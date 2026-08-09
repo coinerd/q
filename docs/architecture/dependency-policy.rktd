@@ -77,12 +77,10 @@
     (revisit-by . "2026-10-01")
     (boundary . tui)
     (destinations . ("tui/component.rkt")))
-   (context.rkt
-    (rationale . "imports runtime/provider/provider-registry.rkt for provider registration in extension context (fragile — v0.99.88 service isolation)")
-    (owner . "extensions")
-    (revisit-by . "2026-10-01")
-    (boundary . runtime)
-    (destinations . ("runtime/provider/provider-registry.rkt")))
+   ;; v0.99.88 W2: context.rkt exception REMOVED — the provider-registry
+   ;; service is injected as a neutral host capability; the concrete registry
+   ;; import lives only in runtime/extension-host-adapter.rkt (pinned by
+   ;; H3 in tests/test-arch-fitness.rkt).
    (ext-package-manager.rkt
     (rationale . "imports runtime/package.rkt for package lifecycle management (fragile — v0.99.88 service isolation)")
     (owner . "extensions")

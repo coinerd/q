@@ -29,6 +29,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../runtime/extension-setup.rkt"
+         "../runtime/extension-host-adapter.rkt"
          "../runtime/provider/provider-registry.rkt"
          "../tools/tool.rkt"
          "../util/event/event-bus.rkt"
@@ -59,11 +60,16 @@
                       #:name "test-provider"))
 
 (define (make-basic-ctx #:provider-registry [registry #f])
+  ;; W2: ctx-* wrappers delegate to an injected neutral provider-host-service.
+  ;; Tests that exercise the registry path wrap a concrete registry once via
+  ;; the Runtime adapter (make-provider-host-service).
   (make-extension-ctx #:session-id "char-test"
                       #:session-dir "/tmp"
                       #:event-bus (make-event-bus)
                       #:extension-registry (make-extension-registry)
-                      #:provider-registry registry))
+                      #:provider-registry (if registry
+                                              (make-provider-host-service registry)
+                                              #f)))
 
 ;; ---------------------------------------------------------------------------
 ;; CH1 — session-type boundary (MA-03 closure evidence)
@@ -135,7 +141,7 @@
                           #:event-bus (make-event-bus)
                           #:extension-registry (make-extension-registry)
                           #:session-store #f
-                          #:provider-registry reg))
+                          #:provider-registry (make-provider-host-service reg)))
     (check-equal? (ctx-register-provider! ctx "openai" (make-test-provider)) 'registered)
     (check-equal? (length (ctx-list-providers ctx)) 1)
     (check-true (provider-info? (ctx-lookup-provider ctx "openai")))

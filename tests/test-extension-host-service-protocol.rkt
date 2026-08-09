@@ -257,17 +257,17 @@
          (delete-file client-path))))))
 
 ;; ---------------------------------------------------------------------------
-;; P7 — compatibility shim preserved in W1
+;; P7 — compatibility shim preserved (W1 kept direct; W2 delegates via service)
 ;; ---------------------------------------------------------------------------
 
 (module+ test
-  (test-case "P7: ctx-* facade behavior is unchanged in W1"
+  (test-case "P7: ctx-* facade behavior is unchanged in W2 via injected service"
     (define ctx
       (make-extension-ctx #:session-id "s"
                           #:session-dir #f
                           #:event-bus (make-event-bus)
                           #:extension-registry #f
-                          #:provider-registry (make-provider-registry)))
+                          #:provider-registry (make-provider-host-service (make-provider-registry))))
     (check-equal? (ctx-register-provider! ctx "openai" (make-test-provider)) 'registered)
     (check-equal? (length (ctx-list-providers ctx)) 1)
     (check-true (provider-info? (ctx-lookup-provider ctx "openai")))

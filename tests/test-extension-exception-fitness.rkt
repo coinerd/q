@@ -178,15 +178,14 @@
         (check-equal? problems '() (format "Extension exception fitness problems: ~a" problems))))
 
     (test-case "Extension exception set is stable (count and membership)"
-      (check-equal? (length extension-exceptions)
-                    5
-                    "Extensions known-exceptions must remain at 5 (v0.99.87 baseline)")
-      (check-equal? (sort (map entry-name extension-exceptions) string<?)
-                    '("context.rkt" "dialog-api.rkt"
-                                    "ext-package-manager.rkt"
-                                    "ui-surface.rkt"
-                                    "widget-lifecycle.rkt")
-                    "Extension exception membership must match v0.99.87 baseline"))
+      (check-equal?
+       (length extension-exceptions)
+       4
+       "Extensions known-exceptions must remain at 4 (v0.99.88 W2: context.rkt exception removed)")
+      (check-equal?
+       (sort (map entry-name extension-exceptions) string<?)
+       '("dialog-api.rkt" "ext-package-manager.rkt" "ui-surface.rkt" "widget-lifecycle.rkt")
+       "Extension exception membership must match v0.99.88 W2 baseline"))
 
     (test-case "Runtime and TUI exceptions are reported separately"
       (define runtime-entries
@@ -208,8 +207,10 @@
                        'ui))
                 extension-exceptions))
       ;; Runtime-boundary exceptions (fragile runtime service coupling).
+      ;; v0.99.88 W2: context.rkt removed — provider registry is injected as a
+      ;; neutral host capability; only ext-package-manager.rkt remains.
       (check-equal? (sort (map entry-name runtime-entries) string<?)
-                    '("context.rkt" "ext-package-manager.rkt")
+                    '("ext-package-manager.rkt")
                     "Runtime-boundary extension exceptions")
       ;; TUI-boundary exceptions (direct tui/ import).
       (check-equal? (sort (map entry-name tui-entries) string<?)

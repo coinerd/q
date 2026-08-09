@@ -18,6 +18,7 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../runtime/provider/provider-registry.rkt"
+         "../runtime/extension-host-adapter.rkt"
          "../extensions/api.rkt"
          "../extensions/context.rkt"
          "../extensions/hooks.rkt"
@@ -340,7 +341,7 @@
                                            #:session-dir "/tmp"
                                            #:event-bus (make-event-bus)
                                            #:extension-registry (make-extension-registry)
-                                           #:provider-registry reg))
+                                           #:provider-registry (make-provider-host-service reg)))
                      (define p (make-test-provider))
                      (ctx-register-provider! ctx "openai" p)
                      (check-true (provider-info? (lookup-provider reg "openai"))))
@@ -360,7 +361,7 @@
                                            #:session-dir "/tmp"
                                            #:event-bus (make-event-bus)
                                            #:extension-registry (make-extension-registry)
-                                           #:provider-registry reg))
+                                           #:provider-registry (make-provider-host-service reg)))
                      (ctx-register-provider! ctx "openai" (make-test-provider))
                      (ctx-unregister-provider! ctx "openai")
                      (check-false (lookup-provider reg "openai")))
@@ -371,7 +372,7 @@
                                            #:session-dir "/tmp"
                                            #:event-bus (make-event-bus)
                                            #:extension-registry (make-extension-registry)
-                                           #:provider-registry reg))
+                                           #:provider-registry (make-provider-host-service reg)))
                      (ctx-register-provider! ctx "openai" (make-test-provider))
                      (ctx-register-provider! ctx "anthropic" (make-test-provider))
                      (check-equal? (length (ctx-list-providers ctx)) 2))
@@ -389,7 +390,7 @@
                                            #:session-dir "/tmp"
                                            #:event-bus (make-event-bus)
                                            #:extension-registry (make-extension-registry)
-                                           #:provider-registry reg))
+                                           #:provider-registry (make-provider-host-service reg)))
                      (ctx-register-provider! ctx "openai" (make-test-provider))
                      (check-true (provider-info? (ctx-lookup-provider ctx "openai")))
                      (check-false (ctx-lookup-provider ctx "nonexistent"))))
