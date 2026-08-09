@@ -4,6 +4,7 @@
  (authority . ".planning/Racket-Wartbarkeits-und-Architekturanalyse-q-Coding-Agent.md")
  (baseline-sha . "274de500e86666b54c10bacda09e99d006bd5501")
  (freeze-candidate-sha . "d18c6898ded4086aa534316d167de184fdb6ec5a")
+ (w4-candidate-sha . "93045f4d1e6c9396ec94312c7bbc93958c41847a")
  (series-wave-count . 32)
  (follow-up-wave-count . 27)
  (amendment-required? . #t)

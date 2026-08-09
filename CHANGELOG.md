@@ -44,7 +44,7 @@ Released 2026-08-09.
 - W2 focused GSD inventory tests: 252/252; Arch: 20 files / 224 tests; Fast:
   1,050 files / 15,341 tests.
 - W3 focused provider tests: 432/432; Fast: 1,051 files / 15,349 tests.
-- W4 focused freeze/version/baseline tests: 6 files / 40 tests; Arch:
+- W4 focused freeze/version/baseline tests: 6 files / 41 tests; Arch:
   21 files / 228 tests. Final Broad/Smoke/release evidence is recorded by the
   v0.99.87 release gate and GitHub CI.
 

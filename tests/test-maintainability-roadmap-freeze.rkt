@@ -138,4 +138,12 @@
                   32)
     (check-equal? (field freeze
                          'follow-up-wave-count)
-                  27)))
+                  27))
+
+  (test-case "F5 freeze and W4 candidate SHAs are pinned"
+    (check-equal? (field freeze
+                         'freeze-candidate-sha)
+                  "d18c6898ded4086aa534316d167de184fdb6ec5a")
+    (check-equal? (field freeze
+                         'w4-candidate-sha)
+                  "93045f4d1e6c9396ec94312c7bbc93958c41847a")))

@@ -71,7 +71,13 @@ regression invariant through series completion.
 
 The exact goals, gates, and acceptance text for all 27 waves are stored in the
 machine contract and projected into versioned PLAN/STATE/VALIDATION skeletons
-under `.planning/`.
+and the five reviewed GitHub specs under `docs/planning/` (tracked,
+reviewable). The same content is mirrored to the executor's local
+`.planning/` working set, which is git-ignored by design (`.gitignore` §
+Internal planning) and therefore is not itself a versioned source.
+
+Each follow-up milestone is additionally materialized on GitHub as an open
+milestone with its wave issues in Backlog: see §3 for #875–#879 / #9221–#9247.
 
 ## 4. Baseline review inputs
 
