@@ -831,8 +831,30 @@
                                           (string->symbol f)))
                        (format "~a must be exported from session-types" f))))))
 
+;; v0.99.88 W1: neutral Extension host protocol is permanently kept below
+;; Runtime, while the concrete provider registry import stays in one Runtime
+;; adapter module. W2 will remove the old direct import from context.rkt.
+(define v09988-w1-suite
+  (test-suite "v0.99.88-w1-extension-host-protocol"
+    (test-case "H1: neutral host protocol imports no concrete host layer"
+      (define host-path (build-path q-dir "util" "extension" "host-services.rkt"))
+      (check-true (file-exists? host-path))
+      (define reqs (extract-requires host-path))
+      (check-false (imports-from? reqs '("runtime/" "llm/" "tools/" "tui/" "extensions/"))
+                   "neutral host protocol must not import a concrete host layer"))
+    (test-case "H2: Runtime adapter encapsulates the concrete provider registry"
+      (define adapter-path (build-path q-dir "runtime" "extension-host-adapter.rkt"))
+      (check-true (file-exists? adapter-path))
+      (define reqs (extract-requires adapter-path))
+      (check-true (imports-from? reqs '("provider/provider-registry.rkt"))
+                  "Runtime adapter must own the concrete provider registry import")
+      (check-true (imports-from? reqs '("util/extension/host-services.rkt"))
+                  "Runtime adapter must implement the neutral host protocol"))))
+
 (run-tests v09719-suite)
 
 (run-tests v0747-suite)
 
 (run-tests v0741-suite)
+
+(run-tests v09988-w1-suite)

@@ -1,23 +1,27 @@
 # State: v0.99.88 — Extension Host/Runtime Service Boundary
 
-**Campaign status:** FROZEN — NOT STARTED
-**Plan-ID / Hash:** PENDING_AT_START
-**Baseline SHA:** PENDING_v0.99.87_RELEASE
-**Current wave:** none
-**Next allowed transition:** project frozen plan to canonical `.planning/PLAN.md`, create campaign record, start W0
+**Campaign status:** ACTIVE — W1 ready for PR/CI
+**Plan-ID / Hash:** generated at campaign start
+**Baseline SHA:** `0e78c51f` (v0.99.87 release)
+**Current main:** `61fc7057` (W0 merge)
+**Current wave:** W1 — Neutral Extension Host Service Protocol (#9222)
+**Next:** open W1 PR, wait for CI, squash merge; then W2 provider-registry
+service isolation from `extensions/context.rkt`
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
-| W0 | PENDING | — | — | — | — |
-| W1 | PENDING | — | — | — | — |
+| W0 | ✅ DONE | #9249 | `61fc7057` | ✅ APPROVED (2 passes) | characterization 12/12; focused 257/257; Fast 15369 |
+| W1 | READY | — | — | ✅ APPROVED | protocol 11/11; focused 76/76; Arch 231/231; Fast 15382 |
 | W2 | PENDING | — | — | — | — |
 | W3 | PENDING | — | — | — | — |
 | W4 | PENDING | — | — | — | — |
 
 ## Finding state
 
-MA-02 PARTIAL; MA-03 PARTIAL; MA-04 OPEN; MA-05 OPEN. No finding may become CLOSED without the closure proof in the freeze contract.
+MA-02 PARTIAL; MA-03 PARTIAL (neutral protocol + Runtime adapter implemented;
+context migration remains W2); MA-04 OPEN; MA-05 OPEN.
 
 ## Projection consistency
 
-This archive is a pre-campaign skeleton. At campaign start PLAN/STATE/VALIDATION/SUMMARY and campaign `.rktd` must be projected together.
+Tracked scaffolds live in `q/docs/planning/`; executor mirror in `.planning/`.
+STATE/VALIDATION/wave files advance together on every transition.
