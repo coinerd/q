@@ -32,7 +32,8 @@
          check-info-rkt
          check-readme-badge
          check-md-files
-         check-changelog-integrity)
+         check-changelog-integrity
+         skip-path?)
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing helpers
@@ -54,6 +55,7 @@
   (or (string-contains? s "/compiled/")
       (string-contains? s "/.git/")
       (string-contains? s "/.planning/")
+      (string-contains? s "/docs/planning/")
       (string-contains? s "/.pi/")
       (and (filename-extension p) (equal? (bytes->string/utf-8 (filename-extension p)) "zo"))))
 

@@ -133,5 +133,22 @@
      (define result (with-output-to-string (λ () (check-info-rkt "1.0.0"))))
      (check-true (string-contains? result "ERROR")))))
 
+(define-test-suite
+ lint-version-skip-path-tests
+ (test-case "skip-path? excludes docs/planning scaffolds"
+   (define skip-path? (lv-ref 'skip-path?))
+   (check-true (skip-path? (build-path (current-directory)
+                                       "docs"
+                                       "planning"
+                                       "PLAN-v0.99.92-SESSION-LIFECYCLE-SERIES-CLOSURE.md")))
+   (check-true (skip-path? (build-path (current-directory) "docs" "planning" "v0.99.91.json")))
+   (check-true (skip-path? (build-path (current-directory) ".planning" "PLAN.md"))))
+ (test-case "skip-path? still scans normal docs"
+   (define skip-path? (lv-ref 'skip-path?))
+   (check-false (skip-path? (build-path (current-directory) "docs" "system-overview.md")))
+   (check-false (skip-path? (build-path (current-directory) "docs" "architecture" "overview.md")))))
+
+(run-tests lint-version-skip-path-tests)
+
 (run-tests lint-version-pure-tests)
 (run-tests lint-version-mock-io-tests)

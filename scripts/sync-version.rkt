@@ -98,6 +98,7 @@
   (or (string-contains? s "/compiled/")
       (string-contains? s "/.git/")
       (string-contains? s "/.planning/")
+      (string-contains? s "/docs/planning/")
       (string-contains? s "/.pi/")
       (string-contains? s "/examples/README.md")
       (string-contains? s "/docs/tutorials/")

@@ -35,7 +35,7 @@ User input → Interface (CLI/TUI/RPC)
     → Events emitted to bus
 ```
 
-## Metrics (0.99.84)
+## Metrics (0.99.87)
 > _See `racket scripts/metrics.rkt` for current numbers._
 
 - 414 source modules, 534 test files

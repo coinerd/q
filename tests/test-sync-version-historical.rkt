@@ -110,3 +110,45 @@
                                    "0.57.6")
                  "historical report version must not be rewritten by --all"))
    (lambda () (delete-directory/files root))))
+
+(test-case "sync-version --all skips docs/planning frozen scaffolds"
+  (define root (make-temporary-file "sync-version-planning-~a" 'directory))
+  (define script-path (build-path q-root "scripts" "sync-version.rkt"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (make-directory* (build-path root "util"))
+     (make-directory* (build-path root "docs" "planning"))
+     (call-with-output-file
+      (build-path root "util" "version.rkt")
+      (lambda (out)
+        (display "#lang racket/base\n(provide q-version)\n(define q-version \"9.9.9\")\n" out)))
+     (call-with-output-file (build-path root "info.rkt")
+                            (lambda (out) (display "#lang info\n(define version \"0.0.1\")\n" out)))
+     (call-with-output-file
+      (build-path root "README.md")
+      (lambda (out)
+        (display
+         "# q\n<!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->\nq version 0.0.1\n"
+         out)))
+     (call-with-output-file
+      (build-path root "docs" "planning" "PLAN-v0.99.92-FROZEN.md")
+      (lambda (out)
+        (display
+         "# Plan: v0.99.92 — Session Lifecycle Series Closure\n**Status:** FROZEN — NOT STARTED\n"
+         out)))
+     (define-values (proc _stdout stdin _stderr)
+       (parameterize ([current-directory root])
+         (subprocess #f #f #f (find-executable-path "racket") script-path "--write" "--all")))
+     (close-output-port stdin)
+     (subprocess-wait proc)
+     (check-equal? (subprocess-status proc)
+                   0
+                   "sync-version --write --all completes after applying fixes")
+     (define planning-content
+       (file->string (build-path root "docs" "planning" "PLAN-v0.99.92-FROZEN.md")))
+     (check-true (string-contains? planning-content "0.99.92")
+                 "frozen scaffold future version must not be rewritten by --all")
+     (check-false (string-contains? planning-content "9.9.9")
+                  "frozen scaffold must not be rewritten to canonical version"))
+   (lambda () (delete-directory/files root))))

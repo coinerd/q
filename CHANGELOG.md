@@ -1,3 +1,59 @@
+## 0.99.87
+
+Released 2026-08-09.
+
+### Features
+
+- Added a reproducible architecture baseline with deterministic raw evidence,
+  metric reconciliation, hotspot/co-change analysis, and current finding
+  classification.
+- Replaced broad Extension boundary waivers with pair-precise, owned, dated
+  exceptions plus positive/negative architecture fitness probes.
+- Added a complete responsibility/effect inventory for all 26 GSD modules,
+  including state ownership, consumer/producer relationships, and fitness
+  checks for unclassified modules and undeclared effects.
+- Added the provider duplication/parity matrix (C1–C23), explicit rejection
+  list, G1–G3 asymmetry pins, and P1–P8 provider parity tests without creating
+  a shared provider base abstraction.
+- Frozen the 32-wave maintainability series with 100% MA-01–MA-12 ownership,
+  closure proof, and release assignment. Provisioned v0.99.88–v0.99.92 as 27
+  immutable GitHub wave issues; v0.99.91 is explicitly Path B (Provider
+  Contract & Test Hardening).
+
+### Bug Fixes
+
+- Azure non-200 responses now raise structured `provider-error` categories.
+  The old error path passed unsupported `#:error-replacement` to
+  `bytes->string/utf-8`, producing a generic keyword exception instead.
+
+### Breaking / Behavior Changes
+
+- None. This release freezes evidence, tests, and future campaign scope; it
+  does not change public APIs or introduce a cross-provider abstraction.
+
+### Migration Notes
+
+- No data migration is required. Existing sessions, extensions, provider
+  configuration, and campaign records remain compatible.
+
+### Testing
+
+- W0 focused baseline tests: 90/90; Fast: 1,048 files / 15,326 tests.
+- W1 focused exception tests: 82/82; Arch: 19 files / 218 tests; Fast:
+  1,049 files / 15,335 tests.
+- W2 focused GSD inventory tests: 252/252; Arch: 20 files / 224 tests; Fast:
+  1,050 files / 15,341 tests.
+- W3 focused provider tests: 432/432; Fast: 1,051 files / 15,349 tests.
+- W4 focused freeze/version/baseline tests: 6 files / 41 tests; Arch:
+  21 files / 228 tests. Final Broad/Smoke/release evidence is recorded by the
+  v0.99.87 release gate and GitHub CI.
+
+### Operational / Release
+
+- Release v0.99.87.
+- Future milestones are GitHub #875–#879 with waves #9221–#9247; all were
+  created in Backlog and verified with zero project-board consistency errors.
+
 ## 0.99.84
 
 Released 2026-08-06.
