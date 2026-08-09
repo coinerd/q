@@ -87,7 +87,8 @@
          (only-in "../session/lifecycle-state.rkt"
                   lifecycle-state-prev-task-fsm-state
                   set-lifecycle-state-prev-task-fsm-state!
-                  consume-pending-force-reset!)
+                  consume-pending-force-reset!
+                  consume-reflection-event!)
          ;; Session mutation (for auto-distill persistence)
          (only-in "../session/session-mutation.rkt"
                   guarded-set-working-set-evolved!
@@ -319,7 +320,8 @@
                                #:conclusions [conclusions '()]
                                #:state-aware? [state-aware? #f]
                                #:ca-options [ca-options #f]
-                               #:recent-tool-calls [recent-tool-calls '()])
+                               #:recent-tool-calls [recent-tool-calls '()]
+                               #:reflection-event [reflection-evt #f])
   (define config config-raw)
   ;; An assembled checkpoint may be passed back as history by compatibility
   ;; callers. It is ephemeral: discard it before every fresh assembly.
@@ -353,7 +355,8 @@
                                            #:ca-options ca-options
                                            #:recent-tool-calls recent-tool-calls
                                            #:project-dir project-dir
-                                           #:session-config config))
+                                           #:session-config config
+                                           #:reflection-event reflection-evt))
        (values sa-tc #f)]
       ;; Standard assembly path
       [else
@@ -465,7 +468,12 @@
   (when (and task-state ws-old-state (not (eq? ws-old-state task-state)))
     ;; State transition detected — reset warning counter
     (reset-rollback-warning-count!))
-  (values task-state-raw task-state augmented-conclusions))
+  ;; v0.99.89: Consume reflection event from session lifecycle-state.
+  ;; One-shot: consumed before preamble construction. Last-write-wins.
+  ;; Consumed here (session available) and returned to caller for explicit
+  ;; passage to assemble-context/pure and build-state-awareness-preamble.
+  (define reflection-evt (and session (consume-reflection-event! (agent-session-lifecycle session))))
+  (values task-state-raw task-state augmented-conclusions reflection-evt))
 
 ;; ============================================================
 ;; Context assembly telemetry

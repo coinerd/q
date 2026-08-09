@@ -72,8 +72,7 @@
                   memory-telemetry->jsexpr
                   current-memory-injection-budget
                   inject-memory-for-context)
-         (only-in "blackboard-context.rkt" build-blackboard-context-snippet)
-         (only-in "../../agent/state.rkt" current-reflection-event))
+         (only-in "blackboard-context.rkt" build-blackboard-context-snippet))
 
 (provide current-task-state-aware-assembly?
          build-tiered-context/state-aware
@@ -85,11 +84,10 @@
          current-ws-evolution-enabled?
          check-rollback-triggers-with-actions
          extract-recent-text
-         current-reflection-event
          current-blackboard-injection-enabled)
 
-;; v0.99.85: current-reflection-event moved to agent/state.rkt.
-;; Re-exported here for backward compatibility.
+;; v0.99.89: current-reflection-event eliminated. Session-owned via
+;; lifecycle-state.pending-reflection-event.
 
 ;; v0.99.7 W5: Blackboard context injection into system prompt preamble
 (define current-blackboard-injection-enabled (make-parameter #f))
@@ -108,7 +106,8 @@
                                           #:recent-tool-calls [recent-tool-calls '()]
                                           #:ca-options [ca-options #f]
                                           #:session-config [session-config #f]
-                                          #:project-dir [project-dir #f])
+                                          #:project-dir [project-dir #f]
+                                          #:reflection-event [reflection-event #f])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name (coerce-task-state task-state))
   (define ws-level (and state-name (context-level-for-state state-name 'working-set)))
@@ -333,7 +332,10 @@
 
   ;; v0.75.6: Prepend state-awareness preamble to tier-a
   ;; v0.78.3 G7: Use budgeted conclusions (not raw) for preamble
-  (define preamble (build-state-awareness-preamble task-state budgeted-conclusions))
+  (define preamble
+    (build-state-awareness-preamble task-state
+                                    budgeted-conclusions
+                                    #:reflection-event reflection-event))
   (define preamble-entries
     (if preamble
         (list preamble)
@@ -397,10 +399,14 @@
       base-tc
       (tiered-context-with-tier-a base-tc new-tier-a)))
 
-;; build-state-awareness-preamble : task-state? (listof task-conclusion?) -> (or/c #f message?)
+;; build-state-awareness-preamble : task-state? (listof task-conclusion?) #:reflection-event -> (or/c #f message?)
 ;; Generates a system prompt section describing the current task state.
 ;; Returns #f if no meaningful preamble (idle state with no conclusions).
-(define (build-state-awareness-preamble task-state conclusions)
+;; v0.99.89: Reflection event is now an explicit keyword argument.
+;; The caller consumes it from lifecycle-state before calling this function.
+(define (build-state-awareness-preamble task-state
+                                        conclusions
+                                        #:reflection-event [reflection-event #f])
   ;; Accept both fsm-state structs and bare symbols
   (define state-name (coerce-task-state task-state))
   (cond
@@ -435,7 +441,7 @@
                      (string-join texts "\n")))
            "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
      (define reflection-reminder
-       (if (current-reflection-event)
+       (if reflection-event
            "\n\nReminder: You recently received large tool results. Use record_conclusion to save key findings before taking more actions."
            ""))
      (define preamble-text
@@ -453,8 +459,7 @@
                          (string-append "\n\n" snippet)
                          ""))
                    "")))
-     ;; Clear reflection event after consuming it
-     (current-reflection-event #f)
+     ;; v0.99.89: Reflection event consumed by caller, not here.
      (make-message "state-awareness-preamble"
                    #f
                    'system

@@ -64,8 +64,7 @@
          current-conclusion-token-budget
          current-ws-evolution-enabled?
          check-rollback-triggers-with-actions
-         extract-recent-text
-         current-reflection-event)
+         extract-recent-text)
 
 ;; Remaining exports (not moved)
 (provide build-session-context/tokens

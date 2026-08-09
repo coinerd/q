@@ -216,7 +216,7 @@
            (define result (dispatch-hooks hook-point payload ext-reg))
            result)))
   ;; Phase 1: Prepare task state and conclusions
-  (define-values (task-state-raw task-state augmented-conclusions)
+  (define-values (task-state-raw task-state augmented-conclusions reflection-evt)
     (prepare-turn-context-state ctx-to-use config-raw session))
   ;; Phase 2: Build options from profile and run pure assembly
   ;; v0.99.54 W2 R-8: Use profile->options (pure) instead of apply-context-assembly-profile! (parameter mutation)
@@ -232,7 +232,8 @@
                            #:ca-options ca-options
                            #:recent-tool-calls (if session
                                                    (agent-session-recent-tool-calls session)
-                                                   '())))
+                                                   '())
+                           #:reflection-event reflection-evt))
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
     (current-turn-fsm-state turn-state-blocked)

@@ -25,7 +25,6 @@
            "workflows (1)"
            "workflows-aggregate"
            "smoke (ubuntu-latest)"
-           "smoke (macos-latest)"
            "test (0)"
            "test (1)"
            "test (2)"
