@@ -92,24 +92,27 @@ UI/extension glue. No cycles among the 26 modules (verified by require graph sca
 
 Effects detected by scanning non-comment code (counts = occurrences).
 
-| Module | fs-write | fs-rename | fs-delete | mkdir | dir-list | sha256 | git | subprocess | parameterize | make-param | path-ops |
+| Module | fs-write | fs-rename | fs-delete | mkdir | dir-list | sha256 | git (quoted) | subprocess | parameterize | make-param | path-ops |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `archive.rkt` | 2 | 2 | 1 | 3 | 3 | — | — | — | — | — | 3 |
 | `campaign-state.rkt` | 1 | 1 | — | 1 | — | 5 | — | — | — | — | — |
-| `command-handlers.rkt` | — | — | 1 | 1 | — | — | 2 | — | — | — | — |
-| `go-orchestrator.rkt` | — | — | — | 1 | — | — | 20* | — | — | — | 1 |
-| `tool-handlers.rkt` | 2 | — | — | 1 | — | — | 1 | — | — | — | 3 |
+| `command-handlers.rkt` | — | — | 1 | 1 | — | — | — | — | — | — | — |
+| `go-orchestrator.rkt` | — | — | — | 1 | — | — | — | — | — | — | 1 |
+| `tool-handlers.rkt` | 2 | — | — | 1 | — | — | — | — | — | — | 3 |
 | `wave-completion.rkt` | 2 | 1 | — | 1 | — | — | — | — | — | — | — |
 | `wave-docs.rkt` | 2 | — | — | 1 | — | — | — | — | — | — | 1 |
 | `core.rkt` | 2 | — | — | — | — | — | — | — | 1 | — | 1 |
-| `plan-context-builder.rkt` | — | — | — | — | — | — | — | 2 | — | 1 | — |
+| `plan-context-builder.rkt` | — | — | — | — | — | — | 1 | 2 | — | 1 | — |
 | `events.rkt` | — | — | — | — | — | — | — | — | — | 1 | — |
-| `session-state.rkt` | — | — | — | — | — | — | — | — | 1 | 2 | — |
+| `session-state.rkt` | — | — | — | — | — | — | — | — | — | 2 | — |
 | `state-machine.rkt` | — | — | — | — | — | — | — | — | — | 1 | — |
 | `wave-executor.rkt` | — | — | — | — | — | — | — | — | — | — | — |
 
-\* `go-orchestrator.rkt` `git` tokens are git-root *detection* (`directory-exists?` on
-`.git` marker) via `find-git-root`, not subprocess git invocation.
+\* `git (quoted)` counts the `"git"` string literal (subprocess invocation via
+`find-executable-path "git"`). Only `plan-context-builder.rkt` invokes git.
+`go-orchestrator.rkt`/`command-handlers.rkt`/`tool-handlers.rkt` `git`
+identifier tokens are `.git` marker detection or capability checks — not
+subprocess git — matching the machine inventory (no declared `git` effect).
 
 **dynamic-require:** none found in any of the 26 GSD modules.
 
@@ -119,8 +122,9 @@ markers (`.git` detection) and the tool/bridge layer (`gateway-bridge`, `q-sync`
 `github-integration`), which are outside the GSD module set.
 
 **Subprocess:** only `plan-context-builder.rkt` (2× — `git diff` excerpt via
-`subprocess` for the verifier; `racket/system` import) and `command-handlers.rkt`
-(1× `subprocess` for verification-gate execution).
+`subprocess` for the verifier; `racket/system` import). `command-handlers.rkt`
+has no subprocess call (its `subprocess` token is a comment: "replaced with
+subprocess that captures stderr"); the verification gate runs in-process.
 
 **Pure modules (zero effects):** `shared`, `wave-status`, `command-types`,
 `command-parser`, `plan-types-parser`, `plan-types`, `plan-validator`,
@@ -158,11 +162,15 @@ threshold ≥3). The five highest-count non-test clusters:
 
 | Rank | Cluster | Count | Semantic necessity | Verdict |
 |---|---|---|---|---|
-| 1 | `agent/loop-dispatch.rkt` ↔ `agent/loop.rkt` | 6 | dispatch forwards to loop; tightly coupled by design | ✅ necessary |
-| 2 | `agent/iteration/main-loop.rkt` ↔ `runtime/session/session-lifecycle.rkt` | 5 | iteration loop drives session lifecycle events; boundary interplay | ✅ necessary |
-| 3 | `llm/openai-compatible.rkt` ↔ `llm/stream.rkt` | 5 | SSE stream normalization shared between provider and stream layer | ✅ necessary |
-| 4 | `runtime/context-assembly/state-aware-builder.rkt` ↔ `runtime/context-assembly/turn-context.rkt` | 5 | builder consumes turn-context shape | ✅ necessary |
-| 5 | `runtime/context-assembly/state-aware-builder.rkt` ↔ `tests/test-rollback-isolation.rkt` | 5 | rollback tests exercise builder's snapshot/restore | ✅ necessary (test-prod pairing) |
+| 1 | `agent/iteration/loop-config.rkt` ↔ `agent/iteration/main-loop.rkt` | 6 | iteration loop consumes loop-config injection; co-evolves by design | ✅ necessary |
+| 2 | `agent/loop-dispatch.rkt` ↔ `agent/loop.rkt` | 6 | dispatch forwards to loop; tightly coupled by design | ✅ necessary |
+| 3 | `agent/iteration/main-loop.rkt` ↔ `runtime/session/session-lifecycle.rkt` | 5 | iteration loop drives session lifecycle events; boundary interplay | ✅ necessary |
+| 4 | `llm/openai-compatible.rkt` ↔ `llm/stream.rkt` | 5 | SSE stream normalization shared between provider and stream layer | ✅ necessary |
+| 5 | `runtime/context-assembly/state-aware-builder.rkt` ↔ `runtime/context-assembly/turn-context.rkt` | 5 | builder consumes turn-context shape | ✅ necessary |
+
+Note: the five highest-count non-test clusters; both count-6 pairs listed.
+The next test-pair cluster is `state-aware-builder ↔ tests/test-rollback-isolation`
+(5) — test-prod pairing, also semantically necessary.
 
 **GSD-involved cluster:** `extensions/gsd/go-orchestrator.rkt` ↔
 `tests/test-gsd-go-orchestrator.rkt` (count 3) — test-prod pairing from v0.99.80
@@ -183,7 +191,7 @@ re-verified against current code (v0.99.87):
 |---|---|---|---|
 | F1 ARCH-TEST | Replace `hash-ref result 'key` with struct accessors | `gsd-command-result` accessors used; remaining `hash-ref` in `test-gsd-plan-types.rkt` operates on raw parse hashes (correct usage) | ✅ RESOLVED |
 | F2 DUAL-EVENT | Single delegation path for `emit-gsd-event!` | `events.rkt` owns `emit-gsd-event!`/`ctx-emit-gsd-event!`; command-handlers imports via `events:` aliases — single path | ✅ RESOLVED |
-| F3 GO-NO-TXN | Wrap `handle-go-command` mutations in transaction | `command-handlers.rkt` `handle-go-command` runs under `with-gsd-transaction "go"` (line 301) | ✅ RESOLVED |
+| F3 GO-NO-TXN | Wrap `handle-go-command` mutations in transaction | `command-handlers.rkt` go mutations run under `with-gsd-transaction "go"` in `launch-wave-executor` (line 301), reached via `handle-go-command` (line 456) → `prepare-go-campaign` | ✅ RESOLVED |
 | F4 GO-DUPE | Document `cmd-go` deprecation | `core.rkt` line 217: "DEPRECATED (v0.29.13): Removed dead cmd-go handler" | ✅ RESOLVED |
 | F5 SHIM-SNAP | `gsd-snapshot` delegates to `gsm-snapshot`; fix SDK consumer | `extensions/gsd-planning-state.rkt` **removed**; `sdk-compat.rkt` uses `gsd-runtime-state-mode` struct accessor (line 30) | ✅ RESOLVED + shim removed |
 | F6 DOC-FITNESS | Fitness test asserts architecture doc mentions key modules | `tests/test-gsd-v024-fitness.rkt` still present | ✅ RESOLVED |
