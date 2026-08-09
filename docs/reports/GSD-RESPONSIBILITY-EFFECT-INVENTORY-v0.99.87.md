@@ -102,10 +102,10 @@ Effects detected by scanning non-comment code (counts = occurrences).
 | `wave-completion.rkt` | 2 | 1 | — | 1 | — | — | — | — | — | — | — |
 | `wave-docs.rkt` | 2 | — | — | 1 | — | — | — | — | — | — | 1 |
 | `core.rkt` | 2 | — | — | — | — | — | — | — | 1 | — | 1 |
-| `plan-context-builder.rkt` | — | — | — | — | — | — | 1 | 2 | — | 1 | — |
+| `plan-context-builder.rkt` | — | — | — | — | — | — | 1 | 3 | — | 1 | 2 |
 | `events.rkt` | — | — | — | — | — | — | — | — | — | 1 | — |
 | `session-state.rkt` | — | — | — | — | — | — | — | — | — | 2 | — |
-| `state-machine.rkt` | — | — | — | — | — | — | — | — | — | 1 | — |
+| `state-machine.rkt` | — | — | — | — | — | — | — | — | — | 3 | — |
 | `wave-executor.rkt` | — | — | — | — | — | — | — | — | — | — | — |
 
 \* `git (quoted)` counts the `"git"` string literal (subprocess invocation via
@@ -121,10 +121,12 @@ invocation in any GSD module. Git/GitHub interaction happens through filesystem
 markers (`.git` detection) and the tool/bridge layer (`gateway-bridge`, `q-sync`,
 `github-integration`), which are outside the GSD module set.
 
-**Subprocess:** only `plan-context-builder.rkt` (2× — `git diff` excerpt via
-`subprocess` for the verifier; `racket/system` import). `command-handlers.rkt`
-has no subprocess call (its `subprocess` token is a comment: "replaced with
-subprocess that captures stderr"); the verification gate runs in-process.
+**Subprocess:** only `plan-context-builder.rkt` (3× tokens: 1 launch site
+`subprocess` + `subprocess-wait`/`subprocess-status` handles — `git diff`
+excerpt via `find-executable-path "git"` for the verifier; `racket/system`
+import). `command-handlers.rkt` has no subprocess call (its `subprocess`
+token is a comment: "replaced with subprocess that captures stderr"); the
+verification gate runs in-process.
 
 **Pure modules (zero effects):** `shared`, `wave-status`, `command-types`,
 `command-parser`, `plan-types-parser`, `plan-types`, `plan-validator`,
@@ -169,8 +171,9 @@ threshold ≥3). The five highest-count non-test clusters:
 | 5 | `runtime/context-assembly/state-aware-builder.rkt` ↔ `runtime/context-assembly/turn-context.rkt` | 5 | builder consumes turn-context shape | ✅ necessary |
 
 Note: the five highest-count non-test clusters; both count-6 pairs listed.
-The next test-pair cluster is `state-aware-builder ↔ tests/test-rollback-isolation`
-(5) — test-prod pairing, also semantically necessary.
+Three test-pair clusters tie at count 5 (`main-loop ↔ test-agent-iteration-di`,
+`rollback-actions ↔ test-rollback-isolation`, `state-aware-builder ↔
+test-rollback-isolation`) — test-prod pairings, also semantically necessary.
 
 **GSD-involved cluster:** `extensions/gsd/go-orchestrator.rkt` ↔
 `tests/test-gsd-go-orchestrator.rkt` (count 3) — test-prod pairing from v0.99.80
