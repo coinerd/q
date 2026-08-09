@@ -35,11 +35,16 @@
     . "Browser subsystem peer of tools — imports only agent/event and util. Never runtime/tui.")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
  ;; Dated format: ((filename (rationale . "...") (owner . "...")
- ;;                           (revisit-by . "YYYY-MM-DD")) ...)
+ ;;                           (revisit-by . "YYYY-MM-DD")
+ ;;                           (boundary . tui|runtime|ui)
+ ;;                           (destinations . ("module.rkt" ...))) ...)
  ;; Permanent format: ((filename (rationale . "...") (owner . "...")
  ;;                               (permanent-waiver . #t)
  ;;                               (waiver-justification . "...")) ...)
  ;; Owner and rationale are always required. Exactly one lifecycle form is required.
+ ;; v0.99.87 W1: exceptions are pair-precise — each `destinations` entry is a
+ ;; (source,destination) pair the exemption covers; `boundary` classifies the
+ ;; crossing so Runtime and TUI exceptions are reported separately.
  ;; Permanent waivers remain tracked by exception-count and boundary-drift gates.
  (known-exceptions
   (runtime
@@ -54,22 +59,36 @@
   (agent . ())
   (extensions
    .
-   ((dialog-api.rkt (rationale . "TUI dialog interface") (owner . "tui") (revisit-by . "2026-10-01"))
-    (ui-surface.rkt (rationale . "TUI UI surface interface")
-                    (owner . "tui")
-                    (revisit-by . "2026-10-01"))
-    (widget-lifecycle.rkt
-     (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
-     (owner . "extensions")
-     (revisit-by . "2026-10-01"))
-    (context.rkt
-     (rationale . "imports runtime/session-types.rkt for context assembly (bidirectional — fragile)")
-     (owner . "extensions")
-     (revisit-by . "2026-10-01"))
-    (ext-package-manager.rkt
-     (rationale . "imports runtime/ for package lifecycle management (bidirectional — fragile)")
-     (owner . "extensions")
-     (revisit-by . "2026-10-01")))))
+   ((dialog-api.rkt
+    (rationale . "UI dialog primitives bridge to shared ui-core protocol layer (TUI-adjacent, not tui/)")
+    (owner . "tui")
+    (revisit-by . "2026-10-01")
+    (boundary . ui)
+    (destinations . ("ui-core/ui-state-protocol.rkt")))
+   (ui-surface.rkt
+    (rationale . "UI surface interface callbacks bridge to shared ui-core actions (TUI-adjacent, not tui/)")
+    (owner . "tui")
+    (revisit-by . "2026-10-01")
+    (boundary . ui)
+    (destinations . ("ui-core/ui-actions.rkt")))
+   (widget-lifecycle.rkt
+    (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
+    (owner . "extensions")
+    (revisit-by . "2026-10-01")
+    (boundary . tui)
+    (destinations . ("tui/component.rkt")))
+   (context.rkt
+    (rationale . "imports runtime/provider/provider-registry.rkt for provider registration in extension context (fragile — v0.99.88 service isolation)")
+    (owner . "extensions")
+    (revisit-by . "2026-10-01")
+    (boundary . runtime)
+    (destinations . ("runtime/provider/provider-registry.rkt")))
+   (ext-package-manager.rkt
+    (rationale . "imports runtime/package.rkt for package lifecycle management (fragile — v0.99.88 service isolation)")
+    (owner . "extensions")
+    (revisit-by . "2026-10-01")
+    (boundary . runtime)
+    (destinations . ("runtime/package.rkt"))))))
  ;; Agent iteration boundary (v0.99.87+)
  ;; agent/iteration/ MUST NOT require runtime/ except the documented
  ;; exceptions below. Shared iteration protocols and type predicates belong
