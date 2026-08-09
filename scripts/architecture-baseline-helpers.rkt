@@ -130,13 +130,17 @@
           (define attributes (cdr exception))
           (define revisit (assoc 'revisit-by attributes))
           (define permanent (assoc 'permanent-waiver attributes))
+          (define boundary (assoc 'boundary attributes))
+          (define destinations (assoc 'destinations attributes))
           `((layer ,(symbol->string (car layer-entry)))
             (file ,(symbol->string (car exception)))
             (rationale ,(cdr (assoc 'rationale attributes)))
             (owner ,(cdr (assoc 'owner attributes)))
             (lifecycle ,(if revisit "DATED" "PERMANENT"))
             (revisit-by ,(and revisit (cdr revisit)))
-            (permanent-waiver ,(and permanent (cdr permanent)))))
+            (permanent-waiver ,(and permanent (cdr permanent)))
+            (boundary ,(and boundary (cdr boundary)))
+            (destinations ,(and destinations (cdr destinations)))))
         '()))
   (sort entries
         string<?
@@ -749,16 +753,24 @@
              (markdown-cell (entry-ref pair 'path-a))
              (markdown-cell (entry-ref pair 'path-b))))
   (fprintf out "\n## Policy exceptions\n\n")
-  (fprintf out "| Layer | File | Owner | Lifecycle | Revisit | Rationale |\n")
-  (fprintf out "|---|---|---|---|---|---|\n")
+  (fprintf out
+           "| Layer | File | Owner | Lifecycle | Revisit | Boundary | Destinations | Rationale |\n")
+  (fprintf out "|---|---|---|---|---|---|---|---|\n")
   (for ([exception (in-list exceptions)])
     (fprintf out
-             "| ~a | `~a` | ~a | ~a | ~a | ~a |\n"
+             "| ~a | `~a` | ~a | ~a | ~a | ~a | ~a | ~a |\n"
              (markdown-cell (entry-ref exception 'layer))
              (markdown-cell (entry-ref exception 'file))
              (markdown-cell (entry-ref exception 'owner))
              (entry-ref exception 'lifecycle)
              (markdown-cell (or (entry-ref exception 'revisit-by #f) "—"))
+             (markdown-cell (or (and (entry-ref exception 'boundary #f)
+                                     (symbol->string (entry-ref exception 'boundary)))
+                                "—"))
+             (markdown-cell (if (entry-ref exception 'destinations #f)
+                                (string-join (map markdown-cell (entry-ref exception 'destinations))
+                                             ", ")
+                                "—"))
              (markdown-cell (entry-ref exception 'rationale))))
   (fprintf out "\n## Largest test files\n\n")
   (fprintf out
