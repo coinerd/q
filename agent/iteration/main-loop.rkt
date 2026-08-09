@@ -27,7 +27,6 @@
                   loop-counters-stall-retry-count)
          (only-in "../../util/loop-result.rkt" make-loop-result loop-result-messages)
          (only-in "../../agent/state.rkt" current-empty-response-retried?)
-         (only-in "../../util/message/message.rkt" message?)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason loop-result-metadata)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../event-emitter.rkt" emit-typed-event!)
@@ -45,15 +44,6 @@
          ;; v0.99.85: build-assembled-context and run-provider-turn are now
          ;; injected via loop-config instead of imported from the runtime
          ;; orchestration layer.
-         (only-in "../../runtime/working-set.rkt"
-                  working-set?
-                  make-working-set
-                  compute-working-set-budget)
-         (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/session/session-types.rkt" agent-session?)
-         (only-in "../../llm/provider.rkt" provider?)
-         (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
-         (only-in "../event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)
          (only-in "../../util/iteration/decision.rkt"
@@ -104,6 +94,7 @@
                   loop-config-build-context-fn
                   loop-config-run-provider-turn-fn
                   loop-config-interpret-step-fn
+                  loop-config-ensure-working-set-fn
                   make-loop-config))
 
 (provide (contract-out [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
@@ -129,7 +120,6 @@
         [max-iterations (loop-config-max-iterations cfg)]
         [token (loop-config-cancellation-token cfg)]
         [max-iterations-hard (loop-config-max-iterations-hard cfg)]
-        [context-budget (loop-config-context-budget cfg)]
         [steering-queue (loop-config-queue cfg)]
         [injected-box (loop-config-injected-box cfg)]
         [shutdown-check (loop-config-shutdown-check cfg)]
@@ -149,9 +139,15 @@
       (or (loop-config-interpret-step-fn cfg)
           (error 'run-iteration-loop/v2
                  "interpret-step-fn not supplied; use wiring layer to construct loop-config")))
+    (define ensure-working-set-fn
+      (or (loop-config-ensure-working-set-fn cfg)
+          (error 'run-iteration-loop/v2
+                 "ensure-working-set-fn not supplied; use wiring layer to construct loop-config")))
     (define max-iterations-hard-val max-iterations-hard)
-    (define ws
-      (or initial-ws (make-working-set #:max-tokens (compute-working-set-budget context-budget))))
+    ;; v0.99.9x: Working-set construction is Runtime-owned. The Agent decides
+    ;; only that a working set is needed; the injected ensure-working-set-fn
+    ;; (supplied by the composition root) provides one per Runtime policy.
+    (define ws (ensure-working-set-fn initial-ws))
     ;; v0.99.83 W2: Local helper for counter increment
     (define (make-next-counters base)
       (struct-copy loop-counters

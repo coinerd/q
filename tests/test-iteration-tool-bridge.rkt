@@ -11,6 +11,9 @@
          racket/set
          "../agent/iteration/tool-turn-bridge.rkt"
          "../runtime/working-set.rkt"
+         ;; v0.99.9x: read-spiral detection is Runtime-owned; the bridge no
+         ;; longer exposes it (Agent iteration has no working-set dependency).
+         (only-in "../runtime/iteration/step-executor.rkt" detect-read-spiral)
          "../util/message/protocol-types.rkt")
 
 (define bridge-tests

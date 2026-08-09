@@ -13,10 +13,12 @@
 (require racket/contract
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../event-bus.rkt" event-bus?)
-         (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
+         ;; Neutral type shims — no direct runtime/ imports. Predicates only.
+         (only-in "../../util/tool/tool-registry-struct.rkt" tool-registry?)
+         (only-in "../../util/extension/extension-types.rkt" extension-registry?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/working-set.rkt" working-set?)
-         (only-in "../../runtime/session/session-types.rkt" agent-session?)
+         (only-in "../../util/types/working-set.rkt" working-set?)
+         (only-in "../../util/types/session-types.rkt" agent-session?)
          (only-in "../../util/loop-result.rkt" loop-result?))
 
 ;; ============================================================
@@ -51,6 +53,7 @@
          build-context-fn ; (or/c procedure? #f) — builds assembled context
          run-provider-turn-fn ; (or/c procedure? #f) — executes provider turn
          interpret-step-fn ; (or/c procedure? #f) — executes step-result to directive
+         ensure-working-set-fn ; (or/c procedure? #f) — provides a working set for the loop
          )
   #:transparent)
 
@@ -74,7 +77,8 @@
                           #:session [session #f]
                           #:build-context-fn [build-context-fn #f]
                           #:run-provider-turn-fn [run-provider-turn-fn #f]
-                          #:interpret-step-fn [interpret-step-fn #f])
+                          #:interpret-step-fn [interpret-step-fn #f]
+                          #:ensure-working-set-fn [ensure-working-set-fn #f])
   (loop-config context
                provider
                bus
@@ -94,7 +98,8 @@
                session
                build-context-fn
                run-provider-turn-fn
-               interpret-step-fn))
+               interpret-step-fn
+               ensure-working-set-fn))
 
 (provide loop-config
          loop-config?
@@ -118,6 +123,7 @@
          loop-config-build-context-fn
          loop-config-run-provider-turn-fn
          loop-config-interpret-step-fn
+         loop-config-ensure-working-set-fn
          (contract-out [make-loop-config
                         (->* ((listof any/c) (or/c provider? #f)
                                              event-bus?
@@ -137,5 +143,6 @@
                                                    #:session (or/c agent-session? #f)
                                                    #:build-context-fn (or/c procedure? #f)
                                                    #:run-provider-turn-fn (or/c procedure? #f)
-                                                   #:interpret-step-fn (or/c procedure? #f))
+                                                   #:interpret-step-fn (or/c procedure? #f)
+                                                   #:ensure-working-set-fn (or/c procedure? #f))
                              loop-config?)]))
