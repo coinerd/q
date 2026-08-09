@@ -69,7 +69,7 @@ gemeinsamen Module bewertet. Klassifikationsregeln:
 | ID | Kandidat | Sites | Entscheidung | Begründung |
 |---|---|---|---|---|
 | C9 | Streaming-Setup-Skelett (custodian + `dynamic-wind` + `http-sendrecv` + Status-Pre-Check + `stream-sse-events` + `close-port-after-stream` + Ownership-Transfer) | `anthropic/sse.rkt:103-176`, `gemini.rkt:466-537`, `openai-compatible.rkt:365-428`, `azure-openai.rkt:109-162` | **ACCIDENTAL_DUPLICATION** → SHARED_PRIMITIVE-Kandidat | strukturell identisch, gleicher Timeout-/Cleanup-Vertrag; Variationen (Headers, Pfad, Status-Checker, Schwelle) parametrisierbar. **Vorbedingung:** G1 (Schwellen-Divergenz) auflösen |
-| C10 | Inline-Status-Regexp in Stream-Setup (3 Vorkommen, 2 Regexp-Formen: `^HTTP/[^ ]+ ([0-9]+)` vs `HTTP/[0-9.]+ ([0-9]+)`) | `anthropic/sse.rkt:143-148`, `gemini.rkt:510-515`, `openai-compatible.rkt:419-424`, `azure-openai.rkt:57-62` | **ACCIDENTAL_DUPLICATION** | `extract-status-code` existiert in `http-helpers.rkt` und wird an keiner dieser Stellen genutzt |
+| C10 | Inline-Status-Regexp in Stream-Setup (4 Vorkommen, 2 String-Regexp-Formen + 1 Byte-Variante bei Azure: `^HTTP/[^ ]+ ([0-9]+)` vs `HTTP/[0-9.]+ ([0-9]+)` vs Azure-Byte-Regexp) | `anthropic/sse.rkt:143-148`, `gemini.rkt:510-515`, `openai-compatible.rkt:419-424`, `azure-openai.rkt:57-62` | **ACCIDENTAL_DUPLICATION** | `extract-status-code` existiert in `http-helpers.rkt` und wird an keiner dieser Stellen genutzt |
 | C11 | `azure-stream` inline URL-Parsing | `azure-openai.rkt:115-121` | **ACCIDENTAL_DUPLICATION** | `parse-provider-url` existiert genau für diesen Zweck |
 | C12 | `check-azure-status!` (bespoke: raise bei ≠200, Body-Truncation, inline Regexp) | `azure-openai.rkt:56-68` | **ACCIDENTAL_DUPLICATION** mit semantischem Delta | könnte `check-provider-status!` nutzen; Unterschied ist nur Message-Format und Schwelle (≠200 statt ≥400) |
 
@@ -81,8 +81,8 @@ generischen Keyword-`exn:fail` statt des beabsichtigten strukturierten
 Defekt. **Fix in dieser Wave:** positionales `err-char`-Argument `#\?`
 (1-Zeiler, keine Abstraktion). Paritätstest P6 verifiziert nun die
 Kategorie-Parität für 400/401/429/500.
-| C13 | Base-URL-Trim + Pfad-Join (`(string-append (string-trim base-url "/") path)`) | 4 Sites | **ACCIDENTAL_DUPLICATION** (trivial) | 1-Zeiler; geringer Share-Wert, niedrige Priorität |
-| C14 | `anthropic-translate-tool` vs `gemini-translate-tool` (identische Feld-Extraktion name/description/parameters; nur Output-Key differiert: `input_schema` vs `parameters`) | `anthropic-helpers.rkt:47-53`, `gemini.rkt:237-242` | **ACCIDENTAL_DUPLICATION** | Extraktionshälfte identisch; Kandidat für winzigen Shared-Extractor |
+| C13 | Base-URL-Trim + Pfad-Join (`(string-append (string-trim base-url "/") path)`) | 8 Sites (2 pro Provider: Non-Streaming + Streaming: `anthropic/sse.rkt:49,106`, `gemini.rkt:438,472`, `openai-compatible.rkt:274,351`, `azure-openai.rkt:45,113`) | **ACCIDENTAL_DUPLICATION** (trivial) | 1-Zeiler; geringer Share-Wert, niedrige Priorität |
+| C14 | `anthropic-translate-tool` vs `gemini-translate-tool` (identische Feld-Extraktion name/description/parameters; nur Output-Key differiert: `input_schema` vs `parameters`) | `anthropic-helpers.rkt:42-48`, `gemini.rkt:237-242` | **ACCIDENTAL_DUPLICATION** | Extraktionshälfte identisch; Kandidat für winzigen Shared-Extractor. Hinweis: Default für fehlendes `parameters` differiert minimal (`hasheq` bei Anthropic vs `hash` bei Gemini) |
 | C15 | Gemini-Usage-Mapping inline 2× (`promptTokenCount/candidatesTokenCount/totalTokenCount` → kanonische Keys) | `gemini.rkt:282-290` (non-streaming), `gemini.rkt:411-418` (streaming) | **ACCIDENTAL_DUPLICATION** (gemini-intern) | `translate-gemini-usage`-Helper analog zu `translate-anthropic-usage` extrahieren |
 
 ### Provider-Protokoll (nicht teilen)

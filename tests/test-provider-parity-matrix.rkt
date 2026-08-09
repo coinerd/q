@@ -1,5 +1,8 @@
 #lang racket/base
 
+;; @speed fast
+;; @suite default
+
 ;; tests/test-provider-parity-matrix.rkt — Provider parity matrix (v0.99.87 W3)
 ;;
 ;; Defines the cross-provider parity tests required by roadmap W3
