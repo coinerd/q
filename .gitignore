@@ -8,6 +8,7 @@ compiled/
 !docs/reports/gsd-wave-evidence/*.rktd
 !docs/reports/gsd-wave-reviews/*.rktd
 !docs/reports/gsd-wave-validation/*.rktd
+!docs/reports/architecture-baseline-*.rktd
 
 # Coverage reports
 coverage/
