@@ -82,47 +82,19 @@
  ;;   (owner . "...")
  ;;   (revisit-by . "YYYY-MM-DD")
  ;;   (resolution . "...")) ...)
+ ;;
+ ;; v0.99.9x: ZERO exceptions. All four prior exceptions were eliminated:
+ ;;   - loop-config.rkt / loop-phases.rkt: type predicates now come from the
+ ;;     neutral shims util/types/ and util/ (no runtime/ imports).
+ ;;   - main-loop.rkt: working-set construction moved behind the injected
+ ;;     ensure-working-set-fn semantic operation; dead type-predicate imports
+ ;;     removed. No runtime/ imports remain.
+ ;;   - tool-turn-bridge.rkt: dead update-working-set-after-tools! removed;
+ ;;     detect-read-spiral moved to runtime/iteration/step-executor.rkt
+ ;;     (Runtime-owned). No runtime/ imports remain.
  (agent-iteration-boundary
-  (rule . "agent/iteration/ MUST NOT require runtime/ except documented exceptions below")
-  (exceptions
-   . ((loop-config.rkt
-       (source . "agent/iteration/loop-config.rkt")
-       (destinations . (runtime/layer-adapters.rkt runtime/working-set.rkt runtime/session/session-types.rkt))
-       (kind . type-only)
-       (reason
-        . "type predicates only: tool-registry?, extension-registry?, working-set?, agent-session? — neutral shims already exist in util/types/ and util/")
-       (owner . "runtime")
-       (revisit-by . "2026-12-01")
-       (resolution
-        . "switch requires to util/types/session-types.rkt, util/types/working-set.rkt, util/tool/tool-registry-struct.rkt, util/extension/extension-types.rkt — loop-state.rkt already does this"))
-      (loop-phases.rkt
-       (source . "agent/iteration/loop-phases.rkt")
-       (destinations . (runtime/layer-adapters.rkt))
-       (kind . type-only)
-       (reason . "type predicate only: extension-registry?")
-       (owner . "runtime")
-       (revisit-by . "2026-12-01")
-       (resolution . "switch to util/extension/extension-types.rkt"))
-      (main-loop.rkt
-       (source . "agent/iteration/main-loop.rkt")
-       (destinations . (runtime/working-set.rkt runtime/session/session-types.rkt runtime/layer-adapters.rkt))
-       (kind . implementation)
-       (reason
-        . "working-set construction (make-working-set, compute-working-set-budget) plus type predicates agent-session?/tool-registry?/extension-registry?")
-       (owner . "runtime")
-       (revisit-by . "2026-12-01")
-       (resolution
-        . "inject working-set construction via loop-config (same pattern as build-context-fn/run-provider-turn-fn); import predicates from util/types/"))
-      (tool-turn-bridge.rkt
-       (source . "agent/iteration/tool-turn-bridge.rkt")
-       (destinations . (runtime/working-set.rkt))
-       (kind . implementation)
-       (reason
-        . "working-set implementation (working-set-update!, working-set-entries, ws-entry-path) for post-tool working-set maintenance")
-       (owner . "runtime")
-       (revisit-by . "2026-12-01")
-       (resolution
-        . "move working-set operations to a neutral util/ module or inject via loop-config")))))
+  (rule . "agent/iteration/ MUST NOT require runtime/ (zero exceptions)")
+  (exceptions . ()))
  ;; Module size configuration
  (module-size (max-lines . 900) (known-large . ()))
  ;; Complexity budgets (informational in v0.22.8, enforced in v0.23.0)

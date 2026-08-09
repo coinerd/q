@@ -2,36 +2,36 @@
 
 ;; agent/iteration/tool-turn-bridge.rkt — tool call dispatch coordination
 ;;
-;; Helpers for working-set update, seen-paths tracking, exploration counting,
-;; and tool-turn bridging.
+;; Helpers for seen-paths tracking, exploration counting, tool-error
+;; accounting, steering/injection draining, and tool-turn bridging.
+;;
+;; ARCHITECTURAL NOTE (v0.99.9x): working-set mutation and read-spiral
+;; detection are Runtime-owned (the Runtime step executor). Agent iteration
+;; no longer imports runtime/working-set.rkt.
 
 (require racket/contract
          racket/list
          (only-in racket/string string-join)
          (only-in "../../util/content/content-parts.rkt" text-part? tool-result-part?)
          (only-in "../../util/event/event.rkt" event-ev)
-         (only-in "../../util/message/message.rkt" message-role message? message-id message-content)
+         (only-in "../../util/message/message.rkt" message-role message? message-content)
          (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-arguments)
          (only-in "../../util/content/content-parts.rkt" text-part-text tool-result-part-is-error?)
          (only-in "../../util/event/event.rkt" event-payload)
          "../event-bus.rkt"
          (only-in "../queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
-         "../../runtime/working-set.rkt"
-         (only-in "../../util/token-estimate.rkt" estimate-message-tokens)
          (only-in "../../util/event/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 
 (provide (contract-out [extract-tool-target-path (-> any/c (or/c path-string? #f))]
                        [take-at-most (-> list? exact-nonnegative-integer? list?)]
                        [update-seen-paths (-> list? list? (values list? boolean?))]
-                       [update-working-set-after-tools! (-> (or/c any/c #f) list? list? void?)]
                        [count-tool-errors (-> (listof any/c) exact-nonnegative-integer?)]
                        [compute-tool-counters
                         (-> list?
                             exact-nonnegative-integer?
                             exact-nonnegative-integer?
                             (values exact-nonnegative-integer? exact-nonnegative-integer?))]
-                       [detect-read-spiral (-> list? any/c (listof string?))]
                        [extract-last-assistant-text (-> list? any/c)]
                        [dequeue-all-steering! (-> any/c list?)]
                        [drain-injected-messages! (-> any/c any/c any/c list?)]
@@ -68,15 +68,6 @@
          (not (member p seen-paths))))
      (define updated (remove-duplicates (append seen-paths new-paths)))
      (values updated has-new-path?)]))
-
-;; Update working set after tool execution.
-;; Returns the updated working set.
-(define (update-working-set-after-tools! ws tool-calls tool-result-msgs)
-  (define tool-calls-hashes
-    (for/list ([tc (in-list tool-calls)])
-      (hasheq 'name (tool-call-name tc) 'arguments (tool-call-arguments tc))))
-  (working-set-update! ws tool-calls-hashes tool-result-msgs message-id estimate-message-tokens)
-  ws)
 
 ;; Count errors in tool result messages.
 (define (count-tool-errors messages)
@@ -139,12 +130,3 @@
                         (loop))))))
               #:filter (lambda (evt) (equal? (event-ev evt) inject-topic)))
   collected)
-
-;; Detect read spiral — re-reading files already in working set.
-(define (detect-read-spiral tool-calls ws)
-  (define read-spiral-paths
-    (for/list ([tc (in-list tool-calls)]
-               #:when (equal? (tool-call-name tc) "read"))
-      (define path (extract-tool-target-path tc))
-      (and path (member path (map ws-entry-path (working-set-entries ws))) path)))
-  (filter string? read-spiral-paths))

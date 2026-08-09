@@ -50,6 +50,11 @@
 (define (fake-interpret-step step-res result new-msgs infra snapshot)
   (directive-stop result))
 
+;; Fake working-set provider: passes through the caller's working set
+;; (or #f when none — the fakes below never touch the working set).
+(define (fake-ensure-working-set ws)
+  ws)
+
 ;; ============================================================
 ;; Tests
 ;; ============================================================
@@ -67,7 +72,8 @@
                       10
                       #:build-context-fn fake-build-context
                       #:run-provider-turn-fn fake-run-provider-turn
-                      #:interpret-step-fn fake-interpret-step))
+                      #:interpret-step-fn fake-interpret-step
+                      #:ensure-working-set-fn fake-ensure-working-set))
   (define result (ml:run-iteration-loop/v2 cfg))
   (check-equal? (loop-result-termination-reason result) 'completed)
   (check-true (pair? (loop-result-messages result))

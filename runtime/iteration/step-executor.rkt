@@ -146,6 +146,7 @@
           [execute-pending-tool-calls
            (-> (listof message?) loop-infra? any/c any/c (listof message?))]
           [sink-append-entries! (->* (loop-infra? (listof message?)) ((or/c any/c #f)) void?)]
+          [detect-read-spiral (-> list? any/c (listof string?))]
           [current-reflection-prompt-enabled (parameter/c boolean?)]
           [REFLECTION-THRESHOLD-CHARS exact-positive-integer?]
           [current-post-tool-result-hook (parameter/c procedure?)]))
@@ -169,6 +170,22 @@
   (if sink
       (send sink sink-append-entries! new-msgs)
       (append-entries! (loop-infra-log-path infra) new-msgs)))
+
+;; ============================================================
+;; Read-spiral detection (Runtime-owned working-set inspection)
+;; ============================================================
+
+;; Detect read spirals — re-reading files already pinned in the working set.
+;; Runtime-owned: works directly on working-set internals (entries, paths).
+;; Agent iteration requests this semantic outcome through interpret-step;
+;; it never inspects working-set internals itself.
+(define (detect-read-spiral tool-calls ws)
+  (define read-spiral-paths
+    (for/list ([tc (in-list tool-calls)]
+               #:when (equal? (tool-call-name tc) "read"))
+      (define path (extract-tool-target-path tc))
+      (and path (member path (map ws-entry-path (working-set-entries ws))) path)))
+  (filter string? read-spiral-paths))
 
 ;; ============================================================
 ;; execute-pending-tool-calls
@@ -200,12 +217,7 @@
       (if error-part
           (tool-error-class->string (format "~a" (tool-result-part-content error-part)))
           "success")))
-  (define read-spiral-paths
-    (for/list ([tc (in-list current-tool-calls)]
-               #:when (equal? (tool-call-name tc) "read"))
-      (define path (extract-tool-target-path tc))
-      (and path (member path (map ws-entry-path (working-set-entries ws))) path)))
-  (define valid-spiral-paths (filter string? read-spiral-paths))
+  (define valid-spiral-paths (detect-read-spiral current-tool-calls ws))
   (when (> (length valid-spiral-paths) 0)
     (emit-session-event! (loop-infra-bus infra)
                          (loop-infra-session-id infra)

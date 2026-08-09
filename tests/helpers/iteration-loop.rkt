@@ -15,6 +15,7 @@
          (only-in "../../agent/iteration/loop-state.rkt" iteration-snapshot)
          (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../../runtime/iteration/step-executor.rkt" interpret-step)
+         (only-in "../../runtime/working-set.rkt" make-working-set compute-working-set-budget)
          (only-in "../../runtime/session/session-config.rkt"
                   hash->session-config
                   config-token-budget-threshold
@@ -45,6 +46,7 @@
     (if (hash? cfg-raw)
         (hash->session-config cfg-raw)
         cfg-raw))
+  (define ctx-budget (or (config-token-budget-threshold cfg) (config-max-context-tokens cfg)))
   (ml:run-iteration-loop/v2
    (make-loop-config
     context
@@ -57,7 +59,7 @@
     max-iterations
     #:cancellation-token token
     #:max-iterations-hard (resolve-max-iterations-hard cfg max-iterations)
-    #:context-budget (or (config-token-budget-threshold cfg) (config-max-context-tokens cfg))
+    #:context-budget ctx-budget
     #:queue steering-queue
     #:injected-box injected-box
     #:shutdown-check shutdown-check
@@ -81,4 +83,8 @@
                                           step-result
                                           new-msgs
                                           infra
-                                          (struct-copy iteration-snapshot snapshot [config cfg]))))))
+                                          (struct-copy iteration-snapshot snapshot [config cfg])))
+    ;; v0.99.9x: same injected working-set construction as production
+    #:ensure-working-set-fn
+    (lambda (ws-arg)
+      (or ws-arg (make-working-set #:max-tokens (compute-working-set-budget ctx-budget)))))))

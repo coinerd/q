@@ -139,13 +139,11 @@
 ;; build-session-context-for-prompt
 ;; ============================================================
 
-;; build-session-context-for-prompt — context preparation:
-;;   converts user-message, appends to log, builds/updates index,
-;;   walks tree via context-assembly, injects system instructions.
-;;   Returns the context message list.
-;;
-;;   Wave 1 (#520): Uses session-index + context-assembly tree walk
-;;   instead of linear load-session-log.
+;; build-session-context-for-prompt — context preparation: converts user-message,
+;; appends to log, builds/updates index, walks tree via context-assembly,
+;; injects system instructions. Returns the context message list.
+;; Wave 1 (#520): Uses session-index + context-assembly tree walk
+;; instead of linear load-session-log.
 (define (build-session-context-for-prompt sess user-message ensure-persisted!-fn buffer-or-append!-fn)
   (define log-path (session-log-path-for sess))
   (define idx-path
@@ -348,13 +346,15 @@
                              tid-arg
                              tok-arg
                              cfg))
-        #:interpret-step-fn
-        (lambda (step-res step-result new-msgs infra snapshot)
-          (interpret-step step-res
-                          step-result
-                          new-msgs
-                          infra
-                          (struct-copy iteration-snapshot snapshot [config cfg]))))))
+        #:interpret-step-fn (lambda (step-res step-result new-msgs infra snapshot)
+                              (interpret-step step-res
+                                              step-result
+                                              new-msgs
+                                              infra
+                                              (struct-copy iteration-snapshot snapshot [config cfg])))
+        #:ensure-working-set-fn
+        (lambda (ws-arg)
+          (or ws-arg (make-working-set #:max-tokens (compute-working-set-budget ctx-budget)))))))
     ;; v0.32.0: Stop trace logger on normal completion
     (stop-trace-logger! tracer)
     result))
