@@ -74,9 +74,9 @@
     (define src (read-source extension-types-path))
     (for ([line (in-list (string-split src "\n"))]
           #:when (regexp-match? #rx"^\\s*\\(require" line))
-      (check-false (string-contains? line "\"../runtime/")
-                   (format "runtime import leaked into pure types: ~a" line))
-      (check-false (string-contains? line "\"../../runtime/")
+      ;; Any runtime/ path form on a require line is a boundary violation;
+      ;; matches ../runtime/ and absolute forms alike.
+      (check-false (string-contains? line "runtime/")
                    (format "runtime import leaked into pure types: ~a" line)))))
 
 ;; ---------------------------------------------------------------------------
@@ -123,7 +123,38 @@
     (check-equal? (ctx-list-providers ctx) '())
     (check-false (ctx-lookup-provider ctx "openai"))
     ;; unregister with missing registry is a no-op (void)
-    (check-equal? (ctx-unregister-provider! ctx "openai") (void))))
+    (check-equal? (ctx-unregister-provider! ctx "openai") (void)))
+
+  (test-case "CH4b: session-less ctx (closed/null session state) is registry-safe"
+    ;; A ctx built without session-dir/session-store models closed/null session
+    ;; state; registry operations must not touch session state.
+    (define reg (make-provider-registry))
+    (define ctx
+      (make-extension-ctx #:session-id "closed"
+                          #:session-dir #f
+                          #:event-bus (make-event-bus)
+                          #:extension-registry (make-extension-registry)
+                          #:session-store #f
+                          #:provider-registry reg))
+    (check-equal? (ctx-register-provider! ctx "openai" (make-test-provider)) 'registered)
+    (check-equal? (length (ctx-list-providers ctx)) 1)
+    (check-true (provider-info? (ctx-lookup-provider ctx "openai")))
+    ;; and with no registry at all it still degrades safely
+    (define bare
+      (make-extension-ctx #:session-id "closed"
+                          #:session-dir #f
+                          #:event-bus (make-event-bus)
+                          #:extension-registry (make-extension-registry)))
+    (check-equal? (ctx-list-providers bare) '())
+    (check-false (ctx-lookup-provider bare "openai")))
+
+  (test-case "CH4c: closed session-store accessor stays #f (no hidden state)"
+    (define bare
+      (make-extension-ctx #:session-id "closed"
+                          #:session-dir #f
+                          #:event-bus (make-event-bus)
+                          #:extension-registry (make-extension-registry)))
+    (check-false (ctx-session-store bare))))
 
 ;; ---------------------------------------------------------------------------
 ;; CH5 — registry idempotency and shared-registry concurrency semantics
@@ -171,6 +202,38 @@
                             #:gsd-ctx (current-gsd-ctx)))
       (check-true (gsd-session-ctx? (ctx-gsd-ctx ctx)))
       (check-eq? (ctx-gsd-ctx ctx) probe-ctx))))
+
+;; ---------------------------------------------------------------------------
+;; CH7 — session-switch construction root (rebind/resume path)
+;; ---------------------------------------------------------------------------
+
+(module+ test
+  (test-case "CH7: session-switch rebind ctx expression is a valid extension-ctx"
+    ;; runtime/session/session-switch.rkt `make-rebind-ctx` builds the new
+    ;; session ctx with exactly these kwargs for every switch reason
+    ;; (new/resume/fork). Pin that the factory contract accepts them and the
+    ;; resulting ctx carries the switch fields.
+    (define bus (make-event-bus))
+    (define ctx
+      (make-extension-ctx #:session-id "switched-session"
+                          #:session-dir "/tmp/switched"
+                          #:event-bus bus
+                          #:extension-registry (make-extension-registry)
+                          #:model-name "model-x"
+                          #:working-directory "/work"))
+    (check-true (extension-ctx? ctx))
+    (check-equal? (ctx-session-id ctx) "switched-session")
+    (check-equal? (ctx-session-dir ctx) "/tmp/switched")
+    (check-equal? (ctx-model ctx) "model-x")
+    (check-equal? (ctx-cwd ctx) "/work")
+    (check-eq? (ctx-event-bus ctx) bus)
+    ;; resume keeps the same construction contract
+    (define resumed
+      (make-extension-ctx #:session-id "switched-session"
+                          #:session-dir "/tmp/switched"
+                          #:event-bus bus
+                          #:extension-registry (make-extension-registry)))
+    (check-equal? (ctx-session-id resumed) "switched-session")))
 
 ;; ---------------------------------------------------------------------------
 ;; CH8 — production consumer inventory of ctx-* provider wrappers

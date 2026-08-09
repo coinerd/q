@@ -30,19 +30,20 @@ Policy exception `docs/architecture/dependency-policy.rktd` entry for
 `context.rkt` is already pair-precise: boundary `runtime`, destination
 `runtime/provider/provider-registry.rkt`, owner `extensions`, revisit
 2026-10-01, rationale names the v0.99.88 service isolation. **No stale
-session-type rationale remains** (W1 corrected it); no policy edit required in
+session-type rationale remains** (the pair-precise wording was introduced in
+#9218 / v0.99.87 W1 and is verified present here); no policy edit required in
 W0.
 
 ## 3. Consumer inventory of the ctx-* provider wrapper API
 
 | Wrapper | Production consumers | Test consumers |
 |---|---|---|
-| `ctx-register-provider!` | **0** | `test-wave4-sdk-expansion.rkt` |
-| `ctx-unregister-provider!` | **0** | `test-wave4-sdk-expansion.rkt` |
-| `ctx-list-providers` | **0** | `test-wave4-sdk-expansion.rkt` |
-| `ctx-lookup-provider` | **0** | `test-wave4-sdk-expansion.rkt` |
+| `ctx-register-provider!` | **0** | `test-wave4-sdk-expansion.rkt`, `test-extension-context-characterization.rkt` (CH3/CH4b/CH5) |
+| `ctx-unregister-provider!` | **0** | `test-wave4-sdk-expansion.rkt`, `test-extension-context-characterization.rkt` (CH3/CH4) |
+| `ctx-list-providers` | **0** | `test-wave4-sdk-expansion.rkt`, `test-extension-context-characterization.rkt` (CH3/CH4/CH4b/CH5) |
+| `ctx-lookup-provider` | **0** | `test-wave4-sdk-expansion.rkt`, `test-extension-context-characterization.rkt` (CH3/CH4/CH4b/CH5) |
 | `ctx-provider-registry` (accessor) | **0** production (only example comments + tests) | `test-extension-context.rkt` |
-| `extension-ctx-provider-registry` (struct accessor) | re-export only | tests |
+| `extension-ctx-provider-registry` (struct accessor) | re-export only in `extension-types.rkt`/`context.rkt` | none (no test references the raw accessor) |
 
 CH8 pins this: scanning `extensions/`, `runtime/`, `wiring/`, `agent/`,
 `tools/`, `tui/`, `interfaces/` finds zero production call sites outside the
@@ -73,8 +74,10 @@ returns `'()`) and the gsd-ctx wiring contract used by the session setup root.
   returns `(hasheq 'error #t 'message ...)`; `ctx-list-providers` → `'()`;
   `ctx-lookup-provider` → `#f`; `ctx-unregister-provider!` is a no-op. No
   exception is raised.
-- **Closed/null session**: the ctx is an immutable value; registry operations do
-  not touch session-store, so they are safe on a ctx with `#f` session state.
+- **Closed/null session** (CH4b): a ctx built without `session-dir`/`session-store`
+  (closed-session state) is registry-safe — register/list/lookup work with a
+  real registry and degrade safely without one; `ctx-session-store` stays `#f`
+  (no hidden state, CH4c).
 - **Idempotency**: duplicate `register` returns `'updated`; unregister of an
   unknown name is a no-op.
 - **Shared registry / concurrency**: two ctx values sharing one registry observe
@@ -99,12 +102,25 @@ in `tests/test-extension-context.rkt`.
 
 - [x] Session-type finding reverified (no Runtime session-type import; CH1)
 - [x] Registry import + all ctx-* consumers inventoried (§2, §3; CH8)
-- [x] extension-ctx field/construction/session-switch/resume/GSD/dynamic-load
-      characterization tests (CH2, CH6, §5–§8)
-- [x] Null/closed/concurrent registry error cases characterized (CH4, CH5)
-- [x] Stale policy rationale verified absent (W1 corrected; §2)
+- [x] extension-ctx field/construction characterization pinned (CH2, CH6)
+- [x] session-switch/resume construction-root contract pinned (CH7)
+- [x] Null/closed/concurrent registry error cases characterized (CH4, CH4b,
+      CH4c, CH5)
+- [x] GSD wiring pinned (CH6b); GSD command-handler ctx delivery is covered by
+      pre-existing tests (`tests/test-gsd-planning.rkt`, `test-gsd-go-orchestrator.rkt`)
+- [x] Dynamic loading characterized via pre-existing `tests/test-extension-loader.rkt`
+      (loader API listed in §8; no new loader tests needed in W0)
+- [x] Stale policy rationale verified absent (#9218 introduced pair-precise
+      wording; §2)
 - [x] No production change
-- [ ] Focused Extension/Registry/GSD gate + Fast green
+- [x] Focused Extension/Registry/GSD gate (8 files / 237 tests) + Fast
+      (1053 files / 15366 tests) green
+
+§5–§8 below document the session-switch/resume/GSD/dynamic-load surface;
+the new test file pins the fields (CH2), construction roots (CH6), and the
+session-switch rebind/resume construction contract (CH7). Session-switch and
+resume lifecycle behavior itself is covered by pre-existing
+tests/test-session-switch.rkt; dynamic loading by tests/test-extension-loader.rkt.
 
 ## 10. Scope freeze input for W1–W3
 
