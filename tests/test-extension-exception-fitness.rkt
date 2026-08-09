@@ -146,6 +146,13 @@
             #:when (string-prefix? imp prefix)
             #:unless (member imp destinations))
         (problem! (format "~a: imports ~a beyond declared destinations" name imp)))))
+  ;; tui/ is the only hard-forbidden layer for extensions: a non-tui-boundary
+  ;; exception must not import tui/ at all, and a tui-boundary exception must
+  ;; cover every tui/ import via destinations (checked above).
+  (unless (eq? boundary 'tui)
+    (for ([imp (in-list source-imports*)]
+          #:when (string-prefix? imp "tui/"))
+      (problem! (format "~a: imports ~a despite non-tui boundary" name imp))))
 
   (reverse problems))
 
@@ -241,6 +248,19 @@
          '("runtime/provider/provider-registry.rkt")))
       (check-true (ormap (lambda (p) (string-contains? p "no longer imported")) problems)
                   "Stale destination must be reported"))
+
+    (test-case "Negative probe: tui import on non-tui-boundary exception is flagged"
+      (define problems
+        (extension-exception-problems "context.rkt"
+                                      '((rationale . "imports runtime/provider")
+                                        (owner . "extensions")
+                                        (revisit-by . "2026-10-01")
+                                        (boundary . runtime)
+                                        (destinations . ("runtime/provider/provider-registry.rkt")))
+                                      '("runtime/provider/provider-registry.rkt"
+                                        "tui/component.rkt")))
+      (check-true (ormap (lambda (p) (string-contains? p "non-tui boundary")) problems)
+                  "tui/ import on non-tui exception must be reported"))
 
     (test-case "Negative probe: expired exception is flagged"
       (define problems
