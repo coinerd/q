@@ -422,23 +422,6 @@
     [(timeout) 'timeout]
     [else 'generic-error]))
 
-;; Track error class history across turns
-(define current-error-class-history (make-parameter '()))
-
-;; Detect repeated error class: returns the (signal error-class) pair
-;; if the same error class appears >= min-repeats times consecutively.
-(define (detect-repeated-error-class history [min-repeats 3])
-  (define latest (and (pair? history) (caar history)))
-  (if latest
-      (let ([count (for/fold ([n 0]) ([entry (in-list history)])
-                     (if (equal? (car entry) latest)
-                         (add1 n)
-                         n))])
-        (if (>= count min-repeats)
-            (list latest (format "error ~a repeated ~a times" latest count))
-            #f))
-      #f))
-
 ;; ── Exports ──
 
 ;; W3 v0.99.36: Explicit exports replace struct-out for rollback-action and
@@ -492,9 +475,6 @@
           [warnings->actions
            (-> (listof (or/c string? (list/c symbol? string?))) (listof rollback-action?))]
           [error-class->signal (-> string? symbol?)]
-          [current-error-class-history (parameter/c (listof (list/c symbol? string?)))]
-          [detect-repeated-error-class
-           (-> (listof (list/c symbol? string?)) (or/c #f (list/c symbol? string?)))]
           [tool-error-class->string (-> string? string?)]
           [effective-auto-distill? (-> boolean? rollback-state? boolean?)]
           [effective-conclusion-budget

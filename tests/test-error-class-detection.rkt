@@ -69,42 +69,16 @@
       (check-equal? (error-class->signal "generic-error") 'generic-error))
 
     ;; ============================================================
-    ;; R3: Repeated error class detection
+    ;; R3: Repeated error class detection — DEAD CODE REMOVED v0.99.89
     ;; ============================================================
-
-    (test-case "detect-repeated-error-class: 3+ same errors"
-      ;; History: most recent first -> git-not-found, git-not-found, git-not-found
-      (define history
-        '((git-not-found "git error 1") (git-not-found "git error 2") (git-not-found "git error 3")))
-      (define result (detect-repeated-error-class history))
-      (check-true (pair? result))
-      (check-equal? (car result) 'git-not-found))
-
-    (test-case "detect-repeated-error-class: less than threshold"
-      (define history '((git-not-found "git error") (git-not-found "git error 2")))
-      (define result (detect-repeated-error-class history))
-      (check-false result))
-
-    (test-case "detect-repeated-error-class: mixed errors"
-      (define history
-        '((git-not-found "git error") (not-found "file error") (git-not-found "git error 2")))
-      (define result (detect-repeated-error-class history))
-      (check-false result "mixed errors not repeated"))
-
-    (test-case "detect-repeated-error-class: empty history"
-      (define result (detect-repeated-error-class '()))
-      (check-false result))
+    ;; detect-repeated-error-class was never called in production.
 
     ;; ============================================================
-    ;; Error-class-history parameter
+    ;; Error-class-history parameter — DEAD CODE REMOVED v0.99.89
     ;; ============================================================
-
-    (test-case "current-error-class-history parameter"
-      (current-error-class-history '())
-      (check-equal? (current-error-class-history) '())
-      (current-error-class-history '((git-not-found "test1") (timeout "test2")))
-      (check-equal? (length (current-error-class-history)) 2)
-      (check-equal? (caar (current-error-class-history)) 'git-not-found))))
+    ;; current-error-class-history and detect-repeated-error-class were
+    ;; never called in production. Removed as dead code.
+    ))
 
 (module+ test
   (require rackunit/text-ui)

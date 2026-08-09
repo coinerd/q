@@ -168,8 +168,6 @@
 ;; Checkpoint parameter (current session checkpoint)
 ;; ────────────────────────────────────────────────────────────
 
-(define current-operational-checkpoint (make-parameter (make-empty-checkpoint)))
-
 ;; ────────────────────────────────────────────────────────────
 ;; Inject the checkpoint into a context message list
 ;; ────────────────────────────────────────────────────────────
@@ -225,5 +223,4 @@
          checkpoint-estimated-tokens
          supercedes-generic-planning?
          contradicts-generic-planning?
-         current-operational-checkpoint
          inject-checkpoint-message)
