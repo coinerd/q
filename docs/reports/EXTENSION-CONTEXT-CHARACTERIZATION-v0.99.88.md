@@ -113,8 +113,12 @@ in `tests/test-extension-context.rkt`.
 - [x] Stale policy rationale verified absent (#9218 introduced pair-precise
       wording; §2)
 - [x] No production change
-- [x] Focused Extension/Registry/GSD gate (8 files / 237 tests) + Fast
-      (1053 files / 15366 tests) green
+- [x] Focused Extension/Registry/GSD gate green: `test-extension-context-characterization.rkt`
+      + `test-extension-context.rkt` + `test-extension-loader.rkt` +
+      `test-provider-registry.rkt` + `test-wave4-sdk-expansion.rkt` +
+      `test-gsd-planning.rkt` + `test-gsd-go-orchestrator.rkt` +
+      `test-agent-session-extensions.rkt` + `test-session-switch.rkt`
+      (9 files / 257 tests); Fast (1053 files / 15369 tests) green
 
 §5–§8 below document the session-switch/resume/GSD/dynamic-load surface;
 the new test file pins the fields (CH2), construction roots (CH6), and the
