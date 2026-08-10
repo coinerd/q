@@ -328,6 +328,14 @@
                                                 (cons (campaign-wave-index w)
                                                       (campaign-wave-status w)))
                                               (plan-slug-map base-dir)))
+         ;; v0.99.90 W2 (#9233): the completion outbox is a DERIVED ledger —
+         ;; a crash between the durable commit and the outbox append would
+         ;; otherwise lose the event. Rebuild missing events from the durable
+         ;; 'done waves (dedup-safe; never invents events for non-done waves).
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-warning "completion outbox reconcile failed: ~a"
+                                                   (exn-message e)))])
+           (reconcile-completion-outbox! base-dir authoritative))
          (let loop ([current authoritative]
                     [completed '()])
            (define next-idx (select-next-actionable-wave current))
