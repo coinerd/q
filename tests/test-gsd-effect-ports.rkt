@@ -11,7 +11,7 @@
   (test-case "external-domain inventory is exact and port counts never exceed one"
     (check-equal? gsd-external-domains '(filesystem git github clock process event))
     (check-equal? (length gsd-external-domains) (length (remove-duplicates gsd-external-domains)))
-    (check-equal? (hash-ref gsd-port-domain-counts 'github) 0)
+    (check-equal? (hash-ref gsd-port-domain-counts 'github) 1)
     (for ([(domain count) (in-hash gsd-port-domain-counts)])
       (check-not-false (member domain gsd-external-domains))
       (check-true (<= count 1))))
@@ -23,6 +23,7 @@
     (check-true (gsd-git-port? (gsd-effect-ports-git ports)))
     (check-true (gsd-clock-port? (gsd-effect-ports-clock ports)))
     (check-true (gsd-process-port? (gsd-effect-ports-process ports)))
+    (check-true (gsd-github-port? (gsd-effect-ports-github ports)))
     (check-true (procedure? (gsd-effect-ports-event-sink ports))))
 
   (test-case "aggregate contracts reject a wrong domain value"
@@ -33,6 +34,7 @@
                                    (gsd-effect-ports-git ports)
                                    (gsd-effect-ports-clock ports)
                                    (gsd-effect-ports-process ports)
+                                   (gsd-effect-ports-github ports)
                                    (gsd-effect-ports-event-sink ports)))))
 
   (test-case "filesystem fake is deterministic and records semantic operations"

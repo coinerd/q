@@ -22,6 +22,7 @@
     (check-true (gsd-git-port? (gsd-effect-ports-git ports)))
     (check-true (gsd-clock-port? (gsd-effect-ports-clock ports)))
     (check-true (gsd-process-port? (gsd-effect-ports-process ports)))
+    (check-true (gsd-github-port? (gsd-effect-ports-github ports)))
     (check-true (procedure? (gsd-effect-ports-event-sink ports))))
 
   (test-case "current composition supports dynamic DI and restores afterward"
