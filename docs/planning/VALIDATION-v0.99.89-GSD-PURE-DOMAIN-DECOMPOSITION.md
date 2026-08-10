@@ -1,6 +1,6 @@
 # Validation: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0–W4 validated; v0.99.89 RELEASE pending
+**Status:** ✅ VALIDATED — v0.99.89 RELEASED (tag `dc176ed6`, milestone #876 closed 5/5)
 
 | Wave | Focused/TDD | Fast | Specific gate | Review | Result |
 |---|---|---|---|---|---|

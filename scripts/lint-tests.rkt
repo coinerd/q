@@ -78,6 +78,9 @@
       (string-contains? str "/some/")
       (string-contains? str "/other/")
       (string-contains? str "/sess")
+      ;; v0.99.90 W0: in-memory fake root for gsd-port-fakes.rkt
+      ;; (deterministic in-memory filesystem — never touches the real FS)
+      (string-contains? str "/repo")
       ;; Short fake filenames like /out.txt /in.txt /out2.txt /in2.txt
       (regexp-match? #rx"^/(out|in)[0-9]?\\.[a-z]+$" str)
       ;; Regex patterns in test strings (contain character classes)

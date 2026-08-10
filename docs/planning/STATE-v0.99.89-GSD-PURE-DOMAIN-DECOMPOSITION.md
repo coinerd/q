@@ -1,9 +1,9 @@
 # State: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0–W3 DONE; W4 DONE (PR pending — release wave)
+**Status:** ✅ RELEASED — v0.99.89 (tag `dc176ed6`, milestone #876 closed 5/5)
 **Baseline SHA:** `598fbd00` (v0.99.88 release)
 **Current main:** `927c8024` (W3 merge, PR #9257)
-**Current wave:** W4 — GSD Facade Thinning + Release (#9230) — gates green, PR open
+**Current wave:** W4 — GSD Facade Thinning + Release (#9230) — MERGED `93619627` (PR #9258); tag v0.99.89
 
 | Wave | Issue | Status | Merge | Gates |
 |---|---|---|---|---|
@@ -11,7 +11,7 @@
 | W1 Pure Transition Kernel | #9227 | ✅ DONE (PR #9255, `eb7807ae`) | kernel 29/29; facade 123/123; golden 16/16; GSD batch 1038; Fast 1058; lint-format 0/0 | APPROVED (0 recheck; 2 MINOR + 5 INFO folded) |
 | W2 Plan/State Projection Kernel | #9228 | ✅ DONE (PR #9256, `74da7e8a`) | kernel 22/22; golden 16/16 (crash-resume repair); GSD batch 1038; workflows ✅; Fast 1059; Broad 1237; lint-format 0/0 | APPROVED (0 recheck) |
 | W3 Command Parsing & Intent Boundary | #9229 | ✅ DONE (PR #9257, `927c8024`) | intent/corpus 13/13; golden 16/16; GSD batch 1087; Fast 1060; lint-format 0/0 | APPROVED (0 recheck; 3 MINOR folded) |
-| W4 Facade Thinning + Release | #9230 | ✅ DONE (PR pending) | facade-compat 7/7; pure sweep 14 modules; Broad 1238/1239; Arch 22; Workflow 29; release-dry-run 5/5; golden 16/16 | APPROVED pending |
+| W4 Facade Thinning + Release | #9230 | ✅ DONE (PR #9258, `93619627`) | facade-compat 7/7; pure sweep 12 modules; Broad 1238/1239; Arch 22; Workflow 29; release-dry-run 5/5; golden 16/16 | APPROVED (2 reviews; MAJORs fixed in `106f0d46`) | ✅ v0.99.89 RELEASED `dc176ed6` |
 
 ## W0 deliverables
 
