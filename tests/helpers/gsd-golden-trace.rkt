@@ -30,8 +30,6 @@
          racket/port
          (only-in "../../extensions/gsd/campaign-state.rkt"
                   migrate-campaign!
-                  persist-campaign!
-                  load-campaign-record
                   canonical-wave-status
                   campaign-plan-id
                   campaign-fence-token
@@ -46,6 +44,9 @@
                   campaign-attempt-id
                   campaign-attempt-fence-token
                   set-campaign-wave-status!)
+         (only-in "../../extensions/gsd/campaign-repository.rkt"
+                  persist-campaign!
+                  load-campaign-record)
          (only-in "../../extensions/gsd/go-orchestrator.rkt"
                   make-campaign-request
                   execute-campaign-request!

@@ -34,9 +34,8 @@
                   make-campaign-cancellation
                   begin-attempt!
                   select-next-actionable-wave
-                  persist-campaign!
-                  load-campaign-record
                   migrate-campaign!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
                   run-campaign!

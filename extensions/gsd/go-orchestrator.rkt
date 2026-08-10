@@ -22,6 +22,7 @@
          racket/file
          racket/match
          "campaign-state.rkt"
+         "campaign-repository.rkt"
          "wave-completion.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
