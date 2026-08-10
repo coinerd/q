@@ -57,3 +57,9 @@ Fast 1059 files; Broad 1237 files; lint-format 0/0. Report
 `docs/reports/PLAN-STATE-PROJECTION-KERNEL-v0.99.89.md`. Inventory 26 → 29
 (+projection-kernel/effects, event-projection domain). Wave-map unchanged
 (no new state names / persistence formats).
+
+### 2026-08-11 — W2 MERGED `74da7e8a` (PR #9256, #9228 closed)
+W2 Plan/State Projection Kernel merged. Reviewer APPROVED (0 recheck). All
+gates green (kernel 22/22, golden 16/16 with crash-resume repair pin, GSD
+batch 1038, Fast 1059, Broad 1237, lint-format 0/0). Metrics re-synced
+(post-add). Next: W3 Command Parsing & Intent Boundary (#9229).

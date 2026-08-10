@@ -1,15 +1,15 @@
 # State: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0/W1 DONE; W2 DONE (PR pending); W3 next
+**Status:** ACTIVE — W0/W1/W2 DONE; W3 next
 **Baseline SHA:** `598fbd00` (v0.99.88 release)
-**Current main:** `eb7807ae` (W1 merge, PR #9255)
-**Current wave:** W2 — Plan/State Projection Kernel (#9228) — gates green, PR open
+**Current main:** `74da7e8a` (W2 merge, PR #9256)
+**Current wave:** W3 — Command Parsing & Intent Boundary (#9229)
 
 | Wave | Issue | Status | Merge | Gates |
 |---|---|---|---|---|
 | W0 Golden Workflow Traces | #9226 | ✅ DONE (PR #9254, `8214e6a4`) | golden 16/16; workflows 29/161; Fast 1057/15420; lint-format 0/0 | APPROVED (1 recheck round) |
 | W1 Pure Transition Kernel | #9227 | ✅ DONE (PR #9255, `eb7807ae`) | kernel 29/29; facade 123/123; golden 16/16; GSD batch 1038; Fast 1058; lint-format 0/0 | APPROVED (0 recheck; 2 MINOR + 5 INFO folded) |
-| W2 Plan/State Projection Kernel | #9228 | ✅ DONE (PR pending) | kernel 22/22; golden 16/16 (crash-resume repair); GSD batch 1038; workflows ✅; Fast 1059; Broad 1237; lint-format 0/0 | APPROVED pending |
+| W2 Plan/State Projection Kernel | #9228 | ✅ DONE (PR #9256, `74da7e8a`) | kernel 22/22; golden 16/16 (crash-resume repair); GSD batch 1038; workflows ✅; Fast 1059; Broad 1237; lint-format 0/0 | APPROVED (0 recheck) |
 | W3 Command Parsing & Intent Boundary | #9229 | backlog | — | parser fitness + command corpus + Fast |
 | W4 Facade Thinning + Release | #9230 | backlog | — | Broad + Arch + Workflow + Smoke + Release + review |
 

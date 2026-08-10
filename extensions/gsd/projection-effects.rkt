@@ -26,20 +26,29 @@
          "projection-kernel.rkt")
 
 ;; ============================================================
-;; Atomic single-file write (temp + rename)
+;; Atomic file primitives (temp write + commit rename)
 ;; ============================================================
 
-;; Write content to path via a same-directory temp file + rename, so readers
-;; never observe a partially written file. Mirrors the durable outbox write
-;; pattern from wave-completion.rkt.
-(define (atomic-write-file! path content)
+;; Write content to a same-directory temp file for path; returns the temp
+;; path. Phase 1 of the atomic pattern: no final file is touched.
+(define (write-temp-file! path content)
   (define dir (path-only path))
   (unless (directory-exists? dir)
     (make-directory* dir))
   (define tmp (string->path (string-append (path->string path) ".tmp~a")))
   (call-with-output-file tmp (lambda (out) (display content out)) #:exists 'truncate)
+  tmp)
+
+;; Commit a temp file into place (atomic replace). Phase 2 of the pattern.
+(define (commit-temp-file! tmp path)
   (rename-file-or-directory tmp path #t)
   path)
+
+;; Write content to path via a same-directory temp file + rename, so readers
+;; never observe a partially written file. Mirrors the durable outbox write
+;; pattern from wave-completion.rkt.
+(define (atomic-write-file! path content)
+  (commit-temp-file! (write-temp-file! path content) path))
 
 ;; ============================================================
 ;; Multi-file atomic apply (write all temps, then rename all)
@@ -52,16 +61,9 @@
 (define (apply-atomic-files! files)
   (define temps
     (for/list ([f files])
-      (define p (car f))
-      (define content (cdr f))
-      (define dir (path-only p))
-      (unless (directory-exists? dir)
-        (make-directory* dir))
-      (define tmp (string->path (string-append (path->string p) ".tmp~a")))
-      (call-with-output-file tmp (lambda (out) (display content out)) #:exists 'truncate)
-      (cons tmp p)))
+      (cons (write-temp-file! (car f) (cdr f)) (car f))))
   (for ([tp temps])
-    (rename-file-or-directory (car tp) (cdr tp) #t))
+    (commit-temp-file! (car tp) (cdr tp)))
   (map cdr temps))
 
 ;; ============================================================
@@ -169,6 +171,8 @@
 ;; ============================================================
 
 (provide atomic-write-file!
+         write-temp-file!
+         commit-temp-file!
          apply-atomic-files!
          resolve-projection-path
          apply-projection-set!

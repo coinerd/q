@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | W0 Golden Workflow Traces | ✅ 16/16 (1 helper + 1 test) | ✅ 1057/15420 | ✅ workflows 29 files/161 tests | ✅ APPROVED (1 recheck) | ✅ DONE — merged `8214e6a4` (PR #9254, #9226 closed) |
 | W1 Pure Transition Kernel | ✅ 29/29 (new test file) + 1038 GSD batch | ✅ 1058 files | ✅ pure-kernel + Arch (import closure) | ✅ APPROVED (0 recheck; 2 MINOR + 5 INFO folded `4c55f57b`) | ✅ DONE — merged `eb7807ae` (PR #9255, #9227 closed) |
-| W2 Plan/State Projection Kernel | ✅ 22/22 (new test file) + 1038 GSD batch | ✅ 1059 files / 15472 | ✅ workflows + Broad 1237 files / 17739 + lint-format 0/0 | ✅ APPROVED (0 recheck) | ✅ DONE — PR pending |
+| W2 Plan/State Projection Kernel | ✅ 22/22 (new test file) + 1038 GSD batch | ✅ 1059 files / 15472 | ✅ workflows + Broad 1237 files / 17739 + lint-format 0/0 | ✅ APPROVED (0 recheck) | ✅ DONE — merged `74da7e8a` (PR #9256, #9228 closed) |
 | W3 Command Parsing & Intent Boundary | pending | — | parser fitness + command corpus + Fast | — | — |
 | W4 Facade Thinning + Release | pending | — | Broad + Arch + Workflow + Smoke + Release | — | — |
 
