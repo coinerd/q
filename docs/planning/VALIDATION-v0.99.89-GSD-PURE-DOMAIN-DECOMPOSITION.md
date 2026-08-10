@@ -118,9 +118,10 @@ Gate: pure-kernel + Arch + Fast.
 
 1. Facade-compat test (`tests/test-gsd-facade-compat.rkt`): 7 tests —
    dynamic-require loader-convention probe (the-extension +
-   gsd-planning-extension), export-surface pins (39 gsd-planning names +
-   24 gsd/core names each dynamic-require), legacy wrapper smoke, pure-domain
-   I/O-free sweep over all 14 pure inventory modules, pure-kernel whitelists.
+   gsd-planning-extension), export-surface pins (32 gsd-planning names +
+   22 gsd/core names each dynamic-require), legacy wrapper smoke, pure-domain
+   I/O-free sweep over every pure inventory module (12, after policy/wave-
+   executor were reclassified with their real effects), pure-kernel whitelists.
 2. Thinning: consumer grep (2026-08-11) documented in gsd-planning.rkt
    source; removed dead internal gsd-snapshot (never provided/used); zero
    exported-name removals — no public API breakage.

@@ -41,7 +41,7 @@ NEW `tests/test-gsd-facade-compat.rkt` (7 tests + 1 module+ check,
 
 ## 2. Facade thinning (consumer grep — 2026-08-11)
 
-`gsd/core.rkt`: **all 24 exports have production consumers**
+`gsd/core.rkt`: **all 22 exports have production consumers**
 (gsd-command-dispatch/cmd-* → command-handlers.rkt; reset-all-gsd-state! →
 command-handlers + gsd-planning + interfaces/sdk-compat; gsd-show-status /
 with-gsd-transaction → gsd-planning + command-handlers; gsd-write-guard →
