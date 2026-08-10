@@ -1,13 +1,13 @@
 # Validation: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0–W3 validated; W4 next
+**Status:** ACTIVE — W0–W4 validated; v0.99.89 RELEASE pending
 
 | Wave | Focused/TDD | Fast | Specific gate | Review | Result |
 |---|---|---|---|---|---|
 | W0 Golden Workflow Traces | ✅ 16/16 (1 helper + 1 test) | ✅ 1057/15420 | ✅ workflows 29 files/161 tests | ✅ APPROVED (1 recheck) | ✅ DONE — merged `8214e6a4` (PR #9254, #9226 closed) |
 | W1 Pure Transition Kernel | ✅ 29/29 (new test file) + 1038 GSD batch | ✅ 1058 files | ✅ pure-kernel + Arch (import closure) | ✅ APPROVED (0 recheck; 2 MINOR + 5 INFO folded `4c55f57b`) | ✅ DONE — merged `eb7807ae` (PR #9255, #9227 closed) |
 | W2 Plan/State Projection Kernel | ✅ 22/22 (new test file) + 1038 GSD batch | ✅ 1059 files / 15472 | ✅ workflows + Broad 1237 files / 17739 + lint-format 0/0 | ✅ APPROVED (0 recheck) | ✅ DONE — merged `74da7e8a` (PR #9256, #9228 closed) |
-| W3 Command Parsing & Intent Boundary | ✅ 13/13 (new test file) + 1087 GSD batch | ✅ 1060 files | ✅ parser fitness (I/O-free scan) + command corpus 30 entries + golden 16/16 + lint-format 0/0 | ✅ APPROVED pending | ✅ DONE — PR pending |
+| W3 Command Parsing & Intent Boundary | ✅ 13/13 (new test file) + 1087 GSD batch | ✅ 1060 files | ✅ parser fitness (I/O-free scan) + command corpus 30 entries + golden 16/16 + lint-format 0/0 | ✅ APPROVED (0 recheck; 3 MINOR folded) | ✅ DONE — merged `927c8024` (PR #9257, #9229 closed) |
 | W4 Facade Thinning + Release | pending | — | Broad + Arch + Workflow + Smoke + Release | — | — |
 
 ## W0 evidence record
@@ -113,3 +113,21 @@ Gate: pure-kernel + Arch + Fast.
   parses (args ""). Pinned as the existing contract.
 - W2 post-merge review fold (missing-STATE.md guard, atomic-write DRY,
   inventory requires) rides this branch as commit `f3a6fc87`.
+
+## W4 evidence record
+
+1. Facade-compat test (`tests/test-gsd-facade-compat.rkt`): 7 tests —
+   dynamic-require loader-convention probe (the-extension +
+   gsd-planning-extension), export-surface pins (39 gsd-planning names +
+   24 gsd/core names each dynamic-require), legacy wrapper smoke, pure-domain
+   I/O-free sweep over all 14 pure inventory modules, pure-kernel whitelists.
+2. Thinning: consumer grep (2026-08-11) documented in gsd-planning.rkt
+   source; removed dead internal gsd-snapshot (never provided/used); zero
+   exported-name removals — no public API breakage.
+3. Hotspot re-measure: gsd-planning.rkt score 19199 (263 LOC, 73 changes);
+   GSD absent from top co-change pairs post-extraction.
+4. Release: version 0.99.89 synced (32 surfaces, historical preserved);
+   CHANGELOG entry; lint-version 0/0; release-dry-run 5/5.
+5. Broad 1238/1239 — the 1 failure is env-sensitive test-pre-commit.rkt
+   (fails ONLY with locally-staged .rkt files; 7/7 with clean index; CI
+   fresh checkout green).

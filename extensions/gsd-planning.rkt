@@ -88,6 +88,17 @@
     [_ (gsm-transition! v)]))
 
 ;; Legacy accessor wrappers (DEBT-01)
+;; v0.99.89 W4 (#9230) consumer grep (2026-08-11): every exported wrapper is
+;; KEPT — production or SDK/test consumers exist:
+;;   - set-gsd-mode! / set-total-waves!  → scripts/sdk-gsd-integration-test.rkt
+;;   - set-current-max-old-text-len!     → tools/builtins/edit.rkt (rename import)
+;;   - mark-wave-complete!               → tests/test-sdk-gsd-live.rkt (SDK test)
+;;   - emit-gsd-event!                   → tests/test-gsd-planning.rkt (bus bridge)
+;;   - current-wave-index/set-current-wave-index! → tests
+;;   - pinned-planning-dir/set-pinned-planning-dir!/set-gsd-event-bus! → used
+;;     internally by register-gsd-tools
+;; Removed in W4: the dead internal gsd-snapshot define (never provided,
+;; never used).
 (define (pinned-planning-dir)
   (current-pinned-dir))
 (define (set-pinned-planning-dir! v)
@@ -112,8 +123,6 @@
   (gsm-ctx-current-wave (current-gsd-ctx)))
 (define (set-current-wave-index! n)
   (gsm-set-current-wave! n))
-(define (gsd-snapshot)
-  (gsm-ctx-snapshot (current-gsd-ctx)))
 (define (gsd-event-bus)
   (current-gsd-event-bus))
 
@@ -163,6 +172,8 @@
 
 ;; Event emission: delegates to events.rkt via session bus bridge
 ;; See register-gsd-tools for bus wiring.
+;; v0.99.89 W4 (#9230) consumer grep (2026-08-11): KEPT — test-gsd-planning.rkt
+;; exercises the bus-bridge through this alias (publish + no-op cases).
 (define (emit-gsd-event! event-sym payload)
   (events:emit-gsd-event! event-sym payload))
 
