@@ -120,8 +120,16 @@
      (set-campaign-wave-status! wave 'done)
      (define event-id
        (make-event-id (campaign-plan-id durable) wave-idx (campaign-attempt-id attempt)))
-     (append-completion-event! base-dir durable event-id)
+     ;; v0.99.90 W2 (#9233): the durable record is the transaction COMMIT
+     ;; POINT — persist it FIRST. The completion outbox and the
+     ;; PLAN/STATE/wave-doc projections are DERIVED files: they may lag after
+     ;; a crash (reconcile-completion-outbox! / reconcile-projections-from-waves!
+     ;; rebuild them) but must never lead — a crash between the durable commit
+     ;; and the outbox append leaves NO phantom completion event, so a later
+     ;; outbox publication can never emit an invented DONE for a wave whose
+     ;; durable status is still 'verifying.
      (persist-campaign! base-dir durable)
+     (append-completion-event! base-dir durable event-id)
      (when caller-wave
        (set-campaign-wave-status! caller-wave 'done))
      ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
@@ -178,6 +186,26 @@
 (define (count-completion-events base-dir rec)
   (length (load-outbox base-dir (campaign-plan-id rec))))
 
+;; v0.99.90 W2 (#9233): rebuild missing completion outbox events from the
+;; authoritative durable record. Every durable 'done wave must have exactly its
+;; stable completion event-id in the outbox; dedup (append-completion-event!
+;; skips present ids) makes this idempotent, and non-done waves NEVER get an
+;; event — the outbox is derived, it may only lag the durable commit, never
+;; lead (no invented DONE). Returns the number of events appended.
+(define (reconcile-completion-outbox! base-dir rec)
+  (define pid (campaign-plan-id rec))
+  (define existing (load-outbox base-dir pid))
+  (define missing
+    (for/list ([w (campaign-record-waves rec)]
+               #:when (eq? (campaign-wave-status w) 'done))
+      (define attempt (campaign-wave-current-attempt w))
+      (and attempt
+           (let ([id (make-event-id pid (campaign-wave-index w) (campaign-attempt-id attempt))])
+             (and (not (member id existing)) id)))))
+  (for ([id (filter (lambda (x) x) missing)])
+    (append-completion-event! base-dir rec id))
+  (length (filter (lambda (x) x) missing)))
+
 ;; ============================================================
 ;; Path helper
 ;; ============================================================
@@ -200,4 +228,5 @@
          completion-result-event-id
          load-outbox
          count-completion-events
-         make-event-id)
+         make-event-id
+         reconcile-completion-outbox!)
