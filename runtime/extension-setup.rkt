@@ -7,6 +7,7 @@
 (require racket/contract
          (only-in "layer-adapters.rkt" tool-registry? extension-registry? make-extension-ctx)
          (only-in "layer-adapters.rkt" current-gsd-ctx)
+         "extension-host-adapter.rkt"
          "../util/event/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "runtime-helpers.rkt" maybe-dispatch-hooks))
@@ -37,6 +38,10 @@
                            #:event-bus bus
                            #:extension-registry ext-reg
                            #:tool-registry tool-reg
+                           ;; v0.99.88 W3 (MA-04): inject the neutral package
+                           ;; lifecycle capability; the adapter owns the
+                           ;; concrete runtime/package.rkt implementation.
+                           #:package-service (make-package-host-service)
                            #:gsd-ctx (current-gsd-ctx)))
      (define-values (_amended hook-res)
        (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))

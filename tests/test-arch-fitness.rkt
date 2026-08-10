@@ -857,6 +857,40 @@
       (check-false (imports-from? reqs '("runtime/"))
                    "extensions/context.rkt must not import runtime/ after W2 service isolation"))))
 
+;; v0.99.88 W3: ext-package-manager is isolated behind the neutral
+;; package-host-service; the concrete runtime/package.rkt import lives in the
+;; Runtime adapter only.
+(define v09988-w3-suite
+  (test-suite "v0.99.88-w3-ext-package-manager-isolation"
+    (test-case "H4: extensions/ext-package-manager.rkt imports no runtime layer (W3 isolation)"
+      (define epm-path (build-path q-dir "extensions" "ext-package-manager.rkt"))
+      (check-true (file-exists? epm-path))
+      (define reqs (extract-requires epm-path))
+      (check-false
+       (imports-from? reqs '("runtime/"))
+       "extensions/ext-package-manager.rkt must not import runtime/ after W3 service isolation"))
+    (test-case "H5: Runtime adapter encapsulates the concrete package manager"
+      (define adapter-path (build-path q-dir "runtime" "extension-host-adapter.rkt"))
+      (check-true (file-exists? adapter-path))
+      (define reqs (extract-requires adapter-path))
+      (check-true (imports-from? reqs '("package.rkt"))
+                  "Runtime adapter must own the concrete package manager import")
+      (check-true (imports-from? reqs '("util/extension/host-services.rkt"))
+                  "Runtime adapter must implement the neutral host protocol"))
+    (test-case "H6: neutral protocol provides the package capability"
+      (check-not-exn (lambda ()
+                       (dynamic-require (build-path q-dir "util" "extension" "host-services.rkt")
+                                        'package-host-service?))
+                     "host-services must export package-host-service?")
+      (check-not-exn (lambda ()
+                       (dynamic-require (build-path q-dir "util" "extension" "host-services.rkt")
+                                        'package-summary?))
+                     "host-services must export the package-summary pure type")
+      (check-not-exn (lambda ()
+                       (dynamic-require (build-path q-dir "runtime" "extension-host-adapter.rkt")
+                                        'make-package-host-service))
+                     "Runtime adapter must export make-package-host-service"))))
+
 (run-tests v09719-suite)
 
 (run-tests v0747-suite)
@@ -864,3 +898,5 @@
 (run-tests v0741-suite)
 
 (run-tests v09988-w1-suite)
+
+(run-tests v09988-w3-suite)

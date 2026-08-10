@@ -6,7 +6,7 @@
 
 ;; tests/test-extension-exception-fitness.rkt — Extension exception fitness
 ;;
-;; v0.99.87 W1 (roadmap §W1): the five Extension exceptions are verified
+;; v0.99.87 W1 (roadmap §W1): the Extension exceptions are verified
 ;; against real import targets, metadata, and expiry:
 ;;   1. No stale exceptions (source file still exists)
 ;;   2. No ghost destinations (each declared destination is still imported)
@@ -180,12 +180,11 @@
     (test-case "Extension exception set is stable (count and membership)"
       (check-equal?
        (length extension-exceptions)
-       4
-       "Extensions known-exceptions must remain at 4 (v0.99.88 W2: context.rkt exception removed)")
-      (check-equal?
-       (sort (map entry-name extension-exceptions) string<?)
-       '("dialog-api.rkt" "ext-package-manager.rkt" "ui-surface.rkt" "widget-lifecycle.rkt")
-       "Extension exception membership must match v0.99.88 W2 baseline"))
+       3
+       "Extensions known-exceptions must remain at 3 (v0.99.88 W3: ext-package-manager.rkt exception removed)")
+      (check-equal? (sort (map entry-name extension-exceptions) string<?)
+                    '("dialog-api.rkt" "ui-surface.rkt" "widget-lifecycle.rkt")
+                    "Extension exception membership must match v0.99.88 W3 baseline"))
 
     (test-case "Runtime and TUI exceptions are reported separately"
       (define runtime-entries
@@ -208,9 +207,11 @@
                 extension-exceptions))
       ;; Runtime-boundary exceptions (fragile runtime service coupling).
       ;; v0.99.88 W2: context.rkt removed — provider registry is injected as a
-      ;; neutral host capability; only ext-package-manager.rkt remains.
+      ;; neutral host capability. v0.99.88 W3: ext-package-manager.rkt removed
+      ;; — package lifecycle is injected as a neutral package-host-service
+      ;; (MA-04 closed). Zero runtime-boundary extension exceptions remain.
       (check-equal? (sort (map entry-name runtime-entries) string<?)
-                    '("ext-package-manager.rkt")
+                    '()
                     "Runtime-boundary extension exceptions")
       ;; TUI-boundary exceptions (direct tui/ import).
       (check-equal? (sort (map entry-name tui-entries) string<?)

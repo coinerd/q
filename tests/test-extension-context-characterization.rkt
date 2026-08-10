@@ -90,15 +90,16 @@
 ;; ---------------------------------------------------------------------------
 
 (module+ test
-  (test-case "CH2: extension-ctx exposes the 16 documented read-only fields"
+  (test-case "CH2: extension-ctx exposes the 17 documented read-only fields"
     (define ctx (make-basic-ctx))
-    ;; struct->vector = tag + 16 fields
+    ;; struct->vector = tag + 17 fields (v0.99.88 W3 added package-service)
     (define vec (struct->vector ctx))
     (check-equal? (vector-ref vec 0) 'struct:extension-ctx)
-    (check-equal? (vector-length vec) 17)
+    (check-equal? (vector-length vec) 18)
     ;; spot-check accessors resolve to the struct
     (check-equal? (ctx-session-id ctx) "char-test")
-    (check-equal? (ctx-gsd-ctx ctx) #f)))
+    (check-equal? (ctx-gsd-ctx ctx) #f)
+    (check-false (ctx-package-service ctx) "package-service defaults to #f")))
 
 ;; ---------------------------------------------------------------------------
 ;; CH3 — ctx-* provider wrappers against a real registry

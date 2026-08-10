@@ -47,6 +47,7 @@
                   validate-manifest
                   compute-manifest-checksum
                   qpm-manifest-name
+                  qpm-manifest-version
                   qpm-manifest-checksum
                   qpm-manifest-files)
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?))
@@ -84,5 +85,6 @@
          validate-manifest
          compute-manifest-checksum
          qpm-manifest-name
+         qpm-manifest-version
          qpm-manifest-checksum
          qpm-manifest-files)
