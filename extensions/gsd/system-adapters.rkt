@@ -12,12 +12,14 @@
          racket/string
          racket/system
          "effect-ports.rkt"
+         "wave-runner-port.rkt"
          (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!))
 
 (provide make-system-filesystem-port
          make-system-git-port
          make-system-clock-port
-         make-system-process-port)
+         make-system-process-port
+         run-wave-with-timeout)
 
 (define (system-kind path)
   (cond
@@ -120,3 +122,40 @@
 
 (define (make-system-clock-port)
   (gsd-clock-port current-seconds current-inexact-milliseconds))
+
+;; ============================================================
+;; Wave runner timeout adapter (v0.99.90 W3 #9234)
+;; ============================================================
+
+;; Run one wave with an explicit deadline. Deterministic under fake ports:
+;;   - runner finishes in time        -> its outcome
+;;   - deadline passes                -> cancel! is requested, then the thread
+;;                                       is given a bounded grace period to
+;;                                       honor the cancellation; if it still
+;;                                       will not stop it is force-killed.
+;;                                       Returns 'timed-out exactly once.
+;; The cancel grace is intentionally small and separate from the deadline so
+;; a pending tool is asked to abort rather than being silently killed the
+;; instant the deadline passes.
+(define cancel-grace-sec 2)
+
+(define (run-wave-with-timeout port timeout-sec wave-idx)
+  (define result-box (box #f))
+  (define done (make-semaphore 0))
+  (define worker
+    (thread (lambda ()
+              (set-box! result-box ((gsd-wave-runner-port-run port) wave-idx))
+              (semaphore-post done))))
+  (if (sync/timeout timeout-sec done)
+      (unbox result-box)
+      (begin
+        ;; The deadline is authoritative: once it passes the outcome is
+        ;; 'timed-out no matter what the runner finally returns (a runner that
+        ;; ignored cancellation must never turn a timed-out invocation into a
+        ;; done/failed one — that would break exactly-once ordering).
+        ;; Ask the pending tool to stop, then wait (bounded) for it to comply
+        ;; so no thread keeps executing into the next wave.
+        ((gsd-wave-runner-port-cancel! port))
+        (sync/timeout cancel-grace-sec done)
+        (kill-thread worker)
+        (wave-execution-outcome 'timed-out (format "runner exceeded ~a second(s)" timeout-sec)))))

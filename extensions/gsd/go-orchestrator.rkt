@@ -24,10 +24,12 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "wave-completion.rkt"
+         "wave-runner-port.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
          "../../util/loop-result.rkt"
+         (only-in "system-adapters.rkt" run-wave-with-timeout)
          (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!)
          (only-in "plan-context-builder.rkt" current-git-root))
 
@@ -74,8 +76,16 @@
 ;; Wave runner abstraction (injectable for testing)
 ;; ============================================================
 
-(define default-runner (lambda (wave-idx) 'ok))
+(define default-runner (lambda (wave-idx) (wave-execution-outcome 'done "default runner")))
 (define default-verifier (lambda (wave-idx) #t))
+
+;; Normalize a runner value to a gsd-wave-runner-port. Legacy plain functions
+;; returning symbols ('ok/'error/'cancelled) are wrapped and coerced at the
+;; boundary so the coordinator switch only ever sees structured outcomes.
+(define (coerce-runner runner)
+  (cond
+    [(gsd-wave-runner-port? runner) runner]
+    [else (make-wave-runner-port (lambda (idx) (coerce-run-result (runner idx))))]))
 
 ;; A campaign request is the interface-safe execution boundary for /go.  It
 ;; carries durable campaign identity plus callbacks that build one wave prompt
@@ -91,34 +101,47 @@
      (define metadata (loop-result-metadata result))
      (define tool-loop-limit? (hash-ref metadata 'toolLoopLimit #f))
      (cond
-       [tool-loop-limit? 'error]
-       [(member termination '(completed tool-calls-pending empty-response)) 'ok]
-       [(member termination '(cancelled force-shutdown shutdown)) 'cancelled]
-       [else 'error])]
-    [(eq? result 'completed) 'ok]
-    [(eq? result 'ok) 'ok]
-    [(eq? result 'cancelled) 'cancelled]
-    [else 'error]))
+       [tool-loop-limit? (wave-execution-outcome 'failed "tool loop limit reached")]
+       [(member termination '(completed tool-calls-pending empty-response))
+        (wave-execution-outcome 'done "")]
+       [(member termination '(cancelled force-shutdown shutdown))
+        (wave-execution-outcome 'cancelled "")]
+       [else (wave-execution-outcome 'failed (format "termination reason: ~a" termination))])]
+    [(eq? result 'completed) (wave-execution-outcome 'done "")]
+    [(eq? result 'ok) (wave-execution-outcome 'done "")]
+    [(eq? result 'cancelled) (wave-execution-outcome 'cancelled "")]
+    [else (wave-execution-outcome 'failed (format "unknown runner result: ~s" result))]))
 
 (define (execute-campaign-request! request run-prompt)
+  (define base-dir (campaign-request-base-dir request))
+  (define record (campaign-request-record request))
+  (define plan-id (campaign-plan-id record))
+  ;; Pending-tool cancellation surface: the executor port's cancel-requested?
+  ;; reflects the durable campaign cancellation flag so a long-running tool
+  ;; loop can abort mid-wave instead of completing after /cancel.
+  (define (durable-cancellation-requested?)
+    (define observed (load-campaign-record base-dir plan-id))
+    (and observed (campaign-record-cancellation observed)))
   (run-campaign!
-   (campaign-request-base-dir request)
-   (campaign-request-record request)
-   #:runner (lambda (wave-idx)
-              (with-handlers ([exn:fail? (lambda (e)
-                                           (log-error "campaign runner failed: ~a" (exn-message e))
-                                           'error)])
-                (define returned-values
-                  (call-with-values
-                   (lambda () (run-prompt ((campaign-request-prompt-for-wave request) wave-idx)))
-                   list))
-                ;; Runtime/session runners return either a single
-                ;; loop-result or (values updated-session result).
-                (define run-result
-                  (if (= (length returned-values) 2)
-                      (cadr returned-values)
-                      (and (pair? returned-values) (car returned-values))))
-                (prompt-run-result->outcome run-result)))
+   base-dir
+   record
+   #:runner (make-wave-runner-port
+             (lambda (wave-idx)
+               (with-handlers ([exn:fail? (lambda (e)
+                                            (log-error "campaign runner failed: ~a" (exn-message e))
+                                            (wave-execution-outcome 'failed (exn-message e)))])
+                 (define returned-values
+                   (call-with-values
+                    (lambda () (run-prompt ((campaign-request-prompt-for-wave request) wave-idx)))
+                    list))
+                 ;; Runtime/session runners return either a single
+                 ;; loop-result or (values updated-session result).
+                 (define run-result
+                   (if (= (length returned-values) 2)
+                       (cadr returned-values)
+                       (and (pair? returned-values) (car returned-values))))
+                 (prompt-run-result->outcome run-result)))
+             #:cancel-requested? durable-cancellation-requested?)
    #:verifier (campaign-request-verifier request)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -189,7 +212,8 @@
                            #:runner [runner default-runner]
                            #:verifier [verifier default-verifier]
                            #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
-                           #:fence-token [requested-fence #f])
+                           #:fence-token [requested-fence #f]
+                           #:timeout-sec [timeout-sec #f])
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
@@ -226,7 +250,17 @@
      (define (interrupt-current! message)
        (persist-current-status! 'interrupted)
        (campaign-result 'wave-cancelled '() message))
-     (define run-result (runner wave-idx))
+     ;; Executor port boundary (W3 #9234): ONE structured terminal outcome per
+     ;; invocation. Legacy symbol runners coerce; an optional deadline wraps
+     ;; the port with run-wave-with-timeout so a hung tool yields
+     ;; 'timed-out (persisted as interrupted) instead of blocking forever.
+     (define runner-port (coerce-runner runner))
+     (define run-one
+       (if timeout-sec
+           (lambda (idx) (run-wave-with-timeout runner-port timeout-sec idx))
+           (gsd-wave-runner-port-run runner-port)))
+     (define run-result (coerce-run-result (run-one wave-idx)))
+     (define outcome (wave-execution-outcome-kind run-result))
      (define after-run (observe))
      (cond
        [(and after-run (campaign-record-cancellation after-run))
@@ -234,8 +268,8 @@
        [(not (current-wave-for-attempt after-run wave-idx fence expected-id))
         (campaign-result 'wave-cancelled '() "stale runner result ignored")]
        [else
-        (case run-result
-          [(ok)
+        (case outcome
+          [(done)
            (cond
              [(meta-fix-predicate run-result)
               ;; Meta-fix: reset wave status to pending, don't consume attempt
@@ -276,7 +310,7 @@
                           (campaign-result 'wave-cancelled '() "stale completion ignored")]
                          [else
                           (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
-          [(error)
+          [(failed)
            (if (persist-current-status! 'failed)
                (begin
                  (apply-wave-status-projections! base-dir
@@ -285,7 +319,12 @@
                                                  (lambda (idx) (wave-slug base-dir idx)))
                  (campaign-result 'wave-failed '() "runner error"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
-          [(cancelled) (interrupt-current! "runner cancelled")]
+          [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
+          ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
+          ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
+          ;; completion — the durable record still says in-progress so a
+          ;; restart re-attempts the wave (at-least-once, exactly-once event).
+          [(timed-out) (interrupt-current! (wave-execution-outcome-message run-result))]
           [else
            (if (persist-current-status! 'failed)
                (begin
@@ -293,7 +332,7 @@
                                                  wave-idx
                                                  STATUS-FAILED
                                                  (lambda (idx) (wave-slug base-dir idx)))
-                 (campaign-result 'wave-failed '() "unknown runner result"))
+                 (campaign-result 'wave-failed '() "unknown runner outcome"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))])])]))
 
 ;; ============================================================
@@ -304,7 +343,8 @@
                        rec
                        #:runner [runner default-runner]
                        #:verifier [verifier default-verifier]
-                       #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)])
+                       #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
+                       #:timeout-sec [timeout-sec #f])
   (define plan-id (campaign-plan-id rec))
   (define lease (acquire-lease base-dir plan-id))
   (if (not lease)
@@ -352,7 +392,8 @@
                                    #:runner runner
                                    #:verifier verifier
                                    #:meta-fix-predicate meta-fix-predicate
-                                   #:fence-token (add1 (campaign-fence-token current))))
+                                   #:fence-token (add1 (campaign-fence-token current))
+                                   #:timeout-sec timeout-sec))
               (define observed (load-campaign-record base-dir plan-id))
               (mirror-durable-statuses! rec observed)
               (case (campaign-result-status result)
