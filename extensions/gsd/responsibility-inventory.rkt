@@ -97,13 +97,14 @@
                                "campaign-state"
                                "wave-docs"
                                "wave-status"))
-   ;; transition logic (4)
+   ;; transition logic (5)
    (make-entry "policy.rkt" 'transition-logic '() '() '("racket/match" "racket/string" "racket/path"))
+   (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
    (make-entry "transition-logic.rkt"
                'transition-logic
                '()
                '()
-               '("racket/match" "racket/set" "runtime-state-types"))
+               '("racket/match" "racket/set" "runtime-state-types" "transition-kernel"))
    (make-entry "state-machine.rkt"
                'transition-logic
                '(make-param)
