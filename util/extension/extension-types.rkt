@@ -28,6 +28,7 @@
          extension-ctx-command-registry
          extension-ctx-ui-channel
          extension-ctx-provider-registry
+         extension-ctx-package-service
          extension-ctx-session-messages
          extension-ctx-session-token-usage
          extension-ctx-gsd-ctx
@@ -50,6 +51,8 @@
          command-registry ; (or/c any/c #f) — slash command registration
          ui-channel ; (or/c channel? #f) — user interaction requests
          provider-registry ; (or/c any/c #f) — LLM provider access (#1114)
+         ;; v0.99.88 W3: injected neutral package-host-service (MA-04)
+         package-service ; (or/c any/c #f) — extension package lifecycle access
          ;; #1223: session state fields for query API
          session-messages ; (or/c (listof hash?) #f) — read-only message history
          session-token-usage ; (or/c hash? #f) — token usage stats

@@ -55,6 +55,8 @@
          ctx-ui-channel
          ;; Accessor (#1114: provider registry access for extensions)
          ctx-provider-registry
+         ;; Accessor (v0.99.88 W3: package lifecycle service for extensions)
+         ctx-package-service
          ctx-gsd-ctx
          ;; Constructor
          (contract-out [make-extension-ctx
@@ -70,6 +72,7 @@
                                            #:command-registry (or/c any/c #f)
                                            #:ui-channel (or/c any/c #f)
                                            #:provider-registry (or/c any/c #f)
+                                           #:package-service (or/c any/c #f)
                                            #:session-messages (or/c (listof hash?) #f)
                                            #:session-token-usage (or/c hash? #f)
                                            #:gsd-ctx (or/c any/c #f)
@@ -110,6 +113,9 @@
                             #:command-registry [command-registry #f]
                             #:ui-channel [ui-channel #f]
                             #:provider-registry [provider-registry #f]
+                            ;; v0.99.88 W3: injected neutral package host
+                            ;; capability (MA-04); default #f = null service.
+                            #:package-service [package-service #f]
                             ;; #1223: session state query fields
                             #:session-messages [session-messages #f]
                             #:session-token-usage [session-token-usage #f]
@@ -127,6 +133,7 @@
                  command-registry
                  ui-channel
                  provider-registry
+                 package-service
                  session-messages
                  session-token-usage
                  gsd-ctx
@@ -150,6 +157,8 @@
 (define ctx-ui-channel extension-ctx-ui-channel)
 ;; #1114: provider registry accessor alias
 (define ctx-provider-registry extension-ctx-provider-registry)
+;; v0.99.88 W3: package service accessor alias (MA-04)
+(define ctx-package-service extension-ctx-package-service)
 ;; C-01 v0.35.1: GSD context accessor
 (define ctx-gsd-ctx extension-ctx-gsd-ctx)
 

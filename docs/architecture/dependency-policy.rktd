@@ -81,12 +81,13 @@
    ;; service is injected as a neutral host capability; the concrete registry
    ;; import lives only in runtime/extension-host-adapter.rkt (pinned by
    ;; H3 in tests/test-arch-fitness.rkt).
-   (ext-package-manager.rkt
-    (rationale . "imports runtime/package.rkt for package lifecycle management (fragile — v0.99.88 service isolation)")
-    (owner . "extensions")
-    (revisit-by . "2026-10-01")
-    (boundary . runtime)
-    (destinations . ("runtime/package.rkt"))))))
+   ;; v0.99.88 W3: ext-package-manager.rkt exception REMOVED — the package
+   ;; lifecycle capability is injected as a neutral package-host-service; the
+   ;; concrete runtime/package.rkt import lives only in
+   ;; runtime/extension-host-adapter.rkt (pinned by H5 in
+   ;; tests/test-arch-fitness.rkt). MA-04 closed. Zero runtime-boundary
+   ;; extension exceptions remain.
+   )))
  ;; Agent iteration boundary (v0.99.87+)
  ;; agent/iteration/ MUST NOT require runtime/ except the documented
  ;; exceptions below. Shared iteration protocols and type predicates belong
