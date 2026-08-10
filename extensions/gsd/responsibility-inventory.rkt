@@ -288,7 +288,7 @@
                'external-ports
                '(make-param)
                '()
-               '("racket/contract" "effect-ports" "system-adapters"))))
+               '("racket/contract" "effect-ports" "github-port" "system-adapters"))))
 
 (provide inventory
          (struct-out entry)

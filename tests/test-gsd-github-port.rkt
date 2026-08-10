@@ -118,6 +118,31 @@
     (check-true (gsd-github-command-result-already-done? result))
     (check-equal? (fake-github-call-count state 'create-release!) 0))
 
+  (test-case "release-create dedup on existing tag still enforces the SHA assertion"
+    (define-values (adapter state) (make-fake-github-adapter))
+    (fake-github-seed-release! state "v0.99.90" "rel-0")
+    (define port (make-github-port adapter #:dry-run? #f))
+    ;; pre-existing release is on the WRONG commit -> fail closed, no success
+    (check-exn exn:fail:github-sha-mismatch?
+               (lambda ()
+                 ((gsd-github-port-execute port)
+                  (gsd-github-command 'release-create
+                                      "release-dedup-sha"
+                                      #hasheq((tag . "v0.99.90") (target-commitish . "abc"))
+                                      "def")))
+               "dedup path must not bypass the immutable sha assertion")
+    (check-equal? (fake-github-call-count state 'create-release!) 0)
+    ;; consistent sha -> dedup returns the existing release id
+    (define result
+      ((gsd-github-port-execute port) (gsd-github-command 'release-create
+                                                          "release-dedup-ok"
+                                                          #hasheq((tag . "v0.99.90")
+                                                                  (target-commitish . "abc"))
+                                                          "abc")))
+    (check-equal? (gsd-github-command-result-external-id result) "rel-0")
+    (check-true (gsd-github-command-result-already-done? result))
+    (check-equal? (fake-github-call-count state 'create-release!) 0))
+
   (test-case "pr-merge on an already-merged PR returns the existing merge sha"
     (define-values (adapter state) (make-fake-github-adapter))
     (fake-github-seed-merged-pr! state 11 "abc111" "sha-merged-11")

@@ -149,22 +149,33 @@
     (hash-set! journal correlation-id result))
 
   ;; External dedup: ask the adapter whether the effect already exists before
-  ;; creating it (cross-restart safety: journal is in-memory only).
+  ;; creating it (cross-restart safety: journal is in-memory only). Read ops
+  ;; are guarded the same way as write ops so adapter read errors are also
+  ;; redacted (MINOR-2 fold).
   (define (dedup-external kind params)
     (case kind
       [(issue-create)
        (define key (hash-ref params 'dedup-key (hash-ref params 'title #f)))
-       (and key ((github-adapter-find-issue-by-key adapter) key))]
+       (and key ((guarded (github-adapter-find-issue-by-key adapter) token) key))]
       [(release-create)
        (define tag (hash-ref params 'tag #f))
-       (and tag ((github-adapter-find-release-by-tag adapter) tag))]
+       (and tag ((guarded (github-adapter-find-release-by-tag adapter) token) tag))]
       [else #f]))
+
+  ;; Immutable SHA assertion for release-create: the attested expected-sha
+  ;; must equal the target commitish (MINOR-1 fold: also enforced on the
+  ;; external-dedup path so a pre-existing release on the wrong commit can
+  ;; never be reported as success).
+  (define (assert-release-sha! params expected-sha)
+    (define target (hash-ref params 'target-commitish #f))
+    (when (and expected-sha target (not (equal? expected-sha target)))
+      (sha-mismatch! expected-sha target)))
 
   ;; Immutable SHA assertion for pr-merge: the live PR head must equal the
   ;; attested expected-sha, else fail closed (no merge).
   (define (assert-pr-sha! pull-number expected-sha)
     (when expected-sha
-      (define pr ((github-adapter-get-pr adapter) pull-number))
+      (define pr ((guarded (github-adapter-get-pr adapter) token) pull-number))
       (define live-head (and pr (memq 'head-sha pr) (cadr (memq 'head-sha pr))))
       (unless (equal? live-head expected-sha)
         (sha-mismatch! expected-sha (or live-head "unknown")))))
@@ -195,6 +206,11 @@
                                   "journal replay: no duplicate external effect")]
       [else
        (define existing (dedup-external kind params))
+       ;; MINOR-1 fold: release-create dedup still enforces the immutable
+       ;; SHA assertion (a pre-existing release on the wrong commit must
+       ;; never be reported as success).
+       (when (and existing (eq? kind 'release-create))
+         (assert-release-sha! params expected-sha))
        (define result
          (if existing
              (gsd-github-command-result correlation-id
@@ -228,10 +244,7 @@
                     (let ([merge-sha ((guarded (github-adapter-merge-pr! adapter) token) params)])
                       (gsd-github-command-result correlation-id kind merge-sha #f #f "merged")))]
                [(release-create)
-                (define tag (hash-ref params 'tag))
-                (define target (hash-ref params 'target-commitish #f))
-                (when (and expected-sha target (not (equal? expected-sha target)))
-                  (sha-mismatch! expected-sha target))
+                (assert-release-sha! params expected-sha)
                 (define id ((guarded (github-adapter-create-release! adapter) token) params))
                 (gsd-github-command-result correlation-id kind id #f #f "created")]
                [else (error 'github-port "unhandled command kind: ~s" kind)])))
