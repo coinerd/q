@@ -34,13 +34,22 @@
    (rationale
     . "Browser subsystem peer of tools — imports only agent/event and util. Never runtime/tui.")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
+ ;; HISTORICAL (v0.99.88 W4: no live dated entries remain — all extension
+ ;; exceptions are permanent pair waivers; see Dated format below only as
+ ;; reference for pre-W4 entries):
  ;; Dated format: ((filename (rationale . "...") (owner . "...")
  ;;                           (revisit-by . "YYYY-MM-DD")
  ;;                           (boundary . tui|runtime|ui)
  ;;                           (destinations . ("module.rkt" ...))) ...)
  ;; Permanent format: ((filename (rationale . "...") (owner . "...")
  ;;                               (permanent-waiver . #t)
- ;;                               (waiver-justification . "...")) ...)
+ ;;                               (waiver-justification . "...")
+ ;;                               (boundary . tui|runtime|ui)
+ ;;                               (destinations . ("module.rkt" ...))) ...)
+ ;; Note: extension exceptions ALWAYS keep boundary + destinations
+ ;; (pair-precise permanent waivers) — the extension fitness checker requires
+ ;; them regardless of lifecycle; the runtime/agent checkers allow waivers
+ ;; without destinations.
  ;; Owner and rationale are always required. Exactly one lifecycle form is required.
  ;; v0.99.87 W1: exceptions are pair-precise — each `destinations` entry is a
  ;; (source,destination) pair the exemption covers; `boundary` classifies the
@@ -62,19 +71,25 @@
    ((dialog-api.rkt
     (rationale . "UI dialog primitives bridge to shared ui-core protocol layer (TUI-adjacent, not tui/)")
     (owner . "tui")
-    (revisit-by . "2026-10-01")
+    (permanent-waiver . #t)
+    (waiver-justification
+     . "Intentional UI bridge (v0.99.88 W4): extension dialog primitives (ctx-notify/ctx-confirm/ctx-select, #721-724) integrate via the shared ui-core/ui-state-protocol layer (F3 extraction) that re-exports ui-state from tui/state-types. dialog-api is extension-framework infrastructure (runtime/extension-catalog.rkt infra list) and documented in docs/api-stability.md. No neutral ui-state protocol exists outside TUI; building one would be an abstract UI framework, which the roadmap prohibits. Consumers: extension framework + tests/test-dialog-api.rkt.")
     (boundary . ui)
     (destinations . ("ui-core/ui-state-protocol.rkt")))
    (ui-surface.rkt
     (rationale . "UI surface interface callbacks bridge to shared ui-core actions (TUI-adjacent, not tui/)")
     (owner . "tui")
-    (revisit-by . "2026-10-01")
+    (permanent-waiver . #t)
+    (waiver-justification
+     . "Intentional UI bridge (v0.99.88 W4): extensions call UI callbacks via the parameter registry instead of importing TUI internals (ARCH-02 break); ui-core/ui-actions.rkt is the shared action protocol layer (F4). Static production consumers install callbacks: tui/tui-init.rkt and gui/main.rkt; extensions/widget-api.rkt and extensions/custom-ui-api.rkt depend on it. ui-core/ui-actions re-exports event types and runtime/settings-query.rkt; no neutral location exists without building an abstract UI framework.")
     (boundary . ui)
     (destinations . ("ui-core/ui-actions.rkt")))
    (widget-lifecycle.rkt
     (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
     (owner . "extensions")
-    (revisit-by . "2026-10-01")
+    (permanent-waiver . #t)
+    (waiver-justification
+     . "Intentional TUI component-model bridge (v0.99.88 W4): lifecycle widgets convert to q-components via widget->component using make-q-component/q-component? from tui/component.rkt; the q-component protocol lives in the TUI component model with no neutral equivalent (building one would be an abstract UI framework, which the roadmap prohibits). Shipped extension feature (#5253/#5254) listed as an available extension (non-infra; /activate); consumers: extension authors + tests/test-widget-lifecycle.rkt.")
     (boundary . tui)
     (destinations . ("tui/component.rkt")))
    ;; v0.99.88 W2: context.rkt exception REMOVED — the provider-registry
