@@ -48,11 +48,12 @@
                '()
                '()
                '("racket/format" "racket/string" "plan-types" "wave-executor"))
-   (make-entry "plan-context-builder.rkt"
-               'pure-planning
-               '(git subprocess parameterize make-param path-ops fs-read)
-               '()
-               '("racket/string" "racket/port" "racket/system" "racket/list" "plan-types"))
+   (make-entry
+    "plan-context-builder.rkt"
+    'pure-planning
+    '(make-param path-ops fs-read)
+    '()
+    '("racket/string" "racket/port" "racket/list" "plan-types" "effect-ports" "composition-root"))
    ;; campaign state (5)
    (make-entry "runtime-state-types.rkt" 'campaign-state '() '() '("racket/set"))
    (make-entry "session-state.rkt"
@@ -249,7 +250,25 @@
     '(make-param)
     '("current-gsd-correlation-id")
     '("racket/match" "util/error" "agent/event-structs/base" "agent/event-emitter" "session-state"))
-   (make-entry "event-structs.rkt" 'event-projection '() '() '("util/event/event-macro"))))
+   (make-entry "event-structs.rkt" 'event-projection '() '() '("util/event/event-macro"))
+   ;; v0.99.90 W0 external-domain ports (3)
+   (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
+   (make-entry "system-adapters.rkt"
+               'external-ports
+               '(fs-read fs-write fs-rename fs-delete mkdir dir-list git parameterize subprocess)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "racket/system"
+                               "effect-ports"
+                               "sandbox/gateway-bridge"))
+   (make-entry "composition-root.rkt"
+               'external-ports
+               '(make-param)
+               '()
+               '("racket/contract" "effect-ports" "system-adapters"))))
 
 (provide inventory
          (struct-out entry)

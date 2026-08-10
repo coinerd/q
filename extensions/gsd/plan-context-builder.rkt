@@ -15,9 +15,10 @@
 
 (require racket/string
          racket/port
-         racket/system
          racket/list
-         "plan-types.rkt")
+         "plan-types.rkt"
+         "effect-ports.rkt"
+         "composition-root.rkt")
 
 (provide build-enriched-plan-ctx
          infer-capabilities-from-files
@@ -124,36 +125,21 @@
 ;; Get a compact git diff excerpt for the wave's files.
 ;; v0.99.24 C-3: Fixed dead code — file paths were computed but never passed to git.
 ;; v0.99.83 W1 (F-7): Fixed stderr leak — system* wrote git errors to the terminal.
-;; Now uses subprocess with explicit stderr capture, and resolves the git root
-;; via find-git-root-dir (handles the q-agent two-tier layout).
+;; v0.99.90 W0 (#9231): Delegate to the injected git port through
+;; current-gsd-effect-ports (composition-root.rkt); the production adapter
+;; preserves the exact subprocess command, trimming, and truncation. The
+;; current-git-root parameter remains the public override seam.
 ;; Returns a string (possibly empty when no changes or no git).
 (define (get-diff-excerpt base-dir files)
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
         (define git-root (or (current-git-root) (find-git-root-dir base-dir)))
-        (if (not git-root)
-            ""
-            (parameterize ([current-directory git-root])
-              (define-values (sp out in err)
-                (apply subprocess
-                       #f
-                       'out
-                       'in
-                       'err
-                       (find-executable-path "git")
-                       (list* "show" "--stat" "--oneline" "HEAD" "--" files)))
-              (define stdout-str (port->string out))
-              (define stderr-str (port->string err))
-              (close-input-port out)
-              (close-output-port in)
-              (close-input-port err)
-              (subprocess-wait sp)
-              (define code (subprocess-status sp))
-              (define trimmed (string-trim stdout-str))
-              (if (> (string-length trimmed) 2000)
-                  (string-append (substring trimmed 0 2000) "...")
-                  trimmed))))))
+        (cond
+          [(not git-root) ""]
+          [else
+           (define git-port (gsd-effect-ports-git (current-gsd-effect-ports)))
+           ((gsd-git-port-head-summary git-port) git-root files)]))))
 
 ;; Attempt to read test summary from session artifacts.
 ;; v0.99.24 W1: Checks for cached test results file. Returns a descriptive

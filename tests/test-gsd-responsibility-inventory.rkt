@@ -12,11 +12,12 @@
 
 (require racket/string
          racket/file
+         racket/runtime-path
          rackunit
          rackunit/text-ui
          "../extensions/gsd/responsibility-inventory.rkt")
 
-(define gsd-dir "extensions/gsd")
+(define-runtime-path gsd-dir "../extensions/gsd")
 
 (define valid-domains
   '(pure-planning campaign-state
@@ -25,7 +26,8 @@
                   persistence
                   event-projection
                   command-parsing
-                  compatibility-facade))
+                  compatibility-facade
+                  external-ports))
 
 (define valid-effects
   '(fs-write fs-read
@@ -67,7 +69,7 @@
              #:when
              (case eff
                [(fs-write) (has? #rx"\\((?:write-file|with-output-to-file|call-with-output-file)")]
-               [(fs-read) (has? #rx"\\((?:call-with-input-file|file->string|file->lines)")]
+               [(fs-read) (has? #rx"call-with-input-file|file->string|file->lines|file->bytes")]
                [(fs-rename) (has? #rx"rename-file-or-directory|copy-file")]
                [(fs-delete) (has? #rx"delete-file|delete-directory")]
                [(mkdir) (has? #rx"make-directory")]
@@ -100,7 +102,7 @@
       (check-equal? (length on-disk)
                     (length inventory)
                     "inventory must cover every GSD module exactly once")
-      (check-equal? (length inventory) 29 "GSD module count is stable at 29"))
+      (check-equal? (length inventory) 32 "GSD module count is stable at 32"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])
@@ -142,3 +144,7 @@
 
 (module+ main
   (exit (run-tests inventory-tests)))
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests inventory-tests))

@@ -72,6 +72,8 @@
   (current-gsd-correlation-id . TURN_LOCAL))
  ("extensions/gsd/plan-context-builder.rkt"
   (current-git-root . CONFIGURATION))
+ ("extensions/gsd/composition-root.rkt"
+  (current-gsd-effect-ports . SERVICE_HANDLE))
  ("extensions/gsd/session-state.rkt"
   (current-gsd-session-id . SERVICE_HANDLE)
   (current-gsd-ctx . SERVICE_HANDLE))
