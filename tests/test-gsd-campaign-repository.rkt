@@ -20,6 +20,7 @@
          rackunit/text-ui
          racket/file
          racket/string
+         (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt")
 
@@ -247,6 +248,30 @@
        (list 'campaign-record real-id (list 'manifest 2 "T" '() '() "c") '() #f 0 #f 0 0))
       (delete-directory/files dir #:must-exist? #f))
 
+    (test-case "manifest inner structure validated even with recomputed hash"
+      ;; MINOR-2: plan-id==manifest-hash is the identity backstop, but the
+      ;; manifest's inner fields are ALSO validated directly. Hand-craft a
+      ;; manifest whose hash is recomputed so the backstop would pass, yet
+      ;; the file must still fail closed on direct inner-field validation.
+      (define dir (make-temporary-file "repo-corrupt-~a" 'directory))
+      ;; Hash of the EXACT datum manifest, mirroring campaign-state's
+      ;; manifest->canonical-string (list sv title deps descriptors ch).
+      (define (fixture-hash sv title deps wds ch)
+        (sha256-string (format "~s" (list sv title deps wds ch))))
+      ;; bad dependency element
+      (define bad-id (fixture-hash 1 "T" '(42) '() "c"))
+      (corrupt-check
+       dir
+       bad-id
+       (list 'campaign-record bad-id (list 'manifest 1 "T" '(42) '() "c") '() #f 0 #f 0 0))
+      ;; bad constraints-hash
+      (define bad-ch-id (fixture-hash 1 "T" '() '() 42))
+      (corrupt-check
+       dir
+       bad-ch-id
+       (list 'campaign-record bad-ch-id (list 'manifest 1 "T" '() '() 42) '() #f 0 #f 0 0))
+      (delete-directory/files dir #:must-exist? #f))
+
     (test-case "garbage non-s-expression content"
       (define dir (make-temporary-file "repo-corrupt-~a" 'directory))
       (define plan-id "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
@@ -334,6 +359,19 @@
       (check-exn exn:fail:campaign-corrupt?
                  (lambda () (persist-campaign! dir rec))
                  "persist refuses to write through a symlink")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "dangling symlink fails closed on load (not treated as missing)"
+      (define dir (make-temporary-file "repo-symlink-~a" 'directory))
+      (define plan-id "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+      (define campaigns-dir (build-path dir ".planning" "campaigns"))
+      (make-directory* campaigns-dir)
+      (define target (build-path campaigns-dir (string-append plan-id ".rktd")))
+      ;; link points nowhere — file-exists? FOLLOWS links and would say #f
+      (make-file-or-directory-link (build-path dir "no-such-target.rktd") target)
+      (check-exn exn:fail:campaign-corrupt?
+                 (lambda () (load-campaign-record dir plan-id))
+                 "dangling symlink rejected (no-follow), not #f")
       (delete-directory/files dir #:must-exist? #f))))
 
 ;; ============================================================

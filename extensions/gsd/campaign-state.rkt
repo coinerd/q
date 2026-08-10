@@ -80,6 +80,7 @@
           [campaign-wave-descriptor-title (-> campaign-wave-descriptor? string?)]
           [campaign-wave-descriptor-doc-path (-> campaign-wave-descriptor? string?)]
           [campaign-wave-descriptor-content-hash (-> campaign-wave-descriptor? string?)]
+          [campaign-wave-descriptor? (-> any/c boolean?)]
           [make-campaign-wave
            (-> exact-nonnegative-integer?
                string?

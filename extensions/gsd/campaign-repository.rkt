@@ -81,6 +81,27 @@
     (corrupt! "unsupported schema version ~s (current ~a)" sv CURRENT-SCHEMA))
   (unless (string? (campaign-manifest-title m))
     (corrupt! "manifest title must be a string"))
+  ;; Manifest inner structure (MINOR-2): dependencies, descriptors,
+  ;; constraints-hash are validated directly; plan-id==manifest-hash remains
+  ;; the identity backstop for accidental corruption.
+  (define deps (campaign-manifest-dependencies m))
+  (unless (and (list? deps) (andmap string? deps))
+    (corrupt! "manifest dependencies must be a list of strings"))
+  (unless (string? (campaign-manifest-constraints-hash m))
+    (corrupt! "manifest constraints-hash must be a string"))
+  (define seen-desc (make-hasheq))
+  (for ([wd (campaign-manifest-waves m)])
+    (unless (and (campaign-wave-descriptor? wd)
+                 (string? (campaign-wave-descriptor-title wd))
+                 (string? (campaign-wave-descriptor-doc-path wd))
+                 (string? (campaign-wave-descriptor-content-hash wd)))
+      (corrupt! "wave descriptor must have string title/doc-path/content-hash"))
+    (define wd-idx (campaign-wave-descriptor-index wd))
+    (unless (and (exact-nonnegative-integer? wd-idx) (< wd-idx 1000))
+      (corrupt! "wave descriptor index must be a non-negative integer < 1000"))
+    (when (hash-has-key? seen-desc wd-idx)
+      (corrupt! "duplicate wave descriptor index ~s" wd-idx))
+    (hash-set! seen-desc wd-idx #t))
   (define fence (campaign-fence-token rec))
   (unless (or (not fence) (exact-nonnegative-integer? fence))
     (corrupt! "fence token must be a non-negative integer, got ~s" fence))
@@ -247,8 +268,10 @@
   (validate-plan-id! plan-id)
   (define target (build-path (campaigns-dir-of base-dir) (string-append plan-id ".rktd")))
   (cond
-    [(not (file-exists? target)) #f]
+    ;; no-follow first: file-exists? FOLLOWS links, so a dangling symlink
+    ;; would otherwise be misreported as "no durable record" (MINOR-1).
     [(symlink-target? target) (corrupt! "refusing to read symlinked campaign file ~a" target)]
+    [(not (file-exists? target)) #f]
     [else
      (define datum
        (with-handlers ([exn:fail?
