@@ -82,6 +82,7 @@
                                  "wave-completion"
                                  "wave-docs"
                                  "wave-status"
+                                 "projection-effects"
                                  "util/loop-result"
                                  "sandbox/gateway-bridge"
                                  "plan-context-builder"))
@@ -96,7 +97,8 @@
                                "racket/string"
                                "campaign-state"
                                "wave-docs"
-                               "wave-status"))
+                               "wave-status"
+                               "projection-effects"))
    ;; transition logic (7)
    (make-entry "policy.rkt" 'transition-logic '() '() '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))

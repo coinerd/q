@@ -1,13 +1,13 @@
 # Validation: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0–W2 validated; W3 next
+**Status:** ACTIVE — W0–W3 validated; W4 next
 
 | Wave | Focused/TDD | Fast | Specific gate | Review | Result |
 |---|---|---|---|---|---|
 | W0 Golden Workflow Traces | ✅ 16/16 (1 helper + 1 test) | ✅ 1057/15420 | ✅ workflows 29 files/161 tests | ✅ APPROVED (1 recheck) | ✅ DONE — merged `8214e6a4` (PR #9254, #9226 closed) |
 | W1 Pure Transition Kernel | ✅ 29/29 (new test file) + 1038 GSD batch | ✅ 1058 files | ✅ pure-kernel + Arch (import closure) | ✅ APPROVED (0 recheck; 2 MINOR + 5 INFO folded `4c55f57b`) | ✅ DONE — merged `eb7807ae` (PR #9255, #9227 closed) |
-| W2 Plan/State Projection Kernel | ✅ 22/22 (new test file) + 1038 GSD batch | ✅ 1059 files / 15472 | ✅ workflows + Broad 1237 files / 17739 + lint-format 0/0 | ✅ APPROVED (0 recheck) | ✅ DONE — PR pending |
-| W3 Command Parsing & Intent Boundary | pending | — | parser fitness + command corpus + Fast | — | — |
+| W2 Plan/State Projection Kernel | ✅ 22/22 (new test file) + 1038 GSD batch | ✅ 1059 files / 15472 | ✅ workflows + Broad 1237 files / 17739 + lint-format 0/0 | ✅ APPROVED (0 recheck) | ✅ DONE — merged `74da7e8a` (PR #9256, #9228 closed) |
+| W3 Command Parsing & Intent Boundary | ✅ 13/13 (new test file) + 1087 GSD batch | ✅ 1060 files | ✅ parser fitness (I/O-free scan) + command corpus 30 entries + golden 16/16 + lint-format 0/0 | ✅ APPROVED pending | ✅ DONE — PR pending |
 | W4 Facade Thinning + Release | pending | — | Broad + Arch + Workflow + Smoke + Release | — | — |
 
 ## W0 evidence record
@@ -92,3 +92,24 @@ Gate: pure-kernel + Arch + Fast.
   `(lambda (idx) (wave-slug base-dir idx))` as the shell's slug resolver.
 - Trailing-newline normalization of PLAN/STATE via string-split+join is
   legacy-consistent and preserved byte-for-byte (kernel replicates it).
+
+## W3 evidence record
+
+1. Intent/corpus/fitness tests: `tests/test-gsd-command-intent.rkt` → 13/13.
+2. Corpus: 30 inputs × (parse kind + intent) pinned; malformed unknown cmds
+   → #f; `/done --forcex` substring behavior pinned (legacy).
+3. /go N semantics: go-wave-valid? table + (requested × next) cross-product
+   ≡ assert-go-n definition; executor assert-go-n D8 tests untouched.
+4. Parser fitness: require-scan — command-parser.rkt imports only
+   racket/base/match/string + util/command-helpers + util/command-types;
+   command-helpers.rkt I/O-free; zero file/port/path/system imports.
+5. Golden 16/16 UNCHANGED; GSD batch 1087; lint-format 2089 files 0/0;
+   Fast 1060 files.
+6. Metrics re-synced post-add.
+
+## W3 gate notes
+
+- parse-gsd-command keys on the cmd token: valid cmd + non-slash input still
+  parses (args ""). Pinned as the existing contract.
+- W2 post-merge review fold (missing-STATE.md guard, atomic-write DRY,
+  inventory requires) rides this branch as commit `f3a6fc87`.

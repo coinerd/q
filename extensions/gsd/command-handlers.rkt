@@ -364,10 +364,11 @@
 ;; /go command handler
 ;; ============================================================
 
+;; Trailing numeric token of the /go input (pure; see command-parser.rkt
+;; command-wave-intent). Kept as a thin delegate so the executor consumes the
+;; pure intent boundary instead of re-parsing.
 (define (requested-wave-index input-text)
-  (define parts (string-split (string-trim input-text)))
-  (define last-part (and (pair? parts) (list-ref parts (sub1 (length parts)))))
-  (and last-part (regexp-match? #rx"^[0-9]+$" last-part) (string->number last-part)))
+  (command-wave-intent input-text))
 
 (define (state-for-wave state-text wave-idx)
   ;; Only a canonical table row whose first cell is exactly WN may cross the
@@ -438,14 +439,14 @@
          [(list 'ok _ _)
           (define gsd-ctx (current-gsd-ctx))
           (define request
-            (make-campaign-request
-             base-dir
-             rec
-             (lambda (wave-idx)
-               (gsm-ctx-transition-to! gsd-ctx 'executing)
-               (build-single-wave-prompt base-dir plan wave-idx))
-             (lambda (wave-idx)
-               (gsm-ctx-transition-to! gsd-ctx 'verifying) #t)))
+            (make-campaign-request base-dir
+                                   rec
+                                   (lambda (wave-idx)
+                                     (gsm-ctx-transition-to! gsd-ctx 'executing)
+                                     (build-single-wave-prompt base-dir plan wave-idx))
+                                   (lambda (wave-idx)
+                                     (gsm-ctx-transition-to! gsd-ctx 'verifying)
+                                     #t)))
           (hook-amend (hasheq 'campaign-token
                               (register-campaign-request! request)
                               'new-session

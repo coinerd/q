@@ -209,7 +209,10 @@
           (if (and cur (string? cur))
               (hash-set d idx (project-wave-doc-update cur idx p-status))
               d)))
-      (define new-state (project-state-row-update s idx s-status))
+      (define new-state
+        (if s
+            (project-state-row-update s idx s-status)
+            s))
       (values new-plan new-doc-map new-state)))
   (define entries
     (cons (cons 'plan-index plan)

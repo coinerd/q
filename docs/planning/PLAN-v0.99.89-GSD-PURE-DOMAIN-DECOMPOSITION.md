@@ -57,3 +57,21 @@ Fast 1059 files; Broad 1237 files; lint-format 0/0. Report
 `docs/reports/PLAN-STATE-PROJECTION-KERNEL-v0.99.89.md`. Inventory 26 → 29
 (+projection-kernel/effects, event-projection domain). Wave-map unchanged
 (no new state names / persistence formats).
+
+### 2026-08-11 — W2 MERGED `74da7e8a` (PR #9256, #9228 closed)
+W2 Plan/State Projection Kernel merged. Reviewer APPROVED (0 recheck). All
+gates green (kernel 22/22, golden 16/16 with crash-resume repair pin, GSD
+batch 1038, Fast 1059, Broad 1237, lint-format 0/0). Metrics re-synced
+(post-add). Next: W3 Command Parsing & Intent Boundary (#9229).
+
+### 2026-08-11 — W3: Command Parsing & Intent Boundary (additive surface expansion)
+Delivered on `feature/v09989-w3-command-parsing-intent-boundary` (PR pending):
+parser stays pure (no new deps); new intent classification
+(`command-wave-intent` / `gsd-command-intent` / `go-wave-valid?`) in
+command-parser.rkt; executor `requested-wave-index` delegates to
+`command-wave-intent` (no re-parsing); /go N assertion semantics preserved
+(assert-go-n untouched). New `tests/test-gsd-command-intent.rkt` (13 tests:
+30-entry corpus, malformed pins, /go N cross-product equivalence, parser
+fitness). Golden 16/16 unchanged; GSD batch 1087; Fast 1060; lint-format
+0/0. Report `docs/reports/COMMAND-PARSING-INTENT-BOUNDARY-v0.99.89.md`.
+Also carries the W2 post-merge review fold (`f3a6fc87`). Wave-map unchanged.

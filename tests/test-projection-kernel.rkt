@@ -328,6 +328,25 @@
                   (check-equal? (reconcile-projections-from-waves! dir '((0 . done)) (slug-map)) '()))
                 (lambda () (delete-directory/files dir #:must-exist? #f))))
 
+(test-case "reconcile: missing STATE.md still repairs PLAN.md and docs (W2 MINOR #1)"
+  ;; A plan with PLAN.md but no STATE.md (migrate-campaign! supports this)
+  ;; must not crash the whole reconcile: the state-table entry is skipped and
+  ;; the plan-index + wave-doc repairs still happen.
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (delete-file (build-path dir ".planning" "STATE.md"))
+     (define repaired (reconcile-projections-from-waves! dir '((0 . done) (1 . failed)) (slug-map)))
+     (check-equal? (length repaired) 3)
+     (check-equal?
+      (read-text (build-path dir ".planning" "PLAN.md"))
+      "# Plan: Test Campaign\n\n## Waves\n\n- [DONE] W0: Alpha → waves/W0-alpha.md\n- [FAILED] W1: Beta → waves/W1-beta.md")
+     (check-equal? (read-text (build-path dir ".planning" "waves" "W0-alpha.md"))
+                   "# Wave 0\nStatus: DONE\n\nDeterministic alpha body.\n")
+     (check-false (file-exists? (build-path dir ".planning" "STATE.md"))))
+   (lambda () (delete-directory/files dir #:must-exist? #f))))
+
 (test-case "reconcile: interrupted durable status maps back to pending rows"
   (define dir (make-fixture))
   (dynamic-wind
