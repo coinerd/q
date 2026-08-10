@@ -1,3 +1,51 @@
+## 0.99.88
+
+Released 2026-08-10.
+
+### Features
+
+- Isolated the extension package lifecycle behind a neutral
+  `package-host-service` host capability (`util/extension/host-services.rkt`
+  protocol + `runtime/extension-host-adapter.rkt` adapter).
+  `extensions/ext-package-manager.rkt` no longer imports any Runtime module;
+  zero runtime-boundary extension exceptions remain (MA-04 closed).
+- Converted the three remaining Extension UI/TUI bridge exceptions
+  (`dialog-api.rkt`, `ui-surface.rkt`, `widget-lifecycle.rkt`) from dated
+  entries into evidence-backed permanent pair waivers with consumer evidence
+  (MA-05 closed). No abstract UI framework was introduced.
+- Added the neutral `provider-host-service` and `package-host-service`
+  capability protocols with contracted op fields, pure value types, and
+  capability metadata for extensions.
+
+### Bug Fixes
+
+- `tests/test-hook-expansion.rkt` positional `extension-ctx` construction now
+  matches the extended struct arity after the optional `package-service`
+  field was added.
+
+### Breaking / Behavior Changes
+
+- None: extension public APIs (`handle-ext-pkg`, dialog primitives, UI
+  surface callbacks, lifecycle widgets) are unchanged; direct
+  `handle-ext-pkg` calls without an injected service degrade to safe null
+  defaults (empty list / not-installed / error results), matching the
+  provider-registry precedent from v0.99.88 W2.
+
+### Migration Notes
+
+- None.
+
+### Testing
+
+- `tests/test-package-host-service-isolation.rkt` (E1–E7 dual-run parity,
+  null-service degradation, ctx-injected tool path); H4/H5/H6 arch probes;
+  exception-fitness gate extended for permanent pair waivers.
+
+### Operational / Release
+
+- This release wave also runs the Broad + Arch + Security + Smoke + Release
+  gates and an independent review before publication.
+
 ## 0.99.87
 
 Released 2026-08-09.

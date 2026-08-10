@@ -181,10 +181,10 @@
       (check-equal?
        (length extension-exceptions)
        3
-       "Extensions known-exceptions must remain at 3 (v0.99.88 W3: ext-package-manager.rkt exception removed)")
+       "Extensions known-exceptions must remain at 3 (v0.99.88 W4: dialog-api/ui-surface/widget-lifecycle permanent pair waivers)")
       (check-equal? (sort (map entry-name extension-exceptions) string<?)
                     '("dialog-api.rkt" "ui-surface.rkt" "widget-lifecycle.rkt")
-                    "Extension exception membership must match v0.99.88 W3 baseline"))
+                    "Extension exception membership must match v0.99.88 W4 baseline"))
 
     (test-case "Runtime and TUI exceptions are reported separately"
       (define runtime-entries
@@ -225,6 +225,41 @@
       (check-equal? (+ (length runtime-entries) (length tui-entries) (length ui-entries))
                     (length extension-exceptions)
                     "All extension exceptions must be boundary-classified"))
+
+    (test-case "All extension exceptions are evidence-backed permanent pair waivers (v0.99.88 W4)"
+      ;; v0.99.88 W4 decision: dialog-api / ui-surface / widget-lifecycle are
+      ;; intentional UI/TUI bridges — no neutral UI protocol exists (building
+      ;; one would be an abstract UI framework, which the roadmap prohibits).
+      ;; Each keeps boundary + destinations (pair-precise) and becomes a
+      ;; permanent waiver with a non-empty consumer-evidence justification.
+      ;; None may be dated/expired (acceptance: no expired exception).
+      (for ([entry (in-list extension-exceptions)])
+        (define fields (entry-fields entry))
+        (define permanent
+          (field fields
+                 'permanent-waiver))
+        (define justification
+          (field fields
+                 'waiver-justification))
+        (define revisit
+          (field fields
+                 'revisit-by))
+        (check-true (eq? permanent #t) (format "~a: not a permanent waiver" (entry-name entry)))
+        (check-false revisit (format "~a: must not carry a revisit-by date" (entry-name entry)))
+        (check-true (and (string? justification) (positive? (string-length justification)))
+                    (format "~a: permanent waiver lacks evidence-backed justification"
+                            (entry-name entry)))
+        ;; MA-05 closure: each carries pair-precise destinations + boundary.
+        (check-true (and (field fields
+                                'destinations)
+                         (pair? (field fields
+                                       'destinations)))
+                    (format "~a: permanent waiver must remain pair-precise" (entry-name entry)))
+        (check-true (and (memq (field fields
+                                      'boundary)
+                               '(tui runtime ui))
+                         #t)
+                    (format "~a: permanent waiver must classify its boundary" (entry-name entry)))))
 
     ;; ── Negative probes: deliberately malformed entries must be flagged ──
     (test-case "Negative probe: undeclared boundary import is flagged"
@@ -285,7 +320,7 @@
                   "Blanket waiver without destinations must be reported"))
 
     ;; ── Positive probe: a valid exception must pass ──
-    (test-case "Positive probe: valid pair-precise exception passes"
+    (test-case "Positive probe: valid pair-precise dated exception passes"
       (define problems
         (extension-exception-problems
          "widget-lifecycle.rkt"
@@ -295,7 +330,20 @@
            (boundary . tui)
            (destinations . ("tui/component.rkt")))
          '("tui/component.rkt")))
-      (check-equal? problems '() "Valid exception must produce no problems"))))
+      (check-equal? problems '() "Valid dated exception must produce no problems"))
+
+    (test-case "Positive probe: valid permanent pair waiver passes"
+      (define problems
+        (extension-exception-problems
+         "dialog-api.rkt"
+         '((rationale . "UI dialog primitives bridge to shared ui-core protocol layer")
+           (owner . "tui")
+           (permanent-waiver . #t)
+           (waiver-justification . "Intentional UI bridge with consumer evidence")
+           (boundary . ui)
+           (destinations . ("ui-core/ui-state-protocol.rkt")))
+         '("ui-core/ui-state-protocol.rkt")))
+      (check-equal? problems '() "Valid permanent pair waiver must produce no problems"))))
 
 (module+ main
   (exit (run-tests fitness-tests)))

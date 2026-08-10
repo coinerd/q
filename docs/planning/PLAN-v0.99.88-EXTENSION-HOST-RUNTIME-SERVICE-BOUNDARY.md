@@ -1,12 +1,12 @@
 # Plan: v0.99.88 — Extension Host/Runtime Service Boundary
 
-**Status:** FROZEN — NOT STARTED
+**Status:** ACTIVE — W4 in progress (decisions made; gates + release pending)
 **Authority:** `.planning/Racket-Wartbarkeits-und-Architekturanalyse-q-Coding-Agent.md`
 **Freeze contract:** `q/docs/architecture/maintainability-roadmap-freeze-v0.99.87.rktd`
 **Plan-ID / Plan-Hash:** generated at campaign start from this immutable manifest
 **Dependency:** v0.99.87 released and verified
 **GitHub:** milestone #875; waves #9221–#9225
-**Findings:** MA-02, MA-03, MA-04, MA-05
+**Findings:** MA-02, MA-03, MA-04, MA-05 (MA-02/03/04 CLOSED; MA-05 CLOSED pending release)
 
 ## Goal
 
