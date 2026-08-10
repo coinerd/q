@@ -75,3 +75,10 @@ command-parser.rkt; executor `requested-wave-index` delegates to
 fitness). Golden 16/16 unchanged; GSD batch 1087; Fast 1060; lint-format
 0/0. Report `docs/reports/COMMAND-PARSING-INTENT-BOUNDARY-v0.99.89.md`.
 Also carries the W2 post-merge review fold (`f3a6fc87`). Wave-map unchanged.
+
+### 2026-08-11 — W3 MERGED `927c8024` (PR #9257, #9229 closed)
+W3 Command Parsing & Intent Boundary merged. Reviewer APPROVED (0 recheck; 3
+MINOR folded in `42adcdf4` + metrics sync `372311ef`). All gates green
+(intent/corpus 13/13, golden 16/16, GSD batch 1087, Fast 1060, lint-format
+0/0). Next: W4 GSD Facade Thinning + Release (#9230) — version bump
+v0.99.89, tag, milestone #876 close.

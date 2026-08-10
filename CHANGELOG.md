@@ -1,3 +1,44 @@
+## 0.99.89
+
+Released 2026-08-11.
+
+### Features
+
+- Golden Workflow Traces: pinned the end-to-end GSD workflow behavior with a
+  16-trace golden oracle (\`tests/workflows/gsd/test-gsd-golden-traces.rkt\`),
+  capturing durable campaign state, projections, interruption semantics, and
+  crash behavior (MA-09 evidence baseline).
+- Pure transition kernel (\`extensions/gsd/transition-kernel.rkt\`): all GSD
+  state transitions, terminal-state classification, campaign completeness,
+  and invariant checks now live in a dependency-free neutral kernel
+  (\`racket/match\` + \`racket/set\` only); \`transition-logic.rkt\` is a thin
+  facade (MA-01/02/03 partial).
+- Plan/state projection kernel (\`projection-kernel.rkt\`) + atomic effect
+  shell (\`projection-effects.rkt\`): PLAN.md/wave-doc/STATE.md projection
+  computation is pure and byte-identical to the legacy writers; completion
+  and campaign-start paths write via write-temp-then-rename so a crash cannot
+  leave stale projections (oracle finding #2 closed). Campaign start
+  reconciles stale projections (missing STATE.md guard included).
+- Pure command intent boundary (\`command-parser.rkt\`): the parser stays
+  I/O-free; command INTENT classification (\`gsd-command-intent\`,
+  \`command-wave-intent\`, \`go-wave-valid?\`) separates intent from the
+  executor; \`/go N\` assertion semantics preserved (\`assert-go-n\` untouched).
+- GSD facade compatibility: new \`test-gsd-facade-compat.rkt\` pins the full
+  export surface of \`gsd-planning.rkt\` and \`gsd/core.rkt\` via dynamic-require
+  probes (loader convention) and sweeps every pure-domain inventory module
+  for I/O-free imports (Acceptance for W1–W4).
+
+### Bug Fixes
+
+- Crash between commit and projection no longer leaves stale PLAN.md/STATE.md
+  projections: \`run-campaign!\` reconciles at start; completion paths use the
+  atomic effect shell.
+
+### Breaking / Behavior Changes
+
+- None: state names, persistence formats, and public extension APIs are
+  unchanged; golden traces remain equivalent (16/16) throughout W1–W4.
+
 ## 0.99.88
 
 Released 2026-08-10.

@@ -5,8 +5,9 @@
 ;; Each module entry: (entry module-file domain effects params deps)
 ;; domain ∈ (pure-planning campaign-state transition-logic ui-glue persistence
 ;;            event-projection command-parsing compatibility-facade)
-;; effects ∈ (fs-write fs-rename fs-delete mkdir dir-list sha256 git subprocess
-;;            parameterize make-param path-ops network github dynamic-require)
+;; effects ∈ (fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 git
+;;            subprocess parameterize make-param path-ops network github
+;;            dynamic-require)
 
 (require racket/contract)
 
@@ -49,7 +50,7 @@
                '("racket/format" "racket/string" "plan-types" "wave-executor"))
    (make-entry "plan-context-builder.rkt"
                'pure-planning
-               '(git subprocess parameterize make-param path-ops)
+               '(git subprocess parameterize make-param path-ops fs-read)
                '()
                '("racket/string" "racket/port" "racket/system" "racket/list" "plan-types"))
    ;; campaign state (5)
@@ -61,7 +62,7 @@
                '("racket/contract" "racket/set" "runtime-state-types"))
    (make-entry "campaign-state.rkt"
                'campaign-state
-               '(fs-write fs-rename mkdir sha256)
+               '(fs-read fs-write fs-rename mkdir sha256)
                '()
                '("racket/file" "racket/string"
                                "racket/port"
@@ -88,7 +89,7 @@
                                  "plan-context-builder"))
    (make-entry "wave-completion.rkt"
                'campaign-state
-               '(fs-write fs-rename mkdir)
+               '(fs-read fs-write fs-rename mkdir)
                '()
                '("racket/file" "racket/path"
                                "racket/format"
@@ -100,13 +101,17 @@
                                "wave-status"
                                "projection-effects"))
    ;; transition logic (7)
-   (make-entry "policy.rkt" 'transition-logic '() '() '("racket/match" "racket/string" "racket/path"))
+   (make-entry "policy.rkt"
+               'transition-logic
+               '(path-ops)
+               '()
+               '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
    (make-entry "projection-kernel.rkt" 'event-projection '() '() '("racket/base" "racket/string"))
    (make-entry
     "projection-effects.rkt"
     'event-projection
-    '(fs-write fs-rename mkdir path-ops)
+    '(fs-read fs-write fs-rename mkdir path-ops)
     '()
     '("racket/file" "racket/path" "racket/format" "racket/string" "racket/port" "projection-kernel"))
    (make-entry "transition-logic.rkt"
@@ -125,8 +130,8 @@
                                    "events"
                                    "event-structs"))
    (make-entry "wave-executor.rkt"
-               'transition-logic
-               '()
+               'campaign-state
+               '(fs-read)
                '()
                '("racket/format" "racket/string"
                                  "racket/file"
@@ -139,7 +144,7 @@
    ;; UI/extension glue (3)
    (make-entry "core.rkt"
                'ui-glue
-               '(fs-write parameterize path-ops)
+               '(fs-read fs-write parameterize path-ops)
                '()
                '("racket/contract" "racket/string"
                                    "racket/format"
@@ -158,7 +163,7 @@
                                    "policy"))
    (make-entry "tool-handlers.rkt"
                'ui-glue
-               '(fs-write mkdir path-ops)
+               '(fs-read fs-write mkdir path-ops)
                '()
                '("racket/contract" "racket/match"
                                    "racket/port"
@@ -212,7 +217,7 @@
    ;; persistence (2)
    (make-entry "archive.rkt"
                'persistence
-               '(fs-write fs-rename fs-delete mkdir dir-list path-ops)
+               '(fs-read fs-write fs-rename fs-delete mkdir dir-list path-ops)
                '()
                '("racket/contract" "racket/file"
                                    "racket/path"
@@ -229,7 +234,7 @@
                                    "session-state"))
    (make-entry "wave-docs.rkt"
                'persistence
-               '(fs-write mkdir path-ops)
+               '(fs-read fs-write mkdir path-ops)
                '()
                '("racket/file" "racket/path"
                                "racket/format"

@@ -28,7 +28,8 @@
                   compatibility-facade))
 
 (define valid-effects
-  '(fs-write fs-rename
+  '(fs-write fs-read
+             fs-rename
              fs-delete
              mkdir
              dir-list
@@ -48,8 +49,9 @@
 
 ;; Scanner false-positive exclusions: (file . (effect ...)) where the token is a
 ;; symbol/predicate, not a real call (e.g. policy.rkt's 'write-file decision
-;; symbol and path-normalization helpers).
-(define scanner-exclusions '(("policy.rkt" . (fs-write path-ops))))
+;; symbol). path-ops for policy.rkt is REAL (string->path/path->string in
+;; in-planning-dir?); fs-read for wave-executor.rkt is REAL (call-with-input-file).
+(define scanner-exclusions '(("policy.rkt" . (fs-write))))
 
 ;; Scan a source file's non-comment code for effect markers.
 (define (scan-effects file)
@@ -65,6 +67,7 @@
              #:when
              (case eff
                [(fs-write) (has? #rx"\\((?:write-file|with-output-to-file|call-with-output-file)")]
+               [(fs-read) (has? #rx"\\((?:call-with-input-file|file->string|file->lines)")]
                [(fs-rename) (has? #rx"rename-file-or-directory|copy-file")]
                [(fs-delete) (has? #rx"delete-file|delete-directory")]
                [(mkdir) (has? #rx"make-directory")]
