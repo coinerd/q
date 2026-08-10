@@ -78,8 +78,7 @@
   "# State: Test Campaign\n\n| Wave | Title | Status |\n|---|---|---|\n| W0 | Alpha | PENDING |\n| W1 | Beta | PENDING |")
 
 (define (strip-final-newline s)
-  (if (and (> (string-length s) 0)
-           (char=? #\newline (string-ref s (sub1 (string-length s)))))
+  (if (and (> (string-length s) 0) (char=? #\newline (string-ref s (sub1 (string-length s)))))
       (substring s 0 (sub1 (string-length s)))
       s))
 
@@ -116,8 +115,7 @@
 (test-case "plan-index: unknown wave index leaves text unchanged"
   ;; The transform normalizes the trailing newline (legacy split+join), so
   ;; compare against the input minus its trailing newline.
-  (check-equal? (project-plan-index-update fixture-plan 9 "DONE")
-                (strip-final-newline fixture-plan)))
+  (check-equal? (project-plan-index-update fixture-plan 9 "DONE") (strip-final-newline fixture-plan)))
 
 (test-case "plan-index: matches legacy update-plan-index-text byte-for-byte"
   (for ([status '("DONE" "FAILED" "DEFERRED" "In-Progress" "Inbox")])
