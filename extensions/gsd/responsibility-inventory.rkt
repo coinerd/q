@@ -91,11 +91,14 @@
                '("racket/format" "racket/file"
                                  "racket/match"
                                  "campaign-state"
+                                 "campaign-repository"
                                  "wave-completion"
+                                 "wave-runner-port"
                                  "wave-docs"
                                  "wave-status"
                                  "projection-effects"
                                  "util/loop-result"
+                                 "system-adapters"
                                  "sandbox/gateway-bridge"
                                  "plan-context-builder"))
    (make-entry "wave-completion.rkt"
@@ -261,8 +264,9 @@
     '("current-gsd-correlation-id")
     '("racket/match" "util/error" "agent/event-structs/base" "agent/event-emitter" "session-state"))
    (make-entry "event-structs.rkt" 'event-projection '() '() '("util/event/event-macro"))
-   ;; v0.99.90 W0 external-domain ports (3)
+   ;; v0.99.90 W0 external-domain ports (3) + W3 executor port (1)
    (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
+   (make-entry "wave-runner-port.rkt" 'external-ports '() '() '("racket/contract"))
    (make-entry "system-adapters.rkt"
                'external-ports
                '(fs-read fs-write fs-rename fs-delete mkdir dir-list git parameterize subprocess)
@@ -273,6 +277,7 @@
                                "racket/string"
                                "racket/system"
                                "effect-ports"
+                               "wave-runner-port"
                                "sandbox/gateway-bridge"))
    (make-entry "composition-root.rkt"
                'external-ports
