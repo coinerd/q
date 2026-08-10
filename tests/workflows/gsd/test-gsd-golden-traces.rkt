@@ -226,20 +226,35 @@
   (check-equal? (hash-ref rec 'waves) '((0 pending 0 #f)))
   (check-equal? (hash-ref (golden-trace-projections trace) 'plan-index) '((0 pending)))
   (check-equal? (hash-ref (golden-trace-projections trace) 'plan-overall) 'in-progress)
-  (check-equal? (golden-trace-outbox trace) '()))
+  (check-equal? (golden-trace-outbox trace) '())
+  ;; The old campaign record file is preserved on disk (replan never deletes).
+  (check-true (hash-ref (golden-trace-result trace) 'old-record-preserved)))
 
 ;; ============================================================
 ;; milestone close
 ;; ============================================================
 
-(test-case "golden milestone-close: all waves done and plan overall all-done"
+(test-case "golden milestone-close: /done archives the completed plan and resets the FSM"
   (define trace
     (with-golden-trace 'milestone-close '((/plan) (/go) (/done)) scenario-milestone-close))
-  (check-equal? (hash-ref (golden-trace-result trace) 'status) 'campaign-complete)
-  (check-equal? (hash-ref (golden-trace-result trace) 'completed) '(0 1))
-  (check-equal? (hash-ref (golden-trace-projections trace) 'plan-overall) 'all-done)
-  (check-equal? (golden-trace-final-mode trace) 'verifying)
-  (check-equal? (length (golden-trace-outbox trace)) 2))
+  (define result (golden-trace-result trace))
+  ;; The campaign ran to completion first.
+  (check-equal? (hash-ref (hash-ref result 'campaign) 'status) 'campaign-complete)
+  (check-equal? (hash-ref (hash-ref result 'campaign) 'completed) '(0 1))
+  ;; The production archive path succeeded and moved the projections.
+  (check-true (hash-ref result 'archive-success))
+  (check-true (hash-ref result 'archive-dir-exists))
+  (check-true (hash-ref result 'archive-moved-plan))
+  (check-true (hash-ref result 'projections-cleared))
+  ;; The durable record and outbox survive the archive.
+  (check-equal? (trace-wave trace 0) '(0 done 1 ("attempt-1" 1)))
+  (check-equal? (trace-wave trace 1) '(1 done 1 ("attempt-1" 2)))
+  (check-equal? (length (golden-trace-outbox trace)) 2)
+  ;; reset-gsd-after-archive! clears the FSM to a fresh idle (history cleared).
+  (check-equal? (golden-trace-fsm trace) '())
+  (check-equal? (golden-trace-final-mode trace) 'idle)
+  ;; The archived event is last in the event order.
+  (check-equal? (last (trace-event-names trace)) 'gsd.plan.archived))
 
 ;; ============================================================
 ;; failure injection: crash between commit and projection

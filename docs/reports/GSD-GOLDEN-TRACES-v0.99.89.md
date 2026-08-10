@@ -50,7 +50,7 @@ scenarios run twice must yield identical traces.
 | retry-interrupted | interrupted wave re-attempted → attempt-2 under fence-2, W1 attempted once under fence-3; both DONE |
 | campaign-resume | durable record carries truth across processes; W1 failed in run 1 retried as attempt-2/fence-3 in run 2; per-run completed = (1) |
 | replan | rewritten plan → new plan-id, fresh campaign identity, old record file preserved |
-| milestone-close | all waves done → campaign-complete, plan overall all-done, 2 outbox events |
+| milestone-close | campaign completes, then the production `/done` archive path (`archive-completed-plan!` + the handler's `gsd.plan.archived` event) moves PLAN/STATE/VALIDATION/waves into `.planning/archive/golden-trace-campaign/`; durable record + outbox survive; `reset-gsd-after-archive!` clears the FSM to a fresh idle (history cleared) |
 | crash-between-commit-and-projection | W0 durably DONE + outbox committed, W1 FAILED; projections restored to pre-completion (crash before projection update) |
 | crash-resume | resume completes W1 but the stale W0 projections are NOT repaired; plan overall stays partly-done despite durable both-done |
 
@@ -74,12 +74,24 @@ effect shell must make the crash trace equivalent to the no-crash trace).
    projection, not the durable record.
 3. `campaign-result` `completed` reflects waves completed in the current
    run, not the whole campaign.
-4. The FSM ends in `verifying` after a successful campaign (no transition
-   back to `idle` in the campaign path).
+4. The FSM ends in `verifying` after a successful campaign; `/done` (milestone close) is the complement — `reset-gsd-after-archive!` returns it to a fresh `idle` with cleared history (pinned by the milestone-close trace).
 
 These are intentional pins for W1–W4; W2 changes #2 by construction, and
 the golden expectations will be updated in that wave with a dated
 amendment.
+
+## Modeling notes
+
+- The crash scenario models a crash between the durable commit and the
+  projection update by restoring the deterministic fixture projections to
+  their pre-completion state (an idealization: a real crash would leave the
+  projections partially written). The pinned outcome — stale projections
+  that resume does not repair — is identical either way.
+- The milestone-close scenario drives the production archive path
+  (`archive-completed-plan!`) and emits the `gsd.plan.archived` event
+  exactly as the `/done` handler does; `reset-gsd-after-archive!` clears
+  the traced context's FSM (the production `reset-gsm!` operates on the
+  default context, so the observable context is reset equivalently).
 
 ## Gates
 

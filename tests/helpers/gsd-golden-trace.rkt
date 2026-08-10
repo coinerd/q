@@ -52,6 +52,12 @@
                   campaign-result-status
                   campaign-result-completed-waves)
          (only-in "../../extensions/gsd/wave-completion.rkt" make-event-id load-outbox)
+         (only-in "../../extensions/gsd/archive.rkt" archive-completed-plan!)
+         (only-in "../../extensions/gsd/command-types.rkt"
+                  gsd-command-result-success
+                  gsd-command-result-data)
+         (only-in "../../extensions/gsd/event-structs.rkt" make-gsd-plan-archived-event)
+         (only-in "../../extensions/gsd/events.rkt" ctx-emit-gsd-event!)
          (only-in "../../extensions/gsd/wave-docs.rkt"
                   parse-plan-index
                   read-wave-doc
@@ -62,8 +68,14 @@
          (only-in "../../extensions/gsd/state-machine.rkt"
                   gsm-ctx-current
                   gsm-ctx-history
-                  gsm-ctx-transition-to!)
-         (only-in "../../extensions/gsd/session-state.rkt" make-gsd-context gsd-ctx-set-event-bus!)
+                  gsm-ctx-transition-to!
+                  make-initial-gsd-state)
+         (only-in "../../extensions/gsd/session-state.rkt"
+                  make-gsd-context
+                  gsd-ctx-set-event-bus!
+                  gsd-ctx-set-state!
+                  gsd-ctx-set-history!
+                  current-gsd-ctx)
          (only-in "../../util/loop-result.rkt" make-loop-result))
 
 ;; ============================================================
@@ -369,12 +381,63 @@
   (define old-id (campaign-plan-id rec))
   (rewrite-golden-plan! dir '((0 "Trace Wave Gamma" "gamma")))
   (define new-rec (migrate-campaign! dir))
-  (values new-rec (hash 'status 'replanned 'completed '() 'old-plan-id old-id)))
+  (values new-rec
+          (hash 'status
+                'replanned
+                'completed
+                '()
+                'old-plan-id
+                old-id
+                'old-record-preserved
+                (file-exists?
+                 (build-path dir ".planning" "campaigns" (string-append old-id ".rktd"))))))
 
-;; milestone-close: all waves done -> campaign-complete with both waves.
+;; milestone-close: run the campaign to completion, then close via the
+;; production /done archive path (archive-completed-plan! + the archived
+;; event emitted by the /done handler). The durable campaign record and
+;; outbox survive the archive; the FSM is reset to a fresh idle exactly like
+;; reset-gsd-after-archive! (history cleared).
 (define (scenario-milestone-close dir ctx)
   (define rec (migrate-campaign! dir))
-  (values rec (run-golden-request! dir rec ctx #:outcomes '(ok ok))))
+  (define campaign-result (run-golden-request! dir rec ctx #:outcomes '(ok ok)))
+  (parameterize ([current-gsd-ctx ctx])
+    (define archive-result (archive-completed-plan! dir #f))
+    (define archive-data (gsd-command-result-data archive-result))
+    (define archived?
+      (and (gsd-command-result-success archive-result)
+           (begin
+             (ctx-emit-gsd-event! ctx
+                                  'gsd.plan.archived
+                                  (make-gsd-plan-archived-event
+                                   #:session-id ""
+                                   #:turn-id 0
+                                   #:path (let ([p (and (hash? archive-data)
+                                                        (hash-ref archive-data 'archive-path #f))])
+                                            (cond
+                                              [(path? p) (path->string p)]
+                                              [(string? p) p]
+                                              [else ""]))))
+             #t)))
+    ;; reset-gsd-after-archive! clears the FSM to a fresh initial state.
+    (gsd-ctx-set-state! ctx (make-initial-gsd-state))
+    (gsd-ctx-set-history! ctx '())
+    (values
+     rec
+     (hash 'status
+           'milestone-closed
+           'campaign
+           (hash 'status
+                 (campaign-result-status campaign-result)
+                 'completed
+                 (campaign-result-completed-waves campaign-result))
+           'archive-success
+           archived?
+           'archive-dir-exists
+           (directory-exists? (build-path dir ".planning" "archive" "golden-trace-campaign"))
+           'archive-moved-plan
+           (file-exists? (build-path dir ".planning" "archive" "golden-trace-campaign" "PLAN.md"))
+           'projections-cleared
+           (not (file-exists? (build-path dir ".planning" "PLAN.md")))))))
 
 ;; crash-between-commit-and-projection: commit W0 (DONE + outbox) and fail W1
 ;; via the production path, then simulate the crash by restoring the
