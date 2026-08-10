@@ -20,8 +20,9 @@
          racket/string
          "campaign-state.rkt"
          ;; GSD tracking files — update PLAN.md + wave docs on completion
-         (only-in "wave-docs.rkt" mark-wave-status!)
-         (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED))
+         (only-in "wave-docs.rkt" wave-slug)
+         (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
+         "projection-effects.rkt")
 
 ;; ============================================================
 ;; Completion result
@@ -107,9 +108,12 @@
      (persist-campaign! base-dir durable)
      (when caller-wave
        (set-campaign-wave-status! caller-wave 'failed))
-     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md)
-     (mark-wave-status! base-dir wave-idx STATUS-FAILED)
-     (update-state-table! base-dir wave-idx "FAILED")
+     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
+     ;; atomic projection shell — a crash cannot leave partial tracking.
+     (apply-wave-status-projections! base-dir
+                                     wave-idx
+                                     STATUS-FAILED
+                                     (lambda (idx) (wave-slug base-dir idx)))
      (completion-result 'failed #f)]
     [else
      (set-campaign-wave-status! wave 'done)
@@ -119,9 +123,12 @@
      (persist-campaign! base-dir durable)
      (when caller-wave
        (set-campaign-wave-status! caller-wave 'done))
-     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md)
-     (mark-wave-status! base-dir wave-idx STATUS-DONE)
-     (update-state-table! base-dir wave-idx "DONE")
+     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
+     ;; atomic projection shell — a crash cannot leave partial tracking.
+     (apply-wave-status-projections! base-dir
+                                     wave-idx
+                                     STATUS-DONE
+                                     (lambda (idx) (wave-slug base-dir idx)))
      (completion-result 'done event-id)]))
 ;; ============================================================
 

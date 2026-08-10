@@ -97,9 +97,16 @@
                                "campaign-state"
                                "wave-docs"
                                "wave-status"))
-   ;; transition logic (5)
+   ;; transition logic (7)
    (make-entry "policy.rkt" 'transition-logic '() '() '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
+   (make-entry "projection-kernel.rkt" 'event-projection '() '() '("racket/base" "racket/string"))
+   (make-entry
+    "projection-effects.rkt"
+    'event-projection
+    '(fs-write fs-rename mkdir path-ops)
+    '()
+    '("racket/file" "racket/path" "racket/format" "racket/string" "racket/port" "projection-kernel"))
    (make-entry "transition-logic.rkt"
                'transition-logic
                '()

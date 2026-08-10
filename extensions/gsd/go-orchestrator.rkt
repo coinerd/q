@@ -23,8 +23,9 @@
          racket/match
          "campaign-state.rkt"
          "wave-completion.rkt"
-         (only-in "wave-docs.rkt" mark-wave-status!)
+         (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
+         "projection-effects.rkt"
          "../../util/loop-result.rkt"
          (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!)
          (only-in "plan-context-builder.rkt" current-git-root))
@@ -277,16 +278,20 @@
           [(error)
            (if (persist-current-status! 'failed)
                (begin
-                 (mark-wave-status! base-dir wave-idx STATUS-FAILED)
-                 (update-state-table! base-dir wave-idx "FAILED")
+                 (apply-wave-status-projections! base-dir
+                                                 wave-idx
+                                                 STATUS-FAILED
+                                                 (lambda (idx) (wave-slug base-dir idx)))
                  (campaign-result 'wave-failed '() "runner error"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
           [(cancelled) (interrupt-current! "runner cancelled")]
           [else
            (if (persist-current-status! 'failed)
                (begin
-                 (mark-wave-status! base-dir wave-idx STATUS-FAILED)
-                 (update-state-table! base-dir wave-idx "FAILED")
+                 (apply-wave-status-projections! base-dir
+                                                 wave-idx
+                                                 STATUS-FAILED
+                                                 (lambda (idx) (wave-slug base-dir idx)))
                  (campaign-result 'wave-failed '() "unknown runner result"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))])])]))
 
@@ -309,6 +314,19 @@
          ;; A request may have waited behind another process. Reload only after
          ;; owning the lease, then carry durable state between waves.
          (define authoritative (or (load-campaign-record base-dir plan-id) rec))
+         ;; v0.99.89 W2: repair stale projections left by a crash between the
+         ;; durable commit and the projection apply (golden-trace oracle
+         ;; finding #2). The durable record is the source of truth; reconcile
+         ;; re-derives PLAN.md / wave docs / STATE.md from it. Never blocks
+         ;; the campaign — a reconcile failure only logs.
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-warning "projection reconcile failed: ~a"
+                                                   (exn-message e)))])
+           (reconcile-projections-from-waves! base-dir
+                                              (for/list ([w (campaign-record-waves authoritative)])
+                                                (cons (campaign-wave-index w)
+                                                      (campaign-wave-status w)))
+                                              (plan-slug-map base-dir)))
          (let loop ([current authoritative]
                     [completed '()])
            (define next-idx (select-next-actionable-wave current))
