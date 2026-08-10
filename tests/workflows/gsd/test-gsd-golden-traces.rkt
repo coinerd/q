@@ -256,6 +256,11 @@
   ;; The archived event is last in the event order.
   (check-equal? (last (trace-event-names trace)) 'gsd.plan.archived))
 
+(test-case "golden milestone-close: trace is deterministic across runs"
+  (check-equal?
+   (with-golden-trace 'milestone-close '((/plan) (/go) (/done)) scenario-milestone-close)
+   (with-golden-trace 'milestone-close '((/plan) (/go) (/done)) scenario-milestone-close)))
+
 ;; ============================================================
 ;; failure injection: crash between commit and projection
 ;; ============================================================
