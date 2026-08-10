@@ -322,8 +322,8 @@
           [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
           ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
           ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
-          ;; completion — the durable record still says in-progress so a
-          ;; restart re-attempts the wave (at-least-once, exactly-once event).
+          ;; completion — the durable record says interrupted, so a restart
+          ;; re-attempts the wave (at-least-once, exactly-once event).
           [(timed-out) (interrupt-current! (wave-execution-outcome-message run-result))]
           [else
            (if (persist-current-status! 'failed)
