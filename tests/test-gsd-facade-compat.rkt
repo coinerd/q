@@ -24,11 +24,10 @@
          racket/match
          racket/file
          rackunit
+         "helpers/arch-utils.rkt"
          "../extensions/gsd/responsibility-inventory.rkt")
 
-;; Repo root, robust to both `raco test` (cwd = tests/) and direct runs.
-(define q-dir (if (file-exists? "main.rkt") "." ".."))
-
+;; Repo root from arch-utils (robust to `raco test` cwd = tests/).
 ;; Absolute module path for dynamic-require probes (relative paths in
 ;; dynamic-require resolve from the current directory, not the test file).
 ;; Returns a path object (module-path? accepts paths, not strings).
@@ -36,8 +35,13 @@
   (simplify-path (build-path q-dir path)))
 
 ;; ============================================================
-;; require extraction (read-based, same as test-gsd-command-intent.rkt)
+;; require extraction
 ;; ============================================================
+;; extract-requires comes from helpers/arch-utils.rkt — its read-based
+;; parser strips the #lang line first (a raw read on the source inside a
+;; module raises "#lang not allowed again", which would silently yield an
+;; empty require list). q-dir also comes from arch-utils (robust to raco
+;; test cwd = tests/).
 
 (define (spec-module-path spec)
   (cond
@@ -56,20 +60,6 @@
             #f)]
        [else #f])]
     [else #f]))
-
-(define (extract-requires filepath)
-  (with-handlers ([exn:fail? (lambda (e) '())])
-    (define src (file->string filepath))
-    (define port (open-input-string src))
-    (define out '())
-    (let loop ()
-      (define datum (read port))
-      (unless (eof-object? datum)
-        (when (and (pair? datum) (eq? (car datum) 'require))
-          (set! out (append out (cdr datum))))
-        (loop)))
-    (close-input-port port)
-    out))
 
 (define (module-imports path)
   (define reqs (extract-requires (path->string path)))
@@ -210,6 +200,12 @@
     (define path (build-path q-dir "extensions" "gsd" mod))
     (check-true (file-exists? path) (format "~a must exist" mod))
     (define imports (map normalize-import (module-imports path)))
+    ;; Non-vacuous guard: a broken require extraction (e.g. read on #lang)
+    ;; yields an empty list, letting the sweep pass unconditionally. Fire
+    ;; only when the source actually contains a top-level require form
+    ;; (wave-status.rkt legitimately has zero requires).
+    (when (string-contains? (file->string path) "(require")
+      (check-true (pair? imports) (format "~a must have require forms (extraction broken?)" mod)))
     (define violations
       (for/list ([i (in-list imports)]
                  #:when (member i forbidden-io-imports))

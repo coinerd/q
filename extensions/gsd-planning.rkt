@@ -88,11 +88,14 @@
     [_ (gsm-transition! v)]))
 
 ;; Legacy accessor wrappers (DEBT-01)
-;; v0.99.89 W4 (#9230) consumer grep (2026-08-11): every exported wrapper is
-;; KEPT — production or SDK/test consumers exist:
+;; v0.99.89 W4 (#9230) consumer grep (2026-08-11): the wrappers are KEPT for
+;; public-API stability and are pinned by tests/test-gsd-facade-compat.rkt
+;; (export-surface pins + smoke). Where consumers exist they import the
+;; UNDERLYING bindings (session-state/state-machine) or the facade directly:
 ;;   - set-gsd-mode! / set-total-waves!  → scripts/sdk-gsd-integration-test.rkt
-;;   - set-current-max-old-text-len!     → tools/builtins/edit.rkt (rename import)
-;;   - mark-wave-complete!               → tests/test-sdk-gsd-live.rkt (SDK test)
+;;   - set-current-max-old-text-len!     → tools/builtins/edit.rkt uses the
+;;     underlying set-edit-limit! (rename import from session-state.rkt)
+;;   - mark-wave-complete!               → tests/test-sdk-gsd-live.rkt
 ;;   - emit-gsd-event!                   → tests/test-gsd-planning.rkt (bus bridge)
 ;;   - current-wave-index/set-current-wave-index! → tests
 ;;   - pinned-planning-dir/set-pinned-planning-dir!/set-gsd-event-bus! → used

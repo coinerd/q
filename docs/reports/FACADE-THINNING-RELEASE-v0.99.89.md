@@ -21,7 +21,7 @@ NEW `tests/test-gsd-facade-compat.rkt` (7 tests + 1 module+ check,
   (mirrors extensions/loader.rkt, which resolves extensions via
   `(dynamic-require mod-path 'the-extension)`).
 - **Export-surface pins**: the full public export list of
-  `gsd-planning.rkt` (39 names) and `gsd/core.rkt` (24 names) — each name
+  `gsd-planning.rkt` (32 names) and `gsd/core.rkt` (22 names) — each name
   must dynamic-require without error, so any future thinning must
   consciously update the pin.
 - **Legacy wrapper smoke**: `gsd-mode`, `set-gsd-mode!`, `pinned-planning-dir`,
@@ -111,12 +111,12 @@ requires command-handlers). Needs a shared home module.
 
 ## Reviewer acceptance criteria
 
-1. Pure domains have no I/O imports — machine-checked for all 14 pure
-   inventory modules (not just the three kernels).
+1. Pure domains have no I/O imports — machine-checked for every pure
+   inventory module (not just the three kernels).
 2. Golden Traces remain equivalent — 16/16 unchanged; no behavior change
    (thinning removed only a dead internal define; zero exported-name
    removals).
-3. Public API intact — export-surface pins prove all 39 + 24 names still
+3. Public API intact — export-surface pins prove all 32 + 22 names still
    resolve; dynamic-require loader-convention probe passes.
 4. Facade thinning is grep-backed and documented in source.
 5. Release artifacts consistent (version sync, CHANGELOG, lint gates).
