@@ -54,9 +54,9 @@
          ;; runtime/package.rkt. Concrete qpm-package values stay Runtime-owned:
          ;; the adapter converts them to pure package-summary data.
          (contract-out (struct package-summary ((name string?) (version string?))))
-         (contract-out (struct package-host-service
-                               (;; All installed packages as pure summaries, sorted by name.
-                                (package-list (-> (listof package-summary?)))
+         (contract-out ;; All installed packages as pure summaries, sorted by name.
+                       (struct package-host-service
+                               ((package-list (-> (listof package-summary?)))
                                 ;; Whether a package with NAME is installed.
                                 (package-installed? (-> string? boolean?))
                                 ;; Install a package from a local SOURCE-DIR.
