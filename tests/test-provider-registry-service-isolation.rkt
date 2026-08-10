@@ -11,6 +11,7 @@
 ;; ordering. Also pins the compatibility facade surface.
 
 (require rackunit
+         racket/string
          "../extensions/context.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
@@ -152,7 +153,29 @@
     (check-exn exn:fail:contract? (lambda () (register-provider! reg-direct "bad" 'not-a-provider)))
     (check-exn exn:fail:contract? (lambda () (ctx-register-provider! ctx "bad" 'not-a-provider)))
     (check-exn exn:fail:contract? (lambda () (register-provider! reg-direct 42 (make-test-provider))))
-    (check-exn exn:fail:contract? (lambda () (ctx-register-provider! ctx 42 (make-test-provider))))))
+    (check-exn exn:fail:contract? (lambda () (ctx-register-provider! ctx 42 (make-test-provider)))))
+
+  (test-case "D6b: invalid-provider validation semantics identical on both paths"
+    (define reg-direct (make-provider-registry))
+    (define reg-svc (make-provider-registry))
+    (define ctx (make-ctx-with-service reg-svc))
+    (define (msg thunk)
+      (with-handlers ([exn:fail:contract? (lambda (e) (exn-message e))])
+        (thunk)
+        "no-exn"))
+    (define direct-msg (msg (lambda () (register-provider! reg-direct "bad" 'not-a-provider))))
+    (define svc-msg (msg (lambda () (ctx-register-provider! ctx "bad" 'not-a-provider))))
+    ;; Same validation predicate (provider?), same given value, same error class.
+    (check-true (and (string-contains? direct-msg "expected: provider?")
+                     (string-contains? svc-msg "expected: provider?"))
+                "both paths must validate provider?")
+    (check-true (and (string-contains? direct-msg "given: 'not-a-provider")
+                     (string-contains? svc-msg "given: 'not-a-provider"))
+                "both paths must report the same offending value")
+    ;; Boundary validation: the ctx facade contract fires before the registry
+    ;; contract (same predicate, earlier blame). Root cause is identical.
+    (check-true (string-contains? svc-msg "ctx-register-provider!")
+                (format "facade contract must name the ctx operation: ~a" svc-msg))))
 
 ;; ---------------------------------------------------------------------------
 ;; D7 — compatibility facade preservation

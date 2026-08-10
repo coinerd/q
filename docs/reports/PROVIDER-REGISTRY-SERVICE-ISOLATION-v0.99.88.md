@@ -27,7 +27,7 @@ Resolved import closure of `extensions/context.rkt` (verified with
 
 | File | Change |
 |---|---|
-| `extensions/context.rkt` | Removed `(only-in "../runtime/provider/provider-registry.rkt" ...)` (4 used + 2 already-unused identifiers). Added neutral import; ctx-* wrappers dispatch on `provider-host-service?`; absent/non-service value behaves exactly like the historical null-registry path (error hash / void no-op / `'()` / `#f`). Public signatures and the `#:provider-registry` kwarg (contract `(or/c any/c #f)`) are preserved. |
+| `extensions/context.rkt` | Removed `(only-in "../runtime/provider/provider-registry.rkt" ...)` (4 used + 2 already-unused identifiers). Added neutral import; ctx-* wrappers dispatch on `provider-host-service?`. An absent or non-service value degrades to the historical null-registry path (error hash / void no-op / `'()` / `#f`). NOTE: a truthy legacy value (e.g. a raw registry) is *no longer consumed* — it behaves as the absent path; callers needing the registry wrap it once via `make-provider-host-service` (§4). Public signatures and the `#:provider-registry` kwarg (contract `(or/c any/c #f)`) are preserved. |
 | `tests/test-provider-registry-service-isolation.rkt` | NEW dual-run characterization D1–D7 (below). |
 | `tests/test-arch-fitness.rkt` | H3 negative probe: `extensions/context.rkt` imports no `runtime/` module. |
 | `tests/test-extension-exception-fitness.rkt` | Exception-count/membership gates updated: extensions exceptions 5 → 4; runtime-boundary list now `("ext-package-manager.rkt")` only. |
@@ -48,7 +48,12 @@ identical:
 - **D4** list order: ctx facade returns exactly the registry's list order
   (registry order is `hash-values` order, not insertion order — pinned);
 - **D5** unregister + unknown-unregister no-op (void) identical;
-- **D6** invalid-provider and non-string-name contract errors identical;
+- **D6/D6b** invalid-provider and non-string-name contract errors identical
+  in class; validation semantics identical (same `provider?` predicate, same
+  offending value). The ctx facade's own argument contract fires before the
+  registry contract (same predicate, earlier blame) — root cause identical;
+  non-string-name blame differs by design (ctx contract vs service field
+  contract);
 - **D7** facade surface: injected service exposed via `ctx-provider-registry`,
   absent-service degradation unchanged, kwarg remains an `any/c` passthrough
   slot (non-service values stored/returned verbatim).
@@ -78,7 +83,7 @@ identical:
 
 | Gate | Result |
 |---|---|
-| Focused (6 files: isolation + protocol + characterization + context + wave4 + arch-fitness) | ✅ 149/149 |
+| Focused — test-provider-registry-service-isolation, test-extension-host-service-protocol, test-extension-context-characterization, test-extension-context, test-wave4-sdk-expansion, test-arch-fitness | ✅ 149/149 |
 | Arch | ✅ 21 files / 232 tests |
 | Broad | pending |
 | Fast | pending (after Broad) |
