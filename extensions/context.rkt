@@ -11,21 +11,24 @@
 ;;     ctx-signal, ctx-cwd
 ;;   - Constructor: make-extension-ctx with keyword args
 ;;   - #1220: ctx-register-provider! convenience wrapper
+;;     (W2 v0.99.88: delegates to the injected neutral provider-host-service)
 ;;   - #1223: ctx-session-messages, ctx-session-token-count query methods
 ;;
 ;; Design notes:
 ;;   - Fields are read-only after construction
 ;;   - Optional fields default to #f (model-name, cancellation-token, working-directory)
 ;;   - Transparent struct for testability and debugging
+;;   - W2 (v0.99.88): provider-registry field carries the neutral
+;;     provider-host-service value; the concrete runtime registry import was
+;;     removed (see docs/reports/PROVIDER-REGISTRY-SERVICE-ISOLATION-v0.99.88.md)
 
 (require racket/contract
-         (only-in "../runtime/provider/provider-registry.rkt"
-                  register-provider!
-                  unregister-provider!
-                  list-providers
-                  lookup-provider
-                  provider-info?
-                  provider-info-provider)
+         (only-in "../util/extension/host-services.rkt"
+                  provider-host-service?
+                  provider-host-service-register-provider!
+                  provider-host-service-unregister-provider!
+                  provider-host-service-list-providers
+                  provider-host-service-lookup-provider)
          (only-in "../llm/provider.rkt" provider?)
          ;; M-06: Import struct from pure types module
          "../util/extension/extension-types.rkt")
@@ -154,34 +157,42 @@
 ;; #1220: Provider convenience methods
 ;; ============================================================
 
-;; Register a provider via the context's provider-registry.
+;; W2 (v0.99.88): the ctx-* provider operations delegate to the injected
+;; neutral provider-host-service (util/extension/host-services.rkt). The
+;; concrete provider-registry is never imported here; the Runtime adapter
+;; (runtime/extension-host-adapter.rkt) wraps a concrete registry into the
+;; service at the injection point. When the ctx carries no service (or a
+;; non-service value), behavior matches the historical absent-registry path
+;; exactly (error hash / no-op / '() / #f).
+
+;; Register a provider via the context's provider-registry service.
 ;; Returns 'registered or 'updated on success.
 ;; Returns (hasheq 'error #t 'message "...") when no registry on context.
 (define (ctx-register-provider! ctx name provider-instance #:config [config (hasheq)])
-  (define reg (extension-ctx-provider-registry ctx))
-  (if reg
-      (register-provider! reg name provider-instance #:config config)
+  (define svc (extension-ctx-provider-registry ctx))
+  (if (provider-host-service? svc)
+      ((provider-host-service-register-provider! svc) name provider-instance #:config config)
       (hasheq 'error #t 'message "No provider-registry on context")))
 
-;; Unregister a provider via the context's provider-registry.
+;; Unregister a provider via the context's provider-registry service.
 (define (ctx-unregister-provider! ctx name)
-  (define reg (extension-ctx-provider-registry ctx))
-  (when reg
-    (unregister-provider! reg name)))
+  (define svc (extension-ctx-provider-registry ctx))
+  (when (provider-host-service? svc)
+    ((provider-host-service-unregister-provider! svc) name)))
 
-;; List all providers from the context's provider-registry.
+;; List all providers from the context's provider-registry service.
 ;; Returns empty list if no registry.
 (define (ctx-list-providers ctx)
-  (define reg (extension-ctx-provider-registry ctx))
-  (if reg
-      (list-providers reg)
+  (define svc (extension-ctx-provider-registry ctx))
+  (if (provider-host-service? svc)
+      ((provider-host-service-list-providers svc))
       '()))
 
-;; Look up a provider by name from the context's provider-registry.
+;; Look up a provider by name from the context's provider-registry service.
 (define (ctx-lookup-provider ctx name)
-  (define reg (extension-ctx-provider-registry ctx))
-  (if reg
-      (lookup-provider reg name)
+  (define svc (extension-ctx-provider-registry ctx))
+  (if (provider-host-service? svc)
+      ((provider-host-service-lookup-provider svc) name)
       #f))
 
 ;; ============================================================

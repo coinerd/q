@@ -849,7 +849,13 @@
       (check-true (imports-from? reqs '("provider/provider-registry.rkt"))
                   "Runtime adapter must own the concrete provider registry import")
       (check-true (imports-from? reqs '("util/extension/host-services.rkt"))
-                  "Runtime adapter must implement the neutral host protocol"))))
+                  "Runtime adapter must implement the neutral host protocol"))
+    (test-case "H3: extensions/context.rkt imports no runtime layer (W2 isolation)"
+      (define ctx-path (build-path q-dir "extensions" "context.rkt"))
+      (check-true (file-exists? ctx-path))
+      (define reqs (extract-requires ctx-path))
+      (check-false (imports-from? reqs '("runtime/"))
+                   "extensions/context.rkt must not import runtime/ after W2 service isolation"))))
 
 (run-tests v09719-suite)
 
