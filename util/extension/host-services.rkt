@@ -55,16 +55,16 @@
          ;; the adapter converts them to pure package-summary data.
          (contract-out (struct package-summary ((name string?) (version string?))))
          (contract-out ;; All installed packages as pure summaries, sorted by name.
-                       (struct package-host-service
-                               ((package-list (-> (listof package-summary?)))
-                                ;; Whether a package with NAME is installed.
-                                (package-installed? (-> string? boolean?))
-                                ;; Install a package from a local SOURCE-DIR.
-                                ;; Success: package-summary. Failure: error STRING
-                                ;; (the runtime error message, passed through verbatim).
-                                (package-install (-> path-string? (or/c package-summary? string?)))
-                                ;; Remove package NAME; #f when not installed.
-                                (package-remove (-> string? boolean?)))))
+          (struct package-host-service
+                  ((package-list (-> (listof package-summary?)))
+                   ;; Whether a package with NAME is installed.
+                   (package-installed? (-> string? boolean?))
+                   ;; Install a package from a local SOURCE-DIR.
+                   ;; Success: package-summary. Failure: error STRING
+                   ;; (the runtime error message, passed through verbatim).
+                   (package-install (-> path-string? (or/c package-summary? string?)))
+                   ;; Remove package NAME; #f when not installed.
+                   (package-remove (-> string? boolean?)))))
          package-host-service-capabilities)
 
 ;; ============================================================
