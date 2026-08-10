@@ -10,7 +10,6 @@
 |---|---|---|---|---|---|
 | W0 | ✅ DONE (PR #9259, `53801aab`) | — | — | ✅ APPROVED (recheck 0 findings) | ports + composition root + fakes; Fast 1063/15500; golden 16/16; Arch 22/22 |
 | W1 | ✅ DONE (PR #9260, `f8f2f99d`) | — | — | ✅ APPROVED (2 MINOR folded) | campaign-repository boundary: fail-closed schema/fencing/plan/attempt + containment/no-follow/atomic; Fast 1064/15525; golden 16/16 |
-| W1 | PENDING | — | — | — | — |
 | W2 | PENDING | — | — | — | — |
 | W3 | PENDING | — | — | — | — |
 | W4 | PENDING | — | — | — | — |
