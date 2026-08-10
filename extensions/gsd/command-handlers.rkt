@@ -68,6 +68,7 @@
          (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
          racket/file
          "campaign-state.rkt"
+         "campaign-repository.rkt"
          "go-orchestrator.rkt")
 
 (provide (contract-out
@@ -414,17 +415,13 @@
        ""
        (format "\n## Current State\n~a\n" state-content))))
 
-(define (load-or-migrate-campaign base-dir)
-  (define migrated (migrate-campaign! base-dir))
-  (or (load-campaign-record base-dir (campaign-plan-id migrated)) migrated))
-
 (define (prepare-go-campaign base-dir input-text plan validation)
   (with-handlers ([exn:fail:campaign-migration?
                    (lambda (e)
                      (hook-amend (hasheq 'text
                                          (format "Campaign migration failed closed: ~a"
                                                  (exn-message e)))))])
-    (define rec (load-or-migrate-campaign base-dir))
+    (define rec (load-or-migrate-campaign! base-dir))
     (define next-wave (select-next-actionable-wave rec))
     (define requested (requested-wave-index input-text))
     (cond

@@ -23,10 +23,8 @@
          racket/list
          racket/match
          "../../helpers/gsd-golden-trace.rkt"
-         (only-in "../../../extensions/gsd/campaign-state.rkt"
-                  migrate-campaign!
-                  load-campaign-record
-                  campaign-plan-id))
+         (only-in "../../../extensions/gsd/campaign-state.rkt" migrate-campaign! campaign-plan-id)
+         (only-in "../../../extensions/gsd/campaign-repository.rkt" load-campaign-record))
 
 ;; ============================================================
 ;; Assertion helpers

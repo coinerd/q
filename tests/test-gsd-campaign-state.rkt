@@ -19,6 +19,7 @@
          rackunit/text-ui
          racket/file
          "../extensions/gsd/campaign-state.rkt"
+         "../extensions/gsd/campaign-repository.rkt"
          (only-in "../extensions/gsd/wave-executor.rkt"
                   wave-executor-statuses
                   wave-status-state

@@ -33,9 +33,8 @@
                   set-campaign-fence-token!
                   begin-attempt!
                   select-next-actionable-wave
-                  persist-campaign!
-                  load-campaign-record
                   migrate-campaign!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/wave-completion.rkt"
                   try-complete-wave!
                   skip-wave!

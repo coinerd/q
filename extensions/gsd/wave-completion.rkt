@@ -19,6 +19,7 @@
          racket/port
          racket/string
          "campaign-state.rkt"
+         "campaign-repository.rkt"
          ;; GSD tracking files — update PLAN.md + wave docs on completion
          (only-in "wave-docs.rkt" wave-slug)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)

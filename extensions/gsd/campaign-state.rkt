@@ -30,7 +30,6 @@
          racket/port
          racket/path
          racket/list
-         racket/match
          racket/format
          racket/contract
          (only-in "wave-docs.rkt"
@@ -68,8 +67,6 @@
                (or/c #f exact-nonnegative-integer?)
                void?)]
           [migrate-campaign! (-> path-string? campaign-record?)]
-          [persist-campaign! (-> path-string? campaign-record? void?)]
-          [load-campaign-record (-> path-string? string? (or/c #f campaign-record?))]
           [make-campaign-manifest
            (-> exact-nonnegative-integer?
                string?
@@ -79,6 +76,11 @@
                campaign-manifest?)]
           [make-campaign-wave-descriptor
            (-> exact-nonnegative-integer? string? string? string? campaign-wave-descriptor?)]
+          [campaign-wave-descriptor-index (-> campaign-wave-descriptor? exact-nonnegative-integer?)]
+          [campaign-wave-descriptor-title (-> campaign-wave-descriptor? string?)]
+          [campaign-wave-descriptor-doc-path (-> campaign-wave-descriptor? string?)]
+          [campaign-wave-descriptor-content-hash (-> campaign-wave-descriptor? string?)]
+          [campaign-wave-descriptor? (-> any/c boolean?)]
           [make-campaign-wave
            (-> exact-nonnegative-integer?
                string?
@@ -97,6 +99,11 @@
                exact-integer?
                campaign-record?)]
           [make-campaign-cancellation (-> string? exact-integer? campaign-cancellation?)]
+          [campaign-attempt
+           (-> string? (or/c #f exact-nonnegative-integer?) exact-integer? campaign-attempt?)]
+          [campaign-attempt? (-> any/c boolean?)]
+          [campaign-wave? (-> any/c boolean?)]
+          [campaign-record? (-> any/c boolean?)]
           [campaign-cancellation? (-> any/c boolean?)]
           [campaign-cancellation-reason (-> campaign-cancellation? string?)]
           [campaign-cancellation-timestamp (-> campaign-cancellation? exact-integer?)]
@@ -400,94 +407,6 @@
              (current-continuation-marks)))]))
 
 ;; ============================================================
-;; Atomic persistence (D2)
-;; ============================================================
-
-(define (record->datum rec)
-  (list 'campaign-record
-        (campaign-plan-id rec)
-        (manifest->datum (campaign-record-manifest rec))
-        (map wave->datum (campaign-record-waves rec))
-        (and (campaign-record-cancellation rec)
-             (list 'cancellation
-                   (campaign-cancellation-reason (campaign-record-cancellation rec))
-                   (campaign-cancellation-timestamp (campaign-record-cancellation rec))))
-        (campaign-fence-token rec)
-        (campaign-record-provenance rec)
-        (campaign-record-created-at rec)
-        (campaign-record-updated-at rec)))
-
-(define (manifest->datum m)
-  (list 'manifest
-        (campaign-manifest-schema-version m)
-        (campaign-manifest-title m)
-        (campaign-manifest-dependencies m)
-        (for/list ([w (campaign-manifest-waves m)])
-          (list (campaign-wave-descriptor-index w)
-                (campaign-wave-descriptor-title w)
-                (campaign-wave-descriptor-doc-path w)
-                (campaign-wave-descriptor-content-hash w)))
-        (campaign-manifest-constraints-hash m)))
-
-(define (wave->datum w)
-  (list (campaign-wave-index w)
-        (campaign-wave-title w)
-        (campaign-wave-status w)
-        (campaign-wave-attempt-count w)
-        (and (campaign-wave-current-attempt w)
-             (list (campaign-attempt-id (campaign-wave-current-attempt w))
-                   (campaign-attempt-fence-token (campaign-wave-current-attempt w))
-                   (campaign-attempt-started-at (campaign-wave-current-attempt w))))))
-
-(define (datum->manifest d)
-  (match d
-    [(list 'manifest sv title deps wds ch)
-     (make-campaign-manifest sv
-                             title
-                             deps
-                             (for/list ([wd wds])
-                               (make-campaign-wave-descriptor (list-ref wd 0)
-                                                              (list-ref wd 1)
-                                                              (list-ref wd 2)
-                                                              (list-ref wd 3)))
-                             ch)]))
-
-(define (datum->wave d)
-  (match d
-    [(list idx title status acct attempt)
-     (make-campaign-wave idx
-                         title
-                         status
-                         acct
-                         (and attempt
-                              (match attempt
-                                [(list aid fence started) (campaign-attempt aid fence started)])))]))
-
-(define (datum->record d)
-  (match d
-    [(list 'campaign-record pid m waves cancellation fence prov created updated)
-     (make-campaign-record pid
-                           (datum->manifest m)
-                           (map datum->wave waves)
-                           (and cancellation
-                                (match cancellation
-                                  [(list 'cancellation r t) (make-campaign-cancellation r t)]))
-                           fence
-                           prov
-                           created
-                           updated)]))
-
-(define (persist-campaign! base-dir rec)
-  (define campaigns-dir (build-path base-dir ".planning" "campaigns"))
-  (make-directory* campaigns-dir)
-  (define target (build-path campaigns-dir (string-append (campaign-plan-id rec) ".rktd")))
-  (define tmp
-    (build-path campaigns-dir (format ".tmp-~a-~a" (campaign-plan-id rec) (random 1000000))))
-  (call-with-output-file tmp #:exists 'truncate (lambda (out) (write (record->datum rec) out)))
-  (rename-file-or-directory tmp target #t))
-
-(define (load-campaign-record base-dir plan-id)
-  (define target (build-path base-dir ".planning" "campaigns" (string-append plan-id ".rktd")))
-  (if (file-exists? target)
-      (datum->record (call-with-input-file target read))
-      #f))
+;; v0.99.90 W1 (#9232): .rktd persistence moved to campaign-repository.rkt
+;; (fail-closed validation, atomic replace, path containment, no-follow,
+;; backward-compatible load, and load-or-migrate-campaign!).

@@ -63,17 +63,27 @@
                '("racket/contract" "racket/set" "runtime-state-types"))
    (make-entry "campaign-state.rkt"
                'campaign-state
-               '(fs-read fs-write fs-rename mkdir sha256)
+               '(fs-read sha256)
                '()
                '("racket/file" "racket/string"
                                "racket/port"
                                "racket/path"
                                "racket/list"
-                               "racket/match"
                                "racket/format"
                                "racket/contract"
                                "wave-docs"
                                "util/json/checksum"))
+   ;; v0.99.90 W1: .rktd storage boundary owns persistence effects
+   (make-entry "campaign-repository.rkt"
+               'persistence
+               '(fs-read fs-write fs-rename fs-delete mkdir)
+               '()
+               '("racket/file" "racket/path"
+                               "racket/match"
+                               "racket/format"
+                               "racket/string"
+                               "racket/contract"
+                               "campaign-state"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
                '(mkdir path-ops)
