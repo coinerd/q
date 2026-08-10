@@ -135,6 +135,10 @@
 ;;   (wave-done-wave n) | (wave-done-unspecified) | (done-force) | (done-default)
 ;;   (plan-text s) | (plan-display) | (display artifact)
 ;;   (status) | (replan) | (reset) | (unknown)
+;; NOTE: wave numbers use TRAILING-TOKEN semantics (last whitespace token
+;; must be numeric). "/skip 2 3" classifies as (skip-wave 3). The executor
+;; performs its own full-args interpretation when acting on a command; this
+;; classifier is the pure intent projection used for boundary checks.
 (define (gsd-command-intent parsed)
   (cond
     [(gsd-cmd-go? parsed)

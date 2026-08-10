@@ -166,9 +166,14 @@
     [(string? spec) spec]
     [(pair? spec)
      (case (car spec)
-       [(only-in prefix-in rename-in except-in)
+       [(only-in rename-in except-in)
         (if (and (pair? (cdr spec)) (string? (cadr spec)))
             (cadr spec)
+            #f)]
+       ;; (prefix-in "pref" module-path): the module path is the SECOND arg.
+       [(prefix-in)
+        (if (and (pair? (cdr spec)) (pair? (cddr spec)) (string? (caddr spec)))
+            (caddr spec)
             #f)]
        [else #f])]
     [else #f]))
@@ -209,7 +214,7 @@
       i))
   (check-equal? unexpected '() (format "parser imports unexpected modules: ~a" unexpected)))
 
-(test-case "parser fitness: command-helpers.rkt is I/O-free"
+(test-case "parser fitness: command-helpers.rkt is I/O-free and whitelisted"
   (define path (build-path q-dir "util" "command-helpers.rkt"))
   (check-true (file-exists? path))
   (define imports (map normalize-import (module-imports path)))
@@ -217,7 +222,14 @@
     (for/list ([i (in-list imports)]
                #:when (member i forbidden-parser-imports))
       i))
-  (check-equal? violations '() (format "command-helpers imports I/O modules: ~a" violations)))
+  (check-equal? violations '() (format "command-helpers imports I/O modules: ~a" violations))
+  ;; Strict whitelist: command-helpers may only depend on base/contract/string.
+  (define allowed '("base" "contract" "string"))
+  (define unexpected
+    (for/list ([i (in-list imports)]
+               #:unless (member i allowed))
+      i))
+  (check-equal? unexpected '() (format "command-helpers imports unexpected modules: ~a" unexpected)))
 
 ;; ============================================================
 ;; Intent classification edges
