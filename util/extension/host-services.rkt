@@ -53,24 +53,18 @@
          ;; receive package operations as an injected VALUE; they never import
          ;; runtime/package.rkt. Concrete qpm-package values stay Runtime-owned:
          ;; the adapter converts them to pure package-summary data.
-         (contract-out (struct package-summary
-                               ((name string?)
-                                (version string?))))
+         (contract-out (struct package-summary ((name string?) (version string?))))
          (contract-out (struct package-host-service
-                               ((package-list
-                                 ;; All installed packages as pure summaries, sorted by name.
-                                 (-> (listof package-summary?)))
-                                (package-installed?
-                                 ;; Whether a package with NAME is installed.
-                                 (-> string? boolean?))
-                                (package-install
-                                 ;; Install a package from a local SOURCE-DIR.
-                                 ;; Success: package-summary. Failure: error STRING
-                                 ;; (the runtime error message, passed through verbatim).
-                                 (-> path-string? (or/c package-summary? string?)))
-                                (package-remove
-                                 ;; Remove package NAME; #f when not installed.
-                                 (-> string? boolean?)))))
+                               (;; All installed packages as pure summaries, sorted by name.
+                                (package-list (-> (listof package-summary?)))
+                                ;; Whether a package with NAME is installed.
+                                (package-installed? (-> string? boolean?))
+                                ;; Install a package from a local SOURCE-DIR.
+                                ;; Success: package-summary. Failure: error STRING
+                                ;; (the runtime error message, passed through verbatim).
+                                (package-install (-> path-string? (or/c package-summary? string?)))
+                                ;; Remove package NAME; #f when not installed.
+                                (package-remove (-> string? boolean?)))))
          package-host-service-capabilities)
 
 ;; ============================================================
@@ -125,8 +119,7 @@
 ;; The op fields carry contracts so domain violations blame the extension
 ;; caller and range violations blame the Runtime adapter (same blame model as
 ;; provider-host-service).
-(struct package-host-service
-        (package-list package-installed? package-install package-remove))
+(struct package-host-service (package-list package-installed? package-install package-remove))
 
 ;; Normative capability table for the package host service.
 (define package-host-service-capabilities

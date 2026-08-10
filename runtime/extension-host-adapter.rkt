@@ -53,14 +53,15 @@
 ;; Runtime touchpoint, per MA-04). current-packages-dir is read at call time,
 ;; so callers may parameterize it.
 (define (make-package-host-service)
-  (package-host-service
-   ;; list
-   (lambda () (map qpm-package->summary (list-packages)))
-   ;; installed?
-   (lambda (name) (package-installed? name))
-   ;; install
-   (lambda (source-dir)
-     (define result (install-package-from-dir source-dir))
-     (if (qpm-package? result) (qpm-package->summary result) result))
-   ;; remove
-   (lambda (name) (remove-package name))))
+  ;; list
+  (package-host-service (lambda () (map qpm-package->summary (list-packages)))
+                        ;; installed?
+                        (lambda (name) (package-installed? name))
+                        ;; install
+                        (lambda (source-dir)
+                          (define result (install-package-from-dir source-dir))
+                          (if (qpm-package? result)
+                              (qpm-package->summary result)
+                              result))
+                        ;; remove
+                        (lambda (name) (remove-package name))))

@@ -43,13 +43,13 @@
                   extension-version)
          (only-in "../extensions/loader.rkt" get-extension-name-from-path)
          (only-in "../extensions/manifest.rkt"
-         read-qpm-manifest
-         validate-manifest
-         compute-manifest-checksum
-         qpm-manifest-name
-         qpm-manifest-version
-         qpm-manifest-checksum
-         qpm-manifest-files)
+                  read-qpm-manifest
+                  validate-manifest
+                  compute-manifest-checksum
+                  qpm-manifest-name
+                  qpm-manifest-version
+                  qpm-manifest-checksum
+                  qpm-manifest-files)
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?))
 
 ;; Tool schema assembly
