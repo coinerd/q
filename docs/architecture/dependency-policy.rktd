@@ -34,6 +34,9 @@
    (rationale
     . "Browser subsystem peer of tools — imports only agent/event and util. Never runtime/tui.")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
+ ;; HISTORICAL (v0.99.88 W4: no live dated entries remain — all extension
+ ;; exceptions are permanent pair waivers; see Dated format below only as
+ ;; reference for pre-W4 entries):
  ;; Dated format: ((filename (rationale . "...") (owner . "...")
  ;;                           (revisit-by . "YYYY-MM-DD")
  ;;                           (boundary . tui|runtime|ui)

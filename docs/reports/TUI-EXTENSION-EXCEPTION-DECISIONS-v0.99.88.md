@@ -110,13 +110,13 @@ expiry rule applies only to dated entries.
 |---|---|
 | Policy/boundary focused (5 files) | ✅ 96/96 |
 | Exception fitness | ✅ 12/12 |
-| Arch | (run) |
-| Fast | (run) |
-| Broad | (run) |
-| Security | (run) |
-| Smoke | (run) |
-| Release dry-run | (run) |
-| lint-format | (run) |
+| Arch | ✅ 21 files / 237 tests |
+| Fast | ✅ 1056 files / 15405 tests |
+| Broad | ✅ 1234 files / 17672 tests |
+| Security | ✅ 63 files / 702 tests |
+| Smoke | ✅ 19 files / 306 tests |
+| Release dry-run | ✅ 5/5 |
+| lint-format | ✅ 2081 files, 0 errors, 0 warnings |
 
 ## 5. MA-05 closure proof
 
