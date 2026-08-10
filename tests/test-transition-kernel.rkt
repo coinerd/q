@@ -277,7 +277,11 @@
   (check-false (campaign-complete? 2 (set 0 1 2)))
   (check-true (campaign-complete? 2 (set 0 1)))
   (check-true (campaign-complete? 1 (set 0)))
-  (check-false (campaign-complete? 2 'not-a-set)))
+  (check-false (campaign-complete? 2 'not-a-set))
+  ;; coverage-checked, not count-checked: count 2 but index 3 out of range
+  ;; and index 1 missing
+  (check-false (campaign-complete? 2 (set 0 3)))
+  (check-false (campaign-complete? 3 (set 0 2 5))))
 
 (test-case "kernel: campaign-complete? agrees with compute-next-pending-wave"
   (for ([tw (in-range 0 5)]

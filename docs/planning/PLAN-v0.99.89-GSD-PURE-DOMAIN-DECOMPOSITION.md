@@ -1,6 +1,6 @@
 # Plan: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** FROZEN — NOT STARTED
+**Status:** ACTIVE — W0 DONE, W1 DONE (per wave-amendment entries below)
 **Authority:** roadmap + v0.99.87 freeze contract
 **Plan-ID / Hash:** generated at campaign start
 **Dependency:** v0.99.88 released
@@ -26,3 +26,17 @@ Isolate GSD planning/state logic as an explicit pure domain core while preservin
 ## Amendment policy
 
 Immutable after start; changes require dated amendment, new hash, controlled migration, and preserved MA history.
+
+## Amendments
+
+- **2026-08-10 (W0):** Status FROZEN → ACTIVE — W0 DONE. Golden workflow
+  traces merged (`8214e6a4`, PR #9254, #9226 closed): deterministic
+  semantic trace matrix = refactoring oracle for W1–W4; report
+  `docs/reports/GSD-GOLDEN-TRACES-v0.99.89.md`. No wave-map change.
+- **2026-08-10 (W1):** W1 DONE — Pure Transition Kernel merged
+  (#9227, PR pending): `extensions/gsd/transition-kernel.rkt` (pure,
+  neutral domain data, base-collections only) + facade rewrite
+  (`transition-logic.rkt` delegates via all-from-out; additive surface
+  expansion — no removals/redefinitions). Golden traces 16/16 unchanged;
+  GSD batch 1038 tests passed. Report
+  `docs/reports/PURE-TRANSITION-KERNEL-v0.99.89.md`. No wave-map change.

@@ -43,25 +43,32 @@
 (define (gsm-state? v)
   (and (symbol? v) (memq v GSD-STATES) #t))
 
-;; Terminal states of a GSD lifecycle.
+;; Terminal states of a GSD lifecycle — the campaign-terminus states.
 ;;   verifying — all waves complete, awaiting the /done archive (the campaign
-;;               path ends here; golden-trace finding #4).
+;;               path ends here; golden-trace finding #4). It retains an
+;;               outgoing rework → executing transition by design (the
+;;               verifier may send the campaign back); "terminus" here means
+;;               *successful* campaign completion, not graph-sink.
 ;;   idle      — post-close state (archive resets the FSM to idle).
-;; A terminal state has no productive outgoing transition.
 (define GSD-TERMINAL-STATES '(verifying idle))
 
 (define (terminal-state? s)
   (and (gsm-state? s) (memq s GSD-TERMINAL-STATES) #t))
 
 ;; Pure terminal condition: a campaign is complete iff it has at least one
-;; wave and every wave index is in the completed set. This is the pure
-;; precondition of the /done milestone-close path (archive.rkt's
-;; all-waves-complete? is the filesystem-side equivalent).
+;; wave and every wave index is in the completed set (coverage-checked, not
+;; merely count-checked — guards against invariant-invalid states such as
+;; {0,3} with total-waves 2). This is the pure precondition of the /done
+;; milestone-close path (archive.rkt's all-waves-complete? is the
+;; filesystem-side equivalent; see the report's W2 open-considerations for
+;; the DEFERRED semantics gap).
 (define (campaign-complete? total-waves completed-set)
   (and (exact-nonnegative-integer? total-waves)
        (> total-waves 0)
        (set? completed-set)
-       (= (set-count completed-set) total-waves)))
+       (= (set-count completed-set) total-waves)
+       (for/and ([i (in-range total-waves)])
+         (set-member? completed-set i))))
 
 ;; L-09: Transition table design note.
 ;; This table is intentionally simple: plain (from . to) pairs with no guards,

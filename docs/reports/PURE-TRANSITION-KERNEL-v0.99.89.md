@@ -37,7 +37,9 @@ idempotency. Fitness test forbids I/O imports in the kernel.
 ### 2. Facade rewrite: `extensions/gsd/transition-logic.rkt`
 
 - `(provide (all-from-out "transition-kernel.rkt"))` — the full kernel
-  surface is re-exported verbatim; public API unchanged.
+  surface is re-exported verbatim. **Additive surface expansion** (the
+  facade gains the neutral struct + terminal predicates); **no removals or
+  redefinitions** of any name previously provided.
 - `compute-next-gsm-state` adapts `gsd-runtime-state` → neutral → kernel
   `compute-next-state` → re-materialized runtime state; the runtime policy
   (wave-executor clearing when leaving executing mode) stays in the facade.
@@ -83,6 +85,16 @@ architecture. The oracle pins commands, FSM transitions, campaign record,
 PLAN/STATE/VALIDATION/wave projections, completion outbox, campaign result
 and event order — all byte-identical. Production behavior is provably
 unchanged; W1 is a pure structural refactor.
+
+## Open considerations for W2+
+
+- `campaign-complete?` is coverage-checked (see kernel) but is not wired
+  into `/done` yet; `archive.rkt`'s filesystem-side `all-waves-complete?`
+  also accepts DEFERRED waves (via `done-or-deferred?`), while deferred
+  waves never enter the FSM's `completed-waves` (only PLAN.md is marked).
+  A deferred-only remainder would pass the filesystem gate but fail the
+  pure kernel predicate. Reconcile when W2 wires the pure predicate into
+  the `/done` path.
 
 ## Gates
 
