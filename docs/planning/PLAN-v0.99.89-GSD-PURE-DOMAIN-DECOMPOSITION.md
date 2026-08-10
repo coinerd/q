@@ -40,3 +40,20 @@ Immutable after start; changes require dated amendment, new hash, controlled mig
   expansion — no removals/redefinitions). Golden traces 16/16 unchanged;
   GSD batch 1038 tests passed. Report
   `docs/reports/PURE-TRANSITION-KERNEL-v0.99.89.md`. No wave-map change.
+
+## Amendments (tracked — dated)
+
+### 2026-08-11 — W2: Plan/State Projection Kernel (additive surface expansion)
+Delivered on `feature/v09989-w2-plan-state-projection-kernel` (PR pending):
+new PURE `projection-kernel.rkt` (projection-set neutral data + pure
+transforms byte-identical to the legacy writers) and atomic effect shell
+`projection-effects.rkt` (temp+rename, batch apply, crash-repair
+reconcile). Completion/failure paths (`try-complete-wave!`, go-orchestrator
+error paths) now apply PLAN.md+wave-doc+STATE.md through the shell in one
+batch; `run-campaign!` reconciles stale projections from the durable record
+on resume. Golden traces 15/16 byte-identical; crash-resume trace now
+asserts repaired projections (plan-overall `all-done`). GSD batch 1038;
+Fast 1059 files; Broad 1237 files; lint-format 0/0. Report
+`docs/reports/PLAN-STATE-PROJECTION-KERNEL-v0.99.89.md`. Inventory 26 → 29
+(+projection-kernel/effects, event-projection domain). Wave-map unchanged
+(no new state names / persistence formats).

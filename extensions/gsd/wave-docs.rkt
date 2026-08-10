@@ -50,6 +50,8 @@
           [next-inbox-wave (-> path-string? (or/c wave-index-entry? #f))]
           [find-next-inbox-entry (-> (listof wave-index-entry?) (or/c wave-index-entry? #f))]
           [mark-wave-status! (-> path-string? exact-nonnegative-integer? string? boolean?)]
+          [wave-slug (-> path-string? exact-nonnegative-integer? (or/c string? #f))]
+          [plan-slug-map (-> path-string? hash?)]
           [plan-overall-status (-> path-string? symbol?)]
           [compute-plan-overall-status (-> (listof wave-index-entry?) symbol?)]
           [wave-exists? (-> path-string? exact-nonnegative-integer? string? boolean?)]
@@ -295,3 +297,28 @@
     [else
      (define text (call-with-input-file plan-path port->string))
      (compute-plan-overall-status (parse-plan-index text))]))
+
+;; ============================================================
+;; Slug resolution helpers (v0.99.89 W2 projection shell)
+;; ============================================================
+
+;; Slug for one wave index, read from the PLAN.md index.
+(define (wave-slug base-dir wave-idx)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (cond
+    [(not (file-exists? plan-path)) #f]
+    [else
+     (define text (call-with-input-file plan-path port->string))
+     (define entry
+       (for/first ([e (parse-plan-index text)]
+                   #:when (= (wave-index-entry-idx e) wave-idx))
+         e))
+     (and entry (wave-index-entry-slug entry))]))
+
+;; Whole-index slug map (idx → slug) from the PLAN.md index.
+(define (plan-slug-map base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (if (file-exists? plan-path)
+      (for/hash ([e (parse-plan-index (call-with-input-file plan-path port->string))])
+        (values (wave-index-entry-idx e) (wave-index-entry-slug e)))
+      (hash)))

@@ -281,9 +281,10 @@
   (check-equal? (hash-ref (golden-trace-projections trace) 'wave-docs) '((0 pending) (1 pending)))
   (check-equal? (hash-ref (golden-trace-projections trace) 'state-table) '((0 pending) (1 pending))))
 
-(test-case "golden crash resume: W0 projections remain stale after recovery"
-  ;; Simulate the crash, then resume in a fresh process: W1 completes but the
-  ;; stale W0 projections are NOT repaired by today's resume path.
+(test-case "golden crash resume: W0 projections are repaired on recovery (v0.99.89 W2)"
+  ;; Simulate the crash, then resume in a fresh process: W1 completes AND the
+  ;; stale W0 projections are repaired by the W2 projection reconcile, which
+  ;; re-derives PLAN.md / wave docs / STATE.md from the durable record.
   (define crash
     (with-golden-trace 'crash-between-commit-and-projection
                        '((/plan) (/go))
@@ -305,13 +306,14 @@
   (check-equal? (hash-ref (golden-trace-result trace) 'completed) '(1))
   (check-equal? (trace-wave trace 0) '(0 done 1 ("attempt-1" 1)))
   (check-equal? (trace-wave trace 1) '(1 done 2 ("attempt-2" 3)))
-  ;; W1 projection updated by resume; W0 still stale (pending) — no repair.
-  (check-equal? (hash-ref (golden-trace-projections trace) 'plan-index) '((0 pending) (1 done)))
-  (check-equal? (hash-ref (golden-trace-projections trace) 'wave-docs) '((0 pending) (1 done)))
-  (check-equal? (hash-ref (golden-trace-projections trace) 'state-table) '((0 pending) (1 done)))
-  ;; Durable record is coherent (both done) but the stale W0 projection keeps
-  ;; the plan overall at partly-done — that is the current crash semantic.
-  (check-equal? (hash-ref (golden-trace-projections trace) 'plan-overall) 'partly-done)
+  ;; W2 repair: the stale W0 projection is reconciled from the durable record
+  ;; before W1 runs, so the projections converge on the durable truth.
+  (check-equal? (hash-ref (golden-trace-projections trace) 'plan-index) '((0 done) (1 done)))
+  (check-equal? (hash-ref (golden-trace-projections trace) 'wave-docs) '((0 done) (1 done)))
+  (check-equal? (hash-ref (golden-trace-projections trace) 'state-table) '((0 done) (1 done)))
+  ;; Durable record is coherent (both done) and the projections agree — the
+  ;; plan overall reflects all-done after recovery (was partly-done pre-W2).
+  (check-equal? (hash-ref (golden-trace-projections trace) 'plan-overall) 'all-done)
   (check-equal? (length (golden-trace-outbox trace)) 2)
-  ;; Sanity: the crash trace (pre-resume) showed W0 stale too.
+  ;; Sanity: the crash trace (pre-resume) still shows the stale W0 projection.
   (check-equal? (hash-ref (golden-trace-projections crash) 'plan-index) '((0 pending) (1 pending))))
