@@ -9,6 +9,7 @@
 
 (require racket/contract
          "effect-ports.rkt"
+         "github-port.rkt"
          "system-adapters.rkt")
 
 (provide system-gsd-effect-ports
@@ -21,6 +22,7 @@
                     (make-system-git-port system-process-port)
                     (make-system-clock-port)
                     system-process-port
+                    (make-dry-run-github-port)
                     (lambda (_event-name _payload) (void))))
 
 (define current-gsd-effect-ports (make-parameter system-gsd-effect-ports))

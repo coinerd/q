@@ -264,9 +264,14 @@
     '("current-gsd-correlation-id")
     '("racket/match" "util/error" "agent/event-structs/base" "agent/event-emitter" "session-state"))
    (make-entry "event-structs.rkt" 'event-projection '() '() '("util/event/event-macro"))
-   ;; v0.99.90 W0 external-domain ports (3) + W3 executor port (1)
+   ;; v0.99.90 W0 external-domain ports (3) + W3 executor port (1) + W4 github port (1)
    (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
    (make-entry "wave-runner-port.rkt" 'external-ports '() '() '("racket/contract"))
+   (make-entry "github-port.rkt"
+               'external-ports
+               '()
+               '()
+               '("racket/contract" "racket/string" "effect-ports"))
    (make-entry "system-adapters.rkt"
                'external-ports
                '(fs-read fs-write fs-rename fs-delete mkdir dir-list git parameterize subprocess)
