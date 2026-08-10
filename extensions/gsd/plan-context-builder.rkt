@@ -128,18 +128,20 @@
 ;; v0.99.90 W0 (#9231): Delegate to the injected git port through
 ;; current-gsd-effect-ports (composition-root.rkt); the production adapter
 ;; preserves the exact subprocess command, trimming, and truncation. The
-;; current-git-root parameter remains the public override seam.
+;; current-git-root parameter remains the public override seam. Root
+;; resolution also delegates to the port's find-root so system-adapters is
+;; the single production implementation (find-git-root-dir stays as the
+;; exported compatibility/test API).
 ;; Returns a string (possibly empty when no changes or no git).
 (define (get-diff-excerpt base-dir files)
   (if (or (null? files) (not base-dir))
       ""
       (with-handlers ([exn:fail? (lambda (_) "")])
-        (define git-root (or (current-git-root) (find-git-root-dir base-dir)))
+        (define git-port (gsd-effect-ports-git (current-gsd-effect-ports)))
+        (define git-root (or (current-git-root) ((gsd-git-port-find-root git-port) base-dir)))
         (cond
           [(not git-root) ""]
-          [else
-           (define git-port (gsd-effect-ports-git (current-gsd-effect-ports)))
-           ((gsd-git-port-head-summary git-port) git-root files)]))))
+          [else ((gsd-git-port-head-summary git-port) git-root files)]))))
 
 ;; Attempt to read test summary from session artifacts.
 ;; v0.99.24 W1: Checks for cached test results file. Returns a descriptive

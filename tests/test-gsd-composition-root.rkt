@@ -6,9 +6,13 @@
          racket/runtime-path
          "../extensions/gsd/effect-ports.rkt"
          "../extensions/gsd/composition-root.rkt"
+         "../extensions/gsd/system-adapters.rkt"
          "helpers/gsd-port-fakes.rkt")
 
 (define-runtime-path effect-ports-source "../extensions/gsd/effect-ports.rkt")
+(define-runtime-path facade-path "../extensions/gsd-planning.rkt")
+(define-runtime-path core-path "../extensions/gsd/core.rkt")
+(define-runtime-path repo-root "..")
 
 (module+ test
   (test-case "default composition produces valid cohesive ports"
@@ -36,11 +40,50 @@
     (check-not-eq? a b))
 
   (test-case "stable facades do not export internal ports or composition root"
-    (define facade (build-path "extensions" "gsd-planning.rkt"))
-    (define core (build-path "extensions" "gsd" "core.rkt"))
-    (for ([module-path (in-list (list facade core))]
+    (for ([module-path (in-list (list facade-path core-path))]
           [name (in-cycle '(gsd-effect-ports current-gsd-effect-ports))])
       (check-exn exn:fail? (lambda () (dynamic-require module-path name)))))
+
+  (test-case "system git adapter trims, truncates, and degrades on failure (via fake process)"
+    (define (make-process returning)
+      (gsd-process-port (lambda (_program _args _cwd) returning) (lambda () (void))))
+    ;; trim
+    (define trimmed
+      ((gsd-git-port-head-summary
+        (make-system-git-port (make-process (gsd-process-result 0 #"  abc123 change  \n" #""))))
+       "/repo"
+       '("a.rkt")))
+    (check-equal? trimmed "abc123 change")
+    ;; truncation at 2000 + "..."
+    (define long-out (string->bytes/utf-8 (make-string 2100 #\x)))
+    (define truncated
+      ((gsd-git-port-head-summary
+        (make-system-git-port (make-process (gsd-process-result 0 long-out #""))))
+       "/repo"
+       '("a.rkt")))
+    (check-equal? (string-length truncated) 2003)
+    (check-equal? (substring truncated 2000) "...")
+    ;; empty file list → "" without invoking the process
+    (check-equal?
+     ((gsd-git-port-head-summary (make-system-git-port (make-process (gsd-process-result 0 #"" #""))))
+      "/repo"
+      '())
+     "")
+    ;; process failure → ""
+    (check-equal? ((gsd-git-port-head-summary
+                    (make-system-git-port (gsd-process-port (lambda (_p _a _c) (error 'boom))
+                                                            (lambda () (void)))))
+                   "/repo"
+                   '("a.rkt"))
+                  ""))
+
+  (test-case "default git port runs against the real repository"
+    (define result
+      ((gsd-git-port-head-summary (gsd-effect-ports-git system-gsd-effect-ports))
+       repo-root
+       '("CHANGELOG.md" "README.md")))
+    (check-true (and (string? result) (> (string-length result) 0))
+                (format "real git head-summary produced: ~s" result)))
 
   (test-case "neutral contracts carry no concrete adapter dependencies"
     (define source (file->string effect-ports-source))

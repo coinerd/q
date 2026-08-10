@@ -83,7 +83,13 @@
 (define (run-system-process program args cwd)
   (parameterize ([current-directory cwd])
     (define executable (or (find-executable-path program) program))
-    (define-values (sp out in err) (apply subprocess #f 'out 'in 'err executable args))
+    ;; v0.99.90 W0 (#9231) MAJOR-1 review fix: subprocess stdio slots accept
+    ;; only #f or file-stream ports, never symbols. #f creates pipes the
+    ;; parent reads via the returned port values (same pattern as
+    ;; extensions/remote-collab/ssh-helpers.rkt). The pre-W0 code passed
+    ;; 'out/'in/'err which raised on every call, so get-diff-excerpt always
+    ;; degraded to "" in production.
+    (define-values (sp out in err) (apply subprocess #f #f #f executable args))
     (close-output-port in)
     (define stdout (port->bytes out))
     (define stderr (port->bytes err))
