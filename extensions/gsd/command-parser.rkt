@@ -46,7 +46,11 @@
          gsd-command-spec-aliases
          parse-gsd-command
          gsd-command-specs
-         aliases-for)
+         aliases-for
+         ;; v0.99.89 W3: pure intent boundary
+         command-wave-intent
+         gsd-command-intent
+         go-wave-valid?)
 
 ;; -- Base struct --
 
@@ -107,3 +111,65 @@
     [(equal? cmd "/done")
      (gsd-cmd-done cmd args-text (and args-text (string-contains? args-text "--force")))]
     [else #f]))
+
+;; ============================================================
+;; Pure intent boundary (v0.99.89 W3)
+;; ============================================================
+
+;; The executor side (command-handlers.rkt) previously re-parsed the trailing
+;; numeric token of /go N from the raw input text. That intent extraction
+;; belongs to the pure parser layer: the executor consumes the parsed intent
+;; instead of re-parsing. All functions here are I/O-free.
+
+;; Extract the trailing numeric token from an arg/input string.
+;; "/go 3" → 3; "/go" → #f; "/go 3 extra" → #f (last token non-numeric).
+;; Byte-identical semantics to the executor's former requested-wave-index.
+(define (command-wave-intent arg-text)
+  (define trimmed (string-trim (or arg-text "")))
+  (define parts (string-split trimmed))
+  (define last-part (and (pair? parts) (list-ref parts (sub1 (length parts)))))
+  (and last-part (regexp-match? #rx"^[0-9]+$" last-part) (string->number last-part)))
+
+;; Classify a parsed command into a neutral intent spec:
+;;   (go-wave n) | (go-all) | (skip-wave n) | (skip-all)
+;;   (wave-done-wave n) | (wave-done-unspecified) | (done-force) | (done-default)
+;;   (plan-text s) | (plan-display) | (display artifact)
+;;   (status) | (replan) | (reset) | (unknown)
+(define (gsd-command-intent parsed)
+  (cond
+    [(gsd-cmd-go? parsed)
+     (define n (command-wave-intent (gsd-cmd-go-wave-arg parsed)))
+     (if n
+         (list 'go-wave n)
+         (list 'go-all))]
+    [(gsd-cmd-skip? parsed)
+     (define n (command-wave-intent (gsd-cmd-skip-skip-arg parsed)))
+     (if n
+         (list 'skip-wave n)
+         (list 'skip-all))]
+    [(gsd-cmd-wave-done? parsed)
+     (define n (command-wave-intent (gsd-cmd-wave-done-wave-arg parsed)))
+     (if n
+         (list 'wave-done-wave n)
+         (list 'wave-done-unspecified))]
+    [(gsd-cmd-done? parsed)
+     (if (gsd-cmd-done-force? parsed)
+         (list 'done-force)
+         (list 'done-default))]
+    [(gsd-cmd-plan? parsed)
+     (define text (gsd-cmd-plan-plan-text parsed))
+     (if text
+         (list 'plan-text text)
+         (list 'plan-display))]
+    [(gsd-cmd-artifact? parsed) (list 'display (gsd-cmd-artifact-artifact-name parsed))]
+    [(gsd-cmd-status? parsed) (list 'status)]
+    [(gsd-cmd-replan? parsed) (list 'replan)]
+    [(gsd-cmd-reset? parsed) (list 'reset)]
+    [else (list 'unknown)]))
+
+;; Pure mirror of the executor-side /go N assertion (go-orchestrator
+;; assert-go-n): a requested wave is valid exactly when it equals the
+;; earliest actionable wave. Keeps the /go N assertion semantics checkable at
+;; the intent boundary without touching the campaign record.
+(define (go-wave-valid? requested next-actionable)
+  (and next-actionable (= requested next-actionable)))

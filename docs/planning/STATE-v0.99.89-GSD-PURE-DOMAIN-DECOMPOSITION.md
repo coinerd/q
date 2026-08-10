@@ -1,16 +1,16 @@
 # State: v0.99.89 — GSD Pure Domain Decomposition
 
-**Status:** ACTIVE — W0/W1/W2 DONE; W3 next
+**Status:** ACTIVE — W0–W2 DONE; W3 DONE (PR pending); W4 next
 **Baseline SHA:** `598fbd00` (v0.99.88 release)
 **Current main:** `74da7e8a` (W2 merge, PR #9256)
-**Current wave:** W3 — Command Parsing & Intent Boundary (#9229)
+**Current wave:** W3 — Command Parsing & Intent Boundary (#9229) — gates green, PR open
 
 | Wave | Issue | Status | Merge | Gates |
 |---|---|---|---|---|
 | W0 Golden Workflow Traces | #9226 | ✅ DONE (PR #9254, `8214e6a4`) | golden 16/16; workflows 29/161; Fast 1057/15420; lint-format 0/0 | APPROVED (1 recheck round) |
 | W1 Pure Transition Kernel | #9227 | ✅ DONE (PR #9255, `eb7807ae`) | kernel 29/29; facade 123/123; golden 16/16; GSD batch 1038; Fast 1058; lint-format 0/0 | APPROVED (0 recheck; 2 MINOR + 5 INFO folded) |
 | W2 Plan/State Projection Kernel | #9228 | ✅ DONE (PR #9256, `74da7e8a`) | kernel 22/22; golden 16/16 (crash-resume repair); GSD batch 1038; workflows ✅; Fast 1059; Broad 1237; lint-format 0/0 | APPROVED (0 recheck) |
-| W3 Command Parsing & Intent Boundary | #9229 | backlog | — | parser fitness + command corpus + Fast |
+| W3 Command Parsing & Intent Boundary | #9229 | ✅ DONE (PR pending) | intent/corpus 13/13; golden 16/16; GSD batch 1087; Fast 1060; lint-format 0/0 | APPROVED pending |
 | W4 Facade Thinning + Release | #9230 | backlog | — | Broad + Arch + Workflow + Smoke + Release + review |
 
 ## W0 deliverables
@@ -111,3 +111,29 @@ durable-record reconcile on resume (golden crash-resume repair pin).
 
 Command Parsing & Intent Boundary — pure command parsing + intent
 classification boundary; parser fitness + command corpus + Fast gate.
+
+## W3 deliverables
+
+- `extensions/gsd/command-parser.rkt` (still PURE, no new deps):
+  `command-wave-intent` (trailing numeric token), `gsd-command-intent`
+  (neutral intent spec: go-wave/go-all/skip-wave/skip-all/wave-done-* /
+  done-force/done-default/plan-*/display/status/replan/reset/unknown),
+  `go-wave-valid?` (pure mirror of assert-go-n).
+- `extensions/gsd/command-handlers.rkt` — `requested-wave-index` is now a
+  one-line delegate to `command-wave-intent`; executor no longer re-parses.
+  /go N rejection flow (`assert-go-n`) unchanged.
+- `tests/test-gsd-command-intent.rkt` — 13 tests: 30-entry command corpus
+  (kind + intent), malformed pins, extraction edges, /go N cross-product
+  equivalence, parser fitness (I/O-free require-scan for parser + helpers).
+- `docs/reports/COMMAND-PARSING-INTENT-BOUNDARY-v0.99.89.md` — wave report.
+
+## W3 acceptance recap
+
+"Malformed and valid commands preserve facade behavior with no skip
+semantics." Corpus pins all 30 inputs; golden 16/16 unchanged; assert-go-n
+D8 tests untouched; go-wave-valid? ≡ assert-go-n over the actionable space.
+
+## W4 scope preview
+
+GSD Facade Thinning + Release — Broad + Arch + Workflow + Smoke + Release
+gates; version bump v0.99.89; tag + milestone #876 close.
