@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"gemini","kind":"timeout","operation":"stream-stall","event":{"candidates":[{"content":{"parts":[{"functionCall":{"id":"timeout_tool_test","name":"read_file","args":{"path":"fixture.rkt"}}}]}}]},"expected":{"exception":"exn:fail:network:timeout:stream","phase":"thinking","received_any_data":true,"output_chars":0}}

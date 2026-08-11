@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"azure-openai","kind":"timeout","operation":"stream-stall","expected":{"exception":"exn:fail:network:timeout:stream","phase":"initial","received_any_data":false,"output_chars":0}}

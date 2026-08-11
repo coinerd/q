@@ -1,0 +1,5 @@
+: gemini-heartbeat
+
+data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}
+
+data: [DONE]

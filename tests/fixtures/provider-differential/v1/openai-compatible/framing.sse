@@ -1,0 +1,5 @@
+: openai-compatible-heartbeat
+
+data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}
+
+data: [DONE]

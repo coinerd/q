@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"gemini","kind":"usage","event":{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}}}

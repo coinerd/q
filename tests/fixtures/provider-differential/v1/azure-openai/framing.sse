@@ -1,0 +1,5 @@
+: azure-openai-heartbeat
+
+data: {"model":"deployment-test","choices":[{"delta":{"content":"hi"},"finish_reason":null}]}
+
+data: [DONE]

@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"gemini","kind":"tools","event":{"candidates":[{"content":{"parts":[{"functionCall":{"id":"tool_test_2","name":"read_file","args":{"path":"fixture.rkt"}}}]}}]}}
