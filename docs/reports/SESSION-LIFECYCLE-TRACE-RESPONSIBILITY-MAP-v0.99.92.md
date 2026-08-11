@@ -206,7 +206,7 @@ This appendix is generated from the machine oracle. Each row is checked for exac
 
 | Path | Family | Preconditions / base | Exact ordered effects |
 |---|---|---|---|
-| `normal-success` | normal | none | `claim → begin-turn → outer-turn-started → input-hook → last-prompt-mutation → parameterize-session-state → working-set-config → user-index-persistence → context-build → advisory-compaction → context-pressure → context-built → ensure-persisted → tracer-and-model-iteration → model-terminal → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `normal-success` | normal | none | `working-set-config → claim → begin-turn → outer-turn-started → input-hook → last-prompt-mutation → parameterize-session-state → preparation-plan → user-index-persistence → context-build → advisory-compaction → context-pressure → context-built → ensure-persisted → tracer-and-model-iteration → model-terminal → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
 | `handled-error` | error | none | `partial-persist → runtime-error → error-terminal → trace-stop → index-rebuild → session-updated → save-back-release` |
 | `error-then-index-failure` | error | none | `error-terminal → build-index-raises → rollback-save-back → release → cleanup-terminal` |
 | `cancel-pre-iteration` | cancel | token-pre-cancelled-without-request | `token-already-cancelled → cancellation-check → uncorrelated-turn-cancelled → index-rebuild → session-updated → rotate-token → release-prompt → no-correlated-terminal` |

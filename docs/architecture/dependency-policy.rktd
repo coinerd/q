@@ -255,7 +255,9 @@
  ;; Format: ((module-path . allowed-current-impurities) ...)
  (pure-modules (decision . ("runtime/iteration/decision.rkt" . ()))
                (event-payloads . ("util/event-payloads.rkt" . ()))
-               (event-codec . ("util/event-codec.rkt" . ())))
+               (event-codec . ("util/event-codec.rkt" . ()))
+               (prompt-preparation
+                . ("runtime/session/session-prompt-preparation.rkt" . ())))
  ;; R-19: Parser modules — must not require I/O modules
  ;; Format: (module-path ...)
  (parser-modules ("extensions/gsd/command-parser.rkt" "tui/command-parse.rkt" "cli/args.rkt"))

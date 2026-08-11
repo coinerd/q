@@ -36,12 +36,13 @@
          (only-in racket/dict dict-ref dict-set)
          racket/path
          (only-in "../../util/loop-result.rkt" make-loop-result)
-         (only-in "../../util/message/message.rkt" message-id message-kind message?)
+         (only-in "../../util/message/message.rkt" message-id message?)
          (only-in "../../util/loop-result.rkt" loop-result-termination-reason)
          (only-in "session-lifecycle-transitions.rkt"
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
+         "session-prompt-preparation.rkt"
          "../../util/event/event-bus.rkt"
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../../util/error/errors.rkt" raise-session-error)
@@ -52,16 +53,7 @@
          "../session-index/query.rkt"
          (only-in "../../util/event/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../../util/telemetry.rkt" with-telemetry)
-         (only-in "../context/context-assembly.rkt"
-                  (build-session-context build-session-context/from-index)
-                  build-tiered-context-with-hooks
-                  tiered-context->message-list)
-         (only-in "../working-set.rkt"
-                  compute-working-set-budget
-                  make-working-set
-                  working-set-reset!
-                  working-set-resolve-messages)
-         (only-in "session-context.rkt" extract-path-settings)
+         (only-in "../working-set.rkt" compute-working-set-budget make-working-set working-set-reset!)
          "../../util/ids.rkt"
          (only-in "../runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../../agent/iteration/main-loop.rkt" run-iteration-loop/v2)
@@ -149,84 +141,55 @@
   (define idx-path
     (session-index-path (session-identity-facet-session-dir (session->identity-facet sess))))
 
-  ;; Ensure index exists (build if first time)
+  ;; E0: Ensure the durable index exists (build if first time).
   (unless (agent-session-index sess)
     (when (file-exists? log-path)
       (guarded-set-index! sess (build-index! log-path idx-path))))
   (define idx (agent-session-index sess))
 
-  ;; Convert string to message struct if needed
-  (define user-msg
-    (if (string? user-message)
-        (let ()
-          ;; Determine parent from active leaf in index (#521: use stored IDs)
-          (define parent-id
-            (compute-parent-id (if (file-exists? log-path)
-                                   (load-session-log log-path)
-                                   '())
-                               idx))
-          (build-user-message user-message parent-id))
-        user-message))
+  ;; Pre-load durable history for the pure plan (single read; equivalent to the
+  ;; historical parent/linear reads in all reachable states).
+  (define history
+    (if (file-exists? log-path)
+        (load-session-log log-path)
+        '()))
 
-  ;; v0.26.0: Reset working set on new user message
+  ;; E1: Reset the per-prompt working set before the pure plan reads it.
   (define ws (config-working-set (session-provider-facet-config (session->provider-facet sess))))
   (when ws
     (working-set-reset! ws))
 
-  ;; Canonicalize parent linkage in the index before persisting the message so
-  ;; session.jsonl and session.index cannot disagree for message-struct input.
-  (when idx
-    (define-values (new-idx returned-msg) (append-to-leaf! idx user-msg))
-    (when new-idx
-      (set! user-msg returned-msg)
-      (guarded-set-index! sess new-idx)
-      ;; Keep durable index in lockstep with the durable/buffered user append.
-      ;; A provider stall must not leave resume context behind session.jsonl.
-      (save-index! idx-path new-idx)
-      ;; v0.99.58 FIX: Use new-idx (post-append) instead of idx (pre-append)
-      ;; for context building, so the user message is included.
-      (set! idx new-idx)))
+  ;; Pure preparation (v0.99.92 W1): compute the canonical user message,
+  ;; post-append index, path settings, context source, and system-injected
+  ;; context without performing any side effect.
+  (define plan
+    (build-prompt-preparation-plan user-message
+                                   #:history history
+                                   #:index idx
+                                   #:system-instructions (agent-session-system-instructions sess)
+                                   #:provider? (and (agent-session-provider sess) #t)
+                                   #:working-set ws))
 
-  ;; #771: Buffer canonical user message (deferred persistence).
-  (buffer-or-append!-fn sess user-msg)
+  ;; E2: Apply the canonical index append in the historical order. The pure
+  ;; append leaves the shared active-leaf box untouched; setting it here
+  ;; preserves alias semantics for any pre-append index reference, then the
+  ;; session install and durable save keep index and log in lockstep.
+  (define appended (prompt-preparation-plan-appended-entry plan))
+  (when appended
+    (define post-idx (prompt-preparation-plan-post-append-index plan))
+    (set-box! (session-index-active-leaf-id idx) (message-id appended))
+    (guarded-set-index! sess post-idx)
+    (save-index! idx-path post-idx))
 
-  ;; Build context: use tiered context assembly when provider available, else tree walk
-  ;; v0.45.7 (NF4/ARCH-01): Migrated from raw build-assembled-context to tiered path
-  (define context-messages
-    (if idx
-        (cond
-          [(agent-session-provider sess)
-           ;; v0.45.7: Use tiered assembly for GSD pinning, hooks, and observability
-           ;; v0.45.8 (NF10): Inject working-set messages for context enrichment
-           (define raw-msgs (build-session-context/from-index idx))
-           (define ws-msgs
-             (if ws
-                 (working-set-resolve-messages ws raw-msgs message-id)
-                 '()))
-           (define-values (tc _hook-result)
-             (build-tiered-context-with-hooks raw-msgs
-                                              #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD
-                                              #:working-set-messages ws-msgs))
-           (define result-tc (tiered-context->message-list tc))
-           result-tc]
-          ;; Fallback: context-assembly tree walk (no LLM summarization)
-          [else (build-session-context/from-index idx)])
-        ;; Fallback: no index — use linear history (backward compat)
-        (let ([existing (if (file-exists? log-path)
-                            (load-session-log log-path)
-                            '())])
-          ;; BUG-39: Include buffered user message in context.
-          (if (null? existing)
-              (list user-msg)
-              (append existing (list user-msg))))))
+  ;; E3: Buffer/append the canonical user message (deferred persistence).
+  (buffer-or-append!-fn sess (prompt-preparation-plan-canonical-user-message plan))
 
-  ;; Extract settings from path entries (#522)
-  (define settings (extract-path-settings context-messages))
-  (when (hash-ref settings 'model #f)
-    (guarded-set-model-name! sess (hash-ref settings 'model)))
+  ;; E4: Apply the path-derived model setting.
+  (define model-name (prompt-preparation-plan-model-name plan))
+  (when model-name
+    (guarded-set-model-name! sess model-name))
 
-  ;; Inject system instructions as an ephemeral system message prefix
-  (inject-system-instructions context-messages (agent-session-system-instructions sess)))
+  (prompt-preparation-plan-context-with-system plan))
 
 ;; ============================================================
 ;; dispatch-iteration

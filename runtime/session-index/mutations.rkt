@@ -47,7 +47,8 @@
           [branch-with-summary!
            (-> session-index? (or/c string? #f) string? (values session-index? (or/c message? #f)))]
           [reset-leaf! (-> session-index? void?)]
-          [append-to-leaf! (-> session-index? message? (values session-index? message?))]))
+          [append-to-leaf! (-> session-index? message? (values session-index? message?))]
+          [append-to-leaf/pure (-> session-index? message? (values session-index? message?))]))
 (provide load-index-with-bookmarks
          (all-from-out "bookmarks.rkt"))
 
@@ -244,8 +245,11 @@
   (set-box! (session-index-active-leaf-id idx) #f)
   (void))
 
-;; R-6: Returns (values session-index? message?) — immutable hash operations
-(define (append-to-leaf! idx entry)
+;; R-6: Pure append computation. Returns (values session-index? message?) using
+;; immutable hash operations and WITHOUT mutating the active-leaf box. The caller
+;; owns applying the box mutation so alias semantics stay identical to the
+;; historical shared-box behavior (see append-to-leaf!).
+(define (append-to-leaf/pure idx entry)
   (define parent (active-leaf idx))
   ;; Honor an explicit parent; otherwise attach to the active leaf. Children
   ;; and by-id must describe the same topology.
@@ -263,7 +267,6 @@
                      (lambda (lst) (append lst (list fixed-entry))))
         (session-index-children idx)))
   (define new-children2 (hash-set new-children (message-id fixed-entry) '()))
-  (set-box! (session-index-active-leaf-id idx) (message-id fixed-entry))
   ;; Return updated index with immutable hashes, along with the entry
   (values (session-index new-by-id
                          new-children2
@@ -272,6 +275,13 @@
                          (session-index-active-leaf-id idx)
                          (session-index-bookmark-sem idx))
           fixed-entry))
+
+;; R-6: Returns (values session-index? message?) — immutable hash operations,
+;; plus the historical shared active-leaf box mutation.
+(define (append-to-leaf! idx entry)
+  (define-values (new-idx fixed-entry) (append-to-leaf/pure idx entry))
+  (set-box! (session-index-active-leaf-id idx) (message-id fixed-entry))
+  (values new-idx fixed-entry))
 
 ;; R-6: Use immutable hashes for bookmarks in the index
 (define (load-index-with-bookmarks session-path index-path)
