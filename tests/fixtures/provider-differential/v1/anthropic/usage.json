@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"anthropic","kind":"usage","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}}

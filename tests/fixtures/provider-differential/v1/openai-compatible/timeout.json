@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"openai-compatible","kind":"timeout","operation":"stream-stall","event":{"choices":[{"delta":{"content":"hi"},"finish_reason":null}]},"expected":{"exception":"exn:fail:network:timeout:stream","phase":"content","received_any_data":true,"output_chars":2}}

@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"azure-openai","kind":"tools","event":{"model":"deployment-test","choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_test_4","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"fixture"}}]},"finish_reason":null}]}}

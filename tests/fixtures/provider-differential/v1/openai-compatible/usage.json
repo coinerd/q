@@ -1,0 +1,1 @@
+{"fixture_schema":1,"provider":"openai-compatible","kind":"usage","event":{"choices":[{"delta":{"content":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}}
