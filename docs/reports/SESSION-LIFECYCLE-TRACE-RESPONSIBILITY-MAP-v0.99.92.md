@@ -15,8 +15,8 @@ cleanup. W1 may extract only a coherent **pure prompt-preparation plan**. It
 must not move persistence, event publication, FSM ownership, wiring, or effect
 ordering merely to reduce the lifecycle module's LOC.
 
-The machine oracle freezes six path families as 31 explicit variants, ten
-responsibility units, 27 direct/transitive consumer edges, 38 exceptional
+The machine oracle freezes six path families as 33 explicit variants, ten
+responsibility units, 34 direct/transitive consumer edges, 38 exceptional
 boundaries, two parameter scopes, and five explicitly classified findings.
 Every locator is checked against a real source file and anchor; unique
 control-flow anchors are additionally checked in source order.
@@ -44,7 +44,7 @@ family as one unconditional sequence:
 |---|---|
 | normal / hook exits | `normal-success`, `hook-input-block`, `hook-before-agent-block`, `hook-turn-start-block`, `hook-model-request-block`, `hook-message-start-block`, `hook-message-end-block` |
 | error | `handled-error`, `error-then-index-failure` |
-| cancel | `cancel-pre-iteration`, `cancel-midstream` |
+| cancel | `cancel-pre-iteration` (direct token), `cancel-pre-iteration-correlated`, `cancel-midstream-direct`, `cancel-midstream` (accepted request) |
 | close | `close-normal`, `close-repeated`, `close-active-prompt` |
 | retry | `retry-success`, `retry-exhausted`, `retry-exhausted-partial`, `retry-held-circuit`, `retry-progressive-circuit`, `retry-health-gate`, `retry-adaptive`, `retry-partial-recovery` |
 | compaction | `compact-auto-success`, `compact-auto-hook-block`, `compact-auto-start-failure`, `compact-midturn`, `compact-manual-completed`, `compact-manual-nothing`, `compact-manual-failed`, `compact-manual-tracer-failure`, `compact-manual-contention` |
@@ -107,6 +107,11 @@ sets cooldown. Manual compaction is a separate event-driven durable path that
 persists a summary and rebuilds the index.
 
 ## Responsibility and consumer map
+
+Consumer closure includes tracked production call and re-export modules. It
+explicitly excludes tests, scripts, benchmarks, generated files, and import-only
+modules that neither invoke nor re-export a mapped unit. Direct invocation edges
+and transitive façade/re-export edges are distinct in the machine ledger.
 
 | Unit | Responsibilities | Primary consumers |
 |---|---|---|
@@ -194,3 +199,86 @@ behavioral lifecycle suites. It does not claim formal concurrency verification,
 data-flow analysis, or correction of the classified findings. Generated IDs and
 timestamps are intentionally represented by identity roles rather than literal
 values.
+
+## Machine trace appendix
+
+This appendix is generated from the machine oracle. Each row is checked for exact effect-sequence agreement. Hook variants declare their normal base path and deviation in the ledger.
+
+| Path | Family | Preconditions / base | Exact ordered effects |
+|---|---|---|---|
+| `normal-success` | normal | none | `claim → begin-turn → outer-turn-started → input-hook → last-prompt-mutation → parameterize-session-state → working-set-config → user-index-persistence → context-build → advisory-compaction → context-pressure → context-built → ensure-persisted → tracer-and-model-iteration → model-terminal → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `handled-error` | error | none | `partial-persist → runtime-error → error-terminal → trace-stop → index-rebuild → session-updated → save-back-release` |
+| `error-then-index-failure` | error | none | `error-terminal → build-index-raises → rollback-save-back → release → cleanup-terminal` |
+| `cancel-pre-iteration` | cancel | token-pre-cancelled-without-request | `token-already-cancelled → cancellation-check → uncorrelated-turn-cancelled → index-rebuild → session-updated → rotate-token → release-prompt → no-correlated-terminal` |
+| `cancel-midstream` | cancel | accepted-interrupt-request-midstream | `chunk-processed → token-observed → stream-cancelled → stream-completed → session-updated → finish-turn → release-prompt → correlated-turn-cancelled` |
+| `close-normal` | close | none | `closed-check → mark-closed → browser-clear → ensure-persisted → session-closed → shutdown-hook → persist-conclusions → mark-inactive → stop-blackboard → registry-inactive → disable-hot-swap → stop-watcher → close-repository` |
+| `close-repeated` | close | none | `warning → void-not-return → mark-closed-again → repeat-cleanup-groups → repository-close-again` |
+| `close-active-prompt` | close | none | `no-prompt-claim-check → close-while-active → repository-close → prompt-index-rebuild-can-follow → prompt-session-updated-can-follow` |
+| `retry-success` | retry | none | `failed-attempt → retry-decision → retry-event → sleep → reattempt → success-health-reset` |
+| `retry-exhausted` | retry | none | `budget-denies → retry-exhausted-raise → retry-metadata → runtime-error → error-path` |
+| `retry-exhausted-partial` | retry | none | `exhaustion → partial-wrap → partial-persist → metadata-hidden` |
+| `retry-held-circuit` | retry | none | `held-detected → circuit-callback → circuit-event → no-retry` |
+| `retry-progressive-circuit` | retry | none | `stall-count → threshold → circuit-event → exhaustion` |
+| `retry-health-gate` | retry | none | `record-failure → health-check → health-event → deny` |
+| `retry-adaptive` | retry | none | `retry-event → adapt → adaptive-event → reattempt` |
+| `retry-partial-recovery` | retry | none | `capture-partial → threshold → continuation-context → recovery-event` |
+| `compact-auto-success` | compaction | none | `claim → start-event → hook → compact → completed → release` |
+| `compact-auto-hook-block` | compaction | none | `claim → hook-block → original-context → release-cooldown-complete` |
+| `compact-auto-start-failure` | compaction | none | `claim → start-publication-raises → before-dynamic-wind → ownership-leaks` |
+| `compact-midturn` | compaction | none | `soft-limit-branch → over-budget-event → compact-midturn → recurse` |
+| `compact-manual-completed` | compaction | none | `claim → tracer → started → persist-summary → rebuild-index → completed → release-stop` |
+| `compact-manual-nothing` | compaction | none | `claim-start → history-check → nothing-terminal → release-stop` |
+| `compact-manual-failed` | compaction | none | `handler → failed-event → release → trace-stop` |
+| `compact-manual-tracer-failure` | compaction | none | `claim → tracer-construction-raises → before-handler → ownership-leaks` |
+| `compact-manual-contention` | compaction | none | `claim-denied → already-running → return` |
+| `hook-input-block` | normal | base=normal-success; deviation=hook-input-block; resumes=outer-prompt-cleanup | `claim → begin-turn → outer-turn-started → input-hook → input-blocked → completed-result → cleanup-terminal → finish-turn → release-prompt` |
+| `hook-before-agent-block` | normal | base=normal-success; deviation=hook-before-agent-block; resumes=dispatch-trace-stop+index-rebuild+session-updated+rollback+outer-cleanup | `claim → begin-turn → outer-turn-started → agent-hook → agent-blocked → completed-result → trace-stop → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `hook-turn-start-block` | normal | base=normal-success; deviation=hook-turn-start-block; resumes=dispatch-trace-stop+index-rebuild+session-updated+rollback+outer-cleanup | `claim → begin-turn → outer-turn-started → hook → turn-blocked → completed-result → trace-stop → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `hook-model-request-block` | normal | base=normal-success; deviation=hook-model-request-block; resumes=dispatch-trace-stop+index-rebuild+session-updated+rollback+outer-cleanup | `claim → begin-turn → outer-turn-started → hook → blocked-event → turn-terminal → trace-stop → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `hook-message-start-block` | normal | base=normal-success; deviation=hook-message-start-block; resumes=dispatch-trace-stop+index-rebuild+session-updated+rollback+outer-cleanup | `claim → begin-turn → outer-turn-started → hook → blocked-event → turn-terminal → trace-stop → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `hook-message-end-block` | normal | base=normal-success; deviation=hook-message-end-block; resumes=dispatch-trace-stop+index-rebuild+session-updated+rollback+outer-cleanup | `claim → begin-turn → outer-turn-started → hook → stream-terminal → hook-blocked → trace-stop → index-rebuild → session-updated → rollback-save-back → finish-turn → release-prompt` |
+| `cancel-pre-iteration-correlated` | cancel | accepted-interrupt-request-before-checkpoint | `interrupt-accepted → token-signal → uncorrelated-turn-cancelled → session-updated → finish-rotate → release-prompt → correlated-turn-cancelled` |
+| `cancel-midstream-direct` | cancel | token-cancelled-without-recorded-request | `chunk-processed → token-observed → stream-cancelled → stream-completed → session-updated → release-no-correlated-terminal` |
+
+## Exceptional-boundary semantics appendix
+
+| Boundary | Phase | Cleanup | Terminal | Rollback save-back | Outcome |
+|---|---|---|---|---|---|
+| `closed-guard` | pre-claim | none | none | not-entered | propagates |
+| `busy-event-failure` | claim-denied | none | none | not-entered | masks-busy-exception |
+| `begin-turn-failure` | post-claim-pre-outer-wind | ownership-not-released | none | not-entered | propagates |
+| `outer-start-failure` | post-claim-pre-outer-wind | ownership-not-released | none | not-entered | propagates |
+| `input-hook-failure` | outer-wind | finish+release+cleanup-terminal+emergency-persist | turn.completed/cleanup | not-entered | propagates |
+| `input-hook-block` | outer-wind | finish+release+cleanup-terminal | turn.completed/cleanup | not-entered | returns-completed |
+| `context-persistence-failure` | rollback+outer-winds | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `context-event-failure` | rollback+outer-winds | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `model-select-failure` | rollback+outer-winds | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `tracer-construction-failure` | rollback+outer-winds | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `tracer-start-failure` | rollback+outer-winds | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `provider-generator-failure` | dispatch-handler | partial-persist+error-event+terminal+trace-stop+index-rebuild+outer-release | turn.completed/error | saved-before-unwind | returns-error-result |
+| `dispatch-handler-failure` | dispatch-error-handler | outer-cleanup-best-effort | possibly-turn.completed/cleanup | saved-before-unwind | propagates-handler-error |
+| `normal-tracer-stop-failure` | dispatch-handler | error-handler-runs+second-stop-may-fail | turn.completed/error | saved-before-unwind | error-result-or-propagates |
+| `index-rebuild-failure` | post-dispatch | rollback-save+finish+release+cleanup-terminal | second-turn.completed/cleanup | saved-before-unwind | propagates |
+| `session-updated-failure` | post-index | rollback-save+finish+release+cleanup-terminal | turn.completed/cleanup | saved-before-unwind | propagates |
+| `rollback-save-back-failure` | rollback-after | outer-finish+release | none | save-back-failed | propagates |
+| `finish-turn-failure` | outer-after | subsequent-cleanup-suppressed | none | already-saved | propagates |
+| `release-prompt-failure` | outer-after | acknowledgement+terminal+persist-suppressed | none | already-saved | propagates |
+| `acknowledgement-tracer-failure` | outer-after | cleanup-terminal+persist-suppressed | none | already-saved | propagates |
+| `cleanup-terminal-failure` | outer-after | logged+continue-emergency-persist | attempted-turn.completed/cleanup | already-saved | swallowed-exn-fail |
+| `emergency-persist-failure` | outer-after | logged | none | already-saved | swallowed-exn-fail |
+| `interrupt-accepted-publication-failure` | event-subscriber | request-recorded+token-not-signalled | none | not-applicable | propagates-from-publish |
+| `interrupt-signal-failure` | event-subscriber | accepted-event-already-emitted | none | not-applicable | swallowed-by-subscriber-handler |
+| `retry-callback-failure` | retry-handler | no-sleep+no-reattempt | none | unchanged | propagates-to-dispatch |
+| `retry-sleep-break` | retry-handler | dynamic-winds-only | none | unchanged | non-exn-break-propagates |
+| `retry-partial-metadata-loss` | retry-exhaustion | partial-persist+dispatch-error | turn.completed/error | saved-before-unwind | returns-error-without-retry-metadata |
+| `auto-compaction-start-event-failure` | post-claim-pre-wind | ownership-not-released | none | unchanged | propagates |
+| `auto-compaction-hook-block` | compaction-body | release+cooldown+complete-event | compaction/compaction-complete | unchanged | returns-original-context |
+| `auto-compaction-body-failure` | compaction-body | release+cooldown+complete-event | compaction/compaction-complete | unchanged | propagates-original-or-cleanup-error |
+| `auto-compaction-cleanup-failure` | compaction-after | later-cooldown/event-may-be-suppressed | none | unchanged | propagates |
+| `manual-compaction-contention-event-failure` | claim-denied | none | none | not-applicable | propagates |
+| `manual-compaction-tracer-construction-failure` | post-claim-pre-handler | ownership-not-released | none | not-applicable | propagates |
+| `manual-compaction-failed-event-failure` | manual-handler | release+trace-stop-may-be-suppressed | attempted-session.compact.failed | not-applicable | propagates-handler-error |
+| `repeated-close` | close-guard | repeats-cleanup-groups | warning+possible-session.closed | not-applicable | continues-not-terminal |
+| `active-prompt-close` | concurrent-close | closes-repository-while-prompt-may-write | session.closed+later-session.updated | saved-by-prompt-if-reached | race-dependent |
+| `close-cleanup-group-failure` | close-step | logged+continues-next-group | session.closed-if-emission-reached | not-applicable | swallowed-exn-fail |
+| `non-exn-break-kill` | any-exn-fail-only-boundary | dynamic-winds-only | cleanup-terminal-if-outer-after-reached | save-back-if-inner-entered | propagates |

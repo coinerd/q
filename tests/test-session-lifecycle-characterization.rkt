@@ -7,7 +7,8 @@
          racket/file
          racket/list
          racket/runtime-path
-         racket/string)
+         racket/string
+         file/sha1)
 
 (define-runtime-path tests-dir ".")
 (define root (simplify-path (build-path tests-dir "..")))
@@ -22,6 +23,8 @@
                    error-then-index-failure
                    cancel-pre-iteration
                    cancel-midstream
+                   cancel-pre-iteration-correlated
+                   cancel-midstream-direct
                    close-normal
                    close-repeated
                    close-active-prompt
@@ -74,7 +77,14 @@
             midturn-compaction
             durable-compaction-event
             sdk-compat
-            goal-callback))
+            goal-callback
+            runtime-facade-reexport
+            main-run-reexport
+            main-close-reexport
+            sdk-reexport
+            sdk-public-reexport
+            sdk-compat-send
+            runtime-facade-compaction-reexport))
 (define expected-exit-ids
   '(closed-guard busy-event-failure
                  begin-turn-failure
@@ -121,6 +131,32 @@
                           (check-true (eof-object? (read in))
                                       "lifecycle ledger must contain exactly one datum")
                           datum)))
+
+(define (digest xs)
+  (sha1 (open-input-string (format "~s" xs))))
+
+(define (edge-key e)
+  (map (lambda (k) (hash-ref e k)) '(id from to kind anchor)))
+
+(define (exit-key e)
+  (map (lambda (k) (hash-ref e k))
+       '(id classification
+            severity
+            owner
+            follow-up
+            phase
+            cleanup
+            terminal
+            rollback-save-back
+            outcome
+            anchor)))
+
+(define (probe-key e)
+  (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
+
+(define expected-edge-digest "6b7ed6f8f088c84640a996bcb9298724bbbee82b")
+(define expected-exit-digest "031f2a5c05ec694199dda66df93439ee1fa7ba77")
+(define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
 (define (locator-parts locator)
   (string-split locator ":" #:trim? #f))
@@ -221,6 +257,9 @@
     (check-locator (hash-ref unit 'id) (hash-ref unit 'owner) #:unique? #t))
   (define edges (hash-ref ledger 'consumer-edges))
   (exact-id-bijection "consumer edges" expected-consumer-ids edges)
+  (check-equal? (digest (sort (map edge-key edges) symbol<? #:key car))
+                expected-edge-digest
+                "consumer-edge from/to/kind closure drifted")
   (for ([edge (in-list edges)])
     (check-not-false (member (hash-ref edge 'kind) '(direct transitive)))
     (check-locator (hash-ref edge 'id) (hash-ref edge 'anchor))))
@@ -235,7 +274,12 @@
     (check-true (symbol? (hash-ref exit 'owner)))
     (check-true (string-contains? (hash-ref exit 'follow-up) "#")
                 (format "~a must name an accountable issue" id))
-    (check-locator id (hash-ref exit 'anchor))))
+    (for ([key (in-list '(phase cleanup terminal rollback-save-back outcome))])
+      (check-true (symbol? (hash-ref exit key)) (format "~a needs ~a semantics" id key)))
+    (check-locator id (hash-ref exit 'anchor)))
+  (check-equal? (digest (sort (map exit-key exits) symbol<? #:key car))
+                expected-exit-digest
+                "exceptional-boundary semantic closure drifted"))
 
 (test-case "W0-6: parameter scopes pin exceptional rollback save-back timing"
   (define scopes (hash-ref (read-one ledger-path) 'parameter-scopes))
@@ -250,12 +294,38 @@
 
 (test-case "W0-7: behavior evidence and report agree with the machine oracle"
   (define ledger (read-one ledger-path))
-  (for ([probe (in-list (hash-ref ledger 'behavioral-evidence))])
+  (define probes (hash-ref ledger 'behavioral-evidence))
+  (for ([probe (in-list probes)])
+    (check-not-false (member (hash-ref probe 'mode) '(behavioral source-only)))
+    (check-true (pair? (hash-ref probe 'paths)))
     (check-locator (hash-ref probe 'id) (hash-ref probe 'anchor)))
+  (check-equal? (digest (sort (map probe-key probes) symbol<? #:key car))
+                expected-probe-digest
+                "behavioral evidence mapping drifted")
+  (check-equal?
+   (sort (remove-duplicates (append* (map (lambda (probe) (hash-ref probe 'paths)) probes))) symbol<?)
+   (sort expected-path-ids symbol<?)
+   "every variant needs behavioral or explicit source-only evidence")
   (define report (file->string report-path))
   (for ([path (in-list (hash-ref ledger 'paths))])
-    (check-true (string-contains? report (symbol->string (hash-ref path 'id)))
-                (format "report omits path ~a" (hash-ref path 'id))))
+    (define id (hash-ref path 'id))
+    (define effect-sequence
+      (string-join (map (lambda (effect) (symbol->string (hash-ref effect 'effect)))
+                        (hash-ref path 'trace))
+                   " → "))
+    (check-true (string-contains? report (symbol->string id)) (format "report omits path ~a" id))
+    (check-true (string-contains? report effect-sequence) (format "report trace differs for ~a" id)))
+  (for ([exit (in-list (hash-ref ledger 'exceptional-exits))])
+    (define row
+      (format "| `~a` | ~a | ~a | ~a | ~a | ~a |"
+              (hash-ref exit 'id)
+              (hash-ref exit 'phase)
+              (hash-ref exit 'cleanup)
+              (hash-ref exit 'terminal)
+              (hash-ref exit 'rollback-save-back)
+              (hash-ref exit 'outcome)))
+    (check-true (string-contains? report row)
+                (format "report boundary row differs for ~a" (hash-ref exit 'id))))
   (for ([finding (in-list (hash-ref ledger 'findings))])
     (define id (hash-ref finding 'id))
     (check-true (string-contains? report (symbol->string id)))

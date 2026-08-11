@@ -4,7 +4,7 @@
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
-| W0 | ✅ expanded oracle 7/7 ×3; existing lifecycle 83/83 | ✅ 1075 files / 15622 tests at `3c911684` | 31 explicit variants across 6 families; 10 units; 27 consumer edges; 38 exceptional boundaries; parameter/save-back timing; production diff NONE | — | 🟡 re-review pending after 4-MAJOR/2-MINOR remediation | IN PROGRESS |
+| W0 | ✅ expanded oracle 7/7 ×3; lifecycle 83/83; retry+cancel 97/97; hooks 48/48; midturn 9/9 | ✅ final candidate 1075 files / 15622 tests | 33 explicit variants across 6 families; 10 units; 34 scoped consumer edges; 38 boundaries with phase/cleanup/terminal/save-back/outcome; parameter timing; production diff NONE | — | 🟡 second re-review remediation complete; final re-review pending | IN PROGRESS |
 | W1 | PENDING | PENDING | lifecycle/prompt equivalence | Arch | PENDING | PENDING |
 | W2 | PENDING | PENDING | rollback/session ownership/context | Broad | PENDING | PENDING |
 | W3 | PENDING | PENDING | lifecycle/agent-session/iteration DI | Arch as changed | PENDING | PENDING |
@@ -31,7 +31,21 @@ git diff --exit-code a4b85569 -- \
   agent runtime llm tools extensions cli tui gui interfaces wiring main.rkt launch.rkt
 # no production diff
 
+raco test tests/test-auto-retry.rkt tests/test-adaptive-retry.rkt \
+  tests/test-partial-result-preservation.rkt \
+  tests/test-provider-retry-telemetry.rkt tests/test-midstream-stall.rkt \
+  tests/test-loop-cancellation.rkt
+# 97 tests passed (retry + direct/midstream cancellation)
+
+raco test tests/test-agent-session-hooks.rkt tests/test-hooks-complete.rkt \
+  tests/test-agent-session-cancellation.rkt tests/test-interrupt-lifecycle.rkt
+# 48 tests passed (hook and correlated-cancellation blocks)
+
+raco test tests/test-mid-turn-compaction-integration.rkt
+# 9 tests passed (midturn compaction variant)
+
 racket scripts/run-tests.rkt --suite fast
+# implementation SHA 3c911684 and final candidate after semantic remediation:
 # 1075/1075 files, 15622/15622 tests
 ```
 

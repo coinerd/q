@@ -8,7 +8,7 @@
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
-| W0 | IN PROGRESS | — | — | initial REQUEST_CHANGES (4M/2m); remediation complete, re-review pending | schema-v2 oracle: 31 variants/6 families, 10 units, 27 consumer edges, 38 exceptional boundaries; characterization 7×3; lifecycle 83; Fast 1075/15622; production diff NONE |
+| W0 | IN PROGRESS | — | — | two REQUEST_CHANGES rounds; second remediation complete, final re-review pending | schema-v2 oracle: 33 variants/6 families, 10 units, 34 scoped consumer edges, 38 boundaries with cleanup/terminal/save-back semantics; characterization 7×3; lifecycle 83; retry+cancel 97; hooks 48; midturn 9; production diff NONE; final Fast 1075/15622 |
 | W1 | PENDING | — | — | — | — |
 | W2 | PENDING | — | — | — | — |
 | W3 | PENDING | — | — | — | — |
