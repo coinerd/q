@@ -7,6 +7,11 @@
 ;; from the W0 evidence. It is an exemption registry, not an exhaustive ban on
 ;; new neutral helpers: unlisted neutral code remains allowed as long as it
 ;; carries no provider protocol marker.
+;;
+;; Scope: this is a syntactic high-precision fitness gate, not a data-flow or
+;; security analysis. It detects markers in literal/constructor/alist hash keys,
+;; compound literals, strings, bytes, and regexps, but not values smuggled
+;; through computed indirection (e.g. an alist built from a variable).
 
 ((version . 1)
  (provider-protocols
