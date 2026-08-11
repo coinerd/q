@@ -302,10 +302,16 @@
 
 (define (check-provider-specific-contracts-complete!)
   (define names (map provider-specific-contract-name provider-specific-contracts))
+  (define providers (map provider-specific-contract-provider provider-specific-contracts))
   (append (for/list ([provider (in-list provider-contract-names)]
-                     #:unless (for/or ([contract (in-list provider-specific-contracts)])
-                                (eq? provider (provider-specific-contract-provider contract))))
+                     #:unless (member provider providers))
             (list 'missing-provider provider))
+          (for/list ([provider (in-list provider-contract-names)]
+                     #:when (> (count (lambda (candidate) (eq? candidate provider)) providers) 1))
+            (list 'duplicate-provider provider))
+          (for/list ([provider (in-list providers)]
+                     #:unless (member provider provider-contract-names))
+            (list 'orphan-provider provider))
           (for/list ([name (in-list names)]
                      #:when (> (count (lambda (candidate) (eq? candidate name)) names) 1))
             (list 'duplicate-case name))

@@ -116,7 +116,11 @@
   (check-equal? (sort (remove-duplicates (map provider-specific-contract-provider
                                               provider-specific-contracts))
                       symbol<?)
-                '(anthropic azure-openai gemini openai-compatible)))
+                '(anthropic azure-openai gemini openai-compatible))
+  ;; Reviewer MINOR-2: contract data and executable probes are a bijection;
+  ;; neither stale probes nor unprobed expectations can silently survive.
+  (check-equal? (sort (hash-keys provider-specific-probes) symbol<?)
+                (sort (map provider-specific-contract-name provider-specific-contracts) symbol<?)))
 
 (test-case "W1-B4: every provider-specific expectation matches its REAL parser"
   (for ([contract (in-list provider-specific-contracts)])
