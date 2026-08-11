@@ -25,9 +25,24 @@
          matrix-cell-note
          matrix-cell-expected
          matrix-cell-for
-         check-matrix-complete!)
+         check-matrix-complete!
+         typed-unsupported-capabilities
+         unsupported-capability-provider
+         unsupported-capability-scenario
+         unsupported-capability-kind
+         unsupported-capability-observable
+         unsupported-capability-rationale
+         typed-unsupported-capability-for
+         check-typed-unsupported-complete!
+         provider-specific-contracts
+         provider-specific-contract-provider
+         provider-specific-contract-name
+         provider-specific-contract-expected
+         provider-specific-contract-note
+         check-provider-specific-contracts-complete!)
 
-(require racket/hash)
+(require racket/hash
+         racket/list)
 
 ;; ---------------------------------------------------------------------------
 ;; Matrix shape
@@ -210,3 +225,90 @@
       (unless (member provider provider-contract-names)
         (set! gaps (cons (list 'orphan-provider scenario provider) gaps)))))
   (reverse gaps))
+
+;; ---------------------------------------------------------------------------
+;; W1-B typed unsupported capabilities
+;; ---------------------------------------------------------------------------
+
+;; Machine-readable test contract for a genuinely unsupported normalization.
+;; `kind` classifies the adapter behavior; `observable` pins the REAL parser
+;; result so unsupported never means untested or silently skipped.
+(struct unsupported-capability (provider scenario kind observable rationale) #:transparent)
+
+(define typed-unsupported-capabilities
+  (list (unsupported-capability 'anthropic
+                                'reasoning-delta
+                                'unmapped-event
+                                'no-chunks
+                                "thinking_delta is not handled by anthropic-parse-single-event")
+        (unsupported-capability 'gemini
+                                'reasoning-delta
+                                'mapped-to-text-not-thinking
+                                #f
+                                "thought parts emit delta-text but no delta-thinking")))
+
+(define (typed-unsupported-capability-for scenario provider)
+  (for/first ([record (in-list typed-unsupported-capabilities)]
+              #:when (and (eq? scenario (unsupported-capability-scenario record))
+                          (eq? provider (unsupported-capability-provider record))))
+    record))
+
+;; Bijection gate: unsupported W0 cells and typed records must match exactly.
+(define (check-typed-unsupported-complete!)
+  (define unsupported-cells
+    (for*/list ([scenario (in-list provider-contract-scenarios)]
+                [provider (in-list provider-contract-names)]
+                #:when (let ([cell (matrix-cell-for scenario provider)])
+                         (and cell (not (matrix-cell-supported? cell)))))
+      (list scenario provider)))
+  (define record-cells
+    (for/list ([record (in-list typed-unsupported-capabilities)])
+      (list (unsupported-capability-scenario record) (unsupported-capability-provider record))))
+  (append (for/list ([cell (in-list unsupported-cells)]
+                     #:unless (member cell record-cells))
+            (cons 'missing-typed-record cell))
+          (for/list ([cell (in-list record-cells)]
+                     #:unless (member cell unsupported-cells))
+            (cons 'orphan-typed-record cell))
+          (for/list ([cell (in-list record-cells)]
+                     #:when (> (count (lambda (candidate) (equal? candidate cell)) record-cells) 1))
+            (cons 'duplicate-typed-record cell))))
+
+;; ---------------------------------------------------------------------------
+;; W1-B provider-specific contract inventory
+;; ---------------------------------------------------------------------------
+
+(struct provider-specific-contract (provider name expected note) #:transparent)
+
+(define provider-specific-contracts
+  (list
+   (provider-specific-contract 'anthropic
+                               'anthropic-message-start-zero
+                               '()
+                               "message_start emits no prompt-usage chunk when input_tokens is zero")
+   (provider-specific-contract 'gemini
+                               'gemini-usage-total-fallback
+                               '(7 3 10)
+                               "missing totalTokenCount falls back to prompt plus candidates tokens")
+   (provider-specific-contract 'openai-compatible
+                               'openai-malformed-tool-arguments
+                               "{broken"
+                               "malformed JSON tool arguments remain the original string")
+   (provider-specific-contract
+    'azure-openai
+    'azure-model-injection
+    "deployment-test"
+    "Azure wrapper injects the configured deployment when wire model is absent")))
+
+(define (check-provider-specific-contracts-complete!)
+  (define names (map provider-specific-contract-name provider-specific-contracts))
+  (append (for/list ([provider (in-list provider-contract-names)]
+                     #:unless (for/or ([contract (in-list provider-specific-contracts)])
+                                (eq? provider (provider-specific-contract-provider contract))))
+            (list 'missing-provider provider))
+          (for/list ([name (in-list names)]
+                     #:when (> (count (lambda (candidate) (eq? candidate name)) names) 1))
+            (list 'duplicate-case name))
+          (for/list ([contract (in-list provider-specific-contracts)]
+                     #:unless (positive? (string-length (provider-specific-contract-note contract))))
+            (list 'missing-note (provider-specific-contract-name contract)))))
