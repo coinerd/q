@@ -4,15 +4,15 @@
 **Approved path:** PATH_B (immutable)
 **Plan-ID / Hash:** PENDING_AT_START
 **Baseline SHA:** v0.99.90 @ b006ff08 (released)
-**Current wave:** W2-B DONE
-**Next:** W3-B (Provider Change-Locality Guards, #9240)
+**Current wave:** W4-B IN PROGRESS — reviewed release candidate
+**Next:** PR/CI, exact-main readiness, tag/publication, milestone closure
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
 | W0 | ✅ DONE | #9267 | b3a229c2 | APPROVED (0M/3m/5i, MINORs folded) | golden matrix 5/5, focused 452, Fast 1070/15587 |
 | W1-B | ✅ DONE | #9268 | bd6b8107 | 0M/2m/2i; MINORs folded | typed unsupported bijection + 4 real-parser cases; focused 461; Fast 1071/15591; CI 17/17 |
 | W2-B | ✅ DONE | #9269 | 307bdec1 | 0M/3m/1i; all findings folded | v1 20-cell byte/JSON corpus; focused 507; Fast 1072/15599; Broad 1250/17866; Security 64/710; CI 17/17 |
-| W3-B | PENDING | — | — | — | — |
-| W4-B | PENDING | — | — | — | — |
+| W3-B | ✅ DONE | #9270 | c822efc0 | APPROVED after 2 remediation rounds (0M/0m/4i final) | probes 10/10; focused arch 99; Arch 23/248; Fast 1073/15609; CI 17/17 |
+| W4-B | 🟡 RELEASE CANDIDATE | — | — | ✅ APPROVED after 2 evidence-integrity remediation rounds (final 0M/0m) | exact C1–C23/G1–G3 ledger; focused+smoke 48; Broad 1252/1260 + 17882 (8 skips); Arch 24/254; Security 64/710; release-smoke 15/180; Fast 1074/15615; dry-run 5/5 |
 
-MA-09 PARTIAL. C16–C23 rejection list remains normative. G1–G3 are explicit asymmetries, not silently normalized defects.
+MA-09 CLOSED by Path B on the candidate, conditional on exact-main release and public-bundle gates. C16–C23 rejection list remains normative. G1–G3 are explicit tested asymmetries, not silently normalized defects.
