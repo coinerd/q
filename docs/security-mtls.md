@@ -1,4 +1,4 @@
-<!-- verified-against: 0.99.90 -->
+<!-- verified-against: 0.99.91 -->
 # Security Model: Mutual TLS (mTLS) for Distributed Execution
 
 This document describes the security architecture of q's Phase 2 distributed execution feature (v0.99.29). It covers the trust model, threat model, defense-in-depth layers, and key rotation procedures.

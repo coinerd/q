@@ -1,3 +1,39 @@
+## 0.99.91
+
+Released 2026-08-11.
+
+### Features
+
+- Provider Contract Golden Matrix: 10 equivalent scenarios × four real provider parsers (40 explicit cells), including truthful supported/unsupported reasoning behavior, exact usage asymmetries, tool arguments, malformed input, timeout phases, and canonical error envelopes.
+- Adapter Contract Completion: typed unsupported-capability records and exact provider-specific contracts preserve Anthropic no-chunk reasoning and Gemini plain-text thought behavior without artificial capability equality.
+- Differential Stream/Error Fixtures: a versioned v1 corpus covers four providers × five kinds (framing, tools, usage, malformed input, timeout) with byte/JSON fixtures, SHA-256 digests, schema/cardinality checks, redaction scans, and symlink/path containment.
+- Provider Change-Locality Guards: context-qualified protocol markers are pinned to declared adapters; generic transport modules remain protocol-neutral; the approved C1–C8 neutral-helper registry is frozen with definition/export/ownership mutation probes.
+- Terminal Provider Hardening Ledger: C1–C23 and G1–G3 each have one traceable disposition, with executable pins for status thresholds, authentication headers, corrected timeout/error-wrap asymmetries, Azure URL handling, and Kimi eager streaming.
+
+### Breaking / Behavior Changes
+
+- None. Path B changes contracts, fixtures, architecture policy, and tests only; no provider production module or public API changed.
+- Existing provider asymmetries remain intentional: OpenAI-compatible rejects stream redirects and applies per-model timeout/error wrapping; Anthropic/Gemini/Azure retain their existing status, timeout, and error contracts.
+
+### Migration Notes
+
+- None required. No provider configuration, request, response, streaming, or public API format changed.
+- Maintainers adding provider protocol fields must update the provider-locality policy and positive/negative probes. A shared provider base or parser requires a separate approved amendment with new co-change evidence.
+
+### Testing
+
+- W0: 40 real-parser golden-matrix cells.
+- W1-B: exact provider-specific completion and typed unsupported contracts.
+- W2-B: 20 deterministic fixture cells with digest, schema, containment, and redaction gates.
+- W3-B: 10 locality/ownership/drift/mutation probes.
+- W4-B: exact C1–C23/G1–G3 terminal ledger plus G1/G2/G3, C11/C13/C18/C22 closure probes.
+- Release-candidate gates: provider focused + smoke 48 tests; Broad 1252/1260 files (8 explicit local-profile skips), 17882 tests; Arch 24/254; Security 64/710; release-smoke 15/180; Fast 1074/15615.
+
+### Operational / Release
+
+- **MA-09 CLOSED (Path B):** no shared production abstraction is introduced. C9 remains G1-divergent, C10–C15 lack qualifying repeated primitive-level co-change, C16–C21 are provider protocol, and C22–C23 are intentional duplication.
+- This release requires independent review, CI required-policy verification, an annotated `v0.99.91` tag at the squash-merged release SHA, and public tarball/manifest verification before milestone #878 closes.
+
 ## 0.99.90
 
 Released 2026-08-11.

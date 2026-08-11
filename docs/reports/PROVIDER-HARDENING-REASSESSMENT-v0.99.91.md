@@ -135,16 +135,18 @@ Limitations are explicit:
 
 ## 9. Release gate record
 
-To be finalized on the reviewed release candidate:
+Local release-candidate evidence (implementation commit `e390433d`):
 
 | Gate | Result |
 |---|---|
-| Provider cumulative focused | 41/41 PASS |
-| Provider Smoke | PENDING |
-| Broad | PENDING |
-| Arch | PENDING |
-| Security | PENDING |
-| release-smoke / dry-run / readiness | PENDING |
+| Provider cumulative + smoke | 48/48 PASS |
+| Broad | 1252/1260 files, 17882 tests PASS; 8 explicit local-profile skips |
+| Arch | 24 files / 254 tests PASS |
+| Security | 64 files / 710 tests PASS |
+| release-smoke | 15 files / 180 tests PASS |
+| Fast | 1074 files / 15615 tests PASS |
+| lint-all / lint-format / contract changes | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
+| dry-run / strict readiness | PENDING synchronized release surfaces and exact merged main |
 | independent review | PENDING |
 | PR CI / required policy | PENDING |
 | annotated tag / public bundle | PENDING |
