@@ -2,7 +2,9 @@
 
 **Issue:** #9241 · **Milestone:** #878 · **Approved path:** B (immutable)
 
-**Baseline:** v0.99.90 `b006ff08` · **W4 candidate:** `e2e65ada`
+**Baseline:** v0.99.90 `b006ff08`
+
+**W4 implementation evidence:** `e390433d` · **pre-review release candidate:** `1aaf2da6`
 
 **Machine decision:** `docs/architecture/provider-hardening-terminal-v0.99.91.rktd`
 
@@ -81,13 +83,14 @@ checks remain the security evidence.
 
 ## 6. Defect localization and change amplification
 
-Canonical method: `scripts/architecture-baseline.rkt --revision HEAD --last 200`;
-release-only commits and exact moves excluded.
+Canonical method: `scripts/architecture-baseline.rkt --revision 1aaf2da6 --last 200`;
+release-only commits and exact moves excluded. The explicit revision makes this
+snapshot reproducible after later review and merge commits move `HEAD`.
 
 | Module | LOC | changes (last 200) | hotspot |
 |---|---:|---:|---:|
 | `llm/stream.rkt` | 537 | 10 | 5370 |
-| `llm/openai-compatible.rkt` | 513 | 10 | 5130 |
+| `llm/openai-compatible.rkt` | 513 | 9 | 4617 |
 | `llm/gemini.rkt` | 537 | 2 | 1074 |
 | `llm/azure-openai.rkt` | 162 | 4 | 648 |
 | `llm/anthropic/format.rkt` | 431 | 1 | 431 |
@@ -97,18 +100,21 @@ Provider-scope co-change remains led by
 meets the roadmap’s repeated-co-change criterion. The sliding 200-commit window
 therefore does not justify Path A.
 
-From v0.99.90 through the W4 candidate, the campaign changed **33 files,
-+2217/−21**, with **zero production `llm/` changes**. Changes are contracts,
-fixtures, tests, policy, reports, and metrics. This demonstrates low release
+From v0.99.90 through pre-review release candidate `1aaf2da6`, the campaign
+changed **58 files, +2575/−55**, with **zero production `llm/` changes**. The
+larger release-candidate count includes synchronized version documentation and
+release notes; the W4 implementation itself first appears at `e390433d`.
+Changes are contracts, fixtures, tests, policy, reports, metrics, and release
+surfaces. This demonstrates low release
 amplification for hardening but does not claim empirical post-W3 production
 locality: no provider production defect was introduced to manufacture such
 evidence. Synthetic W3 mutation probes establish the guard behavior instead.
 
 ## 7. No-regression proof and limitations
 
-At the W4 candidate, the cumulative provider suite (golden matrix, adapter
-completion, differential fixtures, parity, locality, terminal decision) is
-**41/41**. The release also requires Provider Smoke, Broad, Arch, Security,
+At W4 implementation commit `e390433d`, the cumulative provider suite (golden
+matrix, adapter completion, differential fixtures, parity, locality, terminal
+decision) is **41/41**. The release also requires Provider Smoke, Broad, Arch, Security,
 release-smoke, release readiness, independent review, CI, and public artifact
 verification.
 
@@ -146,7 +152,8 @@ Local release-candidate evidence (implementation commit `e390433d`):
 | release-smoke | 15 files / 180 tests PASS |
 | Fast | 1074 files / 15615 tests PASS |
 | lint-all / lint-format / contract changes | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
-| dry-run / strict readiness | PENDING synchronized release surfaces and exact merged main |
+| pre-release truth / dry-run | 4/4 PASS / 5/5 PASS on synchronized candidate |
+| strict readiness | PENDING exact merged main evidence |
 | independent review | PENDING |
 | PR CI / required policy | PENDING |
 | annotated tag / public bundle | PENDING |

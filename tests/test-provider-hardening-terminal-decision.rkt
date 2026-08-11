@@ -31,6 +31,23 @@
             (string->symbol (format "C~a" n)))
           '(G1 G2 G3)))
 
+(define (evidence-path locator)
+  (car (string-split locator ":" #:trim? #f)))
+
+(define required-owner-locators
+  (hasheq 'C3
+          "llm/stream.rkt:close-port-after-stream"
+          'C6
+          "llm/http-helpers.rkt:translate-stop-reason"
+          'C7
+          "llm/stream.rkt:accumulate-tool-call-deltas"
+          'C18
+          "tests/test-provider-hardening-terminal-decision.rkt:W4-B3"
+          'C22
+          "llm/adapters/eager-stream.rkt"
+          'C23
+          "tests/test-sse-shared-azure.rkt:reasoning_content null"))
+
 (test-case "W4-B1: terminal ledger closes MA-09 with an exact C1-C23/G1-G3 bijection"
   (define ledger (read-one decision-path))
   (check-equal? (hash-ref ledger 'schema-version) 1)
@@ -43,7 +60,16 @@
   (check-equal? (length entries)
                 (length (remove-duplicates (map (lambda (entry) (hash-ref entry 'id)) entries))))
   (for ([entry (in-list entries)])
-    (check-true (pair? (hash-ref entry 'evidence)) (format "~a needs evidence" (hash-ref entry 'id)))
+    (define id (hash-ref entry 'id))
+    (define evidence (hash-ref entry 'evidence))
+    (check-true (pair? evidence) (format "~a needs evidence" id))
+    (for ([locator (in-list evidence)])
+      (check-true (string? locator) (format "~a evidence must be a locator" id))
+      (check-true (file-exists? (build-path root (evidence-path locator)))
+                  (format "~a evidence file does not exist: ~a" id locator)))
+    (when (hash-has-key? required-owner-locators id)
+      (check-not-false (member (hash-ref required-owner-locators id) evidence)
+                       (format "~a must name its exact owner evidence" id)))
     (check-not-false (member (hash-ref entry 'disposition)
                              '(shared-primitive provider-protocol
                                                 retained-local
