@@ -15,9 +15,11 @@ cleanup. W1 may extract only a coherent **pure prompt-preparation plan**. It
 must not move persistence, event publication, FSM ownership, wiring, or effect
 ordering merely to reduce the lifecycle module's LOC.
 
-The machine oracle freezes six ordered path families, ten responsibility units,
-19 exceptional exits, two parameter scopes, and five explicitly classified
-findings. Every locator is checked against a real source file and anchor.
+The machine oracle freezes six path families as 31 explicit variants, ten
+responsibility units, 27 direct/transitive consumer edges, 38 exceptional
+boundaries, two parameter scopes, and five explicitly classified findings.
+Every locator is checked against a real source file and anchor; unique
+control-flow anchors are additionally checked in source order.
 
 ## Identity model
 
@@ -34,6 +36,18 @@ correlated terminal only during outer cleanup. W1–W3 must preserve this curren
 observable behavior unless a separately approved defect wave changes it.
 
 ## Ordered path map
+
+The schema-v2 oracle separates these observable variants instead of treating a
+family as one unconditional sequence:
+
+| Family | Explicit path IDs |
+|---|---|
+| normal / hook exits | `normal-success`, `hook-input-block`, `hook-before-agent-block`, `hook-turn-start-block`, `hook-model-request-block`, `hook-message-start-block`, `hook-message-end-block` |
+| error | `handled-error`, `error-then-index-failure` |
+| cancel | `cancel-pre-iteration`, `cancel-midstream` |
+| close | `close-normal`, `close-repeated`, `close-active-prompt` |
+| retry | `retry-success`, `retry-exhausted`, `retry-exhausted-partial`, `retry-held-circuit`, `retry-progressive-circuit`, `retry-health-gate`, `retry-adaptive`, `retry-partial-recovery` |
+| compaction | `compact-auto-success`, `compact-auto-hook-block`, `compact-auto-start-failure`, `compact-midturn`, `compact-manual-completed`, `compact-manual-nothing`, `compact-manual-failed`, `compact-manual-tracer-failure`, `compact-manual-contention` |
 
 ### Normal
 
@@ -144,13 +158,13 @@ terminal behavior, classification, and source anchor. Important boundaries are:
 
 ## Findings and disposition
 
-| ID | Classification | Observation |
-|---|---|---|
-| W0-F1 | DEFERRED | Prompt ownership is claimed before outer `dynamic-wind` protection. |
-| W0-F2 | DEFERRED | Normal, error, and correlated cancellation use different terminal identities/events. |
-| W0-F3 | SEPARATE_MILESTONE | Close does not coordinate with an active prompt/repository writer. |
-| W0-F4 | DEFERRED | Automatic compaction cleanup reports completion/cooldown after block or error. |
-| W0-F5 | DEFERRED | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
+| ID | Severity / classification | Owner | Follow-up | Observation |
+|---|---|---|---|---|
+| W0-F1 | High / DEFERRED | Runtime Session | `W1 #9243 preserve; W4 #9246 terminal decision` | Prompt ownership is claimed before outer `dynamic-wind` protection. |
+| W0-F2 | Medium / DEFERRED | Runtime Session | `W1 #9243 preserve; W4 #9246 terminal decision` | Normal, error, and correlated cancellation use different terminal identities/events. |
+| W0-F3 | High / DEFERRED | Runtime Session | `W4 #9246 assign separate concurrency milestone` | Close does not coordinate with an active prompt/repository writer. |
+| W0-F4 | Medium / DEFERRED | Runtime Compaction | `W3 #9245 locality assessment; W4 #9246 decision` | Automatic compaction completion/cooldown follows block/body error; start publication failure leaks ownership. |
+| W0-F5 | Medium / DEFERRED | Runtime Retry | `W4 #9246 terminal decision` | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
 
 No finding is silently repaired in W0. W0-F1/F2 constrain W1–W3 equivalence;
 W0-F3 is concurrent lifecycle correctness rather than pure preparation; W0-F4
