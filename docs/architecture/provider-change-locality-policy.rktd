@@ -2,8 +2,11 @@
 ;;
 ;; Provider protocol markers are parsed as Racket datum atoms, so comments do
 ;; not count. A marker may occur only in its declared adapter ownership paths.
-;; Generic streaming modules may contain only normalized stream mechanics and
-;; the explicitly listed neutral C1-C8 helpers from the frozen W0 evidence.
+;; Generic streaming modules must stay free of provider protocol logic; the
+;; C1-C8 list below freezes the already-approved shared-helper exemption set
+;; from the W0 evidence. It is an exemption registry, not an exhaustive ban on
+;; new neutral helpers: unlisted neutral code remains allowed as long as it
+;; carries no provider protocol marker.
 
 ((version . 1)
  (provider-protocols

@@ -133,11 +133,21 @@
                        ";; content_block_delta is documentation only\n(define candidates '())")))
    '()))
 
-(test-case "W3-B7: compound literals cannot hide markers and reader failures fail closed"
+(test-case "W3-B7: compound literals and hash keys cannot hide markers; readers fail closed"
   (define marker "content_block_delta")
   (for ([source (in-list (list (format "(define leaked #~s)" marker)
                                (format "(define leaked #(~s))" marker)
-                               (format "(define leaked #rx~s)" marker)))])
+                               (format "(define leaked #rx~s)" marker)
+                               (format "(define leaked (box ~s))" marker)))])
+    (define violations
+      (check-provider-change-locality policy (list (source-unit "llm/stream.rkt" source))))
+    (check-equal? (length violations) 1 source)
+    (check-equal? (locality-violation-reason (car violations)) 'generic-stream-protocol))
+  ;; gemini hash-key markers hidden in literals, constructors, and alist builders
+  (for ([source (in-list (list "(define leaked #hash((\"candidates\" . 1)))"
+                               "(define leaked (hash 'functionCall 1))"
+                               "(define leaked (hasheq 'functionCall 1))"
+                               "(define leaked (make-hasheq '((functionCall . 1))))"))])
     (define violations
       (check-provider-change-locality policy (list (source-unit "llm/stream.rkt" source))))
     (check-equal? (length violations) 1 source)
@@ -150,24 +160,78 @@
   (check-equal? (locality-violation-reason (car malformed)) 'source-read-error)
   (check-true (string-contains? (locality-violation->string (car malformed)) "reader failed")))
 
-(test-case "W3-B8: allowlist drift and nonexistent helper ownership fail operational policy checks"
+(define (replace-unit units path synthetic)
+  (append (for/list ([unit (in-list units)]
+                     #:unless (string=? (source-unit-path unit) path))
+            unit)
+          (list synthetic)))
+
+(test-case "W3-B8: allowlist drift is rejected without inventing helper defects"
   (define original (provider-locality-policy-neutral-helpers policy))
-  (define first-helper (car original))
-  (define mutated-helper
-    (struct-copy neutral-helper
-                 first-helper
-                 [primitives
-                  (append (neutral-helper-primitives first-helper) '(invented-shared-parser))]))
-  (define mutated-policy
-    (struct-copy provider-locality-policy
-                 policy
-                 [neutral-helpers (cons mutated-helper (cdr original))]))
-  (define problems (check-provider-locality-policy mutated-policy repo-root))
+  (define drifted-policy
+    (struct-copy provider-locality-policy policy [neutral-helpers (cons (car original) original)]))
+  (define problems (check-provider-locality-policy drifted-policy repo-root))
   (check-not-false (findf (lambda (problem) (problem-kind? 'neutral-helper-allowlist-drift problem))
                           problems))
-  (check-not-false (findf (lambda (problem) (problem-kind? 'neutral-primitive-ownership problem))
-                          problems))
-  (check-not-false
-   (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-definition problem)) problems))
-  (check-not-false (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-export problem))
-                          problems)))
+  (check-false (findf (lambda (problem) (problem-kind? 'neutral-primitive-ownership problem))
+                      problems))
+  (check-false (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-definition problem))
+                      problems))
+  (check-false (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-export problem))
+                      problems)))
+
+(test-case "W3-B8b: a neutral primitive defined in a second module violates ownership"
+  (define real-units (production-llm-source-units repo-root))
+  (define intruder
+    (source-unit "llm/adapters/eager-stream.rkt"
+                 "#lang racket/base\n(define (make-provider-http-request . _) (void))"))
+  (define problems
+    (check-provider-locality-policy-units
+     policy
+     (replace-unit real-units "llm/adapters/eager-stream.rkt" intruder)))
+  (define ownership (findf (lambda (p) (problem-kind? 'neutral-primitive-ownership p)) problems))
+  (check-not-false ownership)
+  (check-equal? (cadr ownership) 'make-provider-http-request)
+  (check-equal? (caddr ownership) "llm/http-helpers.rkt"))
+
+(test-case "W3-B8c: provide semantics decide definition and export defects independently"
+  (define real-units (production-llm-source-units repo-root))
+  (define (with-http-helpers source)
+    (check-provider-locality-policy-units
+     policy
+     (replace-unit real-units "llm/http-helpers.rkt" (source-unit "llm/http-helpers.rkt" source))))
+  (define well-formed
+    (string-append
+     "#lang racket/base\n"
+     "(define (make-provider-http-request . _) (void))\n"
+     "(define (check-provider-status! . _) (void))\n"
+     "(define (translate-stop-reason . _) (void))\n"
+     "(provide make-provider-http-request check-provider-status! translate-stop-reason)"))
+  (check-equal? (with-http-helpers well-formed) '())
+  (define removed-def
+    (string-append
+     "#lang racket/base\n"
+     "(provide make-provider-http-request check-provider-status! translate-stop-reason)"))
+  (define removed-problems (with-http-helpers removed-def))
+  (check-not-false (findf (lambda (p) (problem-kind? 'missing-neutral-primitive-definition p))
+                          removed-problems))
+  (define excluded
+    (string-append "#lang racket/base\n"
+                   "(define (make-provider-http-request . _) (void))\n"
+                   "(define (check-provider-status! . _) (void))\n"
+                   "(define (translate-stop-reason . _) (void))\n"
+                   "(provide (except-out (all-defined-out) make-provider-http-request))"))
+  (define excluded-problems (with-http-helpers excluded))
+  (define excl
+    (findf (lambda (p) (problem-kind? 'missing-neutral-primitive-export p)) excluded-problems))
+  (check-not-false excl)
+  (check-equal? (caddr excl) 'make-provider-http-request)
+  (define renamed
+    (string-append "#lang racket/base\n"
+                   "(define (make-provider-http-request . _) (void))\n"
+                   "(define (check-provider-status! . _) (void))\n"
+                   "(define (translate-stop-reason . _) (void))\n"
+                   "(provide (rename-out (make-provider-http-request renamed-helper)))"))
+  (define renamed-problems (with-http-helpers renamed))
+  (check-not-false (findf (lambda (p) (problem-kind? 'missing-neutral-primitive-export p))
+                          renamed-problems)))

@@ -18,6 +18,7 @@
          load-provider-locality-policy
          production-llm-source-units
          check-provider-locality-policy
+         check-provider-locality-policy-units
          check-provider-change-locality
          locality-violation->string)
 
@@ -61,7 +62,19 @@
   (cdr found))
 
 (define (load-provider-locality-policy path)
-  (define datum (call-with-input-file path read))
+  (define input (open-input-file path))
+  (define datum
+    (with-handlers ([exn:fail:read? (lambda (e)
+                                      (close-input-port input)
+                                      (raise e))])
+      (read input)))
+  (define trailing (read input))
+  (close-input-port input)
+  (unless (and (pair? datum) (eof-object? trailing))
+    (error 'load-provider-locality-policy
+           "policy must contain exactly one complete datum, got ~s + ~s"
+           datum
+           trailing))
   (define protocols
     (for/list ([entry (in-list (section datum 'provider-protocols))])
       (provider-protocol (car entry)
@@ -96,24 +109,83 @@
           (cond
             [(and (pair? value) (eq? (car value) 'quote) (pair? (cdr value)) (symbol? (cadr value)))
              (symbol->string (cadr value))]
+            [(symbol? value) (symbol->string value)]
             [(string? value) value]
             [else #f]))
+        (define (hash-constructor? value)
+          (and (pair? value)
+               (symbol? (car value))
+               (memq (car value) '(hash hasheq hasheqv hash* hasheq* hasheqv*))))
+        (define (alist-builder? value)
+          (and (pair? value)
+               (symbol? (car value))
+               (pair? (cdr value))
+               (memq (car value)
+                     '(make-hash make-hasheq
+                                 make-hasheqv
+                                 make-immutable-hash
+                                 make-immutable-hasheq
+                                 make-immutable-hasheqv
+                                 make-hash-table
+                                 make-weak-hasheq))))
         (define (walk value)
           (cond
             [(pair? value)
              (when (and (symbol? (car value))
-                        (memq (car value) '(hash-ref hash-has-key? hash-set hash-set! hash-remove))
+                        (memq (car value)
+                              '(hash-ref hash-ref!
+                                         hash-has-key?
+                                         hash-set
+                                         hash-set!
+                                         hash-update
+                                         hash-remove
+                                         hash-remove!
+                                         dict-ref))
                         (pair? (cdr value))
                         (pair? (cddr value)))
                (define key (quoted-key (caddr value)))
                (when key
                  (add-fact! key 'hash-key)))
-             (walk (car value))
-             (walk (cdr value))]
+             (cond
+               [(hash-constructor? value)
+                ;; (hash k1 v1 k2 v2 ...) / (hash* k1 v1 ...) — keys at odd cdr positions.
+                (define args (cdr value))
+                (let loop ([remaining args])
+                  (when (and (pair? remaining) (pair? (cdr remaining)))
+                    (define key (quoted-key (car remaining)))
+                    (when key
+                      (add-fact! key 'hash-key))
+                    (loop (cddr remaining))))
+                (for-each walk args)]
+               [(alist-builder? value)
+                ;; (make-hasheq '((k . v) ...)) — keyed by quoted association pairs.
+                (define alist-value (cadr value))
+                (define alist
+                  (cond
+                    [(and (pair? alist-value)
+                          (eq? (car alist-value) 'quote)
+                          (pair? (cdr alist-value)))
+                     (cadr alist-value)]
+                    [else alist-value]))
+                (for ([pair (in-list (if (pair? alist)
+                                         alist
+                                         '()))]
+                      #:when (pair? pair))
+                  (define key (quoted-key (car pair)))
+                  (when key
+                    (add-fact! key 'hash-key)))
+                (for-each walk (cdr value))]
+               [else
+                (walk (car value))
+                (walk (cdr value))])]
             [(vector? value) (for-each walk (vector->list value))]
             [(box? value) (walk (unbox value))]
             [(hash? value)
+             ;; Literal #hash/#hasheq tables: every key is a wire key in scope.
              (for ([(key item) (in-hash value)])
+               (define literal-key (quoted-key key))
+               (when literal-key
+                 (add-fact! literal-key 'hash-key))
                (walk key)
                (walk item))]
             [(string? value) (add-fact! value 'string-literal)]
@@ -188,19 +260,51 @@
                            binding
                            (car binding)))))
 
-(define (provided-symbols forms)
-  (define symbols '())
-  (define (walk value)
+(define (struct-fields forms name)
+  (for/or ([form (in-list forms)]
+           #:when
+           (and (pair? form) (eq? (car form) 'struct) (pair? (cdr form)) (eq? (cadr form) name)))
+    (caddr form)))
+
+;; Interpret (provide ...) spec forms semantically enough to decide whether a
+;; named primitive is actually exported. Handles direct symbols, all-defined-out,
+;; contract-out, struct-out, except-out, rename-out, and prefix-out.
+(define (provide-exports forms)
+  (define defined-names (top-level-definition-names forms))
+  (define (resolve spec)
     (cond
-      [(pair? value)
-       (walk (car value))
-       (walk (cdr value))]
-      [(symbol? value) (set! symbols (cons value symbols))]
-      [else (void)]))
-  (for ([form (in-list forms)]
-        #:when (and (pair? form) (eq? (car form) 'provide)))
-    (walk (cdr form)))
-  (remove-duplicates symbols))
+      [(symbol? spec) (list spec)]
+      [(pair? spec)
+       (case (car spec)
+         [(all-defined-out) defined-names]
+         [(all-from-out) '()]
+         [(contract-out)
+          (for/list ([item (in-list (cdr spec))]
+                     #:when (and (pair? item) (symbol? (car item))))
+            (car item))]
+         [(struct-out)
+          (define name (cadr spec))
+          (define fields (struct-fields forms name))
+          (append (list name (string->symbol (format "~a?" name)))
+                  (for/list ([field (in-list (if (pair? fields)
+                                                 fields
+                                                 '()))])
+                    (string->symbol (format "~a-~a" name field))))]
+         [(except-out) (remove* (cddr spec) (resolve (cadr spec)))]
+         [(rename-out)
+          (for/list ([entry (in-list (cdr spec))]
+                     #:when (and (pair? entry) (pair? (cdr entry))))
+            (cadr entry))]
+         [(prefix-out)
+          (define prefix (cadr spec))
+          (map (lambda (name) (string->symbol (format "~a~a" prefix name))) (resolve (caddr spec)))]
+         [else '()])]
+      [else '()]))
+  (remove-duplicates (append* (for/list ([form (in-list forms)]
+                                         #:when (and (pair? form) (eq? (car form) 'provide)))
+                                (append* (for/list ([spec (in-list (cdr form))])
+                                           (resolve spec)))))
+                     eq?))
 
 (define (neutral-helper-spec helpers)
   (for/list ([helper (in-list helpers)])
@@ -208,8 +312,7 @@
           (neutral-helper-primitives helper)
           (neutral-helper-evidence helper))))
 
-(define (check-provider-locality-policy policy repo-root)
-  (define units (production-llm-source-units repo-root))
+(define (check-provider-locality-policy-units policy units)
   (define units-by-path
     (for/hash ([unit (in-list units)])
       (values (source-unit-path unit) unit)))
@@ -268,7 +371,7 @@
         [(source-analysis-error analysis) '()]
         [else
          (define definitions (top-level-definition-names (source-analysis-forms analysis)))
-         (define exports (provided-symbols (source-analysis-forms analysis)))
+         (define exports (provide-exports (source-analysis-forms analysis)))
          (append*
           (for/list ([primitive (in-list (neutral-helper-primitives helper))])
             (define definition-paths
@@ -287,6 +390,9 @@
                     (if (member primitive exports)
                         '()
                         (list (list 'missing-neutral-primitive-export module primitive))))))])))))
+
+(define (check-provider-locality-policy policy repo-root)
+  (check-provider-locality-policy-units policy (production-llm-source-units repo-root)))
 
 (define (locality-violation->string violation)
   (if (eq? (locality-violation-reason violation) 'source-read-error)
