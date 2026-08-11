@@ -1,3 +1,85 @@
+## 0.99.90
+
+Released 2026-08-11.
+
+### Features
+
+- GSD effect-ports inventory + composition root
+  (`extensions/gsd/effect-ports.rkt`, `system-adapters.rkt`,
+  `composition-root.rkt`): the GSD layer's filesystem/git/clock/process
+  dependencies now flow through contracted ports behind
+  `current-gsd-effect-ports`, with a fake aggregate for tests and a
+  service handle for extensions (MA-01..05 partial).
+- Campaign repository boundary (`extensions/gsd/campaign-repository.rkt`):
+  durable campaign `.rktd` persistence moved behind one fail-closed
+  repository (schema <=1, plan-id==manifest-hash identity, fencing/attempt
+  validation, 64-hex plan-id containment, symlink no-follow, atomic
+  tmp+rename). Corrupt durable records raise `exn:fail:campaign-corrupt`
+  and are never silently re-migrated.
+- Atomic projection transaction (`wave-completion.rkt` + `projection-kernel`
+  + `projection-effects.rkt`): the durable campaign record is the commit
+  point; the completion outbox and the PLAN/STATE/wave-doc projections are
+  derived files that may lag after a crash but never lead. New
+  `reconcile-completion-outbox!` rebuilds missing outbox events from durable
+  `'done` waves (idempotent, never invents events for non-done waves).
+- Wave executor isolation (`wave-runner-port.rkt` + `system-adapters.rkt` +
+  `go-orchestrator.rkt`): wave execution behind `gsd-wave-runner-port` with
+  deadline-authoritative timeout (`run-wave-with-timeout`: cancel! -> 2s
+  grace -> kill-thread), outcome-level switch (done -> approval path,
+  failed -> FAILED, cancelled/interrupted/timed-out -> interrupted, no
+  event), and `cancel-requested?` durable-cancellation polling.
+- GitHub/Release side-effect adapter (`extensions/gsd/github-port.rkt`):
+  board/issue/PR/release operations modeled as idempotent correlated
+  commands (journal replay by correlation-id, external dedup by issue
+  dedup-key / release tag / already-merged PR, immutable SHA assertions
+  fail closed with `exn:fail:github-sha-mismatch`, dry-run default, token
+  redaction on all adapter ops). Production wiring uses the dry-run port;
+  live GitHub requires an explicit approved smoke.
+- End-to-end crash recovery + plan-id stability fix: a full campaign
+  driven through success/failure/interruption/restart now converges —
+  durable Campaign Truth, completion outbox and all projections agree after
+  every injected interruption and recovery is idempotent. Root cause: the
+  manifest hash hashed the raw wave doc including the mutable `Status:`
+  header that projections rewrite, so `load-or-migrate-campaign!` re-seeded
+  a fresh record (orphaning durable state) after the first wave; the hash
+  now covers only the doc body, keeping plan-id stable across projection
+  updates while substantive body edits still pause the campaign (D2).
+  New `tests/test-gsd-end-to-end-recovery.rkt` (8 tests) covers the full
+  lifecycle, every persisted crash window, and exactly-once external
+  effects through the github-port.
+
+### Breaking / Behavior Changes
+
+- None — no public API surface removed. New modules are additive
+  (effect-ports, campaign-repository, github-port, wave-runner-port).
+
+### Migration Notes
+
+- None required. Durable campaign `.rktd` files remain schema-1 and load
+  unchanged; plan-id values change for new campaigns because the manifest
+  hash now covers only the wave-doc body (stability fix), but no persisted
+  fixture depends on exact pre-fix hashes.
+
+### Testing
+
+- NEW `tests/test-gsd-end-to-end-recovery.rkt` (8): e2e campaign
+  success/failure/interruption/restart convergence, crash-window matrix at
+  every persisted transition (begin-attempt / verifying / failed /
+  interrupted / done-commit-before-outbox / outbox-before-projections),
+  idempotent recovery, exactly-once external effect through the W4
+  github-port (journal replay + external dedup across restart).
+- `test-gsd-campaign-state.rkt` +1 regression: status-header rewrite of
+  wave docs preserves plan-id (D2 plan-id stability).
+- Gates: Fast 1069 files/15582 tests, Broad 1247 files/17849 tests, arch
+  22/22 (238), security 63/702, workflows 29/162, governance 43/43,
+  golden 16/16, lint-all 22/22.
+
+### Operational / Release
+
+- This release wave also runs the Broad + Arch + Security + Workflow +
+  Smoke + Release gates and an independent review before publication
+  (milestone #877, 6/6 waves).
+
 ## 0.99.89
 
 Released 2026-08-11.
