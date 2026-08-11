@@ -418,6 +418,10 @@
                 #:when (let ([c (matrix-cell-for scenario provider)])
                          (and c (not (matrix-cell-supported? c)))))
       (list scenario provider)))
+  ;; The exact unsupported set is pinned DELIBERATELY (MINOR-1): extending
+  ;; support (e.g. W1-B typed unsupported capabilities, or a future provider
+  ;; gaining delta-thinking normalization) must consciously update this list
+  ;; and the matrix cells together — the contract gate fails otherwise.
   ;; Currently exactly: reasoning-delta for anthropic + gemini.
   (check-equal? (map car unsupported-cells)
                 (list 'reasoning-delta 'reasoning-delta)

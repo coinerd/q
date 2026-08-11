@@ -189,7 +189,10 @@
          (matrix-cell #t 'bad-request "bespoke check-azure-status! still raises provider-error"))))
 
 ;; ---------------------------------------------------------------------------
-;; Completeness gate: every scenario x provider has an explicit cell.
+;; Completeness gate: every scenario x provider has an explicit cell, and
+;; every matrix entry is reachable from the declared scenario/provider lists
+;; (no orphan entries that would silently drop out of the contract).
+;; Returns a list of problems: (missing-scenario provider) or (orphan key).
 ;; ---------------------------------------------------------------------------
 
 (define (check-matrix-complete!)
@@ -197,5 +200,13 @@
   (for ([scenario (in-list provider-contract-scenarios)])
     (for ([provider (in-list provider-contract-names)])
       (unless (matrix-cell-for scenario provider)
-        (set! gaps (cons (list scenario provider) gaps)))))
+        (set! gaps (cons (list 'missing scenario provider) gaps)))))
+  ;; Orphan detection: keys in the matrix not declared in the lists.
+  (for ([scenario (in-hash-keys provider-contract-expected)])
+    (unless (member scenario provider-contract-scenarios)
+      (set! gaps (cons (list 'orphan-scenario scenario) gaps)))
+    (define by-provider (hash-ref provider-contract-expected scenario))
+    (for ([provider (in-hash-keys by-provider)])
+      (unless (member provider provider-contract-names)
+        (set! gaps (cons (list 'orphan-provider scenario provider) gaps)))))
   (reverse gaps))
