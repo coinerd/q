@@ -19,10 +19,14 @@
   '((anthropic ("llm/anthropic.rkt" "llm/anthropic-helpers.rkt"
                                     "llm/anthropic/format.rkt"
                                     "llm/anthropic/sse.rkt")
-               ("content_block_delta" "input_json_delta" "message_start"))
-    (gemini ("llm/gemini.rkt") ("usageMetadata" "functionCall" "candidates"))
-    (openai-compatible ("llm/openai-compatible.rkt") ("reasoning_content" "finish_reason"))
-    (azure-openai ("llm/azure-openai.rkt") ("api-version" "api-version="))))
+               (("content_block_delta" string-literal) ("input_json_delta" string-literal)
+                                                       ("message_start" string-literal)))
+    (gemini ("llm/gemini.rkt")
+            (("usageMetadata" hash-key) ("functionCall" hash-key) ("candidates" hash-key)))
+    (openai-compatible ("llm/openai-compatible.rkt")
+                       (("reasoning_content" hash-key) ("finish_reason" hash-key)))
+    (azure-openai ("llm/azure-openai.rkt")
+                  (("api-version" hash-key) ("api-version=" string-literal)))))
 
 (define expected-neutral-policy
   '(("llm/http-helpers.rkt" (make-provider-http-request check-provider-status! translate-stop-reason)
@@ -39,14 +43,24 @@
                       (C2 C3 C7 C8))
     ("llm/provider-errors.rkt" (provider-error classify-http-status raise-provider-error) (C4))))
 
+(define (marker-policy-datum marker)
+  (list (protocol-marker-value marker) (protocol-marker-context marker)))
+
+(define (marker-source marker binding)
+  (case (protocol-marker-context marker)
+    [(hash-key)
+     (format "(define ~a (hash-ref payload '~a #f))" binding (protocol-marker-value marker))]
+    [(string-literal) (format "(define ~a ~s)" binding (protocol-marker-value marker))]))
+
+(define (problem-kind? kind problem)
+  (and (pair? problem) (eq? (car problem) kind)))
+
 (test-case "W3-B1: policy is versioned, complete, and pins only W0 C1-C8 neutral helpers"
   (check-equal? (provider-locality-policy-version policy) 1)
-  (check-equal? (map provider-protocol-name (provider-locality-policy-protocols policy))
-                '(anthropic gemini openai-compatible azure-openai))
   (check-equal? (for/list ([protocol (in-list (provider-locality-policy-protocols policy))])
                   (list (provider-protocol-name protocol)
                         (provider-protocol-owners protocol)
-                        (provider-protocol-markers protocol)))
+                        (map marker-policy-datum (provider-protocol-markers protocol))))
                 expected-protocol-policy)
   (check-equal? (for/list ([helper (in-list (provider-locality-policy-neutral-helpers policy))])
                   (list (neutral-helper-module helper)
@@ -63,50 +77,97 @@
 (test-case "W3-B2: current production LLM sources respect provider ownership and neutrality"
   (check-equal? (check-provider-change-locality policy (production-llm-source-units repo-root)) '()))
 
-(test-case "W3-B3: positive probes accept every marker in an allowed ownership path"
+(test-case "W3-B3: positive probes accept every marker in every allowed ownership path"
   (for* ([protocol (in-list (provider-locality-policy-protocols policy))]
+         [owner (in-list (provider-protocol-owners protocol))]
          [marker (in-list (provider-protocol-markers protocol))])
-    (define owner (car (provider-protocol-owners protocol)))
     (check-equal?
-     (check-provider-change-locality policy
-                                     (list (source-unit owner (format "(define probe ~s)" marker))))
+     (check-provider-change-locality policy (list (source-unit owner (marker-source marker 'probe))))
      '()
-     (format "allowed owner rejected for ~a/~a" (provider-protocol-name protocol) marker))))
+     (format "allowed owner rejected for ~a/~a in ~a"
+             (provider-protocol-name protocol)
+             (protocol-marker-value marker)
+             owner))))
 
-(test-case "W3-B4: negative probes reject protocol logic in a generic streaming module"
-  (for ([protocol (in-list (provider-locality-policy-protocols policy))])
-    (define marker (car (provider-protocol-markers protocol)))
+(test-case "W3-B4: negative probes reject every marker in every generic streaming module"
+  (for* ([generic (in-list (provider-locality-policy-generic-streaming-modules policy))]
+         [protocol (in-list (provider-locality-policy-protocols policy))]
+         [marker (in-list (provider-protocol-markers protocol))])
     (define violations
       (check-provider-change-locality policy
-                                      (list (source-unit "llm/stream.rkt"
-                                                         (format "(define leaked ~s)" marker)))))
+                                      (list (source-unit generic (marker-source marker 'leaked)))))
     (check-equal? (length violations) 1)
     (define violation (car violations))
     (check-equal? (locality-violation-reason violation) 'generic-stream-protocol)
     (define message (locality-violation->string violation))
-    (check-true (string-contains? message "llm/stream.rkt"))
-    (check-true (string-contains? message marker))
+    (check-true (string-contains? message generic))
+    (check-true (string-contains? message (protocol-marker-value marker)))
     (check-true (string-contains? message (symbol->string (provider-protocol-name protocol))))
     (for ([owner (in-list (provider-protocol-owners protocol))])
       (check-true (string-contains? message owner)
                   (format "developer message omitted allowed owner ~a" owner)))))
 
-(test-case "W3-B5: negative probe rejects a marker in another provider adapter"
-  (define anthropic (first (provider-locality-policy-protocols policy)))
-  (define marker (car (provider-protocol-markers anthropic)))
-  (define violations
-    (check-provider-change-locality policy
-                                    (list (source-unit "llm/gemini.rkt"
-                                                       (format "(define leaked ~s)" marker)))))
-  (check-equal? (length violations) 1)
-  (check-equal? (locality-violation-reason (car violations)) 'wrong-provider-owner)
-  (check-true (string-contains? (locality-violation->string (car violations))
-                                "allowed ownership path")))
+(test-case "W3-B5: negative probes reject every marker in another provider adapter"
+  (define protocols (provider-locality-policy-protocols policy))
+  (for* ([protocol (in-list protocols)]
+         [marker (in-list (provider-protocol-markers protocol))])
+    (define wrong-owner
+      (car (provider-protocol-owners (findf (lambda (candidate)
+                                              (not (eq? (provider-protocol-name candidate)
+                                                        (provider-protocol-name protocol))))
+                                            protocols))))
+    (define violations
+      (check-provider-change-locality policy
+                                      (list (source-unit wrong-owner
+                                                         (marker-source marker 'leaked)))))
+    (check-equal? (length violations) 1)
+    (check-equal? (locality-violation-reason (car violations)) 'wrong-provider-owner)
+    (check-true (string-contains? (locality-violation->string (car violations))
+                                  "allowed ownership path"))))
 
-(test-case "W3-B6: source parsing ignores comments and requires a real datum marker"
+(test-case "W3-B6: context-specific matching ignores comments and neutral identifiers"
   (check-equal?
    (check-provider-change-locality
     policy
     (list (source-unit "llm/stream.rkt"
-                       ";; content_block_delta is documentation only\n(define neutral #t)")))
+                       ";; content_block_delta is documentation only\n(define candidates '())")))
    '()))
+
+(test-case "W3-B7: compound literals cannot hide markers and reader failures fail closed"
+  (define marker "content_block_delta")
+  (for ([source (in-list (list (format "(define leaked #~s)" marker)
+                               (format "(define leaked #(~s))" marker)
+                               (format "(define leaked #rx~s)" marker)))])
+    (define violations
+      (check-provider-change-locality policy (list (source-unit "llm/stream.rkt" source))))
+    (check-equal? (length violations) 1 source)
+    (check-equal? (locality-violation-reason (car violations)) 'generic-stream-protocol))
+  (define malformed
+    (check-provider-change-locality policy
+                                    (list (source-unit "llm/stream.rkt"
+                                                       "(define leaked \"content_block_delta\") ("))))
+  (check-equal? (length malformed) 1)
+  (check-equal? (locality-violation-reason (car malformed)) 'source-read-error)
+  (check-true (string-contains? (locality-violation->string (car malformed)) "reader failed")))
+
+(test-case "W3-B8: allowlist drift and nonexistent helper ownership fail operational policy checks"
+  (define original (provider-locality-policy-neutral-helpers policy))
+  (define first-helper (car original))
+  (define mutated-helper
+    (struct-copy neutral-helper
+                 first-helper
+                 [primitives
+                  (append (neutral-helper-primitives first-helper) '(invented-shared-parser))]))
+  (define mutated-policy
+    (struct-copy provider-locality-policy
+                 policy
+                 [neutral-helpers (cons mutated-helper (cdr original))]))
+  (define problems (check-provider-locality-policy mutated-policy repo-root))
+  (check-not-false (findf (lambda (problem) (problem-kind? 'neutral-helper-allowlist-drift problem))
+                          problems))
+  (check-not-false (findf (lambda (problem) (problem-kind? 'neutral-primitive-ownership problem))
+                          problems))
+  (check-not-false
+   (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-definition problem)) problems))
+  (check-not-false (findf (lambda (problem) (problem-kind? 'missing-neutral-primitive-export problem))
+                          problems)))

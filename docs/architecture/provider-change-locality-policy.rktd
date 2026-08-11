@@ -12,16 +12,22 @@
               "llm/anthropic-helpers.rkt"
               "llm/anthropic/format.rkt"
               "llm/anthropic/sse.rkt"))
-   (markers . ("content_block_delta" "input_json_delta" "message_start")))
+   (markers . (("content_block_delta" . string-literal)
+               ("input_json_delta" . string-literal)
+               ("message_start" . string-literal))))
   (gemini
    (owners . ("llm/gemini.rkt"))
-   (markers . ("usageMetadata" "functionCall" "candidates")))
+   (markers . (("usageMetadata" . hash-key)
+               ("functionCall" . hash-key)
+               ("candidates" . hash-key))))
   (openai-compatible
    (owners . ("llm/openai-compatible.rkt"))
-   (markers . ("reasoning_content" "finish_reason")))
+   (markers . (("reasoning_content" . hash-key)
+               ("finish_reason" . hash-key))))
   (azure-openai
    (owners . ("llm/azure-openai.rkt"))
-   (markers . ("api-version" "api-version="))))
+   (markers . (("api-version" . hash-key)
+               ("api-version=" . string-literal)))))
  (generic-streaming-modules . ("llm/stream.rkt" "llm/adapters/eager-stream.rkt"))
  (neutral-helpers
   ("llm/http-helpers.rkt"
