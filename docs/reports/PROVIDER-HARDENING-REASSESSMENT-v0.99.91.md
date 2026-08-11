@@ -8,7 +8,7 @@
 
 **Machine decision:** `docs/architecture/provider-hardening-terminal-v0.99.91.rktd`
 
-**Status:** RELEASE CANDIDATE — publication gates pending
+**Status:** RELEASED — merge `a4b85569`, annotated tag `v0.99.91`, workflow `31520743425`
 
 ## 1. Decision summary
 
@@ -160,7 +160,7 @@ Gate evidence is pinned to the candidate on which each command ran:
 | Fast (post-remediation) | `7c6b723f` | 1074 files / 15615 tests PASS |
 | lint-all / lint-format / contract changes | `1aaf2da6` | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
 | pre-release truth / dry-run | `1aaf2da6` | 4/4 PASS / 5/5 PASS on synchronized release surfaces |
-| strict readiness | exact merged main | PENDING |
+| strict readiness | `a4b85569` exact main | 7/7 PASS; Fast repeat-3 PASS |
 | independent review | `b4aee7f6` | APPROVED — 0 MAJOR / 0 MINOR |
-| PR CI / required policy | squash candidate | PENDING |
-| annotated tag / public bundle | exact merged main | PENDING |
+| PR CI / required policy | PR #9271 | 17/17 PASS / NONE unmet |
+| annotated tag / public bundle | `a4b85569`, run `31520743425` | PASS; public `q-0.99.91.tar.gz` + manifest verified, tag object `f7c59e31` |
