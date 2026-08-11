@@ -1,11 +1,11 @@
 # Validation: v0.99.91 — Provider Contract & Test Hardening (PATH B)
 
-**Status:** FROZEN — NOT STARTED
+**Status:** IN PROGRESS — W0 DONE
 **Approved path:** PATH_B
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
-| W0 | PENDING | PENDING | provider golden matrix | — | PENDING | PENDING |
+| W0 | ✅ golden matrix 5/5; focused 141+452 | ✅ 1070/15587 | provider golden matrix complete (40 cells, real parsers) | — | ✅ APPROVED (0M/3m/5i, MINORs folded 9bf5f6cd) | ✅ DONE |
 | W1-B | PENDING | PENDING | adapter contract completion | — | PENDING | PENDING |
 | W2-B | PENDING | PENDING | differential fixtures + redaction | Broad + Security | PENDING | PENDING |
 | W3-B | PENDING | PENDING | positive/negative ownership probes | Arch | PENDING | PENDING |
