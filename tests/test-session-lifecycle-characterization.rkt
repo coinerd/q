@@ -185,7 +185,8 @@
        "runtime/session/session-lifecycle.rkt:define active-turn-id"
        "runtime/session/session-lifecycle.rkt:maybe-dispatch-hooks ext-reg 'input"
        "runtime/session/session-lifecycle.rkt:current-prompt-operation-session sess"
-       "runtime/session/session-lifecycle.rkt:run-prompt-internal sess\n                                                                   effective-input"
+       "runtime/session/session-lifecycle.rkt:run-prompt-internal sess
+                                                                   effective-input"
        "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)"
        "runtime/session/session-lifecycle.rkt:finish-session-turn! sess"
        "runtime/session/session-lifecycle.rkt:release-prompt! sess")

@@ -8,7 +8,7 @@
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
-| W0 | IN PROGRESS | — | — | PENDING | machine trace ledger + source-anchor tests + responsibility report drafted |
+| W0 | IN PROGRESS | — | — | initial REQUEST_CHANGES (4M/2m); remediation complete, re-review pending | schema-v2 oracle: 31 variants/6 families, 10 units, 27 consumer edges, 38 exceptional boundaries; characterization 7×3; lifecycle 83; Fast 1075/15622; production diff NONE |
 | W1 | PENDING | — | — | — | — |
 | W2 | PENDING | — | — | — | — |
 | W3 | PENDING | — | — | — | — |
