@@ -37,6 +37,9 @@
 (define (byte-fixture provider kind)
   (load-differential-bytes (entry provider kind)))
 
+(define (fixture-expected provider kind)
+  (differential-fixture-entry-expected (entry provider kind)))
+
 (define (provider-event->chunks provider event)
   (match provider
     ['anthropic (anthropic-parse-single-event event (box #f) (box #f) (box 0))]
@@ -82,26 +85,29 @@
 (define (run-stream-timeout-recipe provider recipe)
   (define-values (in out) (make-pipe))
   (define event (hash-ref recipe 'event #f))
-  (when event
-    (write-bytes (string->bytes/utf-8 (format "data: ~a\n" (jsexpr->string event))) out)
-    (flush-output out))
-  (define stream
-    (stream-sse-events in
-                       (lambda (wire) (provider-event->chunks provider wire))
-                       #:initial-timeout 0.03
-                       #:thinking-timeout 0.03
-                       #:stream-timeout 0.03
-                       #:max-total-timeout 1))
-  (define caught
-    (with-handlers ([exn:fail:network:timeout:stream? values])
-      (when event
-        (stream))
-      (stream)
-      #f))
-  (close-output-port out)
-  (unless (port-closed? in)
-    (close-input-port in))
-  caught)
+  (dynamic-wind void
+                (lambda ()
+                  (when event
+                    (write-bytes (string->bytes/utf-8 (format "data: ~a\n" (jsexpr->string event)))
+                                 out)
+                    (flush-output out))
+                  (define stream
+                    (stream-sse-events in
+                                       (lambda (wire) (provider-event->chunks provider wire))
+                                       #:initial-timeout 0.1
+                                       #:thinking-timeout 0.1
+                                       #:stream-timeout 0.1
+                                       #:max-total-timeout 2))
+                  (with-handlers ([exn:fail:network:timeout:stream? values])
+                    (when event
+                      (stream))
+                    (stream)
+                    #f))
+                (lambda ()
+                  (unless (port-closed? out)
+                    (close-output-port out))
+                  (unless (port-closed? in)
+                    (close-input-port in)))))
 
 (test-case "W2-B1: v1 manifest is a complete 20-cell fixture bijection"
   (check-equal? differential-fixture-version 1)
@@ -123,50 +129,59 @@
 
 (test-case "W2-B3: provider-specific framing bytes drive each REAL stream parser"
   (for ([provider (in-list differential-fixture-providers)])
-    (check-equal? (framing-observable provider) '(1 "hi") (symbol->string provider))))
+    (define expected (fixture-expected provider 'framing))
+    (check-equal? (framing-observable provider)
+                  (list (hash-ref expected 'event_count) (hash-ref expected 'delta_text))
+                  (symbol->string provider))))
 
 (test-case "W2-B4: tool fixtures retain provider-native argument modes"
-  (check-equal? (tool-observable 'anthropic) '("read_file" partial-json))
-  (check-equal? (tool-observable 'gemini) '("read_file" structured))
-  (check-equal? (tool-observable 'openai-compatible) '("read_file" partial-json))
-  (check-equal? (tool-observable 'azure-openai) '("read_file" partial-json)))
+  (for ([provider (in-list differential-fixture-providers)])
+    (define expected (fixture-expected provider 'tools))
+    (check-equal? (tool-observable provider)
+                  (list (hash-ref expected 'name) (string->symbol (hash-ref expected 'argument_mode)))
+                  (symbol->string provider))))
 
 (test-case "W2-B5: usage fixtures preserve the documented streaming asymmetry"
-  (check-equal? (usage-observable 'anthropic) '(completion_tokens))
-  (for ([provider (in-list '(gemini openai-compatible azure-openai))])
+  (for ([provider (in-list differential-fixture-providers)])
+    (define expected (fixture-expected provider 'usage))
     (check-equal? (usage-observable provider)
-                  '(completion_tokens prompt_tokens total_tokens)
+                  (map string->symbol (hash-ref expected 'keys))
                   (symbol->string provider))))
 
 (test-case "W2-B6: malformed wire bytes are retained exactly and skipped"
   (for ([provider (in-list differential-fixture-providers)])
     (define raw (byte-fixture provider 'malformed))
+    (define parsed (parse-sse-lines (bytes->string/utf-8 raw #\uFFFD)))
     (check-equal? (subbytes raw 0 6) #"data: ")
-    (check-equal? (parse-sse-lines (bytes->string/utf-8 raw #\uFFFD)) '())))
+    (check-equal? (length parsed) (hash-ref (fixture-expected provider 'malformed) 'parsed_count))))
 
 (test-case "W2-B7: timeout recipes execute setup/initial/thinking/content phases"
   (for ([provider (in-list differential-fixture-providers)])
     (define recipe (json-fixture provider 'timeout))
+    (define recipe-expected (hash-ref recipe 'expected))
+    (check-equal? recipe-expected (fixture-expected provider 'timeout))
     (define operation (hash-ref recipe 'operation))
-    (define expected-phase (string->symbol (hash-ref (hash-ref recipe 'expected) 'phase)))
+    (define expected-phase (string->symbol (hash-ref recipe-expected 'phase)))
     (cond
       [(string=? operation "blocked-request")
        (define cleaned? (box #f))
+       (check-equal? (hash-ref recipe-expected 'exception) "exn:fail:network:timeout")
        (check-exn exn:fail:network:timeout?
                   (lambda ()
                     (call-with-request-timeout (lambda () (sync never-evt))
-                                               #:timeout 0.03
+                                               #:timeout 0.1
                                                #:cleanup (lambda () (set-box! cleaned? #t)))))
        (check-true (unbox cleaned?))
        (check-equal? expected-phase 'setup)]
       [else
+       (check-equal? (hash-ref recipe-expected 'exception) "exn:fail:network:timeout:stream")
        (define timeout (run-stream-timeout-recipe provider recipe))
        (check-pred exn:fail:network:timeout:stream? timeout)
        (check-equal? (exn:fail:network:timeout:stream-phase timeout) expected-phase)
        (check-equal? (exn:fail:network:timeout:stream-received-any-data? timeout)
-                     (hash-ref (hash-ref recipe 'expected) 'received_any_data))
+                     (hash-ref recipe-expected 'received_any_data))
        (check-equal? (exn:fail:network:timeout:stream-output-chars timeout)
-                     (hash-ref (hash-ref recipe 'expected) 'output_chars))])))
+                     (hash-ref recipe-expected 'output_chars))])))
 
 (test-case "W2-B8: differential evidence is not artificially equalized"
   (check-not-equal? (byte-fixture 'anthropic 'framing) (byte-fixture 'gemini 'framing))

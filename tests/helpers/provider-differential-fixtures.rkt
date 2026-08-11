@@ -69,8 +69,48 @@
                           (eq? kind (differential-fixture-entry-kind fixture))))
     fixture))
 
-(define (entry-full-path fixture)
+(define (safe-relative-path? value)
+  (and (string? value)
+       (positive? (string-length value))
+       (not (absolute-path? (string->path value)))
+       (not (regexp-match? #px"(^|[/\\\\])\\.\\.($|[/\\\\])" value))
+       (not (string-contains? value "\\"))))
+
+(define resolved-fixture-root (simplify-path differential-fixture-root #t))
+
+(define (candidate-entry-path fixture)
   (build-path differential-fixture-root (differential-fixture-entry-path fixture)))
+
+(define (path-has-link-component? relative)
+  (let loop ([base differential-fixture-root]
+             [parts (explode-path (string->path relative))])
+    (cond
+      [(null? parts) #f]
+      [else
+       (define next (build-path base (car parts)))
+       (or (link-exists? next) (loop next (cdr parts)))])))
+
+(define (resolved-inside-fixture-root? candidate)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define resolved (simplify-path candidate #t))
+    (define relative (path->string (find-relative-path resolved-fixture-root resolved)))
+    (safe-relative-path? relative)))
+
+(define (entry-path-safe? fixture)
+  (define relative (differential-fixture-entry-path fixture))
+  (define candidate (candidate-entry-path fixture))
+  (and (safe-relative-path? relative)
+       (file-exists? candidate)
+       (not (path-has-link-component? relative))
+       (resolved-inside-fixture-root? candidate)))
+
+(define (entry-full-path fixture)
+  (unless (entry-path-safe? fixture)
+    (raise-arguments-error 'provider-differential-fixture
+                           "fixture path is missing, linked, or outside the v1 root"
+                           "path"
+                           (differential-fixture-entry-path fixture)))
+  (candidate-entry-path fixture))
 
 (define (load-differential-bytes fixture)
   (file->bytes (entry-full-path fixture)))
@@ -87,12 +127,22 @@
   (call-with-input-file path (lambda (in) (bytes->hex-string (sha256-bytes in))) #:mode 'binary))
 
 (define (relative-file-paths)
-  (sort (for/list ([path (in-directory differential-fixture-root)]
-                   #:when (and (file-exists? path)
-                               (not (equal? (path->string (file-name-from-path path))
-                                            "manifest.json"))))
-          (path->string (find-relative-path differential-fixture-root path)))
-        string<?))
+  ;; Walk without following links. A linked file/directory is inventoried as an
+  ;; orphan path but never traversed or read.
+  (define (walk directory prefix)
+    (apply append
+           (for/list ([name (in-list (directory-list directory))])
+             (define full (build-path directory name))
+             (define relative
+               (if (string=? prefix "")
+                   (path->string name)
+                   (string-append prefix "/" (path->string name))))
+             (cond
+               [(link-exists? full) (list relative)]
+               [(directory-exists? full) (walk full relative)]
+               [(file-exists? full) (list relative)]
+               [else '()]))))
+  (sort (remove "manifest.json" (walk differential-fixture-root "")) string<?))
 
 (define (duplicates values)
   (remove-duplicates (for/list ([value (in-list values)]
@@ -100,15 +150,30 @@
                                           1))
                        value)))
 
-(define (safe-relative-path? value)
-  (and (string? value)
-       (positive? (string-length value))
-       (not (absolute-path? (string->path value)))
-       (not (regexp-match? #px"(^|[/\\\\])\\.\\.($|[/\\\\])" value))
-       (not (string-contains? value "\\"))))
-
 (define (expected-representation kind)
   (if (member kind '(framing malformed)) 'bytes 'json))
+
+(define (expected-object-valid? kind expected)
+  (and (hash? expected)
+       (cond
+         [(eq? kind 'framing)
+          (and (equal? (sort (hash-keys expected) symbol<?) '(delta_text event_count))
+               (exact-nonnegative-integer? (hash-ref expected 'event_count #f))
+               (string? (hash-ref expected 'delta_text #f)))]
+         [(eq? kind 'tools)
+          (and (equal? (sort (hash-keys expected) symbol<?) '(argument_mode name))
+               (member (hash-ref expected 'argument_mode #f) '("partial-json" "structured"))
+               (string? (hash-ref expected 'name #f)))]
+         [(eq? kind 'usage)
+          (and (equal? (hash-keys expected) '(keys)) (andmap string? (hash-ref expected 'keys '())))]
+         [(eq? kind 'malformed)
+          (and (equal? (hash-keys expected) '(parsed_count))
+               (exact-nonnegative-integer? (hash-ref expected 'parsed_count #f)))]
+         [(eq? kind 'timeout)
+          (define keys (sort (hash-keys expected) symbol<?))
+          (or (equal? keys '(cleanup exception phase))
+              (equal? keys '(exception output_chars phase received_any_data)))]
+         [else #f])))
 
 (define forbidden-fixture-text
   (list #px"(?i:authorization[ ]*:)"
@@ -205,39 +270,58 @@
      (for/list ([raw (in-list raw-entries)]
                 #:unless (equal? (sort (hash-keys raw) symbol<?) required-entry-keys))
        (list 'entry-keys (hash-ref raw 'path #f)))
-     (apply append
-            (for/list ([fixture (in-list differential-fixture-entries)])
-              (define path (differential-fixture-entry-path fixture))
-              (define full-path (entry-full-path fixture))
-              (define kind (differential-fixture-entry-kind fixture))
-              (define representation (differential-fixture-entry-representation fixture))
-              (append (if (safe-relative-path? path)
-                          '()
-                          (list (list 'unsafe-path path)))
-                      (if (file-exists? full-path)
-                          '()
-                          (list (list 'missing-file path)))
-                      (if (eq? representation (expected-representation kind))
-                          '()
-                          (list (list 'representation path representation)))
-                      (if (and (eq? representation 'bytes) (string-suffix? path ".sse"))
-                          '()
-                          (if (and (eq? representation 'json) (string-suffix? path ".json"))
-                              '()
-                              (list (list 'extension path))))
-                      (if (and (string? (differential-fixture-entry-note fixture))
-                               (positive? (string-length (differential-fixture-entry-note fixture))))
-                          '()
-                          (list (list 'missing-note path)))
-                      (if (and (file-exists? full-path)
-                               (equal? (sha256-file full-path)
-                                       (differential-fixture-entry-sha256 fixture)))
-                          '()
-                          (list (list 'digest path)))
-                      (if (file-exists? full-path)
-                          (fixture-security-problems fixture (file->bytes full-path))
-                          '())
-                      (if (file-exists? full-path)
-                          (json-schema-problems fixture)
-                          '()))))))
+     ;; The manifest is security-sensitive evidence too: scan its raw bytes,
+     ;; including notes and paths, with the same detector as entry files.
+     (fixture-security-problems
+      (differential-fixture-entry 'manifest 'manifest "manifest.json" 'json "" (hash) "manifest")
+      (file->bytes manifest-path))
+     (apply
+      append
+      (for/list ([fixture (in-list differential-fixture-entries)])
+        (define path (differential-fixture-entry-path fixture))
+        (define full-path (candidate-entry-path fixture))
+        (define lexical-safe? (safe-relative-path? path))
+        (define exists? (and lexical-safe? (file-exists? full-path)))
+        (define linked? (and exists? (path-has-link-component? path)))
+        (define contained? (and exists? (not linked?) (resolved-inside-fixture-root? full-path)))
+        (define readable? (and exists? (not linked?) contained?))
+        (define kind (differential-fixture-entry-kind fixture))
+        (define representation (differential-fixture-entry-representation fixture))
+        (append (if lexical-safe?
+                    '()
+                    (list (list 'unsafe-path path)))
+                (if exists?
+                    '()
+                    (list (list 'missing-file path)))
+                (if linked?
+                    (list (list 'linked-path path))
+                    '())
+                (if (or (not exists?) linked? contained?)
+                    '()
+                    (list (list 'resolved-path-escape path)))
+                (if (eq? representation (expected-representation kind))
+                    '()
+                    (list (list 'representation path representation)))
+                (if (and (eq? representation 'bytes) (string-suffix? path ".sse"))
+                    '()
+                    (if (and (eq? representation 'json) (string-suffix? path ".json"))
+                        '()
+                        (list (list 'extension path))))
+                (if (expected-object-valid? kind (differential-fixture-entry-expected fixture))
+                    '()
+                    (list (list 'expected-object path)))
+                (if (and (string? (differential-fixture-entry-note fixture))
+                         (positive? (string-length (differential-fixture-entry-note fixture))))
+                    '()
+                    (list (list 'missing-note path)))
+                (if (or (not readable?)
+                        (equal? (sha256-file full-path) (differential-fixture-entry-sha256 fixture)))
+                    '()
+                    (list (list 'digest path)))
+                (if readable?
+                    (fixture-security-problems fixture (file->bytes full-path))
+                    '())
+                (if readable?
+                    (json-schema-problems fixture)
+                    '()))))))
   problems)
