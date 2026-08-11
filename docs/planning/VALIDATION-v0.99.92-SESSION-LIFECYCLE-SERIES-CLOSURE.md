@@ -4,7 +4,7 @@
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
-| W0 | ✅ expanded oracle 7/7 ×3; lifecycle 83/83; retry+cancel 97/97; hooks 48/48; midturn 9/9 | ✅ final candidate 1075 files / 15622 tests | 33 explicit variants across 6 families; 10 units; 34 scoped consumer edges; 38 boundaries with phase/cleanup/terminal/save-back/outcome; parameter timing; production diff NONE | — | 🟡 second re-review remediation complete; final re-review pending | IN PROGRESS |
+| W0 | ✅ expanded oracle 7/7 ×3; lifecycle 83/83; retry+cancel 97/97; hooks 48/48; midturn 9/9 | ✅ final candidate 1075 files / 15622 tests | 33 explicit variants across 6 families; 10 units; 34 scoped consumer edges; 38 boundaries with phase/cleanup/terminal/rollback/outcome; parameter timing; production diff NONE | — | ✅ APPROVED after 2 remediation rounds (final 0M/0m) | ✅ DONE — merge 16c17030, PR #9272, CI 17/17 |
 | W1 | PENDING | PENDING | lifecycle/prompt equivalence | Arch | PENDING | PENDING |
 | W2 | PENDING | PENDING | rollback/session ownership/context | Broad | PENDING | PENDING |
 | W3 | PENDING | PENDING | lifecycle/agent-session/iteration DI | Arch as changed | PENDING | PENDING |
