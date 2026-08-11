@@ -31,8 +31,15 @@
             (string->symbol (format "C~a" n)))
           '(G1 G2 G3)))
 
+(define (evidence-parts locator)
+  (string-split locator ":" #:trim? #f))
+
 (define (evidence-path locator)
-  (car (string-split locator ":" #:trim? #f)))
+  (car (evidence-parts locator)))
+
+(define (evidence-anchor locator)
+  (define parts (evidence-parts locator))
+  (and (pair? (cdr parts)) (string-join (cdr parts) ":")))
 
 (define required-owner-locators
   (hasheq 'C3
@@ -65,8 +72,12 @@
     (check-true (pair? evidence) (format "~a needs evidence" id))
     (for ([locator (in-list evidence)])
       (check-true (string? locator) (format "~a evidence must be a locator" id))
-      (check-true (file-exists? (build-path root (evidence-path locator)))
-                  (format "~a evidence file does not exist: ~a" id locator)))
+      (define path (build-path root (evidence-path locator)))
+      (check-true (file-exists? path) (format "~a evidence file does not exist: ~a" id locator))
+      (define anchor (evidence-anchor locator))
+      (when anchor
+        (check-true (string-contains? (file->string path) anchor)
+                    (format "~a evidence anchor does not exist: ~a" id locator))))
     (when (hash-has-key? required-owner-locators id)
       (check-not-false (member (hash-ref required-owner-locators id) evidence)
                        (format "~a must name its exact owner evidence" id)))

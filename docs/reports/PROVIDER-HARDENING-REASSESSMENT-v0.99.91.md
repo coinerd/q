@@ -83,9 +83,16 @@ checks remain the security evidence.
 
 ## 6. Defect localization and change amplification
 
-Canonical method: `scripts/architecture-baseline.rkt --revision 1aaf2da6 --last 200`;
-release-only commits and exact moves excluded. The explicit revision makes this
-snapshot reproducible after later review and merge commits move `HEAD`.
+Canonical method:
+
+```bash
+racket scripts/architecture-baseline.rkt --revision 1aaf2da6 --last 200 \
+  --raw /tmp/v09991-release-candidate.rktd \
+  --markdown /tmp/v09991-release-candidate.md
+```
+
+Release-only commits and exact moves are excluded. The explicit revision makes
+this snapshot reproducible after later review and merge commits move `HEAD`.
 
 | Module | LOC | changes (last 200) | hotspot |
 |---|---:|---:|---:|
@@ -141,19 +148,19 @@ Limitations are explicit:
 
 ## 9. Release gate record
 
-Local release-candidate evidence (implementation commit `e390433d`):
+Gate evidence is pinned to the candidate on which each command ran:
 
-| Gate | Result |
-|---|---|
-| Provider cumulative + smoke | 48/48 PASS |
-| Broad | 1252/1260 files, 17882 tests PASS; 8 explicit local-profile skips |
-| Arch | 24 files / 254 tests PASS |
-| Security | 64 files / 710 tests PASS |
-| release-smoke | 15 files / 180 tests PASS |
-| Fast | 1074 files / 15615 tests PASS |
-| lint-all / lint-format / contract changes | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
-| pre-release truth / dry-run | 4/4 PASS / 5/5 PASS on synchronized candidate |
-| strict readiness | PENDING exact merged main evidence |
-| independent review | PENDING |
-| PR CI / required policy | PENDING |
-| annotated tag / public bundle | PENDING |
+| Gate | Evidence SHA | Result |
+|---|---|---|
+| Provider cumulative + smoke (post-remediation) | `7c6b723f` | 48/48 PASS |
+| Broad | `e390433d` | 1252/1260 files, 17882 tests PASS; 8 explicit local-profile skips |
+| Arch (post-remediation) | `7c6b723f` | 24 files / 254 tests PASS |
+| Security | `e390433d` | 64 files / 710 tests PASS |
+| release-smoke (post-remediation) | `7c6b723f` | 15 files / 180 tests PASS |
+| Fast (post-remediation) | `7c6b723f` | 1074 files / 15615 tests PASS |
+| lint-all / lint-format / contract changes | `1aaf2da6` | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
+| pre-release truth / dry-run | `1aaf2da6` | 4/4 PASS / 5/5 PASS on synchronized release surfaces |
+| strict readiness | exact merged main | PENDING |
+| independent review | post-remediation candidate | PENDING |
+| PR CI / required policy | squash candidate | PENDING |
+| annotated tag / public bundle | exact merged main | PENDING |

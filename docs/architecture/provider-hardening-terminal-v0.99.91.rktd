@@ -28,7 +28,7 @@
    #hasheq((id . C18) (disposition . provider-protocol) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B3")))
    #hasheq((id . C19) (disposition . provider-protocol) (evidence . ("tests/test-openai-compatible.rkt:openai-normalize-tool")))
    #hasheq((id . C20) (disposition . provider-protocol) (evidence . ("tests/test-gemini.rkt:tool-id")))
-   #hasheq((id . C21) (disposition . provider-protocol) (evidence . ("tests/test-anthropic.rkt:image" "tests/test-gemini.rkt:image")))
+   #hasheq((id . C21) (disposition . provider-protocol) (evidence . ("tests/test-anthropic-helpers.rkt:openai-block->anthropic" "tests/test-browser-audit-w4-v0983.rkt:Gemini converts OpenAI image_url")))
    #hasheq((id . C22) (disposition . intentional-duplication) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B6" "llm/adapters/eager-stream.rkt")))
    #hasheq((id . C23) (disposition . intentional-duplication) (evidence . ("tests/test-sse-shared-azure.rkt:reasoning_content null" "tests/test-provider-parity-matrix.rkt:P7")))
    #hasheq((id . G1) (disposition . documented-asymmetry) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B4")))
