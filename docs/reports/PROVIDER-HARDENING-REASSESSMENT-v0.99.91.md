@@ -161,6 +161,6 @@ Gate evidence is pinned to the candidate on which each command ran:
 | lint-all / lint-format / contract changes | `1aaf2da6` | 23 PASS + 1 non-blocking pre-release warning / PASS / PASS |
 | pre-release truth / dry-run | `1aaf2da6` | 4/4 PASS / 5/5 PASS on synchronized release surfaces |
 | strict readiness | exact merged main | PENDING |
-| independent review | post-remediation candidate | PENDING |
+| independent review | `b4aee7f6` | APPROVED — 0 MAJOR / 0 MINOR |
 | PR CI / required policy | squash candidate | PENDING |
 | annotated tag / public bundle | exact merged main | PENDING |
