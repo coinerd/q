@@ -1,10 +1,10 @@
 # State: v0.99.90 — GSD Execution, Persistence & Campaign Reliability Isolation
 
-**Campaign status:** ACTIVE — W0..W4 DONE (W0 `53801aab` PR #9259; W1 `f8f2f99d` PR #9260; W2 `371fdf4e` PR #9261; W3 `848d8bda` PR #9262; W4 `587c8b65` PR #9263, #9235 closed)
+**Campaign status:** RELEASED v0.99.90 — W0..W5 DONE (W0 `53801aab` PR #9259; W1 `f8f2f99d` PR #9260; W2 `371fdf4e` PR #9261; W3 `848d8bda` PR #9262; W4 `587c8b65` PR #9263; W5 `9e1741de` PR #9264, #9236 closed; release PR #9265 merged `bb0cc98c`)
 **Plan-ID / Hash:** frozen plan `PLAN-v0.99.90-GSD-EXECUTION-PERSISTENCE-ISOLATION.md`
-**Baseline SHA:** `93619627` (v0.99.89 release); main now `587c8b65`
-**Current wave:** none — W0..W4 complete
-**Next:** W5 End-to-End Recovery + Release (#9236)
+**Baseline SHA:** `93619627` (v0.99.89 release); main now `bb0cc98c`
+**Current wave:** none — campaign COMPLETE
+**Next:** v0.99.91 (#878) Provider Contract & Test Hardening (Path B)
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
