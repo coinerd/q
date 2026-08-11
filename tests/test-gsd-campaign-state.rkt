@@ -164,6 +164,51 @@
       (check-true (plan-changed? rec m2)
                   "campaign pauses PLAN-CHANGED when the on-disk manifest diverges"))
 
+    (test-case "W5: status-header rewrite of wave docs preserves plan-id"
+      ;; v0.99.90 W5 (#9236): the manifest hash (plan-id) must be stable
+      ;; across projection updates. Wave docs carry a mutable "Status:"
+      ;; header that completion/failure projections rewrite; hashing the raw
+      ;; file would change the plan-id after every wave, so
+      ;; load-or-migrate-campaign! would re-migrate and orphan the durable
+      ;; record + outbox (Campaign Truth lost on restart).
+      (define dir (make-temporary-file "campaign-identity-~a" 'directory))
+      (make-directory (build-path dir ".planning"))
+      (make-directory (build-path dir ".planning" "waves"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (write-string "# Plan: Identity\n\n## Waves\n" out)
+                               (write-string "- [Inbox] W0: Zero → waves/W0-zero.md\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "STATE.md")
+                             (lambda (out)
+                               (write-string "| Wave | Title | Status |\n|---|---|---|\n" out)
+                               (write-string "| W0 | Zero | PENDING |\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-zero.md")
+                             (lambda (out)
+                               (write-string "# Wave 0\nStatus: Inbox\n\nSame immutable body.\n" out))
+                             #:exists 'truncate)
+      (define rec (migrate-campaign! dir))
+      (define id-before (campaign-plan-id rec))
+      ;; Simulate a completion projection: rewrite the wave doc Status header
+      ;; (body unchanged) and the PLAN.md marker.
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-zero.md")
+                             (lambda (out)
+                               (write-string "# Wave 0\nStatus: DONE\n\nSame immutable body.\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (write-string "# Plan: Identity\n\n## Waves\n" out)
+                               (write-string "- [DONE] W0: Zero → waves/W0-zero.md\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "STATE.md")
+                             (lambda (out)
+                               (write-string "| Wave | Title | Status |\n|---|---|---|\n" out)
+                               (write-string "| W0 | Zero | DONE |\n" out))
+                             #:exists 'truncate)
+      (define rec2 (migrate-campaign! dir))
+      (check-equal? (campaign-plan-id rec2) id-before "status-header rewrite preserves plan-id"))
+
     (test-case "global constraints hash participates in identity"
       (define m1
         (make-campaign-manifest 1

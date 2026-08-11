@@ -338,8 +338,22 @@
 (define (wave-doc-content-hash base-dir idx slug)
   (define p (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
   (if (file-exists? p)
-      (sha256-string (call-with-input-file p port->string))
+      (sha256-string (strip-wave-doc-status (call-with-input-file p port->string)))
       (sha256-string "")))
+
+;; v0.99.90 W5 (#9236): the manifest hash (plan-id) must be STABLE across
+;; projection updates. Wave docs carry a mutable "Status:" header that the
+;; completion/failure projections rewrite (Inbox -> DONE/FAILED); hashing the
+;; raw file would change the plan-id after every wave, so
+;; load-or-migrate-campaign! would re-migrate and orphan the durable record
+;; and its outbox (Campaign Truth lost on restart). Hash only the doc body.
+(define wave-doc-status-header-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n")
+
+(define (strip-wave-doc-status text)
+  (define m (regexp-match wave-doc-status-header-rx text))
+  (if m
+      (substring text (string-length (car m)))
+      text))
 
 (define (seed-record base-dir plan-text provenance)
   (define entries (parse-plan-index plan-text))
