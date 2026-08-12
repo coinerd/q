@@ -892,7 +892,7 @@
                   (summary
                    .
                    "Retry sleep is not cancellation-aware and partial wrapping can hide retry metadata."))))
-        (milestone . v0.99.93)
+        (milestone . v0.99.92)
         (parameter-scopes
          .
          (#hasheq((anchor
