@@ -1,3 +1,22 @@
+## 0.99.92
+
+Released 2026-08-12.
+
+### Features
+
+- Session Lifecycle Trace & Responsibility Map: a schema-v2 machine oracle freezes 33 explicit path variants across normal/error/cancel/close/retry/compaction, 10 responsibility units, 34 scoped consumer edges, and 38 exceptional boundaries with phase/cleanup/terminal/rollback/outcome semantics, all validated by source anchors and SHA1-pinned digests.
+- Pure Prompt Preparation Extraction: `build-prompt-preparation-plan` computes the canonical user message, post-append index, path settings, context source, and system-injected context without I/O or mutation; the caller applies effects E2/E3/E4 in the identical historical order.
+- Context-Build Request/Result Boundary: an explicit `context-build-request`/`context-build-result` pair makes the Context Assembly boundary testable without a live session while keeping Context Assembly Runtime-owned and state session-owned.
+- Orchestration Surface Reduction (evidence-backed): a machine ledger classifies the six remaining inline orchestration blocks (5 reject, 1 defer) and documents that no coherent private helper qualifies for extraction after the W1/W2 thinning.
+- Repository-wide Maintainability Reassessment: terminal dispositions for MA-01..MA-12 (MA-10 CLOSED via trace-equivalent extraction + evidence-backed rejection; MA-11/12 GUARDED), with every wave finding assigned a follow-up issue.
+
+### Breaking / Behavior Changes
+
+- None. The v0.99.92 session-lifecycle work preserves effect order and observable behavior; no public API or configuration format changed.
+
+### Migration Notes
+
+- None required.
 ## 0.99.91
 
 Released 2026-08-11.
