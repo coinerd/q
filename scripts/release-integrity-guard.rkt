@@ -162,11 +162,15 @@
   (define reason (integrity-violation-reason v))
   (case reason
     [(byte-changed)
-     (format
-      "~a changed during release automation,\nbut it was not part of the declared release change set.\n\n  SHA-256 before: ~a\n  SHA-256 after:  ~a\n\nRelease automation must not mutate architecture policy artifacts.\nReview the release step that modified this file."
-      path
-      before-sha
-      after-sha)]
+     (format (string-append "~a changed during release automation,\n"
+                            "but it was not part of the declared release change set.\n\n"
+                            "  SHA-256 before: ~a\n"
+                            "  SHA-256 after:  ~a\n\n"
+                            "Release automation must not mutate architecture policy artifacts.\n"
+                            "Review the release step that modified this file.")
+             path
+             before-sha
+             after-sha)]
     [(file-removed)
      (format
       "~a was removed during release automation.\n\n  SHA-256 before: ~a\n\nRelease automation must not delete architecture policy artifacts."
@@ -174,7 +178,10 @@
       (or before-sha "unknown"))]
     [(file-added)
      (format
-      "~a appeared during release automation.\n\n  SHA-256 after: ~a\n\nRelease automation must not add new artifacts to the protected set without governance review."
+      (string-append
+       "~a appeared during release automation.\n\n"
+       "  SHA-256 after: ~a\n\n"
+       "Release automation must not add new artifacts to the protected set without governance review.")
       path
       (or after-sha "unknown"))]))
 
