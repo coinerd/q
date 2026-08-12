@@ -3,8 +3,8 @@
 **Campaign status:** IN PROGRESS
 **Plan-ID / Hash:** `daa7388354f85b55af15d0c5b1bd203c495103cd2b1c024683bd99a1c4ecec5d`
 **Baseline SHA:** v0.99.91 release `a4b85569ff0dbe7971c3fec12babdb3fccbdd329`
-**Current wave:** W2 — Context-Build Request/Result Boundary (#9244) IN PROGRESS
-**Next:** review/merge W2, then W3
+**Current wave:** W2 DONE
+**Next:** W3 — Orchestration Surface Reduction (#9245)
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
