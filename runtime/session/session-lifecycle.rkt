@@ -62,7 +62,6 @@
          (only-in "../turn-orchestrator.rkt" run-provider-turn build-assembled-context)
          (only-in "../iteration/step-executor.rkt" interpret-step)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
-         (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event)
          (only-in "../../agent/event-structs/session-events.rkt" make-context-event)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
@@ -223,43 +222,40 @@
   (define session-dir (agent-session-session-dir sess))
   (define tracer (make-trace-logger bus session-dir #:enabled? #t))
   (start-trace-logger! tracer)
-  (with-handlers
-      ([exn:fail?
-        (lambda (e)
-          ;; Flush partial messages from stream errors to session.jsonl.
-          ;; Recovery data travels explicitly via exn:fail:stream-error,
-          ;; replacing the former current-loop-state-for-error-recovery parameter
-          ;; (which was dead code — parameterize unwinds before handlers fire).
-          (define partial-msgs
-            (let loop ([ex e])
-              (cond
-                [(exn:fail:stream-error? ex) (exn:fail:stream-error-partial-messages ex)]
-                [(retry-exhausted? ex) (loop (retry-exhausted-original-exn ex))]
-                [else '()])))
-          (when (pair? partial-msgs)
-            (append-session-entries! sess partial-msgs))
-          ;; Emit runtime.error event with classified error-type
-          (define error-type (classify-error e))
-          ;; A3: Include retry metadata if retries were attempted
-          (define base-payload (error-payload (exn-message e) error-type))
-          (define payload
-            (if (retry-exhausted? e)
-                (hash-set* (payload->hash base-payload)
-                           'retries-attempted
-                           (retry-exhausted-attempts e)
-                           'total-retry-delay-ms
-                           (retry-exhausted-total-delay-ms e)
-                           'errorHistory
-                           (retry-exhausted-error-history e))
-                (payload->hash base-payload)))
-          (emit-session-event! bus sid "runtime.error" payload)
-          ;; Defense-in-depth: ensure turn.completed is emitted
-          (emit-typed-event!
-           bus
-           (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "error" 0))
-          ;; v0.32.0: Stop trace logger on error (flush before return)
-          (stop-trace-logger! tracer)
-          (make-loop-result context-with-system 'error payload))])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; Flush partial messages from stream errors to session.jsonl.
+                     ;; Recovery data travels explicitly via exn:fail:stream-error,
+                     ;; replacing the former current-loop-state-for-error-recovery parameter
+                     ;; (which was dead code — parameterize unwinds before handlers fire).
+                     (define partial-msgs
+                       (let loop ([ex e])
+                         (cond
+                           [(exn:fail:stream-error? ex) (exn:fail:stream-error-partial-messages ex)]
+                           [(retry-exhausted? ex) (loop (retry-exhausted-original-exn ex))]
+                           [else '()])))
+                     (when (pair? partial-msgs)
+                       (append-session-entries! sess partial-msgs))
+                     ;; Emit runtime.error event with classified error-type
+                     (define error-type (classify-error e))
+                     ;; A3: Include retry metadata if retries were attempted
+                     (define base-payload (error-payload (exn-message e) error-type))
+                     (define payload
+                       (if (retry-exhausted? e)
+                           (hash-set* (payload->hash base-payload)
+                                      'retries-attempted
+                                      (retry-exhausted-attempts e)
+                                      'total-retry-delay-ms
+                                      (retry-exhausted-total-delay-ms e)
+                                      'errorHistory
+                                      (retry-exhausted-error-history e))
+                           (payload->hash base-payload)))
+                     (emit-session-event! bus sid "runtime.error" payload)
+                     ;; The outer prompt lifecycle owns the canonical prompt terminal.
+                     ;; Inner dispatch reports only runtime.error and its loop result.
+                     ;; v0.32.0: Stop trace logger on error (flush before return)
+                     (stop-trace-logger! tracer)
+                     (make-loop-result context-with-system 'error payload))])
     (define ws (config-working-set cfg))
     ;; v0.99.87: Bind Runtime configuration into injected closures.
     ;; The Agent iteration loop no longer receives or imports session-config.
@@ -414,9 +410,8 @@
                          (agent-session-session-id sess)))
   (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
   (define sid (session-identity-facet-session-id (session->identity-facet sess)))
-  ;; Safety-net control: emit cleanup turn.completed only on abnormal exit.
-  ;; Normal turn flow already emits turn.completed from the core loop.
-  (define emit-cleanup-turn-completed? (box #t))
+  ;; Stable outer prompt identity for the single canonical prompt terminal.
+  (define active-prompt-turn-id (box #f))
   (define termination-reason (box 'error))
   ;; Atomically exclude both another prompt and manual/automatic compaction.
   ;; Acquisition belongs in the before-thunk: a denied contender must not run
@@ -437,6 +432,7 @@
      ;; Inner model iterations have their own IDs, but user interruption targets
      ;; this stable outer turn.
      (define active-turn-id (begin-session-turn! sess))
+     (set-box! active-prompt-turn-id active-turn-id)
      ;; F2: Emit turn.started immediately so TUI shows activity before context
      ;; build + compaction. Inner turn.started events remain idempotent.
      (publish! bus
@@ -465,6 +461,7 @@
      (cond
        [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
         ;; Input blocked by extension
+        (set-box! termination-reason 'completed)
         (emit-session-event! bus sid "input.blocked" (hasheq 'reason "extension-block"))
         (values sess (make-loop-result '() 'completed (hasheq 'reason "input-blocked")))]
        [else
@@ -491,52 +488,58 @@
                                                     ba!))
                              (lambda (updated-session result)
                                (set-box! termination-reason (loop-result-termination-reason result))
-                               (set-box! emit-cleanup-turn-completed? #f)
                                (values updated-session result)))))]))
-   ;; Cleanup: always reset prompt-running? even on error
-   ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
-   ;; even if a regression prevents normal event flow.
-   ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
+   ;; Cleanup owns the single outer prompt terminal. Publish it while prompt
+   ;; ownership is still held so a later prompt cannot interleave, and release
+   ;; ownership from the guaranteed after-thunk even if finish/tracing/publish fails.
    (lambda ()
-     (define-values (finished-turn-id interrupt-request-id) (finish-session-turn! sess))
-     (release-prompt! sess)
-     ;; Emit the only request-correlated terminal after the prompt has actually
-     ;; stopped and the next prompt owns a fresh token.
-     (when interrupt-request-id
-       (define acknowledgement-tracer
-         (make-trace-logger bus (agent-session-session-dir sess) #:enabled? #t))
-       (dynamic-wind (lambda () (start-trace-logger! acknowledgement-tracer))
-                     (lambda ()
-                       (publish! bus
-                                 (make-event (if (eq? (unbox termination-reason) 'cancelled)
-                                                 "turn.cancelled"
-                                                 "interrupt.failed")
-                                             (current-inexact-milliseconds)
-                                             sid
-                                             finished-turn-id
-                                             (hasheq 'request-id
-                                                     interrupt-request-id
-                                                     'target-session-id
-                                                     sid
-                                                     'target-turn-id
-                                                     finished-turn-id
-                                                     'reason
-                                                     (symbol->string (unbox termination-reason))
-                                                     'iteration
-                                                     0))))
-                     (lambda () (stop-trace-logger! acknowledgement-tracer))))
-     ;; v0.45.14 W0a: Safety-net turn.completed for TUI busy-state recovery
-     ;; only on abnormal/early-exit paths.
-     (when (unbox emit-cleanup-turn-completed?)
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (log-warning
-                                     "session-lifecycle: cleanup turn.completed failed: ~a"
-                                     (exn-message e)))])
-         (define sid (agent-session-session-id sess))
-         (define bus (agent-session-event-bus sess))
-         (emit-typed-event!
-          bus
-          (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "cleanup" 0))))
+     (dynamic-wind void
+                   (lambda ()
+                     ;; A finish failure must not suppress the canonical terminal:
+                     ;; degrade the reason, publish while ownership is held, then
+                     ;; re-raise the original finalization error after release.
+                     (define finish-failure (box #f))
+                     (define-values (_finished-turn-id interrupt-request-id)
+                       (with-handlers ([exn:fail? (lambda (e)
+                                                    (set-box! finish-failure e)
+                                                    (values #f #f))])
+                         (finish-session-turn! sess)))
+                     (define prompt-turn-id (unbox active-prompt-turn-id))
+                     (when prompt-turn-id
+                       (define terminal-tracer
+                         (make-trace-logger bus (agent-session-session-dir sess) #:enabled? #t))
+                       (define base-payload
+                         (hasheq 'scope
+                                 "prompt"
+                                 'reason
+                                 (if (unbox finish-failure)
+                                     "error"
+                                     (or (symbol->string (unbox termination-reason)) "error"))
+                                 'duration-ms
+                                 0))
+                       (define payload
+                         (if interrupt-request-id
+                             (hash-set* base-payload
+                                        'request-id
+                                        interrupt-request-id
+                                        'target-session-id
+                                        sid
+                                        'target-turn-id
+                                        prompt-turn-id)
+                             base-payload))
+                       (dynamic-wind (lambda () (start-trace-logger! terminal-tracer))
+                                     (lambda ()
+                                       (publish! bus
+                                                 (make-event "turn.completed"
+                                                             (current-inexact-milliseconds)
+                                                             sid
+                                                             prompt-turn-id
+                                                             payload)))
+                                     (lambda () (stop-trace-logger! terminal-tracer))))
+                     (when (unbox finish-failure)
+                       (raise (unbox finish-failure))))
+                   (lambda () (release-prompt! sess)))
+     ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
      (unless (agent-session-persisted? sess)
        (with-handlers ([exn:fail? (lambda (e)
                                     (log-warning "session-lifecycle: emergency persist failed: ~a"

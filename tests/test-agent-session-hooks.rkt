@@ -299,6 +299,7 @@
  (test-case "input hook block leaves rollback prompt scope uninitialized"
    (define dir (make-temp-dir))
    (define bus (make-event-bus))
+   (define events (make-event-collector bus))
    (define ext-reg (make-extension-registry))
    (register-extension! ext-reg
                         (extension "block-input"
@@ -311,6 +312,13 @@
                                    ext-reg)))
    (define-values (_updated result) (run-prompt! sess "blocked before prompt scope"))
    (check-equal? (loop-result-termination-reason result) 'completed)
+   (define terminals
+     (filter (lambda (evt)
+               (and (string=? (event-ev evt) "turn.completed")
+                    (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+             (unbox events)))
+   (check-equal? (length terminals) 1)
+   (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "completed")
    (check-false (lifecycle-state-rollback-st (agent-session-lifecycle sess))
                 "blocked input must remain outside rollback prompt scope")
    (delete-directory/files dir #:must-exist? #f))

@@ -99,22 +99,54 @@
        [else started])]))
 
 (define (handle-turn-completed state evt)
-  (if (or (not (event-for-current-session? state evt))
-          (not (event-for-active-turn? state evt))
-          (ui-state-interrupt-request-id state))
-      state
-      ;; B5: Clear stale status message when turn ends.  Tool progress
-      ;; messages ("N tools running") are stale once the turn is over.
-      ;; Preserve compact status which has its own lifecycle.
-      (let* ([cleared (set-streaming-phase
-                       (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
-                                                               #f))
-                       'idle)]
-             [status (ui-state-status-message cleared)]
-             [compact? (and status (string-contains? status "Compacting"))])
-        (if compact?
-            cleared
-            (set-status-message cleared #f)))))
+  (define payload (event-payload evt))
+  (define prompt-scope? (and (hash? payload) (equal? (hash-ref payload 'scope #f) "prompt")))
+  (cond
+    [prompt-scope?
+     (define request-id (hash-ref payload 'request-id #f))
+     (define pending-request-id (ui-state-interrupt-request-id state))
+     (define correlated?
+       (and (event-for-current-session? state evt)
+            (event-turn-id evt)
+            (equal? (event-turn-id evt) (ui-state-active-turn-id state))
+            (or (not pending-request-id) (equal? request-id pending-request-id))))
+     (cond
+       [(not correlated?) state]
+       [else
+        (define cleared (clear-after-turn-terminal state))
+        (define reason (hash-ref payload 'reason "completed"))
+        (define with-feedback
+          (if pending-request-id
+              (append-entry cleared
+                            (make-entry 'system
+                                        (if (string=? reason "cancelled")
+                                            "[interrupt completed: turn cancelled]"
+                                            "[interrupt failed: turn did not cancel]")
+                                        (event-time evt)
+                                        (hash)))
+              cleared))
+        (define goal (ui-state-active-goal with-feedback))
+        (if (and goal (eq? (goal-display-info-status goal) 'active))
+            (set-busy (set-status-message with-feedback
+                                          (format "Goal turn ~a/~a: evaluating..."
+                                                  (goal-display-info-turns-used goal)
+                                                  (goal-display-info-max-turns goal)))
+                      #t)
+            with-feedback)])]
+    [(or (not (event-for-current-session? state evt))
+         (not (event-for-active-turn? state evt))
+         (ui-state-interrupt-request-id state))
+     state]
+    [else
+     ;; Legacy id-less/model turn.completed remains a safety recovery path.
+     (define cleared
+       (set-streaming-phase
+        (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))
+        'idle))
+     (define status (ui-state-status-message cleared))
+     (if (and status (string-contains? status "Compacting"))
+         cleared
+         (set-status-message cleared #f))]))
 
 (define (clear-after-turn-terminal state)
   (set-active-model-turn-id

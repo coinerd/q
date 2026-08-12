@@ -37,6 +37,7 @@
                   event?
                   event-event
                   event-payload
+                  event-turn-id
                   loop-result?
                   loop-result-termination-reason
                   loop-result-messages)
@@ -280,7 +281,7 @@
   (define dir (make-temp-dir))
   (define bus (make-event-bus))
   (define events (box '()))
-  (subscribe! bus (lambda (e) (set-box! events (cons (event-event e) (unbox events)))))
+  (subscribe! bus (lambda (e) (set-box! events (cons e (unbox events)))))
   (define prov (make-failing-provider #:on-call 1))
   (define rt
     (sdk:make-runtime #:provider prov
@@ -290,13 +291,20 @@
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 _) (sdk:run-prompt! rt2 "trigger error"))
   (define evts (reverse (unbox events)))
-  ;; turn.started should be emitted
-  (check-not-false (member "turn.started" evts) "turn.started should be emitted before error")
-  ;; NOTE: Current behavior does NOT always pair turn.started with
-  ;; turn.completed on provider errors. This test documents the gap.
-  ;; A future fix should ensure pairing (turn.failed or turn.completed).
-  (define start-count (length (filter (lambda (e) (equal? e "turn.started")) evts)))
+  ;; turn.started should be emitted before the error
+  (check-not-false (member "turn.started" (map event-event evts))
+                   "turn.started should be emitted before error")
+  (define start-count (length (filter (lambda (e) (equal? (event-event e) "turn.started")) evts)))
   (check-equal? start-count 2 "two turn.started: early + failed iteration")
+  ;; #9277: provider errors now pair with exactly one canonical prompt terminal
+  (define terminals
+    (filter (lambda (e)
+              (and (equal? (event-event e) "turn.completed")
+                   (event-turn-id e)
+                   (equal? (hash-ref (event-payload e) 'scope #f) "prompt")))
+            evts))
+  (check-equal? (length terminals) 1 "one canonical prompt terminal per prompt")
+  (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "error")
   (cleanup-dir dir))
 
 (test-case "fail-inject: session.started emitted even when turn fails"

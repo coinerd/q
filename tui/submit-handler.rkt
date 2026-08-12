@@ -72,27 +72,22 @@
         ;; Wrap runner thread with exception handler to prevent TUI hang
         (thread
          (lambda ()
-           (with-handlers
-               ([exn:fail:session:busy? (lambda (_e) (void))]
-                [exn:fail? (lambda (e)
-                             (define bus (tui-ctx-event-bus ctx))
-                             (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
-                             ;; B3-A: Write crash log for unhandled exceptions
-                             (write-crash-log! sid (exn-message e) "run-prompt")
-                             (when (and bus sid)
-                               (publish! bus
-                                         (make-event
-                                          "runtime.error"
-                                          (current-inexact-milliseconds)
-                                          sid
-                                          #f
-                                          (hasheq 'error (exn-message e) 'errorType 'internal-error)))
-                               (publish! bus
-                                         (make-event "turn.completed"
-                                                     (current-inexact-milliseconds)
-                                                     sid
-                                                     #f
-                                                     (hasheq 'reason "error")))))])
+           (with-handlers ([exn:fail:session:busy? (lambda (_e) (void))]
+                           [exn:fail?
+                            (lambda (e)
+                              (define bus (tui-ctx-event-bus ctx))
+                              (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
+                              ;; B3-A: Write crash log for unhandled exceptions
+                              (write-crash-log! sid (exn-message e) "run-prompt")
+                              (when (and bus sid)
+                                (publish!
+                                 bus
+                                 (make-event
+                                  "runtime.error"
+                                  (current-inexact-milliseconds)
+                                  sid
+                                  #f
+                                  (hasheq 'error (exn-message e) 'errorType 'internal-error)))))])
              (runner text))))])])
   (void))
 

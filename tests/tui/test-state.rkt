@@ -627,6 +627,43 @@
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
 
+    (test-case "canonical prompt terminal strictly correlates and clears transient IDs"
+      (define active
+        (set-active-model-turn-id
+         (set-active-turn-id (set-busy (initial-ui-state #:session-id "test-session") #t) "prompt-2")
+         "model-2"))
+      (define stale
+        (apply-event-to-state active
+                              (make-test-event "turn.completed"
+                                               (hash 'scope "prompt" 'reason "completed")
+                                               #:turn-id "prompt-1")))
+      (check-true (ui-state-busy? stale))
+      (check-equal? (ui-state-active-turn-id stale) "prompt-2")
+      (define completed
+        (apply-event-to-state active
+                              (make-test-event "turn.completed"
+                                               (hash 'scope "prompt" 'reason "completed")
+                                               #:turn-id "prompt-2")))
+      (check-false (ui-state-busy? completed))
+      (check-false (ui-state-active-turn-id completed))
+      (check-false (ui-state-active-model-turn-id completed)))
+
+    (test-case "correlated prompt terminal resolves a pending interrupt"
+      (define waiting
+        (set-interrupt-request-id
+         (set-active-turn-id (set-busy (initial-ui-state #:session-id "test-session") #t) "prompt-1")
+         "request-1"))
+      (define completed
+        (apply-event-to-state
+         waiting
+         (make-test-event "turn.completed"
+                          (hash 'scope "prompt" 'reason "cancelled" 'request-id "request-1")
+                          #:turn-id "prompt-1")))
+      (check-false (ui-state-busy? completed))
+      (check-false (ui-state-interrupt-request-id completed))
+      (check-true (string-contains? (transcript-entry-text (last (ui-state-transcript completed)))
+                                    "interrupt completed")))
+
     ;; ============================================================
     ;; W2: BUG-32,33,34 — Event naming and missing handler fixes
     ;; ============================================================

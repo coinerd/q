@@ -35,6 +35,8 @@
          (only-in "../util/message/protocol-types.rkt"
                   make-event
                   event-event
+                  event-payload
+                  event-turn-id
                   event?
                   message?
                   message-id
@@ -394,7 +396,7 @@
   (define reg (make-tool-registry))
   (define tok (make-cancellation-token))
   (define events (box '()))
-  (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list (event-event evt))))))
+  (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list evt)))))
   (cancel-token! tok)
   (define rt
     (sdk:make-runtime #:provider prov
@@ -404,7 +406,14 @@
                       #:cancellation-token tok))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "test")
-  (check-not-false (member "turn.cancelled" (unbox events)))
+  (define terminals
+    (filter (lambda (evt)
+              (and (string=? (event-event evt) "turn.completed")
+                   (event-turn-id evt)
+                   (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+            (unbox events)))
+  (check-equal? (length terminals) 1)
+  (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "cancelled")
   (cleanup-dir dir))
 
 (test-case "integ: uncancelled token → runs normally"

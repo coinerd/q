@@ -575,7 +575,7 @@
                   (terminal . none))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:acknowledgement-tracer")
+                   "runtime/session/session-lifecycle.rkt:define terminal-tracer")
                   (classification . DEFERRED)
                   (cleanup . cleanup-terminal+persist-suppressed)
                   (follow-up . "W3 #9245 locality assessment")
@@ -588,7 +588,7 @@
                   (terminal . none))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:cleanup turn.completed failed")
+                   "runtime/session/session-lifecycle.rkt:define base-payload")
                   (classification . IN_SCOPE)
                   (cleanup . logged+continue-emergency-persist)
                   (follow-up . "W1 #9243 equivalence oracle")
@@ -812,6 +812,22 @@
                   (rollback-save-back . save-back-if-inner-entered)
                   (severity . high)
                   (terminal . cleanup-terminal-if-outer-after-reached))))
+        (terminal-dispositions
+         .
+         (#hasheq((id . W0-F2)
+                  (version . v0.99.93)
+                  (issue . 9277)
+                  (disposition . canonicalized)
+                  (event . "turn.completed")
+                  (scope . "prompt")
+                  (turn-id-source . begin-session-turn!)
+                  (ordering . finish-terminal-release)
+                  (anchor . "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\"")
+                  (finish-failure-degrade . "runtime/session/session-lifecycle.rkt:define finish-failure (box #f)")
+                  (finish-failure-raise . "runtime/session/session-lifecycle.rkt:(raise (unbox finish-failure))")
+                  (finish-failure-behavior . "degraded reason error + terminal published + original error re-raised after release")
+                  (publish-failure-behavior . "propagates after release; emergency persist may be skipped")
+                  (evidence . "tests/test-agent-session-basic.rkt:prompt-terminals"))))
         (findings
          .
          (#hasheq((classification . DEFERRED)
@@ -977,7 +993,7 @@
                             (effect . runtime-error))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:turn-end-event \"turn.completed\"")
+                             "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\"")
                             (effect . error-terminal))
                     #hasheq((anchor
                              .
@@ -1001,7 +1017,7 @@
                    .
                    (#hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:turn-end-event \"turn.completed\"")
+                             "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\"")
                             (effect . error-terminal))
                     #hasheq((anchor
                              .
@@ -1017,7 +1033,7 @@
                             (effect . release))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:emit-cleanup-turn-completed?")
+                             "runtime/session/session-lifecycle.rkt:active-prompt-turn-id")
                             (effect . cleanup-terminal)))))
           #hasheq((family . cancel)
                   (id . cancel-pre-iteration)
@@ -1054,7 +1070,7 @@
                             (effect . release-prompt))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:when interrupt-request-id")
+                             "runtime/session/session-lifecycle.rkt:if interrupt-request-id")
                             (effect . no-correlated-terminal)))))
           #hasheq((family . cancel)
                   (id . cancel-midstream)
@@ -1091,7 +1107,7 @@
                             (effect . release-prompt))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:\"turn.cancelled\"")
+                             "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\"")
                             (effect . correlated-turn-cancelled)))))
           #hasheq((family . close)
                   (id . close-normal)
@@ -1592,7 +1608,7 @@
                             (effect . completed-result))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:emit-cleanup-turn-completed?")
+                             "runtime/session/session-lifecycle.rkt:active-prompt-turn-id")
                             (effect . cleanup-terminal))
                     #hasheq((anchor
                              .
@@ -1908,7 +1924,7 @@
                             (effect . release-prompt))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:\"turn.cancelled\"")
+                             "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\"")
                             (effect . correlated-turn-cancelled)))))
           #hasheq((family . cancel)
                   (id . cancel-midstream-direct)
@@ -1937,7 +1953,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:when interrupt-request-id")
+                             "runtime/session/session-lifecycle.rkt:if interrupt-request-id")
                             (effect . release-no-correlated-terminal)))))))
         (production-change . #f)
         (responsibility-taxonomy

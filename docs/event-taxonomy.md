@@ -376,9 +376,27 @@ TUI subscribers — their payload shapes are part of the stable protocol.
 |-------|------|-------------|
 | `count` | natural | Number of injected messages |
 
+### `turn.completed` (canonical prompt terminal)
+**Contract:** additive event payload; envelope `turnId` is required for canonical prompt producers
+**Stability:** evolving
+
+Exactly one outer prompt terminal is emitted for every initialized prompt. It
+uses the same stable prompt turn ID as `turn.started` with `scope = "prompt"`.
+Inner model lifecycle remains represented by `stream.turn.completed` and may
+occur multiple times within one prompt.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scope` | string | `"prompt"` for the canonical outer terminal |
+| `reason` | string | Actual prompt termination reason |
+| `duration-ms` | natural | Prompt duration placeholder (currently 0) |
+| `request-id` | string, optional | Accepted interrupt correlation ID |
+| `target-session-id` | string, optional | Correlated interrupt session |
+| `target-turn-id` | string, optional | Correlated outer prompt turn |
+
 ### `turn.cancelled`
 **Contract:** `turn-cancelled-payload/c`
-**Stability:** evolving
+**Stability:** legacy/inner cancellation compatibility; not the canonical outer prompt terminal
 
 | Field | Type | Description |
 |-------|------|-------------|
