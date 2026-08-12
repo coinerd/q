@@ -137,6 +137,35 @@
         (check-equal? (ui-state-streaming-text after) "partial"))
       (check-false (check-busy-watchdog waiting (+ (current-inexact-milliseconds) 9999999) 1)))
 
+    (test-case "outer prompt turn-start failure releases prompt and interruption ownership"
+      (define dir (make-temporary-file "q-9276-~a" 'directory))
+      (define bus (make-event-bus))
+      (define sess (make-test-session dir bus))
+      (define sentinel (exn:fail "deliberate outer turn-start failure" (current-continuation-marks)))
+      (define raised (box #f))
+      (subscribe! bus
+                  (lambda (evt)
+                    (when (and (equal? (event-ev evt) "turn.started")
+                               (equal? (hash-ref (event-payload evt) 'scope #f) "prompt"))
+                      (raise sentinel))))
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-event-bus-error-handler (lambda (_evt _handler subscriber-exn)
+                                                           (raise subscriber-exn))])
+           (with-handlers ([exn:fail? (lambda (exn) (set-box! raised exn))])
+             (run-prompt! sess "reproduce #9276")))
+         (check-eq? (unbox raised) sentinel "the original publication failure must propagate")
+         (check-false (agent-session-prompt-running? sess) "prompt ownership must be released")
+         (check-false (active-session-turn-id sess) "interruption ownership must be removed")
+         (check-true (try-claim-prompt! sess) "a later prompt must be able to claim ownership")
+         (release-prompt! sess))
+       (lambda ()
+         (call-with-values (lambda () (finish-session-turn! sess))
+                           (lambda (_turn-id _request-id) (void)))
+         (release-prompt! sess)
+         (delete-directory/files dir #:must-exist? #f))))
+
     (test-case "wired request cancels the active prompt, acknowledges once, and next prompt succeeds"
       (define dir (make-temporary-file "q-interrupt-integration-~a" 'directory))
       (define bus (make-event-bus))

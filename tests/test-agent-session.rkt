@@ -61,6 +61,8 @@
    (subscribe! (agent-session-event-bus sess) (lambda (evt) (set! events (cons evt events))))
    (check-true (try-claim-prompt! sess))
    (check-exn exn:fail:session:busy? (lambda () (run-prompt! sess "second prompt")))
+   (check-true (agent-session-prompt-running? sess)
+               "denied contender must preserve the active owner's claim")
    (check-equal? (count (lambda (evt) (string=? (event-ev evt) "runtime.error")) events) 1)
    (check-equal? (count (lambda (evt) (string=? (event-ev evt) "turn.completed")) events) 0)
    (release-prompt! sess))
