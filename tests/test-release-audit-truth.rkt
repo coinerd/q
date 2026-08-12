@@ -285,12 +285,27 @@
 
 (test-case "ci-required-jobs exports complete current matrix contexts"
   (define jobs (dynamic-script 'ci-required-jobs))
-  (check-not-false (member "test (ubuntu-latest, 8.10)" jobs))
-  (check-not-false (member "test (ubuntu-latest, 8.11)" jobs))
-  (check-not-false (member "test (macos-latest, 8.10)" jobs))
+  (check-not-false (member "test (0)" jobs))
+  (check-not-false (member "test (1)" jobs))
+  (check-not-false (member "test (2)" jobs))
+  (check-not-false (member "test-aggregate" jobs))
+  (check-not-false (member "test-platform" jobs))
+  (check-not-false (member "test-cross-version" jobs))
   (check-not-false (member "security" jobs))
   (check-not-false (member "smoke (ubuntu-latest)" jobs))
-  (check-not-false (member "smoke (macos-latest)" jobs)))
+  (check-not-false (member "workflows (0)" jobs))
+  (check-not-false (member "workflows (1)" jobs))
+  (check-not-false (member "workflows-aggregate" jobs))
+  (check-not-false (member "gsd-governance" jobs))
+  (check-not-false (member "abstraction-audit" jobs))
+  (check-not-false (member "release-dry-run" jobs))
+  ;; #9121: stale matrix labels must be gone
+  (check-false (member "test (ubuntu-latest, 8.10)" jobs))
+  (check-false (member "test (ubuntu-latest, 8.11)" jobs))
+  (check-false (member "test (macos-latest, 8.10)" jobs))
+  (check-false (member "smoke (macos-latest)" jobs))
+  (check-false (member "lint-alignment" jobs))
+  (check-false (member "inter-wave-gate" jobs)))
 
 (test-case "milestone-gate.rkt exports classify-ci-verdict"
   (check-not-exn (lambda () (dynamic-require script-path 'classify-ci-verdict))))

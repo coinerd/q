@@ -9,7 +9,8 @@
 ;; These functions operate on structured data (hashes), not I/O.
 
 (require racket/list
-         racket/match)
+         racket/match
+         racket/string)
 
 ;; ---------------------------------------------------------------------------
 ;; W6 (#8568): Lifecycle transition model
@@ -138,7 +139,35 @@
           (or verdict "unknown")))
 
 ;; ---------------------------------------------------------------------------
+;; Resolve the conclusion of a job group. A reusable-workflow call expands into
+;; several API jobs named "<group> / <step>" (e.g. "release-core / publish");
+;; the group is success only when every member job is success. A plain single
+;; job named exactly <group-name> is matched directly. When the group is absent,
+;; fall back to <fallback-key> (legacy job names, e.g. "release").
+;; ---------------------------------------------------------------------------
+(define (group-status jobs group-name fallback-key)
+  (define direct (hash-ref jobs group-name #f))
+  (cond
+    [direct direct]
+    [else
+     (define prefix (format "~a / " group-name))
+     (define members
+       (for/list ([(k v) (in-hash jobs)]
+                  #:when (and (symbol? k) (string-prefix? (symbol->string k) prefix)))
+         v))
+     (cond
+       [(null? members) (hash-ref jobs fallback-key #f)]
+       [(andmap (lambda (v) (equal? v GITHUB-SUCCESS)) members) GITHUB-SUCCESS]
+       [else "failure"])]))
+
+;; ---------------------------------------------------------------------------
 ;; Classify a release workflow run into a verdict.
+;;
+;; Job-name resolution matches the current release.yml topology
+;; (test -> prepare -> release-core). release-core is a reusable workflow call,
+;; so its group status is derived via group-status. Legacy names (release,
+;; smoke) are kept as fallbacks so older run records and tests still classify
+;; correctly.
 ;; ---------------------------------------------------------------------------
 (define (classify-release-verdict workflow-data jobs assets expected-tag)
   (cond
@@ -149,12 +178,14 @@
     [else
      (define wf-conclusion (hash-ref workflow-data 'conclusion #f))
      (define test-status (hash-ref jobs 'test #f))
-     (define release-status (hash-ref jobs 'release #f))
+     (define prepare-status (group-status jobs 'prepare 'release))
+     (define release-status (group-status jobs 'release-core 'release))
      (define smoke-status (hash-ref jobs 'smoke #f))
      (define release-exists (hash-ref assets 'release_exists #f))
      (cond
        [(and (equal? wf-conclusion GITHUB-SUCCESS))
         (if (and (equal? test-status GITHUB-SUCCESS)
+                 (equal? prepare-status GITHUB-SUCCESS)
                  (equal? release-status GITHUB-SUCCESS)
                  (or (not smoke-status) (equal? smoke-status GITHUB-SUCCESS)))
             'workflow_success
@@ -172,18 +203,35 @@
 
 ;; ---------------------------------------------------------------------------
 ;; Default required CI jobs for milestone closure.
+;;
+;; Source of truth: the `name:` fields in .github/workflows/ci.yml as returned
+;; by the actions API (actions/runs/<id>/jobs -> jobs[].name). Matrix jobs use
+;; GitHub's generated per-cell names (e.g. "test (0)", "workflows (1)").
+;;
+;; #9121: removed stale job names (lint-alignment, inter-wave-gate, macos smoke,
+;; old matrix labels) and synced to the current sharded CI topology. The
+;; fast-suite shards (test (0..2)), platform/cross-version tests, aggregate
+;; jobs, gsd-governance, and abstraction-audit are all required.
+;;
+;; `release-readiness` is intentionally NOT required: it runs on pull_request
+;; and is skipped on main pushes, so requiring it would create false
+;; CI-green failures during milestone closure.
 ;; ---------------------------------------------------------------------------
 (define ci-required-jobs
-  '("lint" "lint-alignment"
+  '("lint" "test (0)"
+           "test (1)"
+           "test (2)"
+           "test-aggregate"
+           "test-platform"
+           "test-cross-version"
            "security"
            "release-dry-run"
-           "inter-wave-gate"
-           "workflows"
            "smoke (ubuntu-latest)"
-           "smoke (macos-latest)"
-           "test (ubuntu-latest, 8.10)"
-           "test (ubuntu-latest, 8.11)"
-           "test (macos-latest, 8.10)"))
+           "workflows (0)"
+           "workflows (1)"
+           "workflows-aggregate"
+           "gsd-governance"
+           "abstraction-audit"))
 
 ;; ---------------------------------------------------------------------------
 ;; Build a CI check result hash for JSON output.

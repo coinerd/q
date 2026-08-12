@@ -1,6 +1,6 @@
 # Validation: v0.99.92 — Session Lifecycle Thinning, Reassessment & Series Closure
 
-**Status:** IN PROGRESS — W0 CHARACTERIZATION
+**Status:** ✅ COMPLETE — v0.99.92 RELEASED
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
@@ -9,7 +9,7 @@
 | W2 | ✅ boundary matrix 8/8 ×3; W1 plan 19/19 | ✅ 1077/15651 | explicit request/result; Runtime-owned Context Assembly; session-owned state; E2/E3/E4 order unchanged | ✅ Broad 1263/17918 (8 skips) | ✅ APPROVED (0M/3m/2i; MINORs folded) | ✅ DONE — merge e13a48e6, PR #9274, CI 17/17 |
 | W3 | ✅ rejection ledger 3/3 ×3; focused 17 files/96 | ✅ 1078/15654 at final candidate `73e6d101` | evidence-backed rejection; 6 blocks classified (5 reject, 1 defer W4); locality baseline 566/38/7924 | ✅ Arch 27 files | ✅ APPROVED (0M/1m/2i; MINOR folded) | ✅ DONE — merge 3773e6f8, PR #9275, CI 17/17 |
 | W4 | ✅ terminal ledger 3/3 | ✅ 1079/15657 at final candidate `11be8782` | MA-01..12 bijection; MA-10 CLOSED; guards GUARDED; wave findings #9276-#9281 | ✅ Arch 28/277 | ✅ APPROVED after 1 remediation (final 0M/0m/3i) | ✅ DONE — merge b81446e1, PR #9282, CI 17/17 |
-| W5 | PENDING | PENDING | Security + Workflow + Smoke + Release + Manifest/Bundle/Main CI | Broad + Arch | PENDING | PENDING |
+| W5 | ✅ projection-truth 3/3; all series suites green | ✅ Fast 1080/15660 | MA-07 hygiene; release surfaces 0.99.92; exact-main readiness 7/7; dry-run 5/5 | ✅ Broad 1266/17927 (8 skips); Arch 29/280; Security 64/710; Workflows 29/162; TUI 84/1321; Smoke; release-smoke 15/180 | ✅ APPROVED (0M/1m/3i; MINOR folded) | ✅ RELEASED — PR #9283 + repair #9284; tag v0.99.92 @ 128f8259; run 31570806686; bundle verified |
 
 ## W0 reproducible evidence
 
