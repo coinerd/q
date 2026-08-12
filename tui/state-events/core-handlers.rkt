@@ -236,7 +236,7 @@
 (define (handle-compaction state evt)
   (define payload (event-payload evt))
   (define reason (hash-ref payload 'reason ""))
-  (if (string=? reason "compaction-complete")
+  (if (member reason '("compaction-complete" "compaction-failed"))
       (set-status-message state #f)
       (set-status-message state "Compacting...")))
 

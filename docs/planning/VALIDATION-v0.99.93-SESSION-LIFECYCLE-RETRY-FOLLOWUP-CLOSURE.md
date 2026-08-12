@@ -1,11 +1,11 @@
 # Validation: v0.99.93 — Session Lifecycle & Retry Follow-up Closure
 
-**Status:** IN PROGRESS — W0 candidate verified
+**Status:** IN PROGRESS — W0 DONE; W1 diagnosis approved after contract amendment
 
 | Wave | Focused/TDD | Fast | Specific gate | Broad/Arch | Review | Result |
 |---|---|---|---|---|---|---|
-| W0 | ✅ RED 1/8 → GREEN 8/8; focused 35/35 | ✅ 1080 files / 15668 tests | ownership claim in guarded boundary; outer-start failure releases prompt + interruption state; denied contender preserves owner | ✅ lifecycle characterization + session-interruption; 566→563 LOC | ✅ production APPROVED; 0M/1m/1i, MINOR evidence typo corrected | REVIEWED / PR PENDING |
-| W1 | PENDING | PENDING | compaction start-event in guarded cleanup; no completion-after-block/error | compaction | PENDING | PENDING |
+| W0 | ✅ RED 1/8 → GREEN 8/8; focused 35/35 | ✅ 1080 files / 15668 tests | ownership claim in guarded boundary; outer-start failure releases prompt + interruption state; denied contender preserves owner | ✅ lifecycle characterization + session-interruption; 566→563 LOC | ✅ production APPROVED; 0M/1m/1i, MINOR evidence typo corrected; CI 17/17 | ✅ DONE — PR #9286, merge 4c21962e, #9276 closed |
+| W1 | ✅ reducer RED 70/1→GREEN 71/71 (114 checks); runtime RED 7/3→GREEN 10/10; final focused 127 | ✅ 1080 files / 15676 tests | hook-before-start; `compaction-failed` terminal; no cooldown/success after block/error; success effects while held; release last | ✅ adjacent compaction/hooks 78; TUI reducer | ✅ APPROVED final 0M/0m | REVIEWED / PR PENDING |
 | W2 | PENDING | PENDING | rollback prompt-scope extraction; save-back timing preserved via oracle | rollback + session-owned + Arch | PENDING | PENDING |
 | W3 | PENDING | PENDING | single canonical prompt terminal; event taxonomy aligned | lifecycle + event taxonomy | PENDING | PENDING |
 | W4 | PENDING | PENDING | cancellation-aware backoff; metadata survives partial wraps | retry + midstream-stall | PENDING | PENDING |
