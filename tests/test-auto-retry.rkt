@@ -12,7 +12,11 @@
          "../runtime/auto-retry.rkt"
          "../llm/provider-errors.rkt"
          "../llm/stream.rkt"
-         "../llm/openai-compatible.rkt")
+         "../llm/openai-compatible.rkt"
+         (only-in "../util/cancellation.rkt"
+                  make-cancellation-token
+                  cancel-token!
+                  cancellation-token-cancelled?))
 
 ;; ============================================================
 ;; retryable-error? predicate tests
@@ -119,6 +123,50 @@
   (check-true (>= (second sorted-delays) 0) "attempt 1 non-negative")
   (check-true (<= (third sorted-delays) 40) "attempt 2 cap = 40")
   (check-true (>= (third sorted-delays) 0) "attempt 2 non-negative"))
+
+(test-case "with-auto-retry: cancellation during backoff aborts immediately (F5a)"
+  (define token (make-cancellation-token))
+  (define attempt (box 0))
+  (define outcome (box 'running))
+  (define backoff-entered (make-semaphore 0))
+  ;; 20s backoff; on-retry fires just before the cancellable sleep, which gives a
+  ;; deterministic synchronization point independent of jitter on the delay.
+  (define t
+    (thread
+     (lambda ()
+       (with-handlers ([retry-cancelled? (lambda (_e) (set-box! outcome 'cancelled))]
+                       [exn:fail? (lambda (e) (set-box! outcome (list 'error (exn-message e))))])
+         (with-auto-retry
+          (lambda ()
+            (set-box! attempt (add1 (unbox attempt)))
+            (raise (exn:fail "HTTP 503 service unavailable" (current-continuation-marks))))
+          #:max-retries 5
+          #:base-delay-ms 20000
+          #:cancellation-token token
+          #:on-retry (lambda (_attempt _max _delay _msg _type) (semaphore-post backoff-entered)))))))
+  (check-not-false (sync/timeout 5 backoff-entered) "first retry should enter backoff")
+  (cancel-token! token)
+  (define result (sync/timeout 5 (thread-dead-evt t)))
+  (check-equal? (unbox attempt)
+                1
+                "only the initial attempt ran before cancellation aborted the backoff")
+  (check-eq? (unbox outcome) 'cancelled "backoff abort surfaced as retry-cancelled")
+  (check-not-false result "cancellation aborted the 20s backoff within 5s"))
+
+(test-case "with-auto-retry: pre-cancelled token never retries (F5a)"
+  (define token (make-cancellation-token))
+  (cancel-token! token)
+  (define attempt (box 0))
+  (check-exn retry-cancelled?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (exn:fail "HTTP 503 service unavailable"
+                                                   (current-continuation-marks))))
+                                #:max-retries 3
+                                #:base-delay-ms 10
+                                #:cancellation-token token)))
+  (check-equal? (unbox attempt) 1 "pre-cancelled token stops after the first failure"))
 
 (test-case "with-auto-retry: delay capped at max-delay-ms"
   (define delays (box '()))

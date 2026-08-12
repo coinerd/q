@@ -411,7 +411,8 @@
                               #:health-window-secs health-window
                               #:health-failure-threshold health-threshold
                               #:partial-recovery partial-recovery?
-                              #:partial-recovery-min-chars partial-recovery-min-chars))
+                              #:partial-recovery-min-chars partial-recovery-min-chars
+                              #:cancellation-token token))
   ;; v0.99.84: Post-turn memory extraction and reflection.
   ;; Moved from agent/loop-stream.rkt — Agent Core must not depend on Runtime Memory.
   ;; Non-fatal: extraction failures do not affect the turn result.

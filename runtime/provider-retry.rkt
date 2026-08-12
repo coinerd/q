@@ -19,16 +19,18 @@
                   exn:fail:stream-error-original-exn)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "adaptive-retry.rkt" adaptive-network-error-type? adapt-provider-request)
-         (only-in "auto-retry.rkt" with-auto-retry retry-exhausted? retry-exhausted-original-exn)
+         (only-in "auto-retry.rkt" with-auto-retry retry-cancelled?)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
          "provider-health.rkt")
 
 (provide (contract-out [call-with-provider-retry
                         (->* (procedure? list? hash? event-bus? string? string? real?)
                              (#:health-tracker (or/c provider-health? #f)
-                              #:health-window-secs exact-positive-integer?
-                              #:health-failure-threshold exact-nonnegative-integer?
-                              #:partial-recovery boolean?
-                              #:partial-recovery-min-chars exact-nonnegative-integer?)
+                                               #:health-window-secs exact-positive-integer?
+                                               #:health-failure-threshold exact-nonnegative-integer?
+                                               #:partial-recovery boolean?
+                                               #:partial-recovery-min-chars exact-nonnegative-integer?
+                                               #:cancellation-token (or/c cancellation-token? #f))
                              any/c)]
                        [default-partial-recovery-min-chars exact-nonnegative-integer?]))
 
@@ -47,7 +49,8 @@
          #:health-window-secs [health-window default-health-window-secs]
          #:health-failure-threshold [health-threshold default-health-failure-threshold]
          #:partial-recovery [partial-recovery? #f]
-         #:partial-recovery-min-chars [partial-min-chars default-partial-recovery-min-chars])
+         #:partial-recovery-min-chars [partial-min-chars default-partial-recovery-min-chars]
+         #:cancellation-token [cancellation-token #f])
   (define ctx-for-retry (box initial-context))
   (define settings-for-retry (box initial-settings))
 
@@ -142,7 +145,10 @@
   ;; Execute with retry. After with-auto-retry returns or raises,
   ;; if an exception propagates and we have partial messages,
   ;; re-wrap with exn:fail:stream-error so session-lifecycle can flush them.
-  (with-handlers ([exn:fail?
+  (with-handlers (;; W0-F5: a cancellation during backoff must propagate cleanly,
+                  ;; never be re-wrapped as a partial stream error.
+                  [retry-cancelled? (lambda (e) (raise e))]
+                  [exn:fail?
                    (lambda (e)
                      (define msgs (unbox partial-msgs-box))
                      (if (pair? msgs)
@@ -157,6 +163,7 @@
      (lambda () (wrapped-attempt (unbox ctx-for-retry) (unbox settings-for-retry)))
      #:max-retries 2
      #:base-delay-ms 1000
+     #:cancellation-token cancellation-token
      #:cumulative-ceiling-secs ceiling-secs
      #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                   (emit-retry-event! attempt max-retries delay-ms error-msg error-type)

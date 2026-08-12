@@ -94,7 +94,8 @@
                   make-cancellation-token
                   cancellation-token?
                   cancellation-token-cancelled?
-                  cancel-token!))
+                  cancel-token!)
+         (only-in "../util/exn.rkt" exn:fail:stream-error exn:fail:stream-error?))
 
 ;; ============================================================
 ;; Helpers
@@ -483,6 +484,59 @@
    (define hist (session-history s))
    (check-equal? (length hist) 1 "user message should be persisted")
    (check-equal? (message-role (first hist)) 'user)
+
+   (delete-directory/files dir #:must-exist? #f))
+ (test-case "run-prompt! preserves retry metadata through partial stream-error wrapping (F5b)"
+   (define dir (make-temp-dir))
+   (define bus (make-event-bus))
+   (define evts (make-event-collector bus))
+
+   ;; Provider whose stream raises exn:fail:stream-error carrying partial messages.
+   ;; The retry chain re-wraps retry-exhausted inside exn:fail:stream-error, and the
+   ;; dispatch handler must deep-unwrap so the runtime.error payload keeps metadata.
+   (define partial-msgs
+     (list (make-message "partial-msg-1"
+                         #f
+                         'assistant
+                         'message
+                         (list (make-text-part "partial answer"))
+                         0
+                         (hasheq))))
+   (define prov
+     (make-provider
+      (lambda () "stream-failing-mock")
+      (lambda () (hash 'streaming #t 'token-counting #t))
+      ;; send: success (stream path is used)
+      (lambda (req)
+        (make-model-response (list (hash 'type "text" 'text "ok"))
+                             (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
+                             "stream-failing-mock"
+                             'stop))
+      ;; stream: always raise a partial stream error (retryable)
+      (lambda (req)
+        (raise (exn:fail:stream-error "persistent stream failure"
+                                      (current-continuation-marks)
+                                      "partial text"
+                                      partial-msgs
+                                      (make-exn:fail "HTTP 503 service unavailable"
+                                                     (current-continuation-marks)))))))
+
+   (define sess (make-agent-session (make-test-config dir bus prov)))
+   (define-values (s result) (run-prompt! sess "trigger stream retry"))
+
+   ;; Retries exhausted -> error termination
+   (check-equal? (loop-result-termination-reason result) 'error)
+   ;; The runtime.error payload must carry retry metadata despite partial wrapping
+   (define errors (filter (lambda (evt) (string=? (event-ev evt) "runtime.error")) (unbox evts)))
+   (check-true (pair? errors) "runtime.error should be emitted")
+   (define payload (event-payload (car errors)))
+   (check-true (hash-has-key? payload 'retries-attempted)
+               "retry metadata must survive partial stream-error wrapping")
+   (check-true (>= (hash-ref payload 'retries-attempted) 1))
+   (check-true (hash-has-key? payload 'errorHistory))
+   (check-true (hash-has-key? payload 'total-retry-delay-ms))
+   ;; Partial messages were still flushed to the session log
+   (check-equal? (length (session-history s)) 2 "user message + partial assistant message")
 
    (delete-directory/files dir #:must-exist? #f))
  (test-case "session-active? and close-session!"

@@ -651,12 +651,13 @@
                   (terminal . none))
           #hasheq((anchor
                    .
-                   "runtime/auto-retry.rkt:sleep (/ next-delay 1000.0)")
+                   "runtime/auto-retry.rkt:sleep-cancellable! next-delay cancellation-token")
                   (classification . DEFERRED)
                   (cleanup . dynamic-winds-only)
                   (follow-up . "W4 #9246 terminal reassessment")
                   (id . retry-sleep-break)
                   (outcome . non-exn-break-propagates)
+                  (resolved-in . v0.99.93-9280-cancellation-aware)
                   (owner . runtime-retry)
                   (phase . retry-handler)
                   (rollback-save-back . unchanged)
@@ -668,6 +669,7 @@
                   (follow-up . "W4 #9246 terminal reassessment")
                   (id . retry-partial-metadata-loss)
                   (outcome . returns-error-without-retry-metadata)
+                  (resolved-in . v0.99.93-9280-metadata-preserved)
                   (owner . runtime-retry)
                   (phase . retry-exhaustion)
                   (rollback-save-back . saved-before-unwind)
@@ -827,7 +829,15 @@
                   (finish-failure-raise . "runtime/session/session-lifecycle.rkt:(raise (unbox finish-failure))")
                   (finish-failure-behavior . "degraded reason error + terminal published + original error re-raised after release")
                   (publish-failure-behavior . "propagates after release; emergency persist may be skipped")
-                  (evidence . "tests/test-agent-session-basic.rkt:prompt-terminals"))))
+                  (evidence . "tests/test-agent-session-basic.rkt:prompt-terminals"))
+          #hasheq((id . W0-F5)
+                  (version . v0.99.93)
+                  (issue . 9280)
+                  (disposition . resolved)
+                  (backoff . cancellation-aware)
+                  (metadata . preserved-through-partial-wrap)
+                  (anchor . "runtime/auto-retry.rkt:sleep-cancellable! next-delay cancellation-token")
+                  (evidence . "tests/test-auto-retry.rkt:with-auto-retry: cancellation during backoff aborts immediately (F5a)"))))
         (findings
          .
          (#hasheq((classification . DEFERRED)
@@ -867,7 +877,7 @@
                    .
                    "Automatic compaction completion/cooldown runs after hook block or body error, while start-event failure leaks ownership."))
           #hasheq((classification . DEFERRED)
-                  (follow-up . "W4 #9246 terminal decision")
+                  (follow-up . "W4 #9246 terminal decision; resolved in v0.99.93 #9280")
                   (id . W0-F5)
                   (owner . runtime-retry)
                   (severity . medium)
@@ -1229,7 +1239,7 @@
                             (effect . retry-event))
                     #hasheq((anchor
                              .
-                             "runtime/auto-retry.rkt:sleep (/ next-delay 1000.0)")
+                             "runtime/auto-retry.rkt:sleep-cancellable! next-delay cancellation-token")
                             (effect . sleep))
                     #hasheq((anchor
                              .
@@ -1281,8 +1291,8 @@
                             (effect . partial-persist))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:if (retry-exhausted? e)")
-                            (effect . metadata-hidden)))))
+                             "runtime/session/session-lifecycle.rkt:(define retry-info (find-retry-exhausted e))")
+                            (effect . metadata-preserved)))))
           #hasheq((family . retry)
                   (id . retry-held-circuit)
                   (trace

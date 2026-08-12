@@ -207,4 +207,9 @@
   ;; The final exception should be exn:fail:stream-error wrapping retry-exhausted
   (check-pred exn:fail:stream-error? caught-exn)
   ;; And should carry the partial messages
-  (check-equal? (exn:fail:stream-error-partial-messages caught-exn) partial-msgs))
+  (check-equal? (exn:fail:stream-error-partial-messages caught-exn) partial-msgs)
+  ;; F5b: the deep unwrap must still find retry metadata through the partial wrap
+  (define inner (find-retry-exhausted caught-exn))
+  (check-not-false inner "retry metadata must survive partial recovery wrapping")
+  (check-pred retry-exhausted? inner)
+  (check-equal? (retry-exhausted-attempts inner) 2))
