@@ -17,7 +17,9 @@
          "../tui/submit-handler.rkt"
          "../tui/state-types.rkt"
          "../tui/tui-keybindings.rkt"
-         "../agent/queue.rkt")
+         "../agent/queue.rkt"
+         "../util/event/event-bus.rkt"
+         (only-in "../util/event/event.rkt" event-ev))
 
 ;; Channel-based mock runner for deterministic thread synchronization
 (define (make-sync-mock-runner ch)
@@ -86,6 +88,23 @@
       (check-true (> (length (ui-state-transcript new-state)) 0))
       (check-equal? (transcript-entry-text (car (ui-state-transcript new-state))) "run this")
       (check-equal? (transcript-entry-kind (car (ui-state-transcript new-state))) 'user))
+
+    (test-case "runner exception emits runtime.error but no synthetic terminal"
+      (define bus (make-event-bus))
+      (define events (box '()))
+      (define raised (make-semaphore 0))
+      (subscribe! bus
+                  (lambda (evt)
+                    (set-box! events (append (unbox events) (list (event-ev evt))))
+                    (when (string=? (event-ev evt) "runtime.error")
+                      (semaphore-post raised))))
+      (define state (initial-ui-state #:session-id "submit-session"))
+      (define ctx
+        (make-tui-ctx #:event-bus bus #:session-runner (lambda (_text) (error 'runner "deliberate"))))
+      (set-box! (tui-ctx-ui-state-box ctx) state)
+      (handle-user-submit! ctx "fail")
+      (check-not-false (sync/timeout 2 raised))
+      (check-equal? (unbox events) '("runtime.error")))
 
     ;; NOTE: We do not test a #f-runner scenario because:
     ;;   1. make-tui-ctx contract requires #:session-runner procedure?

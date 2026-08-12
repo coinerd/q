@@ -816,7 +816,7 @@
     (check-equal? (loop-result-termination-reason result) 'cancelled)
     (cleanup-dir dir)))
 
-(test-case "golden-cancel: cancel emits turn.cancelled event"
+(test-case "golden-cancel: cancel emits canonical turn.completed event"
   (define dir (make-temp-dir))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-dir dir)
@@ -836,8 +836,8 @@
                            #:cancellation-token tok))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "test")
-    (check-not-false (member "turn.cancelled" (get-events))
-                     "cancelled prompt should emit turn.cancelled")
+    (check-not-false (member "turn.completed" (get-events))
+                     "cancelled prompt should emit canonical turn.completed")
     (cleanup-dir dir)))
 
 (test-case "golden-cancel: idle interrupt! does not poison the runtime token"

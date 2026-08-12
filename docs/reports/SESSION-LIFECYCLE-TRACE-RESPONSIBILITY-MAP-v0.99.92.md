@@ -30,10 +30,20 @@ Two turn identities coexist:
 - A **model turn ID** is created by the Agent iteration loop and reused across
   provider retry attempts in that iteration.
 
-Normal completion relies on the inner stream terminal. Dispatch errors emit
-`turn.completed` with no turn ID. Accepted interrupts receive a prompt-ID-
-correlated terminal only during outer cleanup. W1–W3 must preserve this current
-observable behavior unless a separately approved defect wave changes it.
+At the W0 baseline, normal completion relied on the inner stream terminal,
+dispatch errors emitted `turn.completed` with no turn ID, and accepted
+interrupts alone received a prompt-ID-correlated terminal. Those historical
+rows remain unchanged below. The separately approved v0.99.93 #9277 terminal
+disposition supersedes that split contract as documented next.
+
+## Later terminal disposition (v0.99.93 #9277)
+
+Every initialized prompt now emits exactly one outer `turn.completed` with the
+same stable prompt ID as its prompt-scoped `turn.started`. Payload contains
+`scope = "prompt"`, the actual termination reason, and optional accepted-
+interrupt correlation. Inner `stream.turn.completed`/cancellation events remain
+model-turn observations. Cleanup ordering is `finish interruption → canonical
+terminal while prompt ownership is held → guaranteed prompt release`.
 
 ## Ordered path map
 
@@ -174,7 +184,9 @@ terminal behavior, classification, and source anchor. Important boundaries are:
 | W0-F4 | Medium / DEFERRED | Runtime Compaction | `W3 #9245 locality assessment; W4 #9246 decision` | Automatic compaction completion/cooldown follows block/body error; start publication failure leaks ownership. |
 | W0-F5 | Medium / DEFERRED | Runtime Retry | `W4 #9246 terminal decision` | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
 
-No finding is silently repaired in W0. W0-F1/F2 constrain W1–W3 equivalence;
+No finding was silently repaired in W0. W0-F1/F2 constrained the original
+W1–W3 equivalence; later v0.99.93 terminal dispositions are recorded separately
+in the machine ledger and the sections above.
 W0-F3 is concurrent lifecycle correctness rather than pure preparation; W0-F4
 and W0-F5 belong to their respective subsystem hardening scopes.
 

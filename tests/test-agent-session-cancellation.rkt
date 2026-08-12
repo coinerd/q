@@ -54,6 +54,7 @@
                   event
                   event-event
                   event-payload
+                  event-turn-id
                   event-ev
                   make-event
                   content-part->jsexpr)
@@ -110,6 +111,12 @@
 (define (event-names collected-box)
   (map event-event (unbox collected-box)))
 
+(define (prompt-terminals collected-box)
+  (filter (lambda (evt)
+            (and (string=? (event-ev evt) "turn.completed")
+                 (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+          (unbox collected-box)))
+
 (define (text-of msg)
   (text-part-text (first (message-content msg))))
 
@@ -163,7 +170,7 @@
    (define-values (_s2 next-result) (run-prompt! s "next prompt"))
    (check-equal? (loop-result-termination-reason next-result) 'completed)
    (delete-directory/files dir #:must-exist? #f))
- (test-case "run-prompt! with pre-cancelled token emits turn.cancelled event"
+ (test-case "run-prompt! with pre-cancelled token emits canonical prompt terminal"
    (define dir (make-temp-dir))
    (define bus (make-event-bus))
    (define evts (make-event-collector bus))
@@ -175,8 +182,10 @@
    (define sess
      (make-agent-session (hash-set (make-test-config dir bus prov) 'cancellation-token tok)))
    (define-values (s result) (run-prompt! sess "hello"))
-   (define names (event-names evts))
-   (check-not-false (member "turn.cancelled" names) "turn.cancelled event should be emitted")
+   (define terminals (prompt-terminals evts))
+   (check-equal? (length terminals) 1)
+   (check-pred string? (event-turn-id (car terminals)))
+   (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "cancelled")
    (delete-directory/files dir #:must-exist? #f))
  (test-case "run-prompt! token cancelled mid-loop stops after current iteration"
    (define dir (make-temp-dir))
@@ -248,9 +257,9 @@
    (check-equal? (loop-result-termination-reason result)
                  'cancelled
                  "should terminate with 'cancelled when token cancelled mid-loop")
-   ;; turn.cancelled event emitted
-   (check-not-false (member "turn.cancelled" (event-names evts))
-                    "turn.cancelled event should be emitted")
+   (define terminals (prompt-terminals evts))
+   (check-equal? (length terminals) 1)
+   (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "cancelled")
    ;; History should have user + assistant(tool-call) + tool-result from first iteration
    (define hist (session-history s))
    (check-true (>= (length hist) 3)

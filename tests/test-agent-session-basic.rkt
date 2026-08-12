@@ -54,6 +54,7 @@
                   event
                   event-event
                   event-payload
+                  event-turn-id
                   event-ev
                   make-event
                   content-part->jsexpr)
@@ -112,6 +113,12 @@
 
 (define (event-names collected-box)
   (map event-event (unbox collected-box)))
+
+(define (prompt-terminals collected-box)
+  (filter (lambda (evt)
+            (and (string=? (event-ev evt) "turn.completed")
+                 (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+          (unbox collected-box)))
 
 (define (text-of msg)
   (text-part-text (first (message-content msg))))
@@ -461,9 +468,16 @@
                  'provider-error
                  "metadata should have errorType 'provider-error")
 
-   ;; Verify runtime.error event was emitted
+   ;; Verify runtime.error event and one canonical prompt terminal were emitted.
    (check-not-false (member "runtime.error" (event-names evts))
                     "runtime.error event should be emitted")
+   (define terminals (prompt-terminals evts))
+   (check-equal? (length terminals) 1)
+   (check-pred string? (event-turn-id (car terminals)))
+   (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "error")
+   (check-false (for/or ([evt (in-list (unbox evts))])
+                  (and (string=? (event-ev evt) "turn.completed") (not (event-turn-id evt))))
+                "runtime must not emit an id-less prompt terminal")
 
    ;; Verify session is still usable (history has user message)
    (define hist (session-history s))
@@ -503,8 +517,18 @@
    (define names (event-names evts))
    ;; session.started should be first
    (check-equal? (first names) "session.started")
-   ;; session.updated should be last
-   (check-equal? (last names) "session.updated")
+   (define prompt-start
+     (findf (lambda (evt)
+              (and (string=? (event-ev evt) "turn.started")
+                   (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+            (unbox evts)))
+   (define terminals (prompt-terminals evts))
+   (check-equal? (length terminals) 1)
+   (define terminal (car terminals))
+   (check-equal? (event-turn-id terminal) (event-turn-id prompt-start))
+   (check-equal? (hash-ref (event-payload terminal) 'reason) "completed")
+   (check-equal? (last names) "turn.completed")
+   (check-true (< (index-of names "session.updated") (sub1 (length names))))
    ;; Core loop events in between
    (check-not-false (member "turn.started" names))
    (check-not-false (member "stream.turn.completed" names))

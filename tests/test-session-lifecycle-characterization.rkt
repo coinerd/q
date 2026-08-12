@@ -156,7 +156,7 @@
   (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
 
 (define expected-edge-digest "1ca13cc462960413584d0e1964cea50c0240e11f")
-(define expected-exit-digest "be3b429cd8cd37923c0282d13b005399b801884d")
+(define expected-exit-digest "fbebaf003d265f1c7c815106e50f1726c46633ca")
 (define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
 (define (locator-parts locator)
@@ -226,6 +226,7 @@
        "runtime/session/session-lifecycle.rkt:(run-prompt-internal sess
                                                     effective-input"
        "runtime/session/session-lifecycle.rkt:finish-session-turn! sess"
+       "runtime/session/session-lifecycle.rkt:(make-event \"turn.completed\""
        "runtime/session/session-lifecycle.rkt:release-prompt! sess")
       ("runtime/session/session-prompt-scope.rkt:current-prompt-operation-session sess"
        "runtime/session/session-prompt-scope.rkt:dynamic-wind void"
@@ -295,6 +296,23 @@
   (check-eq? (hash-ref rollback 'unwind) 'after-save-back)
   (for ([scope (in-list scopes)])
     (check-locator (hash-ref scope 'id) (hash-ref scope 'anchor))))
+
+(test-case "W0-F2 terminal follow-up records one canonical prompt terminal"
+  (define dispositions (hash-ref (read-one ledger-path) 'terminal-dispositions))
+  (check-equal? (length dispositions) 1)
+  (define disposition (car dispositions))
+  (check-eq? (hash-ref disposition 'id) 'W0-F2)
+  (check-eq? (hash-ref disposition 'version) 'v0.99.93)
+  (check-equal? (hash-ref disposition 'issue) 9277)
+  (check-eq? (hash-ref disposition 'disposition) 'canonicalized)
+  (check-equal? (hash-ref disposition 'event) "turn.completed")
+  (check-equal? (hash-ref disposition 'scope) "prompt")
+  (check-eq? (hash-ref disposition 'turn-id-source) 'begin-session-turn!)
+  (check-eq? (hash-ref disposition 'ordering) 'finish-terminal-release)
+  (check-locator 'W0-F2-terminal (hash-ref disposition 'anchor))
+  (check-locator 'W0-F2-finish-degrade (hash-ref disposition 'finish-failure-degrade))
+  (check-locator 'W0-F2-finish-raise (hash-ref disposition 'finish-failure-raise))
+  (check-locator 'W0-F2-evidence (hash-ref disposition 'evidence)))
 
 (test-case "W0-7: behavior evidence and report agree with the machine oracle"
   (define ledger (read-one ledger-path))

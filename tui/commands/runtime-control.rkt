@@ -167,28 +167,22 @@
            last-prompt))
      (define runner (cmd-ctx-session-runner cctx))
      (when runner
-       (thread
-        (lambda ()
-          (with-handlers ([exn:fail:session:busy? (lambda (_e) (void))]
-                          [exn:fail?
-                           (lambda (e)
-                             (define bus (cmd-ctx-event-bus cctx))
-                             (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
-                             (when (and bus sid)
-                               (publish! bus
-                                         (make-event
-                                          "runtime.error"
-                                          (current-inexact-milliseconds)
-                                          sid
-                                          #f
-                                          (hasheq 'error (exn-message e) 'errorType 'internal-error)))
-                               (publish! bus
-                                         (make-event "turn.completed"
-                                                     (current-inexact-milliseconds)
-                                                     sid
-                                                     #f
-                                                     (hasheq 'reason "error")))))])
-            (runner enriched-prompt)))))]
+       (thread (lambda ()
+                 (with-handlers
+                     ([exn:fail:session:busy? (lambda (_e) (void))]
+                      [exn:fail?
+                       (lambda (e)
+                         (define bus (cmd-ctx-event-bus cctx))
+                         (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
+                         (when (and bus sid)
+                           (publish! bus
+                                     (make-event
+                                      "runtime.error"
+                                      (current-inexact-milliseconds)
+                                      sid
+                                      #f
+                                      (hasheq 'error (exn-message e) 'errorType 'internal-error)))))])
+                   (runner enriched-prompt)))))]
     [else
      (define entry (make-error-entry "No previous prompt to retry."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
