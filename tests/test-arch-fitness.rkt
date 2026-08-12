@@ -399,6 +399,13 @@
         (check-false (imports-from? reqs '("racket/port" "racket/tcp" "racket/os"))
                      "event-codec.rkt must not import I/O modules")))
 
+    (test-case "R-18: session-prompt-preparation.rkt has no I/O imports"
+      (define p (build-path q-dir "runtime" "session" "session-prompt-preparation.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "session-prompt-preparation.rkt must not import I/O modules")))
+
     ;; R-19: Parser modules must not require I/O modules
     (test-case "R-19: GSD command-parser has no I/O imports"
       (define p (build-path q-dir "extensions" "gsd" "command-parser.rkt"))

@@ -399,7 +399,7 @@
                   (terminal . turn.completed/cleanup))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:buffer-or-append!-fn sess user-msg")
+                   "runtime/session/session-lifecycle.rkt:buffer-or-append!-fn sess")
                   (classification . IN_SCOPE)
                   (cleanup . rollback-save+finish+release+cleanup-terminal)
                   (follow-up . "W1 #9243 equivalence oracle")
@@ -878,6 +878,10 @@
                    .
                    (#hasheq((anchor
                              .
+                             "runtime/session/session-lifecycle.rkt:guarded-set-config!")
+                            (effect . working-set-config))
+                    #hasheq((anchor
+                             .
                              "runtime/session/session-lifecycle.rkt:try-claim-prompt! sess")
                             (effect . claim))
                     #hasheq((anchor
@@ -902,11 +906,11 @@
                             (effect . parameterize-session-state))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:guarded-set-config!")
-                            (effect . working-set-config))
+                             "runtime/session/session-prompt-preparation.rkt:(define (build-prompt-preparation-plan")
+                            (effect . preparation-plan))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:buffer-or-append!-fn sess user-msg")
+                             "runtime/session/session-lifecycle.rkt:buffer-or-append!-fn sess")
                             (effect . user-index-persistence))
                     #hasheq((anchor
                              .
@@ -1730,9 +1734,7 @@
                              .
                              "runtime/session/session-lifecycle.rkt:(make-event \"turn.started\"")
                             (effect . outer-turn-started))
-                    #hasheq((anchor
-                             .
-                             "agent/loop.rkt:'model-request-pre")
+                    #hasheq((anchor . "agent/loop.rkt:'model-request-pre")
                             (effect . hook))
                     #hasheq((anchor
                              .
@@ -1785,9 +1787,7 @@
                              .
                              "runtime/session/session-lifecycle.rkt:(make-event \"turn.started\"")
                             (effect . outer-turn-started))
-                    #hasheq((anchor
-                             .
-                             "agent/loop-dispatch.rkt:'message-start")
+                    #hasheq((anchor . "agent/loop-dispatch.rkt:'message-start")
                             (effect . hook))
                     #hasheq((anchor
                              .
@@ -1842,17 +1842,13 @@
                              .
                              "runtime/session/session-lifecycle.rkt:(make-event \"turn.started\"")
                             (effect . outer-turn-started))
-                    #hasheq((anchor
-                             .
-                             "agent/loop-stream.rkt:'message-end")
+                    #hasheq((anchor . "agent/loop-stream.rkt:'message-end")
                             (effect . hook))
                     #hasheq((anchor
                              .
                              "agent/loop-stream.rkt:make-stream-turn-completed-event")
                             (effect . stream-terminal))
-                    #hasheq((anchor
-                             .
-                             "agent/loop-stream.rkt:'hook-blocked")
+                    #hasheq((anchor . "agent/loop-stream.rkt:'hook-blocked")
                             (effect . hook-blocked))
                     #hasheq((anchor
                              .
