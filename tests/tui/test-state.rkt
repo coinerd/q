@@ -177,11 +177,16 @@
         (check-equal? (transcript-entry-text (first (ui-state-transcript s2)))
                       "[session forked: fork-123]")))
 
-    (test-case "apply-event: compaction.started"
-      (let* ([s (initial-ui-state)]
-             [evt (make-test-event "compaction.started" (hash))]
-             [s2 (apply-event-to-state s evt)])
-        (check-equal? (ui-state-status-message s2) "Compacting...")))
+    (test-case "apply-event: automatic compaction start and terminals update status"
+      (define started
+        (apply-event-to-state (initial-ui-state)
+                              (make-test-event "compaction" (hash 'reason "budget-exceeded"))))
+      (check-equal? (ui-state-status-message started) "Compacting...")
+      (for ([reason (in-list '("compaction-complete" "compaction-failed"))])
+        (define terminal
+          (apply-event-to-state started (make-test-event "compaction" (hash 'reason reason))))
+        (check-false (ui-state-status-message terminal)
+                     (format "~a must clear automatic compaction status" reason))))
 
     (test-case "apply-event: session compaction completed is visible with counts"
       (let* ([s (set-status-message (initial-ui-state) "Compacting...")]

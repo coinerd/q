@@ -58,31 +58,40 @@
         context-with-system] ; too soon after last compaction
        [(not (try-claim-compaction! sess #t)) context-with-system] ; explicit prompt-owned claim
        [else
-        (emit-typed-event! bus
-                           (make-compaction-event #:session-id sid
-                                                  #:turn-id #f
-                                                  #:timestamp (now-epoch-ms)
-                                                  #:reason "budget-exceeded"
-                                                  #:tokens-before token-count
-                                                  #:tokens-after token-count))
-        (dynamic-wind (lambda () (void))
+        (define started? (box #f))
+        (dynamic-wind void
                       (lambda ()
-                        (maybe-compact-context-internal sess
-                                                        context-with-system
-                                                        token-count
-                                                        token-budget-threshold
-                                                        bus
-                                                        sid))
-                      (lambda ()
-                        (release-compaction! sess)
-                        (guarded-set-last-compaction-time! sess (now-epoch-ms))
-                        (emit-typed-event! bus
-                                           (make-compaction-event #:session-id sid
-                                                                  #:turn-id #f
-                                                                  #:timestamp (now-epoch-ms)
-                                                                  #:reason "compaction-complete"
-                                                                  #:tokens-before token-count
-                                                                  #:tokens-after token-count))))])]))
+                        (with-handlers ([exn? (lambda (e)
+                                                (when (unbox started?)
+                                                  (with-handlers ([exn? (lambda (_) (void))])
+                                                    (emit-typed-event! bus
+                                                                       (make-compaction-event
+                                                                        #:session-id sid
+                                                                        #:turn-id #f
+                                                                        #:timestamp (now-epoch-ms)
+                                                                        #:reason "compaction-failed"
+                                                                        #:tokens-before token-count
+                                                                        #:tokens-after token-count))))
+                                                (raise e))])
+                          (define-values (result succeeded?)
+                            (maybe-compact-context-internal sess
+                                                            context-with-system
+                                                            token-count
+                                                            token-budget-threshold
+                                                            bus
+                                                            sid
+                                                            started?))
+                          (when succeeded?
+                            (emit-typed-event! bus
+                                               (make-compaction-event #:session-id sid
+                                                                      #:turn-id #f
+                                                                      #:timestamp (now-epoch-ms)
+                                                                      #:reason "compaction-complete"
+                                                                      #:tokens-before token-count
+                                                                      #:tokens-after token-count))
+                            (guarded-set-last-compaction-time! sess (now-epoch-ms)))
+                          result))
+                      (lambda () (release-compaction! sess)))])]))
 
 ;; Internal compaction logic (extracted for dynamic-wind)
 (define (maybe-compact-context-internal sess
@@ -90,7 +99,8 @@
                                         token-count
                                         token-budget-threshold
                                         bus
-                                        sid)
+                                        sid
+                                        started?)
   ;; Dispatch 'session-before-compact hook
   (define compact-payload
     (hasheq 'session-id
@@ -106,8 +116,17 @@
                           'session-before-compact
                           compact-payload))
   (cond
-    [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
+    [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block))
+     (values context-with-system #f)]
     [else
+     (set-box! started? #t)
+     (emit-typed-event! bus
+                        (make-compaction-event #:session-id sid
+                                               #:turn-id #f
+                                               #:timestamp (now-epoch-ms)
+                                               #:reason "budget-exceeded"
+                                               #:tokens-before token-count
+                                               #:tokens-after token-count))
      (emit-session-event! bus
                           sid
                           "compaction.warning"
@@ -122,7 +141,7 @@
                                   (length (compaction-result-kept-messages compact-result))
                                   'tokenCount
                                   token-count))
-     (compaction-result->message-list compact-result)]))
+     (values (compaction-result->message-list compact-result) #t)]))
 
 ;; ============================================================
 ;; Mid-turn compaction (v0.28.21 W3)
