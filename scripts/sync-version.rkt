@@ -99,6 +99,7 @@
       (string-contains? s "/.git/")
       (string-contains? s "/.planning/")
       (string-contains? s "/docs/planning/")
+      (string-contains? s "/docs/architecture/")  ;; architecture policy artifacts are governance, not version targets
       (string-contains? s "/.pi/")
       (string-contains? s "/examples/README.md")
       (string-contains? s "/docs/tutorials/")
@@ -282,8 +283,20 @@
          (values code out))
        (define-values (add-code add-out) (git-run "add" "info.rkt" "README.md"))
        (when all-mode?
-         ;; Stage all changed .md files in docs/ and wiki-src/
-         (git-run "add" "docs/" "wiki-src/"))
+         ;; Stage ONLY the specific .md files that sync-version modified,
+         ;; NOT the entire docs/ tree (which includes governance artifacts).
+         ;; This prevents accidental staging of docs/architecture/*.rktd
+         ;; or other files touched by unrelated prep steps.
+         (define changed-md-files
+           (for/list ([f (in-directory (current-directory))]
+                      #:when (and (not (skip-md-path? f))
+                                  (let ([ext (filename-extension f)])
+                                    (and ext (equal? (bytes->string/utf-8 ext) "md")))
+                                  (not (equal? (path->string (file-name-from-path f)) "README.md"))
+                                  (not (member (path->string (file-name-from-path f)) EXCLUDED-MD-FILES))))
+             (path->string f)))
+         (unless (null? changed-md-files)
+           (apply git-run "add" changed-md-files)))
        (define commit-msg (format "chore: sync version refs to ~a [auto]" version))
        (define-values (commit-code commit-out) (git-run "commit" "-m" commit-msg))
        (cond

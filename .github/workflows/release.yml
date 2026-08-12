@@ -119,6 +119,21 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           racket scripts/lint-release-notes.rkt --version "${VERSION}" --check
 
+      - name: Architecture policy integrity check
+        run: |
+          echo "=== Architecture Policy Integrity Guard ==="
+          racket scripts/release-integrity-guard.rkt --validate-rktd
+          racket scripts/release-integrity-guard.rkt --snapshot > /tmp/arch-integrity-snapshot.json
+          echo "Snapshot captured: $(wc -l < /tmp/arch-integrity-snapshot.json) artifacts"
+          echo "All protected architecture-policy artifacts are byte-stable and syntactically valid."
+
+      - name: Upload integrity snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: arch-integrity-snapshot-${{ steps.version.outputs.VERSION }}
+          path: /tmp/arch-integrity-snapshot.json
+          retention-days: 30
+
       - name: Determine checkout ref
         id: checkout
         run: |
