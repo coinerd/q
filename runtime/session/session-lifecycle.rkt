@@ -416,44 +416,41 @@
   (unless (agent-session-active? sess)
     (raise-session-error (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
                          (agent-session-session-id sess)))
-  ;; Atomically exclude both another prompt and manual/automatic compaction.
-  (unless (try-claim-prompt! sess)
-    (define sid (session-identity-facet-session-id (session->identity-facet sess)))
-    (define reason
-      (if (agent-session-compacting? sess)
-          "Session compaction is active — retry the prompt after it completes"
-          (format "Prompt already running — session ~a is processing. Use /interrupt to cancel."
-                  sid)))
-    (emit-session-event! (session-tool-facet-event-bus (session->tool-facet sess))
-                         sid
-                         "runtime.error"
-                         (hasheq 'error reason))
-    (raise
-     (exn:fail:session:busy (format "run-prompt!: ~a" reason) (current-continuation-marks) sid)))
   (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
   (define sid (session-identity-facet-session-id (session->identity-facet sess)))
-  ;; Bind one fresh prompt-turn identity to this prompt's cancellation token.
-  ;; Inner model iterations have their own IDs, but user interruption targets
-  ;; this stable outer turn.
-  (define active-turn-id (begin-session-turn! sess))
-  ;; F2: Emit turn.started immediately so TUI shows activity before context
-  ;; build + compaction. Inner turn.started events remain idempotent.
-  (publish! bus
-            (make-event "turn.started"
-                        (current-inexact-milliseconds)
-                        sid
-                        active-turn-id
-                        (hasheq 'scope "prompt")))
-  ;; begin-session-turn! may install a token when this session had none.
-  (define base-cfg (session-provider-facet-config (session->provider-facet sess)))
   ;; Safety-net control: emit cleanup turn.completed only on abnormal exit.
   ;; Normal turn flow already emits turn.completed from the core loop.
   (define emit-cleanup-turn-completed? (box #t))
   (define termination-reason (box 'error))
-  ;; #1391: Inject session index into config for session_recall tool access
+  ;; Atomically exclude both another prompt and manual/automatic compaction.
+  ;; Acquisition belongs in the before-thunk: a denied contender must not run
+  ;; cleanup, while every failure after a successful claim must release it.
   (dynamic-wind
-   void
    (lambda ()
+     (unless (try-claim-prompt! sess)
+       (define reason
+         (if (agent-session-compacting? sess)
+             "Session compaction is active — retry the prompt after it completes"
+             (format "Prompt already running — session ~a is processing. Use /interrupt to cancel."
+                     sid)))
+       (emit-session-event! bus sid "runtime.error" (hasheq 'error reason))
+       (raise
+        (exn:fail:session:busy (format "run-prompt!: ~a" reason) (current-continuation-marks) sid))))
+   (lambda ()
+     ;; Bind one fresh prompt-turn identity to this prompt's cancellation token.
+     ;; Inner model iterations have their own IDs, but user interruption targets
+     ;; this stable outer turn.
+     (define active-turn-id (begin-session-turn! sess))
+     ;; F2: Emit turn.started immediately so TUI shows activity before context
+     ;; build + compaction. Inner turn.started events remain idempotent.
+     (publish! bus
+               (make-event "turn.started"
+                           (current-inexact-milliseconds)
+                           sid
+                           active-turn-id
+                           (hasheq 'scope "prompt")))
+     ;; begin-session-turn! may install a token when this session had none.
+     (define base-cfg (session-provider-facet-config (session->provider-facet sess)))
      ;; #1391: Inject session index into config for session_recall tool access
      (define idx (agent-session-index sess))
      ;; v0.14.3: Handle both mutable (make-hash) and immutable (hasheq) configs.
