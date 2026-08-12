@@ -2,7 +2,7 @@
 
 **Campaign status:** IN PROGRESS — W0/W1/W2/W3/W4/W5 DONE; W6 release active
 **Plan-ID / Hash:** `bef99c6431462869fc9e750a05cd834e13b921a2a3070af557f07c6b50856413`
-**Baseline SHA:** v0.99.92 release `128f825977a46f7b1c452f245dcac96f4d8f7726`
+**Baseline SHA:** v0.99.93 release `128f825977a46f7b1c452f245dcac96f4d8f7726`
 **Current wave:** W3 DONE — #9277 canonical prompt terminal contract
 **Next:** W4 #9280 cancellation-aware retry backoff + partial metadata
 

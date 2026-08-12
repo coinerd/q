@@ -1,8 +1,8 @@
-# Session Lifecycle Trace & Responsibility Map — v0.99.92 W0
+# Session Lifecycle Trace & Responsibility Map — v0.99.93 W0
 
 **Status:** CHARACTERIZATION BASELINE
 **Baseline:** v0.99.91 release `a4b85569`
-**Machine oracle:** `docs/architecture/session-lifecycle-trace-v0.99.92.rktd`
+**Machine oracle:** `docs/architecture/session-lifecycle-trace-v0.99.93.rktd`
 **Scope:** evidence only; no production behavior or API changed
 
 ## Executive decision

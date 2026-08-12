@@ -1,8 +1,8 @@
-# Context-Build Request/Result Boundary — v0.99.92 W2
+# Context-Build Request/Result Boundary — v0.99.93 W2
 
 **Status:** IN PROGRESS — implementation complete, gates pending
-**Baseline:** v0.99.92 W1 merge `d190a36b`
-**Trace oracle:** `docs/architecture/session-lifecycle-trace-v0.99.92.rktd`
+**Baseline:** v0.99.93 W1 merge `d190a36b`
+**Trace oracle:** `docs/architecture/session-lifecycle-trace-v0.99.93.rktd`
 **MA-10:** stays OPEN; this wave makes the Context Assembly boundary explicit.
 
 ## Goal and boundary
@@ -33,7 +33,7 @@ and cross-turn state session-owned.
   the historical `DEFAULT-TOKEN-BUDGET-THRESHOLD`), a behavioral no-op.
 - Trace oracle: the `normal-success` path records the `context-build` boundary
   as the zero-effect step; `working-set-config` stays in its correct order.
-- `docs/reports/CONTEXT-BUILD-BOUNDARY-v0.99.92.md` (this report).
+- `docs/reports/CONTEXT-BUILD-BOUNDARY-v0.99.93.md` (this report).
 
 ## Ownership preservation
 

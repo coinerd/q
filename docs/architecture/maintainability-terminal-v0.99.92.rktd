@@ -93,9 +93,9 @@
                    .
                    ("runtime/session/session-prompt-preparation.rkt"
                     "runtime/session/session-context-boundary.rkt"
-                    "docs/architecture/orchestration-surface-reduction-v0.99.92.rktd"
-                    "docs/reports/PROMPT-PREPARATION-EXTRACTION-v0.99.92.md"
-                    "docs/reports/CONTEXT-BUILD-BOUNDARY-v0.99.92.md"))
+                    "docs/architecture/orchestration-surface-reduction-v0.99.93.rktd"
+                    "docs/reports/PROMPT-PREPARATION-EXTRACTION-v0.99.93.md"
+                    "docs/reports/CONTEXT-BUILD-BOUNDARY-v0.99.93.md"))
                   (id . MA-10)
                   (metrics
                    .
@@ -104,7 +104,7 @@
                            (hotspot . 7358)
                            (loc . 566)
                            (pure-modules-testable-without-session . #t)))
-                  (resolved-by . "v0.99.92 W0-W3; terminal decision at W4")
+                  (resolved-by . "v0.99.93 W0-W3; terminal decision at W4")
                   (title
                    .
                    "session-lifecycle.rkt bundles multiple responsibilities"))
@@ -124,7 +124,7 @@
                   (id . MA-12)
                   (resolved-by . "closed invariant; re-verified W2/W4/W5")
                   (title . "Hidden cross-turn state"))))
-        (milestone . v0.99.92)
+        (milestone . v0.99.93)
         (production-change . #f)
         (schema-version . 1)
         (scope . repository-wide-maintainability-reassessment)

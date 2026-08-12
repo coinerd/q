@@ -1,8 +1,8 @@
-# Orchestration Surface Reduction — v0.99.92 W3
+# Orchestration Surface Reduction — v0.99.93 W3
 
 **Status:** HISTORICAL W3 COMPLETE — original rejection evidence retained; later terminal dispositions annotated
-**Baseline:** v0.99.92 W2 merge `e13a48e6`
-**Machine evidence:** `docs/architecture/orchestration-surface-reduction-v0.99.92.rktd`
+**Baseline:** v0.99.93 W2 merge `e13a48e6`
+**Machine evidence:** `docs/architecture/orchestration-surface-reduction-v0.99.93.rktd`
 **MA-10 at W3:** remained OPEN; W4 later CLOSED MA-10, and v0.99.93 #9281 extracted the separately deferred W3-F2 scope.
 
 ## Decision

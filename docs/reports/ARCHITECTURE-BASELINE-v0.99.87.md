@@ -398,7 +398,7 @@ Allowed: OPEN, PARTIALLY_RESOLVED, RESOLVED, STALE_INCORRECT
 | F06_PROVIDER_PROTOCOL_LEAKAGE | Provider-specific stream parsing leaks into Agent Core | RESOLVED | llm/stream.rkt, tests/test-provider-transport-architecture.rkt |
 | F07_AGENT_ITERATION_RUNTIME_BOUNDARY | Agent Iteration imports Runtime implementation modules | RESOLVED | docs/architecture/dependency-policy.rktd, tests/test-arch-fitness.rkt |
 | F08_SESSION_LIFECYCLE_RESPONSIBILITIES | Session Lifecycle concentrates orchestration and preparation responsibilities | OPEN | runtime/session/session-lifecycle.rkt |
-| F09_SETTINGS_QUERY_SURFACE | Settings Query has a high managed surface; policy records 226 provides but source exports count 53 — semantics differ, decide before v0.99.92 | OPEN | runtime/settings-query.rkt, docs/architecture/dependency-policy.rktd, tests/test-architecture-baseline.rkt |
+| F09_SETTINGS_QUERY_SURFACE | Settings Query has a high managed surface; policy records 226 provides but source exports count 53 — semantics differ, decide before v0.99.93 | OPEN | runtime/settings-query.rkt, docs/architecture/dependency-policy.rktd, tests/test-architecture-baseline.rkt |
 | F10_HIDDEN_PARAMETER_STATE | Parameters contain unclassified hidden cross-turn session state | RESOLVED | docs/architecture/parameter-inventory.rktd, tests/test-arch-parameters.rkt |
 | F11_CONTEXT_ASSEMBLY_COMPLEXITY | Context Assembly hidden state is resolved but cognitive complexity remains | PARTIALLY_RESOLVED | runtime/context-assembly/, tests/test-rollback-session-ownership.rkt |
 | F12_DOCUMENTATION_ONLY_ENFORCEMENT | Architecture boundaries rely only on documentation | RESOLVED | tests/test-arch-fitness.rkt, docs/architecture/dependency-policy.rktd |

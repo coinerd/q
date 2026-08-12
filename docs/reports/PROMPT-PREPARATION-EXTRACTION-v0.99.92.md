@@ -1,8 +1,8 @@
-# Prompt Preparation Extraction — v0.99.92 W1
+# Prompt Preparation Extraction — v0.99.93 W1
 
 **Status:** IN PROGRESS — implementation complete, gates pending
-**Baseline:** v0.99.92 W0 merge `16c17030`
-**Trace oracle:** `docs/architecture/session-lifecycle-trace-v0.99.92.rktd`
+**Baseline:** v0.99.93 W0 merge `16c17030`
+**Trace oracle:** `docs/architecture/session-lifecycle-trace-v0.99.93.rktd`
 **MA-10:** stays OPEN; this wave supplies trace-equivalent extraction evidence.
 
 ## Goal and boundary
