@@ -74,7 +74,9 @@
                   retry-exhausted-attempts
                   retry-exhausted-total-delay-ms
                   retry-exhausted-error-history
-                  retry-exhausted-original-exn)
+                  retry-exhausted-original-exn
+                  retry-cancelled?
+                  find-retry-exhausted)
          (only-in "../../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "../context/context-pressure.rkt" check-context-pressure)
          "session-persistence.rkt"
@@ -222,7 +224,15 @@
   (define session-dir (agent-session-session-dir sess))
   (define tracer (make-trace-logger bus session-dir #:enabled? #t))
   (start-trace-logger! tracer)
-  (with-handlers ([exn:fail?
+  (with-handlers ([retry-cancelled?
+                   ;; W0-F5: a cancellation that aborted retry backoff terminates
+                   ;; the prompt as cancelled, never as a provider error.
+                   (lambda (e)
+                     (stop-trace-logger! tracer)
+                     (make-loop-result context-with-system
+                                       'cancelled
+                                       (hasheq 'reason "cancellation-token" 'retry-aborted #t)))]
+                  [exn:fail?
                    (lambda (e)
                      ;; Flush partial messages from stream errors to session.jsonl.
                      ;; Recovery data travels explicitly via exn:fail:stream-error,
@@ -238,17 +248,20 @@
                        (append-session-entries! sess partial-msgs))
                      ;; Emit runtime.error event with classified error-type
                      (define error-type (classify-error e))
-                     ;; A3: Include retry metadata if retries were attempted
+                     ;; A3: Include retry metadata if retries were attempted.
+                     ;; W0-F5: deep-unwrap so partial recovery wrapping cannot hide
+                     ;; the retry-exhausted metadata inside exn:fail:stream-error.
+                     (define retry-info (find-retry-exhausted e))
                      (define base-payload (error-payload (exn-message e) error-type))
                      (define payload
-                       (if (retry-exhausted? e)
+                       (if retry-info
                            (hash-set* (payload->hash base-payload)
                                       'retries-attempted
-                                      (retry-exhausted-attempts e)
+                                      (retry-exhausted-attempts retry-info)
                                       'total-retry-delay-ms
-                                      (retry-exhausted-total-delay-ms e)
+                                      (retry-exhausted-total-delay-ms retry-info)
                                       'errorHistory
-                                      (retry-exhausted-error-history e))
+                                      (retry-exhausted-error-history retry-info))
                            (payload->hash base-payload)))
                      (emit-session-event! bus sid "runtime.error" payload)
                      ;; The outer prompt lifecycle owns the canonical prompt terminal.

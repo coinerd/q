@@ -45,6 +45,19 @@ interrupt correlation. Inner `stream.turn.completed`/cancellation events remain
 model-turn observations. Cleanup ordering is `finish interruption → canonical
 terminal while prompt ownership is held → guaranteed prompt release`.
 
+## Later retry disposition (v0.99.93 #9280)
+
+Retry backoff is now cancellation-aware: `with-auto-retry` polls the session
+cancellation token during the exponential-backoff sleep (50 ms slices) and
+raises `retry-cancelled` immediately when the user interrupts, instead of
+waiting out the full delay (up to 60 s). `retry-cancelled` is never retried and
+never mis-classified as a transient provider error; the dispatch layer converts
+it to a `'cancelled` prompt termination with the canonical terminal. Partial
+recovery wrapping can no longer hide retry metadata: the dispatch error handler
+deep-unwraps `exn:fail:stream-error` chains (`find-retry-exhausted`) so
+`retries-attempted`, `total-retry-delay-ms`, and `errorHistory` survive
+partial-message wrapping in the `runtime.error` payload.
+
 ## Ordered path map
 
 The schema-v2 oracle separates these observable variants instead of treating a
@@ -182,7 +195,7 @@ terminal behavior, classification, and source anchor. Important boundaries are:
 | W0-F2 | Medium / DEFERRED | Runtime Session | `W1 #9243 preserve; W4 #9246 terminal decision` | Normal, error, and correlated cancellation use different terminal identities/events. |
 | W0-F3 | High / DEFERRED | Runtime Session | `W4 #9246 assign separate concurrency milestone` | Close does not coordinate with an active prompt/repository writer. |
 | W0-F4 | Medium / DEFERRED | Runtime Compaction | `W3 #9245 locality assessment; W4 #9246 decision` | Automatic compaction completion/cooldown follows block/body error; start publication failure leaks ownership. |
-| W0-F5 | Medium / DEFERRED | Runtime Retry | `W4 #9246 terminal decision` | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
+| W0-F5 | Medium / DEFERRED | Runtime Retry | `W4 #9246 terminal decision; resolved in v0.99.93 #9280` | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
 
 No finding was silently repaired in W0. W0-F1/F2 constrained the original
 W1–W3 equivalence; later v0.99.93 terminal dispositions are recorded separately
@@ -231,7 +244,7 @@ This appendix is generated from the machine oracle. Each row is checked for exac
 | `close-active-prompt` | close | none | `no-prompt-claim-check → close-while-active → repository-close → prompt-index-rebuild-can-follow → prompt-session-updated-can-follow` |
 | `retry-success` | retry | none | `failed-attempt → retry-decision → retry-event → sleep → reattempt → success-health-reset` |
 | `retry-exhausted` | retry | none | `budget-denies → retry-exhausted-raise → retry-metadata → runtime-error → error-path` |
-| `retry-exhausted-partial` | retry | none | `exhaustion → partial-wrap → partial-persist → metadata-hidden` |
+| `retry-exhausted-partial` | retry | none | `exhaustion → partial-wrap → partial-persist → metadata-preserved` |
 | `retry-held-circuit` | retry | none | `held-detected → circuit-callback → circuit-event → no-retry` |
 | `retry-progressive-circuit` | retry | none | `stall-count → threshold → circuit-event → exhaustion` |
 | `retry-health-gate` | retry | none | `record-failure → health-check → health-event → deny` |

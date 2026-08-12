@@ -378,4 +378,8 @@
        (risk
         .
         "TUI state type definitions with 358 provides — all UI state accessors and predicates; score 49868")
-       (owner . "tui"))))))
+       (owner . "tui"))
+      ("runtime/auto-retry.rkt"
+       (risk
+        . "Retry engine: exponential backoff, per-type budgets, cumulative ceiling, circuit breakers, partial-recovery unwrap, and cancellation-aware sleep (v0.99.93 #9280)")
+       (owner . "runtime"))))))

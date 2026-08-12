@@ -19,7 +19,9 @@
          racket/async-channel
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         (only-in "../util/message/protocol-types.rkt" loop-result-termination-reason)
+         (only-in "../util/message/protocol-types.rkt"
+                  loop-result-termination-reason
+                  loop-result-metadata)
          "../tui/render-loop/watchdog.rkt"
          racket/contract
          (only-in "../util/event/event-contracts.rkt" turn-cancelled-payload/c))
@@ -339,6 +341,82 @@
       (check-false (eq? next-token initial-token))
       (check-false (cancellation-token-cancelled? next-token))
       (guarded-set-prompt-running! sess #f)
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "interrupt during retry backoff terminates the prompt cancelled (F5a)"
+      (define dir (make-temporary-file "q-retry-cancel-~a" 'directory))
+      (define bus (make-event-bus))
+      (define observed (box '()))
+      (subscribe! bus (lambda (evt) (set-box! observed (append (unbox observed) (list evt)))))
+      (define retry-started (make-semaphore 0))
+      (define provider
+        (make-provider (lambda () "retry-cancel-mock")
+                       (lambda () (hash 'streaming #t 'token-counting #t))
+                       (lambda (_request) (make-model-response '() (hash) "mock" 'stop))
+                       (lambda (_request)
+                         ;; Always fail with a retryable provider error so retry backoff engages
+                         (raise (make-exn:fail "HTTP 503 service unavailable"
+                                               (current-continuation-marks))))))
+      (define sess
+        (make-agent-session (hasheq 'session-dir
+                                    dir
+                                    'event-bus
+                                    bus
+                                    'provider
+                                    provider
+                                    'tool-registry
+                                    #f
+                                    'model-name
+                                    "test"
+                                    'system-instructions
+                                    '())))
+      (define result-ch (make-async-channel))
+      (thread (lambda ()
+                (define-values (_updated result) (run-prompt! sess "trigger retry"))
+                (async-channel-put result-ch result)))
+      ;; Wait for the first retry backoff to start (auto-retry.start is emitted
+      ;; before the cancellable sleep), then interrupt.
+      (define started
+        (let loop ([deadline (+ (current-inexact-milliseconds) 10000)])
+          (cond
+            [(>= (current-inexact-milliseconds) deadline) #f]
+            [(for/or ([evt (in-list (unbox observed))])
+               (string=? (event-ev evt) "auto-retry.start"))
+             #t]
+            [else
+             (sleep 0.02)
+             (loop deadline)])))
+      (check-true started "auto-retry.start should fire before backoff sleep")
+      (define turn-id (active-session-turn-id sess))
+      (publish! bus
+                (make-event "interrupt.requested"
+                            (current-inexact-milliseconds)
+                            (agent-session-session-id sess)
+                            turn-id
+                            (hasheq 'request-id
+                                    "retry-cancel-request"
+                                    'target-session-id
+                                    (agent-session-session-id sess)
+                                    'target-turn-id
+                                    turn-id)))
+      (define cancelled-result (sync/timeout 8 result-ch))
+      (check-not-false cancelled-result
+                       "prompt must terminate promptly after interrupt during backoff")
+      (check-equal? (loop-result-termination-reason cancelled-result)
+                    'cancelled
+                    "backoff abort must terminate the prompt as cancelled")
+      (check-true (hash-ref (loop-result-metadata cancelled-result) 'retry-aborted #f)
+                  "metadata marks the retry-backoff abort")
+      (check-false (for/or ([evt (in-list (unbox observed))])
+                     (equal? (event-ev evt) "turn.cancelled"))
+                   "canonical prompt terminal is turn.completed, not turn.cancelled")
+      (define terminals
+        (filter (lambda (evt)
+                  (and (equal? (event-ev evt) "turn.completed")
+                       (equal? (hash-ref (event-payload evt) 'scope #f) "prompt")))
+                (unbox observed)))
+      (check-equal? (length terminals) 1)
+      (check-equal? (hash-ref (event-payload (car terminals)) 'reason) "cancelled")
       (delete-directory/files dir #:must-exist? #f))))
 
 (module+ test

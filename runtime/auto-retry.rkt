@@ -11,7 +11,9 @@
          racket/random
          racket/math
          "../llm/provider-errors.rkt"
-         "../llm/stream.rkt")
+         "../llm/stream.rkt"
+         (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
+         (only-in "../util/exn.rkt" exn:fail:stream-error? exn:fail:stream-error-original-exn))
 
 ;; Predicates
 (provide retryable-error?
@@ -45,6 +47,7 @@
                                #:stall-min-output-chars exact-nonnegative-integer?
                                #:stall-max-consecutive exact-nonnegative-integer?
                                #:health-check-proc (or/c procedure? #f)
+                               #:cancellation-token (or/c cancellation-token? #f)
                                #:on-success (or/c procedure? #f))
                 any/c)]
           [with-retry-policy (->* (retry-policy? procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
@@ -78,6 +81,10 @@
          retry-exhausted-total-delay-ms
          retry-exhausted-error-history
          retry-exhausted-delays
+         ;; Cancellation-aware backoff (W0-F5)
+         retry-cancelled
+         retry-cancelled?
+         find-retry-exhausted
          ;; Struct for retry policy (A21)
          retry-policy
          retry-policy?
@@ -198,6 +205,34 @@
         exn:fail
         (original-exn attempts last-error-type total-delay-ms error-history delays)
   #:transparent)
+
+;; Raised when the cancellation token fires during backoff sleep (W0-F5).
+;; Deliberately NOT retried: with-auto-retry's handler re-raises it immediately
+;; so a cancellation can never be mis-classified as a transient provider error.
+(struct retry-cancelled exn:fail () #:transparent)
+
+;; Deep-unwrap retry metadata (W0-F5): partial-recovery wrapping may re-wrap a
+;; retry-exhausted inside exn:fail:stream-error. This walks the chain so the
+;; metadata (attempts, delays, history) survives partial wrapping.
+(define (find-retry-exhausted exn)
+  (let loop ([e exn])
+    (cond
+      [(retry-exhausted? e) e]
+      [(and (exn:fail:stream-error? e) (exn:fail:stream-error-original-exn e))
+       (loop (exn:fail:stream-error-original-exn e))]
+      [else #f])))
+
+;; Cancellation-aware sleep: polls the token every 50ms so a user interrupt
+;; during backoff aborts promptly instead of waiting out the full delay (W0-F5).
+(define (sleep-cancellable! delay-ms token)
+  (define deadline (+ (current-inexact-milliseconds) delay-ms))
+  (let poll ()
+    (when (and token (cancellation-token-cancelled? token))
+      (raise (retry-cancelled "retry backoff aborted by cancellation" (current-continuation-marks))))
+    (define remaining (- deadline (current-inexact-milliseconds)))
+    (when (> remaining 0)
+      (sleep (min 0.05 (/ remaining 1000.0)))
+      (poll))))
 
 ;; ============================================================
 ;; Predicates
@@ -428,6 +463,7 @@
          #:stall-min-output-chars [stall-min-chars default-stall-min-output-chars]
          #:stall-max-consecutive [stall-max-consecutive default-stall-max-consecutive]
          #:health-check-proc [health-check-proc #f]
+         #:cancellation-token [cancellation-token #f]
          #:on-success [on-success #f])
   (define now (or now-proc current-inexact-milliseconds))
   (define start-ms (now))
@@ -443,7 +479,8 @@
              [delay-history '()] ; list of actual delays used
              [consecutive-stalls 0]) ; v0.99.82 W1 NR-1: consecutive minimal-output stalls
     (with-handlers
-        ([exn:fail?
+        ([retry-cancelled? (lambda (exn) (raise exn))] ; never retry a cancellation (W0-F5)
+         [exn:fail?
           (lambda (exn)
             (define err-type (classify-error exn))
             (define current-type-count (hash-ref type-attempts err-type 0))
@@ -471,6 +508,8 @@
             ;; Can retry if: retryable AND not held AND not progressive-break
             ;; AND health-check passes AND under budget
             (match (and (retryable-error? exn)
+                        (not (and cancellation-token
+                                  (cancellation-token-cancelled? cancellation-token)))
                         (not (held-request? exn))
                         (not progressive-break?)
                         (or (not health-check-proc) (health-check-proc exn attempt))
@@ -511,7 +550,7 @@
                ;; Call retry callback if provided (include error-type and selected delay)
                (when on-retry
                  (on-retry (add1 attempt) max-retries next-delay (exn-message exn) err-type))
-               (sleep (/ next-delay 1000.0))
+               (sleep-cancellable! next-delay cancellation-token)
                (loop (add1 attempt)
                      next-delay
                      (+ total-delay next-delay)
@@ -524,16 +563,22 @@
                ;; A3: Wrap in retry-exhausted if we attempted retries
                (define final-history (append error-history (list err-type)))
                (define final-delays delay-history)
-               (if (> attempt 0)
-                   (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
-                                           (current-continuation-marks)
-                                           exn
-                                           attempt
-                                           last-error-type
-                                           total-delay
-                                           final-history
-                                           final-delays))
-                   (raise exn))]))])
+               (cond
+                 ;; A cancelled token must surface as retry-cancelled, never as
+                 ;; exhaustion of a provider error (W0-F5).
+                 [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
+                  (raise (retry-cancelled "retry aborted by cancellation"
+                                          (current-continuation-marks)))]
+                 [(> attempt 0)
+                  (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
+                                          (current-continuation-marks)
+                                          exn
+                                          attempt
+                                          last-error-type
+                                          total-delay
+                                          final-history
+                                          final-delays))]
+                 [else (raise exn)])]))])
       (define result (thunk))
       ;; v0.99.82 W2 NR-3: Notify success hook for health tracking.
       (when on-success
