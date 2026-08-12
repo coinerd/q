@@ -8,7 +8,7 @@
 | W1 | ✅ pure plan matrix 19/19 ×3; lifecycle 68/68 | ✅ 1076/15642 at final candidate `51a5ee04` | pure `build-prompt-preparation-plan` + `append-to-leaf/pure`; effect order E2→E3→E4 unchanged; no-mutation/no-I/O | ✅ Arch 25 files / 262 tests incl R-18 purity gate | ✅ APPROVED (0M/2m/2i; MINORs folded) | ✅ DONE — merge d190a36b, PR #9273, CI 17/17 |
 | W2 | ✅ boundary matrix 8/8 ×3; W1 plan 19/19 | ✅ 1077/15651 | explicit request/result; Runtime-owned Context Assembly; session-owned state; E2/E3/E4 order unchanged | ✅ Broad 1263/17918 (8 skips) | ✅ APPROVED (0M/3m/2i; MINORs folded) | ✅ DONE — merge e13a48e6, PR #9274, CI 17/17 |
 | W3 | ✅ rejection ledger 3/3 ×3; focused 17 files/96 | ✅ 1078/15654 at final candidate `73e6d101` | evidence-backed rejection; 6 blocks classified (5 reject, 1 defer W4); locality baseline 566/38/7924 | ✅ Arch 27 files | ✅ APPROVED (0M/1m/2i; MINOR folded) | ✅ DONE — merge 3773e6f8, PR #9275, CI 17/17 |
-| W4 | ✅ terminal ledger 3/3 | PENDING | MA-01..12 bijection; MA-10 CLOSED; guards GUARDED; wave findings #9276-#9281 | Arch PENDING | 🟡 review pending | IN PROGRESS |
+| W4 | ✅ terminal ledger 3/3 | ✅ 1079/15657 at final candidate `11be8782` | MA-01..12 bijection; MA-10 CLOSED; guards GUARDED; wave findings #9276-#9281 | ✅ Arch 28/277 | ✅ APPROVED after 1 remediation (final 0M/0m/3i) | ✅ DONE — merge b81446e1, PR #9282, CI 17/17 |
 | W5 | PENDING | PENDING | Security + Workflow + Smoke + Release + Manifest/Bundle/Main CI | Broad + Arch | PENDING | PENDING |
 
 ## W0 reproducible evidence
