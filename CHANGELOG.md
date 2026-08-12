@@ -14,6 +14,17 @@ Released 2026-08-12.
 
 - None. The v0.99.92 session-lifecycle work preserves effect order and observable behavior; no public API or configuration format changed.
 
+### Testing
+
+- Session lifecycle characterization oracle (33 path variants), pure prompt-preparation and context-build boundary matrices, orchestration-surface rejection ledger, terminal maintainability reassessment, and projection-truth enforcement.
+- Gates: Broad 1266/17927 (8 profile skips), Arch 29/280, Security 64/710, Workflows 29/162, TUI 84/1321, release-smoke 15/180, provider-smoke 7, Fast 1080/15660.
+
+### Operational / Release
+
+- v0.99.92 series closure: W0 Trace+Map, W1 Pure Prompt Preparation, W2 Context-Build Boundary, W3 Orchestration Surface (evidence-backed rejection), W4 Maintainability Reassessment (terminal MA-01..12, MA-10 CLOSED, MA-11/12 GUARDED), W5 Release.
+- No production provider, public API, or configuration format changed across the series.
+- Follow-up issues #9276-#9281 track deferred session-lifecycle/compaction/retry findings.
+
 ### Migration Notes
 
 - None required.
