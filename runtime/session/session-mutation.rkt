@@ -24,6 +24,10 @@
 ;; One atomic ownership boundary shared by prompts plus manual/automatic compaction.
 (define session-operation-lock (make-semaphore 1))
 (define current-prompt-operation-session (make-parameter #f))
+;; W0-F3: the thread that currently owns the prompt or compaction, so
+;; close-session! can detect same-thread close calls and skip the ownership
+;; wait (which would self-deadlock).
+(define ownership-owner-threads (make-weak-hasheq))
 
 (define (try-claim-compaction! sess [prompt-owned? #f])
   (call-with-semaphore session-operation-lock
@@ -38,29 +42,39 @@
                             ;; Only the automatic path may request a prompt-owned nested claim,
                             ;; and the dynamic owner must be this exact session.
                             (set-agent-session-compacting?! sess #t)
+                            (hash-set! ownership-owner-threads sess (current-thread))
                             #t]))))
 
 (define (release-compaction! sess)
   (call-with-semaphore session-operation-lock
                        (lambda ()
                          (when (agent-session-compacting? sess)
-                           (set-agent-session-compacting?! sess #f)))))
+                           (set-agent-session-compacting?! sess #f)
+                           (hash-remove! ownership-owner-threads sess)))))
 
 (define (try-claim-prompt! sess)
   (call-with-semaphore
    session-operation-lock
    (lambda ()
      (cond
+       ;; W0-F3: a closing session must never accept a new prompt — otherwise a
+       ;; prompt submitted during the close window could write after session.closed.
+       [(agent-session-closed? sess) #f]
        [(or (agent-session-prompt-running? sess) (agent-session-compacting? sess)) #f]
        [else
         (set-agent-session-prompt-running?! sess #t)
+        (hash-set! ownership-owner-threads sess (current-thread))
         #t]))))
+
+(define (prompt-owner-thread sess)
+  (hash-ref ownership-owner-threads sess #f))
 
 (define (release-prompt! sess)
   (call-with-semaphore session-operation-lock
                        (lambda ()
                          (when (agent-session-prompt-running? sess)
-                           (set-agent-session-prompt-running?! sess #f)))))
+                           (set-agent-session-prompt-running?! sess #f)
+                           (hash-remove! ownership-owner-threads sess)))))
 
 ;; v0.79.2 GAP-4: Injectable callback for persisting archived WS entries.
 ;; Signature: (-> ws-entry? void?). Runtime wires real implementation.
@@ -91,6 +105,7 @@
          release-compaction!
          try-claim-prompt!
          release-prompt!
+         prompt-owner-thread
          current-prompt-operation-session)
 
 ;; Valid session phases derived from boolean flags

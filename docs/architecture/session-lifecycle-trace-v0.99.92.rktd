@@ -784,7 +784,7 @@
                   (cleanup . closes-repository-while-prompt-may-write)
                   (follow-up
                    .
-                   "W4 #9246 assign separate concurrency milestone")
+                   "W4 #9246 assign separate concurrency milestone; resolved in v0.99.93 #9278")
                   (id . active-prompt-close)
                   (outcome . race-dependent)
                   (owner . runtime-session)
@@ -837,7 +837,15 @@
                   (backoff . cancellation-aware)
                   (metadata . preserved-through-partial-wrap)
                   (anchor . "runtime/auto-retry.rkt:sleep-cancellable! next-delay cancellation-token")
-                  (evidence . "tests/test-auto-retry.rkt:with-auto-retry: cancellation during backoff aborts immediately (F5a)"))))
+                  (evidence . "tests/test-auto-retry.rkt:with-auto-retry: cancellation during backoff aborts immediately (F5a)"))
+          #hasheq((id . W0-F3)
+                  (version . v0.99.93)
+                  (issue . 9278)
+                  (disposition . resolved)
+                  (close . waits-for-prompt-compaction-ownership)
+                  (ordering . session.updated-before-session.closed)
+                  (anchor . "runtime/agent-session.rkt:define default-close-ownership-timeout-ms")
+                  (evidence . "tests/test-session-cleanup.rkt:close-session! waits for an active prompt and orders session.updated before session.closed (F3)"))))
         (findings
          .
          (#hasheq((classification . DEFERRED)
@@ -1203,7 +1211,7 @@
                    .
                    (#hasheq((anchor
                              .
-                             "runtime/agent-session.rkt:(define (close-session! sess)")
+                             "runtime/agent-session.rkt:(define (close-session! sess #:timeout-ms")
                             (effect . no-prompt-claim-check))
                     #hasheq((anchor
                              .

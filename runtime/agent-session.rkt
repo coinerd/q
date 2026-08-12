@@ -110,6 +110,7 @@
          (only-in "../agent/registry-watcher.rkt" stop-registry-watcher!)
          "session/session-path.rkt")
 (require "session/session-mutation.rkt")
+(require (only-in "../util/cancellation.rkt" cancel-token!))
 
 (provide agent-session?
          ;; v0.32.8: Convenience accessors (stable API)
@@ -143,7 +144,7 @@
           [session-id (-> agent-session? string?)]
           [session-history (-> agent-session? (listof message?))]
           [session-active? (-> agent-session? boolean?)]
-          [close-session! (-> agent-session? void?)])
+          [close-session! (->* (agent-session?) (#:timeout-ms exact-positive-integer?) void?)])
          ;; v0.42.2: Session control contracts (B5-01)
          ;; Session controls
          (contract-out [set-model! (-> agent-session? string? void?)]
@@ -529,7 +530,9 @@
 (define (session-active? sess)
   (agent-session-active? sess))
 
-(define (close-session! sess)
+(define default-close-ownership-timeout-ms 30000)
+
+(define (close-session! sess #:timeout-ms [timeout-ms default-close-ownership-timeout-ms])
   (define sid (agent-session-session-id sess))
   ;; Guard: only execute cleanup once per session.
   (when (agent-session-closed? sess)
@@ -537,6 +540,34 @@
     (void))
   ;; Mark closed atomically so concurrent callers see the guard.
   (guarded-set-closed! sess #t)
+  ;; ── W0-F3: coordinate with prompt/compaction ownership ──
+  ;; A close must not deactivate the session or close its repository while a
+  ;; prompt is still writing (session.updated after session.closed). Request
+  ;; graceful shutdown, cancel the active provider stream, then wait (bounded)
+  ;; for prompt/compaction ownership to be released by their dynamic-wind
+  ;; cleanup before running the destructive steps below.
+  (when (or (agent-session-prompt-running? sess) (agent-session-compacting? sess))
+    (guarded-set-shutdown-requested! sess #t)
+    (define token (dict-ref (agent-session-config sess) 'cancellation-token #f))
+    (when token
+      (cancel-token! token))
+    ;; Same-thread close (e.g. an extension hook inside the prompt) must not
+    ;; wait for itself; the prompt cleanup performs the release on unwind.
+    (define owner-thread (prompt-owner-thread sess))
+    (unless (and owner-thread (eq? owner-thread (current-thread)))
+      (define deadline (+ (current-inexact-milliseconds) timeout-ms))
+      (let wait-for-ownership ()
+        (cond
+          [(and (not (agent-session-prompt-running? sess)) (not (agent-session-compacting? sess)))
+           (void)]
+          [(>= (current-inexact-milliseconds) deadline)
+           (log-warning
+            "session-lifecycle: close ~a timed out (~a ms) waiting for prompt/compaction ownership"
+            sid
+            timeout-ms)]
+          [else
+           (sleep 0.01)
+           (wait-for-ownership)]))))
   ;; ── Cleanup steps ──
   ;; Each step is wrapped to prevent one failure from suppressing subsequent steps.
   ;; Logging provides session and operation context for diagnosis.
