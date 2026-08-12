@@ -320,12 +320,88 @@
      '("lint" "test")))
   (check-equal? result 'ci_success))
 
+(test-case "classify-release-verdict: current release.yml topology (test→prepare→release-core) → workflow_success"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "success" 'head_branch "v0.99.92" 'run_number 672)
+     (hasheq 'test "success" 'prepare "success" 'release-core "success")
+     (hasheq 'release_exists #t 'tarball #t 'manifest #t)
+     "v0.99.92"))
+  (check-equal? result 'workflow_success))
+
+(test-case "classify-release-verdict: release-core failure → release_failed"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "failure" 'head_branch "v0.99.92" 'run_number 673)
+     (hasheq 'test "success" 'prepare "success" 'release-core "failure")
+     (hasheq 'release_exists #f 'tarball #f 'manifest #f)
+     "v0.99.92"))
+  (check-equal? result 'release_failed))
+
+(test-case "classify-release-verdict: reusable release-core group all success → workflow_success"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "success" 'head_branch "v0.99.92" 'run_number 674)
+     (hasheq 'test
+             "success"
+             'prepare
+             "success"
+             '|release-core / build|
+             "success"
+             '|release-core / smoke|
+             "success"
+             '|release-core / draft|
+             "success"
+             '|release-core / verify-draft|
+             "success"
+             '|release-core / publish|
+             "success"
+             '|release-core / verify-public|
+             "success")
+     (hasheq 'release_exists #t 'tarball #t 'manifest #t)
+     "v0.99.92"))
+  (check-equal? result 'workflow_success))
+
+(test-case "classify-release-verdict: reusable release-core group member failure → release_failed"
+  (define result
+    ((dynamic-script 'classify-release-verdict)
+     (hasheq 'conclusion "failure" 'head_branch "v0.99.92" 'run_number 675)
+     (hasheq 'test
+             "success"
+             'prepare
+             "success"
+             '|release-core / build|
+             "success"
+             '|release-core / smoke|
+             "success"
+             '|release-core / publish|
+             "failure"
+             '|release-core / verify-public|
+             "success")
+     (hasheq 'release_exists #f 'tarball #f 'manifest #f)
+     "v0.99.92"))
+  (check-equal? result 'release_failed))
+
 (test-case "classify-ci-verdict: all required matrix jobs in ci-required-jobs default"
   (define jobs (dynamic-script 'ci-required-jobs))
-  (check-not-false (member "test (ubuntu-latest, 8.10)" jobs))
-  (check-not-false (member "test (macos-latest, 8.10)" jobs))
+  (check-not-false (member "test (0)" jobs))
+  (check-not-false (member "test (1)" jobs))
+  (check-not-false (member "test (2)" jobs))
+  (check-not-false (member "test-aggregate" jobs))
+  (check-not-false (member "test-platform" jobs))
+  (check-not-false (member "test-cross-version" jobs))
   (check-not-false (member "smoke (ubuntu-latest)" jobs))
-  (check-not-false (member "security" jobs)))
+  (check-not-false (member "workflows (0)" jobs))
+  (check-not-false (member "workflows (1)" jobs))
+  (check-not-false (member "workflows-aggregate" jobs))
+  (check-not-false (member "gsd-governance" jobs))
+  (check-not-false (member "abstraction-audit" jobs))
+  (check-not-false (member "security" jobs))
+  (check-not-false (member "release-dry-run" jobs))
+  (check-false (member "test (ubuntu-latest, 8.10)" jobs))
+  (check-false (member "test (macos-latest, 8.10)" jobs))
+  (check-false (member "lint-alignment" jobs))
+  (check-false (member "inter-wave-gate" jobs)))
 
 ;; ============================================================
 ;; W6 (#8568): Lifecycle transition model tests
@@ -444,3 +520,77 @@
 (test-case "can-close: result is milestone-lifecycle-transition-result?"
   (define r ((dynamic-script 'can-close-milestone?) 'workflow_success 'ci_success))
   (check-pred milestone-lifecycle-transition-result? r))
+
+;; ---------------------------------------------------------------------------
+;; #9121: ci-required-jobs drift guard — the milestone gate must track the
+;; live ci.yml job topology (actions API job names) so closure checks do not
+;; produce false CI-green failures. `release-readiness` is skipped on main
+;; pushes and must not be required.
+;; ---------------------------------------------------------------------------
+(test-case "ci-required-jobs: matches current ci.yml topology (no stale names)"
+  (define required (dynamic-script 'ci-required-jobs))
+  (define stale
+    '("lint-alignment" "inter-wave-gate"
+                       "smoke (macos-latest)"
+                       "test (ubuntu-latest, 8.10)"
+                       "test (ubuntu-latest, 8.11)"
+                       "test (macos-latest, 8.10)"))
+  (for ([s (in-list stale)])
+    (check-false (member s required)))
+  (check-false (member "release-readiness" required))
+  (for ([job (in-list '("lint" "test (0)"
+                               "test (1)"
+                               "test (2)"
+                               "test-aggregate"
+                               "test-platform"
+                               "test-cross-version"
+                               "security"
+                               "release-dry-run"
+                               "smoke (ubuntu-latest)"
+                               "workflows (0)"
+                               "workflows (1)"
+                               "workflows-aggregate"
+                               "gsd-governance"
+                               "abstraction-audit"))])
+    (check-not-false (member job required))))
+
+(test-case "ci-required-jobs: classify-ci-verdict succeeds against a complete current-topology run"
+  (define jobs
+    (make-hash (map (lambda (job) (cons job "success"))
+                    '("lint" "test (0)"
+                             "test (1)"
+                             "test (2)"
+                             "test-aggregate"
+                             "test-platform"
+                             "test-cross-version"
+                             "security"
+                             "release-dry-run"
+                             "smoke (ubuntu-latest)"
+                             "workflows (0)"
+                             "workflows (1)"
+                             "workflows-aggregate"
+                             "gsd-governance"
+                             "abstraction-audit"))))
+  (define ci-run (hasheq 'status "completed" 'conclusion "success" 'run_number 1))
+  (check-equal? ((dynamic-script 'classify-ci-verdict) ci-run jobs (dynamic-script 'ci-required-jobs))
+                'ci_success))
+
+(test-case "ci-required-jobs: a current-topology run missing one shard fails closed"
+  (define jobs
+    (make-hash (map (lambda (job) (cons job "success"))
+                    '("lint" "test (0)"
+                             "test (1)"
+                             "test-aggregate"
+                             "test-platform"
+                             "test-cross-version"
+                             "security"
+                             "release-dry-run"
+                             "smoke (ubuntu-latest)"
+                             "workflows (0)"
+                             "workflows (1)"
+                             "workflows-aggregate"
+                             "gsd-governance"
+                             "abstraction-audit"))))
+  (define ci-run (hasheq 'status "completed" 'conclusion "success" 'run_number 1))
+  (check-equal? ((dynamic-script 'classify-ci-verdict) ci-run jobs (dynamic-script 'ci-required-jobs))
+                'ci_required_job_missing))

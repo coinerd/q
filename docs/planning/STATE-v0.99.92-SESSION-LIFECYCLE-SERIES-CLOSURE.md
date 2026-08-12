@@ -1,10 +1,10 @@
 # State: v0.99.92 — Session Lifecycle Thinning, Reassessment & Series Closure
 
-**Campaign status:** IN PROGRESS
+**Campaign status:** ✅ RELEASED — v0.99.92
 **Plan-ID / Hash:** `daa7388354f85b55af15d0c5b1bd203c495103cd2b1c024683bd99a1c4ecec5d`
 **Baseline SHA:** v0.99.91 release `a4b85569ff0dbe7971c3fec12babdb3fccbdd329`
-**Current wave:** W4 DONE
-**Next:** W5 — Series Closure and Release (#9247)
+**Current wave:** W5 DONE
+**Next:** v1.0.0 readiness (next milestone)
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|
@@ -13,6 +13,6 @@
 | W2 | ✅ DONE | #9274 | e13a48e6 | APPROVED (0M/3m/2i; MINORs folded) | explicit context-build request/result; boundary 8x3; lifecycle 68; ownership/context 184; Arch 26/271; Broad 1263/17918 (8 skips); Fast 1077/15651; session-lifecycle 566 LOC; CI 17/17 |
 | W3 | ✅ DONE | #9275 | 3773e6f8 | APPROVED (0M/1m/2i; MINOR folded) | evidence-backed rejection ledger; 6 blocks classified (5 reject, 1 defer W4); ledger 3x; focused 17 files/96; Arch 27; Fast 1078/15654; CI 17/17; no production change |
 | W4 | ✅ DONE | #9282 | b81446e1 | APPROVED after 1 remediation (final 0M/0m/3i) | terminal MA-01..12 ledger; MA-10 CLOSED; MA-11/12 GUARDED; wave findings #9276-#9281; ledger 3x; Arch 28/277; Fast 1079/15657; CI 17/17 |
-| W5 | PENDING | — | — | — | — |
+| W5 | ✅ DONE / RELEASED | #9283 | 184bfb66 + repair #9284 128f8259 | APPROVED (0M/1m/3i); release-notes repair | projection hygiene; Broad 1266/17927 (8 skips); Arch 29/280; Security 64/710; Workflows 29/162; TUI 84/1321; release-smoke 15/180; Fast 1080/15660; CI 17/17; tag v0.99.92 @ 128f8259 (obj 0b4a9013); run 31570806686; public bundle verified |
 
 MA-10 CLOSED (W4 terminal decision); MA-11 and MA-12 GUARDED. W5 closes the series; it cannot close with an unassigned Critical/High finding or stale projection.
