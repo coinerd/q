@@ -396,6 +396,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v0.99.92** — Features
+
 **v0.99.91** — Features
 
 **v0.99.90** — Features
