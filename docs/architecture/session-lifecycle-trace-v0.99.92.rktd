@@ -878,10 +878,6 @@
                    .
                    (#hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:guarded-set-config!")
-                            (effect . working-set-config))
-                    #hasheq((anchor
-                             .
                              "runtime/session/session-lifecycle.rkt:try-claim-prompt! sess")
                             (effect . claim))
                     #hasheq((anchor
@@ -906,16 +902,16 @@
                             (effect . parameterize-session-state))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-prompt-preparation.rkt:(define (build-prompt-preparation-plan")
-                            (effect . preparation-plan))
+                             "runtime/session/session-lifecycle.rkt:guarded-set-config!")
+                            (effect . working-set-config))
+                    #hasheq((anchor
+                             .
+                             "runtime/session/session-context-boundary.rkt:(define (context-build")
+                            (effect . context-build))
                     #hasheq((anchor
                              .
                              "runtime/session/session-lifecycle.rkt:buffer-or-append!-fn sess")
                             (effect . user-index-persistence))
-                    #hasheq((anchor
-                             .
-                             "runtime/session/session-lifecycle.rkt:build-session-context-for-prompt sess user-message")
-                            (effect . context-build))
                     #hasheq((anchor
                              .
                              "runtime/session/session-lifecycle.rkt:maybe-compact-context sess context-with-system")

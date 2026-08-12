@@ -38,7 +38,8 @@
                            #:index (or/c session-index? #f)
                            #:system-instructions (listof string?)
                            #:provider? boolean?
-                           #:working-set (or/c working-set? #f))
+                           #:working-set (or/c working-set? #f)
+                           #:max-tokens exact-nonnegative-integer?)
                 prompt-preparation-plan?)]
           [prompt-preparation-plan? (-> any/c boolean?)]
           [prompt-preparation-plan-canonical-user-message (-> prompt-preparation-plan? message?)]
@@ -76,7 +77,8 @@
                                        #:index [idx #f]
                                        #:system-instructions [system-instrs '()]
                                        #:provider? [provider? #f]
-                                       #:working-set [ws #f])
+                                       #:working-set [ws #f]
+                                       #:max-tokens [max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD])
   ;; 1. Resolve the base user message and its parent (string input only).
   (define-values (initial-msg parent-id)
     (if (string? user-message)
@@ -110,12 +112,12 @@
                    [ws-msgs (if ws
                                 (working-set-resolve-messages ws raw-msgs message-id)
                                 '())]
-                   [tiered (car (call-with-values (lambda ()
-                                                    (build-tiered-context-with-hooks
-                                                     raw-msgs
-                                                     #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD
-                                                     #:working-set-messages ws-msgs))
-                                                  list))])
+                   [tiered (car (call-with-values
+                                 (lambda ()
+                                   (build-tiered-context-with-hooks raw-msgs
+                                                                    #:max-tokens max-tokens
+                                                                    #:working-set-messages ws-msgs))
+                                 list))])
               (tiered-context->message-list tiered))
             (build-session-context/from-index context-index))
         (if (null? history)
