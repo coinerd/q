@@ -1,4 +1,4 @@
-# Plan: v0.99.92 — Session Lifecycle Thinning, Reassessment & Series Closure
+# Plan: v0.99.93 — Session Lifecycle Thinning, Reassessment & Series Closure
 
 **Status:** FROZEN — NOT STARTED
 **Authority:** roadmap + v0.99.87 freeze contract

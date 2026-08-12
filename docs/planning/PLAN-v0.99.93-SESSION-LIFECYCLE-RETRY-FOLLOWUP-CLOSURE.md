@@ -3,7 +3,7 @@
 **Status:** FROZEN — NOT STARTED
 **Authority:** roadmap + v0.99.87 freeze contract + W4 (#9246) terminal dispositions
 **Plan-ID / Hash:** generated at campaign start
-**Dependency:** v0.99.92 released (`128f8259`); milestone #879 closed 6/6
+**Dependency:** v0.99.93 released (`128f8259`); milestone #879 closed 6/6
 **GitHub:** milestone #880; waves #9276–#9281
 **Findings:** six deferred W4 follow-ups (W0-F1…F5, W3-F2); repairs already shipped for #9192 (superseded) and #9121 (milestone-gate job-list sync, `68de6531`)
 

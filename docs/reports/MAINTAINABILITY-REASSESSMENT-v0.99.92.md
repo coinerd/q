@@ -1,8 +1,8 @@
-# Repository-wide Maintainability Reassessment — v0.99.92 W4
+# Repository-wide Maintainability Reassessment — v0.99.93 W4
 
 **Status:** IN PROGRESS — terminal ledger complete, gates pending
-**Baseline:** v0.99.92 W3 merge `3773e6f8`
-**Machine ledger:** `docs/architecture/maintainability-terminal-v0.99.92.rktd`
+**Baseline:** v0.99.93 W3 merge `3773e6f8`
+**Machine ledger:** `docs/architecture/maintainability-terminal-v0.99.93.rktd`
 **MA-10 terminal decision:** CLOSED (trace-equivalent extraction + evidence-backed rejection)
 
 ## Terminal disposition table
@@ -18,7 +18,7 @@
 | MA-07 | Tracking projections can drift | PARTIAL | atomic projection + campaign repo delivered; residual HANDOFF/STATE drift → W5 hygiene sweep (#9247) |
 | MA-08 | GSD external effects deterministic | CLOSED | v0.99.90 W0–W5 |
 | MA-09 | Provider co-change/redundancy | CLOSED | v0.99.91 Path B W0–W4-B |
-| MA-10 | session-lifecycle.rkt bundles responsibilities | **CLOSED** | v0.99.92 W0–W3 + W4 terminal decision |
+| MA-10 | session-lifecycle.rkt bundles responsibilities | **CLOSED** | v0.99.93 W0–W3 + W4 terminal decision |
 | MA-11 | Agent-iteration/Runtime coupling | GUARDED | closed invariant; re-verified W4/W5 |
 | MA-12 | Hidden cross-turn state | GUARDED | closed invariant; re-verified W2/W4/W5 |
 

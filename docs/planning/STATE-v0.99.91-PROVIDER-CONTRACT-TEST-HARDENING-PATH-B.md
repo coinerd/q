@@ -5,7 +5,7 @@
 **Plan-ID / Hash:** PENDING_AT_START
 **Baseline SHA:** v0.99.90 @ b006ff08 (released)
 **Current wave:** W4-B DONE
-**Next:** v0.99.92 W0 — Lifecycle Trace and Responsibility Map (#9242)
+**Next:** v0.99.93 W0 — Lifecycle Trace and Responsibility Map (#9242)
 
 | Wave | Status | PR | Merge SHA | Review | Evidence |
 |---|---|---|---|---|---|

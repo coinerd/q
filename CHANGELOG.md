@@ -1,3 +1,35 @@
+## 0.99.93
+
+Released 2026-08-13.
+
+### Features
+
+- Session Lifecycle Follow-up Closure: six deferred W0-F1..W0-F5 findings from the v0.99.92 session-lifecycle series are resolved with canonical terminal identity, ownership coordination, and cancellation-aware retry, each validated by a machine oracle and independent review.
+- Canonical Prompt Terminal Contract (W3, #9277): exactly one prompt-scoped `turn.completed` per initialized prompt, published while ownership is held with release guaranteed by a nested `dynamic-wind` after-thunk. Inner `stream.turn.completed`/cancellation events remain model-turn observations; adapter synthetic terminals and the outer `turn.cancelled` producer are removed; the TUI strictly correlates prompt-ID terminals; finish-session-turn! failure degrades to an error terminal so every initialized prompt gets exactly one terminal.
+- Cancellation-Aware Retry Backoff + Metadata Preservation (W4, #9280): `with-auto-retry` gains `#:cancellation-token`; backoff sleep polls the token every 50 ms and raises `retry-cancelled` (never retried or mis-classified); `find-retry-exhausted` deep-unwraps `exn:fail:stream-error` chains so retry metadata survives partial wraps; the dispatch handler converts `retry-cancelled` to a `'cancelled` loop-result with a canonical terminal reason.
+- Close/Active-Prompt Concurrency Coordination (W5, #9278): `close-session!` coordinates with prompt/compaction ownership — it marks the session closed, requests graceful shutdown, cancels the active provider stream, and waits bounded (default 30 s, `#:timeout-ms` overridable) for prompt and compaction ownership to be released before the destructive steps (deactivate, repository close), guaranteeing `session.updated` ordering precedes `session.closed`. A closed session rejects new prompt ownership claims; a same-thread close skips the wait while the prompt cleanup still releases on unwind.
+- Prompt Ownership + Compaction Lifecycle Hardening (W0 #9276, W1 #9279, W2 #9281): the prompt ownership claim is moved inside the `dynamic-wind` before-thunk; compaction start-event ownership is hooked with a typed failure terminal and unconditional release-last cleanup; the rollback prompt-scope extraction is restored with a regenerated oracle (11 units, 35 edges).
+
+### Breaking / Behavior Changes
+
+- None. The v0.99.93 work preserves effect order and observable behavior. `close-session!` gains an optional `#:timeout-ms` keyword (backwards-compatible; default 30000). The outer `turn.cancelled` producer is removed in favor of a canonical prompt-scoped `turn.completed(reason:"cancelled")`; the TUI correlates prompt-ID terminals strictly.
+
+### Testing
+
+- Lifecycle characterization oracle expanded to 10/10 (W0-F2 and W0-F3 terminal-disposition records; re-pinned exit digest `0ab36b12…`).
+- Cancellation backoff and partial-metadata preservation unit tests (`tests/test-auto-retry.rkt`); close/active-prompt concurrency tests (`tests/test-session-cleanup.rkt`: wait, cancel, closed-rejects-claim).
+- Gates: Broad 1259/17965 (8 profile skips), Fast 1081/15694, Arch 29/284, TUI 84/1325, Security 64/710, Workflows 29/162, release-smoke 15/180.
+
+### Operational / Release
+
+- v0.99.93 series closure: W0 Prompt Ownership (#9276), W1 Compaction Lifecycle (#9279), W2 Rollback Prompt-Scope (#9281), W3 Canonical Prompt Terminal (#9277), W4 Cancellation-Aware Retry (#9280), W5 Close Concurrency (#9278), W6 Release.
+- No production provider, public API, or configuration format changed across the series beyond the backwards-compatible `close-session! #:timeout-ms` keyword.
+- Milestone #880 closes 6/6 on this release.
+
+### Migration Notes
+
+- None required. Callers of `close-session!` continue to work keyword-less; the new `#:timeout-ms` defaults to 30000.
+
 ## 0.99.92
 
 Released 2026-08-12.
