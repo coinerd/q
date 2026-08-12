@@ -58,6 +58,18 @@ deep-unwraps `exn:fail:stream-error` chains (`find-retry-exhausted`) so
 `retries-attempted`, `total-retry-delay-ms`, and `errorHistory` survive
 partial-message wrapping in the `runtime.error` payload.
 
+## Later close disposition (v0.99.93 #9278)
+
+`close-session!` now coordinates with prompt/compaction ownership. It marks the
+session closed, requests graceful shutdown, cancels the active provider stream,
+and then waits (bounded, default 30 s; `#:timeout-ms` overridable) for prompt
+and compaction ownership to be released by their dynamic-wind cleanup before
+running the destructive steps (deactivate, repository close). This guarantees
+the prompt's `session.updated` write ordering precedes the close's
+`session.closed`, so no write can race a closed repository. Same-thread close
+calls (e.g. an extension hook inside the prompt) skip the wait to avoid
+self-deadlock; the prompt cleanup releases ownership on unwind.
+
 ## Ordered path map
 
 The schema-v2 oracle separates these observable variants instead of treating a
@@ -193,7 +205,7 @@ terminal behavior, classification, and source anchor. Important boundaries are:
 |---|---|---|---|---|
 | W0-F1 | High / DEFERRED | Runtime Session | `W1 #9243 preserve; W4 #9246 terminal decision` | Prompt ownership is claimed before outer `dynamic-wind` protection. |
 | W0-F2 | Medium / DEFERRED | Runtime Session | `W1 #9243 preserve; W4 #9246 terminal decision` | Normal, error, and correlated cancellation use different terminal identities/events. |
-| W0-F3 | High / DEFERRED | Runtime Session | `W4 #9246 assign separate concurrency milestone` | Close does not coordinate with an active prompt/repository writer. |
+| W0-F3 | High / DEFERRED | Runtime Session | `W4 #9246 assign separate concurrency milestone; resolved in v0.99.93 #9278` | Close does not coordinate with an active prompt/repository writer. |
 | W0-F4 | Medium / DEFERRED | Runtime Compaction | `W3 #9245 locality assessment; W4 #9246 decision` | Automatic compaction completion/cooldown follows block/body error; start publication failure leaks ownership. |
 | W0-F5 | Medium / DEFERRED | Runtime Retry | `W4 #9246 terminal decision; resolved in v0.99.93 #9280` | Retry sleep is not cancellation-aware; partial wrapping can hide retry metadata. |
 

@@ -156,7 +156,7 @@
   (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
 
 (define expected-edge-digest "1ca13cc462960413584d0e1964cea50c0240e11f")
-(define expected-exit-digest "963924fd6411bf114e0090b3cfd0dc597066b3eb")
+(define expected-exit-digest "0ab36b122d43b5d7f807c6b87582987c85d810c3")
 (define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
 (define (locator-parts locator)
@@ -324,6 +324,18 @@
   (check-eq? (hash-ref w0f5 'metadata) 'preserved-through-partial-wrap)
   (check-locator 'W0-F5-anchor (hash-ref w0f5 'anchor))
   (check-locator 'W0-F5-evidence (hash-ref w0f5 'evidence)))
+
+(test-case "W0-F3 close follow-up records ownership coordination and write ordering"
+  (define dispositions (hash-ref (read-one ledger-path) 'terminal-dispositions))
+  (define w0f3 (findf (lambda (d) (eq? (hash-ref d 'id) 'W0-F3)) dispositions))
+  (check-not-false w0f3)
+  (check-eq? (hash-ref w0f3 'version) 'v0.99.93)
+  (check-equal? (hash-ref w0f3 'issue) 9278)
+  (check-eq? (hash-ref w0f3 'disposition) 'resolved)
+  (check-eq? (hash-ref w0f3 'close) 'waits-for-prompt-compaction-ownership)
+  (check-eq? (hash-ref w0f3 'ordering) 'session.updated-before-session.closed)
+  (check-locator 'W0-F3-anchor (hash-ref w0f3 'anchor))
+  (check-locator 'W0-F3-evidence (hash-ref w0f3 'evidence)))
 
 (test-case "W0-7: behavior evidence and report agree with the machine oracle"
   (define ledger (read-one ledger-path))
