@@ -257,7 +257,9 @@
                (event-payloads . ("util/event-payloads.rkt" . ()))
                (event-codec . ("util/event-codec.rkt" . ()))
                (prompt-preparation
-                . ("runtime/session/session-prompt-preparation.rkt" . ())))
+                . ("runtime/session/session-prompt-preparation.rkt" . ()))
+               (context-boundary
+                . ("runtime/session/session-context-boundary.rkt" . ())))
  ;; R-19: Parser modules — must not require I/O modules
  ;; Format: (module-path ...)
  (parser-modules ("extensions/gsd/command-parser.rkt" "tui/command-parse.rkt" "cli/args.rkt"))

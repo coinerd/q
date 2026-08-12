@@ -42,7 +42,7 @@
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
-         "session-prompt-preparation.rkt"
+         "session-context-boundary.rkt"
          "../../util/event/event-bus.rkt"
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../../util/error/errors.rkt" raise-session-error)
@@ -159,37 +159,40 @@
   (when ws
     (working-set-reset! ws))
 
-  ;; Pure preparation (v0.99.92 W1): compute the canonical user message,
-  ;; post-append index, path settings, context source, and system-injected
-  ;; context without performing any side effect.
-  (define plan
-    (build-prompt-preparation-plan user-message
-                                   #:history history
-                                   #:index idx
-                                   #:system-instructions (agent-session-system-instructions sess)
-                                   #:provider? (and (agent-session-provider sess) #t)
-                                   #:working-set ws))
+  ;; Context-build boundary (v0.99.92 W2): an explicit request/result pair makes
+  ;; the Context Assembly boundary testable without a live session. The pure
+  ;; context-build computes the canonical message, post-append index, path
+  ;; settings, context source, and system-injected context; the caller then
+  ;; applies its effects below in the historical order.
+  (define result
+    (context-build (context-build-request user-message
+                                          history
+                                          idx
+                                          (agent-session-system-instructions sess)
+                                          (and (agent-session-provider sess) #t)
+                                          ws
+                                          DEFAULT-TOKEN-BUDGET-THRESHOLD)))
 
   ;; E2: Apply the canonical index append in the historical order. The pure
   ;; append leaves the shared active-leaf box untouched; setting it here
   ;; preserves alias semantics for any pre-append index reference, then the
   ;; session install and durable save keep index and log in lockstep.
-  (define appended (prompt-preparation-plan-appended-entry plan))
+  (define appended (context-build-result-appended-entry result))
   (when appended
-    (define post-idx (prompt-preparation-plan-post-append-index plan))
+    (define post-idx (context-build-result-post-append-index result))
     (set-box! (session-index-active-leaf-id idx) (message-id appended))
     (guarded-set-index! sess post-idx)
     (save-index! idx-path post-idx))
 
   ;; E3: Buffer/append the canonical user message (deferred persistence).
-  (buffer-or-append!-fn sess (prompt-preparation-plan-canonical-user-message plan))
+  (buffer-or-append!-fn sess (context-build-result-canonical-user-message result))
 
   ;; E4: Apply the path-derived model setting.
-  (define model-name (prompt-preparation-plan-model-name plan))
+  (define model-name (context-build-result-model-name result))
   (when model-name
     (guarded-set-model-name! sess model-name))
 
-  (prompt-preparation-plan-context-with-system plan))
+  (context-build-result-context-with-system result))
 
 ;; ============================================================
 ;; dispatch-iteration
