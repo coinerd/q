@@ -65,11 +65,6 @@
          (only-in "../../agent/event-structs/turn-events.rkt" turn-end-event)
          (only-in "../../agent/event-structs/session-events.rkt" make-context-event)
          "session-types.rkt"
-         (only-in "session-types.rkt" lifecycle-state-rollback-st set-lifecycle-state-rollback-st!)
-         (only-in "../context-assembly/rollback-actions.rkt"
-                  current-rollback-state
-                  make-default-rollback-state
-                  rollback-state?)
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "../compaction/session-compaction.rkt" maybe-compact-context)
@@ -85,7 +80,8 @@
          (only-in "../context/context-pressure.rkt" check-context-pressure)
          "session-persistence.rkt"
          "session-interruption.rkt"
-         (only-in "../../util/event/event.rkt" make-event))
+         (only-in "../../util/event/event.rkt" make-event)
+         (only-in "session-prompt-scope.rkt" call-with-session-prompt-scope))
 
 (provide (contract-out
           [run-prompt!
@@ -483,33 +479,20 @@
           (guarded-set-config!
            sess
            (dict-set (agent-session-config sess) 'last-user-prompt effective-input)))
-        (parameterize ([current-prompt-operation-session sess]
-                       ;; v0.99.86: Session-scoped rollback state.
-                       ;; Parameterize from lifecycle-state so each session
-                       ;; starts with its own rollback state.
-                       [current-rollback-state
-                        (or (lifecycle-state-rollback-st (agent-session-lifecycle sess))
-                            (make-default-rollback-state))])
-          ;; v0.99.87: Persist rollback state via dynamic-wind so it survives
-          ;; both normal and exceptional prompt exits. Ensures cross-turn
-          ;; corrective consequences commit even if a later operation raises.
-          (dynamic-wind void
-                        (lambda ()
-                          (call-with-values (lambda ()
-                                              (run-prompt-internal sess
-                                                                   effective-input
-                                                                   max-iterations
-                                                                   token-budget-threshold
-                                                                   ep!
-                                                                   ba!))
-                                            (lambda (updated-session result)
-                                              (set-box! termination-reason
-                                                        (loop-result-termination-reason result))
-                                              (set-box! emit-cleanup-turn-completed? #f)
-                                              (values updated-session result))))
-                        (lambda ()
-                          (set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)
-                                                            (current-rollback-state)))))]))
+        (call-with-session-prompt-scope
+         sess
+         (lambda ()
+           (call-with-values (lambda ()
+                               (run-prompt-internal sess
+                                                    effective-input
+                                                    max-iterations
+                                                    token-budget-threshold
+                                                    ep!
+                                                    ba!))
+                             (lambda (updated-session result)
+                               (set-box! termination-reason (loop-result-termination-reason result))
+                               (set-box! emit-cleanup-turn-completed? #f)
+                               (values updated-session result)))))]))
    ;; Cleanup: always reset prompt-running? even on error
    ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
    ;; even if a regression prevents normal event flow.

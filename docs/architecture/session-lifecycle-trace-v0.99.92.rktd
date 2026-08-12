@@ -181,6 +181,13 @@
                   (to . run-prompt-internal))
           #hasheq((anchor
                    .
+                   "runtime/session/session-lifecycle.rkt:call-with-session-prompt-scope")
+                  (from . run-prompt!)
+                  (id . prompt-scope)
+                  (kind . direct)
+                  (to . call-with-session-prompt-scope))
+          #hasheq((anchor
+                   .
                    "runtime/session/session-lifecycle.rkt:build-session-context-for-prompt sess user-message")
                   (from . run-prompt-internal)
                   (id . prompt-context)
@@ -529,7 +536,7 @@
                   (terminal . turn.completed/cleanup))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                   "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                   (classification . DEFERRED)
                   (cleanup . outer-finish+release)
                   (follow-up . "W2 #9244 ownership gate")
@@ -856,14 +863,14 @@
          .
          (#hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:current-prompt-operation-session sess")
+                   "runtime/session/session-prompt-scope.rkt:current-prompt-operation-session sess")
                   (enter . before-run-prompt-internal)
                   (id . current-prompt-operation-session)
                   (save-back . none)
                   (unwind . automatic))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                   "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                   (enter . from-session-lifecycle-state)
                   (id . current-rollback-state)
                   (save-back
@@ -898,7 +905,7 @@
                             (effect . last-prompt-mutation))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:current-prompt-operation-session sess")
+                             "runtime/session/session-prompt-scope.rkt:current-prompt-operation-session sess")
                             (effect . parameterize-session-state))
                     #hasheq((anchor
                              .
@@ -946,7 +953,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1002,7 +1009,7 @@
                             (effect . build-index-raises))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1642,7 +1649,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1699,7 +1706,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1752,7 +1759,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1807,7 +1814,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1860,7 +1867,7 @@
                             (effect . session-updated))
                     #hasheq((anchor
                              .
-                             "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st!")
+                             "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st!")
                             (effect . rollback-save-back))
                     #hasheq((anchor
                              .
@@ -1945,6 +1952,11 @@
                    .
                    "runtime/session/session-lifecycle.rkt:(define (run-prompt!")
                   (responsibilities . (orchestration eventing fsm)))
+          #hasheq((id . call-with-session-prompt-scope)
+                  (owner
+                   .
+                   "runtime/session/session-prompt-scope.rkt:(define (call-with-session-prompt-scope")
+                  (responsibilities . (orchestration fsm)))
           #hasheq((id . run-prompt-internal)
                   (owner
                    .

@@ -91,7 +91,10 @@
                   make-cancellation-token
                   cancellation-token?
                   cancellation-token-cancelled?
-                  cancel-token!))
+                  cancel-token!)
+         (only-in "../runtime/session/session-types.rkt"
+                  agent-session-lifecycle
+                  lifecycle-state-rollback-st))
 
 ;; ============================================================
 ;; Helpers
@@ -292,6 +295,24 @@
    (define-values (s result) (run-prompt! sess "Echo hi"))
    (check-true (unbox turn-start-called?) "'turn-start hook should have been called")
    (check-true (unbox tool-call-called?) "'tool-call hook should have been called")
+   (delete-directory/files dir #:must-exist? #f))
+ (test-case "input hook block leaves rollback prompt scope uninitialized"
+   (define dir (make-temp-dir))
+   (define bus (make-event-bus))
+   (define ext-reg (make-extension-registry))
+   (register-extension! ext-reg
+                        (extension "block-input"
+                                   "1.0"
+                                   "0.1"
+                                   (hasheq 'input (lambda (_payload) (hook-block "blocked input")))))
+   (define sess
+     (make-agent-session (hash-set (make-test-config dir bus (make-simple-mock-provider "unused"))
+                                   'extension-registry
+                                   ext-reg)))
+   (define-values (_updated result) (run-prompt! sess "blocked before prompt scope"))
+   (check-equal? (loop-result-termination-reason result) 'completed)
+   (check-false (lifecycle-state-rollback-st (agent-session-lifecycle sess))
+                "blocked input must remain outside rollback prompt scope")
    (delete-directory/files dir #:must-exist? #f))
  (test-case "hook exception during dispatch is isolated and session continues"
    (define dir (make-temp-dir))

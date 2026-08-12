@@ -1,9 +1,9 @@
 # Orchestration Surface Reduction — v0.99.92 W3
 
-**Status:** IN PROGRESS — evidence ledger complete, gates pending
+**Status:** HISTORICAL W3 COMPLETE — original rejection evidence retained; later terminal dispositions annotated
 **Baseline:** v0.99.92 W2 merge `e13a48e6`
 **Machine evidence:** `docs/architecture/orchestration-surface-reduction-v0.99.92.rktd`
-**MA-10:** stays OPEN; this wave documents an evidence-backed rejection.
+**MA-10 at W3:** remained OPEN; W4 later CLOSED MA-10, and v0.99.93 #9281 extracted the separately deferred W3-F2 scope.
 
 ## Decision
 
@@ -38,28 +38,37 @@ fan-out footprint that extraction would reduce:
 |---|---|---|
 | busy-error-construction | reject | 1-param raise path of the claim primitive; pre-dynamic-wind ownership boundary (W0-F1) |
 | input-hook-handling | reject | control-flow early return inside the outer dynamic-wind; caller-owned hook/event publication |
-| rollback-prompt-scope | defer-to-W4 | only structurally coherent candidate; caller-retained save-back + needs oracle regeneration; W4 #9246 decides |
+| rollback-prompt-scope | defer-to-W4 (historical W3 verdict) | only structurally coherent candidate; caller-retained save-back + needs oracle regeneration; W4 #9246 decides |
 | acknowledgement-tracer | reject | one third of the terminal-identity decision (W0-F2); fragmentation without fan-out gain |
 | cleanup-turn-completed | reject | order-critical safety-net terminal glued to the box protocol |
 | emergency-persist | reject | 1-param guarded call to an already-extracted primitive (`ensure-persisted!`) |
 
 Claim/release, interruption/turn ownership, and persistence primitives already
 live in `session-mutation.rkt`, `session-interruption.rkt`, and
-`session-persistence.rkt` respectively — no duplication exists.
+`session-persistence.rkt` respectively. The terminal #9281 follow-up now also
+owns prompt/rollback parameter scope in `session-prompt-scope.rkt`.
 
-## Findings and disposition
+## Historical W3 findings and disposition
+
+These DEFERRED values record W3-time state; later terminal outcomes are stated in the follow-up column and section below.
 
 | ID | Severity / classification | Owner | Follow-up | Observation |
 |---|---|---|---|---|
 | W3-F1 | Low / DEFERRED | Runtime Session | `W4 #9246 terminal decision` | Remaining complexity is orchestration glue by design; six inline blocks share nearly all imports with the four provided functions, so extraction would add module requires without reducing fan-out (38). |
-| W3-F2 | Low / DEFERRED | Runtime Session | `W4 #9246 terminal decision` | Only the rollback prompt-scope wrapper is structurally coherent; it is caller-retained save-back and needs oracle regeneration, so it is deferred to W4 rather than extracted now. |
+| W3-F2 | Low / DEFERRED | Runtime Session | `W4 #9246 terminal decision; implemented by v0.99.93 #9281` | W3 deferred the coherent wrapper; the later terminal follow-up extracted it with save-back timing preserved. |
+
+## Later terminal disposition (v0.99.93)
+
+W3's historical decision and metrics remain unchanged. The separate terminal
+record now marks W3-F2 **extracted** by #9281 as
+`call-with-session-prompt-scope`, with direct arbitrary-value/exception tests
+and coordinated lifecycle-oracle regeneration.
 
 ## MA-10 discipline
 
-MA-10 remains OPEN. W3 supplies evidence that the remaining session-lifecycle
-surface is orchestration by design and that the only coherent candidate is
-better decided at W4 (#9246), where the W0-F1/F2 terminal decisions also live.
-W5 cannot close with an unassigned Critical/High finding or stale projection.
+At W3, MA-10 remained OPEN and this report supplied the evidence for W4's
+terminal decision. The later #9281 disposition is recorded separately rather
+than rewriting the W3 verdict.
 
 ## Gates
 

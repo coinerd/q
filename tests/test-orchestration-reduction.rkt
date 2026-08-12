@@ -75,7 +75,19 @@
   (check-true (= (length (filter (lambda (c) (eq? (hash-ref c 'verdict) 'reject)) candidates)) 5)
               "five blocks rejected")
   (check-true (= (length (filter (lambda (c) (eq? (hash-ref c 'verdict) 'defer-to-w4)) candidates)) 1)
-              "rollback scope deferred to W4"))
+              "W3 historically deferred rollback scope to W4"))
+
+(test-case "W3-F2 terminal follow-up records later extraction without rewriting W3 history"
+  (define ledger (read-one ledger-path))
+  (define dispositions (hash-ref ledger 'terminal-dispositions))
+  (check-equal? (length dispositions) 1)
+  (define disposition (car dispositions))
+  (check-eq? (hash-ref disposition 'id) 'W3-F2)
+  (check-eq? (hash-ref disposition 'version) 'v0.99.93)
+  (check-equal? (hash-ref disposition 'issue) 9281)
+  (check-eq? (hash-ref disposition 'disposition) 'extracted)
+  (check-locator 'W3-F2-terminal (hash-ref disposition 'anchor))
+  (check-locator 'W3-F2-evidence (hash-ref disposition 'evidence)))
 
 (test-case "W3-3: existing primitives are already extracted and the rejection is non-vacuous"
   (define ledger (read-one ledger-path))
