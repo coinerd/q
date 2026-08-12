@@ -56,17 +56,16 @@
 ;; Characterization tests
 ;; ═══════════════════════════════════════════════════════════════════════════
 
-(define-test-suite
- characterization-tests
- ;; Test 1: Characterization — artifacts unchanged after no-op
- (test-case "protected artifacts byte-identical after no-op automation"
-   (define tmp (make-temp-repo-tree))
-   (define before (snapshot-artifacts tmp))
-   ;; Run a no-op "automation" step (just read files, don't modify)
-   (define after (snapshot-artifacts tmp))
-   (define violations (compare-snapshots before after))
-   (check-true (null? violations) "no mutations should be detected")
-   (cleanup-temp-repo-tree tmp)))
+(define-test-suite characterization-tests
+                   ;; Test 1: Characterization — artifacts unchanged after no-op
+                   (test-case "protected artifacts byte-identical after no-op automation"
+                     (define tmp (make-temp-repo-tree))
+                     (define before (snapshot-artifacts tmp))
+                     ;; Run a no-op "automation" step (just read files, don't modify)
+                     (define after (snapshot-artifacts tmp))
+                     (define violations (compare-snapshots before after))
+                     (check-true (null? violations) "no mutations should be detected")
+                     (cleanup-temp-repo-tree tmp)))
 
 ;; ═══════════════════════════════════════════════════════════════════════════
 ;; Probe tests (negative — mutations must be caught)
@@ -80,8 +79,9 @@
    (define before (snapshot-artifacts tmp))
    ;; Simulate accidental mutation: append a comment to a .rktd file
    (define target (build-path tmp "docs" "architecture" "dependency-policy.rktd"))
-   (call-with-output-file target #:exists 'append
-     (lambda (out) (displayln "\n;; ACCIDENTAL MUTATION" out)))
+   (call-with-output-file target
+                          #:exists 'append
+                          (lambda (out) (displayln "\n;; ACCIDENTAL MUTATION" out)))
    (define after (snapshot-artifacts tmp))
    (define violations (compare-snapshots before after))
    (check-not-false violations "mutation must be detected")
@@ -95,7 +95,6 @@
    (check-true (string-contains? report "dependency-policy.rktd"))
    (check-true (string-contains? report "not part of the declared release change set"))
    (cleanup-temp-repo-tree tmp))
-
  ;; Test 3: Probe — file removal caught
  ;; When a file is deleted, snapshot-artifacts still creates a snapshot entry
  ;; with sha256=#f (because the path is still in the registry). The sha
@@ -116,18 +115,15 @@
    (check-false (integrity-violation-after-sha (car violations))
                 "after-sha should be #f for deleted file")
    (cleanup-temp-repo-tree tmp))
-
  ;; Test 3b: Direct 'file-removed reason — when artifact disappears from
  ;; the after snapshots entirely (path not in registry anymore)
  (test-case "file-removed violation when artifact disappears from after snapshot"
    (define before (list (integrity-snapshot "docs/architecture/test.rktd" "abc123")))
-   (define after '())  ;; artifact disappeared — no after snapshot
+   (define after '()) ;; artifact disappeared — no after snapshot
    (define violations (compare-snapshots before after))
    (check-equal? (length violations) 1)
    (check-equal? (integrity-violation-reason (car violations)) 'file-removed)
-   (check-equal? (integrity-violation-path (car violations))
-                 "docs/architecture/test.rktd"))
-
+   (check-equal? (integrity-violation-path (car violations)) "docs/architecture/test.rktd"))
  ;; Test 3c: Direct 'file-added reason — new artifact appears in after
  (test-case "file-added violation when new artifact appears in after snapshot"
    (define before '())
@@ -135,9 +131,7 @@
    (define violations (compare-snapshots before after))
    (check-equal? (length violations) 1)
    (check-equal? (integrity-violation-reason (car violations)) 'file-added)
-   (check-equal? (integrity-violation-path (car violations))
-                 "docs/architecture/new.rktd"))
-
+   (check-equal? (integrity-violation-path (car violations)) "docs/architecture/new.rktd"))
  ;; Test 3d: format-violation-report covers all three reason types
  (test-case "format-violation-report covers file-removed and file-added"
    (define removed-violation
@@ -147,8 +141,7 @@
    (check-true (string-contains? removed-report "gone.rktd"))
    (check-true (string-contains? removed-report "removed"))
 
-   (define added-violation
-     (integrity-violation "docs/architecture/new.rktd" #f "def" 'file-added))
+   (define added-violation (integrity-violation "docs/architecture/new.rktd" #f "def" 'file-added))
    (define added-report (format-violation-report (list added-violation)))
    (check-true (string-contains? added-report "INTEGRITY VIOLATION"))
    (check-true (string-contains? added-report "new.rktd"))
@@ -165,8 +158,9 @@
    (define tmp (make-temp-repo-tree))
    ;; Developer modifies a protected file BEFORE release start (intentional)
    (define target (build-path tmp "docs" "architecture" "dependency-policy.rktd"))
-   (call-with-output-file target #:exists 'append
-     (lambda (out) (displayln "\n;; INTENTIONAL PRE-RELEASE CHANGE" out)))
+   (call-with-output-file target
+                          #:exists 'append
+                          (lambda (out) (displayln "\n;; INTENTIONAL PRE-RELEASE CHANGE" out)))
    (define intended-content (file->bytes target))
    ;; Snapshot at release start — captures the intentional change
    (define before (snapshot-artifacts tmp))
@@ -190,21 +184,17 @@
    (for ([entry (in-list artifacts)]
          #:when (string-suffix? (car entry) ".rktd"))
      (define result (validate-rktd-syntax (build-path repo-root (car entry))))
-     (check-true (eq? result #t)
-                 (format "rktd syntax invalid for ~a: ~a" (car entry) result))))
-
+     (check-true (eq? result #t) (format "rktd syntax invalid for ~a: ~a" (car entry) result))))
  ;; Test 6: Registry self-consistency — all listed files exist
  (test-case "registry lists only existing files"
    (define artifacts (load-protected-artifacts repo-root))
    (for ([entry (in-list artifacts)])
      (check-true (file-exists? (build-path repo-root (car entry)))
                  (format "registry references missing file: ~a" (car entry)))))
-
  ;; Test 7: validate-rktd-syntax catches broken syntax
  (test-case "validate-rktd-syntax catches malformed .rktd"
    (define tmp (make-temporary-file "bad-rktd-~a.rktd"))
-   (call-with-output-file tmp #:exists 'truncate
-     (lambda (out) (displayln "((unclosed paren" out)))
+   (call-with-output-file tmp #:exists 'truncate (lambda (out) (displayln "((unclosed paren" out)))
    (define result (validate-rktd-syntax tmp))
    (check-true (string? result) "malformed rktd should return error string")
    (check-true (> (string-length result) 0) "error message should be non-empty")
@@ -215,10 +205,10 @@
 ;; ═══════════════════════════════════════════════════════════════════════════
 
 (define-test-suite all-release-integrity-guard-tests
-                  characterization-tests
-                  probe-tests
-                  intentional-change-tests
-                  syntax-and-registry-tests)
+                   characterization-tests
+                   probe-tests
+                   intentional-change-tests
+                   syntax-and-registry-tests)
 
 (module+ test
   (run-tests all-release-integrity-guard-tests))

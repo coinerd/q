@@ -200,22 +200,21 @@
       (if (zero? exit-code)
           (dry-run-result "manifest" #t "manifest generation succeeded")
           (dry-run-result "manifest" #f "manifest generation failed"))))
-    ;; Check 6: Architecture-policy artifact integrity
-    ;; Snapshots all protected artifacts and verifies they exist and parse.
-    ;; The full before/after comparison runs around the actual release
-    ;; automation steps — this check verifies the guard infrastructure works
-    ;; and all protected .rktd files are syntactically valid.
-   (cons "arch-integrity"
-         (lambda ()
-           (define exit-code
-             (run-subprocess "racket"
-                             (list "scripts/release-integrity-guard.rkt"
-                                   "--validate-rktd")))
-           (if (zero? exit-code)
-               (dry-run-result "arch-integrity" #t
-                               "architecture policy artifacts valid and snapshot-able")
-               (dry-run-result "arch-integrity" #f
-                               "architecture policy integrity check failed (see output)"))))))
+   ;; Check 6: Architecture-policy artifact integrity
+   ;; Snapshots all protected artifacts and verifies they exist and parse.
+   ;; The full before/after comparison runs around the actual release
+   ;; automation steps — this check verifies the guard infrastructure works
+   ;; and all protected .rktd files are syntactically valid.
+   (cons
+    "arch-integrity"
+    (lambda ()
+      (define exit-code
+        (run-subprocess "racket" (list "scripts/release-integrity-guard.rkt" "--validate-rktd")))
+      (if (zero? exit-code)
+          (dry-run-result "arch-integrity" #t "architecture policy artifacts valid and snapshot-able")
+          (dry-run-result "arch-integrity"
+                          #f
+                          "architecture policy integrity check failed (see output)"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O layer

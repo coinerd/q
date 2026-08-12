@@ -99,7 +99,9 @@
       (string-contains? s "/.git/")
       (string-contains? s "/.planning/")
       (string-contains? s "/docs/planning/")
-      (string-contains? s "/docs/architecture/")  ;; architecture policy artifacts are governance, not version targets
+      (string-contains?
+       s
+       "/docs/architecture/") ;; architecture policy artifacts are governance, not version targets
       (string-contains? s "/.pi/")
       (string-contains? s "/examples/README.md")
       (string-contains? s "/docs/tutorials/")
@@ -293,7 +295,8 @@
                                   (let ([ext (filename-extension f)])
                                     (and ext (equal? (bytes->string/utf-8 ext) "md")))
                                   (not (equal? (path->string (file-name-from-path f)) "README.md"))
-                                  (not (member (path->string (file-name-from-path f)) EXCLUDED-MD-FILES))))
+                                  (not (member (path->string (file-name-from-path f))
+                                               EXCLUDED-MD-FILES))))
              (path->string f)))
          (unless (null? changed-md-files)
            (apply git-run "add" changed-md-files)))

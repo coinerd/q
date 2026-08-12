@@ -53,14 +53,11 @@
 (define (default-git-diff project-root)
   (define (run-git . args)
     (parameterize ([current-directory project-root])
-      (with-output-to-string
-        (lambda ()
-          (apply system* (find-executable-path "git") args)))))
+      (with-output-to-string (lambda () (apply system* (find-executable-path "git") args)))))
   (define working-tree (run-git "diff" "--name-only" "HEAD"))
   (define staged (run-git "diff" "--cached" "--name-only"))
   (define (parse-lines s)
-    (filter (lambda (l) (and (string? l) (> (string-length l) 0)))
-            (string-split s "\n" #:trim? #f)))
+    (filter (lambda (l) (and (string? l) (> (string-length l) 0))) (string-split s "\n" #:trim? #f)))
   (remove-duplicates (append (parse-lines working-tree) (parse-lines staged))))
 
 ;; Injectable parameters — tests replace these to simulate mutations.
@@ -131,13 +128,12 @@
     (define s-after (find-snapshot after path))
     (cond
       [(not s-after)
-       (set! violations
-             (cons (integrity-violation path before-sha #f 'file-removed)
-                   violations))]
+       (set! violations (cons (integrity-violation path before-sha #f 'file-removed) violations))]
       [(not (equal? before-sha (integrity-snapshot-sha256 s-after)))
-       (set! violations
-             (cons (integrity-violation path before-sha (integrity-snapshot-sha256 s-after) 'byte-changed)
-                   violations))]))
+       (set!
+        violations
+        (cons (integrity-violation path before-sha (integrity-snapshot-sha256 s-after) 'byte-changed)
+              violations))]))
   ;; Check for added files (in after but not in before)
   (for ([s-after after])
     (define path (integrity-snapshot-path s-after))
@@ -153,10 +149,10 @@
 ;; format-violation-report : (listof integrity-violation) . -> . string?
 ;; Produces a loud, actionable multi-line error message.
 (define (format-violation-report violations)
-  (define parts (for/list ([v violations]) (format-single-violation v)))
-  (string-append
-   "*** RELEASE INTEGRITY VIOLATION ***\n\n"
-   (string-join parts "\n\n")))
+  (define parts
+    (for/list ([v violations])
+      (format-single-violation v)))
+  (string-append "*** RELEASE INTEGRITY VIOLATION ***\n\n" (string-join parts "\n\n")))
 
 ;; format-single-violation : integrity-violation? . -> . string?
 (define (format-single-violation v)
@@ -166,14 +162,21 @@
   (define reason (integrity-violation-reason v))
   (case reason
     [(byte-changed)
-     (format "~a changed during release automation,\nbut it was not part of the declared release change set.\n\n  SHA-256 before: ~a\n  SHA-256 after:  ~a\n\nRelease automation must not mutate architecture policy artifacts.\nReview the release step that modified this file."
-             path before-sha after-sha)]
+     (format
+      "~a changed during release automation,\nbut it was not part of the declared release change set.\n\n  SHA-256 before: ~a\n  SHA-256 after:  ~a\n\nRelease automation must not mutate architecture policy artifacts.\nReview the release step that modified this file."
+      path
+      before-sha
+      after-sha)]
     [(file-removed)
-     (format "~a was removed during release automation.\n\n  SHA-256 before: ~a\n\nRelease automation must not delete architecture policy artifacts."
-             path (or before-sha "unknown"))]
+     (format
+      "~a was removed during release automation.\n\n  SHA-256 before: ~a\n\nRelease automation must not delete architecture policy artifacts."
+      path
+      (or before-sha "unknown"))]
     [(file-added)
-     (format "~a appeared during release automation.\n\n  SHA-256 after: ~a\n\nRelease automation must not add new artifacts to the protected set without governance review."
-             path (or after-sha "unknown"))]))
+     (format
+      "~a appeared during release automation.\n\n  SHA-256 after: ~a\n\nRelease automation must not add new artifacts to the protected set without governance review."
+      path
+      (or after-sha "unknown"))]))
 
 ;; run-integrity-check :
 ;;   path-string? (listof integrity-snapshot) procedure? . -> . (or/c #t (listof integrity-violation))
@@ -183,9 +186,7 @@
   (thunk)
   (define after-snapshot (snapshot-artifacts project-root))
   (define violations (compare-snapshots before-snapshot after-snapshot))
-  (if (null? violations)
-      #t
-      violations))
+  (if (null? violations) #t violations))
 
 ;; validate-rktd-syntax : path-string? . -> . (or/c #t string?)
 ;; Reads a .rktd file and attempts (read). Returns #t on success or an
@@ -225,14 +226,12 @@
 ;; snapshots->json : (listof integrity-snapshot) . -> . jsexpr?
 (define (snapshots->json snapshots)
   (for/list ([s snapshots])
-    (hasheq 'path (integrity-snapshot-path s)
-            'sha256 (integrity-snapshot-sha256 s))))
+    (hasheq 'path (integrity-snapshot-path s) 'sha256 (integrity-snapshot-sha256 s))))
 
 ;; json->snapshots : jsexpr? . -> . (listof integrity-snapshot)
 (define (json->snapshots jlist)
   (for/list ([j jlist])
-    (integrity-snapshot (hash-ref j 'path)
-                        (hash-ref j 'sha256))))
+    (integrity-snapshot (hash-ref j 'path) (hash-ref j 'sha256))))
 
 (define (cli-snapshot)
   (define project-root (current-directory))
@@ -241,8 +240,7 @@
 
 (define (cli-verify snapshot-file)
   (define project-root (current-directory))
-  (define before-snapshots
-    (json->snapshots (string->jsexpr (file->string snapshot-file))))
+  (define before-snapshots (json->snapshots (string->jsexpr (file->string snapshot-file))))
   (define after-snapshots (snapshot-artifacts project-root))
   (define violations (compare-snapshots before-snapshots after-snapshots))
   (if (null? violations)
@@ -270,14 +268,12 @@
 
 (define (main)
   (match (vector->list (current-command-line-arguments))
-    [(list "--snapshot")
-     (cli-snapshot)]
-    [(list "--verify" file)
-     (cli-verify file)]
-    [(list "--validate-rktd")
-     (cli-validate-rktd)]
+    [(list "--snapshot") (cli-snapshot)]
+    [(list "--verify" file) (cli-verify file)]
+    [(list "--validate-rktd") (cli-validate-rktd)]
     [_
-     (displayln "Usage: racket scripts/release-integrity-guard.rkt [--snapshot | --verify FILE | --validate-rktd]")
+     (displayln
+      "Usage: racket scripts/release-integrity-guard.rkt [--snapshot | --verify FILE | --validate-rktd]")
      (exit 1)]))
 
 (module+ main
