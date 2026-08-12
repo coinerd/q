@@ -40,7 +40,7 @@
            (params . 2)
            (unique-imports . 2)
            (rationale . "Only structurally coherent candidate; requires coordinated oracle regeneration and is in the caller-retained save-back set; W4 #9246 decides.")
-           (anchor . "runtime/session/session-lifecycle.rkt:current-prompt-operation-session sess"))
+           (anchor . "runtime/session/session-prompt-scope.rkt:(define (call-with-session-prompt-scope"))
    #hasheq((id . acknowledgement-tracer)
            (verdict . reject)
            (lines . 16)
@@ -62,10 +62,17 @@
            (unique-imports . 0)
            (rationale . "One-parameter guarded call to an already-extracted primitive (ensure-persisted!).")
            (anchor . "runtime/session/session-lifecycle.rkt:emergency persist failed"))))
+ (terminal-dispositions .
+  (#hasheq((id . W3-F2)
+           (version . v0.99.93)
+           (issue . 9281)
+           (disposition . extracted)
+           (anchor . "runtime/session/session-prompt-scope.rkt:(define (call-with-session-prompt-scope")
+           (evidence . "tests/test-session-prompt-scope.rkt:prompt scope"))))
  (existing-primitives .
   (#hasheq((capability . prompt-compaction-claims) (module . runtime/session/session-mutation.rkt))
    #hasheq((capability . interruption-turn-ownership) (module . runtime/session/session-interruption.rkt))
    #hasheq((capability . persistence) (module . runtime/session/session-persistence.rkt))))
  (findings .
   (#hasheq((id . W3-F1) (severity . low) (owner . runtime-session) (follow-up . "W4 #9246 terminal decision") (summary . "Remaining session-lifecycle complexity is orchestration glue by design; six inline blocks share nearly all imports with the four provided functions, so extraction would add module requires without reducing fan-out (38)."))
-   #hasheq((id . W3-F2) (severity . low) (owner . runtime-session) (follow-up . "W4 #9246 terminal decision") (summary . "Only the rollback prompt-scope wrapper is structurally coherent; it is caller-retained save-back and needs oracle regeneration, so it is deferred to W4 rather than extracted now.")))))
+   #hasheq((id . W3-F2) (severity . low) (owner . runtime-session) (follow-up . "W4 #9246 terminal decision; implemented by v0.99.93 #9281") (summary . "W3 deferred the coherent rollback prompt-scope wrapper; terminal follow-up #9281 later extracted it with save-back timing preserved.")))))

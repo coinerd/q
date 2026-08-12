@@ -15,8 +15,8 @@ cleanup. W1 may extract only a coherent **pure prompt-preparation plan**. It
 must not move persistence, event publication, FSM ownership, wiring, or effect
 ordering merely to reduce the lifecycle module's LOC.
 
-The machine oracle freezes six path families as 33 explicit variants, ten
-responsibility units, 34 direct/transitive consumer edges, 38 exceptional
+The machine oracle freezes six path families as 33 explicit variants, eleven
+responsibility units, 35 direct/transitive consumer edges, 38 exceptional
 boundaries, two parameter scopes, and five explicitly classified findings.
 Every locator is checked against a real source file and anchor; unique
 control-flow anchors are additionally checked in source order.
@@ -116,14 +116,16 @@ and transitive façade/re-export edges are distinct in the machine ledger.
 | Unit | Responsibilities | Primary consumers |
 |---|---|---|
 | `run-prompt!` | orchestration, eventing, FSM | SDK, TUI, goal runner, façade |
+| `call-with-session-prompt-scope` | orchestration, prompt/rollback ownership FSM | `run-prompt!` |
 | `run-prompt-internal` | orchestration, persistence, eventing | `run-prompt!` |
 | `build-session-context-for-prompt` | pure preparation plus ordered persistence/orchestration | prompt internal |
 | `dispatch-iteration` | orchestration, eventing, wiring | prompt internal |
 | `run-iteration-loop/v2` | orchestration, FSM | Runtime composition closure |
 | `close-session!` | orchestration, persistence, eventing, FSM, wiring | all interfaces |
-| provider/auto retry | orchestration, eventing, retry FSM | turn orchestrator |
-| automatic compaction | orchestration, eventing, ownership FSM | prompt and step executor |
-| durable compaction | orchestration, persistence, eventing, FSM, wiring | event subscribers |
+| `call-with-provider-retry` | orchestration, eventing | turn orchestrator |
+| `with-auto-retry` | orchestration, eventing, retry FSM | provider retry, policy, subagents |
+| `maybe-compact-context` | orchestration, eventing, ownership FSM | prompt and step executor |
+| `compact-session-durably!` | orchestration, persistence, eventing, FSM, wiring | event subscribers |
 
 The context builder is deliberately classified as mixed today: parent/message
 construction and system injection are pure, but index/user append and settings
@@ -132,11 +134,12 @@ function under a new name.
 
 ## Parameter and `dynamic-wind` contract
 
+- `call-with-session-prompt-scope` owns the coherent prompt parameter boundary.
 - `current-prompt-operation-session` enables same-session nested automatic
   compaction and unwinds automatically.
 - `current-rollback-state` is initialized from session lifecycle state.
-- Its value is copied back by the **inner `dynamic-wind` after-thunk before the
-  parameterization unwinds**, on both normal and exceptional prompt exits.
+- Its value is copied back by the wrapper's **inner `dynamic-wind` after-thunk
+  before the parameterization unwinds**, on both normal and exceptional exits.
 - The outer `dynamic-wind` then performs interruption finalization, prompt
   release, abnormal cleanup terminal, and emergency persistence.
 

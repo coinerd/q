@@ -63,6 +63,7 @@
             gui-new-session
             gui-input
             prompt-internal
+            prompt-scope
             prompt-context
             prompt-dispatch
             dispatch-loop
@@ -154,8 +155,8 @@
 (define (probe-key e)
   (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
 
-(define expected-edge-digest "6b7ed6f8f088c84640a996bcb9298724bbbee82b")
-(define expected-exit-digest "ca56e655edec274db81c700d72acf9cea00cad44")
+(define expected-edge-digest "1ca13cc462960413584d0e1964cea50c0240e11f")
+(define expected-exit-digest "be3b429cd8cd37923c0282d13b005399b801884d")
 (define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
 (define (locator-parts locator)
@@ -220,12 +221,15 @@
     '(("runtime/session/session-lifecycle.rkt:try-claim-prompt! sess"
        "runtime/session/session-lifecycle.rkt:define active-turn-id"
        "runtime/session/session-lifecycle.rkt:maybe-dispatch-hooks ext-reg 'input"
-       "runtime/session/session-lifecycle.rkt:current-prompt-operation-session sess"
-       "runtime/session/session-lifecycle.rkt:run-prompt-internal sess
-                                                                   effective-input"
-       "runtime/session/session-lifecycle.rkt:set-lifecycle-state-rollback-st! (agent-session-lifecycle sess)"
+       "runtime/session/session-lifecycle.rkt:(call-with-session-prompt-scope
+         sess"
+       "runtime/session/session-lifecycle.rkt:(run-prompt-internal sess
+                                                    effective-input"
        "runtime/session/session-lifecycle.rkt:finish-session-turn! sess"
        "runtime/session/session-lifecycle.rkt:release-prompt! sess")
+      ("runtime/session/session-prompt-scope.rkt:current-prompt-operation-session sess"
+       "runtime/session/session-prompt-scope.rkt:dynamic-wind void"
+       "runtime/session/session-prompt-scope.rkt:set-lifecycle-state-rollback-st! lifecycle")
       ("runtime/session/session-lifecycle.rkt:    (build-session-context-for-prompt sess user-message ensure-persisted!-fn"
        "runtime/session/session-lifecycle.rkt:maybe-compact-context sess context-with-system"
        "runtime/session/session-lifecycle.rkt:ensure-persisted!-fn sess"
