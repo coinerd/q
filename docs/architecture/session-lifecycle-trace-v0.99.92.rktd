@@ -122,7 +122,7 @@
                   (id . tui-campaign)
                   (kind . direct)
                   (to . run-prompt!))
-          #hasheq((anchor . "tui/tui-init.rkt:run-prompt! sess prompt")
+          #hasheq((anchor . "tui/tui-init.rkt:run-prompt! (unbox agent-session-box) prompt")
                   (from . tui/tui-init)
                   (id . tui-normal)
                   (kind . direct)
