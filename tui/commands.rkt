@@ -343,7 +343,7 @@
      (when (parsed-command? cmd)
        (set! cmd sym))
      (match cmd
-       ['model (handle-model-command cctx)]
+       ['model (handle-model-command cctx (and (pair? args) (car args)))]
        ['history (handle-history-command cctx)]
        ['help
         (set-box! (cmd-ctx-state-box cctx) (handle-help-command cctx state))

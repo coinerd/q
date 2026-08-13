@@ -14,6 +14,7 @@
 
 (require rackunit
          "../tui/commands.rkt"
+         "../tui/command-parse.rkt"
          "../tui/state.rkt"
          "../runtime/provider/model-registry.rkt"
          "../interfaces/cli.rkt")
@@ -137,6 +138,16 @@
                             #:when (string-contains? t "openai"))
                      #t)
                    "Transcript contains provider 'openai'"))
+
+(test-case "parsed /model dispatch forwards its model argument"
+  (define reg (make-model-registry-from-config (make-test-config)))
+  (define cctx (make-test-cctx #:model-registry reg))
+  (define parsed (parse-command-name "/model gpt-3.5-turbo"))
+  (check-true (parsed-command? parsed))
+  (check-equal? (process-slash-command cctx parsed) 'continue)
+  (check-not-false (for/or ([t (in-list (cctx-transcript-text cctx))])
+                     (and (string-contains? t "switched to model")
+                          (string-contains? t "gpt-3.5-turbo")))))
 
 ;; ============================================================
 ;; 5. handle-model-command — model not found (2 tests)
