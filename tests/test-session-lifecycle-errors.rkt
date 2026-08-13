@@ -14,7 +14,8 @@
          "../runtime/session/session-config.rkt"
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"
-         (only-in "../agent/event-structs/base.rkt" typed-event?))
+         (only-in "../agent/event-structs/base.rkt" typed-event?)
+         (only-in "../agent/event-emitter.rkt" emit-session-event!))
 
 (test-case "T-04: runtime.error payload is hash? -- non-retry path"
   (define captured (box #f))
@@ -54,3 +55,18 @@
   (check-not-false result)
   (check-pred hash? result)
   (check-equal? (hash-ref result 'retries-attempted) 3))
+
+(test-case "emit-session-event! preserves optional turn identity"
+  (define bus (make-event-bus))
+  (define evt
+    (emit-session-event! bus
+                         "test-session"
+                         "runtime.error"
+                         (hasheq 'message "provider exhausted" 'error-type 'rate-limit)
+                         #:turn-id "prompt-turn-1"))
+  (check-equal? (event-turn-id evt) "prompt-turn-1"))
+
+(test-case "emit-session-event! remains backward compatible without turn identity"
+  (define bus (make-event-bus))
+  (define evt (emit-session-event! bus "test-session" "runtime.error" (hasheq 'message "failure")))
+  (check-false (event-turn-id evt)))
