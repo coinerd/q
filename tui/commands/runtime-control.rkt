@@ -167,22 +167,38 @@
            last-prompt))
      (define runner (cmd-ctx-session-runner cctx))
      (when runner
-       (thread (lambda ()
-                 (with-handlers
-                     ([exn:fail:session:busy? (lambda (_e) (void))]
-                      [exn:fail?
-                       (lambda (e)
-                         (define bus (cmd-ctx-event-bus cctx))
-                         (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
-                         (when (and bus sid)
-                           (publish! bus
-                                     (make-event
-                                      "runtime.error"
-                                      (current-inexact-milliseconds)
-                                      sid
-                                      #f
-                                      (hasheq 'error (exn-message e) 'errorType 'internal-error)))))])
-                   (runner enriched-prompt)))))]
+       (thread
+        (lambda ()
+          (with-handlers
+              ([exn:fail:session:busy?
+                ;; v0.99.96: Don't silently swallow busy errors.
+                ;; Inform the user that the session is still processing.
+                (lambda (_e)
+                  (define bus (cmd-ctx-event-bus cctx))
+                  (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
+                  (when (and bus sid)
+                    (publish! bus
+                              (make-event "runtime.error"
+                                          (current-inexact-milliseconds)
+                                          sid
+                                          #f
+                                          (hasheq 'error
+                                                  "Session is still processing — use /interrupt first"
+                                                  'errorType
+                                                  'busy)))))]
+               [exn:fail?
+                (lambda (e)
+                  (define bus (cmd-ctx-event-bus cctx))
+                  (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
+                  (when (and bus sid)
+                    (publish! bus
+                              (make-event
+                               "runtime.error"
+                               (current-inexact-milliseconds)
+                               sid
+                               #f
+                               (hasheq 'error (exn-message e) 'errorType 'internal-error)))))])
+            (runner enriched-prompt)))))]
     [else
      (define entry (make-error-entry "No previous prompt to retry."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])

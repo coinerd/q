@@ -169,10 +169,18 @@
     (set-box! (tui-ctx-needs-redraw-box ctx) #t)
     (lambda (prompt) (run-prompt! campaign-sess prompt)))
 
+  ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the
+  ;; session-runner closure can read dynamically from it.  After /go
+  ;; switches sessions via make-campaign-runner, subsequent prompts
+  ;; (/retry, handle-user-submit!) must run on the current (campaign)
+  ;; session — not the stale original — so that events are not filtered
+  ;; out by event-for-current-session?.
+  (define agent-session-box (box sess))
+
   (define ctx
     (make-tui-ctx #:event-bus bus
                   #:session-runner (lambda (prompt)
-                                     (run-prompt! sess prompt)
+                                     (run-prompt! (unbox agent-session-box) prompt)
                                      (void))
                   #:session-dir sess-dir
                   #:model-registry (dict-ref rt-config 'model-registry #f)
@@ -181,7 +189,7 @@
                   #:session-factory-runner (case-lambda
                                              [() (make-campaign-runner)]
                                              [(prompt) ((make-campaign-runner) prompt)])
-                  #:agent-session-box (box sess)))
+                  #:agent-session-box agent-session-box))
 
   ;; Scrollback path
   (define scrollback-path
