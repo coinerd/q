@@ -66,7 +66,7 @@
   (check-true (string-contains? (or (ui-state-status-message st4) "") "evaluating"))
   (check-true (string-contains? (status-text st4) "evaluating")))
 
-(test-case "canonical prompt terminal with stale turn-id keeps active-goal working state"
+(test-case "canonical prompt terminal with stale turn-id advances active goal to evaluating"
   (define st (initial-ui-state #:session-id "S" #:model-name "glm-5.1"))
   (define st1
     (apply-event-to-state st (evt "goal.started" (hasheq 'goal-text "build website" 'max-turns 8))))
@@ -77,9 +77,13 @@
     (apply-event-to-state
      st3
      (evt-turn "turn.completed" (hasheq 'scope "prompt" 'reason "completed") "stale-0")))
+  ;; Prompt-owned transient state is cleared. The active goal then deliberately
+  ;; reasserts busy while its evaluator decides whether to schedule another turn.
   (check-true (ui-state-busy? st4))
   (check-not-false (ui-state-active-goal st4))
-  (check-equal? (ui-state-active-turn-id st4) "prompt-1"))
+  (check-false (ui-state-active-turn-id st4))
+  (check-false (ui-state-active-model-turn-id st4))
+  (check-true (string-contains? (or (ui-state-status-message st4) "") "evaluating")))
 
 (test-case "stream.turn.completed preserves active-goal visual working state"
   (define st (initial-ui-state #:session-id "S" #:model-name "glm-5.1"))
