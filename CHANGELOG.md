@@ -1,3 +1,29 @@
+## 0.99.98
+
+Released 2026-08-13.
+
+### Bug Fixes
+
+- `/retry` after a failed `/go` campaign no longer reports "No previous prompt to retry." Previously, wave prompts ran on a dedicated campaign session that was discarded when the TUI restored the pre-campaign session. Slash commands never populate the TUI last-prompt box, and the restored session had no `last-user-prompt`, so the retry handler found nothing to resubmit — even though the circuit-breaker explicitly told the user to type `/retry`. Now the campaign runner records each wave prompt into the shared last-prompt box, so `/retry` resubmits the failed wave prompt on the restored session.
+
+### Testing
+
+- New regression test in `test-process-extension-command.rkt`: `/retry` resubmits wave prompt after failed campaign.
+- Focused: 233 tests passed across campaign, TUI command, session-runner, lifecycle, model-switch, and go-orchestrator suites.
+
+### Breaking / Behavior Changes
+
+- None. `/retry` behavior is additive: it now finds the last wave prompt after a campaign failure instead of reporting no previous prompt.
+
+### Operational / Release
+
+- v0.99.98 is a TUI recovery hotfix for the reported `[ERR] No previous prompt to retry.` after circuit-breaker campaign failure.
+- No configuration format changes.
+
+### Migration Notes
+
+- None required.
+
 ## 0.99.97
 
 Released 2026-08-16.

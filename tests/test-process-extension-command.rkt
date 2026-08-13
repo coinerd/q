@@ -10,12 +10,14 @@
 (require rackunit
          "../tui/commands.rkt"
          "../tui/state-types.rkt"
+         (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
          (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   make-campaign-request
                   register-campaign-request!)
          (only-in "../util/loop-result.rkt" make-loop-result)
-         racket/file)
+         racket/file
+         racket/string)
 
 ;; ============================================================
 ;; N-10: process-extension-command basic interface tests
@@ -107,3 +109,51 @@
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W1")
      (check-equal? factory-count 1))
    (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+;; v0.99.97 regression: after a /go campaign fails, /retry must be able to
+;; resubmit the last wave prompt. Root cause: make-campaign-runner runs wave
+;; prompts on a dedicated campaign session that is discarded when
+;; execute-campaign-command restores the pre-campaign session. The wave prompt
+;; therefore never reached the TUI last-prompt-box (slash commands don't set
+;; it, and the restored pre-campaign session has no last-user-prompt), so
+;; /retry reported "No previous prompt to retry." even though the
+;; circuit-breaker explicitly told the user to type /retry.
+(test-case "/retry resubmits wave prompt after failed campaign"
+  (define last-prompt-box (box #f))
+  (define submitted (box '()))
+  ;; Simulate make-campaign-runner's returned closure (v0.99.97 fix): it
+  ;; records each wave prompt into the shared last-prompt box before running
+  ;; it on the campaign session.
+  (define (campaign-runner prompt)
+    (set-box! last-prompt-box prompt)
+    (set-box! submitted (cons prompt (unbox submitted)))
+    (values 'campaign-session (make-loop-result '() 'failed (hasheq 'reason "wave-failed"))))
+  (define state-box (box (initial-ui-state)))
+  (define cctx
+    (cmd-ctx state-box
+             (box #f)
+             #f
+             #f
+             (box #f)
+             (box #f)
+             last-prompt-box
+             (lambda (prompt) (set-box! submitted (cons prompt (unbox submitted))))
+             (box "")
+             (box #f)
+             #f
+             (box #f)
+             (box #f)))
+  ;; Simulate the campaign having run a wave and then failed:
+  (campaign-runner "Execute wave W3 from the campaign plan...")
+  (check-equal? (unbox last-prompt-box) "Execute wave W3 from the campaign plan...")
+  ;; Now /retry must resubmit the recorded wave prompt, not report
+  ;; "No previous prompt to retry."
+  (handle-retry-command cctx (unbox state-box))
+  (sleep 0.05)
+  (define retried (unbox submitted))
+  (check-true (pair? retried))
+  (check-equal? (car retried) "Execute wave W3 from the campaign plan...")
+  (define transcript (ui-state-transcript (unbox state-box)))
+  (check-false (for/or ([e transcript])
+                 (and (eq? (transcript-entry-kind e) 'error)
+                      (string-contains? (transcript-entry-text e) "No previous prompt to retry.")))))
