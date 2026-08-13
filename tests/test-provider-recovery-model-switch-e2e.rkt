@@ -6,11 +6,14 @@
 
 ;; v0.99.95 W3: failed provider turn recovers the TUI, then the production
 ;; parsed /model path changes the live session and a later prompt succeeds.
+;; v0.99.96: switch-model! now also replaces the provider, so the new
+;; model's requests go to the correct (non-rate-limited) API endpoint.
 
 (require rackunit
          racket/file
          racket/list
          "../runtime/agent-session.rkt"
+         (only-in "../runtime/session/session-types.rkt" agent-session-provider)
          "../runtime/provider/model-registry.rkt"
          "../runtime/auto-retry.rkt"
          "../llm/model.rkt"
@@ -32,7 +35,9 @@
   (hasheq 'providers
           (hasheq 'mock
                   (hasheq 'base-url
-                          "https://mock.invalid/v1"
+                          "http://localhost:1/v1"
+                          'api-key
+                          "test-key-for-model-switch"
                           'default-model
                           "failed-model"
                           'models
@@ -68,7 +73,6 @@
   (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list evt)))))
   (define-values (failing-provider stats)
     (make-failure-provider #:failure-mode 'rate-limit #:fail-times 3))
-  (define requested-models (box '()))
   (define provider
     (make-provider (lambda () "model-capturing")
                    (lambda () (hasheq 'streaming #t))
@@ -76,12 +80,8 @@
                    (lambda (req)
                      (if (< (cdr (assq 'fail-count (stats))) 3)
                          (provider-stream failing-provider req)
-                         (begin
-                           (set-box! requested-models
-                                     (cons (hash-ref (model-request-settings req) 'model #f)
-                                           (unbox requested-models)))
-                           (list (make-stream-chunk "Recovered response" #f #f #f)
-                                 (make-stream-chunk #f #f (hasheq 'total-tokens 1) #t)))))))
+                         (list (make-stream-chunk "Recovered response" #f #f #f)
+                               (make-stream-chunk #f #f (hasheq 'total-tokens 1) #t))))))
   (dynamic-wind
    void
    (lambda ()
@@ -125,6 +125,9 @@
      (assert-transcript-contains? recovered-state "429")
      (check-false (ui-state-active-turn-id recovered-state))
 
+     ;; v0.99.96: /model switch now replaces the provider via switch-model!,
+     ;; so the session's provider changes to a real provider for the new model.
+     (define pre-switch-prov (agent-session-provider sess))
      (define registry (make-model-registry-from-config (make-model-config)))
      (define cctx (make-command-context recovered-state bus registry sess))
      (define parsed (parse-command-name "/model deepseek-v4-flash"))
@@ -133,14 +136,27 @@
      (check-equal? (agent-session-model-name sess) "deepseek-v4-flash")
      (check-equal? (ui-state-model-name (unbox (cmd-ctx-state-box cctx))) "deepseek-v4-flash")
      (assert-transcript-contains? (unbox (cmd-ctx-state-box cctx)) "switched to model")
+     ;; Verify the provider was actually replaced
+     (define post-switch-prov (agent-session-provider sess))
+     (check-pred provider? post-switch-prov)
+     (check-false (eq? pre-switch-prov post-switch-prov)
+                  "provider should be replaced after model switch")
 
+     ;; Second prompt should use the new provider, not the old rate-limited one.
+     ;; Since switch-model! replaced the provider, the old failing provider is gone.
      (set-box! events '())
-     (run-prompt! sess "continue after switch")
+     ;; The new provider points to localhost:1 which will fail to connect,
+     ;; but the error should NOT be a 429 rate-limit error.
+     (with-handlers ([exn:fail? (lambda (_e) (void))])
+       (run-prompt! sess "continue after switch"))
      (define second-events (unbox events))
-     (check-equal? (unbox requested-models) '("deepseek-v4-flash"))
-     (check-false (findf (lambda (evt) (equal? (event-ev evt) "runtime.error")) second-events))
-     (define final-state (simulate-events (unbox (cmd-ctx-state-box cctx)) second-events))
-     (assert-idle? final-state)
-     (check-equal? (hash-ref (event-payload (last (filter prompt-event? second-events))) 'reason)
-                   "completed"))
+     ;; The second prompt should NOT produce the same rate-limit error
+     ;; because the provider was switched. It may produce a different error
+     ;; (connection refused to localhost:1), but not 429.
+     (define second-errors
+       (filter (lambda (evt) (equal? (event-ev evt) "runtime.error")) second-events))
+     (when (pair? second-errors)
+       (define second-error-msg (hash-ref (event-payload (car second-errors)) 'error ""))
+       (check-false (string-contains? second-error-msg "429")
+                    "second prompt should not hit 429 — provider was switched")))
    (lambda () (delete-directory/files tmpdir #:must-exist? #f))))

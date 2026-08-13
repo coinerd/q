@@ -1,3 +1,32 @@
+## 0.99.97
+
+Released 2026-08-16.
+
+### Bug Fixes
+
+- `/model <name>` now switches the **provider instance** — not just the model name string — so requests go to the correct API endpoint with the correct credentials. Previously, switching from `ark-code-latest` to `deepseek-v4-flash` would send the new model name to the old (rate-limited) ark-code API endpoint, causing the same rate-limit error despite the model switch.
+- `agent-session`'s `provider` field is now mutable, with a `guarded-set-provider!` mutation guard.
+- New `switch-model!` function resolves the model name via the model registry, creates a new provider instance via `create-provider-for-name`, and atomically updates the session's provider, model-name, and config.
+- `set-model!` now accepts an optional `model-registry?` argument. When provided, it calls `switch-model!` to replace the provider. When omitted, it retains the old model-name-only behavior for backward compatibility.
+
+### Breaking / Behavior Changes
+
+- `/model <name>` in the TUI now creates a new provider instance. If credentials for the new model's provider are not configured, the provider creation may fall back to a mock or local provider.
+
+### Testing
+
+- Updated `test-provider-recovery-model-switch-e2e.rkt` to verify provider replacement after `/model` switch (pre-switch provider ≠ post-switch provider).
+- Focused: 47 tests passed across model command, session-runner-dynamic, lifecycle-characterization, E2E recovery, lifecycle-errors, session-config, session-controls, session-mutation.
+
+### Operational / Release
+
+- v0.99.97 fixes the provider-not-switched bug reported in the live session transcript.
+- No configuration format changes.
+
+### Migration Notes
+
+- None required.
+
 ## 0.99.96
 
 Released 2026-08-16.

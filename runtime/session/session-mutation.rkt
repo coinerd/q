@@ -84,6 +84,7 @@
                        [guarded-set-shutdown-requested! (-> agent-session? boolean? void?)]
                        [guarded-set-force-shutdown! (-> agent-session? boolean? void?)]
                        [guarded-set-active! (-> agent-session? boolean? void?)]
+                       [guarded-set-provider! (-> agent-session? any/c void?)]
                        [guarded-set-model-name! (-> agent-session? (or/c string? #f) void?)]
                        [guarded-set-config! (-> agent-session? (or/c session-config? hash? #f) void?)]
                        [guarded-set-index! (-> agent-session? (or/c session-index? #f) void?)]
@@ -149,6 +150,10 @@
 ;; Guard active? — idempotent
 (define (guarded-set-active! sess value)
   (set-agent-session-active?! sess value))
+
+;; v0.99.96: Allow provider switching for live model changes.
+(define (guarded-set-provider! sess value)
+  (set-agent-session-provider! sess value))
 
 ;; Guard closed? — only allows #f→#t transition (once-closed semantics)
 ;; Prevents a session from being un-closed after it has been closed.

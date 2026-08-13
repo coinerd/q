@@ -64,7 +64,7 @@
         (define selected-model (model-resolution-model-name resolution))
         (define live-session (unbox (cmd-ctx-agent-session-box cctx)))
         (when live-session
-          (set-model! live-session selected-model))
+          (set-model! live-session selected-model reg))
         ;; Publish model.switched event
         (when (cmd-ctx-event-bus cctx)
           (publish!
