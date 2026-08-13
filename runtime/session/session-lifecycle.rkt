@@ -92,20 +92,23 @@
                                   #:buffer-or-append! (or/c procedure? #f))
                 any)]
           [run-prompt-internal
-           (-> agent-session?
-               (or/c string? message?)
-               (or/c exact-nonnegative-integer? #f)
-               (or/c exact-nonnegative-integer? #f)
-               (or/c procedure? #f)
-               (or/c procedure? #f)
-               any)]
+           (->* (agent-session? (or/c string? message?)
+                                (or/c exact-nonnegative-integer? #f)
+                                (or/c exact-nonnegative-integer? #f)
+                                (or/c procedure? #f)
+                                (or/c procedure? #f))
+                (#:prompt-turn-id (or/c string? #f))
+                any)]
           [build-session-context-for-prompt
            (-> agent-session?
                (or/c string? message?)
                (or/c procedure? #f)
                (or/c procedure? #f)
                (listof message?))]
-          [dispatch-iteration (-> agent-session? (listof message?) exact-nonnegative-integer? any)]
+          [dispatch-iteration
+           (->* (agent-session? (listof message?) exact-nonnegative-integer?)
+                (#:prompt-turn-id (or/c string? #f))
+                any)]
           [ensure-persisted! (-> agent-session? void?)]
           [buffer-or-append! (-> agent-session? message? void?)]
           [write-crash-log! (-> (or/c string? #f) string? string? void?)]
@@ -198,7 +201,10 @@
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
 ;;   v0.32.0: Starts trace logger for session diagnostics.
-(define (dispatch-iteration sess context-with-system max-iterations)
+(define (dispatch-iteration sess
+                            context-with-system
+                            max-iterations
+                            #:prompt-turn-id [prompt-turn-id #f])
   (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
   (define prov (session-provider-facet-provider (session->provider-facet sess)))
   (define reg (session-tool-facet-tool-registry (session->tool-facet sess)))
@@ -263,7 +269,7 @@
                                       'errorHistory
                                       (retry-exhausted-error-history retry-info))
                            (payload->hash base-payload)))
-                     (emit-session-event! bus sid "runtime.error" payload)
+                     (emit-session-event! bus sid "runtime.error" payload #:turn-id prompt-turn-id)
                      ;; The outer prompt lifecycle owns the canonical prompt terminal.
                      ;; Inner dispatch reports only runtime.error and its loop result.
                      ;; v0.32.0: Stop trace logger on error (flush before return)
@@ -340,7 +346,8 @@
                              max-iterations
                              token-budget-threshold
                              ensure-persisted!-fn
-                             buffer-or-append!-fn)
+                             buffer-or-append!-fn
+                             #:prompt-turn-id [prompt-turn-id #f])
   (define bus (agent-session-event-bus sess))
   (define log-path (session-log-path-for sess))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
@@ -381,8 +388,9 @@
 
   ;; 4. Run the core agent loop (model-select hook + iteration dispatch)
   (define final-result
-    (with-telemetry "dispatch-iteration"
-                    (dispatch-iteration sess context-after-compact max-iterations)))
+    (with-telemetry
+     "dispatch-iteration"
+     (dispatch-iteration sess context-after-compact max-iterations #:prompt-turn-id prompt-turn-id)))
 
   ;; 5. Rebuild index
   (guarded-set-index! sess (build-index! log-path idx-path))
@@ -498,7 +506,8 @@
                                                     max-iterations
                                                     token-budget-threshold
                                                     ep!
-                                                    ba!))
+                                                    ba!
+                                                    #:prompt-turn-id active-turn-id))
                              (lambda (updated-session result)
                                (set-box! termination-reason (loop-result-termination-reason result))
                                (values updated-session result)))))]))

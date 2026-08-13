@@ -23,11 +23,12 @@
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
-(provide (contract-out [emit-typed-event!
-                        (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
-                       [event-struct->hasheq (-> typed-event? hash?)]
-                       [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))]
-                       [emit-session-event! (-> event-bus? string? string? hash? event?)])
+(provide (contract-out
+          [emit-typed-event! (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
+          [event-struct->hasheq (-> typed-event? hash?)]
+          [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))]
+          [emit-session-event!
+           (->* (event-bus? string? string? hash?) (#:turn-id (or/c string? #f)) event?)])
          typed-event-base-field-count)
 
 ;; Look up the field name list for a given event struct symbol.
@@ -129,11 +130,11 @@
 ;; sid : string? (session-id)
 ;; event-name : string?
 ;; payload : hash?
-(define (emit-session-event! bus sid event-name payload)
+(define (emit-session-event! bus sid event-name payload #:turn-id [turn-id #f])
   (define pc (event-payload-contract event-name))
   (when pc
     (unless (pc payload)
       (log-warning "Event payload contract violation: ~a" event-name)))
-  (define evt (make-event event-name (now-seconds) sid #f payload))
+  (define evt (make-event event-name (now-seconds) sid turn-id payload))
   (publish! bus evt)
   evt)
