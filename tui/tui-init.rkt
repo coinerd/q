@@ -167,7 +167,16 @@
               (initial-ui-state #:session-id campaign-sid
                                 #:model-name (dict-ref rt-config 'model-name #f)))
     (set-box! (tui-ctx-needs-redraw-box ctx) #t)
-    (lambda (prompt) (run-prompt! campaign-sess prompt)))
+    (lambda (prompt)
+      ;; v0.99.98: Record the wave prompt in the shared last-prompt box so
+      ;; /retry after a failed /go campaign can resubmit the last prompt
+      ;; (the circuit-breaker says "Type /retry to resubmit."). The wave
+      ;; prompt runs on campaign-sess, which is discarded when
+      ;; execute-campaign-command restores the pre-campaign session; the
+      ;; box is shared with cmd-ctx-last-prompt-box (via tui-ctx->cmd-ctx),
+      ;; so the /retry handler can still find it after the campaign fails.
+      (set-box! (tui-ctx-last-prompt-box ctx) prompt)
+      (run-prompt! campaign-sess prompt)))
 
   ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the
   ;; session-runner closure can read dynamically from it.  After /go
