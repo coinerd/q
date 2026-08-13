@@ -103,20 +103,25 @@
   (define prompt-scope? (and (hash? payload) (equal? (hash-ref payload 'scope #f) "prompt")))
   (cond
     [prompt-scope?
+     (define current-session? (event-for-current-session? state evt))
      (define request-id (hash-ref payload 'request-id #f))
      (define pending-request-id (ui-state-interrupt-request-id state))
-     (define correlated?
-       (and (event-for-current-session? state evt)
-            (event-turn-id evt)
-            (equal? (event-turn-id evt) (ui-state-active-turn-id state))
-            (or (not pending-request-id) (equal? request-id pending-request-id))))
+     (define turn-correlated?
+       (and (event-turn-id evt) (equal? (event-turn-id evt) (ui-state-active-turn-id state))))
+     (define interrupt-correlated?
+       (and pending-request-id turn-correlated? (equal? request-id pending-request-id)))
      (cond
-       [(not correlated?) state]
+       [(not current-session?) state]
        [else
+        (unless turn-correlated?
+          (log-warning
+           "TUI: current-session prompt terminal turn-id mismatch; clearing transient state (event=~v active=~v)"
+           (event-turn-id evt)
+           (ui-state-active-turn-id state)))
         (define cleared (clear-after-turn-terminal state))
         (define reason (hash-ref payload 'reason "completed"))
         (define with-feedback
-          (if pending-request-id
+          (if interrupt-correlated?
               (append-entry cleared
                             (make-entry 'system
                                         (if (string=? reason "cancelled")
