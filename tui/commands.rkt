@@ -33,6 +33,7 @@
                   goal-state-status)
          (only-in "../runtime/agent-session.rkt"
                   agent-session?
+                  agent-session-model-name
                   session-provider
                   session-event-bus
                   session-id)
@@ -153,11 +154,37 @@
   (when display-text
     (append-campaign-message! cctx display-text))
   (define factory (cmd-ctx-session-factory-runner cctx))
+  ;; v0.99.96: Save pre-campaign session so we can restore it after the
+  ;; campaign completes or fails.  make-campaign-runner switches the TUI
+  ;; to a dedicated campaign session; without restoration, subsequent
+  ;; prompts (/retry, user input) would publish events with a session-id
+  ;; that doesn't match the TUI state, causing event filtering and a
+  ;; permanent busy hang.
+  (define pre-campaign-sess (unbox (cmd-ctx-agent-session-box cctx)))
+  (define pre-campaign-sid
+    (and pre-campaign-sess (agent-session? pre-campaign-sess) (session-id pre-campaign-sess)))
+  (define pre-campaign-model
+    (and pre-campaign-sess
+         (agent-session? pre-campaign-sess)
+         (agent-session-model-name pre-campaign-sess)))
   (define runner
     (cond
       [(and factory (procedure-arity-includes? factory 0)) (factory)]
       [factory factory]
       [else (cmd-ctx-session-runner cctx)]))
+  ;; v0.99.96: Restore helper — switches back to the pre-campaign session
+  ;; so the TUI state and agent-session-box are consistent for subsequent
+  ;; user interactions.
+  (define (restore-pre-campaign-session!)
+    (when (and pre-campaign-sess (agent-session? pre-campaign-sess))
+      (set-box! (cmd-ctx-agent-session-box cctx) pre-campaign-sess)
+      (define cur-state (unbox (cmd-ctx-state-box cctx)))
+      (set-box! (cmd-ctx-state-box cctx)
+                (struct-copy ui-state
+                             cur-state
+                             [session-id pre-campaign-sid]
+                             [model-name (or pre-campaign-model (ui-state-model-name cur-state))]))
+      (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
   (if runner
       (thread (lambda ()
                 (with-handlers ([exn:fail? (lambda (e)
@@ -169,9 +196,14 @@
                   (unless (eq? (campaign-result-status result) 'campaign-complete)
                     (append-campaign-message! cctx
                                               (format "[ERROR] /go campaign stopped: ~a"
-                                                      (campaign-result-status result)))))))
-      (append-campaign-message! cctx
-                                "[ERROR] No session runner or factory available for /go campaign.")))
+                                                      (campaign-result-status result)))))
+                ;; v0.99.96: Always restore the pre-campaign session after
+                ;; the campaign thread completes (success, failure, or exception).
+                (restore-pre-campaign-session!)))
+      (begin
+        (append-campaign-message! cctx
+                                  "[ERROR] No session runner or factory available for /go campaign.")
+        (restore-pre-campaign-session!))))
 
 (define (execute-extension-command cctx state payload)
   (define campaign-token (hash-ref payload 'campaign-token #f))

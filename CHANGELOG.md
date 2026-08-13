@@ -1,3 +1,31 @@
+## 0.99.96
+
+Released 2026-08-16.
+
+### Bug Fixes
+
+- Fixed permanent TUI busy/watchdog hang after `/go` campaign failure: the `session-runner` closure dynamically reads from `agent-session-box` instead of capturing the original session at TUI init time. After `/go`'s `make-campaign-runner` switches the TUI to a dedicated campaign session, subsequent prompts (`/retry`, user input) now correctly run on the current (campaign) session so events are not filtered out by `event-for-current-session?`.
+- The `/go` campaign completion handler now restores the pre-campaign session in both the `agent-session-box` and TUI UI state, ensuring subsequent user interactions target the correct session.
+- `/retry` no longer silently swallows `exn:fail:session:busy` errors; it now emits a visible `runtime.error` event with `errorType: busy` so the user is informed that the session is still processing.
+
+### Breaking / Behavior Changes
+
+- After `/go` campaign completion (success or failure), the TUI automatically switches back to the original interactive session rather than remaining on the campaign's fork session.
+
+### Testing
+
+- Added `test-session-runner-dynamic.rkt` covering dynamic session-runner dispatch, pre-campaign session restoration, retry busy-error visibility, and session-ID event filtering.
+- Fast and release-gate counts are recorded by the v0.99.96 release workflow.
+
+### Operational / Release
+
+- v0.99.96 is a hotfix for the session-runner mismatch that caused the persistent busy-state hang reported in the live session transcript.
+- No configuration format changes. Historical `.rktd` architecture-policy artifacts remain excluded from version synchronization.
+
+### Migration Notes
+
+- None required.
+
 ## 0.99.95
 
 Released 2026-08-16.
