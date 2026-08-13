@@ -10,6 +10,7 @@
 (require racket/contract
          racket/list
          (only-in "../provider/model-registry.rkt" available-models model-entry-name model-registry?)
+         (only-in "session-config.rkt" session-config? session-config->hash hash->session-config)
          "session-types.rkt")
 (require "session-mutation.rkt")
 
@@ -36,7 +37,18 @@
 (define (set-model! sess model-name)
   (unless (string? model-name)
     (raise-argument-error 'set-model! "string?" model-name))
-  (guarded-set-model-name! sess model-name))
+  (guarded-set-model-name! sess model-name)
+  (define config (agent-session-config sess))
+  (when config
+    (define config-hash
+      (if (session-config? config)
+          (session-config->hash config)
+          config))
+    (define updated (hash-set config-hash 'model-name model-name))
+    (guarded-set-config! sess
+                         (if (session-config? config)
+                             (hash->session-config updated)
+                             updated))))
 
 ;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
 ;; Cycles to the next model in the registry's available models list.

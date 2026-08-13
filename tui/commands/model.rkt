@@ -9,7 +9,8 @@
          (only-in "../../util/event/event.rkt" make-event)
          "../../util/event/event-bus.rkt"
          "../../runtime/provider/model-registry.rkt"
-         "context.rkt")
+         "context.rkt"
+         (only-in "../../runtime/session/session-controls.rkt" set-model!))
 (require racket/contract)
 
 (provide (contract-out [handle-model-command (->* (any/c) ((or/c string? #f)) any/c)]))
@@ -60,17 +61,20 @@
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else
+        (define selected-model (model-resolution-model-name resolution))
+        (define live-session (unbox (cmd-ctx-agent-session-box cctx)))
+        (when live-session
+          (set-model! live-session selected-model))
         ;; Publish model.switched event
         (when (cmd-ctx-event-bus cctx)
-          (publish! (cmd-ctx-event-bus cctx)
-                    (make-event "model.switched"
-                                (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hasheq 'model
-                                        (model-resolution-model-name resolution)
-                                        'provider
-                                        (model-resolution-provider-name resolution)))))
+          (publish!
+           (cmd-ctx-event-bus cctx)
+           (make-event
+            "model.switched"
+            (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+            (or (ui-state-session-id state) "")
+            #f
+            (hasheq 'model selected-model 'provider (model-resolution-provider-name resolution)))))
         (define entry
           (make-entry 'system
                       (format "[switched to model: ~a (provider: ~a)]"
@@ -81,5 +85,7 @@
                               (model-resolution-model-name resolution)
                               'provider
                               (model-resolution-provider-name resolution))))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        (set-box! (cmd-ctx-state-box cctx)
+                  (add-transcript-entry (struct-copy ui-state state [model-name selected-model])
+                                        entry))
         'continue])]))

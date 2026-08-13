@@ -316,6 +316,11 @@
     (for/hash ([(k v) (in-dict config)]
                #:when (memq k '(max-tokens temperature top_p frequency_penalty presence_penalty)))
       (values k v)))
+  (define active-model-name (config-model-name config))
+  (define provider-settings-with-model
+    (if active-model-name
+        (hash-set provider-settings-raw 'model active-model-name)
+        provider-settings-raw))
   ;; v0.15.1 Wave 1: Also resolve max-tokens from config if not in flat runtime hash.
   ;; Config may have max-tokens in: top-level, providers.<name>.max-tokens, or models.default.max-tokens.
   (define provider-settings
@@ -324,19 +329,19 @@
            [resolve-max-tokens
             (lambda ()
               (or
-               (hash-has-key? provider-settings-raw 'max-tokens)
+               (hash-has-key? provider-settings-with-model 'max-tokens)
                (and settings (setting-ref settings 'max-tokens #f))
                (and settings
                     model-name
                     (setting-ref* settings `(providers ,(string->symbol model-name) max-tokens) #f))
                (and settings (setting-ref* settings '(providers openai-compatible max-tokens) #f))
                (and settings (setting-ref* settings '(models default max-tokens) #f))))])
-      (if (and settings (not (hash-has-key? provider-settings-raw 'max-tokens)))
+      (if (and settings (not (hash-has-key? provider-settings-with-model 'max-tokens)))
           (let ([mt (resolve-max-tokens)])
             (if mt
-                (hash-set provider-settings-raw 'max-tokens mt)
-                provider-settings-raw))
-          provider-settings-raw)))
+                (hash-set provider-settings-with-model 'max-tokens mt)
+                provider-settings-with-model))
+          provider-settings-with-model)))
 
   ;; v0.99.81 W2 PN-7: Resolve cumulative retry ceiling from settings.
   ;; providers.<name>.retry-ceiling-secs overrides the default (300s).
