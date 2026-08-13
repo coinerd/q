@@ -1,3 +1,31 @@
+## 0.99.95
+
+Released 2026-08-16.
+
+### Bug Fixes
+
+- Parsed TUI `/model <name>` commands now forward their argument, update the live agent session and visible model state, and retain the existing `model.switched` event/transcript contract.
+- Current-session canonical prompt terminals clear prompt-owned busy/streaming state even when historical event correlation is stale or absent, while interrupt feedback remains strictly turn/request correlated.
+- Prompt-lifecycle `runtime.error` events now carry the stable outer prompt turn ID through retry exhaustion.
+
+### Breaking / Behavior Changes
+
+- Successful `/model <name>` now changes the model used by subsequent prompts in the live TUI session; bare `/model` still lists models and unknown models remain non-mutating errors.
+
+### Testing
+
+- Focused regressions cover parsed command forwarding, stale/missing terminal cleanup, runtime-error provenance, and the end-to-end 429 → retries exhausted → error displayed → TUI idle → model switch → successful next prompt flow.
+- Fast and release-gate counts are recorded by the v0.99.95 release workflow.
+
+### Operational / Release
+
+- v0.99.95 closes milestone #881 across W0 model command dispatch (#9296), W1 terminal recovery (#9297), W2 runtime-error correlation (#9298), and W3 end-to-end release verification (#9299).
+- No configuration format changes. Historical `.rktd` architecture-policy artifacts remain excluded from version synchronization and protected by release integrity checks.
+
+### Migration Notes
+
+- None required.
+
 ## 0.99.94
 
 Released 2026-08-13.
