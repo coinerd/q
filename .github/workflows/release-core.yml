@@ -94,6 +94,20 @@ jobs:
           echo "TARBALL_NAME=${TARBALL_NAME}" >> $GITHUB_OUTPUT
           echo "TARBALL_PATH=/tmp/release/${TARBALL_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Verify architecture artifacts unchanged in release copy
+        run: |
+          # Snapshot source checkout (default working directory = checkout root)
+          racket scripts/release-integrity-guard.rkt --validate-rktd
+          racket scripts/release-integrity-guard.rkt --snapshot > /tmp/source-snapshot.json
+          # Snapshot release copy
+          cd /tmp/release/q
+          racket scripts/release-integrity-guard.rkt --validate-rktd
+          racket scripts/release-integrity-guard.rkt --snapshot > /tmp/release-copy-snapshot.json
+          # The copy must have identical hashes to the source
+          diff <(jq -S 'sort_by(.path)' /tmp/source-snapshot.json) \
+               <(jq -S 'sort_by(.path)' /tmp/release-copy-snapshot.json) \
+            || { echo "ERROR: Architecture artifacts differ between source and release copy"; exit 1; }
+
       - name: Generate release manifest
         env:
           TARBALL_PATH: ${{ steps.build.outputs.TARBALL_PATH }}

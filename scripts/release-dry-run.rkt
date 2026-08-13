@@ -13,8 +13,9 @@
 ;;   3. CHANGELOG entry: CHANGELOG.md has entry for version
 ;;   4. Release notes: gen-release-notes.rkt produces non-empty output
 ;;   5. Manifest: gen-release-manifest.rkt produces valid JSON output
-;;   6. Tarball build: tarball build command is syntactically valid
-;;   7. No publication: verify no git tag/release creation commands run
+;;   6. Architecture integrity: protected .rktd artifacts exist, parse, snapshot-able
+;;   7. Tarball build: tarball build command is syntactically valid
+;;   8. No publication: verify no git tag/release creation commands run
 ;;
 ;; Exit codes:
 ;;   0 — all checks pass, release is ready
@@ -198,7 +199,22 @@
       (delete-directory/files temp-dir)
       (if (zero? exit-code)
           (dry-run-result "manifest" #t "manifest generation succeeded")
-          (dry-run-result "manifest" #f "manifest generation failed"))))))
+          (dry-run-result "manifest" #f "manifest generation failed"))))
+   ;; Check 6: Architecture-policy artifact integrity
+   ;; Snapshots all protected artifacts and verifies they exist and parse.
+   ;; The full before/after comparison runs around the actual release
+   ;; automation steps — this check verifies the guard infrastructure works
+   ;; and all protected .rktd files are syntactically valid.
+   (cons
+    "arch-integrity"
+    (lambda ()
+      (define exit-code
+        (run-subprocess "racket" (list "scripts/release-integrity-guard.rkt" "--validate-rktd")))
+      (if (zero? exit-code)
+          (dry-run-result "arch-integrity" #t "architecture policy artifacts valid and snapshot-able")
+          (dry-run-result "arch-integrity"
+                          #f
+                          "architecture policy integrity check failed (see output)"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; I/O layer
