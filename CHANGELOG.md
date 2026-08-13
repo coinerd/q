@@ -1,3 +1,31 @@
+## 0.99.94
+
+Released 2026-08-13.
+
+### Features
+
+- Release Integrity Guard: a SHA-256-pinned registry of protected architecture-policy artifacts (`scripts/release-integrity-guard.rkt`) blocks release automation from mutating `.rktd` architecture freeze files, parameter inventories, dependency policies, and other governance records. The guard runs in the CI `prepare` job and fails fast with a clear diff message if any protected file changes during a release.
+- The `sync-version.rkt` script now excludes `.rktd` files from version bulk-replacement, preventing the historical freeze-record corruption that caused the v0.99.93 release repair.
+- The `lint-version.rkt` script now skips `docs/audits/` (historical records, like `docs/reports/`).
+
+### Breaking / Behavior Changes
+
+- None. The release integrity guard is a CI-time check that does not affect runtime behavior.
+
+### Testing
+
+- Release integrity guard characterization tests: 10/10 (protected-artifact registry, mutation detection, exclusion logic, SHA-256 pinning).
+- Gates: Fast 1082/15704, Arch 29/284, TUI 84/1325, Security 64/710, Workflows 29/162, CI 17/17.
+
+### Operational / Release
+
+- v0.99.94 is a single-PR release: the architecture integrity guard (#881) + format/metrics fixes + lint-version `docs/audits/` skip.
+- No production provider, public API, or configuration format changed.
+
+### Migration Notes
+
+- None required.
+
 ## 0.99.93
 
 Released 2026-08-13.
