@@ -127,7 +127,7 @@
         (session-id ; string
          session-dir ; path
          ;; Runtime Services (injected)
-         provider ; provider?
+         [provider #:mutable] ; provider? — v0.99.96: mutable for live model switching
          tool-registry ; tool-registry?
          event-bus ; event-bus?
          extension-registry ; extension-registry? or #f
@@ -284,7 +284,8 @@
 ;; Internal sub-module: provides raw setters for session-mutation.rkt only.
 ;; These MUST NOT be used outside session-mutation.rkt.
 (module+ internal
-  (provide set-agent-session-model-name!
+  (provide set-agent-session-provider!
+           set-agent-session-model-name!
            set-agent-session-index!
            set-agent-session-config!
            set-agent-session-active?!
