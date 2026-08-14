@@ -21,7 +21,11 @@
   (filter (lambda (t) (eq? (md-token-type t) 'text)) toks))
 
 (define sample-table
-  "| Layer | File | Responsibility |\n|-------|:----:|---------------:|\n| parse | util/markdown.rkt | tokens |\n| render | tui/markdown.rkt | styled-lines |\n")
+  (string-append
+   "| Layer | File | Responsibility |\n"
+   "|-------|:----:|---------------:|\n"
+   "| parse | util/markdown.rkt | tokens |\n"
+   "| render | tui/markdown.rkt | styled-lines |\n"))
 
 ;; ---------- parse level ----------
 
