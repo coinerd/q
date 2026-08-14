@@ -453,6 +453,11 @@
 ;; Raw stdin reading
 ;; ============================================================
 
+;; W2: raw control byte 1-26 (Ctrl+letter), excluding bytes handled
+;; specially as backspace(8)/tab(9)/return(10,13) above.
+(define (ctrl-letter-byte? v)
+  (and (>= v 1) (<= v 26) (not (memv v '(8 9 10 13)))))
+
 (define (real-stdin-read-msg #:timeout [timeout 0.20])
   (define in (current-input-port))
   (define b (buffered-read-byte in timeout))
@@ -469,6 +474,10 @@
     [127 (make-tkeymsg-raw 'backspace)]
     [8 (make-tkeymsg-raw 'backspace)]
     [3 (make-tkeymsg-raw 'ctrl-c)]
+    ;; W2: Ctrl+O (15) and other Ctrl+letter bytes decode via keymap registry.
+    [(? ctrl-letter-byte? v)
+     (make-tkeymsg-raw
+      (string->symbol (format "ctrl-~a" (string (integer->char (+ v 96))))))]
     [(? (lambda (v) (>= v 192)))
      (utf8-accumulator-reset!)
      (define lead-char (integer->char b))

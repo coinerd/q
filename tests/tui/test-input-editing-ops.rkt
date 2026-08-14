@@ -115,3 +115,9 @@
 
 (module+ main
   (run-tests editing-tests))
+
+;; W3 reconciliation fix (v0.99.96): raco test only executes (module+ test ...)
+;; submodules and top-level expressions — a suite run solely under (module+ main)
+;; was silently false-green (0 tests reported). Match the q/tests/tui convention
+;; (top-level run-tests, cf. test-ansi-wrap.rkt) so this suite actually runs.
+(run-tests editing-tests)

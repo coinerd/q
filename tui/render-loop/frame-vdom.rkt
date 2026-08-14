@@ -12,7 +12,19 @@
          (prefix-in vdom-comp: "../vdom-components.rkt")
          (only-in "../component.rkt" component-render component-state-ref component-state-update)
          (only-in "../render.rkt" render-transcript apply-selection-highlight plain-line)
-         (only-in "../input.rkt" input-visible-window)
+         (only-in "../input.rkt"
+                  input-state-buffer
+                  input-state-cursor)
+         (only-in "../../ui-core/ui-diagnostics.rkt"
+                  ui-diagnostic!)
+         (only-in "../char-width.rkt" string-visible-width)
+         (only-in "../../ui-core/composer-layout.rkt"
+                  compute-composer-layout
+                  composer-layout-lines
+                  composer-layout-cursor-row
+                  composer-layout-cursor-col
+                  composer-layout-row-count
+                  composer-visual-line-text)
          (only-in "../state.rkt"
                   ui-state-scroll-offset
                   ui-state-selection
@@ -124,10 +136,6 @@
   (define status-vnodes (component-render status-comp ui-state cols))
   (render-vdom-section-to-buffer! status-vnodes ubuf cols status-y 1)
 
-  (define input-comp (vdom-comp:make-input-vdom-component/istate input-st))
-  (define input-vnodes (component-render input-comp ui-state cols))
-  (render-vdom-section-to-buffer! input-vnodes ubuf cols input-y 1)
-
   (define overlay (ui-state-active-overlay ui-state))
   (when overlay
     (define ov-content (overlay-state-content overlay))
@@ -142,6 +150,36 @@
     (when (pair? ov-vnodes)
       (render-vdom-section-to-buffer! ov-vnodes ubuf cols transcript-start-row (length ov-vnodes))))
 
-  (define-values (_visible-text _scroll-offset cursor-display-col)
-    (input-visible-window input-st cols))
-  (values cursor-display-col input-y ui-state* '()))
+  ;; ── Multiline composer (W3, default-on since W5) ────────────────
+  ;; composer-layout is the SINGLE authoritative source for both the
+  ;; painted visual lines AND the cursor cell: the cursor coordinates
+  ;; returned below come from this same layout — never recomputed.
+  (define input-width (max 1 (layout-region-width input-region)))
+  (define clayout (compute-composer-layout (input-state-buffer input-st)
+                                           (input-state-cursor input-st)
+                                           input-width
+                                           string-visible-width))
+  (define vlines (composer-layout-lines clayout))
+  (define cursor-row (composer-layout-cursor-row clayout))
+  (define cursor-col (composer-layout-cursor-col clayout))
+  ;; Rows available on screen from the composer's first text row down.
+  (define avail-rows (max 1 (- rows input-y)))
+  ;; Internal vertical viewport: keep the cursor's visual line visible.
+  (define v-offset (max 0 (- (add1 cursor-row) avail-rows)))
+  (for ([vline (in-list (list-tail vlines v-offset))]
+        [i (in-naturals)]
+        #:break (>= i avail-rows))
+    (cell-buffer-putstring! ubuf 0 (+ input-y i)
+                            (composer-visual-line-text vline)))
+  ;; Clear indicator when the viewport scrolled past the top.
+  (when (> v-offset 0)
+    (cell-buffer-putstring! ubuf 0 input-y "↑"))
+  (define abs-cursor-row (+ input-y (- cursor-row v-offset)))
+  (if (> abs-cursor-row (sub1 rows))
+      (begin
+        ;; W5 diagnostic: renderer cursor clamping.
+        (ui-diagnostic! 'renderer.cursor-clamped
+                        (hasheq 'row abs-cursor-row 'max-row (sub1 rows)))
+        (values cursor-col (sub1 rows) ui-state* '()))
+      (values cursor-col abs-cursor-row ui-state* '())))
+

@@ -62,7 +62,13 @@
                   check-busy-watchdog)
          ;; GAP-LB (v0.98.8 W0): Layout breakpoint classification
          (only-in "../ui-core/layout-protocol.rkt" classify-layout-breakpoint make-gui-layout)
-         (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!))
+         (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!)
+         (only-in "../ui-core/composer-layout.rkt"
+                  compute-composer-layout
+                  composer-layout-row-count)
+         (only-in "../ui-core/feature-flags.rkt"
+                  tui-multiline-composer-enabled)
+         (only-in "../tui/char-width.rkt" string-visible-width))
 
 (define (tui-output-port)
   (or (current-guarded-real-output-port) (current-output-port)))
@@ -85,6 +91,8 @@
          write-cell!
          FULL-RENDER-INTERVAL-FRAMES
          incremental-frame-count
+         last-composer-input-height
+         reset-composer-height-tracking!
          (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [apply-busy-watchdog! (-> tui-ctx? number? number? boolean?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
@@ -137,6 +145,16 @@
 (define FULL-RENDER-INTERVAL-FRAMES 300) ;; kept as value alias for tests
 (define incremental-frame-count (box 0))
 
+;; W3 (v0.99.96): Force full redraw on composer-height changes.
+;; When the multiline composer grows/shrinks (soft-wrap reflow), every
+;; region below it shifts.  An incremental cell diff can leave stale
+;; artifacts at the old boundaries, so a composer-height change always
+;; triggers a full render.  #f = no composer region seen yet.
+(define last-composer-input-height (box #f))
+
+(define (reset-composer-height-tracking!)
+  (set-box! last-composer-input-height #f))
+
 (define (reset-idle-render-state!)
   (set-box! last-render-ms 0.0)
   (set-box! last-blink-toggle-ms 0.0)
@@ -147,7 +165,8 @@
   (set-box! last-cursor-row-box #f)
   (set-box! last-cursor-base-cell-box #f)
   ;; F-TUI-02 (v0.99.16 W1): Reset incremental frame counter.
-  (set-box! incremental-frame-count 0))
+  (set-box! incremental-frame-count 0)
+  (reset-composer-height-tracking!))
 
 (define (resize-poll-due? now-ms last-ms interval-ms)
   (or (not last-ms) (>= (- now-ms last-ms) interval-ms)))
@@ -231,11 +250,23 @@
 
   (define-values (cols rows) (tui-screen-size))
   (define widget-lines (get-widget-lines-above state))
+  ;; W3: composer text rows drive the input region height when the
+  ;; multiline composer is enabled.  The row count comes from the SAME
+  ;; shared visual layout (composer-layout) that frame-vdom uses to paint
+  ;; text and position the cursor — the render loop never recomputes wrap.
+  (define composer-text-rows
+    (and (tui-multiline-composer-enabled)
+         (composer-layout-row-count
+          (compute-composer-layout (input-state-buffer inp)
+                                   (input-state-cursor inp)
+                                   (max 1 cols)
+                                   string-visible-width))))
   (define layout
     (compute-layout rows
                     cols
                     #:widget-bar-h (length widget-lines)
-                    #:has-widgets? (positive? (length widget-lines))))
+                    #:has-widgets? (positive? (length widget-lines))
+                    #:composer-height composer-text-rows))
 
   ;; Initialize component registry on first render
   (define reg-box (tui-ctx-component-registry-box ctx))
@@ -288,11 +319,22 @@
   ;; Hardware cursor remains hidden; we draw the cursor in the cell buffer.
   ;; Sync bracket prevents frame tearing on capable terminals.
   (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
+  ;; W3: Force full render when the composer height changed since the last
+  ;; frame — soft-wrap reflow shifts every region below the composer, and an
+  ;; incremental diff would leave stale cells at the old boundaries.
+  (define composer-height-changed?
+    (let ([h (layout-region-height (layout-input layout))])
+      (define changed? (and (unbox last-composer-input-height)
+                            (not (= h (unbox last-composer-input-height)))))
+      (set-box! last-composer-input-height h)
+      changed?))
   ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
   ;; After current-full-render-interval-frames incremental renders, force a
   ;; full render to clear any accumulated snapshot drift.
   (define force-full-render?
-    (and prev-ubuf (>= (unbox incremental-frame-count) (current-full-render-interval-frames))))
+    (and prev-ubuf
+         (or composer-height-changed?
+             (>= (unbox incremental-frame-count) (current-full-render-interval-frames)))))
   (cond
     ;; Safety net tripped — reset counter and force full render
     [force-full-render? (set-box! incremental-frame-count 0)]

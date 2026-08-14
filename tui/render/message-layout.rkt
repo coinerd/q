@@ -15,7 +15,8 @@
          "../theme.rkt"
          "../../util/markdown.rkt"
          (only-in "../../util/markdown.rkt" md-token-content md-token-type)
-         "../../extensions/custom-renderer-registry.rkt")
+         "../../extensions/custom-renderer-registry.rkt"
+         "../../ui-core/disclosure-state.rkt")
 
 (provide styled-line
          styled-line?
@@ -27,7 +28,7 @@
          (contract-out
           [plain-line (-> string? styled-line?)]
           [theme->style (->* (any/c) [(listof symbol?)] (listof symbol?))]
-          [format-entry (->* (any/c) [exact-nonnegative-integer?] (listof styled-line?))]
+          [format-entry (->* (any/c) [exact-nonnegative-integer? any/c] (listof styled-line?))]
           [md-format-assistant (-> string? exact-nonnegative-integer? (listof styled-line?))]
           [md-token->segment (-> any/c styled-segment?)]
           [styled-line->text (-> styled-line? string?)]
@@ -68,7 +69,7 @@
       modifiers))
 
 ;; Format a transcript entry into styled lines.
-(define (format-entry entry [width 200])
+(define (format-entry entry [width 200] [disclosure #f])
   (define kind (transcript-entry-kind entry))
   (define raw-text (or (transcript-entry-text entry) ""))
 
@@ -109,19 +110,33 @@
      (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
     [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]
     [(thinking)
-     ;; v0.28.21 W1: Distinct thinking rendering with truncation + separator
-     (define max-lines 3)
-     (define lines (string-split raw-text "\n"))
-     (define visible-lines (take lines (min max-lines (length lines))))
-     (define truncated? (> (length lines) max-lines))
+     ;; v0.99.96 W2: Honor disclosure state — collapsed shows preview, expanded shows full body.
+     ;; Pure: uses only disclosure-state.rkt helpers, no terminal/render side effects.
+     (define entry-id (transcript-entry-id entry))
      (define base-style '(dim italic cyan))
-     (append (for/list ([l (in-list visible-lines)])
-               (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))
-             (if truncated?
-                 (list (styled-line (list (styled-segment (format "... ~a more lines"
-                                                                  (- (length lines) max-lines))
-                                                          base-style))))
-                 '()))]
+     (cond
+       ;; No disclosure state available (e.g. legacy callers): fall back to 3-line truncation.
+       [(not disclosure)
+        (define max-lines 3)
+        (define lines (string-split raw-text "\n"))
+        (define visible-lines (take lines (min max-lines (length lines))))
+        (define truncated? (> (length lines) max-lines))
+        (append (for/list ([l (in-list visible-lines)])
+                  (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))
+                (if truncated?
+                    (list (styled-line (list (styled-segment (format "... ~a more lines"
+                                                                 (- (length lines) max-lines))
+                                                         base-style))))
+                    '()))]
+       ;; Expanded: render full body as normal scrollable transcript content (no modal).
+       [(and entry-id (disclosure-expanded? disclosure entry-id))
+        (for/list ([l (in-list (string-split raw-text "\n"))])
+          (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))]
+       ;; Collapsed: show a single useful preview line.
+       [else
+        (define total (length (string-split raw-text "\n")))
+        (define preview (make-collapsed-preview raw-text 3 total))
+        (list (styled-line (list (styled-segment (format "── [thinking] ~a" preview) base-style))))])]
     [else (list (styled-line (list (styled-segment raw-text '()))))]))
 
 ;; Convert a markdown token to a list of styled segments.

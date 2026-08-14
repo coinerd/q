@@ -7,7 +7,7 @@
 
 (require racket/contract
          racket/list
-         "../char-width.rkt"
+         "../../ui-core/composer-model.rkt"
          "state-types.rkt")
 
 (provide input-state?
@@ -45,61 +45,76 @@
                         (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]))
 
 ;; ============================================================
+;; W3 composer-model bridge
+;;
+;; Editing operations route through the shared, pure editor model in
+;; q/ui-core/composer-model.rkt (single source of truth for
+;; grapheme-aware buffer edits and cursor movement).  input-state's own
+;; concerns — undo/redo stack, kill ring, history index — are preserved
+;; here; only buffer+cursor semantics are delegated.
+;; ============================================================
+
+;; input-state -> composer-state (buffer + cursor view)
+(define (input->composer st)
+  (make-composer-state #:buffer (input-state-buffer st)
+                       #:cursor (input-state-cursor st)))
+
+;; Apply a composer editing op; commit buffer/cursor back into
+;; input-state, recording an undo entry (existing history semantics).
+;; No-op edits (e.g. backspace at 0) return st unchanged, as before.
+(define (run-composer-edit st op)
+  (define c (op (input->composer st)))
+  (define new-buf (composer-state-buffer c))
+  (define new-cur (composer-state-cursor c))
+  (if (and (string=? new-buf (input-state-buffer st))
+           (= new-cur (input-state-cursor st)))
+      st
+      (push-undo st (struct-copy input-state st
+                                 [buffer new-buf]
+                                 [cursor new-cur]))))
+
+;; Apply a composer movement op (no undo entry — pure cursor change).
+(define (run-composer-move st op)
+  (define c (op (input->composer st)))
+  (struct-copy input-state st
+               [buffer (composer-state-buffer c)]
+               [cursor (composer-state-cursor c)]))
+
+;; ============================================================
 ;; Basic editing
 ;; ============================================================
 
 (define (input-insert-char st ch)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (define new-buf (string-append (substring buf 0 cur) (string ch) (substring buf cur)))
-  (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (+ cur 1)])))
+  (run-composer-edit st (λ (c) (composer-insert-char c ch))))
 
 (define (input-backspace st)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (if (zero? cur)
-      st
-      (let* ([prev-start (prev-grapheme-start buf cur)]
-             [new-buf (string-append (substring buf 0 prev-start) (substring buf cur))])
-        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor prev-start])))))
+  (run-composer-edit st composer-backspace))
 
 (define (input-insert-newline st)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (define new-buf (string-append (substring buf 0 cur) "\n" (substring buf cur)))
-  (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (add1 cur)] [history-idx #f])))
+  ;; Newline resets in-progress history recall, as before.
+  (define next (run-composer-edit st composer-insert-newline))
+  (if (eq? next st)
+      st
+      (struct-copy input-state next [history-idx #f])))
 
 (define (input-delete st)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (if (>= cur (string-length buf))
-      st
-      (let* ([next-start (next-grapheme-start buf cur)]
-             [new-buf (string-append (substring buf 0 cur) (substring buf next-start))])
-        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor cur])))))
+  (run-composer-edit st composer-delete))
 
 (define (input-cursor-left st)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (if (zero? cur)
-      st
-      (struct-copy input-state st [cursor (prev-grapheme-start buf cur)])))
+  (run-composer-move st composer-cursor-left))
 
 (define (input-cursor-right st)
-  (define buf (input-state-buffer st))
-  (define cur (input-state-cursor st))
-  (if (>= cur (string-length buf))
-      st
-      (struct-copy input-state st [cursor (next-grapheme-start buf cur)])))
+  (run-composer-move st composer-cursor-right))
 
 (define (input-home st)
-  (struct-copy input-state st [cursor 0]))
+  (run-composer-move st composer-cursor-home))
 
 (define (input-end st)
-  (struct-copy input-state st [cursor (string-length (input-state-buffer st))]))
+  (run-composer-move st composer-cursor-end))
 
 (define (input-clear st)
-  (push-undo st (struct-copy input-state st [buffer ""] [cursor 0])))
+  ;; Preserve legacy semantics: clear always records an undo entry.
+  (push-undo st (run-composer-move st composer-clear)))
 
 ;; ============================================================
 ;; Query helpers
@@ -251,11 +266,4 @@
 ;; ============================================================
 
 (define (input-insert-string st text)
-  (if (string=? text "")
-      st
-      (let* ([buf (input-state-buffer st)]
-             [cur (input-state-cursor st)]
-             [new-buf (string-append (substring buf 0 cur) text (substring buf cur))])
-        (push-undo
-         st
-         (struct-copy input-state st [buffer new-buf] [cursor (+ cur (string-length text))])))))
+  (run-composer-edit st (λ (c) (composer-insert-string c text))))

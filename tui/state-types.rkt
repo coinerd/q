@@ -20,6 +20,7 @@
          json
          "../util/cost-tracker.rkt"
          "../util/string-helpers.rkt"
+         "../ui-core/disclosure-state.rkt"
          "arg-summary.rkt")
 
 ;; Structs that need struct-copy support in consumers must use struct-out.
@@ -168,6 +169,7 @@
          ui-state-context-pressure-level
          ui-state-context-pressure-percent
          ui-state-active-goal
+         ui-state-disclosure
          goal-display-info
          goal-display-info?
          goal-display-info-goal-text
@@ -276,7 +278,9 @@
          context-pressure-level ; (or/c #f symbol?) — context pressure level ('low 'medium 'high 'critical)
          context-pressure-percent ; (or/c #f real?) — context pressure percentage (0–100)
          ;; --- Goal group ---
-         active-goal) ; (or/c goal-display-info? #f) — active autonomous goal display info
+         active-goal ; (or/c goal-display-info? #f) — active autonomous goal display info
+         ;; --- Disclosure group (W2) ---
+         disclosure) ; disclosure-state? — collapsed/expanded artifact state (W2)
   #:transparent)
 
 ;; Goal display info for TUI status bar
@@ -419,7 +423,8 @@
             (make-cost-tracker)
             #f
             #f
-            #f))
+            #f
+            (make-empty-disclosure-state)))
 
 ;; ============================================================
 ;; Backward-compatible streaming accessors (v0.38.6)
