@@ -41,8 +41,9 @@
       (check-equal? (transcript-entry-text (car thinking-entries)) "I need to check the files...")
       (check-false (ui-state-streaming-thinking result)))
 
-    ;; T2: Thinking NOT persisted when assistant has content
-    (test-case "thinking NOT persisted when assistant has content"
+    ;; T2 (BUG-0003): thinking IS persisted when assistant has content,
+    ;; as a completed entry ordered before the assistant entry.
+    (test-case "thinking persisted when assistant has content"
       (define state (initial-ui-state))
       (define events
         (list (make-test-event "turn.started" (hasheq))
@@ -51,9 +52,15 @@
               (make-test-event "assistant.message.completed" (hasheq 'content "response text"))))
       (define result (apply-events state events))
       (define thinking-entries (find-entries result 'thinking))
-      (check-equal? (length thinking-entries) 0)
+      (check-equal? (length thinking-entries) 1)
+      (check-equal? (transcript-entry-text (car thinking-entries)) "thinking about this...")
       (define assistant-entries (find-entries result 'assistant))
-      (check-equal? (length assistant-entries) 1))
+      (check-equal? (length assistant-entries) 1)
+      ;; order: transcript list is newest-first, so the chronologically
+      ;; earlier thinking entry sits immediately after the assistant entry.
+      (define kinds (map transcript-entry-kind (ui-state-transcript result)))
+      (check-equal? kinds '(assistant thinking) "thinking precedes assistant chronologically")
+      (check-false (ui-state-streaming-thinking result)))
 
     ;; T3: Thinking NOT persisted when no thinking occurred
     (test-case "thinking NOT persisted when no thinking occurred"
