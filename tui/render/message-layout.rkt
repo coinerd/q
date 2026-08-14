@@ -107,7 +107,14 @@
     [(tool-fail)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'name "tool"))
      (define sanitized (string-replace raw-text "\n" " "))
-     (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
+     ;; v1.00.00-PRE1 W2 (BUG-0002): route the [FAIL] line through the same
+     ;; wrap-styled-line algorithm the assistant path uses (see md-format-assistant),
+     ;; so long failure payloads wrap instead of being clipped at terminal width.
+     ;; Continuation lines keep the red style and carry no repeated prefix,
+     ;; matching the wrapped-assistant convention.
+     (define fail-line
+       (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))
+     (wrap-styled-line fail-line width)]
     [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]
     [(thinking)
      ;; v0.99.96 W2: Honor disclosure state — collapsed shows preview, expanded shows full body.

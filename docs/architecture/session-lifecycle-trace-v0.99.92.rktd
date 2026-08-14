@@ -167,7 +167,7 @@
                   (id . gui-new-session)
                   (kind . direct)
                   (to . run-prompt!))
-          #hasheq((anchor . "gui/main.rkt:run-prompt! sess val")
+          #hasheq((anchor . "gui/main.rkt:run-prompt! sess text")
                   (from . gui/main)
                   (id . gui-input)
                   (kind . direct)
