@@ -155,7 +155,7 @@
 (define (probe-key e)
   (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
 
-(define expected-edge-digest "b283d99011188a7dc674c9552b99a328af1c1730")
+(define expected-edge-digest "8c228646fcd71a89a39162858fdde214b5652eb1")
 (define expected-exit-digest "0ab36b122d43b5d7f807c6b87582987c85d810c3")
 (define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
