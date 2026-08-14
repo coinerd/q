@@ -1,3 +1,38 @@
+## 1.00.00-PRE1
+
+Released 2026-08-15.
+
+> Pre-release milestone: agent GitHub tooling restored and TUI transcript correctness. Six registry bugs closed (BUG-0001 through BUG-0006).
+
+### Bug Fixes
+
+- Scrollback is stored per session (`<base>/<session-id>/scrollback.txt`): a new session no longer loads the previous session's buffer, and resuming a session restores its own scrollback (BUG-0001).
+- Tool-failure (`[FAIL]`) result lines wrap at terminal width through the shared segment wrapper; long error payloads are no longer clipped at the right edge (BUG-0002).
+- Reasoning (`[thinking]`) entries persist in the transcript once a turn produces content: the reducer keeps them as completed entries, the renderer draws them dimmed before that turn's content, and event-JSON round-trips preserve them across resume (BUG-0003).
+- GFM tables parse into a structured `table` token and render as aligned, width-aware tables with per-cell wrapping; malformed tables fall back to paragraph text (BUG-0004).
+- gsd head-summary `git show HEAD` semantics fixed; the session-lifecycle characterization anchor and probe digest landed (BUG-0005, code originally fixed in df56b88d).
+- All agent-usable GitHub auth paths restored: `gh` authenticated and the github-integration extension installed and wired for the agent environment (BUG-0006).
+
+### Breaking / Behavior Changes
+
+- Scrollback moves from a single global file to per-session directories; existing global scrollback is not migrated.
+- Reasoning text that previously disappeared when content arrived is now retained and shown dimmed (no collapse/expand toggle yet; follow-up).
+
+### Migration Notes
+
+- Sessions created before this release have no per-session scrollback file; the first run of such a session simply starts with an empty buffer.
+
+### Testing
+
+- New `test-tui-scrollback-session.rkt`; extended `test-message-layout.rkt`, `test-conversation-reducer.rkt`, `test-markdown-parser.rkt`; pre-release heading case added to `test-lint-release-notes.rkt`.
+- Fast suite and the session-lifecycle characterization suite are green on the release commit.
+
+### Operational / Release
+
+- Version stamped `1.00.00-PRE1` in `util/version.rkt`, `info.rkt`, and the README badge/verify snippet.
+- `lint-release-notes` now accepts semver pre-release version headings (e.g. `## 1.00.00-PRE1`), matching the `v1.00.00-PRE1` tag flow.
+- Milestone v1.00.00-PRE1 closed; bug registry at Open 0 / Fixed 6.
+
 ## 0.99.99
 
 Released 2026-09-10.
