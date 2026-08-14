@@ -28,10 +28,11 @@
   (define content (or streamed (hash-ref payload 'content "")))
   (define ts (event-time evt))
   (define thinking (ui-state-streaming-thinking state))
+  ;; BUG-0003: persist thinking whenever it exists, not only when
+  ;; content is empty. Entry order (thinking before assistant) is
+  ;; preserved by appending thinking first.
   (define s0
-    (if (and thinking
-             (> (string-length (string-trim thinking)) 0)
-             (string=? (string-trim content) ""))
+    (if (and thinking (> (string-length (string-trim thinking)) 0))
         (append-entry state (make-entry 'thinking thinking ts (hash)))
         state))
   (clear-streaming (set-pending-tool-name

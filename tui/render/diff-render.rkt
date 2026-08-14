@@ -98,9 +98,11 @@
   (define streaming-text (ui-state-streaming-text state))
   (define streaming-thinking (ui-state-streaming-thinking state))
   (define chronological-entries (reverse entries))
-  ;; v0.28.19: Show thinking entry during reasoning phase (when no content yet)
+  ;; BUG-0003: keep the streaming thinking pseudo-entry even once
+  ;; content starts streaming, so reasoning does not vanish mid-turn;
+  ;; the persisted entry replaces it on completion.
   (define all-entries
-    (let* ([with-thinking (if (and streaming-thinking (not streaming-text))
+    (let* ([with-thinking (if streaming-thinking
                               (append chronological-entries
                                       (list (transcript-entry 'thinking
                                                               streaming-thinking
