@@ -9,7 +9,8 @@
 
 (require rackunit
          "../tui/render/message-layout.rkt"
-         "../tui/char-width.rkt")
+         "../tui/char-width.rkt"
+         "../tui/state.rkt")
 
 ;; ============================================================
 ;; wrap-styled-line: line ordering
@@ -179,3 +180,72 @@
 (test-case "find-break-pos: hard break when no space before width"
   (define pos (find-break-pos "helloworld" 0 5))
   (check-equal? pos 5))
+
+
+;; ============================================================
+;; BUG-0002 (W2): tool-fail lines must wrap at terminal width
+;; ============================================================
+
+(define (make-fail-entry text)
+  (transcript-entry 'tool-fail text 1000 (hasheq 'name 'bash) #f))
+
+(define (entry-line-widths entry width)
+  (map (lambda (l) (string-visible-width (styled-line->text l)))
+       (format-entry entry width)))
+
+(test-case "BUG-0002: 3x-width failure payload wraps into multiple lines each <= width"
+  (define payload (make-string 240 #\e))
+  (define lines (format-entry (make-fail-entry payload) 80))
+  (check >= (length lines) 2
+         (format "expected wrapping, got ~a line(s)" (length lines)))
+  (for ([w (entry-line-widths (make-fail-entry payload) 80)]
+        [i (in-naturals)])
+    (check-true (<= w 80) (format "line ~a visible width ~a exceeds 80" i w))))
+
+(test-case "BUG-0002: first wrapped line carries the [FAIL] prefix"
+  (define payload (string-append "Error: " (make-string 200 #\x)))
+  (define lines (format-entry (make-fail-entry payload) 80))
+  (check-true (string-prefix? (styled-line->text (car lines)) "[FAIL] bash:")
+              (format "first line missing [FAIL] prefix: ~v" (styled-line->text (car lines)))))
+
+(test-case "BUG-0002: wrapped output preserves the full payload"
+  (define payload (string-append "boom " (make-string 200 #\x)))
+  (define lines (format-entry (make-fail-entry payload) 80))
+  (define joined (string-join (map (lambda (l)
+                                     (string-trim (styled-line->text l)))
+                                   lines)
+                              " "))
+  (define expected (string-trim (string-replace (format "[FAIL] bash: ~a" payload) "\n" " ")))
+  ;; Word-wrap may split the long unbroken x-run across lines; joining with
+  ;; spaces then changes the length. Compare space-stripped text instead:
+  ;; every payload character must survive wrapping.
+  (check-equal? (string-replace joined " " "")
+                (string-replace expected " " "")
+                "wrapped output dropped or duplicated payload characters"))
+
+(test-case "BUG-0002: multi-line error is flattened and wrapped, no raw newlines"
+  (define payload "line one of error\nline two\nline three plus extra padding text xxxxxxxx")
+  (define lines (format-entry (make-fail-entry payload) 40))
+  (for ([l lines]
+        [i (in-naturals)])
+    (for ([seg (styled-line-segments l)])
+      (check-false (string-contains? (styled-segment-text seg) "\n")
+                   (format "segment on line ~a contains raw newline" i)))
+    (check-true (<= (string-visible-width (styled-line->text l)) 40)
+                (format "line ~a exceeds narrow width 40" i)))
+  (check-true (ormap (lambda (l) (string-contains? (styled-line->text l) "line three"))
+                     lines)
+              "flattened tail content missing after wrapping"))
+
+(test-case "BUG-0002: short failure stays a single line"
+  (define lines (format-entry (make-fail-entry "oops") 80))
+  (check-equal? (length lines) 1)
+  (check-equal? (styled-line->text (car lines)) "[FAIL] bash: oops"))
+
+(test-case "BUG-0002: narrow terminal (width 20) wraps without clipping"
+  (define payload (string-append "fatal: " (make-string 90 #\y)))
+  (define lines (format-entry (make-fail-entry payload) 20))
+  (check >= (length lines) 3)
+  (for ([w (entry-line-widths (make-fail-entry payload) 20)]
+        [i (in-naturals)])
+    (check-true (<= w 20) (format "line ~a width ~a exceeds 20" i w))))
