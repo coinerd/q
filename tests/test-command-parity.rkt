@@ -51,6 +51,8 @@
         "/activate"
         "/a" ;; activate
         "/login" ;; login (#5331)
+        "/expand-reasoning" ;; durable reasoning artifacts (v0.99.96)
+        "/toggle-detail" ;; multiline composer detail (v0.99.96)
         "/goal"
         "/g" ;; goal
         ))
