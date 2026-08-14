@@ -51,8 +51,8 @@
 
 ;; Clamp a requested composer text-row count to [1, max-rows].
 (define (clamp-composer-text-rows rows [max-rows default-max-composer-text-rows])
-  (max min-composer-text-rows (min (max rows min-composer-text-rows)
-                                   (max max-rows min-composer-text-rows))))
+  (max min-composer-text-rows
+       (min (max rows min-composer-text-rows) (max max-rows min-composer-text-rows))))
 
 ;; Compute the input region height from a composer text-row count.
 ;; Legacy single-line composer: 3 rows (border + 1 text + spacing).
@@ -81,15 +81,17 @@
   (define effective-widget-h (if (and has-widgets? (> widget-bar-h 0)) widget-bar-h 0))
   (define fixed-height (+ header-height effective-widget-h effective-input-height))
   (define transcript-height (max 0 (- height fixed-height)))
-  (hasheq
-   'header
-   (layout-region 'header 0 header-height width)
-   'transcript
-   (layout-region 'transcript header-height transcript-height width)
-   'widget-bar
-   (layout-region 'widget-bar (+ header-height transcript-height) effective-widget-h width)
-   'input
-   (layout-region 'input (+ header-height transcript-height effective-widget-h) effective-input-height width)))
+  (hasheq 'header
+          (layout-region 'header 0 header-height width)
+          'transcript
+          (layout-region 'transcript header-height transcript-height width)
+          'widget-bar
+          (layout-region 'widget-bar (+ header-height transcript-height) effective-widget-h width)
+          'input
+          (layout-region 'input
+                         (+ header-height transcript-height effective-widget-h)
+                         effective-input-height
+                         width)))
 
 ;; Get transcript region from layout
 (define (layout-transcript layout)
@@ -169,9 +171,9 @@
          (contract-out [compute-layout
                         (->* (exact-positive-integer? exact-positive-integer?)
                              (#:widget-bar-h exact-nonnegative-integer?
-                              #:has-widgets? boolean?
-                              #:composer-height (or/c #f exact-positive-integer?)
-                              #:max-composer-rows exact-positive-integer?)
+                                             #:has-widgets? boolean?
+                                             #:composer-height (or/c #f exact-positive-integer?)
+                                             #:max-composer-rows exact-positive-integer?)
                              hash?)]
                        [layout-transcript (-> hash? layout-region?)]
                        [layout-widget-bar (-> hash? layout-region?)]

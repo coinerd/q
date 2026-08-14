@@ -89,11 +89,14 @@
 ;; Returns (values intent draft) where intent is a ui-intent? (or #f) and
 ;; draft is the next draft state.  Headless-testable; identical semantics
 ;; to the TUI key path.
-(define (gui-composer-event st action val
+(define (gui-composer-event st
+                            action
+                            val
                             #:history [history '()]
                             #:history-index [idx 0]
                             #:prefs [prefs (default-preferences)])
-  (define (with-st st*) (values #f st*))
+  (define (with-st st*)
+    (values #f st*))
   (case action
     ;; Whole-field change from the native control: update the shared draft.
     [(input change) (with-st (gui-draft-update st (or val "")))]
@@ -108,11 +111,15 @@
     [(history-up)
      (define-values (st* idx* text) (gui-draft-history st idx history 'up))
      (values (and text (make-composer-history-intent 'up))
-             (if text (gui-draft-update st* text) st*))]
+             (if text
+                 (gui-draft-update st* text)
+                 st*))]
     [(history-down)
      (define-values (st* idx* text) (gui-draft-history st idx history 'down))
      (values (and text (make-composer-history-intent 'down))
-             (if text (gui-draft-update st* text) st*))]
+             (if text
+                 (gui-draft-update st* text)
+                 st*))]
     [else (with-st st)]))
 
 ;; Pure: map a raw key event to a named intent using the SHARED keymap.
@@ -217,8 +224,7 @@
   (define keymap% (dynamic-require 'racket/gui 'keymap%))
   (define gui-prefs (default-preferences))
   ;; Multiline is on by default; off-ramp for rollout is the env var below.
-  (define composer-multiline?
-    (not (equal? (getenv "Q_GUI_MULTILINE") "0")))
+  (define composer-multiline? (not (equal? (getenv "Q_GUI_MULTILINE") "0")))
 
   ;; Shared: submit the (already prepared) snapshot; mirrors the TUI path.
   (define (composer-submit! text)
@@ -229,29 +235,30 @@
          (handle-slash-command text)
          (set-obs! input-obs "")]
         [else
-         (publish!
-          event-bus
-          (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text text)))
+         (publish! event-bus
+                   (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text text)))
          (thread (lambda ()
-                   (with-handlers ([exn:fail?
-                                    (lambda (e)
-                                      (call-with-semaphore
-                                       gui-state-lock
-                                       (lambda ()
-                                         (define old (unbox state-box))
-                                         (set-box! state-box
-                                                   (gui-state-set-status
-                                                    (gui-state-add-message
-                                                     old
-                                                     (make-gui-message "error" (exn-message e)))
-                                                    'error)))))])
+                   (with-handlers ([exn:fail? (lambda (e)
+                                                (call-with-semaphore
+                                                 gui-state-lock
+                                                 (lambda ()
+                                                   (define old (unbox state-box))
+                                                   (set-box! state-box
+                                                             (gui-state-set-status
+                                                              (gui-state-add-message
+                                                               old
+                                                               (make-gui-message "error"
+                                                                                 (exn-message e)))
+                                                              'error)))))])
                      (run-prompt! sess text))))
          (set-obs! input-obs "")])))
 
   ;; Shared: fold the draft through the semantic model, then act on intent.
   (define (apply-composer-action! action [val #f])
     (define-values (intent draft)
-      (gui-composer-event (unbox composer-box) action val
+      (gui-composer-event (unbox composer-box)
+                          action
+                          val
                           #:history composer-history
                           #:history-index composer-history-idx
                           #:prefs gui-prefs))
@@ -265,7 +272,8 @@
       [(composer-submit-intent t) (composer-submit! t)]
       [(composer-history-intent dir)
        (set! composer-history-idx
-             (if (eq? dir 'up) (history-index-back composer-history-idx)
+             (if (eq? dir 'up)
+                 (history-index-back composer-history-idx)
                  (history-index-forward composer-history-idx composer-history)))]
       [_ (void)]))
 
@@ -280,8 +288,7 @@
            (let ()
              ;; Legacy single-line compatibility path (feature-flag off).
              (set-box! composer-box (gui-draft-update (unbox composer-box) (or val "")))
-             (define-values (text _cleared)
-               (gui-draft-submit (unbox composer-box)))
+             (define-values (text _cleared) (gui-draft-submit (unbox composer-box)))
              (composer-submit! text)
              (set-box! composer-box (make-gui-draft))))]
       [(eq? action 'input)
@@ -292,36 +299,30 @@
   ;; newline (the gui helper contract), Alt+Up/Down walk history.  Every
   ;; mapping goes through the shared preference surface, not ad-hoc code.
   (define composer-keymap
-    (and composer-multiline?
-         (let ([km (make-object keymap%)])
-           (send km add-function
-                 "q-composer-submit"
-                 (lambda (editor _event)
-                   (queue-callback
-                    (lambda ()
-                      (apply-composer-action! 'return (send editor get-text))))))
-           (send km add-function
-                 "q-composer-newline"
-                 (lambda (editor _event)
-                   (send editor insert "\n")))
-           (send km add-function
-                 "q-composer-history-up"
-                 (lambda (editor _event)
-                   (queue-callback
-                    (lambda ()
-                      (apply-composer-action! 'history-up (send editor get-text))))))
-           (send km add-function
-                 "q-composer-history-down"
-                 (lambda (editor _event)
-                   (queue-callback
-                    (lambda ()
-                      (apply-composer-action! 'history-down (send editor get-text))))))
-           (when (submit-key-policy gui-prefs)
-             (send km map-function "return" "q-composer-submit"))
-           (send km map-function "c:return" "q-composer-newline")
-           (send km map-function "a:up" "q-composer-history-up")
-           (send km map-function "a:down" "q-composer-history-down")
-           km)))
+    (and
+     composer-multiline?
+     (let ([km (make-object keymap%)])
+       (send km add-function
+             "q-composer-submit"
+             (lambda (editor _event)
+               (queue-callback (lambda () (apply-composer-action! 'return (send editor get-text))))))
+       (send km add-function "q-composer-newline" (lambda (editor _event) (send editor insert "\n")))
+       (send km add-function
+             "q-composer-history-up"
+             (lambda (editor _event)
+               (queue-callback (lambda ()
+                                 (apply-composer-action! 'history-up (send editor get-text))))))
+       (send km add-function
+             "q-composer-history-down"
+             (lambda (editor _event)
+               (queue-callback (lambda ()
+                                 (apply-composer-action! 'history-down (send editor get-text))))))
+       (when (submit-key-policy gui-prefs)
+         (send km map-function "return" "q-composer-submit"))
+       (send km map-function "c:return" "q-composer-newline")
+       (send km map-function "a:up" "q-composer-history-up")
+       (send km map-function "a:down" "q-composer-history-down")
+       km)))
 
   ;; Observable wrapping the text% editor for editor-canvas view
   (define transcript-obs (make-obs transcript-text))
@@ -368,13 +369,17 @@
                                               #:stretch '(#t #t)
                                               #:mixin (compose-mixins (editor-canvas-clipboard-mixin)
                                                                       (editor-canvas-bg-mixin bg-c)))
-                          (input-view input-obs on-input
-                                             #:style (if composer-multiline? '(multiple) '())
-                                             #:keymap composer-keymap
-                                             #:min-size (list #f (if composer-multiline?
-                                                                    (* 19 (max-composer-rows gui-prefs))
-                                                                    #f))
-                                             #:stretch '(#t #f)))))
+                          (input-view input-obs
+                                      on-input
+                                      #:style (if composer-multiline?
+                                                  '(multiple)
+                                                  '())
+                                      #:keymap composer-keymap
+                                      #:min-size (list #f
+                                                       (if composer-multiline?
+                                                           (* 19 (max-composer-rows gui-prefs))
+                                                           #f))
+                                      #:stretch '(#t #f)))))
   ;; GAP-LH (v0.98.7 W1): Dispatch gui.window.closed lifecycle hook after window closes.
   (dispatch-gui-hook! 'gui.window.closed (hasheq 'session-id (session-id sess)))
 

@@ -120,7 +120,8 @@
                           with-thinking)])
       with-text))
   (define disclosure (ui-state-disclosure state))
-  (define styled-lines (apply append (map (lambda (e) (format-entry e width disclosure)) all-entries)))
+  (define styled-lines
+    (apply append (map (lambda (e) (format-entry e width disclosure)) all-entries)))
   ;; Apply scroll offset — scroll=0 means show bottom (newest), positive = scrolled up
   (define total-lines (length styled-lines))
   (define max-start (max 0 (- total-lines transcript-height)))

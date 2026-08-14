@@ -422,23 +422,18 @@
 
 (define (handle-toggle-detail-command cctx state)
   (define target-id
-    (resolve-toggle-target state
-                           (ui-state-focused-component state)
-                           active-streaming-artifact-id))
+    (resolve-toggle-target state (ui-state-focused-component state) active-streaming-artifact-id))
   (cond
     [target-id
      (define new-state
-       (struct-copy ui-state state
-                    [disclosure (disclosure-toggle
-                                 (ui-state-disclosure state)
-                                 target-id)]))
+       (struct-copy ui-state
+                    state
+                    [disclosure (disclosure-toggle (ui-state-disclosure state) target-id)]))
      (set-box! (cmd-ctx-state-box cctx) new-state)]
     [else
      ;; Harmless status hint when no detail artifact exists (W2 Done #7).
-     (define hint-entry
-       (make-entry 'system "No reasoning to expand" 0 (hash)))
-     (set-box! (cmd-ctx-state-box cctx)
-               (add-transcript-entry state hint-entry))]))
+     (define hint-entry (make-entry 'system "No reasoning to expand" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state hint-entry))]))
 
 ;; ============================================================
 ;; Goal command handler

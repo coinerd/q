@@ -20,7 +20,8 @@
 ;; Unit display width for property testing: 1 char = 1 cell.
 ;; (The TUI passes its own terminal-cell width fn; GUI passes font
 ;;  measurement — both are parameterized, proven here with the unit fn.)
-(define (uw s) (string-length s))
+(define (uw s)
+  (string-length s))
 
 ;; ─────────────────────────────────────────────────────────────────
 ;; Round-trip invariant: concatenating visual-line texts (plus #\newline
@@ -40,19 +41,17 @@
 ;; ─────────────────────────────────────────────────────────────────
 ;; Grapheme cluster fixtures
 ;; ─────────────────────────────────────────────────────────────────
-(define family-emoji "👨‍👩‍👧‍👦")   ; ZWJ sequence
-(define flag-emoji "🇩🇪")          ; regional indicators
-(define skin-tone "👍🏽")            ; emoji + modifier
-(define combining "e\u0301")       ; e + combining acute
-(define cjk "你好世界")             ; wide chars (unit-width fn: 4 cells)
+(define family-emoji "👨‍👩‍👧‍👦") ; ZWJ sequence
+(define flag-emoji "🇩🇪") ; regional indicators
+(define skin-tone "👍🏽") ; emoji + modifier
+(define combining "e\u0301") ; e + combining acute
+(define cjk "你好世界") ; wide chars (unit-width fn: 4 cells)
 (define ascii "abcdef")
 
 ;; ─────────────────────────────────────────────────────────────────
 ;; 1. Layout invariants
 ;; ─────────────────────────────────────────────────────────────────
-(check-equal? (layout-text-reconstruct
-               (compute-composer-layout "hello world" 0 5 uw))
-              "hello world")
+(check-equal? (layout-text-reconstruct (compute-composer-layout "hello world" 0 5 uw)) "hello world")
 
 (test-case "layout reconstructs buffer (no newlines, several widths)"
   (for ([w (in-list '(1 2 3 5 7 11 100))])
@@ -87,8 +86,7 @@
   (define layout (compute-composer-layout "abcdef" 3 5 uw))
   (define l1 (first (composer-layout-lines layout)))
   (define l2 (second (composer-layout-lines layout)))
-  (check-equal? (composer-visual-line-start l2)
-                (+ (composer-visual-line-start l1) 5))
+  (check-equal? (composer-visual-line-start l2) (+ (composer-visual-line-start l1) 5))
   (check-equal? (composer-visual-line-end l2) 6))
 
 (test-case "wrap never loses or duplicates characters (property)"
@@ -107,13 +105,11 @@
 (define (check-cursor-in-bounds buffer cursor width)
   (define layout (compute-composer-layout buffer cursor width uw))
   (check-true (>= (composer-layout-cursor-row layout) 0))
-  (check-true (< (composer-layout-cursor-row layout)
-                 (composer-layout-row-count layout)))
+  (check-true (< (composer-layout-cursor-row layout) (composer-layout-row-count layout)))
   (check-true (>= (composer-layout-cursor-col layout) 0)))
 
 (test-case "cursor always within assigned region (property)"
-  (define buf "ab\ncd efgh ij\nklm"
-  )
+  (define buf "ab\ncd efgh ij\nklm")
   (for ([cursor (in-range 0 (add1 (string-length buf)))]
         [w (in-list '(1 2 3 4 8 50))])
     (check-cursor-in-bounds buf cursor w)))
@@ -139,21 +135,20 @@
   (check-equal? (composer-grapheme-count ascii) 6))
 
 (test-case "backspace deletes whole ZWJ sequence"
-  (define st (make-composer-state #:buffer family-emoji
-                                  #:cursor (string-length family-emoji)))
+  (define st (make-composer-state #:buffer family-emoji #:cursor (string-length family-emoji)))
   (define st2 (composer-backspace st))
   (check-equal? (composer-state-buffer st2) "")
   (check-equal? (composer-state-cursor st2) 0))
 
 (test-case "backspace deletes combining sequence as one"
-  (define st (make-composer-state #:buffer combining
-                                  #:cursor (string-length combining)))
+  (define st (make-composer-state #:buffer combining #:cursor (string-length combining)))
   (define st2 (composer-backspace st))
   (check-equal? (composer-state-buffer st2) ""))
 
 (test-case "cursor-left skips entire grapheme cluster"
-  (define st (make-composer-state #:buffer (string-append "a" family-emoji)
-                                  #:cursor (string-length (string-append "a" family-emoji))))
+  (define st
+    (make-composer-state #:buffer (string-append "a" family-emoji)
+                         #:cursor (string-length (string-append "a" family-emoji))))
   (define st2 (composer-cursor-left st))
   (check-equal? (composer-state-cursor st2) 1))
 
@@ -176,8 +171,7 @@
   (define st (make-composer-state #:buffer "ab" #:cursor 1))
   (define st2 (composer-insert-string st (string-append cjk "x")))
   (check-equal? (composer-state-buffer st2) (string-append "a" cjk "xb"))
-  (check-equal? (composer-state-cursor st2)
-                (add1 (string-length (string-append "a" cjk)))))
+  (check-equal? (composer-state-cursor st2) (add1 (string-length (string-append "a" cjk)))))
 
 (test-case "delete at cursor removes grapheme after cursor"
   (define st (make-composer-state #:buffer (string-append "a" family-emoji) #:cursor 1))
@@ -189,8 +183,7 @@
   (define pieces (list "a" cjk family-emoji combining "z" "\n" " "))
   (define st0 (make-composer-state))
   (define st
-    (for/fold ([st st0])
-              ([i (in-range 60)])
+    (for/fold ([st st0]) ([i (in-range 60)])
       (define p (list-ref pieces (modulo (* i 5) (length pieces))))
       (case (modulo i 4)
         [(0) (composer-insert-string st p)]
@@ -198,8 +191,7 @@
         [(2) (composer-cursor-left st)]
         [(3) (composer-cursor-right st)])))
   (define buf (composer-state-buffer st))
-  (check-true (<= 0 (composer-state-cursor st) (string-length buf))
-              "cursor within buffer bounds")
+  (check-true (<= 0 (composer-state-cursor st) (string-length buf)) "cursor within buffer bounds")
   ;; cursor stays in-bounds under every width after arbitrary edits
   (for ([w (in-list '(1 2 3 6 40))])
     (check-cursor-in-bounds buf (composer-state-cursor st) w)))
@@ -214,8 +206,8 @@
 
 (test-case "move down then up restores position on short lines"
   (define st (make-composer-state #:buffer "ab\ncd" #:cursor 1))
-  (define layout (compute-composer-layout (composer-state-buffer st)
-                                          (composer-state-cursor st) 20 uw))
+  (define layout
+    (compute-composer-layout (composer-state-buffer st) (composer-state-cursor st) 20 uw))
   (define down (composer-move-down st 20 uw))
   (check-equal? (composer-state-cursor down) 4) ; after 'd' line start +1
   (define down-layout
@@ -228,8 +220,8 @@
 (test-case "move down over soft wrap follows visual rows"
   (define st (make-composer-state #:buffer "abcdefghij" #:cursor 2))
   (define down (composer-move-down st 5 uw))
-  (define layout (compute-composer-layout (composer-state-buffer down)
-                                          (composer-state-cursor down) 5 uw))
+  (define layout
+    (compute-composer-layout (composer-state-buffer down) (composer-state-cursor down) 5 uw))
   (check-equal? (composer-layout-cursor-row layout) 1))
 
 (test-case "home/end operate on visual line"
@@ -255,11 +247,14 @@
 
 (test-case "viewport indicators fire only when content overflows"
   (define-values (up? down?) (composer-viewport-indicators 0 3 5))
-  (check-false up?) (check-true down?)
+  (check-false up?)
+  (check-true down?)
   (define-values (u2? d2?) (composer-viewport-indicators 2 3 5))
-  (check-true u2?) (check-false d2?)
+  (check-true u2?)
+  (check-false d2?)
   (define-values (u3? d3?) (composer-viewport-indicators 0 3 3))
-  (check-false u3?) (check-false d3?))
+  (check-false u3?)
+  (check-false d3?))
 
 (test-case "needed rows bounded by max-rows config"
   (define layout (compute-composer-layout "aaa\nbbb\nccc\nddd\neee\nfff\nggg" 0 10 uw))
@@ -272,8 +267,8 @@
 (test-case "resize keeps buffer, cursor, selection stable"
   (define st (make-composer-state #:buffer "hello\nworld" #:cursor 8 #:sel-anchor 6))
   (for ([w (in-list '(1 3 5 30))])
-    (define layout (compute-composer-layout (composer-state-buffer st)
-                                            (composer-state-cursor st) w uw))
+    (define layout
+      (compute-composer-layout (composer-state-buffer st) (composer-state-cursor st) w uw))
     (check-equal? (layout-text-reconstruct layout) "hello\nworld")
     (check-cursor-in-bounds (composer-state-buffer st) (composer-state-cursor st) w))
   (check-equal? (composer-state-cursor st) 8)

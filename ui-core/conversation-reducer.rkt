@@ -33,7 +33,7 @@
 (define missing-count (box 0))
 (define oversized-count (box 0))
 (define last-telemetry-ms (box 0))
-(define telemetry-interval-ms 5000)  ; rate-limit: emit at most once per 5 seconds
+(define telemetry-interval-ms 5000) ; rate-limit: emit at most once per 5 seconds
 
 (define (telemetry-duplicate!)
   (set-box! duplicate-count (add1 (unbox duplicate-count)))
@@ -77,9 +77,12 @@
 (define (make-artifact-key session-id turn-id kind)
   (vector session-id turn-id kind))
 
-(define (artifact-key-session k) (vector-ref k 0))
-(define (artifact-key-turn k) (vector-ref k 1))
-(define (artifact-key-kind k) (vector-ref k 2))
+(define (artifact-key-session k)
+  (vector-ref k 0))
+(define (artifact-key-turn k)
+  (vector-ref k 1))
+(define (artifact-key-kind k)
+  (vector-ref k 2))
 
 ;; Generate a unique artifact ID from session/turn/kind.
 ;; Idempotent: same (session, turn, kind) always produces the same ID.
@@ -99,23 +102,18 @@
   (reducer-state (hash) (hash)))
 
 (define (reducer-get rs session-id turn-id kind)
-  (hash-ref (reducer-state-artifacts rs)
-            (make-artifact-key session-id turn-id kind)
-            #f))
+  (hash-ref (reducer-state-artifacts rs) (make-artifact-key session-id turn-id kind) #f))
 
 (define (reducer-put rs art)
-  (define key (make-artifact-key
-               (conversation-artifact-session-id art)
-               (conversation-artifact-turn-id art)
-               (conversation-artifact-kind art)))
-  (reducer-state
-   (hash-set (reducer-state-artifacts rs) key art)
-   (reducer-state-completed-turns rs)))
+  (define key
+    (make-artifact-key (conversation-artifact-session-id art)
+                       (conversation-artifact-turn-id art)
+                       (conversation-artifact-kind art)))
+  (reducer-state (hash-set (reducer-state-artifacts rs) key art) (reducer-state-completed-turns rs)))
 
 (define (reducer-mark-turn-completed rs turn-id)
-  (reducer-state
-   (reducer-state-artifacts rs)
-   (hash-set (reducer-state-completed-turns rs) turn-id #t)))
+  (reducer-state (reducer-state-artifacts rs)
+                 (hash-set (reducer-state-completed-turns rs) turn-id #t)))
 
 (define (reducer-turn-completed? rs turn-id)
   (hash-has-key? (reducer-state-completed-turns rs) turn-id))
@@ -128,12 +126,11 @@
   (define existing (reducer-get rs session-id turn-id kind))
   (if existing
       (values existing rs)
-      (let ([art (make-conversation-artifact
-                  #:id (make-artifact-id session-id turn-id kind)
-                  #:turn-id turn-id
-                  #:session-id session-id
-                  #:kind kind
-                  #:provider-tag provider-tag)])
+      (let ([art (make-conversation-artifact #:id (make-artifact-id session-id turn-id kind)
+                                             #:turn-id turn-id
+                                             #:session-id session-id
+                                             #:kind kind
+                                             #:provider-tag provider-tag)])
         (values art (reducer-put rs art)))))
 
 ;; ──────────────────────────────────────────────────────
@@ -181,15 +178,15 @@
   ;; Mark thinking artifact as completed (if it exists and still streaming)
   (define thinking-art (reducer-get rs session-id turn-id 'thinking))
   (define rs1
-    (if (and thinking-art
-             (eq? (conversation-artifact-lifecycle thinking-art) 'streaming))
+    (if (and thinking-art (eq? (conversation-artifact-lifecycle thinking-art) 'streaming))
         (let ([completed (artifact-set-lifecycle thinking-art 'completed)])
           ;; Check oversized at persistence boundary
           (when (artifact-oversized? completed max-bytes)
             (telemetry-oversized!))
           (reducer-put rs completed))
         (begin
-          (when (not thinking-art) (telemetry-missing!))
+          (when (not thinking-art)
+            (telemetry-missing!))
           rs)))
 
   ;; Mark assistant artifact as completed (if it exists)
@@ -216,13 +213,12 @@
     (let ([existing (reducer-get rs session-id turn-id 'assistant)])
       (if existing
           (values existing rs)
-          (let ([art (make-conversation-artifact
-                      #:id (make-artifact-id session-id turn-id 'assistant)
-                      #:turn-id turn-id
-                      #:session-id session-id
-                      #:kind 'assistant
-                      #:body content
-                      #:lifecycle 'completed)])
+          (let ([art (make-conversation-artifact #:id (make-artifact-id session-id turn-id 'assistant)
+                                                 #:turn-id turn-id
+                                                 #:session-id session-id
+                                                 #:kind 'assistant
+                                                 #:body content
+                                                 #:lifecycle 'completed)])
             (values art (reducer-put rs art))))))
 
   ;; Transition to 'retained (idempotent — if already 'retained, no-op)
@@ -317,22 +313,26 @@
 ;; Provide
 ;; ──────────────────────────────────────────────────────
 
-(provide
- (struct-out reducer-state)
- (contract-out
-  [make-reducer-state (-> reducer-state?)]
-  [reduce-event (-> reducer-state? hash? reducer-state?)]
-  [reduce-events (-> reducer-state? (listof hash?) reducer-state?)]
-  [reducer-get (-> reducer-state? string? string? symbol? (or/c conversation-artifact? #f))]
-  [reducer-get-or-create (->* (reducer-state? string? string? symbol?) ((or/c symbol? string? #f))
-                              (values conversation-artifact? reducer-state?))]
-  [reducer-artifacts-for-turn (-> reducer-state? string? string? (listof conversation-artifact?))]
-  [reducer-thinking-artifact (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
-  [reducer-assistant-artifact (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
-  [reducer-mark-turn-completed (-> reducer-state? string? reducer-state?)]
-  [reducer-turn-completed? (-> reducer-state? string? boolean?)]
-  [reset-telemetry-counters! (-> void?)]
-  [make-artifact-id (-> string? string? symbol? string?)]))
+(provide (struct-out reducer-state)
+         (contract-out [make-reducer-state (-> reducer-state?)]
+                       [reduce-event (-> reducer-state? hash? reducer-state?)]
+                       [reduce-events (-> reducer-state? (listof hash?) reducer-state?)]
+                       [reducer-get
+                        (-> reducer-state? string? string? symbol? (or/c conversation-artifact? #f))]
+                       [reducer-get-or-create
+                        (->* (reducer-state? string? string? symbol?)
+                             ((or/c symbol? string? #f))
+                             (values conversation-artifact? reducer-state?))]
+                       [reducer-artifacts-for-turn
+                        (-> reducer-state? string? string? (listof conversation-artifact?))]
+                       [reducer-thinking-artifact
+                        (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
+                       [reducer-assistant-artifact
+                        (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
+                       [reducer-mark-turn-completed (-> reducer-state? string? reducer-state?)]
+                       [reducer-turn-completed? (-> reducer-state? string? boolean?)]
+                       [reset-telemetry-counters! (-> void?)]
+                       [make-artifact-id (-> string? string? symbol? string?)]))
 
 ;; ──────────────────────────────────────────────────────
 ;; Submodule: tests
@@ -345,11 +345,16 @@
 
   (test-case "single thinking event creates one artifact"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-event rs0
-                              (hasheq 'event-type "model.stream.thinking"
-                                      'session-id "s1"
-                                      'turn-id "t1"
-                                      'delta "Thinking...")))
+    (define rs1
+      (reduce-event rs0
+                    (hasheq 'event-type
+                            "model.stream.thinking"
+                            'session-id
+                            "s1"
+                            'turn-id
+                            "t1"
+                            'delta
+                            "Thinking...")))
     (define art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? art))
     (check-equal? (conversation-artifact-body art) "Thinking...")
@@ -357,21 +362,29 @@
 
   (test-case "multiple thinking events append to same artifact"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Hello")
-                                     (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta " world"))))
+    (define rs1
+      (reduce-events
+       rs0
+       (list
+        (hasheq 'event-type "model.stream.thinking" 'session-id "s1" 'turn-id "t1" 'delta "Hello")
+        (hasheq 'event-type "model.stream.thinking" 'session-id "s1" 'turn-id "t1" 'delta " world"))))
     (define art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-equal? (conversation-artifact-body art) "Hello world"))
 
   (test-case "model.stream.completed does NOT discard thinking body"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Important reasoning")
-                                     (hasheq 'event-type "model.stream.completed"
-                                             'session-id "s1" 'turn-id "t1"))))
+    (define rs1
+      (reduce-events
+       rs0
+       (list (hasheq 'event-type
+                     "model.stream.thinking"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'delta
+                     "Important reasoning")
+             (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1"))))
     (define art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? art))
     (check-equal? (conversation-artifact-body art) "Important reasoning")
@@ -380,52 +393,99 @@
   (test-case "completed-before-assistant retains thinking exactly once"
     ;; model.stream.completed arrives BEFORE assistant.message.completed
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Reasoning A")
-                                     (hasheq 'event-type "model.stream.completed"
-                                             'session-id "s1" 'turn-id "t1")
-                                     (hasheq 'event-type "assistant.message.completed"
-                                             'session-id "s1" 'turn-id "t1" 'content "Answer"))))
+    (define rs1
+      (reduce-events
+       rs0
+       (list (hasheq 'event-type
+                     "model.stream.thinking"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'delta
+                     "Reasoning A")
+             (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1")
+             (hasheq 'event-type
+                     "assistant.message.completed"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'content
+                     "Answer"))))
     (define thinking-art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? thinking-art))
     (check-equal? (conversation-artifact-body thinking-art) "Reasoning A")
     (check-eq? (conversation-artifact-lifecycle thinking-art) 'retained)
     ;; Verify exactly one thinking artifact (no duplicates)
     (define all-arts (reducer-artifacts-for-turn rs1 "s1" "t1"))
-    (define thinking-arts (filter (lambda (a) (eq? (conversation-artifact-kind a) 'thinking)) all-arts))
+    (define thinking-arts
+      (filter (lambda (a) (eq? (conversation-artifact-kind a) 'thinking)) all-arts))
     (check-equal? (length thinking-arts) 1))
 
   (test-case "assistant-before-completed retains thinking exactly once"
     ;; assistant.message.completed arrives BEFORE model.stream.completed
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Reasoning B")
-                                     (hasheq 'event-type "assistant.message.completed"
-                                             'session-id "s1" 'turn-id "t1" 'content "Answer")
-                                     (hasheq 'event-type "model.stream.completed"
-                                             'session-id "s1" 'turn-id "t1"))))
+    (define rs1
+      (reduce-events
+       rs0
+       (list (hasheq 'event-type
+                     "model.stream.thinking"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'delta
+                     "Reasoning B")
+             (hasheq 'event-type
+                     "assistant.message.completed"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'content
+                     "Answer")
+             (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1"))))
     (define thinking-art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? thinking-art))
     (check-equal? (conversation-artifact-body thinking-art) "Reasoning B")
     (check-eq? (conversation-artifact-lifecycle thinking-art) 'retained)
     ;; Verify exactly one thinking artifact
     (define all-arts (reducer-artifacts-for-turn rs1 "s1" "t1"))
-    (define thinking-arts (filter (lambda (a) (eq? (conversation-artifact-kind a) 'thinking)) all-arts))
+    (define thinking-arts
+      (filter (lambda (a) (eq? (conversation-artifact-kind a) 'thinking)) all-arts))
     (check-equal? (length thinking-arts) 1))
 
   (test-case "reasoning + assistant text → both persist separately"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Let me think")
-                                     (hasheq 'event-type "model.stream.delta"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Here is the answer")
-                                     (hasheq 'event-type "model.stream.completed"
-                                             'session-id "s1" 'turn-id "t1")
-                                     (hasheq 'event-type "assistant.message.completed"
-                                             'session-id "s1" 'turn-id "t1" 'content "Here is the answer"))))
+    (define rs1
+      (reduce-events
+       rs0
+       (list (hasheq 'event-type
+                     "model.stream.thinking"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'delta
+                     "Let me think")
+             (hasheq 'event-type
+                     "model.stream.delta"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'delta
+                     "Here is the answer")
+             (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1")
+             (hasheq 'event-type
+                     "assistant.message.completed"
+                     'session-id
+                     "s1"
+                     'turn-id
+                     "t1"
+                     'content
+                     "Here is the answer"))))
     (define thinking-art (reducer-thinking-artifact rs1 "s1" "t1"))
     (define assistant-art (reducer-assistant-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? thinking-art))
@@ -437,11 +497,17 @@
 
   (test-case "cancellation marks artifacts as rejected"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Partial reasoning")
-                                     (hasheq 'event-type "cancellation"
-                                             'session-id "s1" 'turn-id "t1"))))
+    (define rs1
+      (reduce-events rs0
+                     (list (hasheq 'event-type
+                                   "model.stream.thinking"
+                                   'session-id
+                                   "s1"
+                                   'turn-id
+                                   "t1"
+                                   'delta
+                                   "Partial reasoning")
+                           (hasheq 'event-type "cancellation" 'session-id "s1" 'turn-id "t1"))))
     (define art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? art))
     (check-equal? (conversation-artifact-body art) "Partial reasoning")
@@ -449,22 +515,41 @@
 
   (test-case "error marks artifacts as rejected"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Partial reasoning")
-                                     (hasheq 'event-type "error"
-                                             'session-id "s1" 'turn-id "t1"))))
+    (define rs1
+      (reduce-events rs0
+                     (list (hasheq 'event-type
+                                   "model.stream.thinking"
+                                   'session-id
+                                   "s1"
+                                   'turn-id
+                                   "t1"
+                                   'delta
+                                   "Partial reasoning")
+                           (hasheq 'event-type "error" 'session-id "s1" 'turn-id "t1"))))
     (define art (reducer-thinking-artifact rs1 "s1" "t1"))
     (check-true (conversation-artifact? art))
     (check-eq? (conversation-artifact-lifecycle art) 'rejected))
 
   (test-case "different turns produce independent artifacts"
     (define rs0 (make-reducer-state))
-    (define rs1 (reduce-events rs0
-                               (list (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t1" 'delta "Turn 1 reasoning")
-                                     (hasheq 'event-type "model.stream.thinking"
-                                             'session-id "s1" 'turn-id "t2" 'delta "Turn 2 reasoning"))))
+    (define rs1
+      (reduce-events rs0
+                     (list (hasheq 'event-type
+                                   "model.stream.thinking"
+                                   'session-id
+                                   "s1"
+                                   'turn-id
+                                   "t1"
+                                   'delta
+                                   "Turn 1 reasoning")
+                           (hasheq 'event-type
+                                   "model.stream.thinking"
+                                   'session-id
+                                   "s1"
+                                   'turn-id
+                                   "t2"
+                                   'delta
+                                   "Turn 2 reasoning"))))
     (define art1 (reducer-thinking-artifact rs1 "s1" "t1"))
     (define art2 (reducer-thinking-artifact rs1 "s1" "t2"))
     (check-equal? (conversation-artifact-body art1) "Turn 1 reasoning")
@@ -472,12 +557,17 @@
 
   (test-case "idempotent: re-applying same events produces same state"
     (define facts
-      (list (hasheq 'event-type "model.stream.thinking"
-                    'session-id "s1" 'turn-id "t1" 'delta "Reasoning")
-            (hasheq 'event-type "model.stream.completed"
-                    'session-id "s1" 'turn-id "t1")
-            (hasheq 'event-type "assistant.message.completed"
-                    'session-id "s1" 'turn-id "t1" 'content "Answer")))
+      (list
+       (hasheq 'event-type "model.stream.thinking" 'session-id "s1" 'turn-id "t1" 'delta "Reasoning")
+       (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1")
+       (hasheq 'event-type
+               "assistant.message.completed"
+               'session-id
+               "s1"
+               'turn-id
+               "t1"
+               'content
+               "Answer")))
     (define rs1 (reduce-events (make-reducer-state) facts))
     (define rs2 (reduce-events rs1 facts))
     ;; State should be the same — thinking artifact body unchanged
@@ -490,7 +580,6 @@
     (reset-telemetry-counters!)
     (define rs0 (make-reducer-state))
     ;; No thinking artifact when model.stream.completed arrives → missing counter
-    (define rs1 (reduce-event rs0 (hasheq 'event-type "model.stream.completed"
-                                          'session-id "s1" 'turn-id "t1")))
-    (check-true (reducer-state? rs1)))
-  )
+    (define rs1
+      (reduce-event rs0 (hasheq 'event-type "model.stream.completed" 'session-id "s1" 'turn-id "t1")))
+    (check-true (reducer-state? rs1))))

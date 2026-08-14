@@ -125,8 +125,8 @@
                   (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))
                 (if truncated?
                     (list (styled-line (list (styled-segment (format "... ~a more lines"
-                                                                 (- (length lines) max-lines))
-                                                         base-style))))
+                                                                     (- (length lines) max-lines))
+                                                             base-style))))
                     '()))]
        ;; Expanded: render full body as normal scrollable transcript content (no modal).
        [(and entry-id (disclosure-expanded? disclosure entry-id))

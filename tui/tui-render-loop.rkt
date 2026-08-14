@@ -63,11 +63,8 @@
          ;; GAP-LB (v0.98.8 W0): Layout breakpoint classification
          (only-in "../ui-core/layout-protocol.rkt" classify-layout-breakpoint make-gui-layout)
          (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!)
-         (only-in "../ui-core/composer-layout.rkt"
-                  compute-composer-layout
-                  composer-layout-row-count)
-         (only-in "../ui-core/feature-flags.rkt"
-                  tui-multiline-composer-enabled)
+         (only-in "../ui-core/composer-layout.rkt" compute-composer-layout composer-layout-row-count)
+         (only-in "../ui-core/feature-flags.rkt" tui-multiline-composer-enabled)
          (only-in "../tui/char-width.rkt" string-visible-width))
 
 (define (tui-output-port)
@@ -256,11 +253,10 @@
   ;; text and position the cursor — the render loop never recomputes wrap.
   (define composer-text-rows
     (and (tui-multiline-composer-enabled)
-         (composer-layout-row-count
-          (compute-composer-layout (input-state-buffer inp)
-                                   (input-state-cursor inp)
-                                   (max 1 cols)
-                                   string-visible-width))))
+         (composer-layout-row-count (compute-composer-layout (input-state-buffer inp)
+                                                             (input-state-cursor inp)
+                                                             (max 1 cols)
+                                                             string-visible-width))))
   (define layout
     (compute-layout rows
                     cols
@@ -324,8 +320,8 @@
   ;; incremental diff would leave stale cells at the old boundaries.
   (define composer-height-changed?
     (let ([h (layout-region-height (layout-input layout))])
-      (define changed? (and (unbox last-composer-input-height)
-                            (not (= h (unbox last-composer-input-height)))))
+      (define changed?
+        (and (unbox last-composer-input-height) (not (= h (unbox last-composer-input-height)))))
       (set-box! last-composer-input-height h)
       changed?))
   ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.

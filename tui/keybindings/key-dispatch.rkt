@@ -105,20 +105,16 @@
      (define focused-id (tui-ctx-focused-component-id ctx))
      ;; Active = in-flight reasoning stream, addressed by the shared synthetic
      ;; sentinel id (same one the renderer stamps on the synthetic entry).
-     (define active-id
-       (and (ui-state-streaming-thinking state)
-            active-streaming-artifact-id))
+     (define active-id (and (ui-state-streaming-thinking state) active-streaming-artifact-id))
      (define candidate-ids
        (for/list ([e (in-list (reverse (ui-state-transcript state)))]
                   #:when (eq? (transcript-entry-kind e) 'thinking))
          (transcript-entry-id e)))
      (define disc (ui-state-disclosure state))
-     (define target-id
-       (resolve-toggle-target disc focused-id active-id candidate-ids))
+     (define target-id (resolve-toggle-target disc focused-id active-id candidate-ids))
      (when target-id
        (set-box! (tui-ctx-ui-state-box ctx)
-                 (struct-copy ui-state state
-                              [disclosure (disclosure-toggle disc target-id)])))
+                 (struct-copy ui-state state [disclosure (disclosure-toggle disc target-id)])))
      'handled]
     [else #f]))
 
@@ -243,8 +239,7 @@
           (define target-id (resolve-toggle-target disc focused-id active-id candidate-ids))
           (when target-id
             (set-box! (tui-ctx-ui-state-box ctx)
-                      (struct-copy ui-state state
-                                   [disclosure (disclosure-toggle disc target-id)]))))
+                      (struct-copy ui-state state [disclosure (disclosure-toggle disc target-id)]))))
         'continue]
        [(alt-tab)
         ;; Cycle focus forward through focusable components

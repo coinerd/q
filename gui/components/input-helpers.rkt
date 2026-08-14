@@ -28,34 +28,33 @@
           [gui-key->intent
            (->* (any/c)
                 (#:shift? boolean?
-                 #:control? boolean?
-                 #:alt? boolean?
-                 #:at-start? (or/c boolean? 'no)
-                 #:at-end? (or/c boolean? 'no)
-                 #:prefs preferences?)
+                          #:control? boolean?
+                          #:alt? boolean?
+                          #:at-start? (or/c boolean? 'no)
+                          #:at-end? (or/c boolean? 'no)
+                          #:prefs preferences?)
                 (or/c ui-intent? #f))]
           ;; ── W4: shared draft adapter over composer-model ──────
           [make-gui-draft (->* () ((and/c string? (length>= 0))) composer-state?)]
           [gui-draft-update (-> composer-state? string? composer-state?)]
           [gui-draft-text (-> composer-state? string?)]
-          [gui-draft-insert-newline
-           (-> composer-state? composer-state?)]
-          [gui-draft-submit
-           (-> composer-state? (values string? composer-state?))]
+          [gui-draft-insert-newline (-> composer-state? composer-state?)]
+          [gui-draft-submit (-> composer-state? (values string? composer-state?))]
           [gui-draft-history
-           (-> composer-state? exact-nonnegative-integer? (listof string?)
+           (-> composer-state?
+               exact-nonnegative-integer?
+               (listof string?)
                (or/c 'up 'down)
                (values composer-state? exact-nonnegative-integer? (or/c string? #f)))]
           [make-history-list (->* () ((listof string?)) (listof string?))]
-          [history-previous (-> (listof string?) exact-nonnegative-integer?
-                                (or/c string? #f))]
-          [history-next (-> (listof string?) exact-nonnegative-integer?
-                            (or/c string? #f))]
+          [history-previous (-> (listof string?) exact-nonnegative-integer? (or/c string? #f))]
+          [history-next (-> (listof string?) exact-nonnegative-integer? (or/c string? #f))]
           [history-index-back (-> exact-nonnegative-integer? exact-nonnegative-integer?)]
           [history-index-forward
            (-> exact-nonnegative-integer? (listof string?) exact-nonnegative-integer?)]))
 
-(define-syntax-rule (length>= n) any/c)
+(define-syntax-rule (length>= n)
+  any/c)
 
 ;; Should this key event trigger submit?
 ;; Enter without Shift/Control → submit
@@ -64,11 +63,9 @@
 ;; W4: delegates to the shared preference resolution so GUI and TUI can
 ;; never disagree.  Kept as a boolean predicate for legacy callers/tests.
 (define (input-key-should-submit? key-code shift? control?)
-  (eq? 'ui.composer.submit
-       (resolve-key->intent key-code
-                            #:shift? shift?
-                            #:control? control?
-                            #:prefs (default-preferences))))
+  (eq?
+   'ui.composer.submit
+   (resolve-key->intent key-code #:shift? shift? #:control? control? #:prefs (default-preferences))))
 
 ;; Process input text: trim trailing whitespace for submission
 (define (prepare-input-for-submit text)
@@ -119,8 +116,7 @@
 (define (gui-draft-update st text)
   ;; Whole-field replacement (native on-change callback semantics):
   ;; load the text, then park the cursor at the end of the buffer.
-  (composer-set-cursor (composer-load-text st text)
-                       (string-length (if (string? text) text ""))))
+  (composer-set-cursor (composer-load-text st text) (string-length (if (string? text) text ""))))
 
 (define (gui-draft-text st)
   (composer-state-buffer st))
@@ -130,8 +126,7 @@
 
 ;; Submit: returns the prepared text and a cleared draft.
 (define (gui-draft-submit st)
-  (values (prepare-input-for-submit (composer-state-buffer st))
-          (make-composer-state)))
+  (values (prepare-input-for-submit (composer-state-buffer st)) (make-composer-state)))
 
 ;; History walk shared with the TUI: 'up loads the previous entry,
 ;; 'down the next one.  Returns the new state and the text to load
@@ -143,32 +138,31 @@
         (history-previous history idx)
         (history-next history idx)))
   (cond
-    [(not entry)
-     (values (composer-set-history-intent st intent) idx #f)]
+    [(not entry) (values (composer-set-history-intent st intent) idx #f)]
     [else
      (define idx*
        (if (eq? direction 'up)
            (history-index-back idx)
            (history-index-forward idx history)))
-     (values (composer-set-history-intent
-              (composer-load-text (make-composer-state) entry)
-              intent)
-             idx* entry)]))
+     (values (composer-set-history-intent (composer-load-text (make-composer-state) entry) intent)
+             idx*
+             entry)]))
 
 ;; History list is oldest-first; index counts DOWN from (length history)
 ;; (= live buffer) to 0 (= oldest entry).
 (define (make-history-list [seed '()])
-  (if (list? seed) (reverse (remove-duplicates (reverse seed))) '()))
+  (if (list? seed)
+      (reverse (remove-duplicates (reverse seed)))
+      '()))
 
 (define (history-previous history idx)
-  (and (> idx 0) (< idx (add1 (length history)))
-       (list-ref history (sub1 idx))))
+  (and (> idx 0) (< idx (add1 (length history))) (list-ref history (sub1 idx))))
 
 (define (history-next history idx)
-  (and (< idx (sub1 (length history)))
-       (list-ref history (add1 idx))))
+  (and (< idx (sub1 (length history))) (list-ref history (add1 idx))))
 
-(define (history-index-back idx) (max 0 (sub1 idx)))
+(define (history-index-back idx)
+  (max 0 (sub1 idx)))
 
 (define (history-index-forward idx history)
   (min (sub1 (length history)) (add1 idx)))
@@ -186,18 +180,12 @@
   (check-false (input-looks-like-code? "plain text"))
 
   ;; W4: intent resolution parity
-  (check-equal? (ui-intent-kind (gui-key->intent 'return))
-                'ui.composer.submit)
-  (check-equal? (ui-intent-kind (gui-key->intent 'return #:shift? #t))
-                'ui.composer.insert-newline)
-  (check-equal? (ui-intent-kind (gui-key->intent 'return #:control? #t))
-                'ui.composer.insert-newline)
-  (check-equal? (ui-intent-kind (gui-key->intent 'up #:at-start? #t))
-                'composer.history-up)
-  (check-equal? (ui-intent-kind (gui-key->intent 'down #:at-end? #t))
-                'composer.history-down)
-  (check-equal? (ui-intent-kind (gui-key->intent #\o #:control? #t))
-                'ui.transcript.toggle-detail)
+  (check-equal? (ui-intent-kind (gui-key->intent 'return)) 'ui.composer.submit)
+  (check-equal? (ui-intent-kind (gui-key->intent 'return #:shift? #t)) 'ui.composer.insert-newline)
+  (check-equal? (ui-intent-kind (gui-key->intent 'return #:control? #t)) 'ui.composer.insert-newline)
+  (check-equal? (ui-intent-kind (gui-key->intent 'up #:at-start? #t)) 'composer.history-up)
+  (check-equal? (ui-intent-kind (gui-key->intent 'down #:at-end? #t)) 'composer.history-down)
+  (check-equal? (ui-intent-kind (gui-key->intent #\o #:control? #t)) 'ui.transcript.toggle-detail)
   (check-false (gui-key->intent #\j))
 
   ;; W4: draft adapter

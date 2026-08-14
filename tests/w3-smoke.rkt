@@ -122,13 +122,13 @@
 
 ;; mixed wrap + newline
 (define l7 (compute-composer-layout "abcde\nfghij" 8 4 W))
-(check-equal? (map composer-visual-line-text (composer-layout-lines l7))
-              '("abcd" "e" "fghi" "j"))
+(check-equal? (map composer-visual-line-text (composer-layout-lines l7)) '("abcd" "e" "fghi" "j"))
 (check-equal? (composer-layout-cursor-row l7) 2)
 (check-equal? (composer-layout-cursor-col l7) 2)
 
 ;; wide char wrap: width fn says every char = 2 cells; width 6 → 3 chars/line
-(define (wide2 s) (* 2 (string-length s)))
+(define (wide2 s)
+  (* 2 (string-length s)))
 (define l8 (compute-composer-layout "abcd" 4 6 wide2))
 (check-equal? (map composer-visual-line-text (composer-layout-lines l8)) '("abc" "d"))
 (check-equal? (composer-layout-cursor-row l8) 1)

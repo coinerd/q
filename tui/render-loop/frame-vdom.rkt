@@ -12,11 +12,8 @@
          (prefix-in vdom-comp: "../vdom-components.rkt")
          (only-in "../component.rkt" component-render component-state-ref component-state-update)
          (only-in "../render.rkt" render-transcript apply-selection-highlight plain-line)
-         (only-in "../input.rkt"
-                  input-state-buffer
-                  input-state-cursor)
-         (only-in "../../ui-core/ui-diagnostics.rkt"
-                  ui-diagnostic!)
+         (only-in "../input.rkt" input-state-buffer input-state-cursor)
+         (only-in "../../ui-core/ui-diagnostics.rkt" ui-diagnostic!)
          (only-in "../char-width.rkt" string-visible-width)
          (only-in "../../ui-core/composer-layout.rkt"
                   compute-composer-layout
@@ -155,10 +152,11 @@
   ;; painted visual lines AND the cursor cell: the cursor coordinates
   ;; returned below come from this same layout — never recomputed.
   (define input-width (max 1 (layout-region-width input-region)))
-  (define clayout (compute-composer-layout (input-state-buffer input-st)
-                                           (input-state-cursor input-st)
-                                           input-width
-                                           string-visible-width))
+  (define clayout
+    (compute-composer-layout (input-state-buffer input-st)
+                             (input-state-cursor input-st)
+                             input-width
+                             string-visible-width))
   (define vlines (composer-layout-lines clayout))
   (define cursor-row (composer-layout-cursor-row clayout))
   (define cursor-col (composer-layout-cursor-col clayout))
@@ -169,8 +167,7 @@
   (for ([vline (in-list (list-tail vlines v-offset))]
         [i (in-naturals)]
         #:break (>= i avail-rows))
-    (cell-buffer-putstring! ubuf 0 (+ input-y i)
-                            (composer-visual-line-text vline)))
+    (cell-buffer-putstring! ubuf 0 (+ input-y i) (composer-visual-line-text vline)))
   ;; Clear indicator when the viewport scrolled past the top.
   (when (> v-offset 0)
     (cell-buffer-putstring! ubuf 0 input-y "↑"))
@@ -178,8 +175,6 @@
   (if (> abs-cursor-row (sub1 rows))
       (begin
         ;; W5 diagnostic: renderer cursor clamping.
-        (ui-diagnostic! 'renderer.cursor-clamped
-                        (hasheq 'row abs-cursor-row 'max-row (sub1 rows)))
+        (ui-diagnostic! 'renderer.cursor-clamped (hasheq 'row abs-cursor-row 'max-row (sub1 rows)))
         (values cursor-col (sub1 rows) ui-state* '()))
       (values cursor-col abs-cursor-row ui-state* '())))
-

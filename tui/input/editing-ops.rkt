@@ -56,8 +56,7 @@
 
 ;; input-state -> composer-state (buffer + cursor view)
 (define (input->composer st)
-  (make-composer-state #:buffer (input-state-buffer st)
-                       #:cursor (input-state-cursor st)))
+  (make-composer-state #:buffer (input-state-buffer st) #:cursor (input-state-cursor st)))
 
 ;; Apply a composer editing op; commit buffer/cursor back into
 ;; input-state, recording an undo entry (existing history semantics).
@@ -66,19 +65,14 @@
   (define c (op (input->composer st)))
   (define new-buf (composer-state-buffer c))
   (define new-cur (composer-state-cursor c))
-  (if (and (string=? new-buf (input-state-buffer st))
-           (= new-cur (input-state-cursor st)))
+  (if (and (string=? new-buf (input-state-buffer st)) (= new-cur (input-state-cursor st)))
       st
-      (push-undo st (struct-copy input-state st
-                                 [buffer new-buf]
-                                 [cursor new-cur]))))
+      (push-undo st (struct-copy input-state st [buffer new-buf] [cursor new-cur]))))
 
 ;; Apply a composer movement op (no undo entry — pure cursor change).
 (define (run-composer-move st op)
   (define c (op (input->composer st)))
-  (struct-copy input-state st
-               [buffer (composer-state-buffer c)]
-               [cursor (composer-state-cursor c)]))
+  (struct-copy input-state st [buffer (composer-state-buffer c)] [cursor (composer-state-cursor c)]))
 
 ;; ============================================================
 ;; Basic editing

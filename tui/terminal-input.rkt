@@ -476,8 +476,7 @@
     [3 (make-tkeymsg-raw 'ctrl-c)]
     ;; W2: Ctrl+O (15) and other Ctrl+letter bytes decode via keymap registry.
     [(? ctrl-letter-byte? v)
-     (make-tkeymsg-raw
-      (string->symbol (format "ctrl-~a" (string (integer->char (+ v 96))))))]
+     (make-tkeymsg-raw (string->symbol (format "ctrl-~a" (string (integer->char (+ v 96))))))]
     [(? (lambda (v) (>= v 192)))
      (utf8-accumulator-reset!)
      (define lead-char (integer->char b))

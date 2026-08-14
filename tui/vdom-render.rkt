@@ -17,8 +17,7 @@
          "render/message-layout.rkt"
          "renderer.rkt"
          "char-width.rkt"
-         (only-in "../ui-core/feature-flags.rkt"
-                  tui-multiline-composer-enabled))
+         (only-in "../ui-core/feature-flags.rkt" tui-multiline-composer-enabled))
 
 ;; ============================================================
 ;; Render styled-lines to cell buffer

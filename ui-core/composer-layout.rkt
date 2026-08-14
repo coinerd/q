@@ -37,9 +37,7 @@
 ;;   end   — logical offset just past `text` end (== start + len text);
 ;;           for a hard line, `end` is the offset of the #\newline.
 ;;   hard? — #t when this line is terminated by a newline character
-(struct composer-visual-line
-        (text start end hard?)
-  #:transparent)
+(struct composer-visual-line (text start end hard?) #:transparent)
 
 ;; Full layout result.
 ;;   lines        — (listof composer-visual-line), at least one
@@ -47,9 +45,7 @@
 ;;   cursor-col   — display column of the cursor within that row
 ;;   row-count    — (length lines)
 ;;   width        — the display width the layout was computed for
-(struct composer-layout
-        (lines cursor-row cursor-col row-count width)
-  #:transparent)
+(struct composer-layout (lines cursor-row cursor-col row-count width) #:transparent)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Soft-wrap algorithm
@@ -60,10 +56,10 @@
 (define (wrap-segment text base-offset display-width width)
   (define w (max 1 width))
   (define len (string-length text))
-  (let loop ([i 0]            ; current scan position in text
-             [seg-start 0]    ; start of current visual segment
-             [col 0]          ; accumulated display column of segment
-             [acc '()])       ; reversed list of (cons slice end-rel)
+  (let loop ([i 0] ; current scan position in text
+             [seg-start 0] ; start of current visual segment
+             [col 0] ; accumulated display column of segment
+             [acc '()]) ; reversed list of (cons slice end-rel)
     (cond
       [(>= i len)
        (define slice (substring text seg-start len))
@@ -76,8 +72,7 @@
        (cond
          ;; Grapheme fits (or segment empty → always place, avoids
          ;; infinite loops for wide chars in narrow columns).
-         [(or (<= (+ col gw) w) (= col 0))
-          (loop (+ i sp) seg-start (+ col gw) acc)]
+         [(or (<= (+ col gw) w) (= col 0)) (loop (+ i sp) seg-start (+ col gw) acc)]
          [else
           (define slice (substring text seg-start i))
           (loop i i 0 (cons (list slice seg-start i) acc))])])))
@@ -86,20 +81,21 @@
 (define (compute-composer-layout buffer cursor width display-width)
   (define w (max 1 width))
   (define logical-lines
-    (let loop ([i 0] [start 0] [acc '()])
+    (let loop ([i 0]
+               [start 0]
+               [acc '()])
       (cond
-        [(>= i (string-length buffer))
-         ;; trailing (possibly empty) final line
-         (reverse (cons (cons start (string-length buffer)) acc))]
-        [(char=? (string-ref buffer i) #\newline)
-         (loop (add1 i) (add1 i) (cons (cons start i) acc))]
+        ;; trailing (possibly empty) final line
+        [(>= i (string-length buffer)) (reverse (cons (cons start (string-length buffer)) acc))]
+        [(char=? (string-ref buffer i) #\newline) (loop (add1 i) (add1 i) (cons (cons start i) acc))]
         [else (loop (add1 i) start acc)])))
   ;; Build all visual lines with absolute logical offsets.
   (define-values (lines _)
-    (for/fold ([acc '()] [prev-end 0])
+    (for/fold ([acc '()]
+               [prev-end 0])
               ([logical (in-list logical-lines)])
       (define start (car logical))
-      (define end (cdr logical))   ; exclusive; for hard lines == newline pos
+      (define end (cdr logical)) ; exclusive; for hard lines == newline pos
       (define hard? (< end (string-length buffer)))
       (define text (substring buffer start end))
       (define segs (wrap-segment text start display-width w))
@@ -113,9 +109,10 @@
                                 (+ start (list-ref seg 2))
                                 (and last? hard-tag))))
       (values (append acc new-lines) end)))
-  (define all-lines (if (null? lines)
-                        (list (composer-visual-line "" 0 0 #f))
-                        lines))
+  (define all-lines
+    (if (null? lines)
+        (list (composer-visual-line "" 0 0 #f))
+        lines))
   (define-values (crow ccol) (cursor->row/col all-lines cursor display-width))
   (composer-layout all-lines crow ccol (length all-lines) w))
 
@@ -128,13 +125,14 @@
 ;; line; a cursor on a #\newline belongs to that line; a cursor after a
 ;; #\newline belongs to the next line's start.
 (define (cursor->row/col lines cursor display-width)
-  (let loop ([rest lines] [idx 0] [prev-line #f])
+  (let loop ([rest lines]
+             [idx 0]
+             [prev-line #f])
     (cond
       [(null? rest)
        ;; past the end: clamp to last line
        (define last (or prev-line (car lines)))
-       (values (max 0 (sub1 (length lines)))
-               (display-width (composer-visual-line-text last)))]
+       (values (max 0 (sub1 (length lines))) (display-width (composer-visual-line-text last)))]
       [else
        (define line (car rest))
        (define start (composer-visual-line-start line))
@@ -144,10 +142,11 @@
           ;; A cursor at a line's end boundary stays on THIS line
           ;; (col = line width).  A cursor just after a #\newline is
           ;; the next line's start and matches the next iteration.
-          (values idx (display-width (substring (composer-visual-line-text line)
-                                                 0
-                                                 (min (- cursor start)
-                                                      (string-length (composer-visual-line-text line))))))]
+          (values idx
+                  (display-width (substring (composer-visual-line-text line)
+                                            0
+                                            (min (- cursor start)
+                                                 (string-length (composer-visual-line-text line))))))]
          [else (loop (cdr rest) (add1 idx) line)])])))
 
 ;; Hard-line boundary handled explicitly: cursor == end on a hard line
@@ -161,7 +160,8 @@
 
 ;; Display column → logical offset, walking graphemes.
 (define (visual-col->offset text col display-width)
-  (let loop ([i 0] [c 0])
+  (let loop ([i 0]
+             [c 0])
     (cond
       [(>= i (string-length text)) i]
       [(>= c col) i]
@@ -190,10 +190,10 @@
     [else
      (define target (list-ref lines target-row))
      (define target-text (composer-visual-line-text target))
-     (define target-col (min (or (composer-state-preferred-col st) col)
-                             (display-width target-text)))
-     (define offset (+ (composer-visual-line-start target)
-                       (visual-col->offset target-text target-col display-width)))
+     (define target-col (min (or (composer-state-preferred-col st) col) (display-width target-text)))
+     (define offset
+       (+ (composer-visual-line-start target)
+          (visual-col->offset target-text target-col display-width)))
      (struct-copy composer-state
                   st
                   [cursor offset]
@@ -201,32 +201,37 @@
                   [preferred-col (or (composer-state-preferred-col st) col)])]))
 
 (define (composer-move-up st width display-width)
-  (composer-move-vertical st (compute-composer-layout (composer-state-buffer st)
-                                                      (composer-state-cursor st)
-                                                      width display-width)
-                          -1 display-width))
+  (composer-move-vertical
+   st
+   (compute-composer-layout (composer-state-buffer st) (composer-state-cursor st) width display-width)
+   -1
+   display-width))
 
 (define (composer-move-down st width display-width)
-  (composer-move-vertical st (compute-composer-layout (composer-state-buffer st)
-                                                      (composer-state-cursor st)
-                                                      width display-width)
-                          +1 display-width))
+  (composer-move-vertical
+   st
+   (compute-composer-layout (composer-state-buffer st) (composer-state-cursor st) width display-width)
+   +1
+   display-width))
 
 ;; VISUAL home/end — jump to the start/end of the current visual row
 ;; (soft-wrap aware).  Logical home/end (buffer bounds) live in
 ;; composer-model.rkt as composer-home / composer-end.
 (define (composer-visual-home st width display-width)
-  (define layout (compute-composer-layout (composer-state-buffer st)
-                                          (composer-state-cursor st)
-                                          width display-width))
-  (define target (list-ref (composer-layout-lines layout)
-                           (composer-layout-cursor-row layout)))
+  (define layout
+    (compute-composer-layout (composer-state-buffer st)
+                             (composer-state-cursor st)
+                             width
+                             display-width))
+  (define target (list-ref (composer-layout-lines layout) (composer-layout-cursor-row layout)))
   (composer-set-cursor st (composer-visual-line-start target)))
 
 (define (composer-visual-end st width display-width)
-  (define layout (compute-composer-layout (composer-state-buffer st)
-                                          (composer-state-cursor st)
-                                          width display-width))
+  (define layout
+    (compute-composer-layout (composer-state-buffer st)
+                             (composer-state-cursor st)
+                             width
+                             display-width))
   (define lines (composer-layout-lines layout))
   (define row (composer-layout-cursor-row layout))
   ;; A cursor sitting exactly at a soft-wrap boundary is ambiguous: the
@@ -303,21 +308,38 @@
                (-> string? exact-nonnegative-integer?)
                composer-layout?)]
           [composer-move-up
-           (-> composer-state? exact-nonnegative-integer? (-> string? exact-nonnegative-integer?) composer-state?)]
+           (-> composer-state?
+               exact-nonnegative-integer?
+               (-> string? exact-nonnegative-integer?)
+               composer-state?)]
           [composer-move-down
-           (-> composer-state? exact-nonnegative-integer? (-> string? exact-nonnegative-integer?) composer-state?)]
+           (-> composer-state?
+               exact-nonnegative-integer?
+               (-> string? exact-nonnegative-integer?)
+               composer-state?)]
           [composer-visual-home
-           (-> composer-state? exact-nonnegative-integer? (-> string? exact-nonnegative-integer?) composer-state?)]
+           (-> composer-state?
+               exact-nonnegative-integer?
+               (-> string? exact-nonnegative-integer?)
+               composer-state?)]
           [composer-visual-end
-           (-> composer-state? exact-nonnegative-integer? (-> string? exact-nonnegative-integer?) composer-state?)]
+           (-> composer-state?
+               exact-nonnegative-integer?
+               (-> string? exact-nonnegative-integer?)
+               composer-state?)]
           [composer-viewport-top
            (->* (exact-nonnegative-integer? exact-nonnegative-integer?)
                 (exact-nonnegative-integer?)
                 exact-nonnegative-integer?)]
           [composer-viewport-indicators
-           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-nonnegative-integer?
+           (-> exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?
                (values boolean? boolean?))]
           [composer-needed-rows (-> composer-layout? exact-nonnegative-integer?)]
           [composer-unit-display-width (-> string? exact-nonnegative-integer?)]
           [visual-col->offset
-           (-> string? exact-nonnegative-integer? (-> string? exact-nonnegative-integer?) exact-nonnegative-integer?)]))
+           (-> string?
+               exact-nonnegative-integer?
+               (-> string? exact-nonnegative-integer?)
+               exact-nonnegative-integer?)]))

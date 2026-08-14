@@ -12,18 +12,16 @@
 
 (provide (struct-out disclosure-state)
          active-streaming-artifact-id
-         (contract-out
-          [make-empty-disclosure-state (-> disclosure-state?)]
-          [disclosure-toggle (-> disclosure-state? any/c disclosure-state?)]
-          [disclosure-set (-> disclosure-state? any/c boolean? disclosure-state?)]
-          [disclosure-expanded? (-> disclosure-state? any/c boolean?)]
-          [resolve-toggle-target
-           (->* (disclosure-state?)
-                (any/c any/c (listof any/c))
-                any/c)]
-          [make-collapsed-preview (-> string? exact-nonnegative-integer? exact-nonnegative-integer? string?)]
-          [first-non-empty-line (-> string? (or/c string? #f))]
-          [neutral-detail-label (-> string?)]))
+         (contract-out [make-empty-disclosure-state (-> disclosure-state?)]
+                       [disclosure-toggle (-> disclosure-state? any/c disclosure-state?)]
+                       [disclosure-set (-> disclosure-state? any/c boolean? disclosure-state?)]
+                       [disclosure-expanded? (-> disclosure-state? any/c boolean?)]
+                       [resolve-toggle-target
+                        (->* (disclosure-state?) (any/c any/c (listof any/c)) any/c)]
+                       [make-collapsed-preview
+                        (-> string? exact-nonnegative-integer? exact-nonnegative-integer? string?)]
+                       [first-non-empty-line (-> string? (or/c string? #f))]
+                       [neutral-detail-label (-> string?)]))
 
 ;; Disclosure state: set of artifact IDs currently expanded (default collapsed).
 (struct disclosure-state (expanded-set) #:transparent)
@@ -59,15 +57,11 @@
 ;; Returns #f if no candidate matches.
 (define active-streaming-artifact-id 'streaming-thinking)
 
-(define (resolve-toggle-target state
-                               [focused-id #f]
-                               [active-reasoning-id #f]
-                               [candidate-ids '()])
+(define (resolve-toggle-target state [focused-id #f] [active-reasoning-id #f] [candidate-ids '()])
   (or (and focused-id (not (equal? focused-id "")) focused-id)
       active-reasoning-id
       (and (pair? candidate-ids)
-           (findf (lambda (id) (and id (not (equal? id ""))))
-                  (reverse candidate-ids)))
+           (findf (lambda (id) (and id (not (equal? id "")))) (reverse candidate-ids)))
       #f))
 
 ;; Build a collapsed preview line for a full body.
@@ -81,19 +75,9 @@
   (define first-line (first-non-empty-line body))
   (cond
     [(and first-line (> hidden 0))
-     (format "~a · ~a lines · Show ~a more · Ctrl+O to expand"
-             (string-trim first-line)
-             total
-             hidden)]
-    [first-line
-     (format "~a · ~a line~a"
-             (string-trim first-line)
-             total
-             (if (= total 1) "" "s"))]
-    [else
-     (format "Thinking · ~a line~a · Ctrl+O to expand"
-             total
-             (if (= total 1) "" "s"))]))
+     (format "~a · ~a lines · Show ~a more · Ctrl+O to expand" (string-trim first-line) total hidden)]
+    [first-line (format "~a · ~a line~a" (string-trim first-line) total (if (= total 1) "" "s"))]
+    [else (format "Thinking · ~a line~a · Ctrl+O to expand" total (if (= total 1) "" "s"))]))
 
 (define (first-non-empty-line body)
   (define lines (string-split body "\n" #:repeat? #f))
