@@ -56,9 +56,10 @@
           ;; runtime + path-string
           [create-tui-session (-> any/c any/c any)]
           [make-tui-session (-> any/c any/c any)] ;; F24 alias
-          ;; path-string, integer, list, integer
+          ;; tui-ctx, agent-session, rt-config, scrollback path
+          ;; (v1.00.00-PRE1: fixed stale contract from an old signature)
           [load-tui-scrollback
-           (-> path-string? exact-nonnegative-integer? (listof any/c) exact-nonnegative-integer? any)]
+           (-> any/c any/c any/c (or/c path-string? path?) any)]
           ;; terminal-bridge (opaque)
           [init-tui-terminal (-> any/c any)]
           ;; terminal-bridge + tui-ctx (both opaque)
@@ -200,11 +201,20 @@
                                              [(prompt) ((make-campaign-runner) prompt)])
                   #:agent-session-box agent-session-box))
 
-  ;; Scrollback path
+  ;; Scrollback path — BUG-0001 fix (v1.00.00-PRE1): per-session file.
+  ;;
+  ;; The path is derived from the session (sess is in scope here), NOT from
+  ;; the global base dir. The old computation shared <base>/scrollback.jsonl
+  ;; across all sessions, so every new session loaded the previous session's
+  ;; buffer. The per-session directory is created eagerly by
+  ;; make-agent-session (ensure-persisted!) and is required to exist by
+  ;; resume-agent-session, so it is always usable for a live session.
   (define scrollback-path
-    (cond
-      [(and sess-dir (directory-exists? sess-dir)) (build-path sess-dir "scrollback.jsonl")]
-      [else (build-path "/tmp" (format "q-scrollback-~a.jsonl" (current-seconds)))]))
+    (let ([session-dir (agent-session-session-dir sess)])
+      (cond
+        [(and session-dir (directory-exists? session-dir))
+         (build-path session-dir "scrollback.jsonl")]
+        [else (build-path "/tmp" (format "q-scrollback-~a.jsonl" (current-seconds)))])))
 
   (values ctx sess scrollback-path))
 
