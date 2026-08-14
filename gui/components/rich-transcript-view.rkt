@@ -13,6 +13,7 @@
          racket/list
          "../../ui-core/theme-protocol.rkt"
          "markdown-parser.rkt"
+         (only-in "../../util/markdown.rkt" markdown-table->plain-lines)
          "keybindings.rkt"
          "scroll-state.rkt"
          "input-helpers.rkt")
@@ -157,6 +158,22 @@
                   'list-item
                   'text
                   (hash-ref seg 'text "")
+                  'style
+                  (make-content-delta content-color))]
+           [(table)
+            ;; BUG-0004: GFM table element — degrade to aligned plain lines
+            ;; (GUI text is proportional; alignment kept via monospace-ish
+            ;; plain-line layout from the shared util helper).
+            (hash 'type
+                  'content
+                  'text
+                  (string-append
+                   (string-join (markdown-table->plain-lines
+                                 (list (hash-ref seg 'header '())
+                                       (hash-ref seg 'alignments '())
+                                       (hash-ref seg 'rows '())))
+                                "\n")
+                   "\n")
                   'style
                   (make-content-delta content-color))]
            [else

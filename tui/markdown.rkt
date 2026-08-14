@@ -10,7 +10,8 @@
 
 (require racket/list
          racket/string
-         (only-in "../util/markdown.rkt" parse-markdown md-token md-token-type md-token-content)
+         (only-in "../util/markdown.rkt"
+           parse-markdown md-token md-token-type md-token-content markdown-table->plain-lines)
          "render.rkt")
 
 ;; Main entry point
@@ -83,6 +84,14 @@
                          (list (styled-line (list (styled-segment (make-string (min width 60) #\—)
                                                                   (theme->style 'muted))))))
                  '())]
+        [(table)
+         ;; BUG-0004: width-aware GFM table layout, reusing the shared
+         ;; util helper that already pads/aligns cells.
+         (define prev-lines (flush-current lines current-segs))
+         (define table-lines
+           (for/list ([line (in-list (markdown-table->plain-lines (md-token-content tok)))])
+             (styled-line (list (styled-segment line (theme->style 'md-code))))))
+         (values (append prev-lines table-lines) '())]
         [(blockquote)
          (define prev-lines (flush-current lines current-segs))
          (define depth (car (md-token-content tok)))
