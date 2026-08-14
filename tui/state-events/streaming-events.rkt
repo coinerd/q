@@ -32,8 +32,7 @@
   ;; content is empty. Entry order (thinking before assistant) is
   ;; preserved by appending thinking first.
   (define s0
-    (if (and thinking
-             (> (string-length (string-trim thinking)) 0))
+    (if (and thinking (> (string-length (string-trim thinking)) 0))
         (append-entry state (make-entry 'thinking thinking ts (hash)))
         state))
   (clear-streaming (set-pending-tool-name
