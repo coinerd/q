@@ -54,6 +54,29 @@
                     (jsexpr->hash-deep (hash-ref h 'meta (hash)))
                     (next-scrollback-id)))
 
+;; ── Lifecycle audit (BUG-0001, v1.00.00-PRE1) ──
+;;
+;; Contract: the scrollback path is SESSION-SCOPED. Callers pass
+;; <base>/<session-id>/scrollback.jsonl (see tui-init.rkt
+;; create-tui-session; previously this was a single global
+;; <base>/scrollback.jsonl shared by every session, so each new session
+;; loaded the previous session's buffer — BUG-0001).
+;;
+;; Save/load lifecycle, as audited at fix time:
+;;   * load-scrollback is called exactly once per TUI process, at startup
+;;     (load-tui-scrollback) BEFORE any buffer exists, so there is never an
+;;     old in-memory buffer that could be flushed into the new session's
+;;     file at load time.
+;;   * save-scrollback is called exactly once per TUI process, at exit
+;;     (run-tui-loop cleanup), always AFTER the loop ends; with a
+;;     per-session path the buffer can only ever be flushed into the
+;;     session that produced it.
+;;   * In-process session switches (the /go campaign runner) do not load or
+;;     save scrollback; the buffer belongs to the interactive session and
+;;     is flushed at exit into that session's own per-session file.
+;;   * Missing file at load (first-ever session) returns '() — tolerated
+;;     without error; jsonl-read-last yields '() for absent files.
+
 ;; Save transcript-entries to a JSONL file.
 ;; Atomically rewrites with only the last scrollback-max-entries entries
 ;; to prevent unbounded file growth.
