@@ -112,7 +112,7 @@
          (with-handlers ([exn:fail? (lambda (_) "")])
            (define result
              ((gsd-process-port-run process-port) "git"
-                                                  (append '("show" "--stat" "--oneline" "HEAD" "--")
+                                                  (append '("log" "-1" "--stat" "--oneline" "--")
                                                           files)
                                                   root))
            (define trimmed (string-trim (bytes->string/utf-8 (gsd-process-result-stdout result))))
