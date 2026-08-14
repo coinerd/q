@@ -95,7 +95,13 @@
          (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
-                  campaign-result-status))
+                  campaign-result-status)
+         ;; W2 disclosure controls: /toggle-detail fallback for terminals that
+         ;; cannot deliver a distinct Ctrl+O sequence.
+         (only-in "../ui-core/disclosure-state.rkt"
+                  resolve-toggle-target
+                  disclosure-toggle
+                  active-streaming-artifact-id))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -399,9 +405,35 @@
        ['deactivate (handle-deactivate-command cctx)]
        ['reload (handle-reload-command cctx)]
        ['goal (handle-goal-command cctx state args)]
+       ['toggle-detail
+        (handle-toggle-detail-command cctx state)
+        'continue]
        ['quit (handle-quit-command cctx)]
        ['unknown (process-extension-command cctx state)]
        [else 'continue])]))
+
+;; ============================================================
+;; Toggle-detail command handler (W2 disclosure controls)
+;; ============================================================
+;; Text-command fallback for ui.transcript.toggle-detail. Terminals that
+;; cannot disambiguate the raw Ctrl+O control sequence remain usable via
+;; /toggle-detail (alias /expand-reasoning, registered in command-parse).
+;; Routes to the identical intent as the keymap-registered key binding.
+
+(define (handle-toggle-detail-command cctx state)
+  (define target-id
+    (resolve-toggle-target state (ui-state-focused-component state) active-streaming-artifact-id))
+  (cond
+    [target-id
+     (define new-state
+       (struct-copy ui-state
+                    state
+                    [disclosure (disclosure-toggle (ui-state-disclosure state) target-id)]))
+     (set-box! (cmd-ctx-state-box cctx) new-state)]
+    [else
+     ;; Harmless status hint when no detail artifact exists (W2 Done #7).
+     (define hint-entry (make-entry 'system "No reasoning to expand" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state hint-entry))]))
 
 ;; ============================================================
 ;; Goal command handler

@@ -51,7 +51,12 @@
      (cond
        [(and (> (string-length s) 5) (string-prefix? s "ctrl-"))
         (define rest (substring s 5))
-        (key-spec (string->symbol rest) #t #f #f)]
+        ;; W2: default keymap stores Ctrl+letter bindings with a char key
+        ;; (e.g. (key-spec #\o #t #f #f)). Normalize single-letter ctrl
+        ;; suffixes to chars so decoded 'ctrl-o matches the map entry.
+        (if (and (= (string-length rest) 1) (char-alphabetic? (string-ref rest 0)))
+            (key-spec (string-ref rest 0) #t #f #f)
+            (key-spec (string->symbol rest) #t #f #f))]
        [(and (> (string-length s) 6) (string-prefix? s "shift-"))
         (define rest (substring s 6))
         (key-spec (string->symbol rest) #f #t #f)]

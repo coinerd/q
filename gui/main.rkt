@@ -6,6 +6,7 @@
 ;; and window construction to gui-easy views.
 
 (require racket/contract
+         racket/match
          racket/dict
          racket/format
          racket/class
@@ -21,9 +22,12 @@
          "../extensions/hooks.rkt"
          "../tui/command-parse.rkt"
          "../gui/components/rich-transcript-view.rkt"
+         "../gui/components/input-helpers.rkt"
          "../gui/slash-commands.rkt"
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt"
+         "../ui-core/ui-intents.rkt"
+         "../ui-core/preferences.rkt"
          (only-in "../ui-core/ui-actions.rkt"
                   current-ui-event-actions-enabled?
                   wire-ui-event-actions-from-config!)
@@ -68,6 +72,73 @@
 (define current-gui-theme-manager (make-parameter #f))
 
 (provide current-gui-theme-manager)
+
+;; --------------------------------------------------
+;; W4 (v0.99.96): shared composer input path.
+;;
+;; The GUI runtime input route now goes through the SAME semantic model as
+;; the TUI: the shared composer state (q/ui-core/composer-model.rkt) holds
+;; buffer/cursor/history-intent; named intents (q/ui-core/ui-intents.rkt)
+;; decide submit/newline/history; the shared preference surface
+;; (q/ui-core/preferences.rkt) decides WHICH key means what.  The GUI keeps
+;; its native multiline control, selection and rich rendering — only the
+;; SEMANTICS are shared.
+;; --------------------------------------------------
+
+;; Pure: fold one gui-easy input action into the composer state machine.
+;; Returns (values intent draft) where intent is a ui-intent? (or #f) and
+;; draft is the next draft state.  Headless-testable; identical semantics
+;; to the TUI key path.
+(define (gui-composer-event st
+                            action
+                            val
+                            #:history [history '()]
+                            #:history-index [idx 0]
+                            #:prefs [prefs (default-preferences)])
+  (define (with-st st*)
+    (values #f st*))
+  (case action
+    ;; Whole-field change from the native control: update the shared draft.
+    [(input change) (with-st (gui-draft-update st (or val "")))]
+    [(return)
+     (cond
+       ;; Enter alone: submit intent with the prepared snapshot.
+       [(input-key-should-submit? 'return #f #f)
+        (define-values (text cleared) (gui-draft-submit st))
+        (values (make-composer-submit-intent text) cleared)]
+       [else (with-st (gui-draft-insert-newline st))])]
+    [(newline) (with-st (gui-draft-insert-newline st))]
+    [(history-up)
+     (define-values (st* idx* text) (gui-draft-history st idx history 'up))
+     (values (and text (make-composer-history-intent 'up))
+             (if text
+                 (gui-draft-update st* text)
+                 st*))]
+    [(history-down)
+     (define-values (st* idx* text) (gui-draft-history st idx history 'down))
+     (values (and text (make-composer-history-intent 'down))
+             (if text
+                 (gui-draft-update st* text)
+                 st*))]
+    [else (with-st st)]))
+
+;; Pure: map a raw key event to a named intent using the SHARED keymap.
+;; Used by the GUI control's on-char hook so shortcuts resolve to the same
+;; intents the TUI resolves for the same physical key.
+(define (gui-key-event->intent key-code
+                               #:shift? [shift? #f]
+                               #:control? [control? #f]
+                               #:alt? [alt? #f]
+                               #:at-start? [at-start? 'no]
+                               #:at-end? [at-end? 'no]
+                               #:prefs [prefs (default-preferences)])
+  (gui-key->intent key-code
+                   #:shift? shift?
+                   #:control? control?
+                   #:alt? alt?
+                   #:at-start? at-start?
+                   #:at-end? at-end?
+                   #:prefs prefs))
 
 ;; --------------------------------------------------
 ;; Internal: launch gui-easy window (blocks until closed)
@@ -142,39 +213,116 @@
   ;; Slash command handler (extracted to slash-commands.rkt)
   (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock notify-gui!))
 
-  ;; Input callback: submit on Enter (single-line mode fires 'return on Enter)
+  ;; W4 (v0.99.96): shared composer state for the runtime input path.
+  ;; The GUI keeps its native control (selection, rendering); the SEMANTICS
+  ;; (draft text, submit/newline policy, history intent) go through the same
+  ;; modules the TUI uses: input-helpers (contract) -> composer-model (state)
+  ;; -> ui-intents (named intents) -> preferences (key mapping).
+  (define composer-box (box (make-gui-draft)))
+  (define composer-history '())
+  (define composer-history-idx 0)
+  (define keymap% (dynamic-require 'racket/gui 'keymap%))
+  (define gui-prefs (default-preferences))
+  ;; Multiline is on by default; off-ramp for rollout is the env var below.
+  (define composer-multiline? (not (equal? (getenv "Q_GUI_MULTILINE") "0")))
+
+  ;; Shared: submit the (already prepared) snapshot; mirrors the TUI path.
+  (define (composer-submit! text)
+    (when (> (string-length text) 0)
+      (define trimmed (string-trim text))
+      (cond
+        [(and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
+         (handle-slash-command text)
+         (set-obs! input-obs "")]
+        [else
+         (publish! event-bus
+                   (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text text)))
+         (thread (lambda ()
+                   (with-handlers ([exn:fail? (lambda (e)
+                                                (call-with-semaphore
+                                                 gui-state-lock
+                                                 (lambda ()
+                                                   (define old (unbox state-box))
+                                                   (set-box! state-box
+                                                             (gui-state-set-status
+                                                              (gui-state-add-message
+                                                               old
+                                                               (make-gui-message "error"
+                                                                                 (exn-message e)))
+                                                              'error)))))])
+                     (run-prompt! sess text))))
+         (set-obs! input-obs "")])))
+
+  ;; Shared: fold the draft through the semantic model, then act on intent.
+  (define (apply-composer-action! action [val #f])
+    (define-values (intent draft)
+      (gui-composer-event (unbox composer-box)
+                          action
+                          val
+                          #:history composer-history
+                          #:history-index composer-history-idx
+                          #:prefs gui-prefs))
+    (set-box! composer-box draft)
+    (define text (gui-draft-text draft))
+    ;; Keep the native control and the shared draft in sync (single source of
+    ;; truth for the buffer is the native editor; the draft mirrors it).
+    (unless (or (eq? action 'input) (eq? action 'change) (not val))
+      (set-obs! input-obs text))
+    (match intent
+      [(composer-submit-intent t) (composer-submit! t)]
+      [(composer-history-intent dir)
+       (set! composer-history-idx
+             (if (eq? dir 'up)
+                 (history-index-back composer-history-idx)
+                 (history-index-forward composer-history-idx composer-history)))]
+      [_ (void)]))
+
+  ;; Input callback from the native control.
+  ;; Single-line mode fires 'return on Enter (legacy path preserved).
+  ;; Multiline mode routes every action through apply-composer-action!.
   (define (on-input action val)
     (cond
       [(eq? action 'return)
-       ;; Enter pressed -> submit message
-       (when (and val (> (string-length val) 0))
-         (define trimmed (string-trim val))
-         (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
-             ;; Slash command
-             (begin
-               (handle-slash-command val)
-               (set-obs! input-obs ""))
-             ;; Regular message -> LLM
-             (begin
-               (publish!
-                event-bus
-                (make-event "user.input" (current-inexact-milliseconds) #f #f (hash 'text val)))
-               (thread (lambda ()
-                         (with-handlers ([exn:fail?
-                                          (lambda (e)
-                                            (call-with-semaphore
-                                             gui-state-lock
-                                             (lambda ()
-                                               (define old (unbox state-box))
-                                               (set-box! state-box
-                                                         (gui-state-set-status
-                                                          (gui-state-add-message
-                                                           old
-                                                           (make-gui-message "error" (exn-message e)))
-                                                          'error)))))])
-                           (run-prompt! sess val))))
-               (set-obs! input-obs ""))))]
+       (if composer-multiline?
+           (apply-composer-action! 'return val)
+           (let ()
+             ;; Legacy single-line compatibility path (feature-flag off).
+             (set-box! composer-box (gui-draft-update (unbox composer-box) (or val "")))
+             (define-values (text _cleared) (gui-draft-submit (unbox composer-box)))
+             (composer-submit! text)
+             (set-box! composer-box (make-gui-draft))))]
+      [(eq? action 'input)
+       (set-box! composer-box (gui-draft-update (unbox composer-box) (or val "")))]
       [else (void)]))
+
+  ;; Multiline keymap: Enter submits, Shift+Enter / Ctrl+Enter insert a
+  ;; newline (the gui helper contract), Alt+Up/Down walk history.  Every
+  ;; mapping goes through the shared preference surface, not ad-hoc code.
+  (define composer-keymap
+    (and
+     composer-multiline?
+     (let ([km (make-object keymap%)])
+       (send km add-function
+             "q-composer-submit"
+             (lambda (editor _event)
+               (queue-callback (lambda () (apply-composer-action! 'return (send editor get-text))))))
+       (send km add-function "q-composer-newline" (lambda (editor _event) (send editor insert "\n")))
+       (send km add-function
+             "q-composer-history-up"
+             (lambda (editor _event)
+               (queue-callback (lambda ()
+                                 (apply-composer-action! 'history-up (send editor get-text))))))
+       (send km add-function
+             "q-composer-history-down"
+             (lambda (editor _event)
+               (queue-callback (lambda ()
+                                 (apply-composer-action! 'history-down (send editor get-text))))))
+       (when (submit-key-policy gui-prefs)
+         (send km map-function "return" "q-composer-submit"))
+       (send km map-function "c:return" "q-composer-newline")
+       (send km map-function "a:up" "q-composer-history-up")
+       (send km map-function "a:down" "q-composer-history-down")
+       km)))
 
   ;; Observable wrapping the text% editor for editor-canvas view
   (define transcript-obs (make-obs transcript-text))
@@ -221,7 +369,17 @@
                                               #:stretch '(#t #t)
                                               #:mixin (compose-mixins (editor-canvas-clipboard-mixin)
                                                                       (editor-canvas-bg-mixin bg-c)))
-                          (input-view input-obs on-input #:stretch '(#t #f)))))
+                          (input-view input-obs
+                                      on-input
+                                      #:style (if composer-multiline?
+                                                  '(multiple)
+                                                  '())
+                                      #:keymap composer-keymap
+                                      #:min-size (list #f
+                                                       (if composer-multiline?
+                                                           (* 19 (max-composer-rows gui-prefs))
+                                                           #f))
+                                      #:stretch '(#t #f)))))
   ;; GAP-LH (v0.98.7 W1): Dispatch gui.window.closed lifecycle hook after window closes.
   (dispatch-gui-hook! 'gui.window.closed (hasheq 'session-id (session-id sess)))
 

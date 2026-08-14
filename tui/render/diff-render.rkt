@@ -7,7 +7,8 @@
 (require racket/list
          "../state.rkt"
          "../input.rkt"
-         "message-layout.rkt")
+         "message-layout.rkt"
+         (only-in "../../ui-core/disclosure-state.rkt" active-streaming-artifact-id))
 
 (provide style-invert
          apply-selection-highlight
@@ -105,7 +106,9 @@
                                                               streaming-thinking
                                                               (current-inexact-milliseconds)
                                                               (hash)
-                                                              #f)))
+                                                              ;; Shared sentinel id so Ctrl+O
+                                                              ;; can toggle this entry.
+                                                              active-streaming-artifact-id)))
                               chronological-entries)]
            [with-text (if streaming-text
                           (append with-thinking
@@ -116,7 +119,9 @@
                                                           #f)))
                           with-thinking)])
       with-text))
-  (define styled-lines (apply append (map (lambda (e) (format-entry e width)) all-entries)))
+  (define disclosure (ui-state-disclosure state))
+  (define styled-lines
+    (apply append (map (lambda (e) (format-entry e width disclosure)) all-entries)))
   ;; Apply scroll offset — scroll=0 means show bottom (newest), positive = scrolled up
   (define total-lines (length styled-lines))
   (define max-start (max 0 (- total-lines transcript-height)))

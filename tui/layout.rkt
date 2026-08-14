@@ -40,28 +40,58 @@
 (define header-height 1)
 (define input-height 3)
 
+;; Multiline composer height bounds (W3, v0.99.96).
+;; The composer text area is bounded: at least 1 text row, at most
+;; `max-composer-text-rows` (configurable, default 6).  The total input
+;; region height adds 2 chrome rows (border/prompt header + spacing) on
+;; top of the text rows.
+(define default-max-composer-text-rows 6)
+(define min-composer-text-rows 1)
+(define composer-chrome-rows 2)
+
+;; Clamp a requested composer text-row count to [1, max-rows].
+(define (clamp-composer-text-rows rows [max-rows default-max-composer-text-rows])
+  (max min-composer-text-rows
+       (min (max rows min-composer-text-rows) (max max-rows min-composer-text-rows))))
+
+;; Compute the input region height from a composer text-row count.
+;; Legacy single-line composer: 3 rows (border + 1 text + spacing).
+(define (composer-input-height text-rows [max-rows default-max-composer-text-rows])
+  (+ composer-chrome-rows (clamp-composer-text-rows text-rows max-rows)))
+
 ;; Compute the 5-region layout for a given terminal size.
 ;; Returns a hash of region-name -> layout-region.
 ;; Canonical positional args: (term-height, term-width).
 ;; Use keyword args for extra safety. Minimum height clamped to 4.
+;; `#:composer-height` (W3): composer TEXT rows from the shared visual
+;; layout.  When omitted, the legacy fixed 3-row input region is used.
+;; Height is clamped to [1, #:max-composer-rows]; transcript takes the rest.
 (define (compute-layout term-height
                         term-width
                         #:widget-bar-h [widget-bar-h (widget-bar-height)]
-                        #:has-widgets? [has-widgets? #f])
-  (define height (max (+ header-height input-height) term-height))
+                        #:has-widgets? [has-widgets? #f]
+                        #:composer-height [composer-text-rows #f]
+                        #:max-composer-rows [max-composer-rows default-max-composer-text-rows])
+  (define effective-input-height
+    (if composer-text-rows
+        (composer-input-height composer-text-rows max-composer-rows)
+        input-height))
+  (define height (max (+ header-height effective-input-height) term-height))
   (define width (max 1 term-width))
   (define effective-widget-h (if (and has-widgets? (> widget-bar-h 0)) widget-bar-h 0))
-  (define fixed-height (+ header-height effective-widget-h input-height))
+  (define fixed-height (+ header-height effective-widget-h effective-input-height))
   (define transcript-height (max 0 (- height fixed-height)))
-  (hasheq
-   'header
-   (layout-region 'header 0 header-height width)
-   'transcript
-   (layout-region 'transcript header-height transcript-height width)
-   'widget-bar
-   (layout-region 'widget-bar (+ header-height transcript-height) effective-widget-h width)
-   'input
-   (layout-region 'input (+ header-height transcript-height effective-widget-h) input-height width)))
+  (hasheq 'header
+          (layout-region 'header 0 header-height width)
+          'transcript
+          (layout-region 'transcript header-height transcript-height width)
+          'widget-bar
+          (layout-region 'widget-bar (+ header-height transcript-height) effective-widget-h width)
+          'input
+          (layout-region 'input
+                         (+ header-height transcript-height effective-widget-h)
+                         effective-input-height
+                         width)))
 
 ;; Get transcript region from layout
 (define (layout-transcript layout)
@@ -133,9 +163,17 @@
          layout-region-width
          header-height
          input-height
+         min-composer-text-rows
+         default-max-composer-text-rows
+         composer-chrome-rows
+         clamp-composer-text-rows
+         composer-input-height
          (contract-out [compute-layout
                         (->* (exact-positive-integer? exact-positive-integer?)
-                             (#:widget-bar-h exact-nonnegative-integer? #:has-widgets? boolean?)
+                             (#:widget-bar-h exact-nonnegative-integer?
+                                             #:has-widgets? boolean?
+                                             #:composer-height (or/c #f exact-positive-integer?)
+                                             #:max-composer-rows exact-positive-integer?)
                              hash?)]
                        [layout-transcript (-> hash? layout-region?)]
                        [layout-widget-bar (-> hash? layout-region?)]
@@ -151,3 +189,45 @@
          tui-layout-status-row
          tui-layout-input-row
          compute-layout-with-widgets)
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Tests (W3: composer-height)
+;; ═══════════════════════════════════════════════════════════════════
+
+(module+ test
+  (require rackunit)
+
+  ;; Legacy: no composer-height -> fixed 3-row input region.
+  (let ([l (compute-layout 24 80)])
+    (check-equal? (layout-region-height (layout-input l)) 3)
+    (check-equal? (layout-region-height (layout-transcript l)) 20))
+
+  ;; Composer height clamped: below min -> 1 text row (+2 chrome = 3).
+  (let ([l (compute-layout 24 80 #:composer-height 0)])
+    (check-equal? (layout-region-height (layout-input l)) 3))
+
+  ;; 4 text rows -> 6-row input region, transcript shrinks accordingly.
+  (let ([l (compute-layout 24 80 #:composer-height 4)])
+    (check-equal? (layout-region-height (layout-input l)) 6)
+    (check-equal? (layout-region-height (layout-transcript l)) 17))
+
+  ;; Above default max (6) -> clamped to 6 text rows = 8-row region.
+  (let ([l (compute-layout 40 80 #:composer-height 20)])
+    (check-equal? (layout-region-height (layout-input l)) 8))
+
+  ;; Configurable maximum overrides the default.
+  (let ([l (compute-layout 40 80 #:composer-height 10 #:max-composer-rows 10)])
+    (check-equal? (layout-region-height (layout-input l)) 12))
+
+  ;; Transcript consumes the remaining height even at max composer.
+  (let ([l (compute-layout 40 80 #:composer-height 20)])
+    (check-equal? (+ (layout-region-height (layout-transcript l))
+                     (layout-region-height (layout-input l)))
+                  39))
+
+  (check-equal? (clamp-composer-text-rows 3) 3)
+  (check-equal? (clamp-composer-text-rows 0) 1)
+  (check-equal? (clamp-composer-text-rows 99) 6)
+  (check-equal? (composer-input-height 1) 3)
+  (check-equal? (composer-input-height 6) 8)
+  (check-equal? (composer-input-height 9) 8))

@@ -1,3 +1,50 @@
+## 0.99.99
+
+Released 2026-09-10.
+
+> The v0.99.96 "TUI/GUI UX Improvement" milestone body of work. Version 0.99.96 itself had already shipped as a session-runner hotfix, so the milestone lands under 0.99.99.
+
+### Added — Shared UI semantic layer
+
+- `q/ui-core/composer-model.rkt`: pure, dependency-free multiline text-editor state — buffer, grapheme-aware cursor, selection anchor, preferred column, undo grouping, history intent, viewport intent. No terminal cells, no `text%`, no clipboard access.
+- `q/ui-core/composer-layout.rkt`: single authoritative width-aware soft-wrap layout. Takes a parameterized display-width function (terminal cell width for TUI, font measurement for GUI) and returns visual lines with logical offsets **and** the cursor (row, col). Renderers paint exactly these visual lines and use the same layout result for the software cursor and the hidden hardware/IME cursor; cursor coordinates are never recomputed downstream.
+- `q/ui-core/ui-diagnostics.rkt`: rate-limited structured diagnostics for six categories — malformed stream ordering, unknown turn IDs in the reducer, unsupported terminal chords, clamped composer dimensions, dropped persistence due to `never` retention policy, and renderer cursor clamping.
+
+### TUI
+
+- The prompt is now a genuine multiline composer instead of a single-line horizontal viewport: visual-line navigation, preferred-column retention across wraps, and selection support.
+- Composer height is derived from the shared layout and clamped between a minimum of 1 text row and a configurable maximum (default 6); beyond the maximum the composer gains an internal vertical viewport with an overflow indicator. The transcript consumes the remaining height. Full redraw is forced when the composer height changes.
+- Embedded newlines now render as visual line breaks — the VDOM no longer replaces them with spaces.
+- Reasoning disclosure: `Ctrl+O` (intent `ui.transcript.toggle-detail`) expands/collapses reasoning, including the live in-flight stream, without losing updates.
+
+### GUI / TUI convergence
+
+- The GUI runtime input path routes submission/newline policy, history intent, and persistent draft state through the shared composer model while retaining native selection and rich-text rendering. Only semantics are shared; pixel/cell parity is explicitly not a goal.
+- GUI shortcuts resolve to the same named intents as the TUI (`ui.composer.submit`, `ui.composer.insert-newline`, `composer.history-up`/`-down`, `ui.transcript.toggle-detail`).
+- Unified preference surface across both frontends: reasoning visibility/persistence policy (`session` / `scrollback` / `never`), preview length, max composer rows, and submit/newline key mapping.
+
+### Removed — obsolete special-case paths
+
+- Thinking persistence is no longer gated on empty assistant text; reasoning artifacts persist per retention policy for every turn shape.
+- Destructive data-loss truncations removed: the 3-line transcript truncation (retained only as configurable *presentation* truncation) and the 200-character GUI truncation.
+- The one-line composer rendering path and the `input-visible-window` legacy adapter are gone; `composer-layout` is the only source of visual lines and cursor position.
+- VDOM newline-to-space replacement removed.
+
+### Breaking / Behavior Changes
+
+- `tui.multiline-composer.enabled` now defaults to `#t`.
+- `ui.reasoning.artifacts.enabled` now defaults to `#t`.
+- Set either to `#f` to restore the pre-milestone behavior. No configuration format changes.
+
+### Testing
+
+- New suites: `ux-composer-property-test.rkt` (grapheme/wrap/round-trip invariants over the real composer), `ux-gui-tui-parity-test.rkt` (semantic parity: same draft text, turn-id-keyed artifact identity, folding transitions, submit/newline results, shortcut intent resolution), and `disclosure-state-test.rkt`.
+- Broad gate: `raco test q/ui-core/ q/tui/ q/gui/` green with both flags on by default.
+
+### Migration Notes
+
+- None required. Users who depended on single-line composer behavior should set `tui.multiline-composer.enabled: #f`.
+
 ## 0.99.98
 
 Released 2026-08-13.

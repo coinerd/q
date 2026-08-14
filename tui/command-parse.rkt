@@ -108,7 +108,12 @@
         "/goal"
         (cons 'goal 'optional)
         "/g"
-        (cons 'goal 'optional)))
+        (cons 'goal 'optional)
+        ;; Disclosure controls (W2: Ctrl+O fallback for terminals)
+        "/toggle-detail"
+        (cons 'toggle-detail 'none)
+        "/expand-reasoning"
+        (cons 'toggle-detail 'none)))
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f

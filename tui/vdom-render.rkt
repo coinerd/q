@@ -16,7 +16,8 @@
          "cell-buffer.rkt"
          "render/message-layout.rkt"
          "renderer.rkt"
-         "char-width.rkt")
+         "char-width.rkt"
+         (only-in "../ui-core/feature-flags.rkt" tui-multiline-composer-enabled))
 
 ;; ============================================================
 ;; Render styled-lines to cell buffer
@@ -37,7 +38,10 @@
   (define remaining-width effective-width)
   (for ([seg (in-list (styled-line-segments line))])
     #:break (<= remaining-width 0)
-    (define text (string-replace (styled-segment-text seg) "\n" " "))
+    (define text (styled-segment-text seg))
+    ;; W5: newlines are structural visual-line breaks produced upstream
+    ;; (composer-layout / message-layout); they are never flattened to
+    ;; spaces here.
     (define styles (styled-segment-style seg))
     ;; Truncate text to remaining width
     (define visible-text

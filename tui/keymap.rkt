@@ -154,9 +154,9 @@
 
 (define (keymap-add! km ks action)
   ;; Remove existing binding for this key-spec
-  (set-keymap-entries!
-   km
-   (cons (cons ks action) (filter-not (lambda (e) (key-spec=? (car e) ks)) (keymap-entries km)))))
+  (set-keymap-entries! km
+                       (cons (cons ks action)
+                             (filter-not (lambda (e) (key-spec=? (car e) ks)) (keymap-entries km)))))
 
 (define (keymap-remove! km ks)
   (set-keymap-entries! km (filter-not (lambda (e) (key-spec=? (car e) ks)) (keymap-entries km))))
@@ -224,6 +224,8 @@
   (keymap-add! km (key-spec #\u #t #f #f) 'tui.editor.clear-input)
   ;; Ctrl-L for clear screen
   (keymap-add! km (key-spec #\l #t #f #f) 'tui.display.clear-screen)
+  ;; Ctrl-O for toggle reasoning detail (W2: disclosure controls)
+  (keymap-add! km (key-spec #\o #t #f #f) 'ui.transcript.toggle-detail)
   km)
 
 ;; ============================================================

@@ -1,7 +1,7 @@
-<!-- verified-against: 0.99.98 -->
+<!-- verified-against: 0.99.99 -->
 # Q Event Taxonomy Reference
 
-Complete reference for all event types in q 0.99.98.
+Complete reference for all event types in q 0.99.99.
 ## Base Types
 
 ### `event` (protocol-level)
