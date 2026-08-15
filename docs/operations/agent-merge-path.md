@@ -1,6 +1,6 @@
 # Agent Merge Path — Landing Agent-Authored PRs onto Protected `main`
 
-Status: canonical (v1.00.01, BUG-0010)
+Status: canonical (BUG-0010)
 Audience: any autonomous agent (or human) that must land a fix/document wave on
 protected `main`. This is the **standing, versioned procedure** — no wave may improvise
 its own landing chain.
