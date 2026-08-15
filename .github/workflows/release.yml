@@ -12,23 +12,35 @@ permissions:
   contents: read
 
 jobs:
-  # ── Preflight: cheap structural checks in seconds (BUG-0007 fail-fast).
-  #    Runs before any expensive job, so metadata errors (lightweight tag,
-  #    tag/version mismatch, manifest surface) never cost a full suite run. ──
+  # ── Preflight: cheap structural checks in seconds (BUG-0007 fail-fast),
+  #    plus release readiness (BUG-0008). Runs before any expensive job, so
+  #    metadata errors (lightweight tag, tag/version mismatch, manifest
+  #    surface, missing required fixes) never cost a full suite run. ──
   preflight:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # BUG-0008 readiness: read the v<version> milestone's BUG-NNNN issues.
+      issues: read
+    env:
+      # BUG-0008 readiness: milestone query credentials (registry fallback
+      # lives outside this repo, so in CI the milestone is the tracker source).
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           # fetch-tags: the tag OBJECT must be present locally for
           # `git cat-file -t` to tell annotated from lightweight tags.
-          fetch-depth: 1
+          # fetch-depth 0: readiness runs `git merge-base --is-ancestor
+          # <fix-sha> <tagged-sha>`, so the history containing the required
+          # fixes' landing commits must be present locally.
+          fetch-depth: 0
           fetch-tags: true
       - uses: ./.github/actions/setup-racket
 
-      - name: Release preflight (tag object type, tag/version consistency, manifest dry-run)
-        run: racket scripts/release-preflight.rkt ${{ github.ref_name }}
+      - name: Release preflight (tag/version/manifest invariants + required-fix readiness)
+        run: racket scripts/release-preflight.rkt ${{ github.ref_name }} --readiness
 
   # ── Pre-publication gates (runs before any build) ──
   test:
