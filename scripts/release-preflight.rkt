@@ -234,7 +234,8 @@
 ;; the issue, and the commit that would satisfy the gate.
 ;; ---------------------------------------------------------------------------
 
-(define (strip-v s) (regexp-replace "^v" s ""))
+(define (strip-v s)
+  (regexp-replace "^v" s ""))
 
 (define (release-targets? fixed-in version)
   (and (non-empty-string? fixed-in)
@@ -245,8 +246,7 @@
 ;; Row shape: | ID | reported | title | component | severity | status | fixed-in | [file](link) |
 ;; Backslash-free patterns only (transport-safe): char classes instead of escapes.
 ;; pregexp (not regexp): brace quantifiers {n}/{n,m} are literal braces under plain regexp.
-(define registry-row-rx
-  (pregexp "^[|] *(BUG-[0-9]{4}) *[|](?:[^|]*[|]){5} *([^|]*?) *[|]"))
+(define registry-row-rx (pregexp "^[|] *(BUG-[0-9]{4}) *[|](?:[^|]*[|]){5} *([^|]*?) *[|]"))
 (define file-link-rx (regexp "[]][(]([^)]+)"))
 
 (define (parse-registry-rows index-path)
@@ -260,8 +260,8 @@
 ;; that landed on main. Convention introduced with BUG-0008.
 (define landing-commit-rx
   (pregexp (string-append "(?i:landing[ ]+commit)[^:]*:[ ]*["
-                         (list->string (list #\` #\" #\'))
-                         "]*([0-9a-f]{7,40})")))
+                          (list->string (list #\` #\" #\'))
+                          "]*([0-9a-f]{7,40})")))
 
 (define (landing-sha-from-report registry-dir report-file)
   (cond
@@ -269,16 +269,24 @@
     [else
      (define p (build-path registry-dir (string->path report-file)))
      (and (file-exists? p)
-          (cond [(regexp-match landing-commit-rx (file->string p)) => cadr]
-                [else #f]))]))
+          (cond
+            [(regexp-match landing-commit-rx (file->string p))
+             =>
+             cadr]
+            [else #f]))]))
 
 (define (registry-index-path)
   (define candidates
-    (append
-     (cond [(getenv "Q_BUG_REGISTRY") => (lambda (p) (list (string->path p)))] [else '()])
-     (list (build-path repo-root ".planning" "bugs" "INDEX.md")
-           (build-path repo-root 'up ".planning" "bugs" "INDEX.md"))))
-  (for/first ([p (in-list candidates)] #:when (file-exists? p)) p))
+    (append (cond
+              [(getenv "Q_BUG_REGISTRY")
+               =>
+               (lambda (p) (list (string->path p)))]
+              [else '()])
+            (list (build-path repo-root ".planning" "bugs" "INDEX.md")
+                  (build-path repo-root 'up ".planning" "bugs" "INDEX.md"))))
+  (for/first ([p (in-list candidates)]
+              #:when (file-exists? p))
+    p))
 
 ;; --- GitHub helpers (credential pattern shared with q/scripts/milestone-gate.rkt)
 
@@ -293,8 +301,11 @@
 
 (define (repo-slug)
   (or (for/or ([url (in-list (git-lines "remote" "get-url" "origin"))])
-        (cond [(regexp-match origin-url-rx url) => (lambda (m) (format "~a/~a" (cadr m) (caddr m)))]
-              [else #f]))
+        (cond
+          [(regexp-match origin-url-rx url)
+           =>
+           (lambda (m) (format "~a/~a" (cadr m) (caddr m)))]
+          [else #f]))
       "coinerd/q"))
 
 ;; -> jsexpr or #f (no credentials, HTTP error, or bad JSON)
@@ -306,9 +317,14 @@
          (define code
            (parameterize ([current-output-port out])
              (system*/exit-code (find-executable-path "curl")
-                                "-s" "-f" "--max-time" "30"
-                                "-H" (format "Authorization: token ~a" token)
-                                "-H" "Accept: application/vnd.github+json"
+                                "-s"
+                                "-f"
+                                "--max-time"
+                                "30"
+                                "-H"
+                                (format "Authorization: token ~a" token)
+                                "-H"
+                                "Accept: application/vnd.github+json"
                                 (format "https://api.github.com/repos/~a/~a" (repo-slug) path))))
          (and (zero? code)
               (with-handlers ([exn:fail:read? (lambda (_) #f)])
@@ -353,8 +369,7 @@
 ;; Landing SHA for a tracker issue: prefer a *merged* cross-referenced PR whose
 ;; title mentions the BUG-ID; otherwise the most recently merged one.
 (define (issue-landing-sha bug-id issue-number)
-  (define timeline
-    (gh-api-json (format "issues/~a/timeline?per_page=100" issue-number)))
+  (define timeline (gh-api-json (format "issues/~a/timeline?per_page=100" issue-number)))
   (and (list? timeline)
        (let ()
          (define cross-refs '())
@@ -376,8 +391,7 @@
               (or (for/first ([p (in-list merged-prs)]
                               #:when (regexp-match? (regexp-quote bug-id) (hash-ref p 'title "")))
                     p)
-                  (car (sort merged-prs string>=?
-                             #:key (lambda (p) (hash-ref p 'merged_at ""))))))
+                  (car (sort merged-prs string>=? #:key (lambda (p) (hash-ref p 'merged_at ""))))))
             (hash-ref chosen 'merge_commit_sha #f)]))))
 
 ;; --- containment -----------------------------------------------------------
@@ -393,7 +407,9 @@
   (zero? (car (git-quiet "merge-base" "--is-ancestor" sha of-commit))))
 
 (define (short-sha sha)
-  (if (and (string? sha) (>= (string-length sha) 8)) (substring sha 0 8) (or sha "?")))
+  (if (and (string? sha) (>= (string-length sha) 8))
+      (substring sha 0 8)
+      (or sha "?")))
 
 (define (check-readiness! tag)
   (define version (tag->version tag))
@@ -414,16 +430,18 @@
   ;; union of both sources; registry-recorded SHA wins over tracker resolution
   (define required (make-hash)) ; bug-id -> (list issue-number landing-sha)
   (for ([row (in-list registry-rows)])
-    (hash-set! required (car row)
-               (list #f (landing-sha-from-report registry-dir (caddr row)))))
+    (hash-set! required (car row) (list #f (landing-sha-from-report registry-dir (caddr row)))))
   (for ([e (in-list ms-entries)])
     (match-define (list bug-id issue-num) e)
     (define prev (hash-ref required bug-id (list #f #f)))
-    (hash-set! required bug-id
+    (hash-set! required
+               bug-id
                (list (or (car prev) issue-num)
                      (or (cadr prev) (issue-landing-sha bug-id issue-num)))))
   (printf "  --    [readiness] sources: registry ~a[~a row(s) target v~a] · milestone ~a\n"
-          (if index-path (path->string index-path) "absent")
+          (if index-path
+              (path->string index-path)
+              "absent")
           (length registry-rows)
           version
           (match ms-status
@@ -435,30 +453,67 @@
     [(hash-empty? required)
      (cond
        [(eq? ms-status 'query-failed)
-        (stage-fail "release-readiness"
-                    "cannot prove readiness: no usable registry found AND the milestone query failed (need $GITHUB_TOKEN / $GH_TOKEN / ~/GH_PAT, or a reachable network)")]
+        (stage-fail
+         "release-readiness"
+         (string-append
+          "cannot prove readiness: no usable registry found AND the milestone "
+          "query failed (need $GITHUB_TOKEN / $GH_TOKEN / ~/GH_PAT, or a "
+          "reachable network)"))]
        [else
-        (stage-ok "release-readiness: no fixes recorded as required for v~a (registry + milestone agree there is nothing to gate)" version)])]
+        (stage-ok
+         "release-readiness: no fixes recorded as required for v~a (registry + milestone agree there is nothing to gate)"
+         version)])]
     [else
      (define results
        (for/list ([bug-id (in-list (sort (hash-keys required) string<?))])
          (match-define (list issue-num sha) (hash-ref required bug-id))
-         (define ref (if issue-num (format "~a (#~a)" bug-id issue-num) bug-id))
-         (cons bug-id
-               (cond
-                 [(not sha)
-                  (list 'fail
-                        (format "~a: no landing commit recorded — merge the fix PR and record its SHA on a `Landing commit:` line in the registry report (.planning/bugs/README.md)" ref))]
-                 [(not (commit-in-clone? sha))
-                  (list 'fail
-                        (format "~a: landing commit ~a is not present in this clone — fetch it; commit ~a would satisfy the gate" ref (short-sha sha) (short-sha sha)))]
-                 [(commit-ancestor? sha tagged)
-                  (list 'ok
-                        (format "~a: fix landed at ~a — contained in tagged ~a" ref (short-sha sha) (short-sha tagged)))]
-                 [else
-                  (list 'fail
-                        (format "~a: required fix landed at ~a but tag ~a points at ~a, which does NOT contain it — re-tag on a commit containing ~a, e.g. on current main: git tag -fa ~a main -m \"~a\" && git push origin ~a --force"
-                                ref (short-sha sha) tag (short-sha tagged) (short-sha sha) tag tag tag))]))))
+         (define ref
+           (if issue-num
+               (format "~a (#~a)" bug-id issue-num)
+               bug-id))
+         (cons
+          bug-id
+          (cond
+            [(not sha)
+             (list
+              'fail
+              (format
+               (string-append
+                "~a: no landing commit recorded — merge the fix PR and record "
+                "its SHA on a `Landing commit:` line in the registry report "
+                "(.planning/bugs/README.md)")
+               ref))]
+            [(not (commit-in-clone? sha))
+             (list
+              'fail
+              (format
+               "~a: landing commit ~a is not present in this clone — fetch it; commit ~a would satisfy the gate"
+               ref
+               (short-sha sha)
+               (short-sha sha)))]
+            [(commit-ancestor? sha tagged)
+             (list 'ok
+                   (format "~a: fix landed at ~a — contained in tagged ~a"
+                           ref
+                           (short-sha sha)
+                           (short-sha tagged)))]
+            [else
+             (list
+              'fail
+              (format
+               (string-append
+                "~a: required fix landed at ~a but tag ~a points at ~a, which "
+                "does NOT contain it — re-tag on a commit containing ~a, e.g. on "
+                "current main: git tag -fa ~a main -m \"~a\" && git push origin "
+                "~a --force")
+               ref
+               (short-sha sha)
+               tag
+               (short-sha tagged)
+               (short-sha sha)
+               tag
+               tag
+               tag))]))))
      (for ([r (in-list results)])
        (if (eq? (cadr r) 'ok)
            (printf "  ok    [readiness] ~a\n" (caddr r))
@@ -466,11 +521,18 @@
      (define failed (filter (lambda (r) (not (eq? (cadr r) 'ok))) results))
      (cond
        [(pair? failed)
-        (eprintf "\nrelease preflight: FAILED release-readiness — ~a required fix(es) missing from ~a:\n" (length failed) tag)
-        (for ([r (in-list failed)]) (eprintf "  - ~a\n" (car r)))
+        (eprintf
+         "\nrelease preflight: FAILED release-readiness — ~a required fix(es) missing from ~a:\n"
+         (length failed)
+         tag)
+        (for ([r (in-list failed)])
+          (eprintf "  - ~a\n" (car r)))
         (exit 1)]
        [else
-        (stage-ok "release-readiness: all ~a required fix(es) for v~a are contained in ~a" (length results) version tag)])]))
+        (stage-ok "release-readiness: all ~a required fix(es) for v~a are contained in ~a"
+                  (length results)
+                  version
+                  tag)])]))
 
 ;; ---------------------------------------------------------------------------
 ;; Main
