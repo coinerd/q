@@ -30,6 +30,7 @@
           [theme->style (->* (any/c) [(listof symbol?)] (listof symbol?))]
           [format-entry (->* (any/c) [exact-nonnegative-integer? any/c] (listof styled-line?))]
           [md-format-assistant (-> string? exact-nonnegative-integer? (listof styled-line?))]
+          [table-token->styled-lines (-> any/c exact-nonnegative-integer? (listof styled-line?))]
           [md-token->segment (-> any/c styled-segment?)]
           [styled-line->text (-> styled-line? string?)]
           [styled-line->ansi (-> styled-line? string?)]
@@ -328,11 +329,36 @@
 
 ;; Format assistant text with markdown rendering.
 ;; Preserves per-token styles instead of flattening.
+;; BUG-0004: 'table tokens are laid out width-aware (table-token->styled-lines);
+;; every other token flows through the original flatten+wrap pipeline unchanged,
+;; so non-table output is byte-identical to the previous implementation.
 (define (md-format-assistant text width)
   (if (or (not text) (string=? (string-trim text) ""))
       (quote ())
-      (let* ([tokens (parse-markdown text)]
-             [all-segments (apply append (map md-token->segments tokens))]
+      (render-md-tokens (parse-markdown text) width)))
+
+;; Render a token list: table tokens get the width-aware table layout, all
+;; other tokens are batched into runs through the pre-existing pipeline.
+(define (render-md-tokens tokens width)
+  (let loop ([remaining tokens]
+             [plain-run (quote ())]
+             [out (quote ())])
+    (cond
+      [(null? remaining)
+       (append out (render-plain-md-run (reverse plain-run) width))]
+      [(eq? (md-token-type (car remaining)) 'table)
+       (loop (cdr remaining)
+             (quote ())
+             (append out
+                     (render-plain-md-run (reverse plain-run) width)
+                     (table-token->styled-lines (car remaining) width)))]
+      [else (loop (cdr remaining) (cons (car remaining) plain-run) out)])))
+
+;; Original flatten+wrap pipeline over a run of non-table tokens.
+(define (render-plain-md-run tokens width)
+  (if (null? tokens)
+      (quote ())
+      (let* ([all-segments (apply append (map md-token->segments tokens))]
              [line-groups (split-segments-on-newline all-segments)])
         (apply
          append
@@ -353,6 +379,69 @@
               (if (and exceeds? (not is-header?))
                   (wrap-styled-line line width)
                   (list line))]))))))
+
+;; ============================================================
+;; GFM table rendering (BUG-0004)
+;; ============================================================
+
+;; Shrink column widths (widest first) until the table fits `avail`
+;; characters; every column keeps at least 1 character. avail >= ncols
+;; is guaranteed by the caller, so the loop always terminates.
+(define (clamp-table-widths widths avail)
+  (cond
+    [(null? widths) widths]
+    [(<= (apply + widths) avail) widths]
+    [else
+     (define i (index-of widths (apply max widths)))
+     (define reduced (list-set widths i (max 1 (sub1 (list-ref widths i)))))
+     (if (equal? reduced widths) widths (clamp-table-widths reduced avail))]))
+
+;; Width-aware GFM table -> styled-lines. Column widths come from cell content,
+;; clamped so the whole table (cells + two-space gutters) fits `width`;
+;; over-wide cells wrap within their column via wrap-styled-line -- the same
+;; wrapper used for ordinary markdown text, no duplicated wrap logic.
+(define (table-token->styled-lines tok width)
+  (define content (md-token-content tok))
+  (define header (car content))
+  (define alignments (cadr content))
+  (define rows (caddr content))
+  (define ncols (length header))
+  (define gutters (max 0 (* 2 (sub1 ncols))))
+  (define avail (max ncols (- width gutters)))
+  (define widths (clamp-table-widths (table-column-widths (cons header rows)) avail))
+  (define header-style (theme->style 'md-heading '(bold)))
+  ;; A cell becomes its own wrapped line list (plain text) within its column.
+  (define (cell-text-lines text w)
+    (if (<= (string-length text) w)
+        (list text)
+        (map styled-line->text
+             (wrap-styled-line (styled-line (list (styled-segment text (quote ())))) (max 1 w)))))
+  ;; Emit one visual line per wrapped row line: padded cells + gutters.
+  (define (emit-row cells style)
+    (define cell-lines
+      (for/list ([c (in-list cells)] [w (in-list widths)])
+        (cell-text-lines c w)))
+    (define row-height (if (null? cell-lines) 1 (apply max (map length cell-lines))))
+    (for/list ([idx (in-range row-height)])
+      (define segs
+        (for/fold ([acc (quote ())])
+                  ([ls (in-list cell-lines)]
+                   [w (in-list widths)]
+                   [a (in-list alignments)]
+                   [i (in-naturals)])
+          (define txt (if (< idx (length ls)) (list-ref ls idx) ""))
+          (define gutter (if (zero? i) (quote ()) (list (styled-segment "  " style))))
+          (append acc gutter (list (styled-segment (table-pad-cell txt w a) style)))))
+      (define non-empty (filter (lambda (sg) (not (string=? (styled-segment-text sg) ""))) segs))
+      (styled-line (if (null? non-empty) (list (styled-segment "" (quote ()))) non-empty))))
+  (define delim-segs
+    (for/fold ([acc (quote ())])
+              ([w (in-list widths)] [a (in-list alignments)] [i (in-naturals)])
+      (define gutter (if (zero? i) (quote ()) (list (styled-segment "  " '(dim)))))
+      (append acc gutter (list (styled-segment (table-delimiter-cell-text w a) '(dim))))))
+  (append (emit-row header header-style)
+          (list (styled-line delim-segs))
+          (append-map (lambda (r) (emit-row r (quote ()))) rows)))
 
 ;; Split segments on newline markers.
 (define (split-segments-on-newline segs)

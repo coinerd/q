@@ -9,7 +9,8 @@
          racket/format
          racket/string
          racket/list
-         "../../ui-core/theme-protocol.rkt")
+         "../../ui-core/theme-protocol.rkt"
+         "../../util/markdown.rkt")
 
 (provide (contract-out [contains-code-blocks? (-> any/c boolean?)]
                        [parse-code-blocks (-> any/c (listof hash?))]
@@ -17,7 +18,8 @@
                        [code-block-style (-> ui-theme? hash?)]
                        [code-block-header-style (-> (or/c string? #f) hash?)])
          parse-markdown-elements
-         contains-markdown?)
+         contains-markdown?
+         markdown-contains-table?)
 
 ;; ──────────────────────────────
 ;; Code block detection
@@ -27,14 +29,40 @@
 (define (contains-code-blocks? text)
   (and (string? text) (regexp-match? #rx"```" text)))
 
-;; Check if text has any markdown elements (headers, lists, code)
+;; Check if text has any markdown elements (headers, lists, code, tables)
 (define (contains-markdown? text)
   (and (string? text)
        (or (contains-code-blocks? text)
+           (markdown-contains-table? text)
            (regexp-match? #px"^#{1,6}\\s" text)
            (regexp-match? #rx"^[-*] " text)
            (regexp-match? #rx"^[0-9]+[.)] " text)
            (regexp-match? #rx"`[^`]+`" text))))
+
+;; BUG-0004: text contains a GFM table = a pipe row followed by a delimiter row.
+(define (markdown-contains-table? text)
+  (and (string? text)
+       (let ([lines (string-split text "\n")])
+         (for/or ([line (in-list lines)]
+                  [next (in-list (if (pair? lines) (cdr lines) '()))])
+           (and (pipe-row? line) (table-delimiter-row? next))))))
+
+;; BUG-0004: table recognizer for the GUI element parser — wraps the shared
+;; util/markdown.rkt recognizer and returns the table as a single element
+;; hash (with 'next-i so the caller can resume after the table body).
+(define (try-parse-table-element lines i)
+  (define t (try-parse-table lines i))
+  (and t
+       (hash 'type
+             'table
+             'header
+             (car t)
+             'alignments
+             (cadr t)
+             'rows
+             (caddr t)
+             'next-i
+             (cadddr t))))
 
 ;; ──────────────────────────────
 ;; Code block parsing
@@ -115,8 +143,26 @@
     [else
      (define lines (string-split text "\n" #:trim? #f))
      (define result '())
-     (for ([line (in-list lines)])
-       (cond
+     ;; BUG-0004: walk by index so a GFM table (header + delimiter + body)
+     ;; can be consumed as one element; every other line parses exactly as
+     ;; before (same cond chain).
+     (let walk ([i 0])
+       (when (< i (length lines))
+         (define line (list-ref lines i))
+         (cond
+         [(try-parse-table-element lines i)
+          => (lambda (elem)
+               (set! result
+                     (append result
+                             (list (hash 'type
+                                         'table
+                                         'header
+                                         (hash-ref elem 'header)
+                                         'alignments
+                                         (hash-ref elem 'alignments)
+                                         'rows
+                                         (hash-ref elem 'rows)))))
+               (walk (hash-ref elem 'next-i)))]
          ;; Header detection: # through ######
          [(regexp-match? #px"^#{1,6}\\s" line)
           (define m (regexp-match #px"^(#{1,6})\\s+(.*)" line))
@@ -139,7 +185,8 @@
           (when (pair? result)
             (set! result (append result (list (hash 'type 'blank 'text "")))))]
          ;; Plain text
-         [else (set! result (append result (list (hash 'type 'text 'text line))))]))
+         [else (set! result (append result (list (hash 'type 'text 'text line))))
+               (walk (add1 i))])))
      (if (null? result)
          (list (hash 'type 'text 'text text))
          result)]))
