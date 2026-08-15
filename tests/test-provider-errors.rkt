@@ -90,19 +90,18 @@
         (check-false "should not reach here")))
 
     (test-case "transient-llm-failure?: SSE stall / timeout messages are transient"
-      (check-true (transient-llm-failure?
-                   (exn:fail "stream stalled after 30s" (current-continuation-marks))))
-      (check-true (transient-llm-failure?
-                   (exn:fail "read timed out" (current-continuation-marks))))
-      (check-true (transient-llm-failure?
-                   (exn:fail "Connection reset by peer" (current-continuation-marks)))))
+      (check-true (transient-llm-failure? (exn:fail "stream stalled after 30s"
+                                                    (current-continuation-marks))))
+      (check-true (transient-llm-failure? (exn:fail "read timed out" (current-continuation-marks))))
+      (check-true (transient-llm-failure? (exn:fail "Connection reset by peer"
+                                                    (current-continuation-marks)))))
 
     (test-case "transient-llm-failure?: non-error values and non-transient messages are not"
       (check-false (transient-llm-failure? "just a string"))
       (check-false (transient-llm-failure? 42))
       (check-false (transient-llm-failure? #f))
-      (check-false (transient-llm-failure?
-                    (exn:fail "model not found" (current-continuation-marks)))))))
+      (check-false (transient-llm-failure? (exn:fail "model not found"
+                                                     (current-continuation-marks)))))))
 
 (module+ main
   (run-tests provider-error-tests))

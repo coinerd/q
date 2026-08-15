@@ -15,20 +15,25 @@
          "../extensions/github/helpers.rkt"
          "../extensions/github/handlers/pr-ops.rkt")
 
-
 ;; ============================================================
 ;; gh-pr create: lookup-first idempotence (pure pieces)
 ;; ============================================================
 
 (test-case "pr-lookup-command: targets open PRs for the head branch"
-  (check-equal?
-   (pr-lookup-command "feature/w6")
-   '("pr" "list" "--state" "open" "--head" "feature/w6"
-          "--limit" "1" "--json" "number,title,url,state")))
+  (check-equal? (pr-lookup-command "feature/w6")
+                '("pr" "list"
+                       "--state"
+                       "open"
+                       "--head"
+                       "feature/w6"
+                       "--limit"
+                       "1"
+                       "--json"
+                       "number,title,url,state")))
 
 (test-case "open-pr-from-lookup: parses an existing open PR"
-  (define pr (open-pr-from-lookup
-              "[{\"number\":42,\"title\":\"W6\",\"url\":\"u\",\"state\":\"OPEN\"}]"))
+  (define pr
+    (open-pr-from-lookup "[{\"number\":42,\"title\":\"W6\",\"url\":\"u\",\"state\":\"OPEN\"}]"))
   (check-true (hash? pr))
   (check-equal? (hash-ref pr 'number) 42))
 
@@ -49,30 +54,26 @@
   (lambda args (values expected-ec expected-out "")))
 
 (test-case "wave-already-committed?: clean tree → #t (already applied)"
-  (check-true (wave-already-committed? '("a.rkt" "b.rkt")
-                                       #:git (fake-git 0 ""))))
+  (check-true (wave-already-committed? '("a.rkt" "b.rkt") #:git (fake-git 0 ""))))
 
 (test-case "wave-already-committed?: dirty files → #f (needs commit)"
-  (check-false (wave-already-committed? '("a.rkt")
-                                        #:git (fake-git 0 " M a.rkt"))))
+  (check-false (wave-already-committed? '("a.rkt") #:git (fake-git 0 " M a.rkt"))))
 
 (test-case "wave-already-committed?: git failure → #f (fail safe)"
-  (check-false (wave-already-committed? '("a.rkt")
-                                        #:git (fake-git 128 "fatal: not a repo"))))
+  (check-false (wave-already-committed? '("a.rkt") #:git (fake-git 128 "fatal: not a repo"))))
 
 ;; ============================================================
 ;; Durable checkpoints in STATE.md
 ;; ============================================================
 
 (test-case "wave-checkpoint-section: renders header, wave id, checked steps"
-  (check-equal?
-   (wave-checkpoint-section "W6" '("s1" "s2"))
-   "## Wave checkpoints\n\n### W6\n- [x] s1\n- [x] s2\n"))
+  (check-equal? (wave-checkpoint-section "W6" '("s1" "s2"))
+                "## Wave checkpoints\n\n### W6\n- [x] s1\n- [x] s2\n"))
 
 (test-case "read-wave-checkpoints: parses wave/step pairs"
-  (define content "Intro narrative.\n\n## Wave checkpoints\n\n### W6\n- [x] s1\n- [x] s2\n\n### W5\n- [x] old\n")
-  (check-equal? (read-wave-checkpoints content)
-                '(("W6" . "s1") ("W6" . "s2") ("W5" . "old"))))
+  (define content
+    "Intro narrative.\n\n## Wave checkpoints\n\n### W6\n- [x] s1\n- [x] s2\n\n### W5\n- [x] old\n")
+  (check-equal? (read-wave-checkpoints content) '(("W6" . "s1") ("W6" . "s2") ("W5" . "old"))))
 
 (test-case "read-wave-checkpoints: ignores checked lines outside the section"
   (define content "- [x] stray\n\n## Other\n- [x] nope\n")
@@ -97,7 +98,8 @@
 (define scratch-state (build-path scratch-dir "STATE.md"))
 
 (define (reset-scratch! [initial "# State\n\nSome narrative.\n"])
-  (when (file-exists? scratch-state) (delete-file scratch-state))
+  (when (file-exists? scratch-state)
+    (delete-file scratch-state))
   (display-to-file initial scratch-state))
 
 (test-case "write-wave-checkpoint!: creates section + records first step"

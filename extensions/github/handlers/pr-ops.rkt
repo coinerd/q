@@ -39,8 +39,7 @@
 ;; Both are pure functions so idempotence is unit-testable without a
 ;; live `gh` binary; `pr-exists-for-head?` runs the lookup for real.
 (define (pr-lookup-command head)
-  (list "pr" "list" "--state" "open" "--head" head
-        "--limit" "1" "--json" "number,title,url,state"))
+  (list "pr" "list" "--state" "open" "--head" head "--limit" "1" "--json" "number,title,url,state"))
 
 (define (open-pr-from-lookup stdout)
   ;; "[]" (or whitespace/empty) means no open PR; any non-empty JSON
@@ -86,8 +85,16 @@
             ;; the same head yields the same single PR, success both times.
             (cond
               [(and head (pr-exists-for-head? head))
-               (gh-success-json "pr" "list" "--state" "open" "--head" head
-                                "--limit" "1" "--json" "number,title,url,state")]
+               (gh-success-json "pr"
+                                "list"
+                                "--state"
+                                "open"
+                                "--head"
+                                head
+                                "--limit"
+                                "1"
+                                "--json"
+                                "number,title,url,state")]
               [else
                (apply gh-success-json
                       (append (list "pr"
@@ -157,8 +164,7 @@
 ;; without a repository.
 (define (wave-already-committed? files #:git [git-fn #f])
   (define exec (or git-fn git-exec-result))
-  (define-values (ec out _err)
-    (apply exec (append (list "status" "--porcelain" "--") files)))
+  (define-values (ec out _err) (apply exec (append (list "status" "--porcelain" "--") files)))
   (and (= ec 0) (string=? (string-trim out) "")))
 
 ;; Durable checkpoints: a structured per-wave done-steps checklist
@@ -192,7 +198,10 @@
 (define (read-wave-checkpoints state-content)
   (define step-rx #px"^- \\[x\\] (.+)$")
   (define wave-rx #px"^### (.+)$")
-  (let loop ([lines (string-split state-content "\n")] [in-section? #f] [wave #f] [acc '()])
+  (let loop ([lines (string-split state-content "\n")]
+             [in-section? #f]
+             [wave #f]
+             [acc '()])
     (cond
       [(null? lines) (reverse acc)]
       [else
@@ -203,7 +212,9 @@
           (loop (cdr lines) in-section? (string-trim (cadr (regexp-match wave-rx t))) acc)]
          [(and in-section? wave (regexp-match? step-rx t))
           (define pair (cons wave (string-trim (cadr (regexp-match step-rx t)))))
-          (if (member pair acc) (loop (cdr lines) in-section? wave acc) (loop (cdr lines) in-section? wave (cons pair acc)))]
+          (if (member pair acc)
+              (loop (cdr lines) in-section? wave acc)
+              (loop (cdr lines) in-section? wave (cons pair acc)))]
          [else (loop (cdr lines) in-section? wave acc)])])))
 
 ;; Flat predicate: has this step of this wave been recorded?
@@ -226,7 +237,8 @@
   ;; rest begins right after the "### <wave>" header line; return the
   ;; char length of the maximal run of consecutive "- [x] step" lines
   ;; (each line prefixed by the newline that precedes it).
-  (let loop ([ls (string-split rest "\n")] [len 0])
+  (let loop ([ls (string-split rest "\n")]
+             [len 0])
     (cond
       [(null? ls) len]
       [(regexp-match? #px"^- \\[x\\] " (car ls))
@@ -234,8 +246,7 @@
       [else len])))
 
 (define (insert-step-at-wave-block-end content wave-id step)
-  (define m (regexp-match-positions (format "(?m:^### ~a$)" (regexp-quote wave-id))
-                                    content))
+  (define m (regexp-match-positions (format "(?m:^### ~a$)" (regexp-quote wave-id)) content))
   (and m
        (let* ([end (cdar m)]
               [insert-at (+ end (wave-step-run-length (substring content end)))])
@@ -256,13 +267,11 @@
          [(insert-step-at-wave-block-end content wave-id step)]
          ;; section header exists but not this wave: append the wave block
          [(string-contains? content wave-checkpoint-header)
-          (string-append (string-trim content) "\n\n"
-                         (wave-checkpoint-section wave-id (list step)))]
+          (string-append (string-trim content) "\n\n" (wave-checkpoint-section wave-id (list step)))]
          ;; no section at all: append one
          [else
-          (string-append (string-trim content) "\n\n"
+          (string-append (string-trim content)
+                         "\n\n"
                          (wave-checkpoint-section wave-id (list step)))]))
-     (call-with-output-file state-path
-       (lambda (out) (display new-content out))
-       #:exists 'truncate)
+     (call-with-output-file state-path (lambda (out) (display new-content out)) #:exists 'truncate)
      'recorded]))

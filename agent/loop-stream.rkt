@@ -363,9 +363,7 @@
 ;; Non-transient errors are surfaced immediately (no behavior change).
 ;; ============================================================
 
-(struct turn-retry-policy
-  (max-attempts base-delay-ms max-delay-ms)
-  #:transparent)
+(struct turn-retry-policy (max-attempts base-delay-ms max-delay-ms) #:transparent)
 
 ;; Conservative default: mirrors the LLM-layer policy shape.
 (define (default-turn-retry-policy)
@@ -385,8 +383,7 @@
   ;; attempt is 1-based: first retry waits base, doubling afterwards,
   ;; capped at max-delay-ms (same shape as the LLM-layer policy).
   (min (turn-retry-policy-max-delay-ms policy)
-       (* (turn-retry-policy-base-delay-ms policy)
-          (expt 2 (sub1 attempt)))))
+       (* (turn-retry-policy-base-delay-ms policy) (expt 2 (sub1 attempt)))))
 
 ;; Sleeper is injectable for tests: (-> exact-nonneg-integer? any)
 (define (with-turn-retry thunk
@@ -395,16 +392,14 @@
                          #:on-retry [on-retry void])
   (define max-attempts (turn-retry-policy-max-attempts policy))
   (let loop ([attempt 1])
-    (with-handlers
-        ([values
-          (lambda (e)
-            (cond
-              [(and (turn-error-transient? e) (< attempt max-attempts))
-               (define delay-ms (turn-retry-delay-ms policy attempt))
-               (on-retry e attempt delay-ms)
-               (sleeper delay-ms)
-               (loop (add1 attempt))]
-              [else (raise e)]))])
+    (with-handlers ([values (lambda (e)
+                              (cond
+                                [(and (turn-error-transient? e) (< attempt max-attempts))
+                                 (define delay-ms (turn-retry-delay-ms policy attempt))
+                                 (on-retry e attempt delay-ms)
+                                 (sleeper delay-ms)
+                                 (loop (add1 attempt))]
+                                [else (raise e)]))])
       (thunk))))
 
 (provide turn-retry-policy

@@ -77,8 +77,7 @@
 ;; network 5xx, timeouts, rate limits, and reconnectable provider errors.
 ;; This is the machine-readable single source of truth; the runtime
 ;; auto-retry layer and the agent turn-retry layer both consume it.
-(define transient-provider-error-categories
-  '(rate-limit timeout server server-error network))
+(define transient-provider-error-categories '(rate-limit timeout server server-error network))
 
 ;; Structured predicate: is this provider error transient?
 (define (provider-error-transient? e)
@@ -97,7 +96,10 @@
     [(exn:fail:network? e) #t]
     [(exn:fail? e)
      (define msg (exn-message e))
-     (for/or ([needle (in-list '("timed out" "timeout" "stream stalled"
-                                         "connection" "network" "temporarily unavailable"))])
+     (for/or ([needle (in-list '("timed out" "timeout"
+                                             "stream stalled"
+                                             "connection"
+                                             "network"
+                                             "temporarily unavailable"))])
        (and (string-contains? (string-downcase msg) needle) #t))]
     [else #f]))

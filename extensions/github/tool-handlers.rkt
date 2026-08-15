@@ -7,8 +7,7 @@
 
 (require racket/format
          racket/string
-         (only-in racket/file
-                  [file->string gh-file->string])
+         (only-in racket/file [file->string gh-file->string])
          json
          "../dynamic-tools.rkt"
          "../hooks.rkt"
@@ -75,8 +74,7 @@
 (define (wave-state-path)
   (let-values ([(_ec out _e) (git-exec-result "rev-parse" "--show-toplevel")])
     (define root (string-trim out))
-    (build-path (if (non-empty-string? root) root ".")
-                ".planning" "STATE.md")))
+    (build-path (if (non-empty-string? root) root ".") ".planning" "STATE.md")))
 
 (define (handle-gh-wave-finish args [exec-ctx #f])
   (with-error-result
@@ -95,15 +93,24 @@
      [(not (gh-binary)) (gh-unavailable-error)]
      [(wave-step-completed? state-content wave-id step)
       (make-success-result
-       (list (hasheq 'type "text"
-                     'text (format "Wave ~a step '~a' already recorded in ~a - skipping (idempotent resume)."
-                                   wave-id step state-path))))]
+       (list (hasheq
+              'type
+              "text"
+              'text
+              (format "Wave ~a step '~a' already recorded in ~a - skipping (idempotent resume)."
+                      wave-id
+                      step
+                      state-path))))]
      [(wave-already-committed? files)
       (write-wave-checkpoint! state-path wave-id step)
       (make-success-result
-       (list (hasheq 'type "text"
-                     'text (format "Wave ~a step '~a': change already committed (tree/content check) - no-op."
-                                   wave-id step))))]
+       (list (hasheq
+              'type
+              "text"
+              'text
+              (format "Wave ~a step '~a': change already committed (tree/content check) - no-op."
+                      wave-id
+                      step))))]
      [else
       (unless (pair? files)
         (raise-user-error 'gh-wave-finish "step '~a': 'files' required" step))
@@ -111,17 +118,13 @@
       (unless (= ec-add 0)
         (raise-user-error 'gh-wave-finish "Failed to stage: ~a" (string-trim err-add)))
       (define commit-msg
-        (or (hash-ref args 'commit_message #f)
-            (format "wave: ~a (issue #~a)" summary issue-num)))
-      (define-values (ec-commit _out-c err-commit)
-        (git-exec-result "commit" "-m" commit-msg))
+        (or (hash-ref args 'commit_message #f) (format "wave: ~a (issue #~a)" summary issue-num)))
+      (define-values (ec-commit _out-c err-commit) (git-exec-result "commit" "-m" commit-msg))
       (unless (= ec-commit 0)
         (raise-user-error 'gh-wave-finish "Commit failed: ~a" (string-trim err-commit)))
-      (define-values (ec-hb out-hb _err-hb)
-        (git-exec-result "rev-parse" "--abbrev-ref" "HEAD"))
+      (define-values (ec-hb out-hb _err-hb) (git-exec-result "rev-parse" "--abbrev-ref" "HEAD"))
       (define head-branch (string-trim out-hb))
-      (define-values (ec-push _out-p err-push)
-        (git-exec-result "push" "origin" head-branch))
+      (define-values (ec-push _out-p err-push) (git-exec-result "push" "origin" head-branch))
       (unless (= ec-push 0)
         (raise-user-error 'gh-wave-finish "Push failed: ~a" (string-trim err-push)))
       ;; Idempotent PR create (BUG-0011): lookup-first - reuse the existing
@@ -131,22 +134,28 @@
         (or (and existing-pr (hash-ref existing-pr 'number #f))
             (let ()
               (define-values (ec-pr out-pr err-pr)
-                (gh-exec-result "pr" "create" "--title" (format "Wave ~a" summary)
-                                "--body" (or (hash-ref args 'pr_body #f)
-                                             (format "Wave summary: ~a" summary))
-                                "--head" head-branch "--base" "main"
-                                "--json" "number,title,url"))
+                (gh-exec-result "pr"
+                                "create"
+                                "--title"
+                                (format "Wave ~a" summary)
+                                "--body"
+                                (or (hash-ref args 'pr_body #f) (format "Wave summary: ~a" summary))
+                                "--head"
+                                head-branch
+                                "--base"
+                                "main"
+                                "--json"
+                                "number,title,url"))
               (unless (= ec-pr 0)
-                (raise-user-error 'gh-wave-finish "PR creation failed: ~a"
-                                  (string-trim err-pr)))
+                (raise-user-error 'gh-wave-finish "PR creation failed: ~a" (string-trim err-pr)))
               (define created (open-pr-from-lookup out-pr))
               (and created (hash-ref created 'number #f)))))
       (write-wave-checkpoint! state-path wave-id step)
       (make-success-result
-       (list (hasheq 'type "text"
-                     'text (format "Wave finished: ~a (issue #~a) - PR #~a"
-                                   summary issue-num pr-num))))])))
-
+       (list (hasheq 'type
+                     "text"
+                     'text
+                     (format "Wave finished: ~a (issue #~a) - PR #~a" summary issue-num pr-num))))])))
 
 (define (register-github-tools ctx _payload)
   (ext-register-tool!
