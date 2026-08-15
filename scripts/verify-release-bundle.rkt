@@ -27,7 +27,7 @@
 (struct bundle-check (valid? errors) #:transparent)
 
 (define full-sha-rx #px"^[0-9a-f]{40}$")
-(define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+$")
+(define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$") ;; X.Y.Z with optional pre-release suffix (e.g. 1.00.00-PRE1)
 
 (define (compute-file-sha256 path)
   (call-with-input-file path (lambda (in) (bytes->hex-string (sha256-bytes in))) #:mode 'binary))

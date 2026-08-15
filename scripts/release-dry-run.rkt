@@ -78,11 +78,11 @@
 ;; Pure logic (no I/O)
 ;; ---------------------------------------------------------------------------
 
-;; Semver tag format: vX.Y.Z
-(define tag-format-rx #px"^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+;; Semver tag format: vX.Y.Z with optional pre-release suffix (e.g. v1.00.00-PRE1)
+(define tag-format-rx #px"^v([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[A-Za-z0-9][A-Za-z0-9.-]*)?$")
 
-;; Plain version format: X.Y.Z
-(define version-format-rx #px"^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+;; Plain version format: X.Y.Z with optional pre-release suffix
+(define version-format-rx #px"^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[A-Za-z0-9][A-Za-z0-9.-]*)?$")
 
 ;; Extract canonical version from util/version.rkt content.
 (define (extract-canonical-version content)

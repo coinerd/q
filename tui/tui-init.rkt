@@ -57,7 +57,7 @@
           [create-tui-session (-> any/c any/c any)]
           [make-tui-session (-> any/c any/c any)] ;; F24 alias
           ;; tui-ctx, agent-session, rt-config, scrollback path
-          ;; (v1.00.00: fixed stale contract from an old signature)
+          ;; (v1.00.00-PRE1: fixed stale contract from an old signature)
           [load-tui-scrollback
            (-> any/c any/c any/c (or/c path-string? path?) any)]
           ;; terminal-bridge (opaque)
@@ -201,7 +201,7 @@
                                              [(prompt) ((make-campaign-runner) prompt)])
                   #:agent-session-box agent-session-box))
 
-  ;; Scrollback path — BUG-0001 fix (v1.00.00): per-session file.
+  ;; Scrollback path — BUG-0001 fix (v1.00.00-PRE1): per-session file.
   ;;
   ;; The path is derived from the session (sess is in scope here), NOT from
   ;; the global base dir. The old computation shared <base>/scrollback.jsonl

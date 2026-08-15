@@ -49,26 +49,34 @@
 
 ;; Parse `(define q-version "X.Y.Z")` from content string.
 ;; Handles both #lang racket and #lang typed/racket (multi-line) formats.
+;; Optional pre-release suffix (e.g. "1.00.00-PRE1") is part of the version.
+(define pre-release-suffix-rx "(-[A-Za-z0-9][A-Za-z0-9.-]*)?")
+
 (define (parse-q-version-from-content content)
   (define start (regexp-match-positions #rx"\\(define q-version" content))
   (cond
     [(not start) #f]
     [else
      (define after (substring content (cdar start)))
-     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)" after))
+     (define m
+       (regexp-match (string-append "([0-9]+\\.[0-9]+\\.[0-9]+" pre-release-suffix-rx ")") after))
      (and m (cadr m))]))
 
 ;; Parse `(define version "X.Y.Z")` from info.rkt content string.
+;; Optional pre-release suffix (e.g. "1.00.00-PRE1") is part of the version.
 (define (parse-info-version-from-content content)
   (define m
     (regexp-match
-     #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)\""
+     (string-append "\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+" pre-release-suffix-rx ")\"")
      content))
   (and m (cadr m)))
 
-;; Split "X.Y.Z" into list of numbers: (1 2 3)
+;; Split "X.Y.Z" (or "X.Y.Z-PRE1") into list of numbers: (1 2 3).
+;; The pre-release suffix is ignored for numeric ordering (base version wins,
+;; sufficient for the monotonic-bump checks this module serves).
 (define (parse-version-components s)
-  (map (lambda (c) (string->number (regexp-replace #rx"-.*$" c ""))) (string-split s ".")))
+  (define base (car (regexp-match #rx"^[0-9]+(\\.[0-9]+)*" (or s ""))))
+  (map string->number (string-split base ".")))
 
 ;; ---------------------------------------------------------------------------
 ;; Comparison (pure)
