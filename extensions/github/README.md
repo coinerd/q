@@ -1,7 +1,7 @@
 # GitHub Extension (`extensions/github/`)
 
-GitHub integration tools for the q agent, built on the `gh` CLI + git. Tools are
-registered by `main.rkt`; all handlers live in `tool-handlers.rkt` and are plain
+GitHub integration tools for the q agent, built on the `gh` CLI + git. All handlers
+live in `tool-handlers.rkt` (with per-domain modules under `handlers/`) and are plain
 functions over argument hashes (they can be invoked standalone from Racket as well as
 through the q tool layer).
 
@@ -73,6 +73,8 @@ hygiene for the readiness gate, board visibility) rather than the landing itself
 
 ## Files
 
-- `main.rkt` — entry point; registers the six tools with the q tool layer.
-- `tool-handlers.rkt` — all handlers + shared `gh`/git plumbing.
+- `tool-handlers.rkt` — entry point; the six `handle-gh-*` tool handlers.
+- `tool-schemas.rkt` — argument schemas for the six tools.
+- `helpers.rkt` — shared `gh`/git plumbing (e.g. `gh-success-json`).
+- `handlers/` — per-domain implementation modules (e.g. `pr-ops.rkt` for `gh-pr`).
 - `README.md` — this file.
