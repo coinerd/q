@@ -72,7 +72,9 @@
                     readme-content
                     (format "badge/version-~a-blue" version)))
   (define step2
-    (regexp-replace #rx"q version [0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?" step1 (format "q version ~a" version)))
+    (regexp-replace #rx"q version [0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?"
+                    step1
+                    (format "q version ~a" version)))
   step2)
 
 ;; ---------------------------------------------------------------------------

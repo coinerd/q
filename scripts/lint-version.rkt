@@ -155,9 +155,11 @@
 
 ;; Pure: check README content for badge + verify snippet version match.
 (define (check-readme-content content canonical)
-  (define badge-m (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
+  (define badge-m
+    (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
   (define badge-v (and badge-m (cadr badge-m)))
-  (define verify-m (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
+  (define verify-m
+    (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
   (define verify-v (and verify-m (cadr verify-m)))
   (append (if (and badge-v (not (equal? badge-v canonical)))
               (list (list 'README.md 0 badge-v canonical))
@@ -171,7 +173,8 @@
   (define versions
     (filter values
             (for/list ([line (in-list (string-split content "\n"))])
-              (define m (regexp-match #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)(?:\\s|$)" line))
+              (define m
+                (regexp-match #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)(?:\\s|$)" line))
               (and m (cadr m)))))
   (define distinct-versions (remove-duplicates versions))
   (append
@@ -222,9 +225,11 @@
      '()]
     [else
      (define content (read-string readme-path))
-     (define badge-m (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
+     (define badge-m
+       (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
      (define badge-v (and badge-m (cadr badge-m)))
-     (define verify-m (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
+     (define verify-m
+       (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" content))
      (define verify-v (and verify-m (cadr verify-m)))
      (append (if (and badge-v (not (equal? badge-v canonical)))
                  (begin

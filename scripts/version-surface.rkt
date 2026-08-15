@@ -60,7 +60,10 @@
 
 ;; Parse `(define version "X.Y.Z")` from info.rkt content string.
 (define (parse-info-version-from-content content)
-  (define m (regexp-match #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)\"" content))
+  (define m
+    (regexp-match
+     #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)\""
+     content))
   (and m (cadr m)))
 
 ;; Split "X.Y.Z" into list of numbers: (1 2 3)
