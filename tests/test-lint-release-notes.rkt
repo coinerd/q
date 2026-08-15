@@ -9,7 +9,8 @@
 
 (require rackunit
          racket/string
-         "../scripts/lint-release-notes.rkt")
+         "../scripts/lint-release-notes.rkt"
+         (only-in "../util/version.rkt" q-version))
 
 ;; ===========================================================================
 ;; Helpers
@@ -319,12 +320,16 @@
 (printf "\nAll lint-release-notes tests completed.\n")
 
 ;; ===========================================================================
-;; Test: pre-release version headings (e.g. 1.00.00-PRE1) are supported
+;; Test: pre-release version headings (e.g. <current-version>-PRE1) are
+;; supported. BUG-0009: the fixture is DERIVED from q-version at runtime —
+;; never hard-code the release version in tests/; the
+;; check-version-expectations lint fails any such literal at PR time.
 ;; ===========================================================================
 
 (test-case "test-lint-release-notes: pre-release version heading validates"
+  (define prerelease-version (format "~a-PRE1" q-version))
   (define prerelease-entry
-    (changelog "## 1.00.00-PRE1"
+    (changelog (format "## ~a" prerelease-version)
                ""
                "### Bug Fixes"
                "- fixed thing"
@@ -338,9 +343,9 @@
                ""
                "### Operational / Release"
                "- stamp"))
-  (check-equal? (validate-release-notes (extract-version-block prerelease-entry "1.00.00-PRE1"))
+  (check-equal? (validate-release-notes (extract-version-block prerelease-entry prerelease-version))
                 '()
                 "pre-release version heading should validate cleanly")
   ;; The pre-release heading must not be captured as its bare base version.
-  (check-false (extract-version-block prerelease-entry "1.00.00")
+  (check-false (extract-version-block prerelease-entry q-version)
                "base version alone must not match the pre-release heading"))

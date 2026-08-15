@@ -14,6 +14,7 @@
 ;;   'network          — DNS failure, connection refused
 
 (require racket/contract
+         racket/string
          (only-in "../util/error/errors.rkt"
                   q-error
                   q-error?
@@ -26,8 +27,11 @@
          provider-error-category
          provider-error-status-code
          q-llm-error?
+         transient-provider-error-categories
          (contract-out [raise-provider-error (->* (string? symbol?) ((or/c exact-integer? #f)) any)]
-                       [classify-http-status (-> (or/c exact-integer? #f) (or/c symbol? #f))]))
+                       [classify-http-status (-> (or/c exact-integer? #f) (or/c symbol? #f))]
+                       [provider-error-transient? (-> provider-error? boolean?)]
+                       [transient-llm-failure? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Struct
@@ -64,3 +68,38 @@
     [(= status-code 429) 'rate-limit]
     [(>= status-code 500) 'server]
     [else 'network]))
+
+;; ============================================================
+;; Transient-failure classification (BUG-0011 / W6)
+;; ============================================================
+
+;; Categories that are known to be transient (safe to retry with backoff):
+;; network 5xx, timeouts, rate limits, and reconnectable provider errors.
+;; This is the machine-readable single source of truth; the runtime
+;; auto-retry layer and the agent turn-retry layer both consume it.
+(define transient-provider-error-categories '(rate-limit timeout server server-error network))
+
+;; Structured predicate: is this provider error transient?
+(define (provider-error-transient? e)
+  (and (memq (provider-error-category e) transient-provider-error-categories) #t))
+
+;; General predicate over any raised value. Covers:
+;;  - structured provider-error (category-based, see above)
+;;  - raw Racket network exns (connection refused/reset, DNS) — these wrap
+;;    SSE transport failures that surface before classification
+;;  - stream timeout/stall exns raised by the SSE layer (recognized via
+;;    their exn:fail:network? supertype or message, keeping this module
+;;    decoupled from llm/stream.rkt)
+(define (transient-llm-failure? e)
+  (cond
+    [(provider-error? e) (provider-error-transient? e)]
+    [(exn:fail:network? e) #t]
+    [(exn:fail? e)
+     (define msg (exn-message e))
+     (for/or ([needle (in-list '("timed out" "timeout"
+                                             "stream stalled"
+                                             "connection"
+                                             "network"
+                                             "temporarily unavailable"))])
+       (and (string-contains? (string-downcase msg) needle) #t))]
+    [else #f]))

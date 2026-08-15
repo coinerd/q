@@ -28,6 +28,7 @@
         (list "version-sync" "scripts/sync-version.rkt" '("--all") #f)
         (list "version-validate" "scripts/sync-version.rkt" '("--validate") #f)
         (list "version-cross" "scripts/lint-version.rkt" '() #f)
+        (list "version-expectations" "scripts/check-version-expectations.rkt" '() #f)
         (list "protocols" "scripts/check-protocols.rkt" '() #f)
         (list "imports" "scripts/check-imports.rkt" '() #f)
         (list "deps" "scripts/check-deps.rkt" '() #f)
