@@ -93,6 +93,7 @@
   (string-join '("format" "version-sync"
                           "version-validate"
                           "version-cross"
+                          "version-expectations"
                           "protocols"
                           "imports"
                           "deps"

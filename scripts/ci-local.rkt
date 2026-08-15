@@ -87,6 +87,7 @@
   ;; Group 1: Version consistency
   (list (list "sync-version (dry-run)" "racket scripts/sync-version.rkt")
         (list "lint-version" "racket scripts/lint-version.rkt")
+        (list "check-version-expectations" "racket scripts/check-version-expectations.rkt")
         (list "sync-readme-status --check" "racket scripts/sync-readme-status.rkt --check")
         ;; Group 2: Code quality
         (list "lint-tests" "racket scripts/lint-tests.rkt")
@@ -109,6 +110,7 @@
 (define quick-checks
   (list (list "sync-version (dry-run)" "racket scripts/sync-version.rkt")
         (list "lint-version" "racket scripts/lint-version.rkt")
+        (list "check-version-expectations" "racket scripts/check-version-expectations.rkt")
         (list "sync-readme-status --check" "racket scripts/sync-readme-status.rkt --check")
         (list "lint-format" "racket scripts/lint-format.rkt")
         (list "compile-main" "raco make main.rkt 2>&1")))

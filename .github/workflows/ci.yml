@@ -64,6 +64,11 @@ jobs:
       - name: Run all lint checks
         run: racket scripts/lint-all.rkt
 
+      # BUG-0009: fail the introducing PR when a test hard-codes the release
+      # version instead of deriving it from util/version.rkt (q-version).
+      - name: Version expectation lint (no hard-coded version literals in tests)
+        run: racket scripts/check-version-expectations.rkt
+
       - name: Verify lint alignment
         run: racket scripts/check-lint-alignment.rkt
 

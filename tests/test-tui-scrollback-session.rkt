@@ -7,7 +7,7 @@
 ;; tests/test-tui-scrollback-session.rkt — BUG-0001 regression test
 ;;
 ;; The TUI must compute the scrollback path from the SESSION, not from a
-;; global base dir. Before the fix (v1.00.00) create-tui-session
+;; global base dir. Before the fix (BUG-0001) create-tui-session
 ;; returned <base>/scrollback.jsonl — one file shared by every session —
 ;; so each new session loaded the previous session's buffer at startup
 ;; and, worse, any exit flushed the mixed buffer back into that shared
