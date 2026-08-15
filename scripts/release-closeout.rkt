@@ -46,7 +46,8 @@
 ;; both orderings behave identically.
 (define (normalize-argv argv)
   (define flags '("--dry-run" "--skip-workflow-wait"))
-  (define (flag? s) (and (member s flags) #t))
+  (define (flag? s)
+    (and (member s flags) #t))
   (define args (vector->list argv))
   (list->vector (append (filter flag? args) (filter (compose not flag?) args))))
 
@@ -54,10 +55,10 @@
   (command-line
    #:program "release-closeout"
    #:argv (normalize-argv (current-command-line-arguments))
-   #:once-each
-   [("--dry-run") "print every stage, make no writes" (set! dry-run? #t)]
+   #:once-each [("--dry-run") "print every stage, make no writes" (set! dry-run? #t)]
    [("--skip-workflow-wait") "do not block on the workflow run" (set! skip-workflow-wait? #t)]
-   #:args (tag . _) tag))
+   #:args (tag . _)
+   tag))
 
 (define version-regex #rx"^[0-9]+\\.[0-9]+\\.[0-9]+")
 
@@ -73,9 +74,8 @@
 
 ;; Run a command, capture stdout/stderr, return (exit-code out err).
 (define (run-capture exe . args)
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (values 127 "" (format "cannot run ~a: ~a" exe (exn-message e))))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (values 127 "" (format "cannot run ~a: ~a" exe (exn-message e))))])
     (define-values (sp out in err)
       (apply subprocess #f #f #f (or (find-executable-path exe) exe) args))
     (close-output-port in)
@@ -99,16 +99,20 @@
 (define (gh-json . args)
   (define-values (ec out err) (apply run-capture "gh" args))
   (if (zero? ec)
-      (with-handlers ([exn:fail?
-                       (lambda (_e) (raise-user-error 'gh "bad JSON from gh: ~a" out))])
+      (with-handlers ([exn:fail? (lambda (_e) (raise-user-error 'gh "bad JSON from gh: ~a" out))])
         (string->jsexpr (string-trim out)))
-      (raise-user-error 'gh "gh ~a failed (exit ~a): ~a"
-                        (string-join args " ") ec (string-trim err))))
+      (raise-user-error 'gh
+                        "gh ~a failed (exit ~a): ~a"
+                        (string-join args " ")
+                        ec
+                        (string-trim err))))
 
 (define (repo-slug)
   (define-values (ec out _e)
     (run-capture "gh" "repo" "view" "--json" "nameWithOwner" "-q" ".nameWithOwner"))
-  (if (zero? ec) (string-trim out) "?"))
+  (if (zero? ec)
+      (string-trim out)
+      "?"))
 
 ;; ----------------------------------------------------------------- layout
 
@@ -121,11 +125,10 @@
 ;; Planning dir: prefer the one next to the repo (<repo-parent>/.planning,
 ;; where the durable bug registry lives), else <repo>/.planning.
 (define planning-dir
-  (simplify-path
-   (cond
-     [(directory-exists? (build-path repo-root 'up ".planning"))
-      (build-path repo-root 'up ".planning")]
-     [else (build-path repo-root ".planning")])))
+  (simplify-path (cond
+                   [(directory-exists? (build-path repo-root 'up ".planning"))
+                    (build-path repo-root 'up ".planning")]
+                   [else (build-path repo-root ".planning")])))
 
 (define registry-dir (build-path planning-dir "bugs"))
 
@@ -150,21 +153,28 @@
 ;; Run a helper Racket script; returns #t on success.
 (define (run-racket-script stage path . args)
   (cond
-    [(not path) (fail! stage (format "~a script not found" stage)) #f]
+    [(not path)
+     (fail! stage (format "~a script not found" stage))
+     #f]
     [else
      (printf "  $ racket ~a~a\n"
              (path->string path)
-             (if (null? args) "" (format " ~a" (string-join args " "))))
+             (if (null? args)
+                 ""
+                 (format " ~a" (string-join args " "))))
      (cond
-       [dry-run? (printf "  [dry-run] skipped\n") (void)]
+       [dry-run?
+        (printf "  [dry-run] skipped\n")
+        (void)]
        [else
         (define full-args (cons (path->string path) args))
-        (define-values (ec out err)
-          (apply run-capture racket-exe full-args))
+        (define-values (ec out err) (apply run-capture racket-exe full-args))
         (printf "~a~a" out err)
         (cond
           [(zero? ec) #t]
-          [else (fail! stage (format "exit ~a" ec)) #f])])]))
+          [else
+           (fail! stage (format "exit ~a" ec))
+           #f])])]))
 
 ;; ------------------------------------------------- stage 1: release notes
 
@@ -174,23 +184,28 @@
   (define ms (gh-json "api" "repos/{owner}/{repo}/milestones?state=all&per_page=100"))
   (define hits
     (filter (lambda (m) (string-contains? (hash-ref m 'title "") version))
-            (if (list? ms) ms '())))
+            (if (list? ms)
+                ms
+                '())))
   (and (pair? hits) (hash-ref (car hits) 'number #f)))
 
 ;; Closed issues in the milestone: the note sources from the tracker.
 (define (milestone-issues mn)
   (gh-json "issue"
            "list"
-           "--milestone" (~a mn)
-           "--state" "closed"
-           "--limit" "200"
-           "--json" "number,title,url"))
+           "--milestone"
+           (~a mn)
+           "--state"
+           "closed"
+           "--limit"
+           "200"
+           "--json"
+           "number,title,url"))
 
 ;; Registry rows marked fixed in this version: the note sources from
 ;; .planning/bugs/INDEX.md ("Fixed in" column mentions the version).
 ;; Row shape: | ID | Reported | Title | Component | Severity | Status | Fixed in | File |
-(define index-row-rx
-  #px"^\\| (BUG-\\d{4}) \\|[^|]*\\|([^|]*)\\|[^|]*\\|[^|]*\\|[^|]*\\|([^|]*)\\|")
+(define index-row-rx #px"^\\| (BUG-\\d{4}) \\|[^|]*\\|([^|]*)\\|[^|]*\\|[^|]*\\|[^|]*\\|([^|]*)\\|")
 
 (define (registry-rows-for-version)
   (define index (build-path registry-dir "INDEX.md"))
@@ -203,28 +218,36 @@
          (regexp-match index-row-rx line)))
      (for/list ([row (in-list matched)]
                 #:when (string-contains? (list-ref row 3) version))
-       (hasheq 'id (string-trim (list-ref row 1))
-               'title (string-trim (list-ref row 2))
-               'fixed-in (string-trim (list-ref row 3))))]))
+       (hasheq 'id
+               (string-trim (list-ref row 1))
+               'title
+               (string-trim (list-ref row 2))
+               'fixed-in
+               (string-trim (list-ref row 3))))]))
 
 (define (stage-notes mn)
   (printf "== [1/7] NOTES - assemble release notes (issues + registry rows)\n")
   (define issues
     (if (and mn gh-available?)
-        (with-handlers ([exn:fail? (lambda (e) (printf "  (issue lookup failed: ~a)\n" (exn-message e)) '())])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (printf "  (issue lookup failed: ~a)\n" (exn-message e))
+                                     '())])
           (milestone-issues mn))
-        (begin (printf "  (issue sources unavailable: ~a)\n"
-                       (if mn "gh not available" "no milestone"))
-               '())))
+        (begin
+          (printf "  (issue sources unavailable: ~a)\n" (if mn "gh not available" "no milestone"))
+          '())))
   (define rows (registry-rows-for-version))
   (printf "  sources: ~a closed milestone issue(s), ~a registry row(s) fixed in ~a\n"
-          (length issues) (length rows) version)
+          (length issues)
+          (length rows)
+          version)
   (for ([i (in-list issues)])
-    (printf "    issue #~a ~a - ~a\n"
-            (hash-ref i 'number) (hash-ref i 'title) (hash-ref i 'url #f)))
+    (printf "    issue #~a ~a - ~a\n" (hash-ref i 'number) (hash-ref i 'title) (hash-ref i 'url #f)))
   (for ([r (in-list rows)])
     (printf "    registry ~a ~a (fixed in: ~a)\n"
-            (hash-ref r 'id) (hash-ref r 'title) (hash-ref r 'fixed-in)))
+            (hash-ref r 'id)
+            (hash-ref r 'title)
+            (hash-ref r 'fixed-in)))
   ;; CHANGELOG.md stays the reviewed source of notes; gen/lint check it.
   (run-racket-script "gen-release-notes" (find-script "gen-release-notes.rkt") version)
   (run-racket-script "lint-release-notes" (find-script "lint-release-notes.rkt") version))
@@ -238,8 +261,7 @@
 ;; --------------------------------------------------- stage 3: tag + push
 
 (define (remote-tag-exists?)
-  (define-values (ec out _e)
-    (run-capture "git" "ls-remote" "--tags" "origin" tag))
+  (define-values (ec out _e) (run-capture "git" "ls-remote" "--tags" "origin" tag))
   (and (zero? ec) (non-empty-string? (string-trim out))))
 
 (define (stage-tag)
@@ -271,8 +293,10 @@
   (gh-json "run"
            "list"
            "--workflow=release.yml"
-           "--limit" "15"
-           "--json" "databaseId,status,conclusion,headBranch,url"
+           "--limit"
+           "15"
+           "--json"
+           "databaseId,status,conclusion,headBranch,url"
            "--jq"
            (format "[.[] | select(.headBranch == \"~a\")]" tag)))
 
@@ -280,7 +304,9 @@
   (printf "== [4/7] WORKFLOW - release.yml run for ~a\n" tag)
   (cond
     [(or dry-run? skip-workflow-wait?)
-     (define runs (with-handlers ([exn:fail? (lambda (_e) '())]) (workflow-run-for-tag)))
+     (define runs
+       (with-handlers ([exn:fail? (lambda (_e) '())])
+         (workflow-run-for-tag)))
      (cond
        [(null? runs) (printf "  (no run found yet for ~a)\n" tag)]
        [else
@@ -293,10 +319,11 @@
     [else
      (let poll ([n 0])
        (cond
-         [(> n 120)
-          (fail! "workflow" "timed out waiting for the tag run to conclude")]
+         [(> n 120) (fail! "workflow" "timed out waiting for the tag run to conclude")]
          [else
-          (define runs (with-handlers ([exn:fail? (lambda (_e) '())]) (workflow-run-for-tag)))
+          (define runs
+            (with-handlers ([exn:fail? (lambda (_e) '())])
+              (workflow-run-for-tag)))
           (define done
             (and (pair? runs)
                  (for/or ([r (in-list runs)])
@@ -312,7 +339,9 @@
             [else
              (printf "  ... waiting for run on ~a (~a)\n"
                      tag
-                     (if (pair? runs) (hash-ref (car runs) 'status) "not started"))
+                     (if (pair? runs)
+                         (hash-ref (car runs) 'status)
+                         "not started"))
              (sleep 20)
              (poll (add1 n))])]))]))
 
@@ -321,9 +350,13 @@
 (define (stage-archive)
   (printf "== [5/7] ARCHIVE - archive shipped planning/registry artifacts\n")
   (printf "  planning dir: ~a\n" planning-dir)
-  (apply run-racket-script "archive-planning" (find-script "archive-planning.rkt")
+  (apply run-racket-script
+         "archive-planning"
+         (find-script "archive-planning.rkt")
          `("--planning-dir" ,(path->string planning-dir)
-           ,@(if dry-run? '("--dry-run") '()))))
+                            ,@(if dry-run?
+                                  '("--dry-run")
+                                  '()))))
 
 ;; ------------------------------------------ stage 6: registry consistency
 
@@ -338,21 +371,19 @@
      (define-values (ec out err)
        (run-capture racket-exe (path->string p) "--registry" (path->string registry-dir)))
      (printf "~a~a" out err)
-     (unless (zero? ec) (fail! "check-registry" (format "exit ~a" ec)))]))
+     (unless (zero? ec)
+       (fail! "check-registry" (format "exit ~a" ec)))]))
 
 ;; --------------------------------------------- stage 7: close milestone
 
 (define (stage-milestone-close mn)
   (printf "== [7/7] MILESTONE - close milestone ~a (v~a)\n" mn version)
-  (define state
-    (gh-json "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-q" ".state"))
+  (define state (gh-json "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-q" ".state"))
   (cond
     [(string=? (string-trim (~a state)) "closed") (printf "  already closed - no-op\n")]
     [dry-run? (printf "  [dry-run] would PATCH state=closed\n")]
     [else
-     (gh-json "api"
-              (format "repos/{owner}/{repo}/milestones/~a" mn)
-              "-X" "PATCH" "-f" "state=closed")
+     (gh-json "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-X" "PATCH" "-f" "state=closed")
      (printf "  closed\n")]))
 
 ;; ------------------------------------------------------------------- main
@@ -373,9 +404,13 @@
   (with-handlers ([exn:fail? (lambda (_e) #f)])
     (find-milestone-number)))
 
-(when dry-run? (printf "DRY RUN - no writes will be made.\n"))
+(when dry-run?
+  (printf "DRY RUN - no writes will be made.\n"))
 (printf "release-closeout: tag=~a version=~a repo=~a milestone=~a\n"
-        tag version (repo-slug) (or milestone-number "NOT FOUND"))
+        tag
+        version
+        (repo-slug)
+        (or milestone-number "NOT FOUND"))
 
 (cond
   [(not milestone-number)
@@ -391,20 +426,29 @@
 (stage-workflow)
 (stage-archive)
 (stage-registry)
-(when milestone-number (stage-milestone-close milestone-number))
+(when milestone-number
+  (stage-milestone-close milestone-number))
 
 ;; ------------------------------------------------------------------ report
 
 (printf "\n---- close-out report (~a) ----\n" tag)
 (define known-stages
-  '("gen-release-notes" "lint-release-notes" "release-preflight"
-    "tag" "push" "workflow" "archive-planning" "check-registry" "milestone"))
+  '("gen-release-notes" "lint-release-notes"
+                        "release-preflight"
+                        "tag"
+                        "push"
+                        "workflow"
+                        "archive-planning"
+                        "check-registry"
+                        "milestone"))
 (for ([s (in-list known-stages)])
   (define failed (assoc s stage-failures))
   (printf "  ~a ~a~a\n"
           (if failed "FAIL" "ok")
           s
-          (if failed (format " - ~a" (cdr failed)) "")))
+          (if failed
+              (format " - ~a" (cdr failed))
+              "")))
 
 (cond
   [(null? stage-failures)

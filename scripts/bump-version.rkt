@@ -24,8 +24,7 @@
 (define new-version
   (let ([args (vector->list (current-command-line-arguments))])
     (cond
-      [(and (= (length args) 1)
-            (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+$" (car args)))
+      [(and (= (length args) 1) (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+$" (car args)))
        (car args)]
       [else (usage+exit 2)])))
 
@@ -44,12 +43,9 @@
 (define q-root
   (or (find-q-root (path-only (find-system-path 'run-file)))
       (find-q-root (find-system-path 'orig-dir))
-      (raise-user-error 'bump-version
-                        "cannot locate q root (info.rkt + util/version.rkt)")))
+      (raise-user-error 'bump-version "cannot locate q root (info.rkt + util/version.rkt)")))
 
-(define targets
-  (list (build-path q-root "info.rkt")
-        (build-path q-root "util" "version.rkt")))
+(define targets (list (build-path q-root "info.rkt") (build-path q-root "util" "version.rkt")))
 
 (define version-form-regex #px"^\\(define\\s+(?:q-)?version\\s+\"[0-9]+\\.[0-9]+\\.[0-9]+\"\\)")
 
@@ -66,7 +62,8 @@
            (regexp-replace #px"^(\\(define\\s+(?:q-)?version\\s+\")[0-9]+\\.[0-9]+\\.[0-9]+(\")"
                            line
                            (lambda (m pre post) (string-append pre new-version post))))
-         (unless (string=? updated line) (set! changed? #t))
+         (unless (string=? updated line)
+           (set! changed? #t))
          updated]
         [else line])))
   (cond
@@ -76,14 +73,14 @@
                  (string-contains? line (string-append "\"" new-version "\"")))))
      (printf "~a: already at ~a\n" (find-relative-path q-root target) new-version)]
     [changed?
-     (call-with-output-file*
-       target
-       (lambda (out) (for ([l (in-list new-lines)]) (displayln l out)))
-       #:exists 'truncate)
+     (call-with-output-file* target
+                             (lambda (out)
+                               (for ([l (in-list new-lines)])
+                                 (displayln l out)))
+                             #:exists 'truncate)
      (printf "~a: bumped to ~a\n" (find-relative-path q-root target) new-version)]
     [else
-     (eprintf "~a: no (define [q]version \"…\") form found\n"
-              (find-relative-path q-root target))
+     (eprintf "~a: no (define [q]version \"…\") form found\n" (find-relative-path q-root target))
      (exit 1)]))
 
 (printf "version bump complete: ~a\n" new-version)
