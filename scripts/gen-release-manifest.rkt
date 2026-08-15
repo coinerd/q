@@ -185,7 +185,8 @@
 ;; Validation (pure — no I/O)
 ;; ---------------------------------------------------------------------------
 
-(define semver-rx #px"^[0-9]+\\.[0-9]+\\.[0-9]+$")
+(define semver-rx
+  #px"^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$") ;; X.Y.Z with optional pre-release suffix (e.g. 1.00.00-PRE1)
 (define sha256-rx #px"^[0-9a-f]{64}$")
 (define full-sha-rx #px"^[0-9a-f]{40}$")
 
@@ -362,7 +363,11 @@
 ;; ---------------------------------------------------------------------------
 
 (define (parse-q-version content)
-  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
+  ;; Pre-release suffix (e.g. 1.00.00-PRE1) is part of the version string.
+  (define m
+    (regexp-match
+     #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)\""
+     content))
   (and m (cadr m)))
 
 ;; ---------------------------------------------------------------------------
@@ -432,7 +437,10 @@
 ;; ---------------------------------------------------------------------------
 
 (define cli-usage
-  "Usage: gen-release-manifest.rkt [--version V --tag TAG --commit SHA --tag-commit SHA --tag-object SHA] q-V.tar.gz")
+  "Usage: gen-release-manifest.rkt [--dry-run TAG] | [--version V --tag TAG --commit SHA --tag-commit SHA --tag-object SHA] q-V.tar.gz
+  --dry-run TAG: validate the release surface for TAG (annotated tag, full SHAs,
+    tag version == canonical q-version) and print the manifest that would be
+    generated, without a tarball and without publishing (S2, BUG-0007).")
 
 (define (fail! message)
   (eprintf "gen-release-manifest: ~a\n~a\n" message cli-usage)
@@ -463,8 +471,17 @@
                    [current-error-port error-output])
       (system*/exit-code (find-executable-path "git") "cat-file" "-t" tag)))
   (define type (string-trim (get-output-string output)))
+  ;; S1 (BUG-0007): state the violated invariant AND the remediation command.
   (unless (and (zero? status) (string=? type "tag"))
-    (fail! (format "~a must name an annotated tag object" tag)))
+    (fail!
+     (format
+      "~a must name an annotated tag object, but git cat-file -t ~a => '~a'. Fix with: git tag -fa ~a -m \"~a\" && git push origin ~a --force"
+      tag
+      tag
+      (if (non-empty-string? type) type "?")
+      tag
+      tag
+      tag)))
   type)
 
 (define (git-output! command description)
@@ -524,8 +541,62 @@
             (or (getenv "Q_RELEASE_TOOLING_SHA") workflow-source)))
   (displayln (manifest->json-string (build-manifest inputs) #:provenance provenance)))
 
+;; S2 (BUG-0007): dry-run mode — validate inputs and print the manifest that
+;; WOULD be generated for TAG, without requiring a tarball and without
+;; publishing anything. Used by scripts/release-preflight.rkt; safe to run at
+;; any time. Asset size/checksums are placeholders until a real tarball exists.
+(define (dry-run! tag)
+  (unless (string-prefix? tag "v")
+    (fail! (format "--dry-run TAG must start with 'v', got: ~a" tag)))
+  (define version (substring tag 1))
+  (unless (regexp-match? semver-rx version)
+    (fail! (format "--dry-run: tag must encode X.Y.Z, got: ~a" version)))
+  (define canonical (read-canonical-version!))
+  (unless (string=? version canonical)
+    (fail! (format
+            "--dry-run: tag version ~a does not match canonical q-version ~a (util/version.rkt)"
+            version
+            canonical)))
+  (git-tag-type! tag)
+  (define tag-commit (git-output! (format "git rev-list -n 1 ~a 2>/dev/null" tag) "tag commit"))
+  (define tag-object (git-output! (format "git rev-parse ~a 2>/dev/null" tag) "tag object"))
+  (define head (git-output! "git rev-parse HEAD 2>/dev/null" "HEAD"))
+  ;; In CI (tag push) HEAD IS the tagged commit; locally HEAD may have moved on.
+  ;; The dry-run manifest describes the tagged commit either way, and says so.
+  (unless (commits-match? head tag-commit)
+    (eprintf
+     "note: HEAD (~a) is not the tagged commit (~a); dry-run manifest describes the tagged commit\n"
+     (substring head 0 12)
+     (substring tag-commit 0 12)))
+  (define date
+    (or (getenv "Q_RELEASE_DATE")
+        (string-trim (with-output-to-string (lambda () (system "date -u +%Y-%m-%d"))))))
+  (define inputs
+    (release-inputs version
+                    tag-commit
+                    date
+                    (format "q-~a.tar.gz" version)
+                    0 ; placeholder — no tarball in dry-run
+                    "n/a" ; placeholder — no checksum in dry-run
+                    tag-commit
+                    tag-object))
+  (displayln (manifest->json-string (build-manifest inputs)
+                                    #:provenance (hasheq 'workflow_run_id
+                                                         "dry-run"
+                                                         'workflow_run_url
+                                                         "dry-run"
+                                                         'workflow_source_sha
+                                                         head
+                                                         'generator_tooling_sha
+                                                         (or (getenv "Q_RELEASE_TOOLING_SHA") head))))
+  (eprintf
+   "DRY-RUN OK: ~a validated (annotated tag; version ~a == canonical; manifest renderable). Asset size/sha256 are placeholders.\n"
+   tag
+   version))
+
 (define (main)
   (match (vector->list (current-command-line-arguments))
+    [(list "--dry-run" tag) (dry-run! tag)]
     [(list "--version"
            version
            "--tag"
