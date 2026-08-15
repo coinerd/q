@@ -56,7 +56,12 @@
                   make-stream-tool-call-started-event
                   make-stream-assistant-msg-completed-event)
          (only-in "loop-messages.rkt" usage-empty? classify-hook-result)
-         (only-in "stream-runner.rkt" safe-hook-dispatch))
+         (only-in "stream-runner.rkt" safe-hook-dispatch)
+         ;; W6 (BUG-0011): transient-failure classification + turn-level retry
+         (only-in "../llm/provider-errors.rkt"
+                  transient-llm-failure?
+                  provider-error?
+                  provider-error-category))
 
 (provide classify-chunk
          chunk-has-data?
@@ -347,3 +352,67 @@
                                 raw-messages
                                 final-text-box
                                 (hash-ref acc 'thinking ""))]))
+
+;; ============================================================
+;; W6 (BUG-0011): Bounded turn-level auto-retry with exponential
+;; backoff for transient failures.
+;;
+;; Reuses the LLM-layer retry policy *shape* (max-attempts + backoff
+;; schedule, cf. q/runtime/auto-retry.rkt) and the transient-failure
+;; classification from q/llm/provider-errors.rkt — no duplicate logic.
+;; Non-transient errors are surfaced immediately (no behavior change).
+;; ============================================================
+
+(struct turn-retry-policy
+  (max-attempts base-delay-ms max-delay-ms)
+  #:transparent)
+
+;; Conservative default: mirrors the LLM-layer policy shape.
+(define (default-turn-retry-policy)
+  (turn-retry-policy 3 500 8000))
+
+;; Turn-level transient classification: LLM/provider failures use the
+;; structured classification from provider-errors.rkt; network-style exns
+;; raised anywhere in the turn (transport, tool subprocess plumbing)
+;; also qualify so a mid-turn hiccup does not abort the whole turn.
+;; Tool *result* errors are classified upstream and re-raised as
+;; provider/network exns when transient, so no separate tool clause is
+;; needed here.
+(define (turn-error-transient? e)
+  (transient-llm-failure? e))
+
+(define (turn-retry-delay-ms policy attempt)
+  ;; attempt is 1-based: first retry waits base, doubling afterwards,
+  ;; capped at max-delay-ms (same shape as the LLM-layer policy).
+  (min (turn-retry-policy-max-delay-ms policy)
+       (* (turn-retry-policy-base-delay-ms policy)
+          (expt 2 (sub1 attempt)))))
+
+;; Sleeper is injectable for tests: (-> exact-nonneg-integer? any)
+(define (with-turn-retry thunk
+                         #:policy [policy (default-turn-retry-policy)]
+                         #:sleep [sleeper sleep]
+                         #:on-retry [on-retry void])
+  (define max-attempts (turn-retry-policy-max-attempts policy))
+  (let loop ([attempt 1])
+    (with-handlers
+        ([values
+          (lambda (e)
+            (cond
+              [(and (turn-error-transient? e) (< attempt max-attempts))
+               (define delay-ms (turn-retry-delay-ms policy attempt))
+               (on-retry e attempt delay-ms)
+               (sleeper delay-ms)
+               (loop (add1 attempt))]
+              [else (raise e)]))])
+      (thunk))))
+
+(provide turn-retry-policy
+         turn-retry-policy?
+         turn-retry-policy-max-attempts
+         turn-retry-policy-base-delay-ms
+         turn-retry-policy-max-delay-ms
+         default-turn-retry-policy
+         turn-error-transient?
+         turn-retry-delay-ms
+         with-turn-retry)

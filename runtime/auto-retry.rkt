@@ -10,7 +10,7 @@
          racket/string
          racket/random
          racket/math
-         "../llm/provider-errors.rkt"
+         "../llm/provider-errors.rkt" ; whole-module: provides retryable predicates + transient-llm-failure?
          "../llm/stream.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/exn.rkt" exn:fail:stream-error? exn:fail:stream-error-original-exn))
@@ -246,10 +246,10 @@
     [_
      ;; M-11: Use structured provider-error-category as primary classification.
      ;; Falls back to string matching only for unknown/non-structured errors.
+     ;; W6 (BUG-0011): structured branch delegates to provider-errors'
+     ;; transient classification — single source of truth, no duplication.
      (match (provider-error? exn)
-       [#t
-        (define cat (provider-error-category exn))
-        (and (memq cat '(rate-limit timeout server server-error network)) #t)]
+       [#t (provider-error-transient? exn)]
        [_
         ;; String fallback for non-structured errors
         (define msg (exn-message exn))

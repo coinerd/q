@@ -65,31 +65,34 @@
     [else
      ;; info.rkt must agree with the canonical module; drift here is exactly
      ;; the duplication class this lint exists to catch.
-     (define info-v (and (file-exists? info-path)
-                         (info-version-from-content (file->string info-path))))
+     (define info-v
+       (and (file-exists? info-path) (info-version-from-content (file->string info-path))))
      (when (and info-v (not (string=? info-v canonical)))
        (printf "ERROR: info.rkt version ~a != canonical q-version ~a~n" info-v canonical)
        (displayln "       run: racket scripts/sync-version.rkt --write")
        (exit 1))
      (define files (test-files))
      (define hits
-       (for/fold ([acc '()])
-                 ([f (in-list files)])
+       (for/fold ([acc '()]) ([f (in-list files)])
          (append acc
-                 (for/list ([n (in-list (find-version-literals
-                                         (file->lines f) canonical))])
+                 (for/list ([n (in-list (find-version-literals (file->lines f) canonical))])
                    (cons (path->string f) n)))))
      (cond
        [(null? hits)
-        (printf "Version-expectation lint PASSED — ~a test files scanned, 0 hard-coded \"~a\" literals~n"
-                (length files) canonical)
+        (printf
+         "Version-expectation lint PASSED — ~a test files scanned, 0 hard-coded \"~a\" literals~n"
+         (length files)
+         canonical)
         (exit 0)]
        [else
-        (printf "FAIL: ~a hard-coded version literal(s) \"~a\" in tests/ (derive from q-version instead):~n"
-                (length hits) canonical)
+        (printf
+         "FAIL: ~a hard-coded version literal(s) \"~a\" in tests/ (derive from q-version instead):~n"
+         (length hits)
+         canonical)
         (for ([h (in-list hits)])
           (printf "  ERROR: ~a:~a~n" (car h) (cdr h)))
-        (displayln "  Fix: (require (only-in \"../util/version.rkt\" q-version)) and (format ...) the expectation.")
+        (displayln
+         "  Fix: (require (only-in \"../util/version.rkt\" q-version)) and (format ...) the expectation.")
         (displayln "  Rationale (BUG-0009): a literal here goes green on the branch that adds it and")
         (displayln "  red on main/release after the next version bump.")
         (exit 1)])]))

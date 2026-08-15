@@ -20,7 +20,8 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         racket/string         "../util/event/event-bus.rkt"
+         racket/string
+         "../util/event/event-bus.rkt"
          "../tools/tool.rkt"
          "../tui/context.rkt"
          "../tui/state.rkt"
@@ -35,15 +36,19 @@
 ;; initial buffer differs between dev machines and fresh CI containers.
 (define (tui-first-run?)
   (define q-config-dir (global-config-dir))
-  (not (or (directory-exists? q-config-dir)
-           (file-exists? (build-path q-config-dir "config.json")))))
+  (not (or (directory-exists? q-config-dir) (file-exists? (build-path q-config-dir "config.json")))))
 
 (define (make-rt-config tmp-dir bus prov)
-  (hasheq 'provider prov
-          'tool-registry (make-tool-registry)
-          'event-bus bus
-          'session-dir (path->string tmp-dir)
-          'model-name "test"))
+  (hasheq 'provider
+          prov
+          'tool-registry
+          (make-tool-registry)
+          'event-bus
+          bus
+          'session-dir
+          (path->string tmp-dir)
+          'model-name
+          "test"))
 
 ;; Headless equivalent of TUI startup for one session: create the session,
 ;; load its scrollback into the ctx state box, return the resulting state.
@@ -55,14 +60,15 @@
 (define (transcript-texts state)
   (map transcript-entry-text (ui-state-transcript state)))
 
-(define-test-suite tui-scrollback-session-suite
-  (test-case
-   "scrollback path is session-scoped, not global"
+(define-test-suite
+ tui-scrollback-session-suite
+ (test-case "scrollback path is session-scoped, not global"
    (define tmp-dir (make-temporary-file "q-scrollback-test-~a" 'directory))
    (dynamic-wind
     void
     (lambda ()
-      (define-values (ctx sess path) (create-tui-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider)) #f))
+      (define-values (ctx sess path)
+        (create-tui-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider)) #f))
       (define sid (session-id sess))
       (check-equal? path (build-path tmp-dir sid "scrollback.jsonl"))
       ;; The old bug: a single <base>/scrollback.jsonl shared by all sessions.
@@ -74,24 +80,23 @@
       (check-false (file-exists? path))
       (void))
     (lambda () (delete-directory/files tmp-dir #:must-exist? #f))))
-
-  (test-case
-   "new session B starts empty even though session A wrote scrollback"
+ (test-case "new session B starts empty even though session A wrote scrollback"
    (define tmp-dir (make-temporary-file "q-scrollback-test-~a" 'directory))
    (dynamic-wind
     void
     (lambda ()
       ;; Session A runs, writes its scrollback, exits.
-      (define-values (_a sess-a path-a state-a) (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
+      (define-values (_a sess-a path-a state-a)
+        (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
       (define a-marker "A-ONLY-MARKER-a1b2c3")
-      (save-scrollback
-       (append (ui-state-transcript state-a)
-               (list (make-entry 'user a-marker 1000.0 (hasheq 'test #t))))
-       path-a)
+      (save-scrollback (append (ui-state-transcript state-a)
+                               (list (make-entry 'user a-marker 1000.0 (hasheq 'test #t))))
+                       path-a)
       (check-true (file-exists? path-a))
 
       ;; Session B starts with a NEW session id in the same base dir.
-      (define-values (ctx-b sess-b path-b state-b) (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
+      (define-values (ctx-b sess-b path-b state-b)
+        (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
       (check-not-equal? (session-id sess-b) (session-id sess-a))
       (check-not-equal? path-b path-a)
       ;; B's file does not exist → B loads an empty buffer.
@@ -111,14 +116,13 @@
       (check-true (<= (length texts-b) 3))
       (void))
     (lambda () (delete-directory/files tmp-dir #:must-exist? #f))))
-
-  (test-case
-   "resuming session A restores A's buffer"
+ (test-case "resuming session A restores A's buffer"
    (define tmp-dir (make-temporary-file "q-scrollback-test-~a" 'directory))
    (dynamic-wind
     void
     (lambda ()
-      (define-values (_a sess-a path-a state-a) (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
+      (define-values (_a sess-a path-a state-a)
+        (start-session (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))))
       (define sid-a (session-id sess-a))
       (define a-marker "A-ONLY-MARKER-d4e5f6")
       (define entries-a
@@ -127,15 +131,16 @@
       (save-scrollback entries-a path-a)
 
       ;; Resume A: same session id → same path → A's buffer is restored.
-      (define cfg-resume (hash-set (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))
-                                   'session-id sid-a))
+      (define cfg-resume
+        (hash-set (make-rt-config tmp-dir (make-event-bus) (make-simple-mock-provider))
+                  'session-id
+                  sid-a))
       (define-values (_r sess-r path-r state-r) (start-session cfg-resume))
       (check-equal? (session-id sess-r) sid-a)
       (check-equal? path-r path-a)
       (check-true (file-exists? path-r))
       (define texts-r (transcript-texts state-r))
-      (check-true (and (pair? texts-r)
-                       (ormap (lambda (t) (string-contains? t a-marker)) texts-r))
+      (check-true (and (pair? texts-r) (ormap (lambda (t) (string-contains? t a-marker)) texts-r))
                   "resumed session must restore its own scrollback content")
       ;; next-entry-id advanced past the highest restored id.
       (check-true (>= (ui-state-next-entry-id state-r) (length (ui-state-transcript state-r))))

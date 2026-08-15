@@ -22,18 +22,16 @@
 ;; ===========================================================================
 
 (test-case "canonical-version-parses-define-q-version"
-  (check-equal? (canonical-version-from-content
-                 "#lang racket/base\n(define q-version \"9.87.65\")\n")
+  (check-equal? (canonical-version-from-content "#lang racket/base\n(define q-version \"9.87.65\")\n")
                 "9.87.65"))
 
 (test-case "canonical-version-parses-with-contract-out-wrappers"
   ;; util/version.rkt shape: provide contract-out + plain define, comments first.
   (check-equal? (canonical-version-from-content
-                 (string-join '("#lang racket/base"
-                                ";; STABILITY: stable"
-                                "(provide (contract-out [q-version string?]))"
-                                ""
-                                "(define q-version \"9.87.65\")")
+                 (string-join '("#lang racket/base" ";; STABILITY: stable"
+                                                    "(provide (contract-out [q-version string?]))"
+                                                    ""
+                                                    "(define q-version \"9.87.65\")")
                               "\n"))
                 "9.87.65"))
 
@@ -68,5 +66,4 @@
 (test-case "expected-string-is-derived-not-duplicated"
   ;; Tests must format expectations from q-version, never re-type the literal.
   (define canonical (canonical-version-from-content "(define q-version \"9.87.65\")\n"))
-  (check-equal? (format "q v~a — session restored" canonical)
-                "q v9.87.65 — session restored"))
+  (check-equal? (format "q v~a — session restored" canonical) "q v9.87.65 — session restored"))

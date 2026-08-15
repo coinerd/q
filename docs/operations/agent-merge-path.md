@@ -180,6 +180,38 @@ gitignored); the registry update is a local post-condition, not a commit.
 
 ---
 
+## Retry, resume, and idempotence (BUG-0011)
+
+Transient failures no longer stall a wave on a human `/retry`, and an interrupted run can
+be resumed without re-executing completed steps.
+
+**Auto-retry (turn/LLM/tool).** Failures classified as *transient* — provider 5xx, network
+timeouts, SSE stalls/reconnectable provider errors — are retried automatically at the
+agent-loop level with the same policy shape the LLM layer already uses: bounded
+max-attempts with exponential backoff (`q/runtime/auto-retry.rkt`; classification in
+`q/llm/provider-errors.rkt`). When the budget is exhausted the error surfaces exactly as
+before. Non-transient errors (bad arguments, auth, 4xx policy) fail immediately — no
+behavior change.
+
+**Durable checkpoints.** `gh-wave-start` / `gh-wave-finish` record each completed step as
+`- [x] <step>` under a `### <wave-id>` block in `.planning/STATE.md`. Steps are appended
+in execution order; a resumed run reads the checklist and **skips** steps already checked,
+instead of re-executing them.
+
+**Idempotent milestone actions.**
+- `gh-pr create` / PR creation inside `gh-wave-finish` is lookup-first: if an open PR
+  already exists for the head branch it is returned, never duplicated. Re-running the
+  command for the same head branch succeeds both times with a single PR.
+- `gh-wave-finish` is a no-op success when (a) the step is already checked in
+  `STATE.md`, or (b) the exact change is already committed (tree/content check on the
+  declared `files` list) — it will not double-commit.
+
+**Operational consequence:** after any interruption, re-run the wave commands; completed
+steps report "already recorded / already committed" and the run proceeds from the first
+incomplete step. No operator double-checking of remote state is required.
+
+---
+
 ## Dogfooding
 
 This document itself landed via this exact procedure: `gh-wave-start` on issue #9325 →

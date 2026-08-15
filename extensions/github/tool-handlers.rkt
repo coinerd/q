@@ -7,6 +7,8 @@
 
 (require racket/format
          racket/string
+         (only-in racket/file
+                  [file->string gh-file->string])
          json
          "../dynamic-tools.rkt"
          "../hooks.rkt"
@@ -70,98 +72,81 @@
                                    branch-name
                                    issue-num))))])])])))
 
+(define (wave-state-path)
+  (let-values ([(_ec out _e) (git-exec-result "rev-parse" "--show-toplevel")])
+    (define root (string-trim out))
+    (build-path (if (non-empty-string? root) root ".")
+                ".planning" "STATE.md")))
+
 (define (handle-gh-wave-finish args [exec-ctx #f])
   (with-error-result
    "github operation"
+   ;; W6 (BUG-0011): durable checkpoints + idempotent milestone actions.
+   ;; wave-id/step/state-path drive the resume checklist in STATE.md;
+   ;; files drives the tree/content already-committed check.
+   (define wave-id (hash-ref args 'wave_id "W0"))
+   (define step (hash-ref args 'step "wave-finish"))
+   (define state-path (hash-ref args 'state_path ".planning/STATE.md"))
+   (define summary (hash-ref args 'summary "Wave complete"))
    (define issue-num (hash-ref args 'issue_number #f))
    (define files (hash-ref args 'files '()))
-   (define commit-msg (hash-ref args 'commit_msg #f))
+   (define state-content (read-state-content state-path))
    (cond
-     [(not issue-num) (make-error-result "Missing required argument: issue_number")]
-     [(null? files) (make-error-result "Missing or empty required argument: files")]
-     [(not commit-msg) (make-error-result "Missing required argument: commit_msg")]
      [(not (gh-binary)) (gh-unavailable-error)]
+     [(wave-step-completed? state-content wave-id step)
+      (make-success-result
+       (list (hasheq 'type "text"
+                     'text (format "Wave ~a step '~a' already recorded in ~a - skipping (idempotent resume)."
+                                   wave-id step state-path))))]
+     [(wave-already-committed? files)
+      (write-wave-checkpoint! state-path wave-id step)
+      (make-success-result
+       (list (hasheq 'type "text"
+                     'text (format "Wave ~a step '~a': change already committed (tree/content check) - no-op."
+                                   wave-id step))))]
      [else
-      ;; Step 1: git add + commit
-      (define-values (ec-add _out-add err-add) (apply git-exec-result "add" files))
-      (cond
-        [(not (= ec-add 0)) (make-error-result (format "git add failed: ~a" (string-trim err-add)))]
-        [else
-         (define-values (ec-commit _out-commit err-commit) (git-exec-result "commit" "-m" commit-msg))
-         (cond
-           [(not (= ec-commit 0))
-            (make-error-result (format "git commit failed: ~a" (string-trim err-commit)))]
-           [else
-            ;; Step 2: detect branch, push
-            (define-values (ec-br out-br _) (git-exec-result "branch" "--show-current"))
-            (define branch
-              (or (hash-ref args 'branch #f) (and (= ec-br 0) (string-trim out-br)) "main"))
-            (define-values (ec-push _out-push err-push) (git-exec-result "push" "-u" "origin" branch))
-            (cond
-              [(not (= ec-push 0))
-               (make-error-result (format "git push failed: ~a" (string-trim err-push)))]
-              [else
-               ;; Step 3: create PR
-               (define pr-title (hash-ref args 'pr_title commit-msg))
-               (define pr-body (hash-ref args 'pr_body (format "(#~a)" issue-num)))
-               (define-values (ec-pr out-pr err-pr)
-                 (gh-exec-result "pr"
-                                 "create"
-                                 "--title"
-                                 pr-title
-                                 "--body"
-                                 pr-body
-                                 "--head"
-                                 branch
-                                 "--base"
-                                 "main"
-                                 "--json"
-                                 "number,url"))
-               (define pr-num
-                 (if (= ec-pr 0)
-                     (hash-ref (with-handlers ([exn:fail? (lambda (_) (hasheq))])
-                                 (string->jsexpr (string-trim out-pr)))
-                               'number
-                               #f)
-                     #f))
-               ;; Step 4: merge PR
-               (when pr-num
-                 (define-values (ec-merge _out-merge err-merge)
-                   (gh-exec-result "pr" "merge" (~a pr-num) "--squash"))
-                 (unless (= ec-merge 0)
-                   (make-error-result
-                    (format
-                     "PR merge failed (exit ~a): ~a. Files committed and pushed but PR not merged."
-                     ec-merge
-                     (string-trim err-merge)))))
-               ;; Step 5: sync main
-               (define-values (ec-co _out-co err-co) (git-exec-result "checkout" "main"))
-               (define-values (ec-pull _out-pull err-pull) (git-exec-result "pull" "origin" "main"))
-               (unless (= ec-co 0)
-                 (make-error-result (format "git checkout main failed: ~a" (string-trim err-co))))
-               (unless (= ec-pull 0)
-                 (make-error-result (format "git pull failed: ~a" (string-trim err-pull))))
-               ;; Step 6: close issue
-               (define-values (ec-close _out-close err-close)
-                 (gh-exec-result "issue" "close" (~a issue-num)))
-               (unless (= ec-close 0)
-                 (make-error-result
-                  (format "Issue close failed (exit ~a): ~a. PR merged but issue not closed."
-                          ec-close
-                          (string-trim err-close))))
-               (make-success-result
-                (list (hasheq
-                       'type
-                       "text"
-                       'text
-                       (format "Wave finished: ~a files committed, PR #~a merged, issue #~a closed"
-                               (length files)
-                               pr-num
-                               issue-num))))])])])])))
+      (unless (pair? files)
+        (raise-user-error 'gh-wave-finish "step '~a': 'files' required" step))
+      (define-values (ec-add _out-add err-add) (git-exec-result "add" "-A"))
+      (unless (= ec-add 0)
+        (raise-user-error 'gh-wave-finish "Failed to stage: ~a" (string-trim err-add)))
+      (define commit-msg
+        (or (hash-ref args 'commit_message #f)
+            (format "wave: ~a (issue #~a)" summary issue-num)))
+      (define-values (ec-commit _out-c err-commit)
+        (git-exec-result "commit" "-m" commit-msg))
+      (unless (= ec-commit 0)
+        (raise-user-error 'gh-wave-finish "Commit failed: ~a" (string-trim err-commit)))
+      (define-values (ec-hb out-hb _err-hb)
+        (git-exec-result "rev-parse" "--abbrev-ref" "HEAD"))
+      (define head-branch (string-trim out-hb))
+      (define-values (ec-push _out-p err-push)
+        (git-exec-result "push" "origin" head-branch))
+      (unless (= ec-push 0)
+        (raise-user-error 'gh-wave-finish "Push failed: ~a" (string-trim err-push)))
+      ;; Idempotent PR create (BUG-0011): lookup-first - reuse the existing
+      ;; open PR for the head branch instead of double-creating.
+      (define existing-pr (find-open-pr-for-head head-branch))
+      (define pr-num
+        (or (and existing-pr (hash-ref existing-pr 'number #f))
+            (let ()
+              (define-values (ec-pr out-pr err-pr)
+                (gh-exec-result "pr" "create" "--title" (format "Wave ~a" summary)
+                                "--body" (or (hash-ref args 'pr_body #f)
+                                             (format "Wave summary: ~a" summary))
+                                "--head" head-branch "--base" "main"
+                                "--json" "number,title,url"))
+              (unless (= ec-pr 0)
+                (raise-user-error 'gh-wave-finish "PR creation failed: ~a"
+                                  (string-trim err-pr)))
+              (define created (open-pr-from-lookup out-pr))
+              (and created (hash-ref created 'number #f)))))
+      (write-wave-checkpoint! state-path wave-id step)
+      (make-success-result
+       (list (hasheq 'type "text"
+                     'text (format "Wave finished: ~a (issue #~a) - PR #~a"
+                                   summary issue-num pr-num))))])))
 
-;; ============================================================
-;; Registration
-;; ============================================================
 
 (define (register-github-tools ctx _payload)
   (ext-register-tool!
