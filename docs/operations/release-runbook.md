@@ -110,3 +110,42 @@ When a fix PR merges, record the squashed landing commit SHA on a
 consumes first; see `.planning/bugs/README.md` for the registry-side rules.
 In CI the registry lives outside the repo, so the milestone fallback resolves
 landing SHAs there — locally the registry is authoritative.
+
+## 5. Close-out (one command, full audit trail)
+
+After the readiness gate passes and the tag exists, the entire close-out runs as:
+
+```
+racket scripts/release-closeout.rkt v1.00.01
+```
+
+Dry mode (prints every stage and its sources, makes **no** writes):
+
+```
+racket scripts/release-closeout.rkt v1.00.01 --dry-run
+```
+
+(The flags are order-independent; both `v1.00.01 --dry-run` and
+`--dry-run v1.00.01` behave identically.)
+
+### Stages and what each verifies
+
+| # | Stage | Verifies |
+|---|-------|----------|
+| 1 | NOTES | release-note input assembled from the closed issues in the version's milestone (`gh-issue list state=closed milestone_number=…`) **plus** fixed registry rows for that version; feeds `gen-release-notes.rkt` / `lint-release-notes.rkt` |
+| 2 | READINESS | one final `release-preflight.rkt <tag> --readiness` run — the W2 gate, re-proven at close-out time |
+| 3 | TAG | annotated tag created and pushed (idempotent: existing tag is verified, not duplicated) |
+| 4 | WORKFLOW | `.github/workflows/release.yml` run for the tag goes green end-to-end (preflight → full suite → build → publish) |
+| 5 | ARCHIVE | shipped planning/registry artifacts archived via `scripts/archive-planning.rkt` |
+| 6 | REGISTRY | `scripts/check-registry.rkt` re-run so INDEX counts stay truthful post-archive (exit 0 required) |
+| 7 | MILESTONE | the version's milestone is closed (`gh-milestone action=close`) |
+
+The run ends with a `close-out report` listing `ok`/`FAIL` per stage and
+`ALL STAGES GREEN` only when every stage succeeded. Any failure names the stage
+and the remediation; the command is safe to re-run — every stage is idempotent
+or lookup-first, so an interrupted close-out resumes without double side
+effects.
+
+If the `gh` CLI is unavailable, issue/milestone sources are reported as
+skipped with a warning instead of failing the run; tag push and workflow
+stages require `git`/`gh` respectively and fail loudly when missing.
