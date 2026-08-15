@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.00 --># Security & Trust Model
+<!-- verified-against: 1.00.01 --># Security & Trust Model
 
 This document provides an honest, per-area assessment of what q enforces
 today and what is planned. It is the authoritative reference for security
