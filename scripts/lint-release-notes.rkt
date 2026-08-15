@@ -36,7 +36,7 @@
 ;; the version, but partial and duplicate version headings fail closed.
 (define (extract-version-block text ver)
   (define lines (string-split text "\n"))
-    (define heading-rx #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?)(?:\\s|$)")
+  (define heading-rx #px"^## v?([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?)(?:\\s|$)")
   (define target-indexes
     (for/list ([line (in-list lines)]
                [index (in-naturals)]

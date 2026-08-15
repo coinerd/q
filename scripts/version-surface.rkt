@@ -55,17 +55,17 @@
     [(not start) #f]
     [else
      (define after (substring content (cdar start)))
-     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+)" after))
+     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)" after))
      (and m (cadr m))]))
 
 ;; Parse `(define version "X.Y.Z")` from info.rkt content string.
 (define (parse-info-version-from-content content)
-  (define m (regexp-match #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
+  (define m (regexp-match #rx"\\(define version \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)\"" content))
   (and m (cadr m)))
 
 ;; Split "X.Y.Z" into list of numbers: (1 2 3)
 (define (parse-version-components s)
-  (map string->number (string-split s ".")))
+  (map (lambda (c) (string->number (regexp-replace #rx"-.*$" c ""))) (string-split s ".")))
 
 ;; ---------------------------------------------------------------------------
 ;; Comparison (pure)
