@@ -1,6 +1,6 @@
 # Safe Racket Editing Rules
 
-<!-- verified-against: 1.00.00 -->
+<!-- verified-against: 1.00.00-PRE1 -->
 
 This runbook is the canonical operating guide for editing Racket-family source
 files in q. It applies to `.rkt`, `.rktl`, and `.scrbl` files; q's edit-time
