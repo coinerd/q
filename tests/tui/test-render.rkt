@@ -601,18 +601,22 @@
       (check-true (string-contains? all-text "pondering deeply...")
                   "streaming thinking visible when no streaming text"))
 
-    (test-case "streaming-thinking hidden when streaming-text present"
+    (test-case "streaming-thinking retained when streaming-text present"
+      ;; BUG-0003 fix: the streaming-thinking pseudo-entry stays visible once
+      ;; content starts streaming, so reasoning does not vanish mid-turn; the
+      ;; persisted entry replaces it on completion.
       (define state
         (set-streaming-text
          (set-streaming-thinking
           (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t)
-          "hidden thoughts")
+          "in-flight thoughts")
          "visible response"))
       (define-values (lines _st) (render-transcript state 10 200))
       (define all-text (string-join (map styled-line->text lines) "\n"))
-      (check-false (string-contains? all-text "hidden thoughts")
-                   "streaming thinking hidden when streaming text present")
-      (check-true (string-contains? all-text "visible response") "streaming text visible instead"))
+      (check-true (string-contains? all-text "in-flight thoughts")
+                  "streaming thinking retained when streaming text present")
+      (check-true (string-contains? all-text "visible response")
+                  "streaming text visible alongside thinking"))
 
     (test-case "persisted thinking entry always visible"
       (define entry (transcript-entry 'thinking "persisted thought" 0 (hasheq) #f))
