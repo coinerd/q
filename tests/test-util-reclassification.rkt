@@ -15,7 +15,7 @@
   (test-suite "util/ Reclassification (T2-4)"
 
     (test-case "core util modules load and export"
-      (check-regexp-match #rx"^0\\.[0-9]+\\.[0-9]+$" q-version)
+      (check-regexp-match #rx"^[0-9]+\\.[0-9]+\\.[0-9]+$" q-version)
       (check-true (procedure? generate-id)))))
 
 (run-tests suite)

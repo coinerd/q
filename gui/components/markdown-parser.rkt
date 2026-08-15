@@ -168,22 +168,27 @@
           (define m (regexp-match #px"^(#{1,6})\\s+(.*)" line))
           (define level (and m (string-length (cadr m))))
           (set! result
-                (append result (list (hash 'type 'header 'text (caddr m) 'level (or level 1)))))]
+                (append result (list (hash 'type 'header 'text (caddr m) 'level (or level 1)))))
+           (walk (add1 i))]
          ;; List item detection: - or * followed by space
          [(regexp-match? #rx"^[-*] " line)
           (define m (regexp-match #rx"^[-*] (.*)" line))
-          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))]
+          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))
+           (walk (add1 i))]
          ;; Numbered list: 1. or 1)
          [(regexp-match? #rx"^[0-9]+[.)] " line)
           (define m (regexp-match #rx"^[0-9]+[.)] (.*)" line))
-          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))]
+          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))
+           (walk (add1 i))]
          ;; Inline code: `code`
          [(regexp-match? #rx"`[^`]+`" line)
-          (set! result (append result (list (hash 'type 'inline-code 'text line))))]
+          (set! result (append result (list (hash 'type 'inline-code 'text line))))
+           (walk (add1 i))]
          ;; Empty line
          [(string=? (string-trim line) "")
           (when (pair? result)
-            (set! result (append result (list (hash 'type 'blank 'text "")))))]
+            (set! result (append result (list (hash 'type 'blank 'text "")))))
+           (walk (add1 i))]
          ;; Plain text
          [else (set! result (append result (list (hash 'type 'text 'text line))))
                (walk (add1 i))])))

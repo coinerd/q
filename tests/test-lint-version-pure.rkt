@@ -46,17 +46,17 @@
  ;; --- check-readme-content ---
  (test-case "check-readme-content: matching badge and verify"
    (define check (lv-ref 'check-readme-content))
-   (define content "badge/version-1.0.0 and q version 1.0.0")
+   (define content "badge/version-1.0.0-blue and q version 1.0.0-blue")
    (check-equal? (check content "1.0.0") '()))
  (test-case "check-readme-content: mismatched badge"
    (define check (lv-ref 'check-readme-content))
-   (define content "badge/version-0.9.0 and q version 1.0.0")
+   (define content "badge/version-0.9.0-blue and q version 1.0.0-blue")
    (define errors (check content "1.0.0"))
    (check-equal? (length errors) 1)
    (check-equal? (first (first errors)) 'README.md))
  (test-case "check-readme-content: mismatched verify snippet"
    (define check (lv-ref 'check-readme-content))
-   (define content "badge/version-1.0.0 and q version 0.9.0")
+   (define content "badge/version-1.0.0-blue and q version 0.9.0-blue")
    (define errors (check content "1.0.0"))
    (check-equal? (length errors) 1))
  (test-case "check-readme-content: no version strings in content"

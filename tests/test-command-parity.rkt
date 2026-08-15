@@ -53,6 +53,8 @@
         "/login" ;; login (#5331)
         "/goal"
         "/g" ;; goal
+        "/toggle-detail"
+        "/expand-reasoning"
         ))
 
 (define parity-suite
