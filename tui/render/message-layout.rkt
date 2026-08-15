@@ -108,7 +108,7 @@
     [(tool-fail)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'name "tool"))
      (define sanitized (string-replace raw-text "\n" " "))
-     ;; v1.00.00-PRE1 W2 (BUG-0002): route the [FAIL] line through the same
+     ;; v1.00.00 W2 (BUG-0002): route the [FAIL] line through the same
      ;; wrap-styled-line algorithm the assistant path uses (see md-format-assistant),
      ;; so long failure payloads wrap instead of being clipped at terminal width.
      ;; Continuation lines keep the red style and carry no repeated prefix,

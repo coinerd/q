@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.00-PRE1 -->
+<!-- verified-against: 1.00.00 -->
 # Workflow Testing Guide
 
 This guide covers q's workflow-level integration tests that verify
@@ -122,6 +122,6 @@ Use relative paths from the test file:
 4. Use `(check-true ...)` for boolean assertions
 5. Keep tests independent — no shared mutable state between test-cases
 
-## Version 1.00.00-PRE1
+## Version 1.00.00
 
-This documentation reflects q 1.00.00-PRE1.
+This documentation reflects q 1.00.00.

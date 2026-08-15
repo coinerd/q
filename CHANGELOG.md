@@ -1,4 +1,4 @@
-## 1.00.00-PRE1
+## 1.00.00
 
 Released 2026-08-15.
 
@@ -29,9 +29,9 @@ Released 2026-08-15.
 
 ### Operational / Release
 
-- Version stamped `1.00.00-PRE1` in `util/version.rkt`, `info.rkt`, and the README badge/verify snippet.
-- `lint-release-notes` now accepts semver pre-release version headings (e.g. `## 1.00.00-PRE1`), matching the `v1.00.00-PRE1` tag flow.
-- Milestone v1.00.00-PRE1 closed; bug registry at Open 0 / Fixed 6.
+- Version stamped `1.00.00` in `util/version.rkt`, `info.rkt`, and the README badge/verify snippet.
+- `lint-release-notes` now accepts semver pre-release version headings (e.g. `## 1.00.00`), matching the `v1.00.00` tag flow.
+- Milestone v1.00.00 closed; bug registry at Open 0 / Fixed 6.
 
 ## 0.99.99
 

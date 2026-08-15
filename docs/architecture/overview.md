@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.00-PRE1 -->
+<!-- verified-against: 1.00.00 -->
 # Architecture Overview
 
 > **Navigation**: [Layer Diagram](#layer-diagram) · [Module Ownership](#module-ownership-map) · [Key Data Flows](#key-data-flows) · [Key Design Decisions](#key-design-decisions) · [Event System](#event-system) · [Dependency Policy](#dependency-policy) · [TUI Stack](#native-tui-stack) · [Typed Racket](#typed-racket-modules) · [Contract Metrics](#contract-metrics)
