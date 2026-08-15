@@ -20,9 +20,11 @@
       (check-false (key-spec-ctrl ks))
       (check-false (key-spec-shift ks)))
 
-    (test-case "keycode->key-spec-from-msg: ctrl-x"
+    (test-case "keycode->key-spec-from-msg: ctrl-z"
       (define ks (keycode->key-spec-from-msg 'ctrl-z))
-      (check-equal? (key-spec-name ks) 'z)
+      ;; W2: single-letter ctrl suffixes normalize to chars so decoded
+      ;; 'ctrl-z matches default keymap entries like (key-spec #\z #t #f #f).
+      (check-equal? (key-spec-name ks) #\z)
       (check-true (key-spec-ctrl ks))
       (check-false (key-spec-shift ks)))
 
