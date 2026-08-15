@@ -38,7 +38,7 @@
 ;; Parsing
 ;; ---------------------------------------------------------------------------
 
-(define VERSION-PAT #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"")
+(define VERSION-PAT #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?)\"")
 
 ;; Guard comment that protects the Status section from accidental replacement.
 (define STATUS-GUARD
@@ -68,11 +68,13 @@
     (displayln
      "  Add: <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->"))
   (define step1
-    (regexp-replace #rx"badge/version-[0-9]+\\.[0-9]+\\.[0-9]+-blue"
+    (regexp-replace #rx"badge/version-[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?-blue"
                     readme-content
                     (format "badge/version-~a-blue" version)))
   (define step2
-    (regexp-replace #rx"q version [0-9]+\\.[0-9]+\\.[0-9]+" step1 (format "q version ~a" version)))
+    (regexp-replace #rx"q version [0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?"
+                    step1
+                    (format "q version ~a" version)))
   step2)
 
 ;; ---------------------------------------------------------------------------
@@ -134,7 +136,7 @@
         [in-code-block line]
         [else
          (define new-line
-           (regexp-replace* #rx"[0-9]+\\.[0-9]+\\.[0-9]+"
+           (regexp-replace* #rx"[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z-])?"
                             line
                             (lambda (v)
                               (if (equal? v version)

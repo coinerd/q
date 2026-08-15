@@ -317,3 +317,30 @@
 ;; ===========================================================================
 
 (printf "\nAll lint-release-notes tests completed.\n")
+
+;; ===========================================================================
+;; Test: pre-release version headings (e.g. 1.00.00-PRE1) are supported
+;; ===========================================================================
+
+(test-case "test-lint-release-notes: pre-release version heading validates"
+  (define prerelease-entry
+    (changelog "## 1.00.00-PRE1"
+               ""
+               "### Bug Fixes"
+               "- fixed thing"
+               ""
+               "### Breaking / Behavior Changes"
+               ""
+               "### Migration Notes"
+               ""
+               "### Testing"
+               "- tests"
+               ""
+               "### Operational / Release"
+               "- stamp"))
+  (check-equal? (validate-release-notes (extract-version-block prerelease-entry "1.00.00-PRE1"))
+                '()
+                "pre-release version heading should validate cleanly")
+  ;; The pre-release heading must not be captured as its bare base version.
+  (check-false (extract-version-block prerelease-entry "1.00.00")
+               "base version alone must not match the pre-release heading"))

@@ -54,7 +54,7 @@
                     (jsexpr->hash-deep (hash-ref h 'meta (hash)))
                     (next-scrollback-id)))
 
-;; ── Lifecycle audit (BUG-0001, v1.00.00-PRE1) ──
+;; ── Lifecycle audit (BUG-0001, v1.00.00) ──
 ;;
 ;; Contract: the scrollback path is SESSION-SCOPED. Callers pass
 ;; <base>/<session-id>/scrollback.jsonl (see tui-init.rkt
