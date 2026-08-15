@@ -60,7 +60,7 @@
               (raise-user-error 'github-pr "invalid merge method: ~a" method))
             (define commit-title (hash-ref args 'commit_title #f))
             (apply gh-success-json
-                   (append (list "pr" "merge" (~a num) (string-append "--" method) "--json" "url")
+                   (append (list "pr" "merge" (~a num) (string-append "--" method))
                            (if commit-title
                                (list "--subject" commit-title)
                                '())))])]
