@@ -39,7 +39,7 @@
                        [handle-planning-write (->* (hash?) (any/c) any/c)]
                        [resolve-project-root (-> path-string? path?)]
                        [planning-artifact-path (-> path-string? string? (or/c path? #f))]
-                       [get-base-dir (->* (hash?) ((or/c exec-context? #f)) path?)]
+                       [get-base-dir (->* (hash?) ((or/c exec-context? extension-ctx? #f)) path?)]
                        [read-planning-artifact (-> path-string? string? (or/c hash? string? #f))]
                        [write-planning-artifact!
                         (-> path-string? string? (or/c hash? string?) (or/c path? #f))]))
@@ -82,9 +82,18 @@
 ;; ============================================================
 
 (define (get-base-dir args [exec-ctx #f])
+  ;; D7 (#9356): the tool scheduler passes an exec-context (tools/exec-context.rkt)
+  ;; whose working-directory accessor is exec-context-working-directory — NOT the
+  ;; extension-ctx accessor ctx-cwd (contract requires extension-ctx?). Dispatch on
+  ;; the actual context type so planning-read/planning-write work in campaign
+  ;; executors where current-pinned-dir is #f (reset-all-gsd-state!).
   (or (hash-ref args 'base_dir #f)
       (current-pinned-dir)
-      (and exec-ctx (ctx-cwd exec-ctx))
+      (and exec-ctx
+           (cond
+             [(exec-context? exec-ctx) (exec-context-working-directory exec-ctx)]
+             [(extension-ctx? exec-ctx) (ctx-cwd exec-ctx)]
+             [else #f]))
       (current-directory)))
 
 (define (read-planning-artifact base-dir name)
