@@ -1,3 +1,25 @@
+## 1.00.01
+
+Released 2026-08-16.
+
+> Release-readiness milestone: the agent release/merge pipeline is automated end-to-end — fail-fast preflight, readiness gating, drift-proof test expectations, planning concurrency guards, an agent merge path, auto-retry with idempotent resume, and one-command release close-out. Eight registry bugs closed (BUG-0007 through BUG-0014).
+
+### Bug Fixes
+
+- The release workflow fails fast on cheap checks (tag/version/manifest) before the expensive full suite; malformed inputs no longer burn a full test run (BUG-0007).
+- A strict release-readiness gate (tagged PRs, version consistency, manifest/CHANGELOG validation) runs in CI before tag publish, so tags cannot be cut on commits that predate required fixes (BUG-0008).
+- Version/output-pinned test expectations are generated from the landed artifact rather than hand-edited, eliminating release-blocking RED when changes land in separate PRs (BUG-0009).
+- Protected `main` has a standing automated merge path for agent-driven fixes (`gh-wave-start` → `gh-wave-finish` → `gh-pr` squash) instead of improvised per-wave procedures (BUG-0010).
+- Transient turn/LLM/tool failures (network 5xx, timeouts, SSE stalls) are auto-retried with bounded exponential backoff; per-wave durable checkpoints in `.planning/STATE.md` make resumed runs skip completed steps, and `gh-pr create` / `gh-wave-finish` are idempotent — no operator double-checking after an interruption (BUG-0011).
+- Wave plans declare applicability preconditions; the executor checks them against live STATE before running actions, so stale plans fail fast instead of misapplying (BUG-0012).
+- Planning artifacts have an explicit concurrency protocol; registry counts and INDEX totals are derived consistently under concurrent edits (BUG-0013).
+- Release close-out runs as one command (`racket scripts/release-closeout.rkt <tag>`) producing a full audit trail: notes, tag/workflow evidence, registry archive, and milestone close — no manual multi-system pagination (BUG-0014).
+
+### Breaking / Behavior Changes
+
+- Release tagging now requires the strict readiness gate to pass (previous behavior: tag-first, verify-later).
+- Scratch bug-extraction files (`bugs.txt`, `bug_output.txt`) are removed; `.planning/bugs/` is the durable source.
+
 ## 1.00.00
 
 Released 2026-08-15.
