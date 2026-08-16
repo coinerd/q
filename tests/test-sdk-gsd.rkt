@@ -16,6 +16,7 @@
 
 (require rackunit
          racket/file
+         racket/system
          "../interfaces/sdk.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
@@ -23,10 +24,12 @@
          "../util/event/event-bus.rkt"
          "helpers/mock-provider.rkt"
          "helpers/temp-fs.rkt"
+         (only-in "../util/event/event.rkt" event-session-id)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   campaign-result-status
                   campaign-result-completed-waves
-                  campaign-result-message))
+                  campaign-result-message)
+         (only-in "../agent/verification/verifier-core.rkt" current-verifier-enabled))
 
 ;; ============================================================
 ;; Helpers
@@ -34,6 +37,12 @@
 
 (define (make-gsd-runtime #:with-ext-reg? [with-ext? #f] #:with-session? [with-sess? #f])
   (define tmp (make-temporary-file "/tmp/sdk-gsd-test-~a" 'directory))
+  (define git (find-executable-path "git"))
+  (when git
+    (parameterize ([current-output-port (open-output-nowhere)]
+                   [current-error-port (open-output-nowhere)])
+      (unless (zero? (system*/exit-code git "-C" tmp "init" "--quiet"))
+        (error 'make-gsd-runtime "could not initialize test repository"))))
   (define prov (make-simple-mock-provider "done" "done" "done"))
   (define ext-reg (and with-ext? (make-extension-registry)))
   (when with-ext?
@@ -124,10 +133,16 @@
   (check-not-equal? result 'no-active-session)
   (cleanup-gsd! tmp))
 
-(test-case "q:go reuses one fresh SDK campaign session across waves"
+(test-case "q:go uses a fresh SDK session and stops without delivery evidence"
   (reset-all-gsd-state!)
   (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t #:with-session? #t))
   (define initiating-id (hash-ref (session-info rt) 'session-id))
+  (define observed-session-ids (box '()))
+  (subscribe-events! rt
+                     (lambda (evt)
+                       (define sid (event-session-id evt))
+                       (when (and sid (not (equal? sid initiating-id)))
+                         (set-box! observed-session-ids (cons sid (unbox observed-session-ids))))))
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (call-with-output-file
@@ -139,12 +154,23 @@
               out))
    #:exists 'truncate)
   (set-pinned-planning-dir! tmp)
-  (define-values (rt2 result) (q:go rt))
+  (define-values (rt2 result)
+    (parameterize ([current-verifier-enabled #f])
+      (q:go rt)))
   (check-eq? (campaign-result-status result)
-             'campaign-complete
+             'wave-failed
              (format "~a completed=~a"
                      (campaign-result-message result)
                      (campaign-result-completed-waves result)))
-  (check-equal? (campaign-result-completed-waves result) '(0 1))
-  (check-not-equal? (hash-ref (session-info rt2) 'session-id) initiating-id)
+  (check-equal? (campaign-result-completed-waves result) '())
+  (check-equal? (hash-ref (session-info rt2) 'session-id)
+                initiating-id
+                "q:go restores SDK ownership to the initiating session")
+  (check-equal? (gsd-mode)
+                'executing
+                "advisory rejection must not publish an authoritative idle/done transition")
+  (check >=
+         (length (remove-duplicates (unbox observed-session-ids)))
+         1
+         "the attempted wave should publish from a fresh session")
   (cleanup-gsd! tmp))

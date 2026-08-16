@@ -5,18 +5,40 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/class
          racket/list
          "../gui/state-sync.rkt"
          "../gui/gui-types.rkt"
+         "../ui-core/conversation-artifact.rkt"
+         "../ui-core/disclosure-state.rkt"
+         "../ui-core/theme-protocol.rkt"
          "../util/event/event.rkt")
 
 ;; Helper: create a minimal event
-(define (mk-event tag payload)
-  (make-event tag (current-inexact-milliseconds) #f #f payload))
+(define (mk-event tag payload [session-id "gui-session"] [turn-id "gui-turn"])
+  (make-event tag (current-inexact-milliseconds) session-id turn-id payload))
 
 ;; Helper: fresh state-box
 (define (fresh-box)
   (box (make-gui-state)))
+
+(define click-text%
+  (class object%
+    (super-new)
+    (define content "")
+    (define clickback #f)
+    (define/public (insert str [pos #f])
+      (define at (or pos (string-length content)))
+      (set! content (string-append (substring content 0 at) str (substring content at))))
+    (define/public (delete start end)
+      (set! content (string-append (substring content 0 start) (substring content end))))
+    (define/public (last-position) (string-length content))
+    (define/public (lock value) (void))
+    (define/public (change-style delta [start 0] [end 0]) (void))
+    (define/public (get-text start end) (substring content start end))
+    (define/public (set-clickback start end callback [delta #f] [call-on-down? #f])
+      (set! clickback callback))
+    (define/public (click!) (clickback this 0 0))))
 
 (define test-user-input
   (test-suite "user.input"
@@ -67,6 +89,20 @@
 
 (define test-stream-thinking
   (test-suite "model.stream.thinking"
+    (test-case "active identity rejects same-turn cross-session stream contamination"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "model.stream.thinking" (hash 'delta "A") "session-a" "same-turn"))
+      (sub (mk-event "model.stream.thinking" (hash 'delta "B") "session-b" "same-turn"))
+      (sub (mk-event "model.stream.completed" (hash) "session-a" "same-turn"))
+      (sub (mk-event "model.stream.completed" (hash) "session-b" "same-turn"))
+      (define thinking
+        (filter (lambda (m) (eq? (gui-message-kind m) 'thinking)) (gui-state-messages (unbox sb))))
+      (check-equal? (length thinking) 1)
+      (check-equal? (conversation-artifact-body (hash-ref (gui-message-meta (car thinking))
+                                                          'artifact))
+                    "A"))
+
     (test-case "sets processing status when no assistant msg yet"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
@@ -96,7 +132,29 @@
       (define notify-box (box (lambda () (set! count (+ count 1)))))
       (define sub (make-gui-event-subscriber sb notify-box))
       (sub (mk-event "model.stream.completed" (hash)))
-      (check-equal? count 1))))
+      (check-equal? count 1))
+
+    (test-case "notify callback runs after the subscriber releases the GUI lock"
+      (define callback-owned-lock? #f)
+      (define sb (fresh-box))
+      (define notify-box
+        (box (lambda ()
+               (set! callback-owned-lock? (semaphore-try-wait? gui-state-lock))
+               (when callback-owned-lock?
+                 (semaphore-post gui-state-lock)))))
+      ((make-gui-event-subscriber sb notify-box) (mk-event "model.stream.completed" (hash)))
+      (check-true callback-owned-lock?))
+
+    (test-case "stale terminal cannot idle an unrelated active turn"
+      (define sb (fresh-box))
+      (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "turn.started" (hash) "session-a" "active-turn"))
+      (sub (mk-event "model.stream.thinking" (hash 'delta "working") "session-a" "active-turn"))
+      (sub (mk-event "model.stream.completed" (hash) "session-a" "stale-turn"))
+      (sub (mk-event "assistant.message.completed" (hash 'content "old") "session-a" "stale-turn"))
+      (check-equal? (gui-state-status (unbox sb)) 'processing)
+      (check-equal? (gui-state-active-session-id (unbox sb)) "session-a")
+      (check-equal? (gui-state-active-turn-id (unbox sb)) "active-turn"))))
 
 (define test-turn-started
   (test-suite "turn.started"
@@ -137,12 +195,14 @@
     (test-case "sets error status for 'error' tag"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "turn.started" (hash)))
       (sub (mk-event "provider.error" (hash 'msg "fail")))
       (check-equal? (gui-state-status (unbox sb)) 'error))
 
     (test-case "sets error status for 'model.error' tag"
       (define sb (fresh-box))
       (define sub (make-gui-event-subscriber sb))
+      (sub (mk-event "turn.started" (hash)))
       (sub (mk-event "model.error" (hash)))
       (check-equal? (gui-state-status (unbox sb)) 'error))))
 
@@ -187,7 +247,57 @@
       (define sub (make-gui-event-subscriber sb #f))
       ;; should not crash
       (sub (mk-event "user.input" (hash 'text "x")))
-      (check-equal? (length (gui-state-messages (unbox sb))) 1))))
+      (check-equal? (length (gui-state-messages (unbox sb))) 1))
+
+    (test-case "notification pending state is invocation-local under concurrency"
+      (define count-lock (make-semaphore 1))
+      (define count 0)
+      (define sb (fresh-box))
+      (define notify-box
+        (box (lambda () (call-with-semaphore count-lock (lambda () (set! count (add1 count)))))))
+      (define sub (make-gui-event-subscriber sb notify-box))
+      (define workers
+        (for/list ([i (in-range 100)])
+          (thread (lambda ()
+                    (sub (mk-event (if (even? i) "user.input" "unknown")
+                                   (hash 'text (number->string i))))))))
+      (for-each thread-wait workers)
+      (check-equal? count 50))
+
+    (test-case "disclosure clicks and events mutate GUI state atomically"
+      (define artifact
+        (make-conversation-artifact #:id "click-artifact"
+                                    #:session-id "gui-session"
+                                    #:turn-id "gui-turn"
+                                    #:kind 'thinking
+                                    #:body "reason"
+                                    #:lifecycle 'completed))
+      (define sb (box (gui-state-upsert-artifact (make-gui-state) artifact)))
+      (define text (new click-text%))
+      (define queue-enabled? #t)
+      (define notify
+        (make-notify-gui-callback sb
+                                  (box '())
+                                  (box "")
+                                  text
+                                  (default-theme)
+                                  unbox
+                                  set-box!
+                                  (lambda (callback)
+                                    (when queue-enabled?
+                                      (callback)))))
+      (notify)
+      (set! queue-enabled? #f)
+      (define sub (make-gui-event-subscriber sb))
+      (define workers
+        (append (for/list ([i (in-range 100)])
+                  (thread (lambda () (send text click!))))
+                (for/list ([i (in-range 100)])
+                  (thread (lambda ()
+                            (sub (mk-event "user.input" (hash 'text (number->string i)))))))))
+      (for-each thread-wait workers)
+      (check-equal? (length (gui-state-messages (unbox sb))) 101)
+      (check-false (disclosure-expanded? (gui-state-disclosure (unbox sb)) "click-artifact")))))
 
 (define test-tool-call-with-args
   (test-suite "tool.call.started with args"

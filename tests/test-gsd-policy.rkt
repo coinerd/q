@@ -14,6 +14,20 @@
          "../extensions/gsd/state-machine.rkt")
 
 ;; ============================================================
+;; Explicit campaign budgets
+;; ============================================================
+
+(test-case "GSD campaign budgets are finite and positive"
+  (check-true (positive? (current-gsd-wave-timeout-seconds)))
+  (check-true (exact-positive-integer? (current-gsd-wave-max-iterations)))
+  (check-true (exact-positive-integer? (current-gsd-max-consecutive-tool-calls))))
+
+(test-case "GSD session iteration budget caps a larger configured budget"
+  (parameterize ([current-gsd-wave-max-iterations 12])
+    (check-equal? (gsd-session-iteration-budget 100) 12)
+    (check-equal? (gsd-session-iteration-budget 8) 8)))
+
+;; ============================================================
 ;; blocked-tools-for
 ;; ============================================================
 
@@ -36,6 +50,10 @@
 ;; ============================================================
 ;; gsd-decide-action: tool-call
 ;; ============================================================
+
+(test-case "policy fails closed for unknown actions and malformed tool calls"
+  (check-true (policy-blocked? (gsd-decide-action (hasheq 'mode 'executing) 'unknown-action)))
+  (check-true (policy-blocked? (gsd-decide-action (hasheq 'mode 'executing 'tool "") 'tool-call))))
 
 (test-case "tool-call: read allowed in all modes"
   (for ([mode '(idle exploring plan-written executing verifying)])

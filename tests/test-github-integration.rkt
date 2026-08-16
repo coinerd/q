@@ -22,6 +22,7 @@
          racket/string
          json
          "../extensions/github-integration.rkt"
+         "../extensions/github/tool-schemas.rkt"
          "../extensions/context.rkt"
          "../extensions/dynamic-tools.rkt"
          "../extensions/api.rkt"
@@ -32,6 +33,11 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+(define (result-text result)
+  (string-join (for/list ([item (in-list (tool-result-content result))]
+                          #:when (hash? item))
+                 (hash-ref item 'text ""))))
 
 (define (make-test-ctx #:tool-registry [reg #f])
   (make-extension-ctx #:session-id "test-gh"
@@ -153,7 +159,15 @@
   (register-github-tools ctx (hasheq))
   ;; Check all 6 tools are registered
   (for ([name '("gh-issue" "gh-pr" "gh-milestone" "gh-board" "gh-wave-start" "gh-wave-finish")])
-    (check-not-false (lookup-tool reg name) (format "Tool ~a should be registered" name))))
+    (check-not-false (lookup-tool reg name) (format "Tool ~a should be registered" name)))
+  (let ([finish-tool (lookup-tool reg "gh-wave-finish")])
+    (check-true (string-contains? (tool-description finish-tool) "always fails before mutation"))
+    (check-true (string-contains? (tool-description finish-tool)
+                                  "external authenticated PR workflow"))
+    (check-true (string-contains? (tool-prompt-guidelines finish-tool)
+                                  "always fails before mutation"))
+    (check-true (string-contains? (tool-prompt-guidelines finish-tool)
+                                  "external authenticated PR workflow"))))
 
 ;; ============================================================
 ;; Test: gh-issue handler with mock gh (create)
@@ -367,24 +381,56 @@
     (check-true (tool-result-is-error? result) "wave-start without gh is error")))
 
 ;; ============================================================
-;; Test: gh-wave-finish without issue_number returns error
+;; Tests: gh-wave-finish schema parity and validation
 ;; ============================================================
 
-(let ()
+(test-case "gh-wave-finish schema has exactly the quarantined handler contract"
+  (define properties (hash-ref gh-wave-finish-schema 'properties))
+  (check-equal? (sort (hash-keys properties) symbol<?) '(commit_msg files issue_number))
+  (check-equal? (hash-ref gh-wave-finish-schema 'required) '("issue_number" "files" "commit_msg"))
+  (check-false (hash-ref gh-wave-finish-schema 'additionalProperties)))
+
+(test-case "gh-wave-finish rejects unknown properties before quarantine"
+  (define result
+    (handle-gh-wave-finish
+     (hasheq 'issue_number 42 'files '("test.rkt") 'commit_msg "test" 'branch "unsafe")))
+  (check-true (tool-result-is-error? result))
+  (check-true (string-contains? (result-text result) "unknown property")))
+
+(test-case "gh-wave-finish rejects issue numbers that do not match its positive-integer schema"
   (parameterize ([gh-binary-path 'disabled])
-    (define result (handle-gh-wave-finish (hasheq 'files (list "test.rkt") 'commit_msg "test")))
-    (check-pred tool-result? result "wave-finish without issue returns tool-result")
-    (check-true (tool-result-is-error? result) "wave-finish without issue is error")))
+    (for ([issue-number (in-list '(0 "42"))])
+      (define result
+        (handle-gh-wave-finish
+         (hasheq 'issue_number issue-number 'files '("test.rkt") 'commit_msg "test")))
+      (check-true (tool-result-is-error? result))
+      (check-true (string-contains? (result-text result) "issue_number")))))
 
-;; ============================================================
-;; Test: gh-wave-finish without files returns error
-;; ============================================================
-
-(let ()
+(test-case "gh-wave-finish requires a non-empty safe relative files allowlist"
   (parameterize ([gh-binary-path 'disabled])
-    (define result (handle-gh-wave-finish (hasheq 'issue_number 42 'commit_msg "test")))
-    (check-pred tool-result? result "wave-finish without files returns tool-result")
-    (check-true (tool-result-is-error? result) "wave-finish without files is error")))
+    (define tmp-root (make-temporary-file "gh-finish-root-~a" 'directory))
+    (define abs-path (path->string (build-path tmp-root "absolute.rkt")))
+    (define escape-path (path->string (build-path tmp-root "escape.rkt")))
+    (dynamic-wind
+     void
+     (lambda ()
+       (for ([files (in-list (list '() (list abs-path) (list escape-path) '("")))])
+         (define result
+           (handle-gh-wave-finish (hasheq 'issue_number 42 'files files 'commit_msg "test")))
+         (check-true (tool-result-is-error? result))
+         (check-true (string-contains? (result-text result) "files"))))
+     (lambda () (delete-directory/files tmp-root #:must-exist? #f)))))
+
+(test-case "gh-wave-finish requires a non-empty canonical commit_msg"
+  (parameterize ([gh-binary-path 'disabled])
+    (for ([message (in-list (list #f "" "   "))])
+      (define args
+        (if message
+            (hasheq 'issue_number 42 'files '("test.rkt") 'commit_msg message)
+            (hasheq 'issue_number 42 'files '("test.rkt"))))
+      (define result (handle-gh-wave-finish args))
+      (check-true (tool-result-is-error? result))
+      (check-true (string-contains? (result-text result) "commit_msg")))))
 
 ;; ============================================================
 ;; Test: Extension definition

@@ -15,6 +15,8 @@
          "tui/workflow-harness.rkt"
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
+         "../ui-core/conversation-artifact.rkt"
+         "../ui-core/feature-flags.rkt"
          "../util/message/protocol-types.rkt"
          racket/file)
 
@@ -142,6 +144,81 @@
       (define jsexpr (transcript-entry->jsexpr original))
       (define restored (jsexpr->transcript-entry jsexpr))
       (check-equal? (hash-ref (transcript-entry-meta restored) 'a) 1)
-      (check-equal? (hash-ref (hash-ref (transcript-entry-meta restored) 'nested) 'b) 2))))
+      (check-equal? (hash-ref (hash-ref (transcript-entry-meta restored) 'nested) 'b) 2))
+
+    (test-case "SR11: canonical artifact is serialized only at scrollback boundary"
+      (reset-scrollback-id-counter!)
+      (define body (make-string 350 #\R))
+      (define artifact
+        (make-conversation-artifact #:id "session-a:turn-a:thinking"
+                                    #:session-id "session-a"
+                                    #:turn-id "turn-a"
+                                    #:kind 'thinking
+                                    #:body body
+                                    #:lifecycle 'retained
+                                    #:persistence 'scrollback))
+      (define original (transcript-entry 'thinking body 500 (hasheq 'artifact artifact) 10))
+      (check-true (conversation-artifact? (hash-ref (transcript-entry-meta original) 'artifact)))
+      (define encoded (transcript-entry->jsexpr original))
+      (check-true (hash? (hash-ref (hash-ref encoded 'meta) 'artifact)))
+      (define restored (jsexpr->transcript-entry encoded))
+      (define restored-artifact (hash-ref (transcript-entry-meta restored) 'artifact))
+      (check-true (conversation-artifact? restored-artifact))
+      (check-equal? (conversation-artifact-body restored-artifact) body)
+      (check-equal? (transcript-entry-text restored) body))
+
+    (test-case "SR12: oversized reasoning is byte bounded when persisted"
+      (parameterize ([ui-reasoning-artifacts-max-bytes 17])
+        (define body (make-string 20 #\λ))
+        (define artifact
+          (make-conversation-artifact #:id "large"
+                                      #:session-id "session-a"
+                                      #:turn-id "turn-a"
+                                      #:kind 'thinking
+                                      #:body body
+                                      #:lifecycle 'retained
+                                      #:persistence 'scrollback))
+        (define encoded
+          (transcript-entry->jsexpr
+           (transcript-entry 'thinking body 0 (hasheq 'artifact artifact) 1)))
+        (check-true (<= (bytes-length (string->bytes/utf-8 (hash-ref encoded 'text))) 17))
+        (check-true (<= (bytes-length (string->bytes/utf-8
+                                       (hash-ref (hash-ref (hash-ref encoded 'meta) 'artifact)
+                                                 'body)))
+                        17))))
+
+    (test-case "SR13: newest-first scrollback retains the newest 500 entries"
+      (define tmp-dir (make-temporary-file "scrollback-newest-~a" 'directory))
+      (define tmp-path (build-path tmp-dir "scrollback.jsonl"))
+      (define entries
+        (for/list ([i (in-range 500 -1 -1)])
+          (transcript-entry 'assistant (number->string i) i (hasheq) i)))
+      (save-scrollback entries tmp-path)
+      (define loaded (load-scrollback tmp-path))
+      (check-equal? (length loaded) 500)
+      (check-equal? (transcript-entry-text (first loaded)) "500")
+      (check-equal? (transcript-entry-text (last loaded)) "1")
+      (delete-directory/files tmp-dir))
+
+    (test-case "SR14: legacy thinking without artifact metadata is byte bounded"
+      (parameterize ([ui-reasoning-artifacts-max-bytes 17])
+        (define encoded
+          (transcript-entry->jsexpr (transcript-entry 'thinking (make-string 20 #\λ) 0 (hasheq) 1)))
+        (check-true (<= (bytes-length (string->bytes/utf-8 (hash-ref encoded 'text))) 17))))
+
+    (test-case "SR15: malformed artifact schema is rejected at deserialization boundary"
+      (check-exn
+       exn:fail:contract?
+       (lambda ()
+         (jsexpr->transcript-entry
+          (hasheq 'kind
+                  "thinking"
+                  'text
+                  "bad"
+                  'timestamp
+                  0
+                  'meta
+                  (hasheq 'artifact
+                          (hasheq 'schema "conversation-artifact" 'schema-version 999)))))))))
 
 (run-tests scrollback-roundtrip-tests)

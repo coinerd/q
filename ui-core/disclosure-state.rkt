@@ -45,23 +45,29 @@
   (set-member? (disclosure-state-expanded-set state) id))
 
 ;; Default target selection order:
-;; 1. Explicit focused artifact id (if provided and not #f).
-;; 2. Currently active/streaming reasoning artifact id.
-;;    Use `active-streaming-artifact-id` as the stable synthetic id for the
-;;    in-flight reasoning stream — BOTH the renderer (synthetic transcript
-;;    entry) and the key dispatcher MUST use this same sentinel so toggle
-;;    state matches the rendered entry.
-;; 3. Most recently completed reasoning artifact id from the candidate list.
-;;    Candidate ids are given oldest-first (chronological); the LAST valid
-;;    (non-#f, non-empty) candidate is the most recently completed.
+;; 1. Explicit focused artifact id, but only when it resolves to one of the
+;;    canonical artifact ids supplied by the caller. Component focus ids must
+;;    never leak into disclosure state.
+;; 2. Currently active/streaming canonical reasoning artifact id.
+;; 3. Most recently completed canonical reasoning artifact id from the
+;;    candidate list (oldest-first).
 ;; Returns #f if no candidate matches.
+;;
+;; Kept as a compatibility export for older extensions. Core renderers no
+;; longer use this synthetic value; live reasoning uses its canonical id.
 (define active-streaming-artifact-id 'streaming-thinking)
 
+(define (canonical-disclosure-id? id)
+  (and (string? id) (not (string=? id ""))))
+
 (define (resolve-toggle-target state [focused-id #f] [active-reasoning-id #f] [candidate-ids '()])
-  (or (and focused-id (not (equal? focused-id "")) focused-id)
-      active-reasoning-id
-      (and (pair? candidate-ids)
-           (findf (lambda (id) (and id (not (equal? id "")))) (reverse candidate-ids)))
+  (define candidates (filter canonical-disclosure-id? candidate-ids))
+  (define active (and (canonical-disclosure-id? active-reasoning-id) active-reasoning-id))
+  (or (and (canonical-disclosure-id? focused-id)
+           (or (equal? focused-id active) (member focused-id candidates))
+           focused-id)
+      active
+      (and (pair? candidates) (last candidates))
       #f))
 
 ;; Build a collapsed preview line for a full body.
@@ -73,10 +79,20 @@
   (define show (min total preview-lines))
   (define hidden (- total show))
   (define first-line (first-non-empty-line body))
+  (define preview-line
+    (and first-line
+         (let ([trimmed (string-trim first-line)])
+           (if (> (string-length trimmed) 120)
+               (string-append (substring trimmed 0 117) "...")
+               trimmed))))
   (cond
-    [(and first-line (> hidden 0))
-     (format "~a · ~a lines · Show ~a more · Ctrl+O to expand" (string-trim first-line) total hidden)]
-    [first-line (format "~a · ~a line~a" (string-trim first-line) total (if (= total 1) "" "s"))]
+    [(and preview-line (> hidden 0))
+     (format "~a · ~a lines · Show ~a more · Ctrl+O to expand" preview-line total hidden)]
+    [preview-line
+     (format "~a · ~a line~a · Show reasoning · Ctrl+O to expand"
+             preview-line
+             total
+             (if (= total 1) "" "s"))]
     [else (format "Thinking · ~a line~a · Ctrl+O to expand" total (if (= total 1) "" "s"))]))
 
 (define (first-non-empty-line body)

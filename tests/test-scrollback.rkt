@@ -63,8 +63,9 @@
   (define loaded (load-scrollback tmp))
   ;; Should be trimmed to 500 (scrollback-max-entries)
   (check-true (<= (length loaded) 500))
-  ;; First entry should be entry-100 (entries 100-599 kept)
-  (check-equal? (transcript-entry-text (car loaded)) "entry-100")
+  ;; Transcript storage is newest-first, so retain the first 500 entries.
+  (check-equal? (transcript-entry-text (car loaded)) "entry-0")
+  (check-equal? (transcript-entry-text (last loaded)) "entry-499")
   (delete-file tmp))
 
 (test-case "save-scrollback handles empty list"

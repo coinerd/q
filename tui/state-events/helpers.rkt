@@ -19,6 +19,7 @@
 
 ;; Dedup window size — check last N entries for duplicate tool events
 (define dedup-window-size 10)
+(define transcript-max-entries 500)
 
 ;; Local helper (avoids circular dependency with state-ui)
 (define (ui-model-label state)
@@ -37,7 +38,10 @@
 
 (define (append-entry st entry)
   (define-values (id-entry st1) (assign-entry-id entry st))
-  (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
+  (define entries (cons id-entry (ui-state-transcript st1)))
+  (struct-copy ui-state
+               st1
+               [transcript (take entries (min transcript-max-entries (length entries)))]))
 
 ;; Dedup guard: prevent duplicate tool-start entries
 (define (recent-tool-start? st name)

@@ -120,7 +120,7 @@
     [(thinking)
      ;; v0.99.96 W2: Honor disclosure state — collapsed shows preview, expanded shows full body.
      ;; Pure: uses only disclosure-state.rkt helpers, no terminal/render side effects.
-     (define entry-id (transcript-entry-id entry))
+     (define artifact-id (hash-ref (transcript-entry-meta entry) 'artifact-id #f))
      (define base-style '(dim italic cyan))
      (cond
        ;; No disclosure state available (e.g. legacy callers): fall back to 3-line truncation.
@@ -137,7 +137,7 @@
                                                              base-style))))
                     '()))]
        ;; Expanded: render full body as normal scrollable transcript content (no modal).
-       [(and entry-id (disclosure-expanded? disclosure entry-id))
+       [(and artifact-id (disclosure-expanded? disclosure artifact-id))
         (for/list ([l (in-list (string-split raw-text "\n"))])
           (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))]
        ;; Collapsed: show a single useful preview line.
@@ -344,8 +344,7 @@
              [plain-run (quote ())]
              [out (quote ())])
     (cond
-      [(null? remaining)
-       (append out (render-plain-md-run (reverse plain-run) width))]
+      [(null? remaining) (append out (render-plain-md-run (reverse plain-run) width))]
       [(eq? (md-token-type (car remaining)) 'table)
        (loop (cdr remaining)
              (quote ())
@@ -394,7 +393,9 @@
     [else
      (define i (index-of widths (apply max widths)))
      (define reduced (list-set widths i (max 1 (sub1 (list-ref widths i)))))
-     (if (equal? reduced widths) widths (clamp-table-widths reduced avail))]))
+     (if (equal? reduced widths)
+         widths
+         (clamp-table-widths reduced avail))]))
 
 ;; Width-aware GFM table -> styled-lines. Column widths come from cell content,
 ;; clamped so the whole table (cells + two-space gutters) fits `width`;
@@ -419,9 +420,13 @@
   ;; Emit one visual line per wrapped row line: padded cells + gutters.
   (define (emit-row cells style)
     (define cell-lines
-      (for/list ([c (in-list cells)] [w (in-list widths)])
+      (for/list ([c (in-list cells)]
+                 [w (in-list widths)])
         (cell-text-lines c w)))
-    (define row-height (if (null? cell-lines) 1 (apply max (map length cell-lines))))
+    (define row-height
+      (if (null? cell-lines)
+          1
+          (apply max (map length cell-lines))))
     (for/list ([idx (in-range row-height)])
       (define segs
         (for/fold ([acc (quote ())])
@@ -429,15 +434,28 @@
                    [w (in-list widths)]
                    [a (in-list alignments)]
                    [i (in-naturals)])
-          (define txt (if (< idx (length ls)) (list-ref ls idx) ""))
-          (define gutter (if (zero? i) (quote ()) (list (styled-segment "  " style))))
+          (define txt
+            (if (< idx (length ls))
+                (list-ref ls idx)
+                ""))
+          (define gutter
+            (if (zero? i)
+                (quote ())
+                (list (styled-segment "  " style))))
           (append acc gutter (list (styled-segment (table-pad-cell txt w a) style)))))
       (define non-empty (filter (lambda (sg) (not (string=? (styled-segment-text sg) ""))) segs))
-      (styled-line (if (null? non-empty) (list (styled-segment "" (quote ()))) non-empty))))
+      (styled-line (if (null? non-empty)
+                       (list (styled-segment "" (quote ())))
+                       non-empty))))
   (define delim-segs
     (for/fold ([acc (quote ())])
-              ([w (in-list widths)] [a (in-list alignments)] [i (in-naturals)])
-      (define gutter (if (zero? i) (quote ()) (list (styled-segment "  " '(dim)))))
+              ([w (in-list widths)]
+               [a (in-list alignments)]
+               [i (in-naturals)])
+      (define gutter
+        (if (zero? i)
+            (quote ())
+            (list (styled-segment "  " '(dim)))))
       (append acc gutter (list (styled-segment (table-delimiter-cell-text w a) '(dim))))))
   (append (emit-row header header-style)
           (list (styled-line delim-segs))

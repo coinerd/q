@@ -5,6 +5,8 @@
          racket/file
          racket/list
          "state.rkt"
+         "../ui-core/conversation-artifact.rkt"
+         "../ui-core/feature-flags.rkt"
          "../util/json/jsonl.rkt"
          json)
 
@@ -34,16 +36,41 @@
 
 ;; Serialize a transcript-entry to a JSON-compatible hash.
 (define (transcript-entry->jsexpr entry)
+  (define meta (transcript-entry-meta entry))
+  (define artifact (hash-ref meta 'artifact #f))
+  (define persisted-artifact
+    (and (conversation-artifact? artifact)
+         (if (eq? (conversation-artifact-kind artifact) 'thinking)
+             (artifact-limit-body artifact (ui-reasoning-artifacts-max-bytes))
+             artifact)))
+  (define persisted-meta
+    (if persisted-artifact
+        (hash-set meta 'artifact persisted-artifact)
+        meta))
+  (define persisted-text
+    (cond
+      [(and persisted-artifact (eq? (conversation-artifact-kind persisted-artifact) 'thinking))
+       (conversation-artifact-body persisted-artifact)]
+      [(eq? (transcript-entry-kind entry) 'thinking)
+       ;; Legacy/raw thinking rows still cross the same persistence boundary.
+       (conversation-artifact-body
+        (artifact-limit-body (make-conversation-artifact #:id "scrollback-boundary"
+                                                         #:session-id "legacy"
+                                                         #:turn-id "legacy"
+                                                         #:kind 'thinking
+                                                         #:body (transcript-entry-text entry))
+                             (ui-reasoning-artifacts-max-bytes)))]
+      [else (transcript-entry-text entry)]))
   (hasheq 'kind
           (symbol->string (transcript-entry-kind entry))
           'text
-          (transcript-entry-text entry)
+          persisted-text
           'timestamp
           (transcript-entry-timestamp entry)
           'id
           (or (transcript-entry-id entry) 0)
           'meta
-          (hash->jsexpr-deep (transcript-entry-meta entry))))
+          (hash->jsexpr-deep persisted-meta)))
 
 ;; Deserialize a jsexpr hash back to a transcript-entry.
 ;; Assigns a unique ID so the render cache can track the entry.
@@ -86,10 +113,8 @@
     (if (path? path)
         (path->string path)
         path))
-  (define trimmed
-    (if (> (length entries) scrollback-max-entries)
-        (take-right entries scrollback-max-entries)
-        entries))
+  ;; ui-state transcript order is newest-first; retain the newest prefix.
+  (define trimmed (take entries (min (length entries) scrollback-max-entries)))
   (define jsexprs (map transcript-entry->jsexpr trimmed))
   ;; Atomic rewrite: write to temp then rename
   (define tmp-path (string-append path-str ".tmp"))
@@ -105,21 +130,31 @@
 ;; Load transcript-entries from a JSONL file.
 ;; Returns '() if the file does not exist.
 (define (load-scrollback path)
-  (define raw (jsonl-read-last path 500))
-  (map jsexpr->transcript-entry raw))
+  ;; Persisted order is newest-first, so reading the last lines would discard
+  ;; the newest entries in an oversized legacy file.
+  (define raw (jsonl-read-all-valid path))
+  (map jsexpr->transcript-entry (take raw (min (length raw) scrollback-max-entries))))
 
 ;; Deep hash → nested jsexpr conversion (handles nested hashes)
+(define (value->jsexpr-deep value)
+  (cond
+    [(conversation-artifact? value) (artifact->jsexpr value)]
+    [(hash? value) (hash->jsexpr-deep value)]
+    [(list? value) (map value->jsexpr-deep value)]
+    [else value]))
+
 (define (hash->jsexpr-deep h)
   (for/hash ([(k v) (in-hash h)])
-    (values k
-            (if (hash? v)
-                (hash->jsexpr-deep v)
-                v))))
+    (values k (value->jsexpr-deep v))))
 
-;; Deep jsexpr → nested hash conversion
-(define (jsexpr->hash-deep h)
+;; Deep jsexpr → nested hash conversion.  Artifact hashes are schema checked
+;; here, at the scrollback boundary, and restored to canonical live structs.
+(define (jsexpr->hash-deep value)
   (cond
-    [(hash? h)
-     (for/hash ([(k v) (in-hash h)])
+    [(and (hash? value) (equal? (hash-ref value 'schema #f) "conversation-artifact"))
+     (jsexpr->artifact value)]
+    [(hash? value)
+     (for/hash ([(k v) (in-hash value)])
        (values k (jsexpr->hash-deep v)))]
-    [else h]))
+    [(list? value) (map jsexpr->hash-deep value)]
+    [else value]))

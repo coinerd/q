@@ -17,6 +17,7 @@
          racket/port
          racket/file
          racket/string
+         racket/system
          json
          "../extensions/gsd-planning.rkt"
          "../extensions/context.rkt"
@@ -39,6 +40,7 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   campaign-request?
                   campaign-request-prompt-for-wave
+                  campaign-request-verifier
                   lookup-campaign-request))
 
 ;; ============================================================
@@ -55,6 +57,11 @@
 
 (define (with-temp-dir proc)
   (define dir (make-temp-planning-dir))
+  (define git (find-executable-path "git"))
+  (when git
+    (parameterize ([current-output-port (open-output-string)]
+                   [current-error-port (open-output-string)])
+      (system*/exit-code git "-C" dir "init" "--quiet")))
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-temp-dir dir)
                                (raise e))])
@@ -587,6 +594,11 @@
           (check-true (string-contains? first-wave-text "[gsd-planning]"))
           (check-true (string-contains? first-wave-text "IMPLEMENT NOW"))
           (check-true (string-contains? first-wave-text "ONLY wave W0"))
+          (check-true (string-contains? first-wave-text "coordinator is the only component"))
+          (check-true (string-contains? first-wave-text "never marks the wave DONE"))
+          (check-true (string-contains? first-wave-text "trusted delivery evidence"))
+          (check-false ((campaign-request-verifier request) 0))
+          (check-true (string-contains? first-wave-text "bounded runtime budget"))
           (check-false (string-contains? first-wave-text "future-only.rkt"))
           (check-false (string-contains? first-wave-text "SECRET-LATER-INSTRUCTION"))
           (check-false (string-contains? first-wave-text "SECRET-CROSS-WAVE-W1"))
@@ -604,6 +616,11 @@
 
 (test-case "planning-implement-prompt forbids writing a new plan"
   (check-true (string-contains? planning-implement-prompt "Do NOT write a new plan")))
+
+(test-case "planning-implement-prompt assigns only status transitions to the coordinator"
+  (check-true (string-contains? planning-implement-prompt "Do NOT call /wave-done"))
+  (check-true (string-contains? planning-implement-prompt "coordinator owns status transitions"))
+  (check-true (string-contains? planning-implement-prompt "Delivery finalization remains external")))
 
 (test-case "planning-implement-prompt allows planning-read but blocks planning-write"
   (check-false (string-contains? planning-implement-prompt

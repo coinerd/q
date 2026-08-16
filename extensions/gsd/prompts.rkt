@@ -22,31 +22,37 @@
 ;; ============================================================
 
 (define planning-implement-prompt
-  (string-append "[gsd-planning] EXECUTE the plan below. IMPLEMENT NOW — do NOT explore.
+  (string-append
+   "[gsd-planning] EXECUTE the plan below. IMPLEMENT NOW — do NOT explore.
 "
-                 "
+   "
 "
-                 "CRITICAL RULES:
+   "CRITICAL RULES:
 "
-                 "1. Do NOT re-read the plan. It is provided below in full.
+   "1. Do NOT re-read the plan. It is provided below in full.
 "
-                 "2. Do NOT write a new plan. Execute the existing one.
+   "2. Do NOT write a new plan. Execute the existing one.
 "
-                 "3. Do NOT use planning-write during implementation.
+   "3. Do NOT use planning-write during implementation.
 "
-                 "   planning-read is allowed to check STATE or VALIDATION.
+   "   planning-read is allowed to check STATE or VALIDATION.
 "
-                 "4. Read each target file BEFORE editing it. You need the current content
+   "4. Read each target file BEFORE editing it. You need the current content
 "
-                 "   to apply edits correctly. Read is necessary and expected.
+   "   to apply edits correctly. Read is necessary and expected.
 "
-                 "5. After reading, apply the edits specified in the wave doc actions.
+   "5. After reading, apply the edits specified in the wave doc actions.
 "
-                 "6. After completing each wave, run its verify command.
+   "6. After completing the assigned wave, run its verify command.
 "
-                 "
+   "7. Do NOT call /wave-done; the runtime coordinator owns status transitions only.
+
 "
-                 "The plan follows. Start implementing immediately.
+   "   Delivery finalization remains external; without trusted delivery evidence the campaign stops before DONE.
+"
+   "
+"
+   "The plan follows. Start implementing immediately.
 
 "))
 ;; ============================================================
@@ -134,13 +140,11 @@
   (string-append
    "# GSD Execution Phase\n\n"
    (format "Executing plan with ~a waves. Starting from wave ~a.\n\n" wave-count (or next-idx 0))
-   "CRITICAL — Wave-by-wave checkpointing:\n"
-   "- Complete ONE wave at a time: read → edit → verify → format → syntax-check\n"
-   "- IMMEDIATELY after finishing wave N, call /wave-done N to mark it complete\n"
-   "- This checkpoint persists your progress — if interrupted, /go resumes from the\n"
-   "  first incomplete wave, not from scratch\n"
-   "- Do NOT start wave N+1 until /wave-done N has been called\n"
-   "- Only after /wave-done succeeds, begin the next wave\n\n"
+   "CRITICAL — Runtime-owned wave checkpointing:\n"
+   "- Complete ONE assigned wave at a time: read → edit → verify → format → syntax-check\n"
+   "- Do NOT call /wave-done; the runtime coordinator alone verifies and commits status\n"
+   "- Return after the assigned wave; a normal response is not itself a DONE commit\n"
+   "- The coordinator starts later waves only after the current commit succeeds\n\n"
    "Other instructions:\n"
    "- Follow the plan strictly — do not expand scope\n"
    "- If a wave fails, use `/skip <N>` to skip it and proceed\n"

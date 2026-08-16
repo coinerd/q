@@ -54,9 +54,20 @@
      'ext-register-tool!
      "no tool-registry available in extension context. \
             Ensure #:tool-registry is set when creating the context."))
-  ;; Wrap handler to always accept (args exec-ctx) — defense against arity mismatch
-  ;; when the scheduler calls ((tool-execute t) args exec-ctx).
-  (define wrapped-handler (lambda (args exec-ctx) (handler args)))
+  ;; Preserve legacy one-argument handlers, but pass the scheduler's execution
+  ;; context whenever the extension handler supports the canonical two-argument
+  ;; protocol. Optional second arguments satisfy both arities and receive ctx.
+  (define (wrapped-handler args exec-ctx)
+    (cond
+      [(procedure-arity-includes? handler 2) (handler args exec-ctx)]
+      [(procedure-arity-includes? handler 1) (handler args)]
+      [else
+       (raise-arguments-error 'ext-register-tool!
+                              "handler must accept (args) or (args exec-ctx)"
+                              "tool"
+                              name
+                              "handler"
+                              handler)]))
   (define t
     (make-tool name
                description

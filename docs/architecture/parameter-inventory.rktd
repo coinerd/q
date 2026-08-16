@@ -67,13 +67,25 @@
  ("extensions/combinators.rkt"
   (current-hook-violation-callback . SERVICE_HANDLE))
  ("extensions/github/helpers.rkt"
-  (gh-binary-path . CONFIGURATION))
+  (gh-binary-path . CONFIGURATION)
+  (git-binary-path . CONFIGURATION)
+  (current-gh-exec-result . SERVICE_HANDLE)
+  (current-git-exec-result . SERVICE_HANDLE))
+ ("extensions/gsd/core.rkt"
+  (current-gsd-campaign-owner . OTHER_REVIEWED)
+  (current-gsd-lifecycle-reset-suppressed? . OTHER_REVIEWED))
  ("extensions/gsd/events.rkt"
   (current-gsd-correlation-id . TURN_LOCAL))
  ("extensions/gsd/plan-context-builder.rkt"
   (current-git-root . CONFIGURATION))
  ("extensions/gsd/composition-root.rkt"
   (current-gsd-effect-ports . SERVICE_HANDLE))
+ ("extensions/gsd/go-orchestrator.rkt"
+  (current-gsd-wave-cancel! . SERVICE_HANDLE))
+ ("extensions/gsd/policy.rkt"
+  (current-gsd-wave-timeout-seconds . CONFIGURATION)
+  (current-gsd-wave-max-iterations . CONFIGURATION)
+  (current-gsd-max-consecutive-tool-calls . CONFIGURATION))
  ("extensions/gsd/session-state.rkt"
   (current-gsd-session-id . SERVICE_HANDLE)
   (current-gsd-ctx . SERVICE_HANDLE))
@@ -103,6 +115,8 @@
   (current-gui-lifecycle-hooks . SERVICE_HANDLE))
  ("gui/main.rkt"
   (current-gui-theme-manager . SERVICE_HANDLE))
+ ("gui/state-sync.rkt"
+  (notification-pending? . TURN_LOCAL))
  ("interfaces/sessions.rkt"
   (current-sessions-fs-ops . SERVICE_HANDLE))
  ("llm/gemini.rkt"

@@ -54,13 +54,20 @@
   (or (not state-session) (not event-session) (equal? state-session event-session)))
 
 (define (event-for-active-turn? state evt)
+  (define event-session (event-session-id evt))
   (define event-turn (event-turn-id evt))
   (define prompt-turn (ui-state-active-turn-id state))
   (define model-turn (ui-state-active-model-turn-id state))
-  (or (not event-turn)
-      (and (not prompt-turn) (not model-turn))
-      (equal? event-turn prompt-turn)
-      (equal? event-turn model-turn)))
+  (if (or prompt-turn model-turn)
+      (and (string? event-session)
+           (not (string=? event-session ""))
+           (string? event-turn)
+           (not (string=? event-turn ""))
+           (equal? event-session (ui-state-session-id state))
+           (or (equal? event-turn prompt-turn) (equal? event-turn model-turn)))
+      ;; With no active canonical turn there is nothing for a terminal to
+      ;; clear. Identity-less recovery is intentionally fail-closed.
+      #f))
 
 (define (handle-session-started state evt)
   (define payload (event-payload evt))
@@ -78,18 +85,34 @@
   (define payload (event-payload evt))
   (define prompt-scope?
     (and (hash? payload) (equal? (hash-ref payload 'scope #f) "prompt") (event-turn-id evt)))
+  ;; A newly initialized UI may not yet know its session. Adopt the first
+  ;; non-empty turn envelope so subsequent terminals can be correlated without
+  ;; weakening stale-event checks once a session is active.
+  (define event-session (event-session-id evt))
+  (define event-turn (event-turn-id evt))
+  (define canonical-identity?
+    (and (string? event-session)
+         (not (string=? event-session ""))
+         (string? event-turn)
+         (not (string=? event-turn ""))))
+  (define session-state
+    (if (and (not (ui-state-session-id state)) canonical-identity?)
+        (struct-copy ui-state state [session-id event-session])
+        state))
   (cond
-    [(not (event-for-current-session? state evt)) state]
+    [(not canonical-identity?) state]
+    [(not (event-for-current-session? session-state evt)) session-state]
     ;; Inner iteration starts must not erase pending feedback or partial output.
-    [(and (ui-state-interrupt-request-id state) (not prompt-scope?)) state]
+    [(and (ui-state-interrupt-request-id session-state) (not prompt-scope?)) session-state]
     [else
      (define started
-       (set-status-message (clear-streaming (set-pending-tool-name
-                                             (set-streaming-phase (set-busy-since (set-busy state #t)
-                                                                                  (event-time evt))
-                                                                  'thinking)
-                                             #f))
-                           #f))
+       (set-status-message
+        (clear-streaming (set-pending-tool-name
+                          (set-streaming-phase (set-busy-since (set-busy session-state #t)
+                                                               (event-time evt))
+                                               'thinking)
+                          #f))
+        #f))
      (cond
        [prompt-scope?
         (set-active-model-turn-id (set-active-turn-id (set-interrupt-request-id started #f)
@@ -111,13 +134,13 @@
      (define interrupt-correlated?
        (and pending-request-id turn-correlated? (equal? request-id pending-request-id)))
      (cond
-       [(not current-session?) state]
+       [(or (not current-session?) (not turn-correlated?))
+        (when current-session?
+          (log-warning "TUI: ignoring stale prompt terminal (event=~v active=~v)"
+                       (event-turn-id evt)
+                       (ui-state-active-turn-id state)))
+        state]
        [else
-        (unless turn-correlated?
-          (log-warning
-           "TUI: current-session prompt terminal turn-id mismatch; clearing transient state (event=~v active=~v)"
-           (event-turn-id evt)
-           (ui-state-active-turn-id state)))
         (define cleared (clear-after-turn-terminal state))
         (define reason (hash-ref payload 'reason "completed"))
         (define with-feedback
@@ -232,9 +255,10 @@
 ;; ============================================================
 
 (define (handle-runtime-error state evt)
+  (define active-turn? (or (ui-state-active-turn-id state) (ui-state-active-model-turn-id state)))
   (cond
     [(or (not (event-for-current-session? state evt))
-         (not (event-for-active-turn? state evt))
+         (and active-turn? (not (event-for-active-turn? state evt)))
          (ui-state-interrupt-request-id state))
      state]
     [else

@@ -26,6 +26,7 @@
          pr-exists-for-head?
          find-open-pr-for-head
          open-pr-from-lookup
+         unrelated-staged-paths
          wave-already-committed?
          wave-checkpoint-section
          read-state-content
@@ -52,15 +53,25 @@
          (define parsed (string->jsexpr raw))
          (and (list? parsed) (pair? parsed) (car parsed)))))
 
-(define (pr-exists-for-head? head)
-  (define-values (ec out _err) (apply gh-exec-result (pr-lookup-command head)))
-  (and (= ec 0) (open-pr-from-lookup out)))
+(define (checked-open-pr-from-lookup stdout)
+  (define raw (string-trim (or stdout "")))
+  (define parsed
+    (with-handlers ([exn:fail? (lambda (_)
+                                 (raise-user-error 'github-pr "PR lookup returned invalid JSON"))])
+      (string->jsexpr raw)))
+  (cond
+    [(and (list? parsed) (null? parsed)) #f]
+    [(and (list? parsed) (pair? parsed) (hash? (car parsed))) (car parsed)]
+    [else (raise-user-error 'github-pr "PR lookup returned an unexpected response")]))
 
-;; W6 (BUG-0011): canonical lookup-first helper used by gh-wave-finish.
-;; Returns the existing OPEN PR (as a jsexpr hash) for a head branch or
-;; #f — so creating/re-checking a PR for the same branch is idempotent.
-(define (find-open-pr-for-head head)
-  (pr-exists-for-head? head))
+(define (find-open-pr-for-head head #:gh [gh-fn gh-exec-result])
+  (define-values (ec out err) (apply gh-fn (pr-lookup-command head)))
+  (unless (= ec 0)
+    (raise-user-error 'github-pr "PR lookup failed: ~a" (string-trim err)))
+  (checked-open-pr-from-lookup out))
+
+(define (pr-exists-for-head? head)
+  (find-open-pr-for-head head))
 
 (define (handle-gh-pr args [exec-ctx #f])
   (with-error-result
@@ -158,14 +169,27 @@
 
 ;; Tree/content check: the wave's change is already applied iff every
 ;; listed file is clean in the working tree — `git status --porcelain
-;; -- <files>` reports nothing, meaning the committed tree already
-;; contains exactly the current content of those files. Injected
-;; git-fn (default the real git-exec-result) keeps this unit-testable
-;; without a repository.
+;; -- <files>` reports nothing. Status failures are errors, never evidence
+;; that a mutation is required.
 (define (wave-already-committed? files #:git [git-fn #f])
   (define exec (or git-fn git-exec-result))
-  (define-values (ec out _err) (apply exec (append (list "status" "--porcelain" "--") files)))
-  (and (= ec 0) (string=? (string-trim out) "")))
+  (define-values (ec out err) (apply exec (append (list "status" "--porcelain" "--") files)))
+  (unless (= ec 0)
+    (raise-user-error 'gh-wave-finish "git status failed: ~a" (string-trim err)))
+  (string=? (string-trim out) ""))
+
+;; Return staged paths that are not in the explicit wave allowlist. Failure to
+;; inspect the index is fail-closed because continuing could commit unrelated
+;; work. File validation in the handler excludes embedded newlines.
+(define (unrelated-staged-paths files #:git [git-fn #f])
+  (define exec (or git-fn git-exec-result))
+  (define-values (ec out err) (exec "diff" "--cached" "--name-only" "-z" "--"))
+  (unless (= ec 0)
+    (raise-user-error 'gh-wave-finish "staged-path lookup failed: ~a" (string-trim err)))
+  ;; NUL-delimited output disables Git's quoting/escaping and preserves path
+  ;; bytes represented by the process string, including whitespace and tabs.
+  (define staged (filter (lambda (path) (not (string=? path ""))) (string-split out "\0" #:trim? #f)))
+  (filter (lambda (path) (not (member path files))) staged))
 
 ;; Durable checkpoints: a structured per-wave done-steps checklist
 ;; stored in .planning/STATE.md. Format:

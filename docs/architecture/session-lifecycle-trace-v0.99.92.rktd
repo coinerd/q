@@ -117,7 +117,7 @@
                   (to . run-prompt!))
           #hasheq((anchor
                    .
-                   "tui/tui-init.rkt:run-prompt! campaign-sess prompt")
+                   "tui/tui-init.rkt:run-prompt! campaign-sess")
                   (from . tui/tui-init)
                   (id . tui-campaign)
                   (kind . direct)
@@ -148,7 +148,7 @@
                   (to . run-prompt!))
           #hasheq((anchor
                    .
-                   "gui/slash-commands.rkt:run-prompt! campaign-session prompt")
+                   "gui/slash-commands.rkt:run-prompt! campaign-session")
                   (from . gui/slash-commands)
                   (id . gui-campaign)
                   (kind . direct)

@@ -12,8 +12,7 @@
          racket/string
          racket/system
          "effect-ports.rkt"
-         "wave-runner-port.rkt"
-         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!))
+         "wave-runner-port.rkt")
 
 (provide make-system-filesystem-port
          make-system-git-port
@@ -101,7 +100,10 @@
     (gsd-process-result (subprocess-status sp) stdout stderr)))
 
 (define (make-system-process-port)
-  (gsd-process-port run-system-process shutdown-worker!))
+  ;; This adapter does not retain an owned subprocess handle, so cancellation
+  ;; is intentionally a no-op. It must never stop the process-global gateway
+  ;; worker, which can be shared by unrelated sessions.
+  (gsd-process-port run-system-process void))
 
 (define (make-system-git-port process-port)
   (gsd-git-port
@@ -146,16 +148,21 @@
     (thread (lambda ()
               (set-box! result-box ((gsd-wave-runner-port-run port) wave-idx))
               (semaphore-post done))))
-  (if (sync/timeout timeout-sec done)
-      (unbox result-box)
-      (begin
-        ;; The deadline is authoritative: once it passes the outcome is
-        ;; 'timed-out no matter what the runner finally returns (a runner that
-        ;; ignored cancellation must never turn a timed-out invocation into a
-        ;; done/failed one — that would break exactly-once ordering).
-        ;; Ask the pending tool to stop, then wait (bounded) for it to comply
-        ;; so no thread keeps executing into the next wave.
-        ((gsd-wave-runner-port-cancel! port))
-        (sync/timeout cancel-grace-sec done)
-        (kill-thread worker)
-        (wave-execution-outcome 'timed-out (format "runner exceeded ~a second(s)" timeout-sec)))))
+  (define deadline (+ (current-inexact-milliseconds) (* timeout-sec 1000.0)))
+  (define (stop-runner! status message)
+    ((gsd-wave-runner-port-cancel! port))
+    (sync/timeout cancel-grace-sec done)
+    (unless (thread-dead? worker)
+      (kill-thread worker))
+    (wave-execution-outcome status message))
+  (let wait-loop ()
+    (cond
+      [((gsd-wave-runner-port-cancel-requested? port))
+       (stop-runner! 'cancelled "campaign cancellation requested")]
+      [else
+       (define remaining (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+       (cond
+         [(<= remaining 0)
+          (stop-runner! 'timed-out (format "runner exceeded ~a second(s)" timeout-sec))]
+         [(sync/timeout (min 0.1 remaining) done) (unbox result-box)]
+         [else (wait-loop)])])))

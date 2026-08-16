@@ -26,7 +26,39 @@
          (only-in "../commands/runtime-control.rkt" request-active-turn-interrupt!)
          "../../ui-core/ui-intents.rkt"
          "../../ui-core/disclosure-state.rkt"
+         "../../ui-core/conversation-artifact.rkt"
+         "../../ui-core/conversation-reducer.rkt"
          racket/list)
+
+(define (toggle-transcript-detail! ctx state)
+  ;; Both configurable dispatch and raw Ctrl+O resolve only canonical artifact
+  ;; ids. A focused component id is merely a hint and is ignored unless it is
+  ;; also one of these artifact ids.
+  (define focused-id (tui-ctx-focused-component-id ctx))
+  (define reducer (ui-state-conversation-reducer state))
+  (define session-id (ui-state-session-id state))
+  (define active-artifact
+    (and (ui-state-streaming-thinking state)
+         (string? session-id)
+         (for/first ([turn-id (in-list (filter values
+                                               (list (ui-state-active-model-turn-id state)
+                                                     (ui-state-active-turn-id state))))]
+                     #:do [(define artifact (reducer-thinking-artifact reducer session-id turn-id))]
+                     #:when artifact)
+           artifact)))
+  (define active-id (and active-artifact (conversation-artifact-id active-artifact)))
+  (define candidate-ids
+    (for/list ([entry (in-list (reverse (ui-state-transcript state)))]
+               #:when (eq? (transcript-entry-kind entry) 'thinking)
+               #:do [(define id (hash-ref (transcript-entry-meta entry) 'artifact-id #f))]
+               #:when (string? id))
+      id))
+  (define disclosure (ui-state-disclosure state))
+  (define target-id (resolve-toggle-target disclosure focused-id active-id candidate-ids))
+  (when target-id
+    (set-box! (tui-ctx-ui-state-box ctx)
+              (struct-copy ui-state state [disclosure (disclosure-toggle disclosure target-id)])))
+  target-id)
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -98,23 +130,7 @@
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-bottom state))
      'handled]
     [(ui.transcript.toggle-detail toggle-detail)
-     ;; Resolve target: focused → active → latest completed reasoning.
-     ;; Candidate IDs are transcript entries of kind 'thinking, collected
-     ;; OLDEST-FIRST (chronological) per the resolve-toggle-target contract:
-     ;; ui-state-transcript stores newest-first, so we iterate in reverse.
-     (define focused-id (tui-ctx-focused-component-id ctx))
-     ;; Active = in-flight reasoning stream, addressed by the shared synthetic
-     ;; sentinel id (same one the renderer stamps on the synthetic entry).
-     (define active-id (and (ui-state-streaming-thinking state) active-streaming-artifact-id))
-     (define candidate-ids
-       (for/list ([e (in-list (reverse (ui-state-transcript state)))]
-                  #:when (eq? (transcript-entry-kind e) 'thinking))
-         (transcript-entry-id e)))
-     (define disc (ui-state-disclosure state))
-     (define target-id (resolve-toggle-target disc focused-id active-id candidate-ids))
-     (when target-id
-       (set-box! (tui-ctx-ui-state-box ctx)
-                 (struct-copy ui-state state [disclosure (disclosure-toggle disc target-id)])))
+     (toggle-transcript-detail! ctx state)
      'handled]
     [else #f]))
 
@@ -225,21 +241,8 @@
               (set-box! (tui-ctx-ui-state-box ctx) new-state)))
         'continue]
        [(ctrl-o)
-        ;; Toggle disclosure of reasoning artifact.
-        ;; Normally dispatched via action registry as 'ui.transcript.toggle-detail;
-        ;; this hardcoded fallback ensures terminals where Ctrl+O doesn't map cleanly still work.
-        (let ()
-          (define focused-id (tui-ctx-focused-component-id ctx))
-          (define active-id (ui-state-streaming-thinking state))
-          (define candidate-ids
-            (for/list ([e (in-list (ui-state-transcript state))]
-                       #:when (eq? (transcript-entry-kind e) 'thinking))
-              (transcript-entry-id e)))
-          (define disc (ui-state-disclosure state))
-          (define target-id (resolve-toggle-target disc focused-id active-id candidate-ids))
-          (when target-id
-            (set-box! (tui-ctx-ui-state-box ctx)
-                      (struct-copy ui-state state [disclosure (disclosure-toggle disc target-id)]))))
+        ;; Hardcoded fallback intentionally delegates to the same action path.
+        (toggle-transcript-detail! ctx state)
         'continue]
        [(alt-tab)
         ;; Cycle focus forward through focusable components

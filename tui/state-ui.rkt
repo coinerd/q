@@ -92,9 +92,10 @@
     (if (transcript-entry-id entry)
         (values entry state)
         (assign-entry-id entry state)))
+  (define entries (cons id-entry (ui-state-transcript state1)))
   (struct-copy ui-state
                state1
-               [transcript (cons id-entry (ui-state-transcript state1))]
+               [transcript (take entries (min 500 (length entries)))]
                [scroll-offset 0]))
 
 (define (transcript-entries state)

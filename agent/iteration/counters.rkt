@@ -38,12 +38,17 @@
 
 (define (compute-next-counters counters new-msgs)
   (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-  (define-values (new-seen-paths should-increment?)
+  (define-values (new-seen-paths _new-exploration-path?)
     (update-seen-paths current-tool-calls (loop-counters-seen-paths counters)))
+  ;; This counter is the number of consecutive assistant turns that emitted
+  ;; one or more tool calls. It is independent of path novelty and tool class,
+  ;; and resets as soon as a turn emits no tool calls.
   (define effective-tool-count
-    (if should-increment?
-        (add1 (loop-counters-consecutive-tool-count counters))
-        (loop-counters-consecutive-tool-count counters)))
+    (cond
+      ;; No messages means no assistant turn occurred; preserve the counter.
+      [(null? new-msgs) (loop-counters-consecutive-tool-count counters)]
+      [(pair? current-tool-calls) (add1 (loop-counters-consecutive-tool-count counters))]
+      [else 0]))
   (define new-explore-count
     (+ (loop-counters-explore-count counters)
        (for/sum ([tc (in-list current-tool-calls)])

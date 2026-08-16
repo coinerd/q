@@ -86,7 +86,7 @@
                                "campaign-state"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(mkdir path-ops)
+               '(git make-param mkdir path-ops parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
@@ -117,7 +117,7 @@
    ;; transition logic (7)
    (make-entry "policy.rkt"
                'transition-logic
-               '(path-ops)
+               '(path-ops make-param)
                '()
                '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
@@ -158,7 +158,7 @@
    ;; UI/extension glue (3)
    (make-entry "core.rkt"
                'ui-glue
-               '(fs-read fs-write parameterize path-ops)
+               '(fs-read fs-write make-param parameterize path-ops)
                '()
                '("racket/contract" "racket/string"
                                    "racket/format"

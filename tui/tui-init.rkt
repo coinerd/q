@@ -40,32 +40,34 @@
                   current-ui-event-actions-enabled?
                   wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
-         "../util/config-paths.rkt")
+         "../util/config-paths.rkt"
+         (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget)
+         (only-in "../extensions/gsd/core.rkt"
+                  current-gsd-campaign-owner
+                  call-with-gsd-owned-session-switch))
 
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
 ;; without exported predicates (internal-only types).
 
-(provide (contract-out
-          [run-tui (->* () () any)]
-          ;; runtime: hash table from build-runtime-from-cli
-          ;; cli-cfg: cli-config struct from cli/args
-          [run-tui-with-runtime (-> any/c any/c any)]
-          ;; ctx: tui-ctx struct (opaque)
-          [subscribe-runtime-events! (-> any/c void?)]
-          ;; runtime + path-string
-          [create-tui-session (-> any/c any/c any)]
-          [make-tui-session (-> any/c any/c any)] ;; F24 alias
-          ;; tui-ctx, agent-session, rt-config, scrollback path
-          ;; (v1.00.00: fixed stale contract from an old signature)
-          [load-tui-scrollback
-           (-> any/c any/c any/c (or/c path-string? path?) any)]
-          ;; terminal-bridge (opaque)
-          [init-tui-terminal (-> any/c any)]
-          ;; terminal-bridge + tui-ctx (both opaque)
-          [run-tui-loop (-> any/c any/c any)]
-          ;; Testable approval-channel lifecycle extent used by both entry points.
-          [call-with-tui-approval-channel (-> (-> any/c) any/c)]))
+(provide (contract-out [run-tui (->* () () any)]
+                       ;; runtime: hash table from build-runtime-from-cli
+                       ;; cli-cfg: cli-config struct from cli/args
+                       [run-tui-with-runtime (-> any/c any/c any)]
+                       ;; ctx: tui-ctx struct (opaque)
+                       [subscribe-runtime-events! (-> any/c void?)]
+                       ;; runtime + path-string
+                       [create-tui-session (-> any/c any/c any)]
+                       [make-tui-session (-> any/c any/c any)] ;; F24 alias
+                       ;; tui-ctx, agent-session, rt-config, scrollback path
+                       ;; (v1.00.00: fixed stale contract from an old signature)
+                       [load-tui-scrollback (-> any/c any/c any/c (or/c path-string? path?) any)]
+                       ;; terminal-bridge (opaque)
+                       [init-tui-terminal (-> any/c any)]
+                       ;; terminal-bridge + tui-ctx (both opaque)
+                       [run-tui-loop (-> any/c any/c any)]
+                       ;; Testable approval-channel lifecycle extent used by both entry points.
+                       [call-with-tui-approval-channel (-> (-> any/c) any/c)]))
 
 ;; ============================================================
 ;; PIPE-01 (v0.98.13): Bridge event struct → hash for action handler.
@@ -148,21 +150,32 @@
   ;; Wire GSD mode query callback — defaults to 'idle
   ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-ctx-current (via current-gsd-mode-query) if GSD is loaded
 
-  ;; Create one dedicated execution session per campaign.  The returned runner
-  ;; is reused for every wave while the initiating interactive session remains
-  ;; separate.
+  ;; Create one dedicated execution session per wave. The zero-argument
+  ;; factory is called by the campaign adapter for each isolated prompt while
+  ;; the initiating interactive session remains separate.
   (define (make-campaign-runner)
     (define campaign-sess (make-agent-session rt-config))
     (define campaign-sid (session-id campaign-sess))
-    (define campaign-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
-    (switch-session! #:old-session-id (session-id sess)
-                     #:old-bus bus
-                     #:old-extension-registry (dict-ref rt-config 'extension-registry #f)
-                     #:new-session-id campaign-sid
-                     #:new-session-dir campaign-dir
-                     #:new-bus bus
-                     #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
-                     #:reason 'fork)
+    (define prior-sess (unbox agent-session-box))
+    (define campaign-dir
+      (or (agent-session-session-dir campaign-sess)
+          (dict-ref rt-config 'session-dir #f)
+          (dict-ref rt-config 'store-dir #f)))
+    ;; Run the complete lifecycle (shutdown/rebind/start), but scope the GSD
+    ;; cleanup suppression to this coordinator-owned switch. Other extensions
+    ;; still receive ordinary lifecycle hooks and explicit resets still work.
+    (define (switch-to-wave-session!)
+      (switch-session! #:old-session-id (session-id prior-sess)
+                       #:old-bus bus
+                       #:old-extension-registry (dict-ref rt-config 'extension-registry #f)
+                       #:new-session-id campaign-sid
+                       #:new-session-dir campaign-dir
+                       #:new-bus bus
+                       #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
+                       #:reason 'fork))
+    (if (current-gsd-campaign-owner)
+        (call-with-gsd-owned-session-switch switch-to-wave-session!)
+        (switch-to-wave-session!))
     (set-box! (tui-ctx-agent-session-box ctx) campaign-sess)
     (set-box! (tui-ctx-ui-state-box ctx)
               (initial-ui-state #:session-id campaign-sid
@@ -177,7 +190,10 @@
       ;; box is shared with cmd-ctx-last-prompt-box (via tui-ctx->cmd-ctx),
       ;; so the /retry handler can still find it after the campaign fails.
       (set-box! (tui-ctx-last-prompt-box ctx) prompt)
-      (run-prompt! campaign-sess prompt)))
+      (run-prompt! campaign-sess
+                   prompt
+                   #:max-iterations
+                   (gsd-session-iteration-budget (dict-ref rt-config 'max-iterations 50)))))
 
   ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the
   ;; session-runner closure can read dynamically from it.  After /go

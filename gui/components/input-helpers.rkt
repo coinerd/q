@@ -32,6 +32,7 @@
                           #:alt? boolean?
                           #:at-start? (or/c boolean? 'no)
                           #:at-end? (or/c boolean? 'no)
+                          #:target (or/c string? symbol? #f)
                           #:prefs preferences?)
                 (or/c ui-intent? #f))]
           ;; ── W4: shared draft adapter over composer-model ──────
@@ -89,6 +90,7 @@
                          #:alt? [alt? #f]
                          #:at-start? [at-start? #f]
                          #:at-end? [at-end? #f]
+                         #:target [target #f]
                          #:prefs [prefs (default-preferences)])
   (define kind
     (resolve-key->intent key-code
@@ -103,7 +105,7 @@
     [(ui.composer.insert-newline) (make-composer-newline-intent)]
     [(composer.history-up) (make-composer-history-intent 'up)]
     [(composer.history-down) (make-composer-history-intent 'down)]
-    [(ui.transcript.toggle-detail) (make-toggle-detail-intent)]
+    [(ui.transcript.toggle-detail) (make-toggle-detail-intent target)]
     [else #f]))
 
 ;; ── W4: shared draft adapter over the composer model ────────

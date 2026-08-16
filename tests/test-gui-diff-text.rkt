@@ -6,6 +6,7 @@
 (require rackunit
          rackunit/text-ui
          racket/class
+         racket/list
          racket/string
          "../gui/components/rich-transcript-view.rkt"
          "../ui-core/theme-protocol.rkt")
@@ -17,6 +18,7 @@
     (define content "")
     (define locked #f)
     (define insert-with-position? #f)
+    (define clickbacks '())
     ;; insert: positional insert when pos given, append otherwise
     (define/public (insert str [pos #f])
       (when pos
@@ -28,6 +30,12 @@
     (define/public (last-position) (string-length content))
     (define/public (lock v) (set! locked v))
     (define/public (change-style delta [start 0] [end 0]) (void))
+    (define/public (set-clickback start end callback [delta #f] [call-on-down? #f])
+      (set! clickbacks (cons (list start end callback) clickbacks)))
+    (define/public (activate-last-clickback!)
+      (define clickback (car clickbacks))
+      ((third clickback) this (first clickback) (second clickback)))
+    (define/public (clickback-count) (length clickbacks))
     (define/public (get-content) content)
     (define/public (get-text start end) (substring content start (min end (string-length content))))
     (define/public (is-locked?) locked)
@@ -47,6 +55,14 @@
    (define msgs (list (hash 'role "user" 'text "Hello")))
    (apply-diff-to-text! text-obj msgs msgs (default-theme) #f)
    (check-equal? (send text-obj get-content) ""))
+ (test-case "same content with a different artifact identity is a render change"
+   (define old-msgs
+     (list
+      (hash 'role "assistant" 'kind 'thinking 'text "same" 'meta (hasheq 'artifact-id "artifact-a"))))
+   (define new-msgs
+     (list
+      (hash 'role "assistant" 'kind 'thinking 'text "same" 'meta (hasheq 'artifact-id "artifact-b"))))
+   (check-not-equal? (compute-transcript-diff old-msgs new-msgs) '()))
  (test-case "apply-diff-to-text! reset clears and rebuilds"
    (define text-obj (make-object mock-text%))
    (define old-msgs (list (hash 'role "user" 'text "Old")))
@@ -103,7 +119,25 @@
     (test-case "insert-message-into-text! uses explicit position"
       (define text-obj (make-object mock-text%))
       (insert-message-into-text! text-obj (hash 'role "user" 'text "hello") (default-theme))
-      (check-true (send text-obj was-insert-positional?)))))
+      (check-true (send text-obj was-insert-positional?)))
+    (test-case "thinking disclosure is a clickable targeted action"
+      (define text-obj (make-object mock-text%))
+      (define targets (box '()))
+      (insert-message-into-text! text-obj
+                                 (hash 'role
+                                       "assistant"
+                                       'kind
+                                       'thinking
+                                       'text
+                                       "collapsed preview"
+                                       'meta
+                                       (hasheq 'artifact-id "artifact-42"))
+                                 (default-theme)
+                                 (lambda (target) (set-box! targets (cons target (unbox targets)))))
+      (check-equal? (send text-obj clickback-count) 1)
+      (check-true (string-contains? (send text-obj get-content) "Show reasoning"))
+      (send text-obj activate-last-clickback!)
+      (check-equal? (unbox targets) '("artifact-42")))))
 
 (run-tests (test-suite "gui-diff-text"
              test-diff-text

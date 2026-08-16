@@ -42,7 +42,7 @@ Each extension is defined using the `define-q-extension` macro from `define-exte
   - `gh-milestone` — Manage milestones (create, close, list, create_from_spec)
   - `gh-board` — Project board operations (status, stale, autofix, verify, batch_set, reconfigure)
   - `gh-wave-start` — Start a GSD wave (create feature branch from main)
-  - `gh-wave-finish` — Finish a GSD wave (commit, push, PR, merge, close issue, sync main)
+  - `gh-wave-finish` — Quarantined: validates required arguments, then fails before mutation; use the external authenticated PR/merge workflow
 - **Commands:** `/milestone`, `/issue`, `/pr`
 - **Hooks:** `register-tools`, `register-shortcuts`
 - **Runtime dependency:** Requires `gh` CLI installed; gracefully degrades if missing

@@ -33,7 +33,10 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
                   campaign-result-status)
-         (only-in "../runtime/session/session-types.rkt" agent-session-config))
+         (only-in "../runtime/session/session-types.rkt" agent-session-config)
+         (only-in "../runtime/session/session-config.rkt" config-max-iterations)
+         (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget)
+         (only-in "../ui-core/ui-intents.rkt" make-toggle-detail-intent))
 
 ;; GAP-CR (v0.98.8 W1): Cache command registry at module level instead of rebuilding per invocation.
 (define the-canonical-registry (make-ui-command-registry canonical-commands))
@@ -60,8 +63,14 @@
      (notify!))))
 
 (define (make-gui-campaign-runner initiating-session)
-  (define campaign-session (make-agent-session (agent-session-config initiating-session)))
-  (values campaign-session (lambda (prompt) (run-prompt! campaign-session prompt))))
+  (define config (agent-session-config initiating-session))
+  (define campaign-session (make-agent-session config))
+  (values campaign-session
+          (lambda (prompt)
+            (run-prompt! campaign-session
+                         prompt
+                         #:max-iterations
+                         (gsd-session-iteration-budget (config-max-iterations config))))))
 
 ;; --------------------------------------------------
 ;; Extension dispatch
@@ -104,8 +113,12 @@
                                                                 (exn-message e))
                                                         state-box
                                                         gui-state-lock))])
-            (define-values (_campaign-session campaign-runner) (make-gui-campaign-runner sess))
-            (define result (execute-campaign-token! campaign-token campaign-runner))
+            (define result
+              (execute-campaign-token! campaign-token
+                                       (lambda (prompt)
+                                         (define-values (_campaign-session campaign-runner)
+                                           (make-gui-campaign-runner sess))
+                                         (campaign-runner prompt))))
             (unless (eq? (campaign-result-status result) 'campaign-complete)
               (add-system-msg! (format "[ERROR] /go campaign stopped: ~a"
                                        (campaign-result-status result))
@@ -353,6 +366,20 @@
                           ;; Reset cancel box for next goal
                           (set-box! goal-cancel-box #f)))))
                    #t))])]
+         [(toggle-detail)
+          (define changed? #f)
+          (call-with-semaphore gui-state-lock
+                               (lambda ()
+                                 (define old (unbox state-box))
+                                 (define next
+                                   (gui-state-apply-intent old (make-toggle-detail-intent #f)))
+                                 (unless (eq? next old)
+                                   (set-box! state-box next)
+                                   (set! changed? #t))))
+          (if changed?
+              (notify!)
+              (add-system-msg! "No reasoning to expand" state-box gui-state-lock notify!))
+          #t]
          [(interrupt)
           (add-system-msg! "Interrupt not yet supported in GUI mode."
                            state-box

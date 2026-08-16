@@ -15,8 +15,8 @@
          "../gui/gui-types.rkt"
          "../util/event/event.rkt")
 
-(define (make-test-event type payload)
-  (make-event type (current-inexact-milliseconds) #f #f payload))
+(define (make-test-event type payload #:turn-id [turn-id "test-turn"])
+  (make-event type (current-inexact-milliseconds) "test-session" turn-id payload))
 
 (define (make-fresh-state)
   (make-gui-state #:model "test-model"))
@@ -52,13 +52,11 @@
    (subscriber (make-test-event "model.stream.delta" (hash 'delta "partial")))
    (subscriber (make-test-event "model.stream.completed" (hash)))
    (check-equal? (gui-state-status (unbox state-box)) 'idle)
-   ;; After completion, the "partial" message still exists; next delta updates it
-   (subscriber (make-test-event "model.stream.delta" (hash 'delta "new")))
+   ;; A delta for a new canonical turn creates a distinct assistant artifact.
+   (subscriber (make-test-event "model.stream.delta" (hash 'delta "new") #:turn-id "test-turn-2"))
    (define msgs (gui-state-messages (unbox state-box)))
-   ;; CHARACTERIZATION: Only 1 message — the accumulator reset but the subscriber
-   ;; updates the existing assistant message (last one) with the new accumulated text
-   (check-equal? (length msgs) 1)
-   (check-equal? (gui-message-text (car msgs)) "new"))
+   (check-equal? (length msgs) 2)
+   (check-equal? (gui-message-text (last msgs)) "new"))
  (test-case "turn.started sets processing status"
    (define state-box (box (make-fresh-state)))
    (define subscriber (make-gui-event-subscriber state-box))
@@ -92,6 +90,7 @@
  (test-case "error events set error status"
    (define state-box (box (make-fresh-state)))
    (define subscriber (make-gui-event-subscriber state-box))
+   (subscriber (make-test-event "turn.started" (hash)))
    (subscriber (make-test-event "provider.error" (hash 'message "timeout")))
    (check-equal? (gui-state-status (unbox state-box)) 'error))
  (test-case "unknown events are ignored"

@@ -21,6 +21,8 @@
 (require racket/format
          racket/file
          racket/match
+         racket/string
+         racket/system
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "wave-completion.rkt"
@@ -30,8 +32,11 @@
          "projection-effects.rkt"
          "../../util/loop-result.rkt"
          (only-in "system-adapters.rkt" run-wave-with-timeout)
-         (only-in "../../sandbox/gateway-bridge.rkt" shutdown-worker!)
-         (only-in "plan-context-builder.rkt" current-git-root))
+         (only-in "plan-context-builder.rkt" current-git-root)
+         (only-in "policy.rkt"
+                  current-gsd-wave-timeout-seconds
+                  current-gsd-max-consecutive-tool-calls)
+         (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls))
 
 ;; ============================================================
 ;; Lease (D5: process-safe OS advisory lock)
@@ -76,8 +81,15 @@
 ;; Wave runner abstraction (injectable for testing)
 ;; ============================================================
 
-(define default-runner (lambda (wave-idx) (wave-execution-outcome 'done "default runner")))
-(define default-verifier (lambda (wave-idx) #t))
+;; Missing execution or verification authority must never invent DONE.
+(define default-runner
+  (lambda (wave-idx) (wave-execution-outcome 'failed "no wave runner configured")))
+(define default-verifier (lambda (wave-idx) #f))
+
+;; A caller that owns a wave-specific cancellation handle may bind it here.
+;; The default is deliberately a no-op: a campaign must never terminate the
+;; process-global gateway worker, which may be serving unrelated sessions.
+(define current-gsd-wave-cancel! (make-parameter void))
 
 ;; Normalize a runner value to a gsd-wave-runner-port. Legacy plain functions
 ;; returning symbols ('ok/'error/'cancelled) are wrapped and coerced at the
@@ -100,12 +112,19 @@
      (define termination (loop-result-termination-reason result))
      (define metadata (loop-result-metadata result))
      (define tool-loop-limit? (hash-ref metadata 'toolLoopLimit #f))
+     (define completion-reason (hash-ref metadata 'reason #f))
+     (define shutdown-reason? (equal? completion-reason "graceful-shutdown"))
      (cond
        [tool-loop-limit? (wave-execution-outcome 'failed "tool loop limit reached")]
-       [(member termination '(completed tool-calls-pending empty-response))
-        (wave-execution-outcome 'done "")]
-       [(member termination '(cancelled force-shutdown shutdown))
+       [(and (eq? termination 'completed) (not completion-reason)) (wave-execution-outcome 'done "")]
+       [(or shutdown-reason? (member termination '(cancelled force-shutdown shutdown)))
         (wave-execution-outcome 'cancelled "")]
+       [(eq? termination 'completed)
+        (wave-execution-outcome 'failed (format "completion blocked: ~a" completion-reason))]
+       [(eq? termination 'tool-calls-pending)
+        (wave-execution-outcome 'failed "tool calls remain pending")]
+       [(eq? termination 'empty-response)
+        (wave-execution-outcome 'failed "model returned an empty response")]
        [else (wave-execution-outcome 'failed (format "termination reason: ~a" termination))])]
     [(eq? result 'completed) (wave-execution-outcome 'done "")]
     [(eq? result 'ok) (wave-execution-outcome 'done "")]
@@ -122,27 +141,30 @@
   (define (durable-cancellation-requested?)
     (define observed (load-campaign-record base-dir plan-id))
     (and observed (campaign-record-cancellation observed)))
-  (run-campaign!
-   base-dir
-   record
-   #:runner (make-wave-runner-port
-             (lambda (wave-idx)
-               (with-handlers ([exn:fail? (lambda (e)
-                                            (log-error "campaign runner failed: ~a" (exn-message e))
-                                            (wave-execution-outcome 'failed (exn-message e)))])
-                 (define returned-values
-                   (call-with-values
-                    (lambda () (run-prompt ((campaign-request-prompt-for-wave request) wave-idx)))
-                    list))
-                 ;; Runtime/session runners return either a single
-                 ;; loop-result or (values updated-session result).
-                 (define run-result
-                   (if (= (length returned-values) 2)
-                       (cadr returned-values)
-                       (and (pair? returned-values) (car returned-values))))
-                 (prompt-run-result->outcome run-result)))
-             #:cancel-requested? durable-cancellation-requested?)
-   #:verifier (campaign-request-verifier request)))
+  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)])
+    (run-campaign!
+     base-dir
+     record
+     #:runner (make-wave-runner-port
+               (lambda (wave-idx)
+                 (with-handlers ([exn:fail? (lambda (e)
+                                              (log-error "campaign runner failed: ~a" (exn-message e))
+                                              (wave-execution-outcome 'failed (exn-message e)))])
+                   (define returned-values
+                     (call-with-values
+                      (lambda () (run-prompt ((campaign-request-prompt-for-wave request) wave-idx)))
+                      list))
+                   ;; Runtime/session runners return either a single
+                   ;; loop-result or (values updated-session result).
+                   (define run-result
+                     (if (= (length returned-values) 2)
+                         (cadr returned-values)
+                         (and (pair? returned-values) (car returned-values))))
+                   (prompt-run-result->outcome run-result)))
+               #:cancel! (current-gsd-wave-cancel!)
+               #:cancel-requested? durable-cancellation-requested?)
+     #:verifier (campaign-request-verifier request)
+     #:timeout-sec (current-gsd-wave-timeout-seconds))))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
 ;; higher-order values. Keep callbacks process-local and send only an opaque
@@ -409,10 +431,9 @@
                      (loop refreshed completed)
                      (campaign-result 'error (reverse completed) "campaign record disappeared"))]
                 [(wave-failed wave-cancelled)
-                 ;; B4: Kill any stuck tool execution worker so pending tools
-                 ;; don't keep running after the campaign stops.
-                 (with-handlers ([exn:fail? void])
-                   (shutdown-worker!))
+                 ;; The runner timeout/cancellation boundary owns only its wave
+                 ;; thread. Do not stop the process-global gateway worker: it
+                 ;; may be serving an unrelated interactive or SDK session.
                  (campaign-result (campaign-result-status result)
                                   (reverse completed)
                                   (campaign-result-message result))]
@@ -463,7 +484,23 @@
            #f)])))
 
 (define (git-available? base-dir)
-  (and (find-git-root base-dir) #t))
+  (define git (find-executable-path "git"))
+  (define (inside-work-tree? dir)
+    (and git
+         dir
+         (directory-exists? dir)
+         (let ([stdout (open-output-string)]
+               [stderr (open-output-string)])
+           (with-handlers ([exn:fail? (lambda (_) #f)])
+             (define exit-code
+               (parameterize ([current-output-port stdout]
+                              [current-error-port stderr])
+                 (system*/exit-code git "-C" dir "rev-parse" "--is-inside-work-tree")))
+             (and (zero? exit-code) (string=? (string-trim (get-output-string stdout)) "true"))))))
+  ;; Validate from the requested base directory. Preserve the supported
+  ;; two-tier checkout layout by trying its q/ child explicitly, but never
+  ;; trust a .git marker or an unrelated current-git-root fallback.
+  (and base-dir (or (inside-work-tree? base-dir) (inside-work-tree? (build-path base-dir "q"))) #t))
 ;; ============================================================
 ;; Provide
 ;; ============================================================
@@ -489,6 +526,7 @@
          campaign-request-prompt-for-wave
          campaign-request-verifier
          execute-campaign-request!
+         current-gsd-wave-cancel!
          register-campaign-request!
          lookup-campaign-request
          execute-campaign-token!)

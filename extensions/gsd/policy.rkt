@@ -17,7 +17,11 @@
          policy-reason
          policy-tags
          gsd-decide-action
-         blocked-tools-for)
+         blocked-tools-for
+         current-gsd-wave-timeout-seconds
+         current-gsd-wave-max-iterations
+         current-gsd-max-consecutive-tool-calls
+         gsd-session-iteration-budget)
 
 ;; ============================================================
 ;; Policy decision struct
@@ -36,6 +40,38 @@
 
 (define (policy-tags d)
   (policy-decision-tags d))
+
+;; ============================================================
+;; Bounded campaign budgets
+;; ============================================================
+
+(define (positive-real-guard who)
+  (lambda (value)
+    (if (and (real? value) (positive? value))
+        value
+        (raise-argument-error who "positive-real?" value))))
+
+(define (positive-integer-guard who)
+  (lambda (value)
+    (if (exact-positive-integer? value)
+        value
+        (raise-argument-error who "exact-positive-integer?" value))))
+
+;; One wave owns one fresh runtime session and cannot run indefinitely. These
+;; parameters make the production policy explicit while keeping focused tests
+;; deterministic. Tool calls are bounded by the runtime's existing
+;; consecutive-tool circuit breaker; no command or shell parsing is involved.
+(define current-gsd-wave-timeout-seconds
+  (make-parameter 1800 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+(define current-gsd-wave-max-iterations
+  (make-parameter 50 (positive-integer-guard 'current-gsd-wave-max-iterations)))
+(define current-gsd-max-consecutive-tool-calls
+  (make-parameter 30 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
+
+(define (gsd-session-iteration-budget configured-max)
+  (unless (exact-positive-integer? configured-max)
+    (raise-argument-error 'gsd-session-iteration-budget "exact-positive-integer?" configured-max))
+  (min configured-max (current-gsd-wave-max-iterations)))
 
 ;; ============================================================
 ;; Consolidated tool blocklist (from state-machine.rkt BLOCKED-TOOLS)
@@ -61,11 +97,14 @@
     [(tool-call)
      (define tool (hash-ref ctx 'tool ""))
      (define blocked (blocked-tools-for mode))
-     (if (member tool blocked)
-         (policy-decision #f
-                          (format "Tool '~a' blocked in ~a mode" tool mode)
-                          (list 'tool-blocked mode tool))
-         (policy-decision #t #f (list 'tool-allowed mode tool)))]
+     (cond
+       [(not (and (string? tool) (non-empty-string? tool)))
+        (policy-decision #f "Malformed tool call: non-empty tool name required" '(tool-malformed))]
+       [(member tool blocked)
+        (policy-decision #f
+                         (format "Tool '~a' blocked in ~a mode" tool mode)
+                         (list 'tool-blocked mode tool))]
+       [else (policy-decision #t #f (list 'tool-allowed mode tool))])]
     [(write-file)
      (define target (hash-ref ctx 'target-path ""))
      (define pinned (hash-ref ctx 'pinned-dir ""))
@@ -81,7 +120,10 @@
     [(transition)
      (define target-mode (hash-ref ctx 'target-mode #f))
      (policy-decision #t #f (list 'transition mode target-mode))]
-    [else (policy-decision #t #f (list 'unknown-action action))]))
+    [else
+     (policy-decision #f
+                      (format "Unknown GSD policy action: ~a" action)
+                      (list 'unknown-action 'blocked action))]))
 
 ;; ============================================================
 ;; Internal helpers

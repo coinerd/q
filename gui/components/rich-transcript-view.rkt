@@ -12,6 +12,7 @@
          racket/class
          racket/list
          "../../ui-core/theme-protocol.rkt"
+         "../../ui-core/ui-intents.rkt"
          "markdown-parser.rkt"
          (only-in "../../util/markdown.rkt" markdown-table->plain-lines)
          "keybindings.rkt"
@@ -31,10 +32,12 @@
           [apply-diff-to-plan (-> (listof hash?) (listof hash?) ui-theme? (listof hash?))]
           [update-last-message (-> list? string? list?)]
           [make-rich-transcript-gui-view (-> any/c any/c any/c any/c any/c any/c any/c any/c)]
-          [insert-message-into-text! (-> any/c hash? ui-theme? void?)]
-          [clear-and-rebuild-text! (-> any/c list? ui-theme? void?)]
+          [insert-message-into-text! (->* (any/c hash? ui-theme?) ((or/c procedure? #f)) void?)]
+          [clear-and-rebuild-text! (->* (any/c list? ui-theme?) ((or/c procedure? #f)) void?)]
           [apply-diff-to-text!
-           (-> any/c list? list? ui-theme? (or/c (box/c exact-nonnegative-integer?) #f) void?)])
+           (->* (any/c list? list? ui-theme? (or/c (box/c exact-nonnegative-integer?) #f))
+                ((or/c procedure? #f))
+                void?)])
          (rename-out [contains-code-blocks? contains-code-blocks?]
                      [parse-code-blocks parse-code-blocks]
                      [render-message-with-code-blocks render-message-with-code-blocks]
@@ -107,6 +110,8 @@
   (define role (hash-ref msg 'role "system"))
   (define text (hash-ref msg 'text ""))
   (define kind (hash-ref msg 'kind 'message))
+  (define meta (hash-ref msg 'meta (hasheq)))
+  (define artifact-id (and (hash? meta) (hash-ref meta 'artifact-id #f)))
   (define label (role->label role))
   (define role-color (or (kind->color kind theme) (role->color role theme)))
   (define content-color (or (kind->color kind theme) (theme-ref theme 'foreground)))
@@ -168,10 +173,9 @@
                   'content
                   'text
                   (string-append
-                   (string-join (markdown-table->plain-lines
-                                 (list (hash-ref seg 'header '())
-                                       (hash-ref seg 'alignments '())
-                                       (hash-ref seg 'rows '())))
+                   (string-join (markdown-table->plain-lines (list (hash-ref seg 'header '())
+                                                                   (hash-ref seg 'alignments '())
+                                                                   (hash-ref seg 'rows '())))
                                 "\n")
                    "\n")
                   'style
@@ -190,7 +194,19 @@
                    (string-append text "\n\n")
                    'style
                    (make-content-delta content-color)))]))
-  (hash 'role role 'text text 'segments (cons role-seg content-segs)))
+  (define disclosure-segs
+    (if (and (eq? kind 'thinking) artifact-id)
+        (list
+         (hash 'type
+               'disclosure-action
+               'text
+               (if (string-contains? text "Ctrl+O to collapse") "Hide reasoning" "Show reasoning")
+               'target
+               artifact-id
+               'intent
+               (make-toggle-detail-intent artifact-id)))
+        '()))
+  (hash 'role role 'text text 'segments (append (list role-seg) content-segs disclosure-segs)))
 
 (define (messages->render-plan msgs theme)
   (for/list ([m (in-list (if (list? msgs)
@@ -210,17 +226,30 @@
      (define updated (hash-set last 'text new-text))
      (append (take msgs (- (length msgs) 1)) (list updated))]))
 
+(define (message-artifact-id message)
+  (define meta (hash-ref message 'meta (hasheq)))
+  (and (hash? meta) (hash-ref meta 'artifact-id #f)))
+
+(define (render-message-equal? left right)
+  (and (equal? (hash-ref left 'role #f) (hash-ref right 'role #f))
+       (equal? (hash-ref left 'kind #f) (hash-ref right 'kind #f))
+       (equal? (hash-ref left 'text #f) (hash-ref right 'text #f))
+       (equal? (message-artifact-id left) (message-artifact-id right))))
+
 (define (compute-transcript-diff old-msgs new-msgs)
   (define old-len (length old-msgs))
   (define new-len (length new-msgs))
   (cond
     [(= old-len new-len)
      (cond
-       [(and (> old-len 0)
-             (not (equal? (hash-ref (list-ref old-msgs (- old-len 1)) 'text #f)
-                          (hash-ref (list-ref new-msgs (- new-len 1)) 'text #f))))
-        (list (hash 'op 'update-last 'msg (list-ref new-msgs (- new-len 1))))]
-       [else '()])]
+       [(andmap render-message-equal? old-msgs new-msgs) '()]
+       [(and
+         (> old-len 0)
+         (andmap render-message-equal? (take old-msgs (sub1 old-len)) (take new-msgs (sub1 new-len))))
+        (list (hash 'op 'update-last 'msg (list-ref new-msgs (sub1 new-len))))]
+       ;; Disclosure can change a completed reasoning message that is not the
+       ;; final transcript item.  Rebuild so the visible fold state changes.
+       [else (list (hash 'op 'reset 'msgs new-msgs))])]
     [(> new-len old-len)
      (for/list ([i (in-range old-len new-len)])
        (hash 'op 'append 'msg (list-ref new-msgs i)))]
@@ -251,10 +280,12 @@
 ;; text-obj: a text% instance (must be unlocked externally)
 ;; msg: hash with 'role and 'text keys
 ;; theme: ui-theme
-(define (insert-message-into-text! text-obj msg theme)
+(define (insert-message-into-text! text-obj msg theme [on-disclosure #f])
   (define role (hash-ref msg 'role "system"))
   (define text (hash-ref msg 'text ""))
   (define kind (hash-ref msg 'kind 'message))
+  (define meta (hash-ref msg 'meta (hasheq)))
+  (define artifact-id (and (hash? meta) (hash-ref meta 'artifact-id #f)))
   (define label (role->label role))
   (cond
     [(or (getenv "DISPLAY") (getenv "WAYLAND_DISPLAY"))
@@ -280,19 +311,32 @@
      (define content-delta (make-object style-delta% 'change-normal))
      (send content-delta set-delta-foreground content-color)
      (send text-obj change-style content-delta)
-     (send text-obj insert (string-append text "\n\n") (send text-obj last-position))]
+     (send text-obj insert text (send text-obj last-position))]
     ;; Headless fallback: plain text insertion
-    [else (send text-obj insert (format "~a: ~a\n\n" label text) (send text-obj last-position))]))
+    [else (send text-obj insert (format "~a: ~a" label text) (send text-obj last-position))])
+  ;; text% clickbacks are the visible disclosure control. Keeping this outside
+  ;; the GUI styling branch makes the interaction contract headless-testable.
+  (when (and (eq? kind 'thinking) artifact-id on-disclosure)
+    (define action-text
+      (if (string-contains? text "Ctrl+O to collapse") "\nHide reasoning" "\nShow reasoning"))
+    (define action-start (send text-obj last-position))
+    (send text-obj insert action-text action-start)
+    (define action-end (send text-obj last-position))
+    (send text-obj set-clickback
+          action-start
+          action-end
+          (lambda (_editor _start _end) (on-disclosure artifact-id))))
+  (send text-obj insert "\n\n" (send text-obj last-position)))
 
 ;; Clear a text% object and rebuild from a list of messages.
 ;; text-obj: a text% instance
 ;; msgs: list of message hashes
 ;; theme: ui-theme
-(define (clear-and-rebuild-text! text-obj msgs theme)
+(define (clear-and-rebuild-text! text-obj msgs theme [on-disclosure #f])
   (send text-obj lock #f)
   (send text-obj delete 0 (send text-obj last-position))
   (for ([msg (in-list msgs)])
-    (insert-message-into-text! text-obj msg theme))
+    (insert-message-into-text! text-obj msg theme on-disclosure))
   (send text-obj lock #t))
 
 ;; Apply diff between old and new messages to a text% object.
@@ -302,7 +346,7 @@
 ;; For reset, falls back to full rebuild.
 ;; last-len-box: (boxof exact-nonnegative-integer?) — tracks previous text length
 ;;   for incremental append. Pass #f to disable incremental mode.
-(define (apply-diff-to-text! text-obj old-msgs new-msgs theme [last-len-box #f])
+(define (apply-diff-to-text! text-obj old-msgs new-msgs theme [last-len-box #f] [on-disclosure #f])
   (define diff (compute-transcript-diff old-msgs new-msgs))
   (cond
     ;; No structural change
@@ -310,7 +354,7 @@
     [(and (= (length diff) 1) (eq? (hash-ref (car diff) 'op #f) 'append))
      ;; Single append → just insert the new message
      (send text-obj lock #f)
-     (insert-message-into-text! text-obj (hash-ref (car diff) 'msg) theme)
+     (insert-message-into-text! text-obj (hash-ref (car diff) 'msg) theme on-disclosure)
      (send text-obj lock #t)]
     [(and (= (length diff) 1) (eq? (hash-ref (car diff) 'op #f) 'update-last))
      ;; Update last → try incremental suffix append first
@@ -352,15 +396,15 @@
         (cond
           [(>= start-pos 0)
            (send text-obj delete start-pos total)
-           (insert-message-into-text! text-obj last-msg theme)]
+           (insert-message-into-text! text-obj last-msg theme on-disclosure)]
           ;; Label not found — full rebuild
-          [else (clear-and-rebuild-text! text-obj new-msgs theme)])
+          [else (clear-and-rebuild-text! text-obj new-msgs theme on-disclosure)])
         (when last-len-box
           (set-box! last-len-box (string-length new-text)))])
      (send text-obj lock #t)]
     ;; Multiple appends or reset → full rebuild
     [else
-     (clear-and-rebuild-text! text-obj new-msgs theme)
+     (clear-and-rebuild-text! text-obj new-msgs theme on-disclosure)
      (when last-len-box
        (set-box! last-len-box 0))]))
 
