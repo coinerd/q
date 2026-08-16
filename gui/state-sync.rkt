@@ -16,6 +16,7 @@
          "../gui/components/rich-transcript-view.rkt"
          "../ui-core/theme-protocol.rkt"
          "../ui-core/conversation-reducer.rkt"
+         "../ui-core/conversation-artifact.rkt"
          "../ui-core/ui-intents.rkt"
          "../gui/gui-types.rkt")
 
@@ -43,7 +44,7 @@
 ;; Listens to event-bus events and accumulates messages
 ;; into the gui-state struct that the GUI polls.
 ;; --------------------------------------------------
-(define (arg-summary-text args)
+(define (arg-brief-text args)
   (cond
     [(not args) ""]
     [(hash? args)
@@ -79,6 +80,12 @@
             (hash-set fact key value)))
       base))
 
+;; Only artifacts carrying a canonical full body are projected into the GUI
+;; transcript.  The body is stored verbatim — (conversation-artifact-body a) —
+;; and folding to a short preview happens at render time, never here.
+(define (projectable-artifact? artifact)
+  (and artifact (string? (conversation-artifact-body artifact))))
+
 (define (reduce-gui-conversation state evt)
   (define session-id (event-session-id evt))
   (define turn-id (event-turn-id evt))
@@ -92,7 +99,7 @@
       (for/fold ([current reduced])
                 ([artifact
                   (in-list
-                   (filter values
+                   (filter projectable-artifact?
                            (list (reducer-thinking-artifact next-reducer session-id turn-id)
                                  (reducer-assistant-artifact next-reducer session-id turn-id))))])
         (gui-state-upsert-artifact current artifact))
@@ -197,8 +204,9 @@
                                     (notify!)))))]
 
         ;; Either terminal order updates the same session+turn artifacts.  No
-        ;; summary truncation is performed; folded presentation is derived from
-        ;; the full artifact body by gui-types.rkt.
+        ;; destructive shortening of the reasoning body is performed here; the
+        ;; folded presentation is derived from the full artifact body by
+        ;; gui-types.rkt.
         [(equal? ev "model.stream.completed")
          (call-with-semaphore gui-state-lock
                               (lambda ()
@@ -243,7 +251,7 @@
         [(equal? ev "tool.call.started")
          (define name (hash-ref payload 'name "unknown"))
          (define args (hash-ref payload 'arguments #f))
-         (define arg-summary (arg-summary-text args))
+         (define arg-brief (arg-brief-text args))
          (call-with-semaphore
           gui-state-lock
           (lambda ()
@@ -251,7 +259,7 @@
             (set-box! state-box
                       (gui-state-add-message old
                                              (make-gui-message "tool"
-                                                               (format "[~a]~a" name arg-summary)
+                                                               (format "[~a]~a" name arg-brief)
                                                                (hasheq 'name name 'arguments args)
                                                                #:kind 'tool-start)))
             (notify!)))]
@@ -259,12 +267,12 @@
         ;; Tool execution completed → add new tool-end/tool-fail entry with result
         [(equal? ev "tool.execution.completed")
          (define name (hash-ref payload 'toolName "unknown"))
-         (define result-summary (hash-ref payload 'resultSummary 'completed))
-         (define is-error (eq? result-summary 'error))
+         (define result-note (hash-ref payload 'resultSummary 'completed))
+         (define is-error (eq? result-note 'error))
          (define result-text
-           (let ([raw (if (string? result-summary)
-                          result-summary
-                          (format "~a" result-summary))])
+           (let ([raw (if (string? result-note)
+                          result-note
+                          (format "~a" result-note))])
              (if (> (string-length raw) 80)
                  (string-append (substring raw 0 77) "...")
                  raw)))
@@ -277,7 +285,7 @@
                        old
                        (make-gui-message "tool"
                                          (format "[~a] → ~a" name result-text)
-                                         (hasheq 'name name 'result result-summary)
+                                         (hasheq 'name name 'result result-note)
                                          #:kind (if is-error 'tool-fail 'tool-end))))
             (notify!)))]
 

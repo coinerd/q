@@ -270,7 +270,10 @@
                                                     #:max-iterations (gsd-session-iteration-budget
                                                                       (runtime-config-max-iterations
                                                                        (runtime-rt-config rt2)))))
-                             run-result))])
+                             run-result)
+                           ;; D4 (#9351): name the lease after the
+                           ;; orchestrating SDK session.
+                           #:lease-owner (session:session-id (runtime-rt-session rt2)))])
               ;; Wave sessions are campaign-owned implementation details. The
               ;; SDK caller retains ownership of the initiating runtime after
               ;; success, rejection, cancellation, or exception.

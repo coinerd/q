@@ -123,11 +123,16 @@
                              (#:permission-config (or/c permission-config? #f))
                              tool-batch-outcome?)]))
 (provide (struct-out tool-batch-outcome))
+
+;; D1 (#9351): pre-start dispatch deadline for tool batches, in milliseconds.
+;; 0 or #f disables the watchdog (legacy behavior).
+(define current-tool-dispatch-timeout-ms (make-parameter 60000))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
          build-blocked-tool-results
          permission-config-for-execution
-         capabilities-for-tool-execution)
+         capabilities-for-tool-execution
+         current-tool-dispatch-timeout-ms)
 
 ;; v0.31.5 W1: export struct
 (provide tool-call-actions
@@ -278,7 +283,8 @@
                                   config
                                   per-tool-start-ms
                                   batch-start-ms
-                                  perm-cfg)
+                                  perm-cfg
+                                  #:on-dispatch-started [on-dispatch-started void])
   ;; Dispatch 'tool.execution.started hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks
@@ -296,6 +302,12 @@
       #:timestamp (current-inexact-milliseconds)
       #:tool-name (format "~a tools starting" (length tool-calls-to-run))
       #:progress (hasheq 'total (length tool-calls-to-run) 'running (length tool-calls-to-run)))))
+  ;; D1 (#9351): execution counts as STARTED only after the first progress
+  ;; emit succeeded. publish! is synchronous fan-out, so a stalled subscriber
+  ;; here (the 01M05MCKP incident) must trip the pre-start deadline, not
+  ;; wait forever.
+  (when (not (null? tool-calls-to-run))
+    (on-dispatch-started))
   (define sched-result
     (cond
       [(not reg) (scheduler-result '() (hasheq))]
@@ -434,91 +446,167 @@
     (if (session-config? config-raw)
         config-raw
         (hash->session-config config-raw)))
-  ;; Phase 1: Preparation
-  (define-values (tool-calls assistant-msg-id actions)
-    (prepare-tool-execution-phase new-msgs ext-reg))
-  (define tool-calls-to-run (tool-call-actions-calls-to-run actions))
-  (define tool-call-blocked? (tool-call-actions-blocked? actions))
-  ;; Phase 2: Execution
-  (define batch-start-ms (current-inexact-milliseconds))
-  (define per-tool-start-ms (make-hash))
-  (define sched-result
-    (if tool-call-blocked?
-        (scheduler-result '() (hasheq))
-        (execute-tool-batch-phase tool-calls-to-run
-                                  reg
-                                  ext-reg
-                                  bus
-                                  session-id
-                                  log-path
-                                  token
-                                  config
-                                  per-tool-start-ms
-                                  batch-start-ms
-                                  perm-cfg)))
-  ;; Phase 3: Assembly
-  (define malformed-calls (find-malformed-tool-calls new-msgs))
-  (define assembled-msgs
-    (assemble-tool-results-phase tool-calls
-                                 tool-calls-to-run
-                                 sched-result
-                                 assistant-msg-id
-                                 tool-call-blocked?
-                                 ext-reg))
-  ;; v0.99.78 Bug A: malformed tool-call arguments must not kill the turn.
-  ;; Append an error tool-result for each malformed call so the model sees the
-  ;; parse failure and can retry with corrected JSON. The malformed calls were
-  ;; excluded from extraction, so they never execute; the error result answers
-  ;; their tool_call_id, preventing orphaned tool_calls on the next request.
-  (define validated-msgs
-    (if (null? malformed-calls)
-        assembled-msgs
-        (append
-         assembled-msgs
-         (for/list ([m (in-list malformed-calls)])
-           (make-message
-            (generate-id)
-            assistant-msg-id
-            'tool
-            'tool-result
-            (list
-             (make-tool-result-part
-              (hash-ref m 'id)
-              (format
-               "Tool call '~a' rejected: arguments are not valid JSON (~a). Fix the arguments and retry."
-               (hash-ref m 'name)
-               (hash-ref m 'raw))
-              #t))
-            (now-seconds)
-            (hasheq 'toolCallId (hash-ref m 'id) 'isError #t))))))
-  ;; P2: Emit outcome-capture trace for classified tool outcomes
-  (unless tool-call-blocked?
-    (for ([tc (in-list tool-calls-to-run)]
-          [tr (in-list (scheduler-result-results sched-result))])
-      (define tool-outcome (classify-tool-outcome tc tr))
-      (when tool-outcome
-        (emit-session-event! bus
-                             session-id
-                             "outcome.captured"
-                             (hasheq 'tool-name
-                                     (tool-call-name tc)
-                                     'outcome-kind
-                                     (typed-tool-outcome-kind tool-outcome)
-                                     'status
-                                     (typed-tool-outcome-status tool-outcome)
-                                     'has-payload
-                                     (positive? (hash-count (typed-tool-outcome-payload
-                                                             tool-outcome))))))))
-  ;; Append validated tool results to log.  Persistence remains owned here;
-  ;; the compatibility wrapper below only projects the outcome value.
-  (append-entries! log-path validated-msgs)
-  (define effective-current-calls
-    (if tool-call-blocked?
-        (tool-call-actions-final-calls actions)
-        tool-calls-to-run))
-  (tool-batch-outcome (append ctx-with-steering new-msgs validated-msgs)
-                      effective-current-calls
-                      validated-msgs))
+  ;; D1 (#9351): pre-start dispatch deadline. Phases 1+2 run on a worker
+  ;; thread. If tool execution has not STARTED within the deadline (e.g. a
+  ;; synchronous bus subscriber stalls the first tool.execution.updated
+  ;; publish — the 01M05MCKP incident: 35 dispatches accepted, 34 started,
+  ;; turn open for 92 minutes), emit tool.dispatch.timeout and answer every
+  ;; pending call with a synthetic error tool-result so the model can react
+  ;; and the turn recovers instead of hanging forever. Once execution HAS
+  ;; started, the scheduler's own per-tool timeouts own the remainder: the
+  ;; wait is unbounded. A deadline of 0/#f disables the watchdog entirely.
+  (define started-box (box #f))
+  (define result-ch (make-channel))
+  (define (run-phases)
+    ;; Phase 1: Preparation
+    (define-values (tool-calls assistant-msg-id actions)
+      (prepare-tool-execution-phase new-msgs ext-reg))
+    (define tool-calls-to-run (tool-call-actions-calls-to-run actions))
+    (define tool-call-blocked? (tool-call-actions-blocked? actions))
+    ;; A permission-blocked batch never dispatches execution; that is a
+    ;; normal outcome, not a watchdog timeout.
+    (when tool-call-blocked?
+      (set-box! started-box #t))
+    ;; Phase 2: Execution
+    (define batch-start-ms (current-inexact-milliseconds))
+    (define per-tool-start-ms (make-hash))
+    (define sched-result
+      (if tool-call-blocked?
+          (scheduler-result '() (hasheq))
+          (execute-tool-batch-phase tool-calls-to-run
+                                    reg
+                                    ext-reg
+                                    bus
+                                    session-id
+                                    log-path
+                                    token
+                                    config
+                                    per-tool-start-ms
+                                    batch-start-ms
+                                    perm-cfg
+                                    #:on-dispatch-started (lambda () (set-box! started-box #t)))))
+    ;; Phase 3: Assembly
+    (define malformed-calls (find-malformed-tool-calls new-msgs))
+    (define assembled-msgs
+      (assemble-tool-results-phase tool-calls
+                                   tool-calls-to-run
+                                   sched-result
+                                   assistant-msg-id
+                                   tool-call-blocked?
+                                   ext-reg))
+    ;; v0.99.78 Bug A: malformed tool-call arguments must not kill the turn.
+    ;; Append an error tool-result for each malformed call so the model sees
+    ;; the parse failure and can retry with corrected JSON. The malformed
+    ;; calls were excluded from extraction, so they never execute; the error
+    ;; result answers their tool_call_id, preventing orphaned tool_calls on
+    ;; the next request.
+    (define validated-msgs
+      (if (null? malformed-calls)
+          assembled-msgs
+          (append
+           assembled-msgs
+           (for/list ([m (in-list malformed-calls)])
+             (make-message
+              (generate-id)
+              assistant-msg-id
+              'tool
+              'tool-result
+              (list
+               (make-tool-result-part
+                (hash-ref m 'id)
+                (format
+                 "Tool call '~a' rejected: arguments are not valid JSON (~a). Fix the arguments and retry."
+                 (hash-ref m 'name)
+                 (hash-ref m 'raw))
+                #t))
+              (now-seconds)
+              (hasheq 'toolCallId (hash-ref m 'id) 'isError #t))))))
+    ;; P2: Emit outcome-capture trace for classified tool outcomes
+    (unless tool-call-blocked?
+      (for ([tc (in-list tool-calls-to-run)]
+            [tr (in-list (scheduler-result-results sched-result))])
+        (define tool-outcome (classify-tool-outcome tc tr))
+        (when tool-outcome
+          (emit-session-event! bus
+                               session-id
+                               "outcome.captured"
+                               (hasheq 'tool-name
+                                       (tool-call-name tc)
+                                       'outcome-kind
+                                       (typed-tool-outcome-kind tool-outcome)
+                                       'status
+                                       (typed-tool-outcome-status tool-outcome)
+                                       'has-payload
+                                       (positive? (hash-count (typed-tool-outcome-payload
+                                                               tool-outcome))))))))
+    ;; Append validated tool results to log.  Persistence remains owned here;
+    ;; the compatibility wrapper below only projects the outcome value.
+    (append-entries! log-path validated-msgs)
+    (define effective-current-calls
+      (if tool-call-blocked?
+          (tool-call-actions-final-calls actions)
+          tool-calls-to-run))
+    (tool-batch-outcome (append ctx-with-steering new-msgs validated-msgs)
+                        effective-current-calls
+                        validated-msgs))
+  (thread (lambda ()
+            (with-handlers ([exn:fail? (lambda (e) (channel-put result-ch (list 'exn e)))])
+              (channel-put result-ch (list 'ok (run-phases))))))
+  (define timeout-ms (current-tool-dispatch-timeout-ms))
+  (define signal
+    (cond
+      [(not (positive? timeout-ms)) (sync result-ch)]
+      [else
+       (define sig (sync result-ch (alarm-evt (+ (current-inexact-milliseconds) timeout-ms))))
+       (cond
+         [(pair? sig) sig]
+         ;; Execution started within the deadline: the scheduler's own
+         ;; per-tool timeouts own the remainder of the wait.
+         [(unbox started-box) (sync result-ch)]
+         [else 'dispatch-timeout])]))
+  (cond
+    [(eq? signal 'dispatch-timeout)
+     (define pending-calls (extract-tool-calls-from-messages new-msgs))
+     (emit-session-event! bus
+                          session-id
+                          "tool.dispatch.timeout"
+                          (hasheq 'waited-ms
+                                  timeout-ms
+                                  'tool-call-ids
+                                  (map (lambda (tc) (or (tool-call-id tc) "unknown")) pending-calls)
+                                  'count
+                                  (length pending-calls)))
+     (define synthetic-msgs (synthetic-dispatch-timeout-results pending-calls timeout-ms))
+     ;; Persist the synthetic answers so the next model request never sees
+     ;; orphaned tool_calls (which providers reject with 400s).
+     (append-entries! log-path synthetic-msgs)
+     (tool-batch-outcome (append ctx-with-steering new-msgs synthetic-msgs)
+                         pending-calls
+                         synthetic-msgs)]
+    [(and (pair? signal) (eq? (car signal) 'exn)) (raise (cadr signal))]
+    [(and (pair? signal) (eq? (car signal) 'ok)) (cadr signal)]
+    [else (error 'handle-tool-calls-pending/outcome "unreachable watchdog signal: ~s" signal)]))
+
+;; D1 (#9351): synthetic error answers for a dispatch that never started.
+;; Mirrors the malformed-call pattern above so providers never see orphaned
+;; tool_calls on the next request.
+(define (synthetic-dispatch-timeout-results tool-calls waited-ms)
+  (for/list ([tc (in-list tool-calls)])
+    (make-message
+     (generate-id)
+     #f
+     'tool
+     'tool-result
+     (list
+      (make-tool-result-part
+       (or (tool-call-id tc) "unknown")
+       (format (string-append
+                "Tool dispatch timed out after ~ams without starting execution; "
+                "the runtime dropped the call. Treat it as failed and re-issue it if still needed.")
+               waited-ms)
+       #t))
+     (now-seconds)
+     (hasheq 'toolCallId (or (tool-call-id tc) "unknown") 'isError #t))))
 
 ;; Backward-compatible API: preserve the historical list return value without
 ;; executing, persisting, or emitting anything a second time.

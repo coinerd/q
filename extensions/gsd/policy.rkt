@@ -65,8 +65,13 @@
   (make-parameter 1800 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
 (define current-gsd-wave-max-iterations
   (make-parameter 50 (positive-integer-guard 'current-gsd-wave-max-iterations)))
+;; D3 (#9351): raised from 30 — incident 81f9be4b W2 died at exactly 30
+;; consecutive tool-only turns (attempt-3) while the identical wave completed
+;; in the main session with 24-consecutive bursts. Implementation waves
+;; legitimately exceed the old default; 100 keeps the runaway-loop guard
+;; without policy-killing real work.
 (define current-gsd-max-consecutive-tool-calls
-  (make-parameter 30 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
+  (make-parameter 100 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
 
 (define (gsd-session-iteration-budget configured-max)
   (unless (exact-positive-integer? configured-max)

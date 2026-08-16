@@ -197,6 +197,44 @@
       (define lease (acquire-lease dir (campaign-plan-id rec)))
       (check-true (campaign-lease? lease))
       (release-lease! lease)
+      (cleanup-tmp dir))
+
+    (test-case "lease records owner session-id and pid (D4, issue #9351)"
+      ;; Incident 81f9be4b: the lock file named owner "unknown" and no pid,
+      ;; so a stale lease could not be attributed to any holder.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id "session-abc"))
+      (check-true (campaign-lease? lease))
+      (define lock-path
+        (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
+      (define content (with-input-from-file lock-path read))
+      (check-equal? (hash-ref content 'owner #f) "session-abc")
+      (check-true (exact-nonnegative-integer? (hash-ref content 'pid #f)) "pid must be recorded")
+      (check-true (real? (hash-ref content 'acquired #f)) "acquired timestamp must be recorded")
+      (release-lease! lease)
+      (cleanup-tmp dir))
+
+    (test-case "run-campaign! threads lease-owner into the lease (D4, issue #9351)"
+      ;; The wave runner executes while the coordinator holds the lease, so
+      ;; it can observe the lock-file owner written under the lease.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lock-path
+        (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
+      (define observed-owner (box #f))
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:lease-owner "main-tui-session"
+                       #:verifier (lambda (_) #t)
+                       #:runner
+                       (lambda (_idx)
+                         (set-box! observed-owner
+                                   (hash-ref (with-input-from-file lock-path read) 'owner #f))
+                         'ok)))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? (unbox observed-owner) "main-tui-session")
       (cleanup-tmp dir))))
 
 (define go-n-suite

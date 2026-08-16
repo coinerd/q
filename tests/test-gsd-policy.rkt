@@ -22,6 +22,15 @@
   (check-true (exact-positive-integer? (current-gsd-wave-max-iterations)))
   (check-true (exact-positive-integer? (current-gsd-max-consecutive-tool-calls))))
 
+(test-case "executor tool-loop limit clears implementation workloads (D3, issue #9351)"
+  ;; Incident 81f9be4b W2: the executor died at the old default of 30
+  ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
+  ;; the identical wave completed in the main session with 24-consecutive
+  ;; bursts. Implementation waves must not be policy-killed; 60 is the
+  ;; minimum credible floor.
+  (check-true (>= (current-gsd-max-consecutive-tool-calls) 60)
+              "current-gsd-max-consecutive-tool-calls default is too small for implementation waves"))
+
 (test-case "GSD session iteration budget caps a larger configured budget"
   (parameterize ([current-gsd-wave-max-iterations 12])
     (check-equal? (gsd-session-iteration-budget 100) 12)

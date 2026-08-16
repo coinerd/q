@@ -167,6 +167,8 @@
  ("runtime/iteration/step-executor.rkt"
   (current-post-tool-result-hook . SERVICE_HANDLE)
   (current-reflection-prompt-enabled . CONFIGURATION))
+ ("runtime/tool-coordinator.rkt"
+  (current-tool-dispatch-timeout-ms . CONFIGURATION))
  ("runtime/memory/auto-extraction.rkt"
   (current-auto-extraction-min-confidence . CONFIGURATION)
   (current-auto-extraction-enabled . CONFIGURATION))

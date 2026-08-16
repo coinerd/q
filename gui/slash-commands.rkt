@@ -118,7 +118,10 @@
                                        (lambda (prompt)
                                          (define-values (_campaign-session campaign-runner)
                                            (make-gui-campaign-runner sess))
-                                         (campaign-runner prompt))))
+                                         (campaign-runner prompt))
+                                       ;; D4 (#9351): name the lease after the
+                                       ;; orchestrating GUI session.
+                                       #:lease-owner (session-id sess)))
             (unless (eq? (campaign-result-status result) 'campaign-complete)
               (add-system-msg! (format "[ERROR] /go campaign stopped: ~a"
                                        (campaign-result-status result))

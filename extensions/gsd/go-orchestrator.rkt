@@ -36,7 +36,8 @@
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-max-consecutive-tool-calls)
-         (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls))
+         (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
+         racket/os)
 
 ;; ============================================================
 ;; Lease (D5: process-safe OS advisory lock)
@@ -58,7 +59,9 @@
     (if (port-try-file-lock? port 'exclusive)
         (begin
           (file-position port 0)
-          (write (hasheq 'owner session-id 'acquired (current-seconds)) port)
+          ;; D4 (#9351): record the owning session id AND pid so a stale
+          ;; lock file names its holder (incident 81f9be4b: "unknown").
+          (write (hasheq 'owner session-id 'pid (getpid) 'acquired (current-seconds)) port)
           (flush-output port)
           (campaign-lease p port (current-seconds) session-id))
         (begin
@@ -131,7 +134,7 @@
     [(eq? result 'cancelled) (wave-execution-outcome 'cancelled "")]
     [else (wave-execution-outcome 'failed (format "unknown runner result: ~s" result))]))
 
-(define (execute-campaign-request! request run-prompt)
+(define (execute-campaign-request! request run-prompt #:lease-owner [lease-owner "unknown"])
   (define base-dir (campaign-request-base-dir request))
   (define record (campaign-request-record request))
   (define plan-id (campaign-plan-id record))
@@ -145,6 +148,7 @@
     (run-campaign!
      base-dir
      record
+     #:lease-owner lease-owner
      #:runner (make-wave-runner-port
                (lambda (wave-idx)
                  (with-handlers ([exn:fail? (lambda (e)
@@ -186,15 +190,15 @@
   (call-with-semaphore campaign-request-registry-lock
                        (lambda () (hash-ref campaign-request-registry token #f))))
 
-(define (execute-campaign-token! token run-prompt)
+(define (execute-campaign-token! token run-prompt #:lease-owner [lease-owner "unknown"])
   (define request (lookup-campaign-request token))
   (if request
-      (dynamic-wind void
-                    (lambda () (execute-campaign-request! request run-prompt))
-                    (lambda ()
-                      (call-with-semaphore campaign-request-registry-lock
-                                           (lambda ()
-                                             (hash-remove! campaign-request-registry token)))))
+      (dynamic-wind
+       void
+       (lambda () (execute-campaign-request! request run-prompt #:lease-owner lease-owner))
+       (lambda ()
+         (call-with-semaphore campaign-request-registry-lock
+                              (lambda () (hash-remove! campaign-request-registry token)))))
       (campaign-result 'error '() "campaign request token is missing or expired")))
 
 ;; ============================================================
@@ -366,9 +370,12 @@
                        #:runner [runner default-runner]
                        #:verifier [verifier default-verifier]
                        #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
-                       #:timeout-sec [timeout-sec #f])
+                       #:timeout-sec [timeout-sec #f]
+                       #:lease-owner [lease-owner "unknown"])
   (define plan-id (campaign-plan-id rec))
-  (define lease (acquire-lease base-dir plan-id))
+  ;; D4 (#9351): pass the owning session id so the lease file names its
+  ;; holder instead of the opaque "unknown" observed in incident 81f9be4b.
+  (define lease (acquire-lease base-dir plan-id #:session-id lease-owner))
   (if (not lease)
       (campaign-result 'busy '() "campaign lease held by another process")
       (dynamic-wind
