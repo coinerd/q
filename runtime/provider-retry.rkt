@@ -19,9 +19,18 @@
                   exn:fail:stream-error-original-exn)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "adaptive-retry.rkt" adaptive-network-error-type? adapt-provider-request)
-         (only-in "auto-retry.rkt" with-auto-retry retry-cancelled?)
+         (only-in "auto-retry.rkt" with-auto-retry retry-cancelled? default-stall-max-consecutive)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          "provider-health.rkt")
+
+;; D8 (#9357): campaign-aware provider retry scaling. Interactive turns keep
+;; the interactive defaults (2 retries, 2-stall breaker, caller ceiling).
+;; The campaign executor parameterizes these to wave-scale values (via
+;; extensions/gsd/go-orchestrator.rkt execute-campaign-request!) so a single
+;; transient SSE read timeout does not burn an entire implementation wave.
+(define current-provider-retry-max-retries (make-parameter 2))
+(define current-provider-retry-stall-max-consecutive (make-parameter default-stall-max-consecutive))
+(define current-provider-retry-ceiling-secs (make-parameter #f))
 
 (provide (contract-out [call-with-provider-retry
                         (->* (procedure? list? hash? event-bus? string? string? real?)
@@ -33,6 +42,11 @@
                                                #:cancellation-token (or/c cancellation-token? #f))
                              any/c)]
                        [default-partial-recovery-min-chars exact-nonnegative-integer?]))
+
+;; D8 (#9357): provider-retry scaling knobs for campaign-aware retry.
+(provide current-provider-retry-max-retries
+         current-provider-retry-stall-max-consecutive
+         current-provider-retry-ceiling-secs)
 
 ;; v0.99.82 W3 NR-4: Minimum partial text length to qualify for recovery.
 (define default-partial-recovery-min-chars 200)
@@ -161,10 +175,11 @@
                          (raise e)))])
     (with-auto-retry
      (lambda () (wrapped-attempt (unbox ctx-for-retry) (unbox settings-for-retry)))
-     #:max-retries 2
+     #:max-retries (current-provider-retry-max-retries)
      #:base-delay-ms 1000
+     #:stall-max-consecutive (current-provider-retry-stall-max-consecutive)
      #:cancellation-token cancellation-token
-     #:cumulative-ceiling-secs ceiling-secs
+     #:cumulative-ceiling-secs (or (current-provider-retry-ceiling-secs) ceiling-secs)
      #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                   (emit-retry-event! attempt max-retries delay-ms error-msg error-type)
                   (maybe-adapt-request! attempt error-type)
