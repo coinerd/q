@@ -107,6 +107,17 @@
                         ec
                         (string-trim err))))
 
+;; Call gh expecting plain scalar output (e.g. with -q '.field').
+(define (gh-text . args)
+  (define-values (ec out err) (apply run-capture "gh" args))
+  (if (zero? ec)
+      (string-trim out)
+      (raise-user-error 'gh
+                        "gh ~a failed (exit ~a): ~a"
+                        (string-join args " ")
+                        ec
+                        (string-trim err))))
+
 (define (repo-slug)
   (define-values (ec out _e)
     (run-capture "gh" "repo" "view" "--json" "nameWithOwner" "-q" ".nameWithOwner"))
@@ -178,16 +189,24 @@
 
 ;; ------------------------------------------------- stage 1: release notes
 
-;; Find the milestone number for the version by title. One page of 100
-;; (state=all) keeps the response a single JSON document; filter in Racket.
+;; Find the milestone number for the version by title. Milestones are sorted
+;; by due date, so a single page can miss the target (BUG-0014: "nine pages of
+;; closed milestones"); walk pages of 100 until a title match or an empty page.
 (define (find-milestone-number)
-  (define ms (gh-json "api" "repos/{owner}/{repo}/milestones?state=all&per_page=100"))
-  (define hits
-    (filter (lambda (m) (string-contains? (hash-ref m 'title "") version))
-            (if (list? ms)
-                ms
-                '())))
-  (and (pair? hits) (hash-ref (car hits) 'number #f)))
+  (let loop ([page 1])
+    (define ms
+      (gh-json "api"
+               (format "repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a"
+                       page)))
+    (cond
+      [(not (list? ms)) #f]
+      [(null? ms) #f]
+      [else
+       (define hits
+         (filter (lambda (m) (equal? (hash-ref m 'title "") (string-append "v" version)))
+                 ms))
+       (or (and (pair? hits) (hash-ref (car hits) 'number #f))
+           (loop (add1 page)))])))
 
 ;; Closed issues in the milestone: the note sources from the tracker.
 (define (milestone-issues mn)
@@ -378,9 +397,9 @@
 
 (define (stage-milestone-close mn)
   (printf "== [7/7] MILESTONE - close milestone ~a (v~a)\n" mn version)
-  (define state (gh-json "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-q" ".state"))
+  (define state (gh-text "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-q" ".state"))
   (cond
-    [(string=? (string-trim (~a state)) "closed") (printf "  already closed - no-op\n")]
+    [(string=? (string-trim state) "closed") (printf "  already closed - no-op\n")]
     [dry-run? (printf "  [dry-run] would PATCH state=closed\n")]
     [else
      (gh-json "api" (format "repos/{owner}/{repo}/milestones/~a" mn) "-X" "PATCH" "-f" "state=closed")
