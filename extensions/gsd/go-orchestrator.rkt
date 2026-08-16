@@ -37,6 +37,10 @@
                   current-gsd-wave-timeout-seconds
                   current-gsd-max-consecutive-tool-calls)
          (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
+         (only-in "../../runtime/provider-retry.rkt"
+                  current-provider-retry-max-retries
+                  current-provider-retry-stall-max-consecutive
+                  current-provider-retry-ceiling-secs)
          racket/os)
 
 ;; ============================================================
@@ -109,6 +113,28 @@
   #:transparent
   #:constructor-name make-campaign-request)
 
+;; D8 (#9357): classify a loop-result as an infrastructure failure (provider/
+;; network/SSE timeout) rather than a genuine agent/code failure. Positive
+;; signals: classify-error domain network/provider, a retry-exhausted marker
+;; (the provider retry machinery only retries transient LLM failures), or
+;; stream/SSE/read-timeout messages. A single transient provider stall must
+;; NOT consume a campaign attempt (attempt-4: 30 tools done, then one
+;; 120 s SSE read timeout → wave-failed).
+(define (infra-failure? result)
+  (and (loop-result? result)
+       (eq? (loop-result-termination-reason result) 'error)
+       (let ([meta (loop-result-metadata result)])
+         (and (hash? meta)
+              (let* ([err-type (hash-ref meta 'errorType #f)]
+                     [domain (and (pair? err-type) (car err-type))]
+                     [retries (hash-ref meta 'retries-attempted #f)]
+                     [msg (let ([e (hash-ref meta 'error #f)]) (if (string? e) e ""))])
+                (or (memq domain '(network provider))
+                    (and retries (positive? retries))
+                    (regexp-match?
+                     #rx"read timeout|SSE|stream|circuit|temporarily unavailable|network|connection"
+                     msg)))))))
+
 (define (prompt-run-result->outcome result)
   (cond
     [(loop-result? result)
@@ -128,6 +154,11 @@
         (wave-execution-outcome 'failed "tool calls remain pending")]
        [(eq? termination 'empty-response)
         (wave-execution-outcome 'failed "model returned an empty response")]
+       [(infra-failure? result)
+        ;; D8 (#9357): transient provider/network/SSE failure — distinct
+        ;; outcome so run-campaign-wave can preserve the attempt.
+        (wave-execution-outcome 'infra-failed
+                                "provider/network failure — wave preserved (attempt not consumed)")]
        [else (wave-execution-outcome 'failed (format "termination reason: ~a" termination))])]
     [(eq? result 'completed) (wave-execution-outcome 'done "")]
     [(eq? result 'ok) (wave-execution-outcome 'done "")]
@@ -144,7 +175,17 @@
   (define (durable-cancellation-requested?)
     (define observed (load-campaign-record base-dir plan-id))
     (and observed (campaign-record-cancellation observed)))
-  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)])
+  ;; D8 (#9357): campaign-aware provider retry. A single transient SSE read
+  ;; timeout (120 s) must not burn an implementation wave that may have made
+  ;; 30+ tool-call minutes of progress. Scale the interactive retry knobs to
+  ;; wave budget: more retries, more consecutive-stall tolerance, and a
+  ;; cumulative ceiling proportional to the wave timeout (capped at 900 s).
+  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)]
+                 [current-provider-retry-max-retries 5]
+                 [current-provider-retry-stall-max-consecutive 4]
+                 [current-provider-retry-ceiling-secs
+                  (let ([budget (current-gsd-wave-timeout-seconds)])
+                    (min 900 (max 60 (quotient (inexact->exact (floor budget)) 2))))])
     (run-campaign!
      base-dir
      record
@@ -345,6 +386,27 @@
                                                  (lambda (idx) (wave-slug base-dir idx)))
                  (campaign-result 'wave-failed '() "runner error"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
+          ;; D8 (#9357): transient provider/network/SSE failure — do NOT
+          ;; consume the attempt. Roll back the begin-attempt! increment,
+          ;; reset the wave to pending, and stop the campaign so the user
+          ;; re-runs /go when the provider is healthy. Avoids both attempt
+          ;; churn (attempt-4: 30 tools done, one 120 s SSE read timeout
+          ;; → wave-failed) and hot-looping on a sick provider.
+          [(infra-failed)
+           (define infra-wave (current-wave-for-attempt after-run wave-idx fence expected-id))
+           (when infra-wave
+             (set-campaign-wave-status! infra-wave 'pending)
+             (set-campaign-wave-attempt-count! infra-wave
+                                               (max 0
+                                                    (sub1 (campaign-wave-attempt-count infra-wave))))
+             (set-campaign-wave-current-attempt! infra-wave #f)
+             (persist-campaign! base-dir after-run)
+             (mirror-status! 'pending))
+           (campaign-result
+            'wave-cancelled
+            '()
+            (format "provider/network failure: ~a — wave preserved (attempt not consumed); re-run /go"
+                    (wave-execution-outcome-message run-result)))]
           [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
           ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
           ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
@@ -524,6 +586,8 @@
          campaign-result-message
          run-campaign-wave
          run-campaign!
+         prompt-run-result->outcome
+         infra-failure?
          assert-go-n
          campaign-request
          campaign-request?

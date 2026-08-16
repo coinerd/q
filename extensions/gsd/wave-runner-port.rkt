@@ -35,20 +35,23 @@
 ;; ============================================================
 
 (define (valid-outcome-kind? k)
-  (memq k '(done failed cancelled timed-out interrupted)))
+  ;; D8 (#9357): 'infra-failed — transient provider/network/SSE failure that
+  ;; run-campaign-wave resolves to wave-cancelled without consuming the attempt.
+  (memq k '(done failed cancelled timed-out interrupted infra-failed)))
 
 (struct wave-execution-outcome (kind message)
   #:transparent
-  #:guard (lambda (kind message name)
-            (unless (valid-outcome-kind? kind)
-              (raise-arguments-error
-               name
-               "invalid terminal outcome kind (expected done|failed|cancelled|timed-out|interrupted)"
-               "kind"
-               kind))
-            (unless (string? message)
-              (raise-arguments-error name "outcome message must be a string" "message" message))
-            (values kind message)))
+  #:guard
+  (lambda (kind message name)
+    (unless (valid-outcome-kind? kind)
+      (raise-arguments-error
+       name
+       "invalid terminal outcome kind (expected done|failed|cancelled|timed-out|interrupted|infra-failed)"
+       "kind"
+       kind))
+    (unless (string? message)
+      (raise-arguments-error name "outcome message must be a string" "message" message))
+    (values kind message)))
 
 ;; ============================================================
 ;; Executor port
