@@ -58,12 +58,22 @@
     (define port (open-output-file p #:exists 'can-update))
     (if (port-try-file-lock? port 'exclusive)
         (begin
-          (file-position port 0)
+          ;; S2a (#9358): the file may hold a LONGER lease from a previous
+          ;; owner (e.g. "01M0645J64E772Q0ZFNVGGEKK0"). open-output-file
+          ;; 'can-update does NOT truncate, so file-position 0 + write left
+          ;; a stale tail after a shorter write — corrupting the lease
+          ;; (observed: `…VGGEKK0") (pid …)`). Truncate to zero before write.
           ;; D4 (#9351): record the owning session id AND pid so a stale
           ;; lock file names its holder (incident 81f9be4b: "unknown").
-          (write (hasheq 'owner session-id 'pid (getpid) 'acquired (current-seconds)) port)
-          (flush-output port)
-          (campaign-lease p port (current-seconds) session-id))
+          ;; S2a (#9358): never write an empty owner — a re-dispatch path
+          ;; passed "" (observed in attempt-5), defeating D4 diagnostics.
+          (let ([owner
+                 (if (and (string? session-id) (not (string=? session-id ""))) session-id "unknown")])
+            (file-truncate port 0)
+            (file-position port 0)
+            (write (hasheq 'owner owner 'pid (getpid) 'acquired (current-seconds)) port)
+            (flush-output port)
+            (campaign-lease p port (current-seconds) owner)))
         (begin
           (close-output-port port)
           #f))))
