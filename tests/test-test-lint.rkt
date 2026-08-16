@@ -1,14 +1,22 @@
 #lang racket/base
 
-;; @speed fast
-;; @suite default
-
 ;; BOUNDARY: unit
 ;; @suite runtime
 ;; @boundary unit
 ;; @speed fast
-;; @mutates none
+;; @isolation subprocess
+;; @mutates env
 ;; Tests for lint-tests.rkt v0.83.4 checks (#6748)
+;;
+;; Subprocess-isolation rationale (W7 / BUG-0014 release CI): the
+;; "lint-tests.rkt runs" integration case below spawns
+;; `racket scripts/lint-tests.rkt`, which enumerates and reads every file
+;; under tests/. Under --jobs 4 the parallel workers are compiling/writing
+;; test files at the same moment, so the scan intermittently observed a
+;; half-written file and the lint crashed (exit 2) → ASSERTION_FAILURE in CI
+;; while passing standalone. classify-filters.rkt's mutating-file? treats
+;; subprocess isolation as serializing (F-7, v0.99.77), running this file in
+;; the serial batch before any parallel worker starts.
 
 (require racket/string
          racket/system
