@@ -9,6 +9,8 @@
          racket/class
          "../gui/gui-types.rkt"
          "../gui/slash-commands.rkt"
+         "../ui-core/conversation-artifact.rkt"
+         "../ui-core/disclosure-state.rkt"
          "../runtime/session/session-types.rkt"
          (only-in "../runtime/session/lifecycle-state.rkt" make-lifecycle-state)
          "../extensions/api.rkt"
@@ -93,6 +95,20 @@
       (check-equal? (length msgs) 1)
       (check-equal? (gui-message-role (car msgs)) "system")
       (check-true (string-contains? (gui-message-text (car msgs)) "Available commands")))
+
+    (test-case "/toggle-detail expands the latest canonical reasoning artifact"
+      (define artifact
+        (make-conversation-artifact #:id "gui-artifact"
+                                    #:session-id "gui-session"
+                                    #:turn-id "gui-turn"
+                                    #:kind 'thinking
+                                    #:body "reason"
+                                    #:lifecycle 'completed))
+      (define state-box (box (gui-state-upsert-artifact (make-gui-state) artifact)))
+      (define lock (make-semaphore 1))
+      (define handler (make-slash-command-handler #f state-box lock))
+      (check-true (handler "/toggle-detail"))
+      (check-true (disclosure-expanded? (gui-state-disclosure (unbox state-box)) "gui-artifact")))
 
     (test-case "/compact adds system message"
       (define state-box (box (make-gui-state)))
@@ -275,7 +291,7 @@
 
 (define test-campaign-session
   (test-suite "dedicated GUI campaign session"
-    (test-case "one fresh session-backed runner is reused across prompts"
+    (test-case "campaign runner factory creates a fresh session for each wave"
       (define dir (make-temporary-file "gui-campaign-~a" 'directory))
       (dynamic-wind
        void
@@ -291,14 +307,13 @@
                                        (path->string dir)
                                        'model-name
                                        "test")))
-         (define-values (campaign-session campaign-runner) (make-gui-campaign-runner initiating))
-         (check-not-equal? (session-id campaign-session) (session-id initiating))
-         (define campaign-id (session-id campaign-session))
-         (define first-values (call-with-values (lambda () (campaign-runner "W0")) list))
-         (define second-values (call-with-values (lambda () (campaign-runner "W1")) list))
-         (check-equal? (length first-values) 2)
-         (check-equal? (length second-values) 2)
-         (check-equal? (session-id campaign-session) campaign-id))
+         (define-values (first-session first-runner) (make-gui-campaign-runner initiating))
+         (define-values (second-session second-runner) (make-gui-campaign-runner initiating))
+         (check-not-equal? (session-id first-session) (session-id initiating))
+         (check-not-equal? (session-id second-session) (session-id initiating))
+         (check-not-equal? (session-id first-session) (session-id second-session))
+         (check-equal? (length (call-with-values (lambda () (first-runner "W0")) list)) 2)
+         (check-equal? (length (call-with-values (lambda () (second-runner "W1")) list)) 2))
        (lambda () (delete-directory/files dir #:must-exist? #f))))))
 
 (run-tests (test-suite "gui-slash-commands"

@@ -33,7 +33,8 @@
          ;; Core SDK types
          "sdk-core.rkt"
          "../runtime/session/session-path.rkt"
-         (only-in "../extensions/gsd/go-orchestrator.rkt" execute-campaign-token!))
+         (only-in "../extensions/gsd/go-orchestrator.rkt" execute-campaign-token!)
+         (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget))
 
 ;; Re-export core types for convenience
 ;; C1 v0.97.13: Explicit re-exports instead of struct-out (matches sdk-core.rkt).
@@ -256,17 +257,24 @@
        [campaign-token
         (if (not (runtime-rt-session rt2))
             (values rt2 (or submit-text campaign-token))
-            (let ([current-rt (box (open-session rt2))])
-              (define result
-                (execute-campaign-token! campaign-token
-                                         (lambda (prompt)
-                                           ;; One dedicated SDK campaign session is reused for every
-                                           ;; wave; the initiating session remains untouched.
-                                           (define-values (updated-rt run-result)
-                                             (run-prompt! (unbox current-rt) prompt))
-                                           (set-box! current-rt updated-rt)
-                                           run-result)))
-              (values (unbox current-rt) result)))]
+            (let ([result (execute-campaign-token!
+                           campaign-token
+                           (lambda (prompt)
+                             ;; A fresh SDK session is opened for every wave; the
+                             ;; initiating session and prior-wave context stay isolated.
+                             (define fresh-rt (open-session rt2))
+                             (define fresh-session (runtime-rt-session fresh-rt))
+                             (define-values (_updated-session run-result)
+                               (session:run-prompt! fresh-session
+                                                    prompt
+                                                    #:max-iterations (gsd-session-iteration-budget
+                                                                      (runtime-config-max-iterations
+                                                                       (runtime-rt-config rt2)))))
+                             run-result))])
+              ;; Wave sessions are campaign-owned implementation details. The
+              ;; SDK caller retains ownership of the initiating runtime after
+              ;; success, rejection, cancellation, or exception.
+              (values rt2 result)))]
        [(not submit-text) (values rt2 'no-plan-text)]
        [(not (runtime-rt-session rt2)) (values rt2 submit-text)]
        [else (run-prompt! rt2 submit-text)])]))

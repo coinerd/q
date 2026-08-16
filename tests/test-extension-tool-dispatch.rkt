@@ -90,26 +90,26 @@
   (check-true (string-contains? (result-text result) "1-arg with ctx succeeded")))
 
 ;; ============================================================
-;; 2-arg handler (defense-in-depth pattern)
+;; 2-arg handler receives the scheduler execution context
 ;; ============================================================
 
-(test-case "2-arg handler with [exec-ctx #f] still works through scheduler"
+(test-case "2-arg handler receives exec-ctx while 1-arg compatibility is preserved"
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx #:tool-registry reg))
-  (ext-register-tool!
-   ctx
-   "test-2arg"
-   "Test tool with 2-arg handler"
-   (hasheq 'type "object" 'properties (hasheq))
-   (lambda (args [exec-ctx #f])
-     (make-success-result
-      (list (hasheq 'type "text" 'text (format "2-arg handler succeeded, exec-ctx=~a" exec-ctx))))))
+  (define received-ctx (box #f))
+  (ext-register-tool! ctx
+                      "test-2arg"
+                      "Test tool with 2-arg handler"
+                      (hasheq 'type "object" 'properties (hasheq))
+                      (lambda (args [exec-ctx #f])
+                        (set-box! received-ctx exec-ctx)
+                        (make-success-result
+                         (list (hasheq 'type "text" 'text "2-arg handler succeeded")))))
   (define t (lookup-tool reg "test-2arg"))
-  ;; Wrapped by dynamic-tools.rkt, so the outer lambda takes (args exec-ctx)
-  ;; and calls the inner lambda with just (args). The inner lambda has [exec-ctx #f]
-  ;; as defense-in-depth but the wrapper won't pass exec-ctx.
-  (define result ((tool-execute t) (hasheq) #f))
+  (define exec-ctx (make-exec-context #:working-directory "/tmp/dispatch-root"))
+  (define result ((tool-execute t) (hasheq) exec-ctx))
   (check-false (tool-result-is-error? result))
+  (check-eq? (unbox received-ctx) exec-ctx)
   (check-true (string-contains? (result-text result) "2-arg handler succeeded")))
 
 ;; ============================================================

@@ -81,7 +81,8 @@
                            rec
                            0
                            #:runner (make-wave-runner-port
-                                     (lambda (idx) (wave-execution-outcome 'done "wave finished")))))
+                                     (lambda (idx) (wave-execution-outcome 'done "wave finished")))
+                           #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-done)
       (check-eq? (wave-status* rec 0) 'done)
       (check-equal? (count-completion-events dir rec) 1 "exactly one completion event per done wave")
@@ -91,7 +92,7 @@
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
       (define runner (make-wave-runner-port (lambda (idx) (wave-execution-outcome 'done "ok"))))
-      (define first (run-campaign-wave dir rec 0 #:runner runner))
+      (define first (run-campaign-wave dir rec 0 #:runner runner #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status first) 'wave-done)
       ;; second run with the same record: fence/attempt are stale
       (define second (run-campaign-wave dir rec 0 #:runner runner))
@@ -191,6 +192,35 @@
       (check-equal? (count-completion-events dir rec)
                     0
                     "pending-tool cancellation must not invent a completion")
+      (cleanup-tmp dir))
+
+    (test-case "timeout adapter polls durable cancellation and invokes cancel once"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define started (make-semaphore 0))
+      (define release (make-semaphore 0))
+      (define requested? (box #f))
+      (define cancel-count (box 0))
+      (define port
+        (make-wave-runner-port (lambda (_idx)
+                                 (semaphore-post started)
+                                 (semaphore-wait release)
+                                 (wave-execution-outcome 'done "must not win after cancellation"))
+                               #:cancel! (lambda ()
+                                           (set-box! cancel-count (add1 (unbox cancel-count)))
+                                           (semaphore-post release))
+                               #:cancel-requested? (lambda () (unbox requested?))))
+      (define result-box (box #f))
+      (define worker
+        (thread (lambda ()
+                  (set-box! result-box
+                            (run-campaign-wave dir rec 0 #:runner port #:timeout-sec 10)))))
+      (semaphore-wait started)
+      (set-box! requested? #t)
+      (thread-wait worker)
+      (check-eq? (campaign-result-status (unbox result-box)) 'wave-cancelled)
+      (check-equal? (unbox cancel-count) 1)
+      (check-eq? (wave-status* rec 0) 'interrupted)
       (cleanup-tmp dir))))
 
 (define compat-suite
@@ -199,7 +229,8 @@
     (test-case "symbol runner 'ok still completes a wave"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok)))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-done)
       (check-eq? (wave-status* rec 0) 'done)
       (cleanup-tmp dir))

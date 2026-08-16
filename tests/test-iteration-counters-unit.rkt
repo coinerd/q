@@ -18,30 +18,32 @@
 
 ;; Helper: create a message struct with tool-call content parts
 (define (make-tool-msg tool-names)
-  (define content (for/list ([n (in-list tool-names)])
-                    (make-tool-call-part (format "tc-~a" n) n (hasheq))))
+  (define content
+    (for/list ([n (in-list tool-names)])
+      (make-tool-call-part (format "tc-~a" n) n (hasheq))))
   (make-message "mid" #f 'assistant 'tool-call content 0 (hasheq)))
 
-(define base-counters
-  (make-initial-counters))
+(define (make-text-turn)
+  (make-message "mid-text" #f 'assistant 'message '() 0 (hasheq)))
+
+(define base-counters (make-initial-counters))
 
 (define counters-suite
   (test-suite "compute-next-counters"
 
-    (test-case "empty messages leaves counters mostly unchanged"
-      (define result (compute-next-counters base-counters '()))
-      (check-equal? (loop-counters-consecutive-tool-count result)
-                    (loop-counters-consecutive-tool-count base-counters))
-      (check-equal? (loop-counters-explore-count result)
-                    (loop-counters-explore-count base-counters))
+    (test-case "a turn without tool calls resets the consecutive-tool count"
+      (define seeded (struct-copy loop-counters base-counters [consecutive-tool-count 4]))
+      (define result (compute-next-counters seeded (list (make-text-turn))))
+      (check-equal? (loop-counters-consecutive-tool-count result) 0)
+      (check-equal? (loop-counters-explore-count result) (loop-counters-explore-count base-counters))
       (check-equal? (loop-counters-implement-count result)
                     (loop-counters-implement-count base-counters)))
 
-    (test-case "message with bash tool call (non-read) does not increment consecutive-tool-count"
-      ;; consecutive-tool-count only increments for read-tools with new paths
+    (test-case "every tool-only turn increments consecutive-tool-count once"
+      (define seeded (struct-copy loop-counters base-counters [consecutive-tool-count 4]))
       (define msgs (list (make-tool-msg '("bash"))))
-      (define result (compute-next-counters base-counters msgs))
-      (check-equal? (loop-counters-consecutive-tool-count result) 0))
+      (define result (compute-next-counters seeded msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 5))
 
     (test-case "explore tools (read) increment explore-count"
       (define msgs (list (make-tool-msg '("read"))))
@@ -66,8 +68,13 @@
       (define result (compute-next-counters base-counters msgs))
       (check-equal? (loop-counters-explore-count result) 1)
       (check-equal? (loop-counters-implement-count result) 1)
-      ;; "edit" is non-read, so consecutive-tool-count does not increment
-      (check-equal? (loop-counters-consecutive-tool-count result) 0))
+      ;; Count consecutive tool-only turns, not the number or class of calls.
+      (check-equal? (loop-counters-consecutive-tool-count result) 1))
+
+    (test-case "repeated reads of the same path still count as consecutive tool turns"
+      (define first (compute-next-counters base-counters (list (make-tool-msg '("read")))))
+      (define second (compute-next-counters first (list (make-tool-msg '("read")))))
+      (check-equal? (loop-counters-consecutive-tool-count second) 2))
 
     (test-case "recent-tool-names tracks tools"
       (define msgs (list (make-tool-msg '("bash"))))
@@ -76,8 +83,6 @@
 
     (test-case "iteration counter stays at base value"
       (define result (compute-next-counters base-counters '()))
-      (check-equal? (loop-counters-iteration result)
-                    (loop-counters-iteration base-counters)))
-    ))
+      (check-equal? (loop-counters-iteration result) (loop-counters-iteration base-counters)))))
 
 (run-tests counters-suite 'verbose)

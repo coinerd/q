@@ -6,6 +6,8 @@
 ;; start/finish and tool/command registration inline.
 
 (require racket/format
+         racket/list
+         racket/path
          racket/string
          (only-in racket/file [file->string gh-file->string])
          json
@@ -18,11 +20,16 @@
                   gh-unavailable-error
                   gh-exec-result
                   git-exec-result
+                  resolve-git-root
+                  resolve-planning-root
+                  valid-number?
                   with-error-result)
          "tool-schemas.rkt"
-         "handlers/issue-ops.rkt"
-         "handlers/pr-ops.rkt"
-         "handlers/milestone-ops.rkt")
+         (rename-in "handlers/issue-ops.rkt" [handle-gh-issue raw-handle-gh-issue])
+         (rename-in "handlers/pr-ops.rkt" [handle-gh-pr raw-handle-gh-pr])
+         (rename-in "handlers/milestone-ops.rkt"
+                    [handle-gh-milestone raw-handle-gh-milestone]
+                    [handle-gh-board raw-handle-gh-board]))
 
 (provide handle-gh-issue
          handle-gh-pr
@@ -39,123 +46,124 @@
 ;; Wave handlers
 ;; ============================================================
 
+(define (execution-cwd exec-ctx)
+  (or (and exec-ctx (exec-context? exec-ctx) (exec-context-working-directory exec-ctx))
+      (current-directory)))
+
+(define (resolved-repo-root exec-ctx)
+  (or (resolve-git-root (execution-cwd exec-ctx))
+      (raise-user-error 'github-wave "Cannot resolve a Git repository from execution cwd")))
+
+(define (non-empty-text? value)
+  (and (string? value) (not (string=? (string-trim value) ""))))
+
+(define (positive-integer? value)
+  (and (integer? value) (positive? value)))
+
+(define (call-in-resolved-root handler args exec-ctx)
+  (with-error-result "github operation"
+                     (parameterize ([current-directory (resolved-repo-root exec-ctx)])
+                       (handler args exec-ctx))))
+
+(define (handle-gh-issue args [exec-ctx #f])
+  (call-in-resolved-root raw-handle-gh-issue args exec-ctx))
+
+(define (handle-gh-pr args [exec-ctx #f])
+  (call-in-resolved-root raw-handle-gh-pr args exec-ctx))
+
+(define (handle-gh-milestone args [exec-ctx #f])
+  (call-in-resolved-root raw-handle-gh-milestone args exec-ctx))
+
+(define (handle-gh-board args [exec-ctx #f])
+  (call-in-resolved-root raw-handle-gh-board args exec-ctx))
+
 (define (handle-gh-wave-start args [exec-ctx #f])
   (with-error-result
    "github operation"
    (define issue-num (hash-ref args 'issue_number #f))
+   (define requested-branch (hash-ref args 'branch_name #f))
    (cond
-     [(not issue-num) (make-error-result "Missing required argument: issue_number")]
+     [(not (valid-number? issue-num)) (make-error-result "Invalid required argument: issue_number")]
+     [(and requested-branch (not (non-empty-text? requested-branch)))
+      (make-error-result "Invalid argument: branch_name")]
      [(not (gh-binary)) (gh-unavailable-error)]
      [else
-      (define branch-name
-        (or (hash-ref args 'branch_name #f) (format "feature/issue-~a-wave" issue-num)))
-      ;; Sync main
-      (define-values (ec-co _out-co err-co) (git-exec-result "checkout" "main"))
-      (cond
-        [(not (= ec-co 0))
-         (make-error-result (format "Cannot checkout main: ~a" (string-trim err-co)))]
-        [else
-         (git-exec-result "pull" "origin" "main")
-         ;; Create feature branch
-         (define-values (ec-branch _out-br err-br) (git-exec-result "checkout" "-b" branch-name))
-         (cond
-           [(not (= ec-branch 0))
-            (make-error-result
-             (format "Failed to create branch ~a: ~a" branch-name (string-trim err-br)))]
-           [else
-            (make-success-result
-             (list (hasheq 'type
-                           "text"
-                           'text
-                           (format "Wave started: branch '~a' created for issue #~a"
-                                   branch-name
-                                   issue-num))))])])])))
+      (define repo-root (resolved-repo-root exec-ctx))
+      (define branch-name (or requested-branch (format "feature/issue-~a-wave" issue-num)))
+      (parameterize ([current-directory repo-root])
+        (define-values (ec-co _out-co err-co) (git-exec-result "checkout" "main"))
+        (unless (= ec-co 0)
+          (raise-user-error 'gh-wave-start "Cannot checkout main: ~a" (string-trim err-co)))
+        (define-values (ec-pull _out-pull err-pull) (git-exec-result "pull" "origin" "main"))
+        (unless (= ec-pull 0)
+          (raise-user-error 'gh-wave-start "Cannot pull origin/main: ~a" (string-trim err-pull)))
+        (define-values (ec-branch _out-br err-br) (git-exec-result "checkout" "-b" branch-name))
+        (unless (= ec-branch 0)
+          (raise-user-error 'gh-wave-start
+                            "Failed to create branch ~a: ~a"
+                            branch-name
+                            (string-trim err-br)))
+        (make-success-result (list (hasheq 'type
+                                           "text"
+                                           'text
+                                           (format "Wave started: branch '~a' created for issue #~a"
+                                                   branch-name
+                                                   issue-num)))))])))
 
-(define (wave-state-path)
-  (let-values ([(_ec out _e) (git-exec-result "rev-parse" "--show-toplevel")])
-    (define root (string-trim out))
-    (build-path (if (non-empty-string? root) root ".") ".planning" "STATE.md")))
+(define (safe-wave-file? value)
+  (and (non-empty-text? value)
+       (not (string-contains? value "\n"))
+       (not (string-contains? value "\r"))
+       (not (string-contains? value "\u0000"))
+       (let ([path (string->path value)])
+         (and (not (absolute-path? path))
+              (for/and ([component (in-list (explode-path path))])
+                (not (memq component '(up same))))))))
+
+(define (valid-wave-files? files)
+  (and (list? files)
+       (pair? files)
+       (andmap safe-wave-file? files)
+       (= (length files) (length (remove-duplicates files string=?)))))
+
+(define (explicit-state-path raw cwd)
+  (parameterize ([current-directory cwd])
+    (simplify-path (path->complete-path raw))))
+
+(define (created-pr-number stdout)
+  (define parsed
+    (with-handlers ([exn:fail? (lambda (_)
+                                 (raise-user-error 'gh-wave-finish
+                                                   "PR creation returned invalid JSON"))])
+      (string->jsexpr (string-trim stdout))))
+  (define number (and (hash? parsed) (hash-ref parsed 'number #f)))
+  (unless (valid-number? number)
+    (raise-user-error 'gh-wave-finish "PR creation response did not contain a valid PR number"))
+  number)
 
 (define (handle-gh-wave-finish args [exec-ctx #f])
-  (with-error-result
-   "github operation"
-   ;; W6 (BUG-0011): durable checkpoints + idempotent milestone actions.
-   ;; wave-id/step/state-path drive the resume checklist in STATE.md;
-   ;; files drives the tree/content already-committed check.
-   (define wave-id (hash-ref args 'wave_id "W0"))
-   (define step (hash-ref args 'step "wave-finish"))
-   (define state-path (hash-ref args 'state_path ".planning/STATE.md"))
-   (define summary (hash-ref args 'summary "Wave complete"))
-   (define issue-num (hash-ref args 'issue_number #f))
-   (define files (hash-ref args 'files '()))
-   (define state-content (read-state-content state-path))
-   (cond
-     [(not (gh-binary)) (gh-unavailable-error)]
-     [(wave-step-completed? state-content wave-id step)
-      (make-success-result
-       (list (hasheq
-              'type
-              "text"
-              'text
-              (format "Wave ~a step '~a' already recorded in ~a - skipping (idempotent resume)."
-                      wave-id
-                      step
-                      state-path))))]
-     [(wave-already-committed? files)
-      (write-wave-checkpoint! state-path wave-id step)
-      (make-success-result
-       (list (hasheq
-              'type
-              "text"
-              'text
-              (format "Wave ~a step '~a': change already committed (tree/content check) - no-op."
-                      wave-id
-                      step))))]
-     [else
-      (unless (pair? files)
-        (raise-user-error 'gh-wave-finish "step '~a': 'files' required" step))
-      (define-values (ec-add _out-add err-add) (git-exec-result "add" "-A"))
-      (unless (= ec-add 0)
-        (raise-user-error 'gh-wave-finish "Failed to stage: ~a" (string-trim err-add)))
-      (define commit-msg
-        (or (hash-ref args 'commit_message #f) (format "wave: ~a (issue #~a)" summary issue-num)))
-      (define-values (ec-commit _out-c err-commit) (git-exec-result "commit" "-m" commit-msg))
-      (unless (= ec-commit 0)
-        (raise-user-error 'gh-wave-finish "Commit failed: ~a" (string-trim err-commit)))
-      (define-values (ec-hb out-hb _err-hb) (git-exec-result "rev-parse" "--abbrev-ref" "HEAD"))
-      (define head-branch (string-trim out-hb))
-      (define-values (ec-push _out-p err-push) (git-exec-result "push" "origin" head-branch))
-      (unless (= ec-push 0)
-        (raise-user-error 'gh-wave-finish "Push failed: ~a" (string-trim err-push)))
-      ;; Idempotent PR create (BUG-0011): lookup-first - reuse the existing
-      ;; open PR for the head branch instead of double-creating.
-      (define existing-pr (find-open-pr-for-head head-branch))
-      (define pr-num
-        (or (and existing-pr (hash-ref existing-pr 'number #f))
-            (let ()
-              (define-values (ec-pr out-pr err-pr)
-                (gh-exec-result "pr"
-                                "create"
-                                "--title"
-                                (format "Wave ~a" summary)
-                                "--body"
-                                (or (hash-ref args 'pr_body #f) (format "Wave summary: ~a" summary))
-                                "--head"
-                                head-branch
-                                "--base"
-                                "main"
-                                "--json"
-                                "number,title,url"))
-              (unless (= ec-pr 0)
-                (raise-user-error 'gh-wave-finish "PR creation failed: ~a" (string-trim err-pr)))
-              (define created (open-pr-from-lookup out-pr))
-              (and created (hash-ref created 'number #f)))))
-      (write-wave-checkpoint! state-path wave-id step)
-      (make-success-result
-       (list (hasheq 'type
-                     "text"
-                     'text
-                     (format "Wave finished: ~a (issue #~a) - PR #~a" summary issue-num pr-num))))])))
+  ;; Quarantined by policy: in-product finalization cannot safely prove
+  ;; protected-branch merge, issue closure, and planning synchronization.
+  ;; Validate the public contract, then fail before any filesystem, git, or
+  ;; GitHub mutation. The external authenticated PR workflow remains the sole
+  ;; finalization authority.
+  (define allowed-keys '(issue_number files commit_msg))
+  (define issue-num (hash-ref args 'issue_number #f))
+  (define files (hash-ref args 'files #f))
+  (define commit-msg (hash-ref args 'commit_msg #f))
+  (cond
+    [(not (for/and ([key (in-hash-keys args)])
+            (memq key allowed-keys)))
+     (make-error-result "Invalid argument: unknown property for quarantined gh-wave-finish")]
+    [(not (positive-integer? issue-num))
+     (make-error-result "Invalid required argument: issue_number must be a positive integer")]
+    [(not (valid-wave-files? files))
+     (make-error-result
+      "Invalid required argument: files must be a non-empty list of safe relative paths")]
+    [(not (non-empty-text? commit-msg)) (make-error-result "Invalid required argument: commit_msg")]
+    [else
+     (make-error-result
+      "gh-wave-finish is quarantined: use the external authenticated PR workflow; no repository or GitHub mutation was performed")]))
 
 (define (register-github-tools ctx _payload)
   (ext-register-tool!
@@ -191,12 +199,15 @@
                       gh-wave-start-schema
                       handle-gh-wave-start
                       #:prompt-guidelines "Use gh-wave-start at the beginning of a wave.")
-  (ext-register-tool! ctx
-                      "gh-wave-finish"
-                      "Finish a GSD wave: commit, push, PR, merge, close issue, sync main."
-                      gh-wave-finish-schema
-                      handle-gh-wave-finish
-                      #:prompt-guidelines "Use gh-wave-finish after completing a wave.")
+  (ext-register-tool!
+   ctx
+   "gh-wave-finish"
+   (string-append "Quarantined: validates required issue_number, files, and commit_msg, "
+                  "then always fails before mutation. Use the external authenticated PR workflow.")
+   gh-wave-finish-schema
+   handle-gh-wave-finish
+   #:prompt-guidelines
+   "gh-wave-finish is quarantined and always fails before mutation after validating required arguments; use the external authenticated PR workflow.")
   (hook-pass #f))
 
 (define (register-github-commands ctx)

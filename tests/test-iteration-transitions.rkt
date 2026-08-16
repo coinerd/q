@@ -321,9 +321,9 @@
       (cleanup-temp-log!))
 
     ;; ============================================================
-    ;; I7: exploration-loop escalation injects corrective steering (v0.99.78)
+    ;; I7: repeated same-path tool turns hit the general tool-loop bound
     ;; ============================================================
-    (test-case "I7: exploration-loop escalation injects corrective steering"
+    (test-case "I7: repeated same-path reads hit the consecutive-tool bound"
       (cleanup-temp-log!)
       (current-rollback-state (make-default-rollback-state)) ; reset rollback state
       (define bus (make-event-bus))
@@ -349,13 +349,12 @@
           (filter (lambda (e) (equal? (event-event e) "iteration.exploration-loop")) evts))
         (define corrected-events
           (filter (lambda (e) (equal? (event-event e) "iteration.exploration-loop.corrected")) evts))
-        (check-true (positive? (length exploration-events))
-                    "exploration-loop warning fired for circling model")
-        (check-true (positive? (length corrected-events))
-                    "exploration-loop escalation injected corrective steering")
-        ;; Same-path reads do not increment consecutive-tool-count, so the
-        ;; loop runs to max-iterations; the corrective steering is the fix.
-        (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded))
+        ;; Repeated reads now count as tool-bearing turns even when they use
+        ;; the same path. The general circuit breaker fires before the older
+        ;; exploration-only steering threshold.
+        (check-equal? (length exploration-events) 0)
+        (check-equal? (length corrected-events) 0)
+        (check-equal? (loop-result-termination-reason result) 'tool-calls-pending))
       (cleanup-temp-log!))))
 
 (module+ test

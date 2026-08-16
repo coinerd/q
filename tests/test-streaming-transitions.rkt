@@ -288,10 +288,10 @@
          (make-test-event "turn.completed" (hasheq 'termination 'completed 'turnId "t1"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 5))
-      ;; Two assistant entries will appear — this documents current behavior
+      ;; Duplicate terminal events are idempotent for one canonical turn.
       (check-equal? (length (filter (lambda (t) (eq? t 'assistant)) (transcript-types final)))
-                    2
-                    "duplicate assistant.message.completed creates 2 entries")
+                    1
+                    "duplicate assistant.message.completed keeps one entry")
       (check-false (ui-state-streaming-text final) "streaming cleared"))
 
     ;; T3: Duplicate tool.call.started for same tool

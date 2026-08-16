@@ -21,6 +21,7 @@
          "../util/cost-tracker.rkt"
          "../util/string-helpers.rkt"
          "../ui-core/disclosure-state.rkt"
+         "../ui-core/conversation-reducer.rkt"
          "arg-summary.rkt")
 
 ;; Structs that need struct-copy support in consumers must use struct-out.
@@ -55,6 +56,7 @@
          ui-state-editor-component
          ui-state-context-tokens
          ui-state-cost-tracker
+         ui-state-conversation-reducer
          streaming-state
          streaming-state?
          streaming-state-busy?
@@ -280,7 +282,9 @@
          ;; --- Goal group ---
          active-goal ; (or/c goal-display-info? #f) — active autonomous goal display info
          ;; --- Disclosure group (W2) ---
-         disclosure) ; disclosure-state? — collapsed/expanded artifact state (W2)
+         disclosure ; disclosure-state? — collapsed/expanded artifact state (W2)
+         ;; --- Canonical conversation artifacts (W1/W2) ---
+         conversation-reducer) ; reducer-state? — keyed by session + turn + kind
   #:transparent)
 
 ;; Goal display info for TUI status bar
@@ -424,7 +428,8 @@
             #f
             #f
             #f
-            (make-empty-disclosure-state)))
+            (make-empty-disclosure-state)
+            (make-reducer-state)))
 
 ;; ============================================================
 ;; Backward-compatible streaming accessors (v0.38.6)
@@ -537,10 +542,14 @@
   (update-streaming state (lambda (s) (struct-copy streaming-state s [last-delta-ms ms]))))
 
 (define (clear-streaming state)
-  (update-streaming
-   state
-   (lambda (s)
-     (struct-copy streaming-state s [streaming-text #f] [streaming-thinking #f] [last-delta-ms #f]))))
+  (update-streaming state
+                    (lambda (s)
+                      (struct-copy streaming-state
+                                   s
+                                   [streaming-text #f]
+                                   [streaming-thinking #f]
+                                   [streaming-phase 'idle]
+                                   [last-delta-ms #f]))))
 
 ;; ============================================================
 ;; String helpers

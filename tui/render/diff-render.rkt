@@ -8,7 +8,7 @@
          "../state.rkt"
          "../input.rkt"
          "message-layout.rkt"
-         (only-in "../../ui-core/disclosure-state.rkt" active-streaming-artifact-id))
+         (only-in "../../ui-core/conversation-reducer.rkt" make-artifact-id))
 
 (provide style-invert
          apply-selection-highlight
@@ -98,6 +98,12 @@
   (define streaming-text (ui-state-streaming-text state))
   (define streaming-thinking (ui-state-streaming-thinking state))
   (define chronological-entries (reverse entries))
+  (define live-thinking-id
+    (and (string? (ui-state-session-id state))
+         (or (ui-state-active-model-turn-id state) (ui-state-active-turn-id state))
+         (make-artifact-id (ui-state-session-id state)
+                           (or (ui-state-active-model-turn-id state) (ui-state-active-turn-id state))
+                           'thinking)))
   ;; BUG-0003: keep the streaming thinking pseudo-entry even once
   ;; content starts streaming, so reasoning does not vanish mid-turn;
   ;; the persisted entry replaces it on completion.
@@ -107,10 +113,11 @@
                                       (list (transcript-entry 'thinking
                                                               streaming-thinking
                                                               (current-inexact-milliseconds)
-                                                              (hash)
-                                                              ;; Shared sentinel id so Ctrl+O
-                                                              ;; can toggle this entry.
-                                                              active-streaming-artifact-id)))
+                                                              (if live-thinking-id
+                                                                  (hasheq 'artifact-id
+                                                                          live-thinking-id)
+                                                                  (hasheq))
+                                                              #f)))
                               chronological-entries)]
            [with-text (if streaming-text
                           (append with-thinking

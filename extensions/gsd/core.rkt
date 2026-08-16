@@ -51,12 +51,33 @@
                   set-plan-data!
                   current-gsd-ctx))
 
+;; Campaign wave sessions are implementation details of one coordinator-owned
+;; GSD lifecycle. Keep ownership separate from reset suppression: ownership is
+;; inherited by the campaign thread, while suppression is enabled only around
+;; the real session-switch lifecycle call. Explicit /reset operations during a
+;; wave therefore retain their normal behavior.
+(define current-gsd-campaign-owner (make-parameter #f))
+(define current-gsd-lifecycle-reset-suppressed? (make-parameter #f))
+
+(define (call-with-gsd-campaign-ownership owner thunk)
+  (unless owner
+    (raise-argument-error 'call-with-gsd-campaign-ownership "non-#f owner" owner))
+  (parameterize ([current-gsd-campaign-owner owner])
+    (thunk)))
+
+(define (call-with-gsd-owned-session-switch thunk)
+  (unless (current-gsd-campaign-owner)
+    (error 'call-with-gsd-owned-session-switch "no campaign owns this session switch"))
+  (parameterize ([current-gsd-lifecycle-reset-suppressed? #t])
+    (thunk)))
+
 (define (reset-all-gsd-state!)
-  (reset-gsm!)
-  (set-pinned-dir! #f)
-  (set-edit-limit! 500)
-  (set-gsd-event-bus! #f)
-  (set-plan-data! #f))
+  (unless (current-gsd-lifecycle-reset-suppressed?)
+    (reset-gsm!)
+    (set-pinned-dir! #f)
+    (set-edit-limit! 500)
+    (set-gsd-event-bus! #f)
+    (set-plan-data! #f)))
 
 ;; Command names for registration (data)
 (provide gsd-commands
@@ -72,6 +93,10 @@
          gsd-result?
          gsd-success?
          gsd-failed?
+         ;; Scoped campaign lifecycle ownership
+         current-gsd-campaign-owner
+         (contract-out [call-with-gsd-campaign-ownership (-> any/c procedure? any)]
+                       [call-with-gsd-owned-session-switch (-> procedure? any)])
          ;; Functions (contracted)
          (contract-out [gsd-command-dispatch
                         (-> (or/c symbol? string?) (or/c string? #f) (or/c gsd-command-result? #f))]

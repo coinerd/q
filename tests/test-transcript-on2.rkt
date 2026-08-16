@@ -21,7 +21,13 @@
 
 ;; Helper: make a test event
 (define (make-test-event ev-type [payload (hash)])
-  (event 1 ev-type (current-inexact-milliseconds) "test-session" "test-turn" payload))
+  ;; Each completed message in these ordering tests represents a distinct turn.
+  (event 1
+         ev-type
+         (current-inexact-milliseconds)
+         "test-session"
+         (format "test-turn-~a" (gensym))
+         payload))
 
 ;; Helper: make a simple entry for testing
 (define (make-test-entry kind text)

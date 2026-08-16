@@ -14,7 +14,8 @@
 ;; enforced by the companion reducer module.
 
 (require racket/contract
-         racket/string)
+         racket/string
+         "feature-flags.rkt")
 
 ;; ──────────────────────────────────────────────────────
 ;; Contracts
@@ -56,7 +57,7 @@
   (hasheq 'line-count
           (length lines)
           'byte-size
-          (string-length body)
+          (bytes-length (string->bytes/utf-8 body))
           'provider-capability-tag
           (or provider-tag 'unknown)
           'redaction-marker
@@ -124,6 +125,34 @@
 (define (artifact-set-lifecycle art lifecycle)
   (struct-copy conversation-artifact art [lifecycle lifecycle]))
 
+;; Bound a body at a persistence boundary without splitting a UTF-8 sequence.
+;; Streaming append remains lossless; callers invoke this only when the body
+;; becomes durable.
+(define (artifact-limit-body art max-bytes)
+  (define body (conversation-artifact-body art))
+  (if (not (artifact-oversized? art max-bytes))
+      art
+      (let loop ([chars (string->list body)]
+                 [used 0]
+                 [kept '()])
+        (cond
+          [(null? chars) art]
+          [else
+           (define width (bytes-length (string->bytes/utf-8 (string (car chars)))))
+           (if (> (+ used width) max-bytes)
+               (let ([bounded (list->string (reverse kept))])
+                 (struct-copy conversation-artifact
+                              art
+                              [body bounded]
+                              [summary (compute-summary bounded (conversation-artifact-kind art))]
+                              [metadata
+                               (compute-metadata bounded
+                                                 (hash-ref (conversation-artifact-metadata art)
+                                                           'provider-capability-tag
+                                                           #f)
+                                                 #t)]))
+               (loop (cdr chars) (+ used width) (cons (car chars) kept)))]))))
+
 ;; Set persistence class.
 (define (artifact-set-persistence art persistence)
   (struct-copy conversation-artifact art [persistence persistence]))
@@ -137,29 +166,52 @@
 ;; Serialization (JSON-compatible hash, for scrollback)
 ;; ──────────────────────────────────────────────────────
 
+(define (validate-artifact who art)
+  (unless (and (conversation-artifact? art)
+               (string? (conversation-artifact-id art))
+               (not (string=? (conversation-artifact-id art) ""))
+               (string? (conversation-artifact-turn-id art))
+               (not (string=? (conversation-artifact-turn-id art) ""))
+               (string? (conversation-artifact-session-id art))
+               (not (string=? (conversation-artifact-session-id art) ""))
+               (memq (conversation-artifact-kind art)
+                     '(thinking assistant tool tool-start tool-end system user error))
+               (string? (conversation-artifact-body art))
+               (string? (conversation-artifact-summary art))
+               (memq (conversation-artifact-lifecycle art) '(streaming completed retained rejected))
+               (memq (conversation-artifact-persistence art) '(session scrollback never))
+               (hash? (conversation-artifact-metadata art)))
+    (raise-argument-error who "schema-valid conversation-artifact?" art))
+  art)
+
 (define (artifact->jsexpr art)
+  (validate-artifact 'artifact->jsexpr art)
+  (define persisted
+    (if (eq? (conversation-artifact-kind art) 'thinking)
+        (artifact-limit-body art (ui-reasoning-artifacts-max-bytes))
+        art))
   (hasheq 'schema
           "conversation-artifact"
           'schema-version
           1
           'id
-          (conversation-artifact-id art)
+          (conversation-artifact-id persisted)
           'turn-id
-          (conversation-artifact-turn-id art)
+          (conversation-artifact-turn-id persisted)
           'session-id
-          (conversation-artifact-session-id art)
+          (conversation-artifact-session-id persisted)
           'kind
-          (symbol->string (conversation-artifact-kind art))
+          (symbol->string (conversation-artifact-kind persisted))
           'body
-          (conversation-artifact-body art)
+          (conversation-artifact-body persisted)
           'summary
-          (conversation-artifact-summary art)
+          (conversation-artifact-summary persisted)
           'lifecycle
-          (symbol->string (conversation-artifact-lifecycle art))
+          (symbol->string (conversation-artifact-lifecycle persisted))
           'persistence
-          (symbol->string (conversation-artifact-persistence art))
+          (symbol->string (conversation-artifact-persistence persisted))
           'metadata
-          (metadata->jsexpr (conversation-artifact-metadata art))))
+          (metadata->jsexpr (conversation-artifact-metadata persisted))))
 
 (define (metadata->jsexpr h)
   (for/hasheq ([(k v) (in-hash h)])
@@ -183,22 +235,36 @@
               [else v]))))
 
 (define (jsexpr->artifact h)
-  (conversation-artifact (hash-ref h 'id "")
-                         (hash-ref h 'turn-id "")
-                         (hash-ref h 'session-id "")
-                         (string->symbol (hash-ref h 'kind "thinking"))
-                         (hash-ref h 'body "")
-                         (hash-ref h 'summary "")
-                         (string->symbol (hash-ref h 'lifecycle "retained"))
-                         (string->symbol (hash-ref h 'persistence "session"))
-                         (jsexpr->metadata (hash-ref h 'metadata (hasheq)))))
+  (unless (and (hash? h)
+               (equal? (hash-ref h 'schema #f) "conversation-artifact")
+               (equal? (hash-ref h 'schema-version #f) 1)
+               (string? (hash-ref h 'id #f))
+               (string? (hash-ref h 'turn-id #f))
+               (string? (hash-ref h 'session-id #f))
+               (string? (hash-ref h 'kind #f))
+               (string? (hash-ref h 'body #f))
+               (string? (hash-ref h 'summary #f))
+               (string? (hash-ref h 'lifecycle #f))
+               (string? (hash-ref h 'persistence #f))
+               (hash? (hash-ref h 'metadata #f)))
+    (raise-argument-error 'jsexpr->artifact "conversation-artifact schema version 1 jsexpr" h))
+  (validate-artifact 'jsexpr->artifact
+                     (conversation-artifact (hash-ref h 'id)
+                                            (hash-ref h 'turn-id)
+                                            (hash-ref h 'session-id)
+                                            (string->symbol (hash-ref h 'kind))
+                                            (hash-ref h 'body)
+                                            (hash-ref h 'summary)
+                                            (string->symbol (hash-ref h 'lifecycle))
+                                            (string->symbol (hash-ref h 'persistence))
+                                            (jsexpr->metadata (hash-ref h 'metadata)))))
 
 ;; ──────────────────────────────────────────────────────
 ;; Byte-size check (used at persistence boundaries only)
 ;; ──────────────────────────────────────────────────────
 
 (define (artifact-oversized? art max-bytes)
-  (> (string-length (conversation-artifact-body art)) max-bytes))
+  (> (bytes-length (string->bytes/utf-8 (conversation-artifact-body art))) max-bytes))
 
 ;; ──────────────────────────────────────────────────────
 ;; Provide
@@ -218,6 +284,8 @@
           [artifact-append-body (-> conversation-artifact? string? conversation-artifact?)]
           [artifact-set-lifecycle
            (-> conversation-artifact? artifact-lifecycle/c conversation-artifact?)]
+          [artifact-limit-body
+           (-> conversation-artifact? exact-nonnegative-integer? conversation-artifact?)]
           [artifact-set-persistence
            (-> conversation-artifact? persistence-class/c conversation-artifact?)]
           [artifact-mark-redacted (-> conversation-artifact? conversation-artifact?)]

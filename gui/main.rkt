@@ -131,6 +131,7 @@
                                #:alt? [alt? #f]
                                #:at-start? [at-start? 'no]
                                #:at-end? [at-end? 'no]
+                               #:target [target #f]
                                #:prefs [prefs (default-preferences)])
   (gui-key->intent key-code
                    #:shift? shift?
@@ -138,6 +139,7 @@
                    #:alt? alt?
                    #:at-start? at-start?
                    #:at-end? at-end?
+                   #:target target
                    #:prefs prefs))
 
 ;; --------------------------------------------------
@@ -208,7 +210,26 @@
                               queue-callback))
 
   ;; Store notify callback in box so subscriber can use it
-  (set-box! notify-callback-box notify-gui!)
+  (call-with-semaphore gui-state-lock (lambda () (set-box! notify-callback-box notify-gui!)))
+
+  ;; Both the visible disclosure affordance and Ctrl+O resolve to a targeted
+  ;; toggle-detail intent, then use the same state transition path.
+  (define (toggle-detail!)
+    (define changed? #f)
+    (call-with-semaphore gui-state-lock
+                         (lambda ()
+                           (define old (unbox state-box))
+                           ;; Untargeted Ctrl+O delegates focused/active/latest
+                           ;; selection to the same gui-state resolver used by
+                           ;; visible targeted disclosure actions.
+                           (define intent (gui-key-event->intent #\o #:control? #t #:target #f))
+                           (when (toggle-detail-intent? intent)
+                             (define next (gui-state-apply-intent old intent))
+                             (unless (eq? next old)
+                               (set-box! state-box next)
+                               (set! changed? #t)))))
+    (when changed?
+      (notify-gui!)))
 
   ;; Slash command handler (extracted to slash-commands.rkt)
   (define handle-slash-command (make-slash-command-handler sess state-box gui-state-lock notify-gui!))
@@ -317,9 +338,13 @@
              (lambda (editor _event)
                (queue-callback (lambda ()
                                  (apply-composer-action! 'history-down (send editor get-text))))))
+       (send km add-function
+             "q-transcript-toggle-detail"
+             (lambda (_editor _event) (queue-callback toggle-detail!)))
        (when (submit-key-policy gui-prefs)
          (send km map-function "return" "q-composer-submit"))
        (send km map-function "c:return" "q-composer-newline")
+       (send km map-function "c:o" "q-transcript-toggle-detail")
        (send km map-function "a:up" "q-composer-history-up")
        (send km map-function "a:down" "q-composer-history-down")
        km)))
@@ -347,6 +372,7 @@
            (define ed (send this get-editor))
            (when ed
              (send ed set-position 0 (send ed last-position)))]
+          [(and (send event get-control-down) (eq? (send event get-key-code) #\o)) (toggle-detail!)]
           [else (super on-char event)]))))
 
   ;; Compose multiple mixins into one (right-to-left application)

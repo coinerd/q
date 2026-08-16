@@ -46,6 +46,12 @@
 (test-case "open-pr-from-lookup: JSON object (not array) → #f"
   (check-false (open-pr-from-lookup "{\"number\":42}")))
 
+(test-case "find-open-pr-for-head: lookup failure is fail-closed"
+  (check-exn exn:fail?
+             (lambda ()
+               (find-open-pr-for-head "feature/w6"
+                                      #:gh (lambda _args (values 1 "" "lookup unavailable"))))))
+
 ;; ============================================================
 ;; gh-wave-finish: already-committed tree/content check
 ;; ============================================================
@@ -59,8 +65,46 @@
 (test-case "wave-already-committed?: dirty files → #f (needs commit)"
   (check-false (wave-already-committed? '("a.rkt") #:git (fake-git 0 " M a.rkt"))))
 
-(test-case "wave-already-committed?: git failure → #f (fail safe)"
-  (check-false (wave-already-committed? '("a.rkt") #:git (fake-git 128 "fatal: not a repo"))))
+(test-case "wave-already-committed?: git status failure is fail-closed"
+  (check-exn exn:fail?
+             (lambda ()
+               (wave-already-committed? '("a.rkt") #:git (fake-git 128 "fatal: not a repo")))))
+
+(test-case "unrelated-staged-paths: permits allowlist and requests raw NUL paths"
+  (define seen-args #f)
+  (check-equal? (unrelated-staged-paths '("a.rkt" "dir/b.rkt")
+                                        #:git (lambda args
+                                                (set! seen-args args)
+                                                (values 0 "a.rkt\0dir/b.rkt\0" "")))
+                '())
+  (check-equal? seen-args '("diff" "--cached" "--name-only" "-z" "--")))
+
+(test-case "unrelated-staged-paths: reports pre-staged paths outside allowlist"
+  (check-equal? (unrelated-staged-paths '("a.rkt")
+                                        #:git (lambda _args (values 0 "a.rkt\0unrelated.txt\0" "")))
+                '("unrelated.txt")))
+
+(test-case "unrelated-staged-paths: preserves leading whitespace in path names"
+  (check-equal? (unrelated-staged-paths '(" leading.rkt")
+                                        #:git (lambda _args (values 0 " leading.rkt\0" "")))
+                '()))
+
+(test-case "unrelated-staged-paths: preserves trailing whitespace in path names"
+  (check-equal? (unrelated-staged-paths '("trailing.rkt ")
+                                        #:git (lambda _args (values 0 "trailing.rkt \0" "")))
+                '()))
+
+(test-case "unrelated-staged-paths: preserves Git-special characters without quoting"
+  (check-equal? (unrelated-staged-paths '("tab\tname.rkt" "back\\slash.rkt")
+                                        #:git (lambda _args
+                                                (values 0 "tab\tname.rkt\0back\\slash.rkt\0" "")))
+                '()))
+
+(test-case "unrelated-staged-paths: staged lookup failure is fail-closed"
+  (check-exn exn:fail?
+             (lambda ()
+               (unrelated-staged-paths '("a.rkt")
+                                       #:git (lambda _args (values 128 "" "cannot inspect index"))))))
 
 ;; ============================================================
 ;; Durable checkpoints in STATE.md

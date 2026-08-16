@@ -5,7 +5,10 @@
 
 (require rackunit
          rackunit/text-ui
-         "../gui/gui-types.rkt")
+         "../gui/gui-types.rkt"
+         "../ui-core/conversation-artifact.rkt"
+         "../ui-core/disclosure-state.rkt"
+         "../ui-core/ui-intents.rkt")
 
 (define-test-suite
  test-gui-types
@@ -23,6 +26,24 @@
    (define gs2 (gui-state-add-message gs (make-gui-message "user" "hi")))
    (check-equal? (length (gui-state-messages gs2)) 1)
    (check-equal? (gui-state-messages gs) '()))
+ (test-case "GUI live messages retain only the scrollback-sized tail"
+   (define gs
+     (for/fold ([state (make-gui-state)]) ([i (in-range 510)])
+       (gui-state-add-message state (make-gui-message "user" (number->string i)))))
+   (check-equal? (length (gui-state-messages gs)) 500)
+   (check-equal? (gui-message-text (car (gui-state-messages gs))) "10"))
+ (test-case "arbitrary focused component cannot become a disclosure artifact id"
+   (define artifact
+     (make-conversation-artifact #:id "canonical-artifact"
+                                 #:session-id "session"
+                                 #:turn-id "turn"
+                                 #:kind 'thinking
+                                 #:body "reason"
+                                 #:lifecycle 'completed))
+   (define gs (gui-state-upsert-artifact (make-gui-state) artifact))
+   (define toggled (gui-state-apply-intent gs (make-toggle-detail-intent 'input-component)))
+   (check-false (disclosure-expanded? (gui-state-disclosure toggled) 'input-component))
+   (check-true (disclosure-expanded? (gui-state-disclosure toggled) "canonical-artifact")))
  (test-case "gui-state-update-last-message"
    (define gs (make-gui-state))
    (define gs2 (gui-state-add-message gs (make-gui-message "assistant" "hello")))

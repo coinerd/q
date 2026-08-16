@@ -36,7 +36,9 @@
                   agent-session-model-name
                   session-provider
                   session-event-bus
-                  session-id)
+                  session-id
+                  agent-session-session-dir)
+         (only-in "../runtime/session/session-switch.rkt" switch-session!)
          (only-in "../runtime/runtime-helpers.rkt" emit-session-event!)
          (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?)
          ;; Sub-module imports
@@ -96,12 +98,14 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
                   campaign-result-status)
+         (only-in "../extensions/gsd/core.rkt"
+                  call-with-gsd-campaign-ownership
+                  call-with-gsd-owned-session-switch)
          ;; W2 disclosure controls: /toggle-detail fallback for terminals that
          ;; cannot deliver a distinct Ctrl+O sequence.
-         (only-in "../ui-core/disclosure-state.rkt"
-                  resolve-toggle-target
-                  disclosure-toggle
-                  active-streaming-artifact-id))
+         (only-in "../ui-core/disclosure-state.rkt" resolve-toggle-target disclosure-toggle)
+         (only-in "../ui-core/conversation-artifact.rkt" conversation-artifact-id)
+         (only-in "../ui-core/conversation-reducer.rkt" reducer-thinking-artifact))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -173,16 +177,44 @@
     (and pre-campaign-sess
          (agent-session? pre-campaign-sess)
          (agent-session-model-name pre-campaign-sess)))
-  (define runner
+  ;; Resolve the factory for every prompt so each wave gets a fresh session.
+  ;; A legacy one-argument factory remains supported and is likewise invoked
+  ;; once per wave. Campaign execution fails closed when no factory exists;
+  ;; reusing the interactive runner would leak prior-wave context.
+  (define (run-in-fresh-wave-session prompt)
     (cond
-      [(and factory (procedure-arity-includes? factory 0)) (factory)]
-      [factory factory]
-      [else (cmd-ctx-session-runner cctx)]))
-  ;; v0.99.96: Restore helper — switches back to the pre-campaign session
-  ;; so the TUI state and agent-session-box are consistent for subsequent
-  ;; user interactions.
+      [(and factory (procedure-arity-includes? factory 0))
+       (define wave-runner (factory))
+       (unless (procedure? wave-runner)
+         (error 'execute-campaign-command "session factory did not return a runner"))
+       (wave-runner prompt)]
+      [factory (factory prompt)]
+      [else (error 'execute-campaign-command "no fresh session factory available")]))
+  ;; Restore through the same full lifecycle used to enter wave sessions. The
+  ;; box/UI update is a fallback as well as the final local ownership handoff,
+  ;; so a non-critical extension hook failure cannot strand the TUI.
   (define (restore-pre-campaign-session!)
     (when (and pre-campaign-sess (agent-session? pre-campaign-sess))
+      (define current-sess (unbox (cmd-ctx-agent-session-box cctx)))
+      (when (and (agent-session? current-sess)
+                 (not (equal? (session-id current-sess) pre-campaign-sid)))
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (append-campaign-message!
+                                      cctx
+                                      (format "[ERROR] campaign session restore lifecycle failed: ~a"
+                                              (exn-message e))))])
+          (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
+          (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
+          (call-with-gsd-owned-session-switch
+           (lambda ()
+             (switch-session! #:old-session-id (session-id current-sess)
+                              #:old-bus (session-event-bus current-sess)
+                              #:old-extension-registry ext-reg
+                              #:new-session-id pre-campaign-sid
+                              #:new-session-dir (agent-session-session-dir pre-campaign-sess)
+                              #:new-bus (session-event-bus pre-campaign-sess)
+                              #:new-extension-registry ext-reg
+                              #:reason 'resume)))))
       (set-box! (cmd-ctx-agent-session-box cctx) pre-campaign-sess)
       (define cur-state (unbox (cmd-ctx-state-box cctx)))
       (set-box! (cmd-ctx-state-box cctx)
@@ -191,24 +223,29 @@
                              [session-id pre-campaign-sid]
                              [model-name (or pre-campaign-model (ui-state-model-name cur-state))]))
       (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
-  (if runner
-      (thread (lambda ()
-                (with-handlers ([exn:fail? (lambda (e)
-                                             (append-campaign-message!
-                                              cctx
-                                              (format "[ERROR] /go campaign failed: ~a"
-                                                      (exn-message e))))])
-                  (define result (execute-campaign-token! campaign-token runner))
-                  (unless (eq? (campaign-result-status result) 'campaign-complete)
-                    (append-campaign-message! cctx
-                                              (format "[ERROR] /go campaign stopped: ~a"
-                                                      (campaign-result-status result)))))
-                ;; v0.99.96: Always restore the pre-campaign session after
-                ;; the campaign thread completes (success, failure, or exception).
-                (restore-pre-campaign-session!)))
+  (if factory
+      (let ([campaign-owner (gensym 'gsd-campaign)])
+        (thread (lambda ()
+                  (call-with-gsd-campaign-ownership
+                   campaign-owner
+                   (lambda ()
+                     (dynamic-wind
+                      void
+                      (lambda ()
+                        (with-handlers ([exn:fail? (lambda (e)
+                                                     (append-campaign-message!
+                                                      cctx
+                                                      (format "[ERROR] /go campaign failed: ~a"
+                                                              (exn-message e))))])
+                          (define result
+                            (execute-campaign-token! campaign-token run-in-fresh-wave-session))
+                          (unless (eq? (campaign-result-status result) 'campaign-complete)
+                            (append-campaign-message! cctx
+                                                      (format "[ERROR] /go campaign stopped: ~a"
+                                                              (campaign-result-status result))))))
+                      restore-pre-campaign-session!))))))
       (begin
-        (append-campaign-message! cctx
-                                  "[ERROR] No session runner or factory available for /go campaign.")
+        (append-campaign-message! cctx "[ERROR] No fresh session factory available for /go campaign.")
         (restore-pre-campaign-session!))))
 
 (define (execute-extension-command cctx state payload)
@@ -421,8 +458,28 @@
 ;; Routes to the identical intent as the keymap-registered key binding.
 
 (define (handle-toggle-detail-command cctx state)
+  (define reducer (ui-state-conversation-reducer state))
+  (define session-id (ui-state-session-id state))
+  (define active-artifact
+    (and (string? session-id)
+         (for/first ([turn-id (in-list (filter values
+                                               (list (ui-state-active-model-turn-id state)
+                                                     (ui-state-active-turn-id state))))]
+                     #:do [(define artifact (reducer-thinking-artifact reducer session-id turn-id))]
+                     #:when artifact)
+           artifact)))
+  (define active-id (and active-artifact (conversation-artifact-id active-artifact)))
+  (define candidate-ids
+    (for/list ([entry (in-list (reverse (ui-state-transcript state)))]
+               #:when (eq? (transcript-entry-kind entry) 'thinking)
+               #:do [(define id (hash-ref (transcript-entry-meta entry) 'artifact-id #f))]
+               #:when (string? id))
+      id))
   (define target-id
-    (resolve-toggle-target state (ui-state-focused-component state) active-streaming-artifact-id))
+    (resolve-toggle-target (ui-state-disclosure state)
+                           (ui-state-focused-component state)
+                           active-id
+                           candidate-ids))
   (cond
     [target-id
      (define new-state

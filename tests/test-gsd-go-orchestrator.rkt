@@ -17,6 +17,7 @@
          racket/file
          racket/path
          racket/string
+         racket/system
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-manifest
                   make-campaign-wave-descriptor
@@ -47,9 +48,11 @@
                   campaign-lease?
                   make-campaign-request
                   execute-campaign-request!
+                  current-gsd-wave-cancel!
                   find-git-root
                   git-available?)
-         (only-in "../util/loop-result.rkt" make-loop-result))
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-timeout-seconds))
 
 ;; ============================================================
 ;; Helpers
@@ -87,7 +90,8 @@
     (test-case "runner succeeds + verifier approves → DONE"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign-wave dir rec 0))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-done)
       (check-eq? (wave-status* rec 0) 'done)
       (cleanup-tmp dir))
@@ -95,7 +99,8 @@
     (test-case "verifier rejects → no DONE"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign-wave dir rec 0 #:verifier (lambda (_) #f)))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #f)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-false (eq? (wave-status* rec 0) 'done) "verifier rejection cannot persist DONE")
       (cleanup-tmp dir))
@@ -103,7 +108,8 @@
     (test-case "runner error → FAILED"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign-wave dir rec 0 #:runner (lambda (_) 'error)))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'error) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-eq? (wave-status* rec 0) 'failed)
       (cleanup-tmp dir))
@@ -111,7 +117,8 @@
     (test-case "runner cancelled → INTERRUPTED"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign-wave dir rec 0 #:runner (lambda (_) 'cancelled)))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'cancelled) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (cleanup-tmp dir))))
@@ -122,7 +129,7 @@
     (test-case "all waves succeed → campaign-complete"
       (define dir (make-tmp-campaign-dir 3))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign! dir rec))
+      (define result (run-campaign! dir rec #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? (campaign-result-completed-waves result) '(0 1 2))
       (cleanup-tmp dir))
@@ -136,7 +143,8 @@
                        rec
                        #:runner (lambda (idx)
                                   (set! call-count (add1 call-count))
-                                  (if (= idx 1) 'error 'ok))))
+                                  (if (= idx 1) 'error 'ok))
+                       #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-equal? call-count 2 "runner called for W0 and W1 only")
       (check-eq? (wave-status* rec 0) 'done)
@@ -147,10 +155,19 @@
     (test-case "verifier rejection stops campaign"
       (define dir (make-tmp-campaign-dir 3))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign! dir rec #:verifier (lambda (idx) (not (= idx 1)))))
+      (define cancel-count 0)
+      (define result
+        (parameterize ([current-gsd-wave-cancel! (lambda () (set! cancel-count (add1 cancel-count)))])
+          (run-campaign! dir
+                         rec
+                         #:runner (lambda (_) 'ok)
+                         #:verifier (lambda (idx) (not (= idx 1))))))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-eq? (wave-status* rec 0) 'done)
       (check-false (eq? (wave-status* rec 1) 'done))
+      (check-equal? cancel-count
+                    0
+                    "an expected verifier rejection must not cancel an unrelated worker")
       (cleanup-tmp dir))))
 
 (define lease-suite
@@ -207,6 +224,17 @@
 (define request-suite
   (test-suite "live campaign request boundary"
 
+    (test-case "unsafe default runner and verifier fail closed"
+      (define dir-a (make-tmp-campaign-dir 1))
+      (define rec-a (load-or-migrate dir-a))
+      (check-eq? (campaign-result-status (run-campaign-wave dir-a rec-a 0)) 'wave-failed)
+      (cleanup-tmp dir-a)
+      (define dir-b (make-tmp-campaign-dir 1))
+      (define rec-b (load-or-migrate dir-b))
+      (check-eq? (campaign-result-status (run-campaign-wave dir-b rec-b 0 #:runner (lambda (_) 'ok)))
+                 'wave-failed)
+      (cleanup-tmp dir-b))
+
     (test-case "request runs isolated prompt for each wave"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
@@ -220,6 +248,54 @@
                                      (make-loop-result '() 'completed (hasheq)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? prompts '("ONLY-W0" "ONLY-W1"))
+      (cleanup-tmp dir))
+
+    (test-case "blocked completion metadata fails closed"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (execute-campaign-request!
+         request
+         (lambda (_) (make-loop-result '() 'completed (hasheq 'reason "extension-block")))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-eq? (wave-status* rec 0) 'failed)
+      (cleanup-tmp dir))
+
+    (test-case "pending tools without limit metadata fail current wave"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (execute-campaign-request! request
+                                   (lambda (_) (make-loop-result '() 'tool-calls-pending (hasheq)))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-eq? (wave-status* rec 0) 'failed)
+      (cleanup-tmp dir))
+
+    (test-case "empty response fails current wave"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (execute-campaign-request! request
+                                   (lambda (_) (make-loop-result '() 'empty-response (hasheq)))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-eq? (wave-status* rec 0) 'failed)
+      (cleanup-tmp dir))
+
+    (test-case "production request applies bounded wave timeout"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-seconds 0.01])
+          (execute-campaign-request! request
+                                     (lambda (_)
+                                       (sleep 0.1)
+                                       (make-loop-result '() 'completed (hasheq))))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
       (cleanup-tmp dir))
 
     (test-case "tool-loop termination fails current wave and stops advancement"
@@ -297,6 +373,7 @@
         (run-campaign-wave dir
                            rec
                            0
+                           #:runner (lambda (_) 'ok)
                            #:verifier (lambda (_)
                                         (set-campaign-fence-token! rec 999)
                                         (persist-campaign! dir rec)
@@ -312,6 +389,7 @@
         (run-campaign-wave dir
                            rec
                            0
+                           #:runner (lambda (_) 'ok)
                            #:verifier
                            (lambda (_)
                              (set-campaign-cancellation! rec (make-campaign-cancellation "stop" 2))
@@ -329,6 +407,7 @@
         (run-campaign-wave dir
                            rec
                            0
+                           #:runner (lambda (_) 'ok)
                            #:verifier (lambda (_)
                                         (set! observed-status (wave-status* rec 0))
                                         #t)))
@@ -392,12 +471,24 @@
          (check-true (or (not result) (path? result))))
        (lambda () (delete-directory/files tmp))))
 
-    (test-case "F-7: git-available? returns #t when git root found"
+    (test-case "F-7: git-available? rejects a fake .git marker"
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
                       (make-directory (build-path tmp ".git"))
-                      (check-true (git-available? tmp)))
+                      (check-false (git-available? tmp)))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: git-available? validates an actual work tree"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (define git (find-executable-path "git"))
+                      (when git
+                        (parameterize ([current-output-port (open-output-string)]
+                                       [current-error-port (open-output-string)])
+                          (check-equal? (system*/exit-code git "-C" tmp "init" "--quiet") 0))
+                        (check-true (git-available? tmp))))
                     (lambda () (delete-directory/files tmp))))
 
     (test-case "F-7: find-git-root handles .git as file (worktree/submodule)"

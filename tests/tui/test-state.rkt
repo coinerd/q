@@ -22,6 +22,9 @@
                          #:turn-id [turn-id "turn-1"])
   (event 1 ev-type time session-id turn-id payload))
 
+(define (activate-test-turn [state (initial-ui-state)])
+  (apply-event-to-state state (make-test-event "turn.started" (hash))))
+
 (define state-tests
   (test-suite "TUI State"
 
@@ -148,15 +151,14 @@
         (check-true (ui-state-busy? s2))))
 
     (test-case "apply-event: turn.completed"
-      (let* ([s (set-busy (initial-ui-state) #t)]
+      (let* ([s (activate-test-turn)]
              [evt (make-test-event "turn.completed" (hash))]
              [s2 (apply-event-to-state s evt)])
         (check-false (ui-state-busy? s2))))
 
     (test-case "state: turn.cancelled clears busy and streaming"
       (define s0
-        (set-pending-tool-name (set-streaming-text (set-busy (initial-ui-state) #t) "partial...")
-                               "bash"))
+        (set-pending-tool-name (set-streaming-text (activate-test-turn) "partial...") "bash"))
       (define evt (make-test-event "turn.cancelled" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-busy? s1))
@@ -331,7 +333,9 @@
 
     (test-case "multiple events accumulate in transcript"
       (let* ([s0 (initial-ui-state)]
-             [s1 (apply-event-to-state s0 (make-test-event "session.started" (hash 'sessionId "s1")))]
+             [s1 (apply-event-to-state s0
+                                       (make-test-event "session.started"
+                                                        (hash 'sessionId "test-session")))]
              [s2 (apply-event-to-state s1 (make-test-event "turn.started" (hash)))]
              [s3 (apply-event-to-state s2 (make-test-event "tool.call.started" (hash 'name "bash")))]
              [s4 (apply-event-to-state s3
@@ -589,14 +593,14 @@
     ;; ============================================================
 
     (test-case "BUG-29: runtime.error clears pending-tool-name"
-      (define s0 (set-pending-tool-name (set-busy (initial-ui-state) #t) "bash"))
+      (define s0 (set-pending-tool-name (activate-test-turn) "bash"))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "runtime.error clears pending-tool-name")
       (check-false (ui-state-busy? s1) "runtime.error clears busy?"))
 
     (test-case "BUG-29: runtime.error clears streaming-text"
-      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial response..."))
+      (define s0 (set-streaming-text (activate-test-turn) "partial response..."))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "runtime.error clears streaming-text"))
@@ -615,19 +619,19 @@
       (check-false (ui-state-streaming-text s1) "turn.started clears streaming-text"))
 
     (test-case "BUG-31: turn.completed clears pending-tool-name"
-      (define s0 (set-pending-tool-name (set-busy (initial-ui-state) #t) "read"))
+      (define s0 (set-pending-tool-name (activate-test-turn) "read"))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "turn.completed clears pending-tool-name")
       (check-false (ui-state-busy? s1) "turn.completed clears busy?"))
 
     (test-case "BUG-31: turn.completed clears streaming-text"
-      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "leftover stream"))
+      (define s0 (set-streaming-text (activate-test-turn) "leftover stream"))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
 
-    (test-case "canonical prompt terminal clears transient IDs despite stale turn correlation"
+    (test-case "canonical prompt terminal ignores stale turn and clears the matching turn"
       (define active
         (set-active-model-turn-id
          (set-active-turn-id (set-busy (initial-ui-state #:session-id "test-session") #t) "prompt-2")
@@ -637,9 +641,9 @@
                               (make-test-event "turn.completed"
                                                (hash 'scope "prompt" 'reason "completed")
                                                #:turn-id "prompt-1")))
-      (check-false (ui-state-busy? stale))
-      (check-false (ui-state-active-turn-id stale))
-      (check-false (ui-state-active-model-turn-id stale))
+      (check-true (ui-state-busy? stale))
+      (check-equal? (ui-state-active-turn-id stale) "prompt-2")
+      (check-equal? (ui-state-active-model-turn-id stale) "model-2")
       (define completed
         (apply-event-to-state active
                               (make-test-event "turn.completed"
@@ -692,7 +696,7 @@
       (check-not-false (string-contains? (transcript-entry-text last-entry) "retry")))
 
     (test-case "BUG-34: model.stream.completed clears streaming-text"
-      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial..."))
+      (define s0 (set-streaming-text (activate-test-turn) "partial..."))
       (define evt (make-test-event "model.stream.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))

@@ -130,27 +130,34 @@
    '("issue_number")))
 
 (define gh-wave-finish-schema
-  (hasheq 'type
-          "object"
-          'properties
-          (hasheq 'issue_number
-                  (hasheq 'type "number" 'description "GitHub issue number for the wave parent")
-                  'files
-                  (hasheq 'type
-                          "array"
-                          'items
-                          (hasheq 'type "string")
-                          'description
-                          "File paths to commit (relative to repo root)")
-                  'commit_msg
-                  (hasheq 'type "string" 'description "Commit message")
-                  'branch
-                  (hasheq 'type "string" 'description "Branch name (default: auto-detected)")
-                  'pr_title
-                  (hasheq 'type "string" 'description "PR title override (default: commit message)")
-                  'pr_body
-                  (hasheq 'type "string" 'description "PR body override (default: references issue)")
-                  'close_sub_issues
-                  (hasheq 'type "boolean" 'description "Close sub-issues (default: true)"))
-          'required
-          '("issue_number" "files" "commit_msg")))
+  (hasheq
+   'type
+   "object"
+   'properties
+   (hasheq 'issue_number
+           (hasheq 'type
+                   "integer"
+                   'minimum
+                   1
+                   'description
+                   "Positive issue number validated before the quarantined tool fails closed")
+           'files
+           (hasheq 'type
+                   "array"
+                   'minItems
+                   1
+                   'items
+                   (hasheq 'type "string" 'minLength 1)
+                   'description
+                   "Safe relative file allowlist validated before the quarantined tool fails closed")
+           'commit_msg
+           (hasheq 'type
+                   "string"
+                   'minLength
+                   1
+                   'description
+                   "Commit message (validated before the quarantined tool fails closed)"))
+   'required
+   '("issue_number" "files" "commit_msg")
+   'additionalProperties
+   #f))

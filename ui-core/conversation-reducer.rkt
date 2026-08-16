@@ -22,6 +22,8 @@
 (require racket/contract
          racket/string
          racket/format
+         racket/list
+         racket/set
          "conversation-artifact.rkt"
          "feature-flags.rkt")
 
@@ -74,6 +76,12 @@
 ;; Only one artifact per (session, turn, 'thinking) is ever created.
 ;; ──────────────────────────────────────────────────────
 
+(define (canonical-artifact-identity? session-id turn-id)
+  (and (string? session-id)
+       (not (string=? session-id ""))
+       (string? turn-id)
+       (not (string=? turn-id ""))))
+
 (define (make-artifact-key session-id turn-id kind)
   (vector session-id turn-id kind))
 
@@ -87,7 +95,9 @@
 ;; Generate a unique artifact ID from session/turn/kind.
 ;; Idempotent: same (session, turn, kind) always produces the same ID.
 (define (make-artifact-id session-id turn-id kind)
-  (format "~a:~a:~a" session-id turn-id kind))
+  ;; Length-prefix both free-form IDs so delimiters inside either component
+  ;; cannot alias another (session, turn) pair.
+  (format "~a:~a~a:~a:~a" (string-length session-id) session-id (string-length turn-id) turn-id kind))
 
 ;; ──────────────────────────────────────────────────────
 ;; Reducer state
@@ -96,10 +106,14 @@
 ;; The reducer state is a hash: key → conversation-artifact
 ;; plus a set of completed turn-ids to track completion.
 
-(struct reducer-state (artifacts completed-turns) #:transparent)
+(define reducer-max-artifacts 500)
+
+;; Orders are oldest-first and let the live reducer prune deterministically at
+;; the same retention boundary as TUI/GUI scrollback.
+(struct reducer-state (artifacts completed-turns artifact-order completion-order) #:transparent)
 
 (define (make-reducer-state)
-  (reducer-state (hash) (hash)))
+  (reducer-state (hash) (hash) '() '()))
 
 (define (reducer-get rs session-id turn-id kind)
   (hash-ref (reducer-state-artifacts rs) (make-artifact-key session-id turn-id kind) #f))
@@ -109,14 +123,48 @@
     (make-artifact-key (conversation-artifact-session-id art)
                        (conversation-artifact-turn-id art)
                        (conversation-artifact-kind art)))
-  (reducer-state (hash-set (reducer-state-artifacts rs) key art) (reducer-state-completed-turns rs)))
+  (define order (append (remove key (reducer-state-artifact-order rs)) (list key)))
+  (define overflow (max 0 (- (length order) reducer-max-artifacts)))
+  (define evicted (take order overflow))
+  (define kept-order (drop order overflow))
+  (define artifacts
+    (for/fold ([current (hash-set (reducer-state-artifacts rs) key art)])
+              ([old-key (in-list evicted)])
+      (hash-remove current old-key)))
+  (reducer-state artifacts
+                 (reducer-state-completed-turns rs)
+                 kept-order
+                 (reducer-state-completion-order rs)))
 
-(define (reducer-mark-turn-completed rs turn-id)
-  (reducer-state (reducer-state-artifacts rs)
-                 (hash-set (reducer-state-completed-turns rs) turn-id #t)))
+(define (completion-key session-id turn-id)
+  (vector session-id turn-id))
 
-(define (reducer-turn-completed? rs turn-id)
-  (hash-has-key? (reducer-state-completed-turns rs) turn-id))
+(define (reducer-mark-turn-completed rs session-id turn-id [source 'completed])
+  (if (canonical-artifact-identity? session-id turn-id)
+      (let* ([key (completion-key session-id turn-id)]
+             [sources (hash-ref (reducer-state-completed-turns rs) key (set))])
+        (define order (append (remove key (reducer-state-completion-order rs)) (list key)))
+        (define overflow (max 0 (- (length order) reducer-max-artifacts)))
+        (define evicted (take order overflow))
+        (define completions
+          (for/fold ([current
+                      (hash-set (reducer-state-completed-turns rs) key (set-add sources source))])
+                    ([old-key (in-list evicted)])
+            (hash-remove current old-key)))
+        (reducer-state (reducer-state-artifacts rs)
+                       completions
+                       (reducer-state-artifact-order rs)
+                       (drop order overflow)))
+      rs))
+
+(define (reducer-turn-completed? rs session-id turn-id [source #f])
+  (define sources
+    (and (canonical-artifact-identity? session-id turn-id)
+         (hash-ref (reducer-state-completed-turns rs) (completion-key session-id turn-id) #f)))
+  (and sources
+       (if source
+           (set-member? sources source)
+           (not (set-empty? sources)))))
 
 ;; ──────────────────────────────────────────────────────
 ;; Get or create an artifact (idempotent — no duplicates)
@@ -142,133 +190,148 @@
 
 ;; model.stream.thinking — append reasoning delta
 (define (reduce-model-stream-thinking rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define delta (hash-ref fact 'delta ""))
-  (define provider-tag (hash-ref fact 'provider-capability-tag #f))
-  (define-values (art rs1) (reducer-get-or-create rs session-id turn-id 'thinking provider-tag))
-  ;; Only append if still in streaming lifecycle
-  (define art2
-    (if (eq? (conversation-artifact-lifecycle art) 'streaming)
-        (artifact-append-body art delta)
-        art))
-  (reducer-put rs1 art2))
+  (define session-id (hash-ref fact 'session-id #f))
+  (define turn-id (hash-ref fact 'turn-id #f))
+  (cond
+    [(not (canonical-artifact-identity? session-id turn-id)) rs]
+    [else
+     (define delta (hash-ref fact 'delta ""))
+     (define provider-tag (hash-ref fact 'provider-capability-tag #f))
+     (define-values (art rs1) (reducer-get-or-create rs session-id turn-id 'thinking provider-tag))
+     (define appended
+       (if (eq? (conversation-artifact-lifecycle art) 'streaming)
+           (artifact-append-body art delta)
+           art))
+     (define art2
+       (cond
+         [(reducer-turn-completed? rs1 session-id turn-id 'assistant)
+          (artifact-set-lifecycle appended 'retained)]
+         [(reducer-turn-completed? rs1 session-id turn-id 'model)
+          (artifact-set-lifecycle appended 'completed)]
+         [else appended]))
+     (reducer-put rs1 art2)]))
 
 ;; model.stream.delta — append assistant text delta
 (define (reduce-model-stream-delta rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define delta (hash-ref fact 'delta ""))
-  (define-values (art rs1) (reducer-get-or-create rs session-id turn-id 'assistant))
-  (define art2
-    (if (eq? (conversation-artifact-lifecycle art) 'streaming)
-        (artifact-append-body art delta)
-        art))
-  (reducer-put rs1 art2))
+  (define session-id (hash-ref fact 'session-id #f))
+  (define turn-id (hash-ref fact 'turn-id #f))
+  (cond
+    [(not (canonical-artifact-identity? session-id turn-id)) rs]
+    [else
+     (define delta (hash-ref fact 'delta ""))
+     (define-values (art rs1) (reducer-get-or-create rs session-id turn-id 'assistant))
+     (define appended
+       (if (eq? (conversation-artifact-lifecycle art) 'streaming)
+           (artifact-append-body art delta)
+           art))
+     (define art2
+       (if (reducer-turn-completed? rs1 session-id turn-id)
+           (artifact-set-lifecycle appended 'retained)
+           appended))
+     (reducer-put rs1 art2)]))
 
 ;; model.stream.completed — mark thinking and assistant as completed
 ;; CRITICAL: does NOT discard the live reasoning buffer.
 ;; The artifact transitions to 'completed lifecycle; the body is preserved.
 ;; Byte limits enforced ONLY here (persistence boundary).
 (define (reduce-model-stream-completed rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define max-bytes (ui-reasoning-artifacts-max-bytes))
+  (define session-id (hash-ref fact 'session-id #f))
+  (define turn-id (hash-ref fact 'turn-id #f))
+  (cond
+    [(not (canonical-artifact-identity? session-id turn-id)) rs]
+    [else
+     (define max-bytes (ui-reasoning-artifacts-max-bytes))
 
-  ;; Mark thinking artifact as completed (if it exists and still streaming)
-  (define thinking-art (reducer-get rs session-id turn-id 'thinking))
-  (define rs1
-    (if (and thinking-art (eq? (conversation-artifact-lifecycle thinking-art) 'streaming))
-        (let ([completed (artifact-set-lifecycle thinking-art 'completed)])
-          ;; Check oversized at persistence boundary
-          (when (artifact-oversized? completed max-bytes)
-            (telemetry-oversized!))
-          (reducer-put rs completed))
-        (begin
-          (when (not thinking-art)
-            (telemetry-missing!))
-          rs)))
+     ;; Mark thinking artifact as completed (if it exists and still streaming)
+     (define thinking-art (reducer-get rs session-id turn-id 'thinking))
+     (define rs1
+       (if (and thinking-art (eq? (conversation-artifact-lifecycle thinking-art) 'streaming))
+           (let* ([completed (artifact-set-lifecycle thinking-art 'completed)]
+                  [oversized? (artifact-oversized? completed max-bytes)]
+                  [persistable (artifact-limit-body completed max-bytes)])
+             (when oversized?
+               (telemetry-oversized!))
+             (reducer-put rs persistable))
+           (begin
+             (when (not thinking-art)
+               (telemetry-missing!))
+             rs)))
 
-  ;; Mark assistant artifact as completed (if it exists)
-  (define assistant-art (reducer-get rs1 session-id turn-id 'assistant))
-  (define rs2
-    (if assistant-art
-        (reducer-put rs1 (artifact-set-lifecycle assistant-art 'completed))
-        rs1))
+     ;; Mark assistant artifact as completed (if it exists)
+     (define assistant-art (reducer-get rs1 session-id turn-id 'assistant))
+     (define rs2
+       (if (and assistant-art (eq? (conversation-artifact-lifecycle assistant-art) 'streaming))
+           (reducer-put rs1 (artifact-set-lifecycle assistant-art 'completed))
+           rs1))
 
-  ;; Mark turn as completed
-  (reducer-mark-turn-completed rs2 turn-id))
+     ;; Mark completion by the full canonical identity.  Preserve a retained
+     ;; lifecycle when assistant completion arrived first.
+     (reducer-mark-turn-completed rs2 session-id turn-id 'model)]))
 
 ;; assistant.message.completed — mark assistant as retained
 ;; Idempotent: if model.stream.completed already marked it 'completed,
 ;; this transitions to 'retained without losing body or creating duplicates.
 (define (reduce-assistant-message-completed rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define content (hash-ref fact 'content ""))
+  (define session-id (hash-ref fact 'session-id #f))
+  (define turn-id (hash-ref fact 'turn-id #f))
+  (cond
+    [(not (canonical-artifact-identity? session-id turn-id)) rs]
+    [else
+     (define content (hash-ref fact 'content ""))
 
-  ;; If there's no assistant artifact yet (model.stream.delta events weren't
-  ;; seen), create one now with the completed content.
-  (define-values (assistant-art rs1)
-    (let ([existing (reducer-get rs session-id turn-id 'assistant)])
-      (if existing
-          (values existing rs)
-          (let ([art (make-conversation-artifact #:id (make-artifact-id session-id turn-id 'assistant)
-                                                 #:turn-id turn-id
-                                                 #:session-id session-id
-                                                 #:kind 'assistant
-                                                 #:body content
-                                                 #:lifecycle 'completed)])
-            (values art (reducer-put rs art))))))
+     ;; Completion itself is the durable assistant-message boundary. Preserve
+     ;; an empty assistant artifact for tool-only turns and empty provider
+     ;; responses; projection code decides whether an empty artifact is shown.
+     (define existing-assistant (reducer-get rs session-id turn-id 'assistant))
+     (define rs2
+       (if existing-assistant
+           (reducer-put rs (artifact-set-lifecycle existing-assistant 'retained))
+           (reducer-put rs
+                        (make-conversation-artifact #:id
+                                                    (make-artifact-id session-id turn-id 'assistant)
+                                                    #:turn-id turn-id
+                                                    #:session-id session-id
+                                                    #:kind 'assistant
+                                                    #:body (if (string? content) content "")
+                                                    #:lifecycle 'retained))))
 
-  ;; Transition to 'retained (idempotent — if already 'retained, no-op)
-  (define retained-art (artifact-set-lifecycle assistant-art 'retained))
-  (define rs2 (reducer-put rs1 retained-art))
+     ;; If thinking artifact exists and is 'completed, transition to 'retained
+     (define thinking-art (reducer-get rs2 session-id turn-id 'thinking))
+     (define max-bytes (ui-reasoning-artifacts-max-bytes))
+     (define oversized? (and thinking-art (artifact-oversized? thinking-art max-bytes)))
+     (define rs3
+       (if (and thinking-art
+                (memq (conversation-artifact-lifecycle thinking-art) '(streaming completed)))
+           (reducer-put rs2
+                        (artifact-limit-body (artifact-set-lifecycle thinking-art 'retained)
+                                             max-bytes))
+           rs2))
 
-  ;; If thinking artifact exists and is 'completed, transition to 'retained
-  (define thinking-art (reducer-get rs2 session-id turn-id 'thinking))
-  (define rs3
-    (if (and thinking-art
-             (memq (conversation-artifact-lifecycle thinking-art) '(streaming completed)))
-        (reducer-put rs2 (artifact-set-lifecycle thinking-art 'retained))
-        rs2))
+     (when oversized?
+       (telemetry-oversized!))
 
-  ;; Check oversized at persistence boundary
-  (when (and thinking-art (artifact-oversized? thinking-art (ui-reasoning-artifacts-max-bytes)))
-    (telemetry-oversized!))
-
-  (reducer-mark-turn-completed rs3 turn-id))
+     (reducer-mark-turn-completed rs3 session-id turn-id 'assistant)]))
 
 ;; Cancellation / error — mark artifacts as 'rejected
+(define (reject-turn-artifacts rs session-id turn-id)
+  (cond
+    [(not (canonical-artifact-identity? session-id turn-id)) rs]
+    [else
+     (define thinking-art (reducer-get rs session-id turn-id 'thinking))
+     (define rs1
+       (if thinking-art
+           (reducer-put rs (artifact-set-lifecycle thinking-art 'rejected))
+           rs))
+     (define assistant-art (reducer-get rs1 session-id turn-id 'assistant))
+     (if assistant-art
+         (reducer-put rs1 (artifact-set-lifecycle assistant-art 'rejected))
+         rs1)]))
+
 (define (reduce-cancellation rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define thinking-art (reducer-get rs session-id turn-id 'thinking))
-  (define rs1
-    (if thinking-art
-        (reducer-put rs (artifact-set-lifecycle thinking-art 'rejected))
-        rs))
-  (define assistant-art (reducer-get rs1 session-id turn-id 'assistant))
-  (define rs2
-    (if assistant-art
-        (reducer-put rs1 (artifact-set-lifecycle assistant-art 'rejected))
-        rs1))
-  rs2)
+  (reject-turn-artifacts rs (hash-ref fact 'session-id #f) (hash-ref fact 'turn-id #f)))
 
 (define (reduce-error rs fact)
-  (define session-id (hash-ref fact 'session-id ""))
-  (define turn-id (hash-ref fact 'turn-id ""))
-  (define thinking-art (reducer-get rs session-id turn-id 'thinking))
-  (define rs1
-    (if thinking-art
-        (reducer-put rs (artifact-set-lifecycle thinking-art 'rejected))
-        rs))
-  (define assistant-art (reducer-get rs1 session-id turn-id 'assistant))
-  (define rs2
-    (if assistant-art
-        (reducer-put rs1 (artifact-set-lifecycle assistant-art 'rejected))
-        rs1))
-  rs2)
+  (reject-turn-artifacts rs (hash-ref fact 'session-id #f) (hash-ref fact 'turn-id #f)))
 
 ;; ──────────────────────────────────────────────────────
 ;; Dispatch: reduce a single event fact
@@ -329,8 +392,10 @@
                         (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
                        [reducer-assistant-artifact
                         (-> reducer-state? string? string? (or/c conversation-artifact? #f))]
-                       [reducer-mark-turn-completed (-> reducer-state? string? reducer-state?)]
-                       [reducer-turn-completed? (-> reducer-state? string? boolean?)]
+                       [reducer-mark-turn-completed
+                        (->* (reducer-state? string? string?) (symbol?) reducer-state?)]
+                       [reducer-turn-completed?
+                        (->* (reducer-state? string? string?) ((or/c symbol? #f)) boolean?)]
                        [reset-telemetry-counters! (-> void?)]
                        [make-artifact-id (-> string? string? symbol? string?)]))
 

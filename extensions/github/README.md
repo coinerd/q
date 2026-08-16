@@ -45,13 +45,14 @@ Create, read, and manage tracker issues (one wave = one issue).
 Derives and checks out `feature/issue-<N>-wave` (created from `main`, or reused if it
 already exists — restart-safe). Step 1 of the merge path.
 
-### `gh-wave-finish` — commit, push, open PR (best-effort merge)
-**Parameters:** `issue_number`, `files[]`, `commit_msg`, `pr_title`, `pr_body`
+### `gh-wave-finish` — quarantined (fail closed)
+**Required parameters:** `issue_number` (positive integer), `files[]` (non-empty safe
+relative paths), `commit_msg` (non-empty string). No additional parameters are accepted.
 
-Stages exactly `files[]`, commits with `commit_msg`, pushes the branch, opens the PR
-(`pr_title`/`pr_body`), attempts an inline squash-merge (usually skipped while checks
-run), returns to a clean `main`, and closes the wave issue with a summary comment.
-Step 2 of the merge path. **`pr_body` must contain `Closes #<issue_number>`.**
+This in-product tool validates those required arguments and then **always returns an
+error before any repository, git, planning, or GitHub mutation**. It cannot commit,
+push, open, merge, or close a PR or issue. Use the external authenticated PR workflow
+to publish and land wave changes.
 
 ## Where each tool fits in the merge path
 
@@ -59,14 +60,15 @@ The canonical landing procedure is documented in
 [docs/operations/agent-merge-path.md](../../docs/operations/agent-merge-path.md):
 
 ```
-gh-issue create        →  file the wave issue (pre-wave)
-gh-wave-start          →  branch feature/issue-<N>-wave           (step 1)
-[ implement ]          →  edit files in the working tree
-gh-wave-finish         →  commit files[], push, open PR           (step 2)
-[ wait for checks ]    →  12 required status checks green
-gh-pr (merge/squash)   →  land on protected main                  (step 3)
-gh-issue get           →  verify auto-close (post-condition)
+gh-issue create            →  file the wave issue (pre-wave)
+gh-wave-start              →  branch feature/issue-<N>-wave
+[ implement ]              →  edit files in the working tree
+external authenticated PR  →  commit, push, open PR, wait for checks, and merge
+gh-issue get               →  verify auto-close (post-condition)
 ```
+
+Do not call `gh-wave-finish` as a publishing step: its quarantine guarantees that it
+fails before mutation. See the operations guide for the external workflow boundary.
 
 `gh-milestone` and `gh-board` support the surrounding release workflow (milestone
 hygiene for the readiness gate, board visibility) rather than the landing itself.

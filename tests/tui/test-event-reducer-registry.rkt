@@ -69,7 +69,8 @@
   (check-false (ui-state-streaming-text st1)))
 
 (test-case "event-reducer-registry: turn.cancelled clears busy and streaming"
-  (define st0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial text"))
+  (define active (apply-event-to-state (initial-ui-state) (make-test-event "turn.started" (hash))))
+  (define st0 (set-streaming-text active "partial text"))
   (define st1 (apply-event-to-state st0 (make-test-event "turn.cancelled" (hash))))
   (check-false (ui-state-busy? st1))
   (check-false (ui-state-streaming-text st1)))

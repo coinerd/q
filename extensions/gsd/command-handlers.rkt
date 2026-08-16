@@ -69,7 +69,11 @@
          racket/file
          "campaign-state.rkt"
          "campaign-repository.rkt"
-         "go-orchestrator.rkt")
+         "go-orchestrator.rkt"
+         (only-in "policy.rkt"
+                  current-gsd-wave-timeout-seconds
+                  current-gsd-wave-max-iterations
+                  current-gsd-max-consecutive-tool-calls))
 
 (provide (contract-out
           [register-gsd-commands (-> extension-ctx? hook-result?)]
@@ -409,7 +413,14 @@
    "# Runtime-Enforced Single-Wave Execution\n\n"
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"
-   "Do not call /wave-done; the coordinator verifies and commits completion after this run returns.\n\n"
+   "Do not call /wave-done: the coordinator is the only component allowed to commit wave status.\n"
+   "Delivery finalization remains external. Until trusted delivery evidence is available, this run stops before DONE.\n"
+   "A normal response never marks the wave DONE.\n"
+   (format (string-append "This wave has a bounded runtime budget: ~a seconds, ~a iterations, "
+                          "and ~a consecutive tool-only turns. Budget exhaustion fails closed.\n\n")
+           (current-gsd-wave-timeout-seconds)
+           (current-gsd-wave-max-iterations)
+           (current-gsd-max-consecutive-tool-calls))
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
    (if (string=? state-content "")
        ""
@@ -441,9 +452,13 @@
                                    (lambda (wave-idx)
                                      (gsm-ctx-transition-to! gsd-ctx 'executing)
                                      (build-single-wave-prompt base-dir plan wave-idx))
-                                   (lambda (wave-idx)
-                                     (gsm-ctx-transition-to! gsd-ctx 'verifying)
-                                     #t)))
+                                   (lambda (_wave-idx)
+                                     ;; Delivery verification is not implemented yet, so production
+                                     ;; fails closed. Do not invoke execute-verification-gate here:
+                                     ;; that gate owns FSM done/rework transitions and authoritative
+                                     ;; verification events, which would contradict the coordinator's
+                                     ;; durable FAILED result. Advisory checks must be observational.
+                                     #f)))
           (hook-amend (hasheq 'campaign-token
                               (register-campaign-request! request)
                               'new-session
@@ -452,15 +467,15 @@
                               (format "Executing campaign from W~a..." next-wave)))])])))
 
 (define (handle-go-command base-dir input-text)
-  ;; F-7: Warn if no git repository is reachable, but do not block /go.
-  ;; The actual stderr leak is fixed in plan-context-builder.rkt (system*
-  ;; replaced with subprocess that captures stderr).
-  (unless (git-available? base-dir)
-    (log-warning (format "gsd: /go - no git repository found from ~a. Branch operations may fail."
-                         base-dir)))
+  ;; Report plan validation failures first. Repository identity becomes a hard
+  ;; precondition only once there is a runnable campaign to isolate.
   (match (validate-plan-for-go base-dir)
     [(list 'error msg) (hook-amend (hasheq 'text msg))]
-    [(list 'ok plan _ validation) (prepare-go-campaign base-dir input-text plan validation)]))
+    [(list 'ok plan _ validation)
+     (if (not (git-available? base-dir))
+         (hook-amend (hasheq 'text
+                             (format "/go blocked: no Git repository reachable from ~a." base-dir)))
+         (prepare-go-campaign base-dir input-text plan validation))]))
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================

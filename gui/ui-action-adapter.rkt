@@ -16,7 +16,8 @@
          (only-in "../gui/gui-types.rkt" gui-state gui-state? gui-state-status)
          ;; G-TM1 (v0.98.11): theme sync wiring
          (only-in "../gui/main.rkt" current-gui-theme-manager)
-         (only-in "../gui/theme-manager.rkt" tm-switch-theme! theme-manager?))
+         (only-in "../gui/theme-manager.rkt" tm-switch-theme! theme-manager?)
+         (only-in "state-sync.rkt" gui-state-lock))
 
 ;; Shared handler table for GUI
 (provide gui-delta-handlers
@@ -71,12 +72,17 @@
     (define action-type (hash-ref event-hash 'type #f))
     (when (and (string? action-type) (string-prefix? action-type "ui."))
       (define deltas (ui-action->deltas action-type event-hash))
-      (define old-state (unbox state-box))
-      (when (gui-state? old-state)
-        (define new-state (gui-apply-deltas deltas old-state))
-        (set-box! state-box new-state)
-        ;; GUI-03 (v0.98.13 audit): Trigger observable sync after state update.
-        ;; Without notify!, GUI widgets (status bar, etc.) don't re-render.
+      (define changed?
+        (call-with-semaphore gui-state-lock
+                             (lambda ()
+                               (define old-state (unbox state-box))
+                               (and (gui-state? old-state)
+                                    (let ([new-state (gui-apply-deltas deltas old-state)])
+                                      (set-box! state-box new-state)
+                                      #t)))))
+      ;; Notify after releasing the state lock; notification may read state or
+      ;; schedule callbacks that acquire the same lock.
+      (when changed?
         (define notify (and notify-box (unbox notify-box)))
         (when (procedure? notify)
           (notify))))))

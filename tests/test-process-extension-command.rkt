@@ -75,7 +75,15 @@
          (length initial-transcript)
          "submit with no runner should add error to transcript"))
 
-(test-case "campaign token uses one dedicated runner for isolated waves"
+(test-case "campaign token fails closed without a fresh-session factory"
+  (define cctx (make-test-cctx "/go"))
+  (execute-extension-command cctx
+                             (unbox (cmd-ctx-state-box cctx))
+                             (hasheq 'campaign-token "unresolved-token" 'text "starting"))
+  (define texts (map transcript-entry-text (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))))
+  (check-true (ormap (lambda (text) (string-contains? text "No fresh session factory")) texts)))
+
+(test-case "campaign token creates one fresh runner per isolated wave"
   (define dir (make-temporary-file "tui-campaign-~a" 'directory))
   (dynamic-wind
    void
@@ -107,7 +115,7 @@
       (hasheq 'campaign-token token 'new-session "legacy-all-plan" 'text "starting"))
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W0")
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W1")
-     (check-equal? factory-count 1))
+     (check-equal? factory-count 2))
    (lambda () (delete-directory/files dir #:must-exist? #f))))
 
 ;; v0.99.97 regression: after a /go campaign fails, /retry must be able to
