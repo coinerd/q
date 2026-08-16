@@ -84,9 +84,14 @@
          ['pass (loop rest current-payload amended?)]
          [_ (loop rest current-payload amended?)])])))
 
-;; Per-hook timeout in milliseconds (default: 500ms).
-;; Set to #f to disable timeout.
-(define current-hook-timeout-ms (make-parameter 500))
+;; Per-hook timeout in milliseconds.
+;; D6 (#9351 follow-up): raised 500 -> 5000. The critical execute-command
+;; hook (/go: plan parse + normalize + campaign load + executor launch)
+;; measures ~650ms on the incident machine — the old 500ms default made
+;; /go timing-flaky (it succeeded at 19:53 and failed at 22:18 on the same
+;; tree). User-initiated commands legitimately vary in latency; 5s keeps a
+;; runaway guard without racing real work. Set to #f to disable timeout.
+(define current-hook-timeout-ms (make-parameter 5000))
 
 ;; Internal: call handler with or without ctx based on arity.
 ;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).
