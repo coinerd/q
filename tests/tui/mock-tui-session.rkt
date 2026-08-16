@@ -34,6 +34,17 @@
                            #:model-name [model-name "test-model"])
   (mock-session (initial-ui-state #:session-id session-id #:model-name model-name) '()))
 
+;; Derive the canonical turn id for the next event.  Production emits every
+;; turn-scoped event with a non-empty session + turn envelope, so the harness
+;; does the same: events before the first terminal belong to turn-1, and each
+;; turn.completed / turn.cancelled advances to the next turn id.
+(define (mock-current-turn-id ms)
+  (define terminals
+    (for/sum ([e (in-list (mock-session-events ms))] #:when (or (equal? e "turn.completed")
+                                                                (equal? e "turn.cancelled")))
+             1))
+  (format "turn-~a" (add1 terminals)))
+
 ;; Apply a single event (by string name and payload hash) to the mock session.
 ;; Time is computed from the current event count to ensure deterministic
 ;; ordering and to avoid the 500ms minimum-busy-duration rule in tests.
@@ -41,7 +52,12 @@
   (define idx (length (mock-session-events ms)))
   ;; Space events 600ms apart so turn.completed always clears busy?
   (define t (or time-override (* idx 600)))
-  (define evt (make-event ev-str t (ui-state-session-id (mock-session-state ms)) #f payload))
+  (define evt
+    (make-event ev-str
+                t
+                (ui-state-session-id (mock-session-state ms))
+                (mock-current-turn-id ms)
+                payload))
   (define new-state (apply-event-to-state (mock-session-state ms) evt))
   (mock-session new-state (append (mock-session-events ms) (list ev-str))))
 

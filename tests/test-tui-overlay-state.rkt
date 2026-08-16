@@ -36,15 +36,19 @@
       (define s2 (show-overlay s1 'command-palette '(("Option 1" normal) ("Option 2" normal)) "se"))
       (check-true (overlay-active? s2) "overlay is active")
 
-      ;; Now events arrive while overlay is up
+      ;; Now events arrive while overlay is up — a distinct second turn, as in
+      ;; production where every turn carries its own canonical turn id.
       (define s3
-        (simulate-events s2
-                         (list (make-test-event "turn.started" (hasheq))
-                               (make-test-event "model.stream.delta" (hasheq 'delta "Background"))
-                               (make-test-event "assistant.message.completed"
-                                                (hasheq 'messageId "m2" 'content "Background"))
-                               (make-test-event "turn.completed"
-                                                (hasheq 'termination 'completed 'turnId "t2")))))
+        (simulate-events
+         s2
+         (list (make-test-event "turn.started" (hasheq) #:turn-id "turn-2")
+               (make-test-event "model.stream.delta" (hasheq 'delta "Background") #:turn-id "turn-2")
+               (make-test-event "assistant.message.completed"
+                                (hasheq 'messageId "m2" 'content "Background")
+                                #:turn-id "turn-2")
+               (make-test-event "turn.completed"
+                                (hasheq 'termination 'completed 'turnId "t2")
+                                #:turn-id "turn-2"))))
 
       ;; Overlay should still be active
       (check-true (overlay-active? s3) "overlay persists through background events")

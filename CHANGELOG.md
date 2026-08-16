@@ -1,3 +1,96 @@
+## 1.00.03
+
+Released 2026-08-16.
+
+> Release-workflow remediation: the `v1.00.02` tag's release workflow failed while recording TUI gate evidence. This release restores the TUI terminal contracts that the v1.00.02 hardening over-tightened, reconciles multi-turn TUI tests to canonical per-turn identity, and restores the CHANGELOG record for 1.00.01/1.00.02.
+
+### Bug Fixes
+
+- Prompt-scoped `turn.completed` for the current session owns cleanup again even when the TUI's recorded turn id is stale or absent (#9297 contract): transient busy/streaming/tool state is cleared with a `prompt terminal turn-id mismatch` warning, interrupt feedback stays strictly correlated, and an active goal deliberately re-asserts busy while evaluating.
+- Non-prompt `turn.completed` and `turn.cancelled` for the current session recover a busy state that was recorded without an active canonical turn (v0.45.14 watchdog contract); empty or foreign identities remain fail-closed.
+- Unmatched stale non-prompt terminals no longer fall out of the reducer cond and return `#<void>` (a `ui-state?` contract violation surfaced by `test-tui-reasoning-artifact-integration`); they are now ignored explicitly.
+
+### Testing
+
+- Restored the #9297 expectations in `tests/tui/test-state.rkt` and `tests/test-tui-goal-status-bar.rkt` that v1.00.02 flipped while the TUI suite was red.
+- `tests/tui/mock-tui-session.rkt` now derives canonical per-turn identity (`turn-1`, `turn-2`, …) so mock events match production envelopes; identity-less mock events no longer exist.
+- Multi-turn TUI tests use distinct turn ids per turn (`test-tui-event-ordering` EO3, `test-tui-overlay-state`, `test-tui-selection-state`, `test-tui-scrollback-collision` SC4).
+- TUI suite green: 87 files / 1,348 tests; fast suite green on the tracked tree.
+
+### Breaking / Behavior Changes
+
+- None beyond restoring the released #9297 behavior: a current-session prompt terminal again clears transient TUI state on stale turn correlation instead of being ignored.
+
+### Operational / Release
+
+- The mandatory release-notes lint is why 1.00.01/1.00.02 entries now exist: the `v1.00.02` tag had no CHANGELOG entry and its release workflow would have failed lint after the (failed) TUI gate-evidence step.
+- Version stamped `1.00.03`; the `v1.00.02` GitHub release remains published at `dc4a0cf9` and is verified by this release's workflow.
+
+### Migration Notes
+
+- None required.
+
+## 1.00.02
+
+Released 2026-08-16.
+
+> `/go` campaign truth, quarantined `gh-wave-finish`, and reasoning artifact integrity (#9346, PR #9347, `dc4a0cf9`).
+
+### Bug Fixes
+
+- `/go` requires trusted delivery evidence before durable DONE; the advisory verifier can no longer emit contradictory authoritative approval events.
+- `/go` refuses to start without a resolvable Git repository; plan-validation errors are reported first.
+- Campaign waves use fresh isolated sessions; cancellation is wave-owned and cannot shut down global workers.
+- `gh-wave-finish` quarantined: validates the required contract, then always fails before any mutation.
+- Staged-path inspection uses NUL-delimited `git diff -z` output for exact path matching.
+- TUI/GUI terminal effects correlated with active canonical session/turn identity.
+- Reasoning disclosure resolves canonical artifact IDs across Ctrl+O, `/toggle-detail`, and live render; UTF-8-byte-bounded persistence and bounded live retention.
+- GUI state mutations serialized under `gui-state-lock`.
+
+### Testing
+
+- Fast gate on the hotfix commit: 1,096 files, 15,973/15,973 tests.
+- All CI checks green on main `dc4a0cf9` (lint, security, smoke, test, test-platform, test-cross-version, workflows, gsd-governance, abstraction-audit, release-dry-run).
+
+### Breaking / Behavior Changes
+
+- `gh-wave-finish` now always fails after validation; PR delivery goes through the authenticated external workflow only.
+
+### Operational / Release
+
+- Known defect at release time (fixed in 1.00.03): the TUI suite was not run before tagging; the tag-triggered release workflow failed at "Record gate evidence (tui)" and, latently, at release-notes lint. No release assets were produced for this tag.
+
+### Migration Notes
+
+- None required.
+
+## 1.00.01
+
+Released 2026-08-16.
+
+> Automated release close-out and planning-registry reliability (#9336, #9337, #9338; BUG-0014, BUG-0012, BUG-0013).
+
+### Bug Fixes
+
+- Automated release close-out: milestone lookup paginates with `state=all` and scalar `-q` output goes through `gh-text`, so close-out no longer misses closed milestones or misparses results (#9336 BUG-0014, #9337).
+- Wave-preconditions gate: plans missing required preconditions fail fast with actionable errors, and the planning registry self-heals stale wave state (#9338 BUG-0012, BUG-0013).
+
+### Testing
+
+- Covered by the fast suite and main CI, both green on `8875be51` (the v1.00.02 parent that includes these merges).
+
+### Breaking / Behavior Changes
+
+- None.
+
+### Operational / Release
+
+- First release produced through the automated close-out path.
+
+### Migration Notes
+
+- None required.
+
 ## 1.00.00
 
 Released 2026-08-15.

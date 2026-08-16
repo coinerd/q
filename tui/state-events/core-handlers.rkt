@@ -69,6 +69,21 @@
       ;; clear. Identity-less recovery is intentionally fail-closed.
       #f))
 
+;; Canonical current-session identity: non-empty session + turn envelope that
+;; belongs to the UI's session.  Used by the legacy terminal recovery path so
+;; that a busy state recorded without an active turn (missed turn.started) can
+;; still be cleared by a well-identified terminal, while empty or foreign
+;; identities remain fail-closed.
+(define (event-canonical-current-session? state evt)
+  (and (string? (event-session-id evt))
+       (not (string=? (event-session-id evt) ""))
+       (string? (event-turn-id evt))
+       (not (string=? (event-turn-id evt) ""))
+       (event-for-current-session? state evt)))
+
+(define (no-active-turn-recorded? state)
+  (and (not (ui-state-active-turn-id state)) (not (ui-state-active-model-turn-id state))))
+
 (define (handle-session-started state evt)
   (define payload (event-payload evt))
   (define sid (hash-ref payload 'sessionId ""))
@@ -134,13 +149,18 @@
      (define interrupt-correlated?
        (and pending-request-id turn-correlated? (equal? request-id pending-request-id)))
      (cond
-       [(or (not current-session?) (not turn-correlated?))
-        (when current-session?
-          (log-warning "TUI: ignoring stale prompt terminal (event=~v active=~v)"
-                       (event-turn-id evt)
-                       (ui-state-active-turn-id state)))
-        state]
+       [(not current-session?) state]
        [else
+        ;; v0.99.95 W1 contract: the runtime publishes exactly one canonical
+        ;; prompt terminal per initialized prompt while holding ownership, so a
+        ;; current-session prompt terminal is authoritative even when the TUI's
+        ;; recorded turn id is stale or absent.  Clear transient state and warn;
+        ;; interrupt feedback below remains strictly correlated.
+        (unless turn-correlated?
+          (log-warning
+           "TUI: current-session prompt terminal turn-id mismatch; clearing transient state (event=~v active=~v)"
+           (event-turn-id evt)
+           (ui-state-active-turn-id state)))
         (define cleared (clear-after-turn-terminal state))
         (define reason (hash-ref payload 'reason "completed"))
         (define with-feedback
@@ -161,11 +181,11 @@
                                                   (goal-display-info-max-turns goal)))
                       #t)
             with-feedback)])]
-    [(or (not (event-for-current-session? state evt))
-         (not (event-for-active-turn? state evt))
-         (ui-state-interrupt-request-id state))
-     state]
-    [else
+    [(or (not (event-for-current-session? state evt)) (ui-state-interrupt-request-id state)) state]
+    [(or (event-for-active-turn? state evt)
+         ;; Legacy recovery: a canonical current-session terminal may clear a
+         ;; busy state that was recorded without an active canonical turn.
+         (and (no-active-turn-recorded? state) (event-canonical-current-session? state evt)))
      ;; Legacy id-less/model turn.completed remains a safety recovery path.
      (define cleared
        (set-streaming-phase
@@ -174,7 +194,10 @@
      (define status (ui-state-status-message cleared))
      (if (and status (string-contains? status "Compacting"))
          cleared
-         (set-status-message cleared #f))]))
+         (set-status-message cleared #f))]
+    ;; Stale non-prompt terminals (active turn recorded but mismatched) and
+    ;; identity-less terminals stay fail-closed: nothing is cleared.
+    [else state]))
 
 (define (clear-after-turn-terminal state)
   (set-active-model-turn-id
@@ -207,6 +230,10 @@
     ;; must not clear the visible turn before its correlated acknowledgement.
     [pending-request-id state]
     [(and (event-for-current-session? state evt) (event-for-active-turn? state evt))
+     (clear-after-turn-terminal state)]
+    ;; Legacy recovery: a canonical current-session cancellation may clear a
+    ;; busy state recorded without an active canonical turn.
+    [(and (no-active-turn-recorded? state) (event-canonical-current-session? state evt))
      (clear-after-turn-terminal state)]
     [else state]))
 
