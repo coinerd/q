@@ -37,15 +37,19 @@
       (define s3 (set-selection-end s2 5 0))
       (check-true (has-selection? s3) "selection is active")
 
-      ;; Now a new turn adds transcript entries — selection coords are now stale
+      ;; Now a new turn adds transcript entries — selection coords are now stale.
+      ;; The second turn carries its own canonical turn id, as in production.
       (define s4
-        (simulate-events s3
-                         (list (make-test-event "turn.started" (hasheq))
-                               (make-test-event "model.stream.delta" (hasheq 'delta "Line 2"))
-                               (make-test-event "assistant.message.completed"
-                                                (hasheq 'messageId "m2" 'content "Line 2"))
-                               (make-test-event "turn.completed"
-                                                (hasheq 'termination 'completed 'turnId "t2")))))
+        (simulate-events
+         s3
+         (list (make-test-event "turn.started" (hasheq) #:turn-id "turn-2")
+               (make-test-event "model.stream.delta" (hasheq 'delta "Line 2") #:turn-id "turn-2")
+               (make-test-event "assistant.message.completed"
+                                (hasheq 'messageId "m2" 'content "Line 2")
+                                #:turn-id "turn-2")
+               (make-test-event "turn.completed"
+                                (hasheq 'termination 'completed 'turnId "t2")
+                                #:turn-id "turn-2"))))
       ;; Selection is still technically active (coords unchanged)
       (check-true (has-selection? s4)
                   "selection still active after transcript growth (documents behavior)")

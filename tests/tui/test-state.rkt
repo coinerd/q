@@ -631,7 +631,7 @@
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
 
-    (test-case "canonical prompt terminal ignores stale turn and clears the matching turn"
+    (test-case "canonical prompt terminal clears transient IDs despite stale turn correlation"
       (define active
         (set-active-model-turn-id
          (set-active-turn-id (set-busy (initial-ui-state #:session-id "test-session") #t) "prompt-2")
@@ -641,9 +641,9 @@
                               (make-test-event "turn.completed"
                                                (hash 'scope "prompt" 'reason "completed")
                                                #:turn-id "prompt-1")))
-      (check-true (ui-state-busy? stale))
-      (check-equal? (ui-state-active-turn-id stale) "prompt-2")
-      (check-equal? (ui-state-active-model-turn-id stale) "model-2")
+      (check-false (ui-state-busy? stale))
+      (check-false (ui-state-active-turn-id stale))
+      (check-false (ui-state-active-model-turn-id stale))
       (define completed
         (apply-event-to-state active
                               (make-test-event "turn.completed"

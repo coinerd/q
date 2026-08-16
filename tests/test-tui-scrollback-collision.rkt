@@ -108,12 +108,14 @@
                      [transcript scrollback-entries]
                      [next-entry-id (add1 max-id)]))
       (check-equal? (ui-state-next-entry-id state0) 50)
-      ;; Apply 5 new events
+      ;; Apply 5 new events — each on its own canonical turn, as in production
+      ;; where consecutive turns never share an identity.
       (define state1
         (for/fold ([st state0]) ([i (in-range 5)])
           (apply-event-to-state st
                                 (make-test-event "assistant.message.completed"
-                                                 (hash 'content (format "new ~a" i))))))
+                                                 (hash 'content (format "new ~a" i))
+                                                 #:turn-id (format "t~a" (add1 i))))))
       ;; Total entries: 50 + 5 = 55, all IDs unique
       (check-equal? (entry-count state1) 55)
       (define all-ids (map transcript-entry-id (ui-state-transcript state1)))
