@@ -196,14 +196,17 @@
   (define ver-path (build-path project-root "q" "util" "version.rkt"))
   (check-true (file-exists? ver-path))
   (define content (file->string ver-path))
-  ;; Verify a valid semver is present (0.NN.NN format)
-  (check-true (regexp-match? #rx"0[.][0-9]+[.][0-9]+" content)
+  ;; Verify a valid semver is present (0.NN.NN or 1.NN.NN format — the
+  ;; project crossed the 1.00 major line, W7/BUG-0014)
+  (check-true (regexp-match? #rx"[01][.][0-9]+[.][0-9]+" content)
               "version.rkt must contain a valid semver string")
-  ;; Verify it's a recent version (>= 0.90)
-  (define m (regexp-match #rx"0[.]([0-9]+)[.]" content))
+  ;; Verify it's a recent version (>= 0.90, or on the 1.x line)
+  (define m (regexp-match #rx"([01])[.]([0-9]+)[.]" content))
   (when m
-    (define minor (string->number (cadr m)))
-    (check-true (and minor (>= minor 90)) (format "version minor must be >= 90, got 0.~a.x" minor))))
+    (define major (string->number (cadr m)))
+    (define minor (string->number (caddr m)))
+    (check-true (or (equal? major 1) (and minor (>= minor 90)))
+                (format "version must be 1.x or >= 0.90, got ~a.~a.x" major minor))))
 
 ;; ============================================================
 ;; Deep Test 10: Benchmark suite infrastructure
