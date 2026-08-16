@@ -19,6 +19,25 @@ Released 2026-08-16.
 
 - Release tagging now requires the strict readiness gate to pass (previous behavior: tag-first, verify-later).
 - Scratch bug-extraction files (`bugs.txt`, `bug_output.txt`) are removed; `.planning/bugs/` is the durable source.
+- Transient agent failures are retried automatically before surfacing (previous behavior: first failure is terminal).
+
+### Migration Notes
+
+- If you kept local notes in `bugs.txt` / `bug_output.txt`, move anything still needed into `.planning/bugs/`; the repo-root scratch files are deleted and no longer read by any tooling.
+- Operators no longer need to re-run milestone steps after an interruption: resume the run and completed steps are skipped from the `.planning/STATE.md` checkpoint.
+- Release scripts: `release-closeout.rkt <tag>` supersedes the manual per-system close-out; `--dry-run` prints every stage with sources and performs no writes.
+
+### Testing
+
+- New tests next to existing ones for the touched modules: transient-classification and retry-policy cases in `test-provider-errors.rkt`, bounded turn-retry behavior in `test-loop-stream-retry.rkt`, PR idempotence (`gh-pr create` lookup-first, `gh-wave-finish` no-op) in `test-pr-ops-idempotence.rkt`.
+- Registry/consistency suites extended for check-registry post-archive counts (`test-check-registry.rkt`) and close-out stage reporting (`test-release-closeout.rkt`).
+- Fault-injection and interrupt/resume checks (scratch env) verified: mid-wave transient error auto-retried and the wave completes; interrupt-after-step-N resume skips steps 1..N; double `gh-pr create` for one head branch yields a single PR.
+
+### Operational / Release
+
+- Version stamped `1.00.01` via `scripts/bump-version.rkt` (`util/version.rkt`, `info.rkt`, README badge/verify snippet).
+- Release close-out executed as one command: `racket scripts/release-closeout.rkt v1.00.01` (notes assembly → readiness re-proof → tag/workflow → registry archive → check-registry → milestone close), each stage reported `ok`/`FAIL`.
+- Milestone v1.00.01 closed; registry rows for BUG-0007..BUG-0014 archived; `check-registry.rkt` exit 0.
 
 ## 1.00.00
 
