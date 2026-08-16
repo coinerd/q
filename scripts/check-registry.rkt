@@ -29,26 +29,33 @@
 (define verbose? #t)
 
 (define (log/ fmt . args)
-  (when verbose? (apply printf fmt args)))
+  (when verbose?
+    (apply printf fmt args)))
 
 (define (->id s)
   (string->number (substring s 4)))
 
-(define (id->s n) (format "BUG-~a" (~a n #:align 'right #:pad-string "0" #:width 4)))
+(define (id->s n)
+  (format "BUG-~a" (~a n #:align 'right #:pad-string "0" #:width 4)))
 
 ;; ---------------------------------------------------------- arg parsing
 
 (define-values (registry-dir check-only?)
   (let loop ([args (vector->list (current-command-line-arguments))]
-             [dir #f] [check #f])
+             [dir #f]
+             [check #f])
     (cond
       [(null? args)
-       (define d (or dir
-                     (for/or ([cand (in-list
-                                     (filter values
-                                             (list (build-path (path-only (find-system-path 'run-file)) 'up ".planning" "bugs")
-                                                   (build-path (current-directory) ".planning" "bugs"))))])
-                       (and (directory-exists? cand) cand))))
+       (define d
+         (or dir
+             (for/or ([cand (in-list
+                             (filter values
+                                     (list (build-path (path-only (find-system-path 'run-file))
+                                                       'up
+                                                       ".planning"
+                                                       "bugs")
+                                           (build-path (current-directory) ".planning" "bugs"))))])
+               (and (directory-exists? cand) cand))))
        (unless d
          (eprintf "check-registry: no .planning/bugs found; pass --registry <dir>~n")
          (exit 2))
@@ -57,11 +64,14 @@
        (loop (cddr args) (path->complete-path (cadr args)) check)]
       [(member (car args) '("--check" "-n")) (loop (cdr args) dir #t)]
       [(member (car args) '("--quiet" "-q"))
-       (set! verbose? #f) (loop (cdr args) dir check)]
+       (set! verbose? #f)
+       (loop (cdr args) dir check)]
       [(member (car args) '("--help" "-h"))
        (printf "usage: check-registry.rkt [--registry <dir>] [--check] [--quiet]~n")
        (exit 0)]
-      [else (eprintf "check-registry: unknown argument ~a~n" (car args)) (exit 2)])))
+      [else
+       (eprintf "check-registry: unknown argument ~a~n" (car args))
+       (exit 2)])))
 
 ;; ------------------------------------------------------------ parsing
 
@@ -70,29 +80,42 @@
   #px"^\\|\\s*(BUG-\\d{4})\\s*\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|\\s*([a-z-]+)\\s*\\|([^|]*)\\|\\s*\\[[^\\]]*\\]\\(([^)]+)\\)\\s*\\|")
 
 (define next-free-rx #px"^\\*\\*Next free ID:\\s*(BUG-\\d{4})\\*\\*")
-(define counts-rx #px"^\\*\\*Open:\\s*(\\d+)([^*]*)Fixed/validated:\\s*(\\d+)([^*]*)Terminal \\(wontfix/dup/deferred\\):\\s*(\\d+)\\*\\*")
+(define counts-rx
+  #px"^\\*\\*Open:\\s*(\\d+)([^*]*)Fixed/validated:\\s*(\\d+)([^*]*)Terminal \\(wontfix/dup/deferred\\):\\s*(\\d+)\\*\\*")
 (define archived-rx #px"^\\*\\*Archived \\(closed\\):\\s*(\\d+)\\s*→")
 
 (struct row (line id date title component severity status fixed-in file) #:transparent)
 
 (define (parse-index path)
   (define rows '())
-  (define derived '())       ; (cons line-idx (list kind old-value))
+  (define derived '()) ; (cons line-idx (list kind old-value))
   (define lines (file->lines path))
-  (for ([l (in-list lines)] [i (in-naturals)])
-    (cond [(regexp-match row-rx l)
-           => (lambda (m)
-                (set! rows (cons (row l (list-ref m 1) (list-ref m 2) (list-ref m 3)
-                                  (list-ref m 4) (list-ref m 5) (string-trim (list-ref m 6))
-                                  (string-trim (list-ref m 7)) (list-ref m 8))
-                              rows)))]
-          [(regexp-match next-free-rx l)
-           => (lambda (m) (set! derived (cons (list i 'next-free (list-ref m 1)) derived)))]
-          [(regexp-match counts-rx l)
-           => (lambda (m)
-                (set! derived (cons (list i 'counts (list-tail m 1)) derived)))]
-          [(regexp-match archived-rx l)
-           => (lambda (m) (set! derived (cons (list i 'archived (list-ref m 1)) derived)))]))
+  (for ([l (in-list lines)]
+        [i (in-naturals)])
+    (cond
+      [(regexp-match row-rx l)
+       =>
+       (lambda (m)
+         (set! rows
+               (cons (row l
+                          (list-ref m 1)
+                          (list-ref m 2)
+                          (list-ref m 3)
+                          (list-ref m 4)
+                          (list-ref m 5)
+                          (string-trim (list-ref m 6))
+                          (string-trim (list-ref m 7))
+                          (list-ref m 8))
+                     rows)))]
+      [(regexp-match next-free-rx l)
+       =>
+       (lambda (m) (set! derived (cons (list i 'next-free (list-ref m 1)) derived)))]
+      [(regexp-match counts-rx l)
+       =>
+       (lambda (m) (set! derived (cons (list i 'counts (list-tail m 1)) derived)))]
+      [(regexp-match archived-rx l)
+       =>
+       (lambda (m) (set! derived (cons (list i 'archived (list-ref m 1)) derived)))]))
   (values (reverse rows) (reverse derived) lines))
 
 ;; ------------------------------------------------------------- status sets
@@ -102,24 +125,28 @@
 (define terminal-statuses '("wontfix" "duplicate" "deferred"))
 
 (define (status-class s)
-  (cond [(member s open-statuses) 'open]
-        [(member s fixed-statuses) 'fixed]
-        [(member s terminal-statuses) 'terminal]
-        [else 'unknown]))
+  (cond
+    [(member s open-statuses) 'open]
+    [(member s fixed-statuses) 'fixed]
+    [(member s terminal-statuses) 'terminal]
+    [else 'unknown]))
 
 ;; ------------------------------------------------------------- main check
 
-(define problems '())    ; strings — invariant violations (never auto-healed)
-(define fixes '())       ; strings — derived-line drift (healed unless --check)
+(define problems '()) ; strings — invariant violations (never auto-healed)
+(define fixes '()) ; strings — derived-line drift (healed unless --check)
 
-(define (problem! fmt . args) (set! problems (cons (apply format fmt args) problems)))
-(define (fix! fmt . args) (set! fixes (cons (apply format fmt args) fixes)))
+(define (problem! fmt . args)
+  (set! problems (cons (apply format fmt args) problems)))
+(define (fix! fmt . args)
+  (set! fixes (cons (apply format fmt args) fixes)))
 
 (define index-path (build-path registry-dir "INDEX.md"))
 (define archive-path (build-path registry-dir "archive" "ARCHIVE-INDEX.md"))
 
 (unless (file-exists? index-path)
-  (eprintf "check-registry: INDEX.md not found in ~a~n" registry-dir) (exit 2))
+  (eprintf "check-registry: INDEX.md not found in ~a~n" registry-dir)
+  (exit 2))
 
 (define-values (rows derived lines) (parse-index index-path))
 
@@ -142,12 +169,14 @@
 (for ([r (in-list rows)])
   (define f (build-path registry-dir (row-file r)))
   (if (file-exists? f)
-      (let ([m (for/or ([l (in-list (file->lines f))]) (regexp-match file-status-rx l))])
-        (cond [m (define st (cadr m))
-               (unless (string=? st (row-status r))
-                 (problem! "~a: INDEX says '~a' but report file says '~a'"
-                           (row-id r) (row-status r) st))]
-              [else (problem! "~a: report file has no '**Status:**' line" (row-id r))]))
+      (let ([m (for/or ([l (in-list (file->lines f))])
+                 (regexp-match file-status-rx l))])
+        (cond
+          [m
+           (define st (cadr m))
+           (unless (string=? st (row-status r))
+             (problem! "~a: INDEX says '~a' but report file says '~a'" (row-id r) (row-status r) st))]
+          [else (problem! "~a: report file has no '**Status:**' line" (row-id r))]))
       (problem! "~a: referenced report file missing: ~a" (row-id r) (row-file r))))
 
 ;; --- unindexed report files ----------------------------------------------
@@ -164,7 +193,8 @@
 ;; --- archive rows excluded from open counts ------------------------------
 (define archive-rows
   (if (file-exists? archive-path)
-      (let-values ([(rs _s _n) (parse-index archive-path)]) rs)
+      (let-values ([(rs _s _n) (parse-index archive-path)])
+        rs)
       '()))
 (for ([r (in-list archive-rows)])
   (when (eq? (status-class (row-status r)) 'open)
@@ -206,21 +236,26 @@
        (vector-set! new-lines i (format "**Next free ID: ~a**" computed-next-free)))]
     [(counts)
      (define old-line (vector-ref new-lines i))
-     (unless (string=? (string-normalize-spaces old-line) (string-normalize-spaces computed-counts-line))
+     (unless (string=? (string-normalize-spaces old-line)
+                       (string-normalize-spaces computed-counts-line))
        (fix! "counts line: \"~a\" → \"~a\"" old-line computed-counts-line)
        (vector-set! new-lines i computed-counts-line))]
     [(archived)
      (define old-n (string->number (car old)))
      (unless (= old-n computed-archived)
        (fix! "Archived (closed): ~a → ~a" old-n computed-archived)
-       (vector-set! new-lines i
-                    (regexp-replace archived-rx (vector-ref new-lines i)
+       (vector-set! new-lines
+                    i
+                    (regexp-replace archived-rx
+                                    (vector-ref new-lines i)
                                     (format "**Archived (closed): ~a →" computed-archived))))]))
 
 (when (and (pair? fixes) (not check-only?))
   (call-with-output-file index-path
-    #:exists 'truncate
-    (lambda (o) (for ([l (in-vector new-lines)]) (displayln l o)))))
+                         #:exists 'truncate
+                         (lambda (o)
+                           (for ([l (in-vector new-lines)])
+                             (displayln l o)))))
 
 ;; --------------------------------------------------------------- report
 
@@ -232,11 +267,19 @@
   (log/ "  ERROR: ~a~n" p))
 
 (log/ "next free: ~a · open ~a · fixed/validated ~a · terminal ~a · archived ~a~n"
-      computed-next-free (length open-rows) (length fixed-rows) (length term-rows) computed-archived)
+      computed-next-free
+      (length open-rows)
+      (length fixed-rows)
+      (length term-rows)
+      computed-archived)
 
-(cond [(or (pair? problems) (pair? fixes))
-       (printf "REGISTRY: ~a — ~a drift, ~a error(s)~n"
-               (if check-only? "INCONSISTENT (check-only)" "INCONSISTENT (healed where derivable)")
-               (length fixes) (length problems))
-       (exit 1)]
-      [else (printf "REGISTRY: consistent~n") (exit 0)])
+(cond
+  [(or (pair? problems) (pair? fixes))
+   (printf "REGISTRY: ~a — ~a drift, ~a error(s)~n"
+           (if check-only? "INCONSISTENT (check-only)" "INCONSISTENT (healed where derivable)")
+           (length fixes)
+           (length problems))
+   (exit 1)]
+  [else
+   (printf "REGISTRY: consistent~n")
+   (exit 0)])

@@ -29,15 +29,15 @@
 (define repo-root (make-parameter #f))
 (define wave-file (make-parameter #f))
 
-(command-line
- #:args ([root (path->string (current-directory))] [wave #f])
- (repo-root (path->complete-path (string->path root)))
- (wave-file (and wave (path->complete-path (string->path wave)))))
+(command-line #:args ([root (path->string (current-directory))] [wave #f])
+              (repo-root (path->complete-path (string->path root)))
+              (wave-file (and wave (path->complete-path (string->path wave)))))
 
 (define (git . args)
   (define out (open-output-string))
   (define err (open-output-string))
-  (parameterize ([current-output-port out] [current-error-port err]
+  (parameterize ([current-output-port out]
+                 [current-error-port err]
                  [current-directory (repo-root)])
     (apply system* (find-executable-path "git") args))
   (values (string-trim (get-output-string out)) (string-trim (get-output-string err))))
@@ -50,12 +50,13 @@
 ;; --------------------------------------------------------------- verdict
 
 (define (print-verdict!)
-  (cond [(null? reasons)
-         (displayln "PRECONDITIONS: READY — mirror fresh, wave present, registry consistent")]
-        [else
-         (for ([r (in-list (reverse reasons))])
-           (printf "PRECONDITIONS: NOT-READY ~a\n" r))
-         (exit 1)]))
+  (cond
+    [(null? reasons)
+     (displayln "PRECONDITIONS: READY — mirror fresh, wave present, registry consistent")]
+    [else
+     (for ([r (in-list (reverse reasons))])
+       (printf "PRECONDITIONS: NOT-READY ~a\n" r))
+     (exit 1)]))
 
 ;; ----------------------------------------------------- 1. mirror freshness
 
@@ -78,27 +79,33 @@
   [else
    ;; one call: "ahead<TAB>behind" for local...origin/main
    (define-values (lr-out lr-err)
-     (git "rev-list" "--left-right" "--count"
-          (format "~a...~a" local-sha remote-sha)))
+     (git "rev-list" "--left-right" "--count" (format "~a...~a" local-sha remote-sha)))
    (define parts (string-split lr-out "\t"))
    (cond
-     [(and (= (length parts) 2)
-           (string->number (first parts)) (string->number (second parts)))
+     [(and (= (length parts) 2) (string->number (first parts)) (string->number (second parts)))
       (define ahead (string->number (first parts)))
       (define behind (string->number (second parts)))
       (cond
         [(= ahead 0)
-         (not-ready! "local main is BEHIND origin/main by ~a commit(s) (~a → ~a): re-sync before executing the wave (plan may be superseded)"
-                     behind (substring local-sha 0 10) (substring remote-sha 0 10))]
+         (not-ready!
+          "local main is BEHIND origin/main by ~a commit(s) (~a → ~a): re-sync before executing the wave (plan may be superseded)"
+          behind
+          (substring local-sha 0 10)
+          (substring remote-sha 0 10))]
         [(= behind 0)
-         (not-ready! "local main has ~a commit(s) not on origin/main — push or reconcile before executing"
-                     ahead)]
+         (not-ready!
+          "local main has ~a commit(s) not on origin/main — push or reconcile before executing"
+          ahead)]
         [else
-         (not-ready! "local main DIVERGED from origin/main (~a ahead, ~a behind) — reconcile before executing"
-                     ahead behind)])]
+         (not-ready!
+          "local main DIVERGED from origin/main (~a ahead, ~a behind) — reconcile before executing"
+          ahead
+          behind)])]
      [else
-      (not-ready! "cannot compare main with origin/main (rev-list said '~a' / '~a') — treat state as unknown"
-                  lr-out lr-err)])])
+      (not-ready!
+       "cannot compare main with origin/main (rev-list said '~a' / '~a') — treat state as unknown"
+       lr-out
+       lr-err)])])
 
 ;; --------------------------------------------------- 2. wave state check
 
@@ -115,7 +122,8 @@
   [(not (directory-exists? waves-dir))
    (printf "  waves: no ~a directory (skipping wave check)\n" waves-dir)]
   [else
-   (define (wave-mtime p) (file-or-directory-modify-seconds p))
+   (define (wave-mtime p)
+     (file-or-directory-modify-seconds p))
    (define plans
      (filter (lambda (f) (regexp-match? #px"^W\\d+-.*\\.md$" (path->string f)))
              (directory-list waves-dir)))
@@ -129,22 +137,24 @@
             ;; advisory: a prerequisite wave edited after this plan was written
             ;; may have moved state the plan does not account for.
             (define prereqs
-              (filter (lambda (f) (and (wave-num f) target-num (>= target-num (wave-num f))
-                                       (not (string=? (path->string f) target))))
+              (filter (lambda (f)
+                        (and (wave-num f)
+                             target-num
+                             (>= target-num (wave-num f))
+                             (not (string=? (path->string f) target))))
                       plans))
             (for ([p (in-list prereqs)]
-                  #:when (> (wave-mtime (build-path waves-dir p))
-                            (wave-mtime (wave-file))))
-              (printf "  ADVISORY: prerequisite ~a was modified after this plan was written — re-verify the wave still applies (see .planning/bugs/README.md)\n"
-                      (path->string p)))
+                  #:when (> (wave-mtime (build-path waves-dir p)) (wave-mtime (wave-file))))
+              (printf
+               "  ADVISORY: prerequisite ~a changed after this plan was written — re-verify the wave still applies (see .planning/bugs/README.md)\n"
+               (path->string p)))
             (printf "  waves: executing ~a (~a plan(s) present)\n" target (length plans)))
           ;; wave file missing → hard NOT-READY
           (not-ready! "wave file ~a does not exist — plan state unknown" target))]
      [else
       (printf "  waves: ~a plan(s) present; newest = ~a\n"
               (length plans)
-              (path->string
-               (argmax (lambda (f) (wave-mtime (build-path waves-dir f))) plans)))])
+              (path->string (argmax (lambda (f) (wave-mtime (build-path waves-dir f))) plans)))])
    ;; report any wave files that git reports as modified/untracked (in-flight edits)
    (define-values (status-out _se) (git "status" "--porcelain" "--" ".planning/waves/"))
    (when (non-empty-string? status-out)
@@ -163,12 +173,16 @@
    (define code
      (parameterize ([current-output-port (open-output-nowhere)]
                     [current-error-port (open-output-nowhere)])
-       (apply system*/exit-code (find-executable-path "racket")
-              (list (path->string checker) "--registry"
-                    (path->string (build-path (repo-root) ".planning" "bugs")) "--check"))))
+       (apply system*/exit-code
+              (find-executable-path "racket")
+              (list (path->string checker)
+                    "--registry"
+                    (path->string (build-path (repo-root) ".planning" "bugs"))
+                    "--check"))))
    (cond
      [(= code 0) (printf "  registry: INDEX consistent\n")]
      [else
-      (not-ready! "registry INDEX inconsistent — run `racket scripts/check-registry.rkt` to heal before starting the wave")])])
+      (not-ready!
+       "registry INDEX inconsistent — run `racket scripts/check-registry.rkt` to heal before starting the wave")])])
 
 (print-verdict!)
