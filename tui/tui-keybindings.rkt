@@ -68,7 +68,8 @@
          "../tui/keymap.rkt"
          "keybindings/binding-resolver.rkt"
          "keybindings/default-map.rkt"
-         "keybindings/mode-map.rkt")
+         "keybindings/mode-map.rkt"
+         (only-in "commands/context.rkt" ext-command-dispatcher-box))
 
 ;; ── tui-ctx struct ──
 (provide tui-ctx
@@ -161,6 +162,11 @@
 ;; This avoids a circular dependency (commands.rkt cannot import
 ;; interfaces/tui.rkt where tui-ctx is defined).
 (define (tui-ctx->cmd-ctx ctx)
+  ;; D2 (#9351): populate the module-level /retry dispatcher so GSD wave
+  ;; EXECUTE prompts re-enter the campaign via the extension /go pipeline
+  ;; instead of an in-session plain resubmit (which wedged campaign 81f9be4b).
+  (set-box! ext-command-dispatcher-box
+            (lambda (cctx state) (commands:process-extension-command cctx state)))
   (commands:cmd-ctx (tui-ctx-ui-state-box ctx)
                     (tui-ctx-running-box ctx)
                     (tui-ctx-event-bus ctx)

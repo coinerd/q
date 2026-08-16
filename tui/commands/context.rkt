@@ -24,7 +24,8 @@
          cmd-ctx-extension-registry-box
          cmd-ctx-session-factory-runner
          cmd-ctx-agent-session-box
-         cmd-ctx-goal-cancel-box)
+         cmd-ctx-goal-cancel-box
+         ext-command-dispatcher-box)
 
 ;; ============================================================
 ;; Command context — lightweight alternative to tui-ctx
@@ -47,3 +48,12 @@
          agent-session-box ; (boxof (or/c agent-session? #f)) — live session for goal-runner
          goal-cancel-box) ; (boxof boolean?) — #t signals goal thread to stop
   #:transparent)
+
+;; D2 (#9351): optional dispatcher that routes /retry of GSD wave EXECUTE
+;; prompts through the extension /go pipeline (full campaign continuation:
+;; attempt accounting, fresh executor sessions, durable state updates).
+;; Held in a module-level box so the fifteen positional cmd-ctx constructor
+;; call sites stay source-compatible. The TUI wiring populates it with
+;; commands:process-extension-command; #f preserves the legacy plain
+;; resubmit path (and keeps non-TUI embedders unchanged).
+(define ext-command-dispatcher-box (box #f))

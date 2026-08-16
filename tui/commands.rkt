@@ -238,7 +238,12 @@
                                                       (format "[ERROR] /go campaign failed: ~a"
                                                               (exn-message e))))])
                           (define result
-                            (execute-campaign-token! campaign-token run-in-fresh-wave-session))
+                            (execute-campaign-token!
+                             campaign-token
+                             run-in-fresh-wave-session
+                             ;; D4 (#9351): name the lease after the
+                             ;; orchestrating TUI session.
+                             #:lease-owner (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
                           (unless (eq? (campaign-result-status result) 'campaign-complete)
                             (append-campaign-message! cctx
                                                       (format "[ERROR] /go campaign stopped: ~a"

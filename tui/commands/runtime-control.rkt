@@ -155,6 +155,25 @@
     (and sess (agent-session? sess) (dict-ref (agent-session-config sess) 'last-user-prompt #f)))
   (define last-prompt (or box-prompt session-prompt))
   (cond
+    ;; D2 (#9351): a GSD wave EXECUTE prompt belongs to a durable campaign.
+    ;; Plain in-session resubmission bypasses campaign state entirely (the
+    ;; 01M05VA2 wedge: wave done in-tree, durable record stuck at "failed
+    ;; attempt-3", remaining waves never dispatched). Route through the
+    ;; extension /go pipeline so the campaign coordinator re-dispatches the
+    ;; wave with attempt accounting, fresh executor sessions, and durable
+    ;; state updates. Without a dispatcher the legacy path stays available.
+    [(and last-prompt
+          (unbox ext-command-dispatcher-box)
+          (regexp-match? #rx"^\\[gsd-planning\\] EXECUTE" last-prompt))
+     (define entry
+       (make-entry 'system
+                   "[retry: GSD wave prompt — continuing campaign via /go]"
+                   (current-inexact-milliseconds)
+                   (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     (set-box! (cmd-ctx-input-text-box cctx) "/go")
+     ((unbox ext-command-dispatcher-box) cctx (unbox (cmd-ctx-state-box cctx)))
+     'continue]
     [last-prompt
      (define entry
        (make-entry 'system (format "[retry: resubmitting]") (current-inexact-milliseconds) (hash)))
