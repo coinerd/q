@@ -64,25 +64,16 @@
     ;; EO3: Rapid turn start/complete cycles maintain clean state
     (test-case "EO3: rapid turn cycles maintain clean state"
       (define state0 (initial-ui-state))
-      (define events
-        (event-sequence "turn.started"
-                        (hash)
-                        "assistant.message.completed"
-                        (hash 'content "Turn 1")
-                        "turn.completed"
-                        (hash)
-                        "turn.started"
-                        (hash)
-                        "assistant.message.completed"
-                        (hash 'content "Turn 2")
-                        "turn.completed"
-                        (hash)
-                        "turn.started"
-                        (hash)
-                        "assistant.message.completed"
-                        (hash 'content "Turn 3")
-                        "turn.completed"
-                        (hash)))
+      ;; Each turn cycle carries its own canonical turn id, as in production
+      ;; where consecutive turns never share an identity.
+      (define (turn-cycle n)
+        (define tid (format "t~a" n))
+        (list (make-test-event "turn.started" (hash) #:turn-id tid)
+              (make-test-event "assistant.message.completed"
+                               (hash 'content (format "Turn ~a" n))
+                               #:turn-id tid)
+              (make-test-event "turn.completed" (hash) #:turn-id tid)))
+      (define events (append (turn-cycle 1) (turn-cycle 2) (turn-cycle 3)))
       (define state1 (apply-events state0 events))
       (check-equal? (entry-count state1) 3)
       (check-not-false (find-entry-by-text state1 "Turn 1"))
