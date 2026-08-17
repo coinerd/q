@@ -205,6 +205,11 @@
   ;; Ctrl+up/down for scrolling
   (keymap-add! km (key-spec 'up #t #f #f) 'tui.navigation.scroll-up)
   (keymap-add! km (key-spec 'down #t #f #f) 'tui.navigation.scroll-down)
+  ;; W4: Alt+Up / Alt+Down — explicit history navigation. Always invokes
+  ;; history regardless of the cursor's visual position in the multiline
+  ;; composer. Overridable via custom keybindings like any other entry.
+  (keymap-add! km (key-spec 'up #f #f #t) 'tui.navigation.history-up-explicit)
+  (keymap-add! km (key-spec 'down #f #f #t) 'tui.navigation.history-down-explicit)
   ;; Input
   (keymap-add! km (key-spec 'return #f #f #f) 'tui.input.submit)
   (keymap-add! km (key-spec 'backspace #f #f #f) 'tui.input.backspace)
