@@ -102,7 +102,7 @@
       (check-equal? (length on-disk)
                     (length inventory)
                     "inventory must cover every GSD module exactly once")
-      (check-equal? (length inventory) 35 "GSD module count is stable at 35"))
+      (check-equal? (length inventory) 36 "GSD module count is stable at 36"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

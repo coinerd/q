@@ -138,25 +138,25 @@
 ;; tool-edit — v0.19.10 safeguards
 ;; ============================================================
 
-(test-case "tool-edit: rejects old-text longer than 500 chars"
+(test-case "tool-edit: rejects old-text longer than 2000 chars"
   (define tmp (make-temporary-file "q-test-edit-~a.txt"))
-  (display-to-file (make-string 600 #\x) tmp #:exists 'replace)
-  (define long-old-text (make-string 501 #\x))
+  (display-to-file (make-string 2100 #\x) tmp #:exists 'replace)
+  (define long-old-text (make-string 2001 #\x))
   (define result (tool-edit (hasheq 'path tmp 'old-text long-old-text 'new-text "y")))
   (check-pred tool-result-is-error? result)
   (define msg (hash-ref (car (tool-result-content result)) 'text))
   (check-true (string-contains? msg "too long"))
-  (check-true (string-contains? msg "500"))
+  (check-true (string-contains? msg "2000"))
   (check-true (string-contains? msg "max-old-text-len"))
   ;; File must not be modified
-  (check-equal? (file->string tmp) (make-string 600 #\x))
+  (check-equal? (file->string tmp) (make-string 2100 #\x))
   (delete-file tmp))
 
-(test-case "tool-edit: accepts old-text at exactly 500 chars"
+(test-case "tool-edit: accepts old-text at exactly 2000 chars"
   (define tmp (make-temporary-file "q-test-edit-~a.txt"))
-  (define content (string-append (make-string 500 #\a) "suffix"))
+  (define content (string-append (make-string 2000 #\a) "suffix"))
   (display-to-file content tmp #:exists 'replace)
-  (define result (tool-edit (hasheq 'path tmp 'old-text (make-string 500 #\a) 'new-text "REPLACED")))
+  (define result (tool-edit (hasheq 'path tmp 'old-text (make-string 2000 #\a) 'new-text "REPLACED")))
   (check-false (tool-result-is-error? result))
   (check-equal? (file->string tmp) "REPLACEDsuffix")
   (delete-file tmp))
@@ -200,8 +200,8 @@
   (define t (lookup-tool reg "edit"))
   (check-not-false t)
   (define guidelines (tool-prompt-guidelines t))
-  ;; v0.19.10: guidelines should mention the 500-char limit
-  (check-true (string-contains? guidelines "500") "should mention 500-char limit")
+  ;; v0.19.10: guidelines should mention the 2000-char limit (was 500)
+  (check-true (string-contains? guidelines "2000") "should mention 2000-char limit")
   ;; W1: guidelines should mention whole-form replacement
   (check-true (string-contains? guidelines "whole") "should mention whole-form replacement"))
 

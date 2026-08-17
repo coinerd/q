@@ -46,9 +46,10 @@
    "6. After completing the assigned wave, run its verify command.
 "
    "7. Do NOT call /wave-done; the runtime coordinator owns status transitions only.
-
 "
-   "   Delivery finalization remains external; without trusted delivery evidence the campaign stops before DONE.
+   "   After you return, the coordinator verifies real delivery evidence (expected branch,
+"
+   "   changed wave files, passing verify command). Only that evidence marks the wave DONE.
 "
    "
 "
@@ -157,7 +158,7 @@
    "Edit rules (non-negotiable):\n"
    "- For removing 3+ consecutive lines, prefer delete-lines (specify start/end line numbers)\n"
    "- Keep each edit ≤20 lines — split large changes into sequential edits\n"
-   "- Keep oldText ≤500 characters — include just enough surrounding context for uniqueness\n"
+   "- Keep oldText ≤2000 characters — include just enough surrounding context for uniqueness\n"
    "- Verify oldText is unique in the file before editing\n"
    "- For Racket files, prefer racket_edit over raw edit for structural changes\n"
    "- After each edit, run format + syntax check before proceeding\n\n"

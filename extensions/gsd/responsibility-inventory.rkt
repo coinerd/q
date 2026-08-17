@@ -97,6 +97,7 @@
                                  "wave-docs"
                                  "wave-status"
                                  "projection-effects"
+                                 "delivery-verifier"
                                  "util/loop-result"
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
@@ -114,6 +115,18 @@
                                "wave-docs"
                                "wave-status"
                                "projection-effects"))
+   (make-entry "delivery-verifier.rkt"
+               'campaign-state
+               '(git subprocess fs-read make-param path-ops parameterize)
+               '(current-gsd-delivery-verify-command current-gsd-delivery-verify-timeout-sec)
+               '("racket/format" "racket/path"
+                                 "racket/port"
+                                 "racket/set"
+                                 "racket/string"
+                                 "racket/system"
+                                 "plan-types"
+                                 "wave-docs"
+                                 "plan-context-builder"))
    ;; transition logic (7)
    (make-entry "policy.rkt"
                'transition-logic

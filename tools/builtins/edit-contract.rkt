@@ -6,7 +6,7 @@
          racket/string
          "edit-normalize.rkt")
 
-(define DEFAULT-MAX-OLD-TEXT-LEN 500)
+(define DEFAULT-MAX-OLD-TEXT-LEN 2000)
 (define SAFE-MAX-OLD-TEXT-LEN 2000)
 (define MAX-LINE-DELTA-DIFFERENCE 2)
 

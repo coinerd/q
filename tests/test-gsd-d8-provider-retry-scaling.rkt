@@ -8,7 +8,8 @@
 ;; transient 120 s SSE read timeout → progressive-stall circuit break →
 ;; turn error → wave-failed, attempt consumed. The executor inherited the
 ;; interactive provider-retry policy (max-retries 2, stall-breaker 2,
-;; 300 s ceiling) against a 1800 s wave budget.
+;; 300 s ceiling) against the then-1800 s wave budget (the current default is
+;; now 3600 s, and the retry ceiling stays capped at 900 s).
 ;;
 ;; D8 fix (#9357), two parts:
 ;;   (A) campaign-aware retry scaling — execute-campaign-request! parameterizes
