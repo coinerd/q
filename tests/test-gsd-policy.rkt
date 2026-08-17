@@ -28,7 +28,7 @@
   ;; Incident 81f9be4b W2: the executor died at the old default of 30
   ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
   ;; the identical wave completed in the main session with 24-consecutive
-  ;; bursts. v1.00.03 finding (#9366): a W3 executor was killed at 100 after a
+  ;; bursts. Live finding (#9366): a W3 executor was killed at 100 after a
   ;; productive edit-retry loop (read -> grep -> re-edit). 200 is the current
   ;; ceiling; the runaway guard must stay well above real implementation
   ;; bursts.
