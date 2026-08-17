@@ -86,13 +86,21 @@
 
 (define (handle-session-started state evt)
   (define payload (event-payload evt))
-  (define sid (hash-ref payload 'sessionId ""))
+  ;; v1.00.03 user finding: real session.started events carry the sid in the
+  ;; ENVELOPE (event-session-id) and/or the payload key 'session-id (hyphen) —
+  ;; the typed-event serializer emits 'session-id, not 'sessionId. Reading only
+  ;; 'sessionId returned "", resetting ui-state-session-id to "" on every wave
+  ;; session start, which dropped all later model.stream.thinking events
+  ;; (executors showed tools but never thinking). Prefer the envelope sid.
+  (define sid
+    (or (hash-ref payload 'sessionId #f) (hash-ref payload 'session-id #f) (event-session-id evt) ""))
   (define s1 (struct-copy ui-state state [session-id sid]))
   (append-entry s1 (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash))))
 
 (define (handle-session-resumed state evt)
   (define payload (event-payload evt))
-  (define sid (hash-ref payload 'sessionId ""))
+  (define sid
+    (or (hash-ref payload 'sessionId #f) (hash-ref payload 'session-id #f) (event-session-id evt) ""))
   (define s1 (struct-copy ui-state state [session-id sid]))
   (append-entry s1 (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash))))
 

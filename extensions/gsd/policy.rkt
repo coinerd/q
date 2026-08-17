@@ -63,8 +63,17 @@
 ;; consecutive-tool circuit breaker; no command or shell parsing is involved.
 (define current-gsd-wave-timeout-seconds
   (make-parameter 1800 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
+;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
+;; real implementation wave was policy-cancelled at iteration 80 mid-work
+;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]" then
+;; wave-cancelled). A wave is a fresh session doing a bounded chunk of work
+;; within the 1800s timeout; the iteration ceiling is a runaway guard, not a
+;; completion cap. Raise it so implementation waves are never iteration-killed
+;; while the timeout and the 100-consecutive-tool breaker still bound runaway
+;; loops. The derived hard limit scales with the budget.
 (define current-gsd-wave-max-iterations
-  (make-parameter 50 (positive-integer-guard 'current-gsd-wave-max-iterations)))
+  (make-parameter 2000 (positive-integer-guard 'current-gsd-wave-max-iterations)))
 ;; D3 (#9351): raised from 30 — incident 81f9be4b W2 died at exactly 30
 ;; consecutive tool-only turns (attempt-3) while the identical wave completed
 ;; in the main session with 24-consecutive bursts. Implementation waves

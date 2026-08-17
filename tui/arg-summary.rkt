@@ -42,6 +42,15 @@
       [(hash-has-key? h 'query)
        (define q (hash-ref h 'query ""))
        (format "query: \"~a\"" (substring q 0 (min 40 (string-length q))))]
+      [(hash-has-key? h 'path)
+       ;; read/edit/file tools: the file path is the actionable argument —
+       ;; v1.00.03 user finding: showing the first value (line limit or
+       ;; old-text snippet) made [TOOL] read:/[TOOL] edit: lines useless.
+       (define p (hash-ref h 'path ""))
+       (format "path: ~a" (truncate-string (format "~a" p) 60))]
+      [(hash-has-key? h 'file)
+       (define f (hash-ref h 'file ""))
+       (format "file: ~a" (truncate-string (format "~a" f) 60))]
       [else
        (define vals (hash-values h))
        (if (null? vals)
