@@ -72,19 +72,32 @@
         (define span (cons start (+ start (string-length old-text))))
         (replacement-outcome content old-text new-text span 1 #f)]
        [else
-        (define fuzzy-spans
-          (if fuzzy-enabled?
-              (fuzzy-find-matches content old-text)
-              '()))
-        ;; W3: fuzzy-find-matches uses highest-score-only semantics — only
-        ;; candidates with the maximal similarity score are returned.
-        ;; When multiple candidates share the same top score, they are equal-
-        ;; quality matches and the edit is rejected as ambiguous to prevent
-        ;; silent mis-editing. Only a single unique highest-scoring match
-        ;; proceeds to replacement.
+        ;; Issue #9366: leading-whitespace auto-fallback. When exact match
+        ;; fails but old-text differs only in leading whitespace per line
+        ;; (indentation drift), apply the single unique match instead of
+        ;; failing. Threshold 1.0 means byte-exact after stripping leading
+        ;; whitespace — the content match is unambiguous, only indentation
+        ;; may differ.
+        (define leading-ws-spans (leading-ws-find-matches content old-text))
         (cond
-          [(> (length fuzzy-spans) 1)
-           (edit-contract-result 'ambiguous content (length fuzzy-spans) 0 #t)]
-          [(= (length fuzzy-spans) 1)
-           (replacement-outcome content old-text new-text (car fuzzy-spans) 0 #t)]
-          [else (edit-contract-result 'not-found content 0 0 #f)])])]))
+          [(> (length leading-ws-spans) 1)
+           (edit-contract-result 'ambiguous content (length leading-ws-spans) 0 #t)]
+          [(= (length leading-ws-spans) 1)
+           (replacement-outcome content old-text new-text (car leading-ws-spans) 0 #t)]
+          [else
+           (define fuzzy-spans
+             (if fuzzy-enabled?
+                 (fuzzy-find-matches content old-text)
+                 '()))
+           ;; W3: fuzzy-find-matches uses highest-score-only semantics — only
+           ;; candidates with the maximal similarity score are returned.
+           ;; When multiple candidates share the same top score, they are equal-
+           ;; quality matches and the edit is rejected as ambiguous to prevent
+           ;; silent mis-editing. Only a single unique highest-scoring match
+           ;; proceeds to replacement.
+           (cond
+             [(> (length fuzzy-spans) 1)
+              (edit-contract-result 'ambiguous content (length fuzzy-spans) 0 #t)]
+             [(= (length fuzzy-spans) 1)
+              (replacement-outcome content old-text new-text (car fuzzy-spans) 0 #t)]
+             [else (edit-contract-result 'not-found content 0 0 #f)])])])]))

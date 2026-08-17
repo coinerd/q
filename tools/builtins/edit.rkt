@@ -374,12 +374,24 @@
                          (if replaced?
                              (make-success-result
                               (list
-                               (let ([base (format "Edited ~a (replaced ~a occurrence)"
-                                                   path
-                                                   (edit-contract-result-replacements edit-result))])
-                                 (if balance-warning
-                                     (string-append base "\n" balance-warning)
-                                     base)))
+                               (let* ([base (format "Edited ~a (replaced ~a occurrence)"
+                                                    path
+                                                    (edit-contract-result-replacements edit-result))]
+                                      ;; Issue #9366: when the leading-whitespace
+                                      ;; auto-fallback fired (fuzzy? on the result
+                                      ;; but fuzzy was not explicitly requested),
+                                      ;; surface it so the agent knows indentation
+                                      ;; was tolerated.
+                                      [ws-note
+                                       (if (and (edit-contract-result-fuzzy? edit-result)
+                                                (not fuzzy-allowed?))
+                                           "\nNote: old-text matched after ignoring leading whitespace (indentation)."
+                                           "")])
+                                 (string-append base
+                                                (if balance-warning
+                                                    (string-append "\n" balance-warning)
+                                                    "")
+                                                ws-note)))
                               (hasheq 'path
                                       path
                                       'replacements

@@ -360,11 +360,23 @@
          (check-false (tool-result-is-error? ok-result) "exact match with em dash should succeed")
          ;; Recreate file
          (display-to-file content p #:exists 'replace)
-         ;; Test 2: one-space indentation mismatch reports detailed diagnostics
-         (define fail-result
+         ;; Test 2: a one-space leading-whitespace mismatch now succeeds via the
+         ;; leading-ws auto-fallback (#9366) and reports the indentation note
+         (define ws-result
            (tool-edit (hasheq 'path p 'old-text old-text-with-different-indent 'new-text "replaced")
                       #f))
-         (check-true (tool-result-is-error? fail-result) "indentation mismatch should fail")
+         (check-false (tool-result-is-error? ws-result)
+                      "leading-whitespace-only mismatch should auto-fallback")
+         (define ws-text (local-result-text ws-result))
+         (check-true (string-contains? ws-text "Note:")
+                     "auto-fallback should surface the indentation note")
+         ;; Recreate file
+         (display-to-file content p #:exists 'replace)
+         ;; Test 3: a genuine content mismatch still reports detailed diagnostics
+         (define old-text-different-body "def foo(em \u2014 dash):\n    fail\n")
+         (define fail-result
+           (tool-edit (hasheq 'path p 'old-text old-text-different-body 'new-text "replaced") #f))
+         (check-true (tool-result-is-error? fail-result) "content mismatch should fail")
          (define err-text (local-result-text fail-result))
          (check-true (string-contains? err-text "offset") "diagnostics should mention offset")
          (check-true (or (string-contains? err-text "U+20") (string-contains? err-text "U+0020"))
