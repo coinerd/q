@@ -174,7 +174,7 @@
 
 (test-case "edit-limit get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (gsd-ctx-edit-limit ctx) 500 "default edit limit")
+  (check-equal? (gsd-ctx-edit-limit ctx) 2000 "default edit limit")
   (gsd-ctx-set-edit-limit! ctx 1000)
   (check-equal? (gsd-ctx-edit-limit ctx) 1000))
 
