@@ -25,11 +25,12 @@
 (define (handle-tool-call-started state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
+  (define tool-call-id (hash-ref payload 'id #f))
   ;; MF2 (v0.99.5): Clear stale streaming text when transitioning to tool
   ;; execution. Without this, old streaming-text triggers false watchdog
   ;; stall detection during tool calls.
   (define cleared-stream (clear-streaming state))
-  (if (recent-tool-start? state name)
+  (if (recent-tool-start? state name tool-call-id)
       (set-streaming-phase (set-pending-tool-name (set-busy cleared-stream #t) name) 'tool-pending)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
@@ -37,7 +38,7 @@
                               "")]
              [text arg-summary]
              [ts (event-time evt)]
-             [meta (hasheq 'name name 'arguments (or args-raw ""))]
+             [meta (hasheq 'name name 'arguments (or args-raw "") 'tool-call-id tool-call-id)]
              [new-state (append-entry cleared-stream (make-entry 'tool-start text ts meta))])
         (if (ui-state-pending-tool-name state)
             (set-busy new-state #t)
@@ -46,7 +47,8 @@
 (define (handle-tool-execution-started state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'toolName "?"))
-  (if (recent-tool-start? state name)
+  (define tool-call-id (hash-ref payload 'toolCallId #f))
+  (if (recent-tool-start? state name tool-call-id)
       (set-streaming-phase (set-pending-tool-name (set-busy state #t) name) 'tool-pending)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
@@ -54,7 +56,7 @@
                               "")]
              [text arg-summary]
              [ts (event-time evt)]
-             [meta (hasheq 'name name 'arguments (or args-raw ""))]
+             [meta (hasheq 'name name 'arguments (or args-raw "") 'tool-call-id tool-call-id)]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
         (if (ui-state-pending-tool-name state)
             (set-busy new-state #t)
@@ -68,9 +70,19 @@
   (define result-raw (hash-ref payload 'result #f))
   (define error-raw (or (hash-ref payload 'resultError #f) (hash-ref payload 'error #f)))
   (define ts (event-time evt))
+  ;; BUG-0015: the typed end-event carries no tool-call id, so key the tool-end
+  ;; dedup on (name . result-key) — two distinct reads return different results
+  ;; and must BOTH render; a genuine duplicate completion returns the same
+  ;; result and is suppressed. result-key falls back to the result summary when
+  ;; no result body is present (NF4 legacy/test payloads).
+  (define result-key
+    (cond
+      [result-raw (tool-result-content->string result-raw)]
+      [error-raw error-raw]
+      [else (format "~a" result-summary)]))
   ;; B5: Clear tool progress status when execution completes.
   (define state-no-status (set-status-message state #f))
-  (if (recent-tool-end? state-no-status name)
+  (if (recent-tool-end? state-no-status name result-key)
       (set-pending-tool-name state-no-status #f)
       (if (eq? result-summary 'completed)
           (let* ([result-text
@@ -81,13 +93,15 @@
                                       " | ")
                       "")]
                  [text result-text]
-                 [meta (hasheq 'name name 'result (or result-raw ""))])
-            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-end text ts meta)) #f))
+                 [meta (hasheq 'name name 'result (or result-raw "") 'result-key result-key)])
+            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-end text ts meta))
+                                   #f))
           (let* ([err (or error-raw "tool failed")]
                  [text (string-replace err "
 " " | ")]
-                 [meta (hasheq 'name name 'error err)])
-            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-fail text ts meta)) #f)))))
+                 [meta (hasheq 'name name 'error err 'result-key result-key)])
+            (set-pending-tool-name (append-entry state-no-status (make-entry 'tool-fail text ts meta))
+                                   #f)))))
 
 ;; B3 fix: Show progress during long-running tool batches
 (define (handle-tool-execution-update state evt)
