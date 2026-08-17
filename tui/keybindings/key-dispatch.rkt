@@ -28,6 +28,7 @@
          "../../ui-core/disclosure-state.rkt"
          "../../ui-core/conversation-artifact.rkt"
          "../../ui-core/conversation-reducer.rkt"
+         "../../ui-core/preferences.rkt"
          racket/list)
 
 (define (toggle-transcript-detail! ctx state)
@@ -155,12 +156,67 @@
         (mark-dirty! ctx)
         (set! state new-state))))
 
-  ;; 2. Check configurable keymap
-  (define km (get-active-keymap))
+  ;; 2. Shared preference-aware key resolver (W3): custom keybindings from
+  ;; the live preference snapshot win, then the configurable keymap, then
+  ;; the hardcoded fallback branches below.
+  (define prefs (or (tui-ctx-preferences ctx) (default-preferences)))
+  (define-values (base-key k-shift? k-control? k-alt?)
+    ;; W3 fix: only char/symbol keycodes have a representable base key;
+    ;; other keycodes (e.g. raw numeric ids) bypass preference resolution
+    ;; and fall through to the built-in branches below.
+    (if (or (char? keycode) (symbol? keycode))
+        (let* ([sym (if (symbol? keycode)
+                        (symbol->string keycode)
+                        (string keycode))]
+               [ctl (or (string-prefix? sym "ctrl-") (string-prefix? sym "C-"))]
+               [alt (string-prefix? sym "alt-")]
+               [sft (string-prefix? sym "shift-")]
+               [rest (cond
+                       [(string-prefix? sym "ctrl-") (substring sym 5)]
+                       [(string-prefix? sym "alt-") (substring sym 4)]
+                       [(string-prefix? sym "shift-") (substring sym 6)]
+                       [else sym])]
+               [k (if (and (string=? rest "return") (eqv? (string-length rest) 6))
+                      'return
+                      (string->symbol rest))])
+          (values k sft ctl alt))
+        (values #f #f #f #f)))
   (define ks (keycode->key-spec-from-msg keycode))
+  (define resolved-intent
+    (and ks
+         (resolve-key->intent base-key
+                              #:shift? k-shift?
+                              #:control? k-control?
+                              #:alt? k-alt?
+                               #:at-start? (input-at-beginning? inp)
+                              #:at-end? (input-at-end? inp)
+                              #:prefs prefs)))
+  ;; 3. Check configurable keymap
+  (define km (get-active-keymap))
   (define action (and ks (keymap-lookup km ks)))
   (match keycode
     [(? (lambda (k) (and action (eq? (dispatch-keymap-action ctx inp state action) 'handled))))
+     'continue]
+    ;; Preference-resolved intents (custom keybindings) take precedence
+    ;; over the hardcoded fallback for the intents they cover.
+    [(? (lambda (k) (and resolved-intent
+                         (case resolved-intent
+                           [(ui.composer.insert-newline)
+                            (set-box! (tui-ctx-input-state-box ctx)
+                                      (input-insert-newline inp))
+                            #t]
+                           [(composer.history-up)
+                            (set-box! (tui-ctx-input-state-box ctx)
+                                      (input-history-up inp))
+                            #t]
+                           [(composer.history-down)
+                            (set-box! (tui-ctx-input-state-box ctx)
+                                      (input-history-down inp))
+                            #t]
+                           [(ui.transcript.toggle-detail)
+                            (toggle-transcript-detail! ctx state)
+                            #t]
+                           [else #f]))))
      'continue]
     ;; Fallback to hardcoded behavior
     [(? char?)

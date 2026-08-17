@@ -7,6 +7,7 @@
          "state.rkt"
          "../ui-core/conversation-artifact.rkt"
          "../ui-core/feature-flags.rkt"
+         "../ui-core/preferences.rkt"
          "../util/json/jsonl.rkt"
          json)
 
@@ -34,32 +35,54 @@
   (set-box! scrollback-id-counter (add1 id))
   id)
 
+;; W3 (v1.00.02): the reasoning persistence policy (from the live user
+;; preference snapshot, reasoning-visibility) gates what crosses the
+;; serialization boundary:
+;;   'scrollback — serialize FULL artifacts (byte bounded, as before)
+;;   'session   — artifacts live in memory ONLY; they never reach disk
+;;   'never     — reasoning bodies are stripped even from legacy text
+;; Non-thinking artifacts (tool/error/...) are not reasoning and are
+;; unaffected by the policy.
+(define reasoning-session-marker "[reasoning not persisted (reasoning-visibility: session)]")
+(define reasoning-never-marker "[reasoning stripped (reasoning-visibility: never)]")
+
 ;; Serialize a transcript-entry to a JSON-compatible hash.
 (define (transcript-entry->jsexpr entry)
+  (define policy (reasoning-visibility-policy (current-preferences)))
   (define meta (transcript-entry-meta entry))
   (define artifact (hash-ref meta 'artifact #f))
   (define persisted-artifact
     (and (conversation-artifact? artifact)
+         ;; Only REASONING (thinking) artifacts are policy-gated; tool/error
+         ;; artifacts are not reasoning and always serialize as before.
+         (or (not (eq? (conversation-artifact-kind artifact) 'thinking)) (eq? policy 'scrollback))
          (if (eq? (conversation-artifact-kind artifact) 'thinking)
              (artifact-limit-body artifact (ui-reasoning-artifacts-max-bytes))
              artifact)))
   (define persisted-meta
-    (if persisted-artifact
-        (hash-set meta 'artifact persisted-artifact)
-        meta))
+    (cond
+      [persisted-artifact (hash-set meta 'artifact persisted-artifact)]
+      ;; The policy suppressed a reasoning artifact: strip it entirely so
+      ;; the on-disk scrollback carries no reasoning payload.
+      [(hash-ref meta 'artifact #f) (hash-remove meta 'artifact)]
+      [else meta]))
   (define persisted-text
     (cond
       [(and persisted-artifact (eq? (conversation-artifact-kind persisted-artifact) 'thinking))
        (conversation-artifact-body persisted-artifact)]
       [(eq? (transcript-entry-kind entry) 'thinking)
-       ;; Legacy/raw thinking rows still cross the same persistence boundary.
-       (conversation-artifact-body
-        (artifact-limit-body (make-conversation-artifact #:id "scrollback-boundary"
-                                                         #:session-id "legacy"
-                                                         #:turn-id "legacy"
-                                                         #:kind 'thinking
-                                                         #:body (transcript-entry-text entry))
-                             (ui-reasoning-artifacts-max-bytes)))]
+       (case policy
+         [(scrollback)
+          ;; Legacy/raw thinking rows still cross the same persistence boundary.
+          (conversation-artifact-body
+           (artifact-limit-body (make-conversation-artifact #:id "scrollback-boundary"
+                                                            #:session-id "legacy"
+                                                            #:turn-id "legacy"
+                                                            #:kind 'thinking
+                                                            #:body (transcript-entry-text entry))
+                                (ui-reasoning-artifacts-max-bytes)))]
+         [(never) reasoning-never-marker]
+         [else reasoning-session-marker])]
       [else (transcript-entry-text entry)]))
   (hasheq 'kind
           (symbol->string (transcript-entry-kind entry))

@@ -40,6 +40,14 @@
 (define header-height 1)
 (define input-height 3)
 
+;; W3 (v1.00.02): the composer row bound now comes from the LIVE user
+;; preference snapshot (composer-max-rows) rather than a compile-time
+;; constant.  Imported under a local name so it cannot shadow the
+;; `max-composer-rows` formal in compute-layout below.
+(require (only-in "../ui-core/preferences.rkt"
+                  [max-composer-rows pref-max-composer-rows]
+                  current-preferences))
+
 ;; Multiline composer height bounds (W3, v0.99.96).
 ;; The composer text area is bounded: at least 1 text row, at most
 ;; `max-composer-text-rows` (configurable, default 6).  The total input
@@ -71,7 +79,8 @@
                         #:widget-bar-h [widget-bar-h (widget-bar-height)]
                         #:has-widgets? [has-widgets? #f]
                         #:composer-height [composer-text-rows #f]
-                        #:max-composer-rows [max-composer-rows default-max-composer-text-rows])
+                        #:max-composer-rows
+                        [max-composer-rows (pref-max-composer-rows (current-preferences))])
   (define effective-input-height
     (if composer-text-rows
         (composer-input-height composer-text-rows max-composer-rows)
