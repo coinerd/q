@@ -41,7 +41,9 @@
                   wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
          "../util/config-paths.rkt"
-         (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget)
+         (only-in "../extensions/gsd/policy.rkt"
+                  gsd-session-iteration-budget
+                  current-gsd-wave-max-iterations)
          (only-in "../extensions/gsd/core.rkt"
                   current-gsd-campaign-owner
                   call-with-gsd-owned-session-switch))
@@ -193,7 +195,8 @@
       (run-prompt! campaign-sess
                    prompt
                    #:max-iterations
-                   (gsd-session-iteration-budget (dict-ref rt-config 'max-iterations 50)))))
+                   (gsd-session-iteration-budget
+                    (dict-ref rt-config 'max-iterations (current-gsd-wave-max-iterations))))))
 
   ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the
   ;; session-runner closure can read dynamically from it.  After /go

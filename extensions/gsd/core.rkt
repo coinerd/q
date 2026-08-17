@@ -75,7 +75,7 @@
   (unless (current-gsd-lifecycle-reset-suppressed?)
     (reset-gsm!)
     (set-pinned-dir! #f)
-    (set-edit-limit! 500)
+    (set-edit-limit! 2000)
     (set-gsd-event-bus! #f)
     (set-plan-data! #f)))
 

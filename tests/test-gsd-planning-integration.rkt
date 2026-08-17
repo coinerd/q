@@ -115,10 +115,10 @@
                          (set-gsd-mode! #f))))))
 
 ;; ============================================================
-;; Test 3: /go raises edit limit from default to 1200
+;; Test 3: /go raises edit limit from default to 2000
 ;; ============================================================
 
-(test-case "/go raises edit limit from default to 1200"
+(test-case "/go raises edit limit from default to 2000"
   (with-clean-state
    (lambda ()
      (with-temp-planning-dir
@@ -130,10 +130,10 @@
             "# Plan: Integration\n- [Inbox] W0: Test\n## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
             out))
          #:exists 'truncate)
-        (check-equal? (current-edit-limit) 500 "default should be 500")
+        (check-equal? (current-edit-limit) 2000 "default should be 2000")
         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
         (handler (hasheq 'command "/go" 'input "/go"))
-        (check-equal? (current-edit-limit) 1200 "should be raised to 1200 during /go"))))))
+        (check-equal? (current-edit-limit) 2000 "should be 2000 during /go"))))))
 
 ;; ============================================================
 ;; Test 4: reset-all-gsd-state! is idempotent

@@ -307,7 +307,7 @@
                           (lambda ()
                             (set-gsd-mode! 'executing)
                             (emit-mode-change! 'executing)
-                            (set-edit-limit! 1200)
+                            (set-edit-limit! 2000)
                             (define wis
                               (for/list ([w (gsd-plan-waves plan)])
                                 (gsd-wave-index w)))
@@ -513,7 +513,7 @@
     (set-pinned-dir! saved-dir))
   (set-gsd-mode! 'planning)
   (emit-mode-change! 'planning)
-  (set-edit-limit! 500)
+  (set-edit-limit! 2000)
   ;; Auto-create STATE.md if missing (#2164)
   (ensure-state-md! base-dir)
   (define existing-plan (read-planning-artifact base-dir "PLAN"))
