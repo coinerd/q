@@ -47,6 +47,7 @@
                   release-lease!
                   campaign-lease?
                   make-campaign-request
+                  campaign-request-timeout-sec
                   execute-campaign-request!
                   current-gsd-wave-cancel!
                   find-git-root
@@ -334,6 +335,35 @@
                                        (make-loop-result '() 'completed (hasheq))))))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "request #:timeout-sec overrides the wave-budget parameter"
+      ;; /go --wave-timeout=SECONDS and config wave-timeout-seconds
+      ;; resolve to a per-campaign timeout carried on the request. It must
+      ;; override the (default 3600 s) parameter even when the campaign runs
+      ;; in a separate thread — hence the request-carried value, not a
+      ;; parameterize at /go time.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request
+        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:timeout-sec 0.01))
+      (define result
+        (execute-campaign-request! request
+                                   (lambda (_)
+                                     (sleep 0.1)
+                                     (make-loop-result '() 'completed (hasheq)))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "request timeout-sec carries onto the request struct"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request
+        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:timeout-sec 4321))
+      (check-equal? (campaign-request-timeout-sec request) 4321)
+      (define default-request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (check-false (campaign-request-timeout-sec default-request))
       (cleanup-tmp dir))
 
     (test-case "tool-loop termination fails current wave and stops advancement"

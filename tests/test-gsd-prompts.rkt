@@ -104,7 +104,7 @@
   (define p (executing-prompt plan exec))
   (check-true (string-contains? p "Edit rules") "mentions edit rules")
   (check-true (string-contains? p "\u226420") "mentions 20-line limit")
-  (check-true (string-contains? p "\u2264500") "mentions 500-char limit"))
+  (check-true (string-contains? p "\u22642000") "mentions 2000-char limit"))
 
 ;; ============================================================
 ;; Wave failure prompt

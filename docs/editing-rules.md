@@ -33,7 +33,7 @@ When replacing a clause or other form containing nested `if`, `begin`, `case`,
 `cond`, `match`, or similar forms:
 
 - Replace the **whole form** in one edit.
-- For a whole-form replacement longer than the default 500-character
+- For a whole-form replacement longer than the default 2000-character
   `old-text` limit, pass `max-old-text-len` explicitly. The safe per-call
   ceiling is 2000.
 - If a structural edit tool supports the operation, use it instead of manually
@@ -79,7 +79,7 @@ Use the edit tool's explicit limit override rather than splitting the form:
 path: tools/example.rkt
 old-text: <the complete enclosing form copied from read>
 new-text: <the complete replacement form>
-max-old-text-len: 1200
+max-old-text-len: 2000
 ```
 
 ### Verification sequence

@@ -70,6 +70,8 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "go-orchestrator.rkt"
+         "delivery-verifier.rkt"
+         (only-in "../../runtime/settings-core.rkt" load-global-settings)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-max-iterations
@@ -414,8 +416,10 @@
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"
    "Do not call /wave-done: the coordinator is the only component allowed to commit wave status.\n"
-   "Delivery finalization remains external. Until trusted delivery evidence is available, this run stops before DONE.\n"
-   "A normal response never marks the wave DONE.\n"
+   "After you return, the coordinator verifies real delivery evidence: the expected branch is\n"
+   "checked out, the wave's target files were changed, and the wave's verify command exits 0.\n"
+   "A wave is marked DONE only when that evidence is present and verification passes; otherwise\n"
+   "it is marked FAILED and the campaign stops for review.\n"
    (format (string-append "This wave has a bounded runtime budget: ~a seconds, ~a iterations, "
                           "and ~a consecutive tool-only turns. Budget exhaustion fails closed.\n\n")
            (current-gsd-wave-timeout-seconds)
@@ -425,6 +429,18 @@
    (if (string=? state-content "")
        ""
        (format "\n## Current State\n~a\n" state-content))))
+
+;; v1.00.03: resolve the per-campaign wave budget at /go time.
+;; Precedence: /go --wave-timeout=SECONDS flag > ~/.q/config.json
+;; wave-timeout-seconds > current-gsd-wave-timeout-seconds (default 3600).
+;; The resolved value travels on the campaign request because the campaign
+;; runs in a separate thread where a parameterize here would not apply.
+(define (resolve-wave-timeout-secs input-text)
+  (or (command-wave-timeout-arg input-text)
+      (let* ([cfg (load-global-settings)]
+             [raw (hash-ref cfg 'wave-timeout-seconds #f)])
+        (and (number? raw) (positive? raw) raw))
+      (current-gsd-wave-timeout-seconds)))
 
 (define (prepare-go-campaign base-dir input-text plan validation)
   (with-handlers ([exn:fail:campaign-migration?
@@ -446,19 +462,15 @@
          [(list 'error msg) (hook-amend (hasheq 'text msg))]
          [(list 'ok _ _)
           (define gsd-ctx (current-gsd-ctx))
+          (define effective-timeout (resolve-wave-timeout-secs input-text))
           (define request
             (make-campaign-request base-dir
                                    rec
                                    (lambda (wave-idx)
                                      (gsm-ctx-transition-to! gsd-ctx 'executing)
                                      (build-single-wave-prompt base-dir plan wave-idx))
-                                   (lambda (_wave-idx)
-                                     ;; Delivery verification is not implemented yet, so production
-                                     ;; fails closed. Do not invoke execute-verification-gate here:
-                                     ;; that gate owns FSM done/rework transitions and authoritative
-                                     ;; verification events, which would contradict the coordinator's
-                                     ;; durable FAILED result. Advisory checks must be observational.
-                                     #f)))
+                                   (make-delivery-verifier base-dir plan)
+                                   #:timeout-sec effective-timeout))
           (hook-amend (hasheq 'campaign-token
                               (register-campaign-request! request)
                               'new-session

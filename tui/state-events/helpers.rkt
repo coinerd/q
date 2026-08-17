@@ -43,21 +43,38 @@
                st1
                [transcript (take entries (min transcript-max-entries (length entries)))]))
 
-;; Dedup guard: prevent duplicate tool-start entries
-(define (recent-tool-start? st name)
+;; Dedup guard: prevent duplicate tool-start entries.
+;; BUG-0015: key on the tool-call id when available; fall back to name-only
+;; matching for events that carry no id (legacy/test payloads). Without the id
+;; key, a 2-read burst would collapse the second read onto the first because
+;; both share the name "read".
+(define (recent-tool-start? st name [tool-call-id #f])
   (define transcript (ui-state-transcript st))
   (define recent (take transcript (min dedup-window-size (length transcript))))
   (for/or ([entry (in-list recent)])
     (and (eq? (transcript-entry-kind entry) 'tool-start)
-         (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
+         (let ([entry-name (hash-ref (transcript-entry-meta entry) 'name "")])
+           (if tool-call-id
+               (and (equal? entry-name name)
+                    (equal? (hash-ref (transcript-entry-meta entry) 'tool-call-id #f) tool-call-id))
+               (equal? entry-name name))))))
 
-;; Dedup guard: prevent duplicate tool-end entries
-(define (recent-tool-end? st name)
+;; Dedup guard: prevent duplicate tool-end entries.
+;; BUG-0015: the typed tool.execution.completed event carries no tool-call id,
+;; so tool-end dedup keys on (name . result-key). Two distinct calls return
+;; different results and both render; a genuine duplicate completion returns
+;; the same result and is suppressed. Falls back to name-only matching when no
+;; result-key is supplied (legacy/test payloads).
+(define (recent-tool-end? st name [result-key #f])
   (define transcript (ui-state-transcript st))
   (define recent (take transcript (min dedup-window-size (length transcript))))
   (for/or ([entry (in-list recent)])
     (and (memq (transcript-entry-kind entry) '(tool-end tool-fail))
-         (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
+         (let ([entry-name (hash-ref (transcript-entry-meta entry) 'name "")])
+           (if result-key
+               (and (equal? entry-name name)
+                    (equal? (hash-ref (transcript-entry-meta entry) 'result-key #f) result-key))
+               (equal? entry-name name))))))
 
 ;; M-09: Extracted error classification (pure function)
 (define (classify-error-type err payload)

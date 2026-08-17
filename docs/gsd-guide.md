@@ -35,6 +35,15 @@ Begin executing the plan. The agent follows the plan's waves sequentially.
 /go 2        # Start from wave 2
 ```
 
+**Per-wave budget (v1.00.03).** Each wave runs with a bounded runtime budget
+(default **3600 s** = 1 hour). Override per campaign, in precedence order:
+
+1. `/go --wave-timeout=SECONDS` flag (e.g. `/go --wave-timeout=7200 3` starts
+   wave 3 with a 2-hour budget; the wave number stays the **last** token);
+2. `wave-timeout-seconds` key in `~/.q/config.json` (applies to all campaigns
+   from that machine);
+3. the built-in default (3600 s).
+
 During execution:
 - **Write guard active** — cannot modify `.planning/PLAN.md` (use `/replan`)
 - **Tool guard active** — `planning-write` is blocked

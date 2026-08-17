@@ -78,7 +78,55 @@
       ;; 12 tool-start entries: 10 "other-N" + 2 "bash" (window exceeded)
       (check-equal? (length tool-starts)
                     12
-                    "tool-start beyond dedup window should not be suppressed"))))
+                    "tool-start beyond dedup window should not be suppressed"))
+
+    ;; BUG-0015: dedup must key on tool-call id, NOT name — consecutive
+    ;; same-name calls (e.g. a 2-read burst) must all render.
+    (test-case "two same-name calls with distinct ids — both tool-start entries render"
+      (define st (initial-ui-state))
+      (define evt1
+        (make-test-event "tool.call.started" (hasheq 'id "call-1" 'name "read" 'arguments "/a.rkt")))
+      (define evt2
+        (make-test-event "tool.call.started" (hasheq 'id "call-2" 'name "read" 'arguments "/b.rkt")))
+      (define result (simulate-events st (list evt1 evt2)))
+      (define tool-starts (filter (lambda (k) (eq? k 'tool-start)) (transcript-types result)))
+      (check-equal? (length tool-starts) 2 "distinct ids must each produce a tool-start"))
+
+    (test-case "two same-name completions with distinct results — both tool-end entries render"
+      (define st (initial-ui-state))
+      (define events
+        (list
+         (make-test-event "tool.call.started" (hasheq 'id "call-1" 'name "read" 'arguments "/a.rkt"))
+         (make-test-event "tool.call.started" (hasheq 'id "call-2" 'name "read" 'arguments "/b.rkt"))
+         (make-test-event "tool.execution.completed" (hasheq 'toolName "read" 'result "content-a"))
+         (make-test-event "tool.execution.completed" (hasheq 'toolName "read" 'result "content-b"))))
+      (define result (simulate-events st events))
+      (define tool-ends
+        (filter (lambda (k) (memq k '(tool-end tool-fail))) (transcript-types result)))
+      (check-equal? (length tool-ends) 2 "distinct results must each produce a tool-end"))
+
+    (test-case "same id twice — still collapses to one tool-start (NF4 regression)"
+      (define st (initial-ui-state))
+      (define evt1
+        (make-test-event "tool.call.started" (hasheq 'id "call-dup" 'name "bash" 'arguments "ls")))
+      (define evt2
+        (make-test-event "tool.call.started" (hasheq 'id "call-dup" 'name "bash" 'arguments "ls")))
+      (define result (simulate-events st (list evt1 evt2)))
+      (define tool-starts (filter (lambda (k) (eq? k 'tool-start)) (transcript-types result)))
+      (check-equal? (length tool-starts) 1 "same id must be deduplicated"))
+
+    (test-case "same result twice — tool-end dedup still collapses (NF4 regression)"
+      (define st (initial-ui-state))
+      (define events
+        (list (make-test-event "tool.call.started" (hasheq 'id "call-1" 'name "bash" 'arguments "ls"))
+              (make-test-event "tool.execution.completed"
+                               (hasheq 'toolName "bash" 'resultSummary 'completed))
+              (make-test-event "tool.execution.completed"
+                               (hasheq 'toolName "bash" 'resultSummary 'completed))))
+      (define result (simulate-events st events))
+      (define tool-ends
+        (filter (lambda (k) (memq k '(tool-end tool-fail))) (transcript-types result)))
+      (check-equal? (length tool-ends) 1 "duplicate completion of same call suppressed"))))
 
 ;; ============================================================
 ;; Run tests

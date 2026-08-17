@@ -61,14 +61,20 @@
 ;; parameters make the production policy explicit while keeping focused tests
 ;; deterministic. Tool calls are bounded by the runtime's existing
 ;; consecutive-tool circuit breaker; no command or shell parsing is involved.
+;; v1.00.03: default raised 1800 → 3600 s (per-wave budget). A live W5 wave
+;; with a scoped verify command legitimately needs up to ~40 min of tool-turn
+;; work; the old 30-minute cap policy-cancelled real implementation waves
+;; that were mid-edit on a large TUI file. The budget is now also overridable
+;; per-campaign via ~/.q/config.json (wave-timeout-seconds) and via
+;; /go --wave-timeout=SECONDS.
 (define current-gsd-wave-timeout-seconds
-  (make-parameter 1800 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+  (make-parameter 3600 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
 ;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
 ;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
 ;; real implementation wave was policy-cancelled at iteration 80 mid-work
 ;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]" then
 ;; wave-cancelled). A wave is a fresh session doing a bounded chunk of work
-;; within the 1800s timeout; the iteration ceiling is a runaway guard, not a
+;; within the 3600s timeout; the iteration ceiling is a runaway guard, not a
 ;; completion cap. Raise it so implementation waves are never iteration-killed
 ;; while the timeout and the 100-consecutive-tool breaker still bound runaway
 ;; loops. The derived hard limit scales with the budget.

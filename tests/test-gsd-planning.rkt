@@ -41,7 +41,10 @@
                   campaign-request?
                   campaign-request-prompt-for-wave
                   campaign-request-verifier
-                  lookup-campaign-request))
+                  lookup-campaign-request)
+         (only-in "../extensions/gsd/delivery-verifier.rkt"
+                  delivery-verification?
+                  delivery-verification-approved?))
 
 ;; ============================================================
 ;; Helpers
@@ -595,10 +598,14 @@
           (check-true (string-contains? first-wave-text "IMPLEMENT NOW"))
           (check-true (string-contains? first-wave-text "ONLY wave W0"))
           (check-true (string-contains? first-wave-text "coordinator is the only component"))
-          (check-true (string-contains? first-wave-text "never marks the wave DONE"))
-          (check-true (string-contains? first-wave-text "trusted delivery evidence"))
-          (check-false ((campaign-request-verifier request) 0))
+          (check-true (string-contains? first-wave-text "verifies real delivery evidence"))
           (check-true (string-contains? first-wave-text "bounded runtime budget"))
+          ;; The verifier is now a structured delivery verifier (no hardcoded
+          ;; fail-closed #f). In a non-git temp dir it returns a rejected
+          ;; delivery-verification struct (approved? #f).
+          (define verifier-result ((campaign-request-verifier request) 0))
+          (check-true (delivery-verification? verifier-result))
+          (check-false (delivery-verification-approved? verifier-result))
           (check-false (string-contains? first-wave-text "future-only.rkt"))
           (check-false (string-contains? first-wave-text "SECRET-LATER-INSTRUCTION"))
           (check-false (string-contains? first-wave-text "SECRET-CROSS-WAVE-W1"))
@@ -620,7 +627,7 @@
 (test-case "planning-implement-prompt assigns only status transitions to the coordinator"
   (check-true (string-contains? planning-implement-prompt "Do NOT call /wave-done"))
   (check-true (string-contains? planning-implement-prompt "coordinator owns status transitions"))
-  (check-true (string-contains? planning-implement-prompt "Delivery finalization remains external")))
+  (check-true (string-contains? planning-implement-prompt "verifies real delivery evidence")))
 
 (test-case "planning-implement-prompt allows planning-read but blocks planning-write"
   (check-false (string-contains? planning-implement-prompt

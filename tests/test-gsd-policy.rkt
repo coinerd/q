@@ -24,6 +24,12 @@
   (check-true (exact-positive-integer? (current-gsd-wave-max-iterations)))
   (check-true (exact-positive-integer? (current-gsd-max-consecutive-tool-calls))))
 
+(test-case "wave timeout default is 3600 s (per-wave budget)"
+  ;; User request: raise the 1800 s default to 3600 s so implementation waves
+  ;; with scoped verify commands are not policy-cancelled mid-edit. The
+  ;; parameter remains overridable per-campaign (flag / config / parameterize).
+  (check-equal? (current-gsd-wave-timeout-seconds) 3600))
+
 (test-case "executor tool-loop limit clears implementation workloads (D3, issue #9351)"
   ;; Incident 81f9be4b W2: the executor died at the old default of 30
   ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
@@ -57,7 +63,7 @@
   (define derived-hard (resolve-max-iterations-hard cfg (current-gsd-wave-max-iterations)))
   ;; resolve-max-iterations-hard = max(iter*8/5, 80). With the raised budget the
   ;; hard ceiling is comfortably in the thousands (e.g. 3200 at 2000), so a wave
-  ;; is bounded by the 1800s timeout and the consecutive-tool breaker, not by
+  ;; is bounded by the 3600s timeout and the consecutive-tool breaker, not by
   ;; an iteration kill at 80.
   (check-true (>= derived-hard (quotient (* 8 (current-gsd-wave-max-iterations)) 5))
               "derived hard limit should scale with the soft budget"))

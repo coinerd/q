@@ -8,6 +8,7 @@
 (require racket/contract
          racket/list
          "../../ui-core/composer-model.rkt"
+         "../../ui-core/composer-layout.rkt"
          "state-types.rkt")
 
 (provide input-state?
@@ -37,6 +38,26 @@
                        [input-at-beginning? (-> input-state? boolean?)]
                        [input-at-end? (-> input-state? boolean?)]
                        [input-empty? (-> input-state? boolean?)]
+                       ;; History
+                       ;; W4: visual (soft-wrap aware) vertical movement and
+                       ;; boundary queries, bridged through the shared
+                       ;; composer layout engine.
+                       [input-visual-up
+                        (->* (input-state? exact-positive-integer?)
+                             ((-> string? exact-nonnegative-integer?))
+                             input-state?)]
+                       [input-visual-down
+                        (->* (input-state? exact-positive-integer?)
+                             ((-> string? exact-nonnegative-integer?))
+                             input-state?)]
+                       [input-visual-first-row?
+                        (->* (input-state? exact-positive-integer?)
+                             ((-> string? exact-nonnegative-integer?))
+                             boolean?)]
+                       [input-visual-last-row?
+                        (->* (input-state? exact-positive-integer?)
+                             ((-> string? exact-nonnegative-integer?))
+                             boolean?)]
                        [input-current-text (-> input-state? string?)]
                        ;; Internal word helpers (shared with completion)
                        [find-word-start-backward
@@ -261,3 +282,36 @@
 
 (define (input-insert-string st text)
   (run-composer-edit st (λ (c) (composer-insert-string c text))))
+
+;; ============================================================
+;; W4: Visual vertical movement (shared composer layout bridge)
+;;
+;; Plain cursor Up/Down inside the (possibly soft-wrapped) draft routes
+;; through q/ui-core/composer-layout.rkt — the single authoritative
+;; visual layout engine — so the TUI key dispatch and the renderer can
+;; never disagree about where "one line up" lands.  Boundary queries
+;; tell the dispatcher when a vertical move would leave the draft (the
+;; point at which history navigation takes over).
+;;
+;; These are pure movements: no undo entries, history index preserved.
+;; ============================================================
+
+;; input-state -> composer-layout (authoritative layout for buffer+cursor)
+(define (input-composer-layout st width display-width)
+  (compute-composer-layout (input-state-buffer st) (input-state-cursor st) width display-width))
+
+(define (input-visual-first-row? st width [display-width composer-unit-display-width])
+  (composer-first-visual-row? (input-composer-layout st width display-width)))
+
+(define (input-visual-last-row? st width [display-width composer-unit-display-width])
+  (composer-last-visual-row? (input-composer-layout st width display-width)))
+
+(define (input-visual-move st mover width display-width)
+  (define c (mover (input->composer st) width display-width))
+  (struct-copy input-state st [buffer (composer-state-buffer c)] [cursor (composer-state-cursor c)]))
+
+(define (input-visual-up st width [display-width composer-unit-display-width])
+  (input-visual-move st composer-move-up width display-width))
+
+(define (input-visual-down st width [display-width composer-unit-display-width])
+  (input-visual-move st composer-move-down width display-width))

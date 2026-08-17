@@ -130,15 +130,15 @@
                       (check-equal? (file->string worker-path) "alpha  \nbeta"))
                     (lambda () (delete-directory/files dir))))
 
-    (test-case "old-text over 500 characters is rejected without mutation"
-      (define content (make-string 600 #\x))
+    (test-case "old-text over 2000 characters is rejected without mutation"
+      (define content (make-string 2100 #\x))
       (run-parity-case content
-                       (make-string 501 #\x)
+                       (make-string 2001 #\x)
                        "short"
                        #:expected-status 'error
                        #:expected-content content))
 
-    (test-case "nondefault max length above 500 is honored in both planes"
+    (test-case "nondefault max length above default is honored in both planes"
       (define old-text (make-string 501 #\x))
       (run-parity-case old-text
                        old-text
@@ -211,7 +211,7 @@
     (test-case "worker too-long error routes to a whole-form structural edit"
       (define dir (make-temporary-file "q-edit-worker-too-long-~a" 'directory))
       (define path (build-path dir "worker.txt"))
-      (define content (make-string 600 #\x))
+      (define content (make-string 2100 #\x))
       (dynamic-wind
        void
        (lambda ()
@@ -220,7 +220,7 @@
            (parameterize ([current-allowed-roots (list dir)])
              (dispatch-tool
               "edit"
-              (hasheq 'path (path->string path) 'old-text (make-string 501 #\x) 'new-text "short"))))
+              (hasheq 'path (path->string path) 'old-text (make-string 2001 #\x) 'new-text "short"))))
          (define message (ipc-response-error-message result))
          (check-equal? (ipc-response-status result) 'error)
          (check-true (string-contains? message "max-old-text-len"))

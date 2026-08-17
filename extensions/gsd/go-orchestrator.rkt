@@ -36,6 +36,10 @@
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-max-consecutive-tool-calls)
+         (only-in "delivery-verifier.rkt"
+                  delivery-verification?
+                  delivery-verification-approved?
+                  delivery-verification-message)
          (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
          (only-in "../../runtime/provider-retry.rkt"
                   current-provider-retry-max-retries
@@ -109,9 +113,21 @@
 ;; A campaign request is the interface-safe execution boundary for /go.  It
 ;; carries durable campaign identity plus callbacks that build one wave prompt
 ;; and verify one completed attempt; interfaces supply only the prompt runner.
-(struct campaign-request (base-dir record prompt-for-wave verifier)
+;; timeout-sec: per-campaign override for the wave budget (current-gsd-wave-
+;; timeout-seconds), resolved at /go time from the --wave-timeout=SECONDS flag,
+;; then ~/.q/config.json wave-timeout-seconds, then the parameter default.
+;; #f → use the current parameter value at execution time. Carried on the
+;; request (not the parameter) because the campaign runs in a separate thread.
+(struct campaign-request (base-dir record prompt-for-wave verifier timeout-sec)
   #:transparent
-  #:constructor-name make-campaign-request)
+  #:constructor-name make-campaign-request/5)
+
+(define (make-campaign-request base-dir
+                               record
+                               prompt-for-wave
+                               verifier
+                               #:timeout-sec [timeout-sec #f])
+  (make-campaign-request/5 base-dir record prompt-for-wave verifier timeout-sec))
 
 ;; D8 (#9357): classify a loop-result as an infrastructure failure (provider/
 ;; network/SSE timeout) rather than a genuine agent/code failure. Positive
@@ -169,6 +185,11 @@
   (define base-dir (campaign-request-base-dir request))
   (define record (campaign-request-record request))
   (define plan-id (campaign-plan-id record))
+  ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
+  ;; > parameter) and carried on the request because the campaign runs in a
+  ;; separate thread where a parameterize at /go time would not apply.
+  (define effective-wave-timeout-secs
+    (or (campaign-request-timeout-sec request) (current-gsd-wave-timeout-seconds)))
   ;; Pending-tool cancellation surface: the executor port's cancel-requested?
   ;; reflects the durable campaign cancellation flag so a long-running tool
   ;; loop can abort mid-wave instead of completing after /cancel.
@@ -184,7 +205,7 @@
                  [current-provider-retry-max-retries 5]
                  [current-provider-retry-stall-max-consecutive 4]
                  [current-provider-retry-ceiling-secs
-                  (let ([budget (current-gsd-wave-timeout-seconds)])
+                  (let ([budget effective-wave-timeout-secs])
                     (min 900 (max 60 (quotient (inexact->exact (floor budget)) 2))))])
     (run-campaign!
      base-dir
@@ -209,7 +230,7 @@
                #:cancel! (current-gsd-wave-cancel!)
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
-     #:timeout-sec (current-gsd-wave-timeout-seconds))))
+     #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
 ;; higher-order values. Keep callbacks process-local and send only an opaque
@@ -351,8 +372,15 @@
               (define verifying (persist-current-status! 'verifying))
               (if (not verifying)
                   (campaign-result 'wave-cancelled '() "stale runner result ignored")
-                  (let* ([approved? (with-handlers ([exn:fail? (lambda (_) #f)])
-                                      (and (verifier wave-idx) #t))]
+                  (let* ([verifier-result (with-handlers ([exn:fail? (lambda (_) #f)])
+                                            (verifier wave-idx))]
+                         [approved? (cond
+                                      [(delivery-verification? verifier-result)
+                                       (delivery-verification-approved? verifier-result)]
+                                      [else (and verifier-result #t)])]
+                         [verifier-message (if (delivery-verification? verifier-result)
+                                               (delivery-verification-message verifier-result)
+                                               "")]
                          [after-verifier (observe)])
                     (cond
                       [(and after-verifier (campaign-record-cancellation after-verifier))
@@ -372,7 +400,11 @@
                          (mirror-status! completion-status))
                        (case completion-status
                          [(done) (campaign-result 'wave-done (list wave-idx) "wave completed")]
-                         [(failed) (campaign-result 'wave-failed '() "verifier rejected")]
+                         [(failed)
+                          (campaign-result
+                           'wave-failed
+                           '()
+                           (if (string=? verifier-message "") "verifier rejected" verifier-message))]
                          [(stale-attempt invalid-state)
                           (campaign-result 'wave-cancelled '() "stale completion ignored")]
                          [else
@@ -596,6 +628,7 @@
          campaign-request-record
          campaign-request-prompt-for-wave
          campaign-request-verifier
+         campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!
          register-campaign-request!
