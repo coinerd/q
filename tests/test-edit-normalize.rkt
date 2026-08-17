@@ -28,22 +28,32 @@
   (check-equal? (normalize-text "\n\nalpha\n\n") "alpha"))
 
 (test-case "normalize-text can preserve trailing whitespace when configured"
-  (define opts (normalize-options #f #t #t #t 2 #t))
+  (define opts (normalize-options #f #t #t #t 2 #t #f))
   (check-equal? (normalize-text "a  \n" opts) "a  "))
 
 (test-case "normalize-text can preserve repeated blank lines when configured"
-  (define opts (normalize-options #t #t #f #t 2 #t))
+  (define opts (normalize-options #t #t #f #t 2 #t #f))
   (check-equal? (normalize-text "a\n\n\nb" opts) "a\n\n\nb"))
 
 (test-case "normalize-crlf can be disabled independently"
-  (define opts (normalize-options #t #f #t #t 2 #t))
+  (define opts (normalize-options #t #f #t #t 2 #t #f))
   (check-equal? (normalize-text "a\r\nb" opts) "a\r\nb")
   (check-equal? (normalize-text "a  \r\nb" opts) "a\r\nb"))
 
 (test-case "normalize-text can preserve boundary blank lines when configured"
-  (define opts (normalize-options #t #t #t #t 2 #f))
+  (define opts (normalize-options #t #t #t #t 2 #f #f))
   (check-equal? (normalize-text "\nalpha\n") "alpha")
   (check-equal? (normalize-text "\nalpha\n" opts) "\nalpha\n"))
+
+(test-case "normalize-text strips leading whitespace when strip-leading? is set"
+  (define opts (normalize-options #f #t #f #f 2 #f #t))
+  (check-equal? (normalize-text "    alpha\n  beta\ngamma" opts) "alpha\nbeta\ngamma")
+  (check-equal? (normalize-text "\talpha\n\t\tbeta" opts) "alpha\nbeta"))
+
+(test-case "strip-leading? leaves non-leading whitespace intact"
+  (define opts (normalize-options #f #t #f #f 2 #f #t))
+  (check-equal? (normalize-text "alpha beta\n  gamma delta" opts) "alpha beta\ngamma delta")
+  (check-equal? (normalize-text "   " opts) ""))
 
 (test-case "similarity-score exact and empty cases"
   (check-= (similarity-score "abc" "abc") 1.0 0.0)
@@ -193,6 +203,35 @@
 (test-case "middle span fuzzy case 13"
   (define s "111\nabc  \ndef\n222")
   (check-equal? (slice s (fuzzy-find-match s "abc\ndef")) "abc  \ndef"))
+
+(test-case "leading-ws-find-matches tolerates indentation drift"
+  ;; The exact live incident: model old-text had +1 leading space per level
+  ;; vs the file (9 vs 8, 11 vs 10, 19 vs 18).
+  (define s "(define (f)\n        (write-config! path\n          (hasheq 'a 1))\n")
+  (define old "(define (f)\n         (write-config! path\n           (hasheq 'a 1))\n")
+  (define spans (leading-ws-find-matches s old))
+  (check-equal? (length spans) 1)
+  (check-equal? (slice s (car spans))
+                "(define (f)\n        (write-config! path\n          (hasheq 'a 1))\n"))
+
+(test-case "leading-ws-find-matches reports ambiguity for repeated blocks"
+  (define s "(define (a)\n   x\n)\n(define (b)\n   x\n)\n")
+  (define old "(define (c)\n     y\n)\n")
+  ;; Only content that differs only by indentation is matched; different
+  ;; content is not a match at all.
+  (check-equal? (leading-ws-find-matches s old) '()))
+
+(test-case "leading-ws-find-matches requires identical content, not just whitespace"
+  (define s "(define (f)\n  (list 1 2 3))")
+  (define old "(define (f)\n (list 9 9 9))") ; different content, only leading ws differs
+  (check-equal? (leading-ws-find-matches s old) '()))
+
+(test-case "leading-ws-find-matches maps coordinates to original text"
+  (define s "prefix\n        body\n    tail")
+  (define old "   body\n   tail")
+  (define spans (leading-ws-find-matches s old))
+  (check-equal? (length spans) 1)
+  (check-equal? (slice s (car spans)) "        body\n    tail"))
 
 (test-case "default-normalization-options is a normalize-options value"
   (check-true (normalize-options? default-normalization-options))

@@ -28,10 +28,15 @@
   ;; Incident 81f9be4b W2: the executor died at the old default of 30
   ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
   ;; the identical wave completed in the main session with 24-consecutive
-  ;; bursts. Implementation waves must not be policy-killed; 60 is the
-  ;; minimum credible floor.
-  (check-true (>= (current-gsd-max-consecutive-tool-calls) 60)
-              "current-gsd-max-consecutive-tool-calls default is too small for implementation waves"))
+  ;; bursts. v1.00.03 finding (#9366): a W3 executor was killed at 100 after a
+  ;; productive edit-retry loop (read -> grep -> re-edit). 200 is the current
+  ;; ceiling; the runaway guard must stay well above real implementation
+  ;; bursts.
+  (check-true (>= (current-gsd-max-consecutive-tool-calls) 200)
+              "current-gsd-max-consecutive-tool-calls default is too small for implementation waves")
+  (check-true
+   (<= (current-gsd-max-consecutive-tool-calls) 400)
+   "current-gsd-max-consecutive-tool-calls default is unreasonably high (runaway guard lost)"))
 
 (test-case "GSD session iteration budget caps a larger configured budget"
   (parameterize ([current-gsd-wave-max-iterations 12])

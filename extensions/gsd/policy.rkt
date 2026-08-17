@@ -77,10 +77,16 @@
 ;; D3 (#9351): raised from 30 — incident 81f9be4b W2 died at exactly 30
 ;; consecutive tool-only turns (attempt-3) while the identical wave completed
 ;; in the main session with 24-consecutive bursts. Implementation waves
-;; legitimately exceed the old default; 100 keeps the runaway-loop guard
-;; without policy-killing real work.
+;; legitimately exceed the old default; 100 kept the runaway-loop guard
+;; without policy-killing real work. v1.00.03 live finding (2026-08-17): a W3
+;; executor spent 100 consecutive tool-only turns on a productive edit-retry
+;; loop (read -> grep -> re-edit after a leading-whitespace mismatch) and was
+;; policy-killed at the ceiling. The edit-tool whitespace auto-fallback
+;; (#9366) removes the root-cause trigger, but recovery loops that re-read and
+;; re-grep before retrying should not be killed either; 200 keeps the runaway
+;; guard while giving recovery room.
 (define current-gsd-max-consecutive-tool-calls
-  (make-parameter 100 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
+  (make-parameter 200 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
 
 (define (gsd-session-iteration-budget configured-max)
   (unless (exact-positive-integer? configured-max)

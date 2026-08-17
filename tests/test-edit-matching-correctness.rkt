@@ -35,6 +35,37 @@
   (check-equal? (edit-contract-result-status result) 'ok)
   (check-equal? (edit-contract-result-content result) "gamma\nbeta"))
 
+(test-case "leading-whitespace auto-fallback applies a unique indentation-drift match"
+  ;; Live incident (#9366): model old-text was +1 space per level vs the file.
+  (define content "(define (f)\n        (write-config! path\n          (hasheq 'a 1))\n")
+  (define old-text "(define (f)\n         (write-config! path\n           (hasheq 'a 1))\n")
+  (define result (apply content old-text "(define (g)\n        (write-config! path)\n"))
+  (check-equal? (edit-contract-result-status result) 'ok)
+  (check-equal? (edit-contract-result-replacements result) 1)
+  (check-equal? (edit-contract-result-content result) "(define (g)\n        (write-config! path)\n")
+  (check-true (edit-contract-result-fuzzy? result)))
+
+(test-case "leading-whitespace auto-fallback does NOT fire on different content"
+  (define content "(define (f)\n  (list 1 2 3))\n")
+  (define old-text "(define (f)\n (list 9 9 9))\n") ; same-ish indent, different body
+  (define result (apply content old-text "changed"))
+  (check-equal? (edit-contract-result-status result) 'not-found)
+  (check-equal? (edit-contract-result-content result) content))
+
+(test-case "leading-whitespace auto-fallback reports ambiguity for repeated blocks"
+  (define content "(define (a)\n   x\n)\n(define (a)\n   x\n)\n")
+  (define old-text "(define (a)\n     x\n)\n") ; both occurrences differ only in indent
+  (define result (apply content old-text "changed"))
+  (check-equal? (edit-contract-result-status result) 'ambiguous)
+  (check-equal? (edit-contract-result-content result) content)
+  (check-equal? (edit-contract-result-replacements result) 0))
+
+(test-case "leading-whitespace auto-fallback requires byte-exact content after indent strip"
+  (define content "(define (f)\n  (list 1 2 3))\n")
+  (define old-text "(define (f)\n   (list 1 2 4))\n") ; differs beyond indentation
+  (define result (apply content old-text "changed"))
+  (check-equal? (edit-contract-result-status result) 'not-found))
+
 (test-case "fuzzy? contract rejects non-boolean values"
   (check-exn exn:fail:contract?
              (lambda () (apply-edit-contract "alpha" "alpha" "beta" #:fuzzy? "false"))))
