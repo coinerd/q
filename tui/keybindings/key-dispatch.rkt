@@ -54,15 +54,16 @@
 ;; Always-history move (Alt+Up/Alt+Down and explicit intents).
 (define (history-move! ctx inp dir)
   (set-box! (tui-ctx-input-state-box ctx)
-            (if (eq? dir 'up) (input-history-up inp) (input-history-down inp)))
+            (if (eq? dir 'up)
+                (input-history-up inp)
+                (input-history-down inp)))
   'handled)
 
 ;; Vertical move that is visual-first, history-at-boundary.
 (define (vertical-move! ctx inp dir)
   (cond
-    [(not (tui-multiline-composer-enabled))
-     ;; Legacy single-line mode: plain Up/Down stay history-only.
-     (history-move! ctx inp dir)]
+    ;; Legacy single-line mode: plain Up/Down stay history-only.
+    [(not (tui-multiline-composer-enabled)) (history-move! ctx inp dir)]
     [(eq? dir 'up)
      (define width (composer-display-width))
      (if (input-visual-first-row? inp width)
@@ -129,22 +130,18 @@
     [(tui.navigation.end end)
      (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
      'handled]
-    [(tui.navigation.history-up history-up)
-     ;; W4: plain Up moves visually inside the draft; history only at the
-     ;; first visual row.
-     (vertical-move! ctx inp 'up)]
-    [(tui.navigation.history-down history-down)
-     ;; W4: plain Down moves visually inside the draft; history only at the
-     ;; last visual row.
-     (vertical-move! ctx inp 'down)]
-    [(tui.navigation.history-up-explicit)
-     ;; W4: explicit history shortcut (Alt+Up) — always history,
-     ;; regardless of the cursor's visual position.
-     (history-move! ctx inp 'up)]
-    [(tui.navigation.history-down-explicit)
-     ;; W4: explicit history shortcut (Alt+Down) — always history,
-     ;; regardless of the cursor's visual position.
-     (history-move! ctx inp 'down)]
+    ;; W4: plain Up moves visually inside the draft; history only at the
+    ;; first visual row.
+    [(tui.navigation.history-up history-up) (vertical-move! ctx inp 'up)]
+    ;; W4: plain Down moves visually inside the draft; history only at the
+    ;; last visual row.
+    [(tui.navigation.history-down history-down) (vertical-move! ctx inp 'down)]
+    ;; W4: explicit history shortcut (Alt+Up) — always history,
+    ;; regardless of the cursor's visual position.
+    [(tui.navigation.history-up-explicit) (history-move! ctx inp 'up)]
+    ;; W4: explicit history shortcut (Alt+Down) — always history,
+    ;; regardless of the cursor's visual position.
+    [(tui.navigation.history-down-explicit) (history-move! ctx inp 'down)]
     [(tui.editor.word-left word-left)
      (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp))
      'handled]
@@ -248,7 +245,7 @@
                               #:shift? k-shift?
                               #:control? k-control?
                               #:alt? k-alt?
-                               #:at-start? (input-at-beginning? inp)
+                              #:at-start? (input-at-beginning? inp)
                               #:at-end? (input-at-end? inp)
                               #:prefs prefs)))
   ;; 3. Check configurable keymap
@@ -259,24 +256,22 @@
      'continue]
     ;; Preference-resolved intents (custom keybindings) take precedence
     ;; over the hardcoded fallback for the intents they cover.
-    [(? (lambda (k) (and resolved-intent
-                         (case resolved-intent
-                           [(ui.composer.insert-newline)
-                            (set-box! (tui-ctx-input-state-box ctx)
-                                      (input-insert-newline inp))
-                            #t]
-                           [(composer.history-up)
-                            (set-box! (tui-ctx-input-state-box ctx)
-                                      (input-history-up inp))
-                            #t]
-                           [(composer.history-down)
-                            (set-box! (tui-ctx-input-state-box ctx)
-                                      (input-history-down inp))
-                            #t]
-                           [(ui.transcript.toggle-detail)
-                            (toggle-transcript-detail! ctx state)
-                            #t]
-                           [else #f]))))
+    [(? (lambda (k)
+          (and resolved-intent
+               (case resolved-intent
+                 [(ui.composer.insert-newline)
+                  (set-box! (tui-ctx-input-state-box ctx) (input-insert-newline inp))
+                  #t]
+                 [(composer.history-up)
+                  (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
+                  #t]
+                 [(composer.history-down)
+                  (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
+                  #t]
+                 [(ui.transcript.toggle-detail)
+                  (toggle-transcript-detail! ctx state)
+                  #t]
+                 [else #f]))))
      'continue]
     ;; Fallback to hardcoded behavior
     [(? char?)
@@ -356,13 +351,13 @@
                           (request-active-turn-interrupt! (tui-ctx-event-bus ctx) state)])
               (set-box! (tui-ctx-ui-state-box ctx) new-state)))
         'continue]
-        ;; W5: the hardcoded ctrl-o fallback is gone. Raw byte 15 decodes to
-        ;; 'ctrl-o (terminal-input.rkt), normalizes to (key-spec #\o #t #f #f)
-        ;; (binding-resolver.rkt), and resolves through the shared keymap to
-        ;; 'ui.transcript.toggle-detail — the single disclosure toggle path.
-        ;; If the user unbinds Ctrl+O, no toggle happens, matching keymap
-        ;; override semantics for every other action.
-        [(alt-tab)
+       ;; W5: the hardcoded ctrl-o fallback is gone. Raw byte 15 decodes to
+       ;; 'ctrl-o (terminal-input.rkt), normalizes to (key-spec #\o #t #f #f)
+       ;; (binding-resolver.rkt), and resolves through the shared keymap to
+       ;; 'ui.transcript.toggle-detail — the single disclosure toggle path.
+       ;; If the user unbinds Ctrl+O, no toggle happens, matching keymap
+       ;; override semantics for every other action.
+       [(alt-tab)
         ;; Cycle focus forward through focusable components
         (let ()
           (define reg-box (tui-ctx-component-registry-box ctx))

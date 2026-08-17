@@ -308,30 +308,29 @@
      #:when (and final-ch (char=? final-ch #\;))
      (define mod-byte (buffered-read-byte in 0.01)) ;; modifier number
      (define b4 (buffered-read-byte in 0.01))
-      ;; W5: kitty CSI-u (ESC[<codepoint>;<mods>u) reports ctrl+letter keys
-      ;; with an explicit ctrl modifier, either as the control codepoint
-      ;; (Ctrl+O = 15;5u — kitty/fixterms) or as the lowercase letter
-      ;; codepoint (Ctrl+O = 111;5u — legacy CSI-u terminals). Normalize
-      ;; both forms to the canonical ctrl-<letter> symbols — the exact same
-      ;; symbols the raw control-byte decode produces — so keymap lookup
-      ;; resolves every route through the single dispatch-keymap-action
-      ;; path. Without this, csi-num->key misses the codepoint and the key
-      ;; decodes to 'escape, dropping the event entirely.
-      (define (ctrl-letter-codepoint n)
-        (cond
-          [(and (>= n 1) (<= n 26) (not (memv n '(8 9 10 13)))) (+ n 96)]
-          [(and (>= n 97) (<= n 122)) n]
-          [else #f]))
-      (define kitty-ctrl-sym
-        (and (byte? b4) (= b4 117)
-             ;; ctrl bit set in the kitty modifier bitmask (1+shift/alt/ctrl):
-             ;; 53='5' ctrl, 54='6' S-C, 55='7' A-C, 56='8' S-A-C
-             (memv mod-byte '(53 54 55 56))
-             (let* ([n (string->number param-str)]
-                    [cp (and (integer? n) (ctrl-letter-codepoint n))])
-               (and cp
-                    (string->symbol
-                     (format "ctrl-~a" (string (integer->char cp))))))))
+     ;; W5: kitty CSI-u (ESC[<codepoint>;<mods>u) reports ctrl+letter keys
+     ;; with an explicit ctrl modifier, either as the control codepoint
+     ;; (Ctrl+O = 15;5u — kitty/fixterms) or as the lowercase letter
+     ;; codepoint (Ctrl+O = 111;5u — legacy CSI-u terminals). Normalize
+     ;; both forms to the canonical ctrl-<letter> symbols — the exact same
+     ;; symbols the raw control-byte decode produces — so keymap lookup
+     ;; resolves every route through the single dispatch-keymap-action
+     ;; path. Without this, csi-num->key misses the codepoint and the key
+     ;; decodes to 'escape, dropping the event entirely.
+     (define (ctrl-letter-codepoint n)
+       (cond
+         [(and (>= n 1) (<= n 26) (not (memv n '(8 9 10 13)))) (+ n 96)]
+         [(and (>= n 97) (<= n 122)) n]
+         [else #f]))
+     (define kitty-ctrl-sym
+       (and (byte? b4)
+            (= b4 117)
+            ;; ctrl bit set in the kitty modifier bitmask (1+shift/alt/ctrl):
+            ;; 53='5' ctrl, 54='6' S-C, 55='7' A-C, 56='8' S-A-C
+            (memv mod-byte '(53 54 55 56))
+            (let* ([n (string->number param-str)]
+                   [cp (and (integer? n) (ctrl-letter-codepoint n))])
+              (and cp (string->symbol (format "ctrl-~a" (string (integer->char cp))))))))
 
      (define base-key (csi-num->key param-str))
      (define base-key-or-dir
@@ -344,7 +343,9 @@
          [70 'end]
          [_ base-key]))
      (match (list base-key-or-dir (and (byte? mod-byte) (> mod-byte 49)))
-       [_ #:when kitty-ctrl-sym (make-tkeymsg-raw kitty-ctrl-sym)]
+       [_
+        #:when kitty-ctrl-sym
+        (make-tkeymsg-raw kitty-ctrl-sym)]
        [(list #f _) (make-tkeymsg-raw 'escape)]
        [(list _ #f) (make-tkeymsg-raw base-key-or-dir)]
        [(list _ #t)

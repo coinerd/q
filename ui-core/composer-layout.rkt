@@ -251,6 +251,20 @@
   (composer-set-cursor st (composer-visual-line-end target)))
 
 ;; ═══════════════════════════════════════════════════════════════════
+;; Visual-boundary predicates (W4)
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Is the cursor on the FIRST visual row of the draft?  Upstream callers
+;; (e.g. the TUI Up/Down dispatch) use these to decide when a vertical
+;; move leaves the draft — the moment history navigation takes over.
+;; A single-visual-row draft is simultaneously first and last row.
+(define (composer-first-visual-row? layout)
+  (zero? (composer-layout-cursor-row layout)))
+
+(define (composer-last-visual-row? layout)
+  (= (composer-layout-cursor-row layout) (sub1 (composer-layout-row-count layout))))
+
+;; ═══════════════════════════════════════════════════════════════════
 ;; Viewport
 ;; ═══════════════════════════════════════════════════════════════════
 
@@ -331,6 +345,8 @@
            (->* (exact-nonnegative-integer? exact-nonnegative-integer?)
                 (exact-nonnegative-integer?)
                 exact-nonnegative-integer?)]
+          [composer-first-visual-row? (-> composer-layout? boolean?)]
+          [composer-last-visual-row? (-> composer-layout? boolean?)]
           [composer-viewport-indicators
            (-> exact-nonnegative-integer?
                exact-nonnegative-integer?

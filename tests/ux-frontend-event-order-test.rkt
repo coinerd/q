@@ -116,8 +116,7 @@
 
 ;; TUI: the real registry reducers via the production apply-event-to-state.
 (define (run-tui events)
-  (for/fold ([st (initial-ui-state)])
-            ([evt (in-list events)])
+  (for/fold ([st (initial-ui-state)]) ([evt (in-list events)])
     (apply-event-to-state st evt)))
 
 ;; GUI: the production subscriber writing into a boxed gui-state.
@@ -143,10 +142,14 @@
              (conversation-artifact-body artifact)
              (conversation-artifact-lifecycle artifact))))
 
-(define (tui-thinking st) (artifact-view (reducer-thinking-artifact (ui-state-conversation-reducer st) SESSION TURN)))
-(define (tui-assistant st) (artifact-view (reducer-assistant-artifact (ui-state-conversation-reducer st) SESSION TURN)))
-(define (gui-thinking st) (artifact-view (reducer-thinking-artifact (gui-state-conversation-reducer st) SESSION TURN)))
-(define (gui-assistant st) (artifact-view (reducer-assistant-artifact (gui-state-conversation-reducer st) SESSION TURN)))
+(define (tui-thinking st)
+  (artifact-view (reducer-thinking-artifact (ui-state-conversation-reducer st) SESSION TURN)))
+(define (tui-assistant st)
+  (artifact-view (reducer-assistant-artifact (ui-state-conversation-reducer st) SESSION TURN)))
+(define (gui-thinking st)
+  (artifact-view (reducer-thinking-artifact (gui-state-conversation-reducer st) SESSION TURN)))
+(define (gui-assistant st)
+  (artifact-view (reducer-assistant-artifact (gui-state-conversation-reducer st) SESSION TURN)))
 
 ;; Stable ids: both frontends must agree on the canonical artifact ids, and
 ;; they must equal the ids derived from the identity triple alone.
@@ -208,7 +211,9 @@
     (check-equal? (tui-thinking tui-st) expected-thinking "unexpected TUI thinking artifact")
     (check-equal? (gui-thinking gui-st) expected-thinking "unexpected GUI thinking artifact")
     ;; ...the same assistant artifact (present or absent together)...
-    (check-equal? (tui-assistant tui-st) (gui-assistant gui-st) "frontend assistant artifacts diverged")
+    (check-equal? (tui-assistant tui-st)
+                  (gui-assistant gui-st)
+                  "frontend assistant artifacts diverged")
     (check-equal? (tui-assistant tui-st) expected-assistant "unexpected TUI assistant artifact")
     (check-equal? (gui-assistant gui-st) expected-assistant "unexpected GUI assistant artifact")
     ;; ...and stable ids across both frontends.
@@ -237,54 +242,54 @@
 
 ;; (a) Normal order: thinking deltas, content deltas, stream completion,
 ;; assistant completion, turn completion.
-(run-scenario
- "e2e: normal order - both frontends converge on identical retained artifacts"
- (normal-order-events)
- #:thinking-body "Plan: step one."
- #:thinking-lifecycle 'retained
- #:assistant-body "Hello world."
- #:assistant-lifecycle 'retained
- #:projection (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "Hello world." 'retained)
+(run-scenario "e2e: normal order - both frontends converge on identical retained artifacts"
+              (normal-order-events)
+              #:thinking-body "Plan: step one."
+              #:thinking-lifecycle 'retained
+              #:assistant-body "Hello world."
+              #:assistant-lifecycle 'retained
+              #:projection
+              (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "Hello world." 'retained)
                     (list 'thinking SESSION TURN EXPECTED-THINKING-ID "Plan: step one." 'retained))
- #:terminal? #t)
+              #:terminal? #t)
 
 ;; (b) Reversed terminals: assistant.message.completed BEFORE
 ;; model.stream.completed.
-(run-scenario
- "e2e: assistant.message.completed before model.stream.completed"
- (reversed-terminal-events)
- #:thinking-body "Reason first. "
- #:thinking-lifecycle 'retained
- #:assistant-body "Answer second."
- #:assistant-lifecycle 'retained
- #:projection (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "Answer second." 'retained)
+(run-scenario "e2e: assistant.message.completed before model.stream.completed"
+              (reversed-terminal-events)
+              #:thinking-body "Reason first. "
+              #:thinking-lifecycle 'retained
+              #:assistant-body "Answer second."
+              #:assistant-lifecycle 'retained
+              #:projection
+              (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "Answer second." 'retained)
                     (list 'thinking SESSION TURN EXPECTED-THINKING-ID "Reason first. " 'retained))
- #:terminal? #t)
+              #:terminal? #t)
 
 ;; (c) Thinking deltas interleaved after content deltas.
-(run-scenario
- "e2e: thinking deltas interleaved after content deltas"
- (interleaved-thinking-events)
- #:thinking-body "t1 t2  t3"
- #:thinking-lifecycle 'retained
- #:assistant-body "one two three"
- #:assistant-lifecycle 'retained
- #:projection (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "one two three" 'retained)
+(run-scenario "e2e: thinking deltas interleaved after content deltas"
+              (interleaved-thinking-events)
+              #:thinking-body "t1 t2  t3"
+              #:thinking-lifecycle 'retained
+              #:assistant-body "one two three"
+              #:assistant-lifecycle 'retained
+              #:projection
+              (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "one two three" 'retained)
                     (list 'thinking SESSION TURN EXPECTED-THINKING-ID "t1 t2  t3" 'retained))
- #:terminal? #t)
+              #:terminal? #t)
 
 ;; (d) Duplicate completion events (3x stream completed, 2x assistant
 ;; completed): artifacts must be deduplicated, single-stable-id, retained.
-(run-scenario
- "e2e: duplicate completion events do not duplicate or corrupt artifacts"
- (duplicate-completion-events)
- #:thinking-body "Reasoning body."
- #:thinking-lifecycle 'retained
- #:assistant-body "answer"
- #:assistant-lifecycle 'retained
- #:projection (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "answer" 'retained)
+(run-scenario "e2e: duplicate completion events do not duplicate or corrupt artifacts"
+              (duplicate-completion-events)
+              #:thinking-body "Reasoning body."
+              #:thinking-lifecycle 'retained
+              #:assistant-body "answer"
+              #:assistant-lifecycle 'retained
+              #:projection
+              (list (list 'assistant SESSION TURN EXPECTED-ASSISTANT-ID "answer" 'retained)
                     (list 'thinking SESSION TURN EXPECTED-THINKING-ID "Reasoning body." 'retained))
- #:terminal? #t)
+              #:terminal? #t)
 
 ;; (e) Thinking-only turn: thinking retained; the canonical empty assistant
 ;; artifact is retained internally; NO phantom assistant row is projected by
@@ -296,7 +301,8 @@
  #:thinking-lifecycle 'retained
  #:assistant-body ""
  #:assistant-lifecycle 'retained
- #:projection (list (list 'thinking SESSION TURN EXPECTED-THINKING-ID "Only thinking. No answer." 'retained))
+ #:projection
+ (list (list 'thinking SESSION TURN EXPECTED-THINKING-ID "Only thinking. No answer." 'retained))
  #:terminal? #t)
 
 ;; (f) Cancellation mid-thinking: no assistant artifact exists yet; thinking
@@ -304,23 +310,21 @@
 ;; lifecycle.  (Mid-stream scenarios assert artifact parity only: projection
 ;; strategy during streaming is a frontend presentation concern, the shared
 ;; contract is the artifact state.)
-(run-scenario
- "e2e: cancellation mid-thinking - partial thinking artifacts match across frontends"
- (cancelled-mid-thinking-events)
- #:thinking-body "Partial reasoning before cancel."
- #:thinking-lifecycle 'streaming
- #:assistant-body #f
- #:assistant-lifecycle #f
- #:projection #f
- #:terminal? #f)
+(run-scenario "e2e: cancellation mid-thinking - partial thinking artifacts match across frontends"
+              (cancelled-mid-thinking-events)
+              #:thinking-body "Partial reasoning before cancel."
+              #:thinking-lifecycle 'streaming
+              #:assistant-body #f
+              #:assistant-lifecycle #f
+              #:projection #f
+              #:terminal? #f)
 
 ;; (g) Runtime error mid-thinking.
-(run-scenario
- "e2e: runtime error mid-thinking - partial thinking artifacts match across frontends"
- (error-mid-thinking-events)
- #:thinking-body "Partial reasoning before error."
- #:thinking-lifecycle 'streaming
- #:assistant-body #f
- #:assistant-lifecycle #f
- #:projection #f
- #:terminal? #f)
+(run-scenario "e2e: runtime error mid-thinking - partial thinking artifacts match across frontends"
+              (error-mid-thinking-events)
+              #:thinking-body "Partial reasoning before error."
+              #:thinking-lifecycle 'streaming
+              #:assistant-body #f
+              #:assistant-lifecycle #f
+              #:projection #f
+              #:terminal? #f)
