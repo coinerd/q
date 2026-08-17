@@ -51,6 +51,13 @@
   (check-true (string-contains? p "STEP 3") "has step 3")
   (check-true (string-contains? p "STEP 4") "has step 4"))
 
+(test-case "W0: planning-prompt warns against quarantined gh-wave-finish"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "gh-wave-finish") "mentions gh-wave-finish")
+  (check-true (string-contains? p "QUARANTINED") "warns that gh-wave-finish is quarantined")
+  (check-true (string-contains? p "external authenticated PR workflow")
+              "points to the external finalization authority"))
+
 (test-case "planning-prompt mentions planning-read tool"
   (define p (planning-prompt "test"))
   (check-true (string-contains? p "planning-read") "mentions planning-read"))
