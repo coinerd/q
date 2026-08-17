@@ -11,7 +11,9 @@
 
 (require rackunit
          "../extensions/gsd/policy.rkt"
-         "../extensions/gsd/state-machine.rkt")
+         "../extensions/gsd/state-machine.rkt"
+         (only-in "../runtime/session/session-config.rkt" resolve-max-iterations-hard)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config))
 
 ;; ============================================================
 ;; Explicit campaign budgets
@@ -35,6 +37,25 @@
   (parameterize ([current-gsd-wave-max-iterations 12])
     (check-equal? (gsd-session-iteration-budget 100) 12)
     (check-equal? (gsd-session-iteration-budget 8) 8)))
+
+(test-case "wave iteration budget is high enough for implementation waves"
+  ;; The user observed a live /go wave policy-cancelled at iteration 80
+  ;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]").
+  ;; That hard stop is derived from the wave session's max-iterations budget;
+  ;; with the old default of 50 the hard ceiling was only 80
+  ;; (resolve-max-iterations-hard = max(iter*8/5, 80)). Implementation waves
+  ;; legitimately run many tool turns; the timeout + consecutive-tool breaker
+  ;; are the real bounds, not a tiny iteration ceiling.
+  (check-true (>= (current-gsd-wave-max-iterations) 1000)
+              "current-gsd-wave-max-iterations default is too small; wave is iteration-killed")
+  (define cfg (hash->session-config (hasheq 'max-iterations (current-gsd-wave-max-iterations))))
+  (define derived-hard (resolve-max-iterations-hard cfg (current-gsd-wave-max-iterations)))
+  ;; resolve-max-iterations-hard = max(iter*8/5, 80). With the raised budget the
+  ;; hard ceiling is comfortably in the thousands (e.g. 3200 at 2000), so a wave
+  ;; is bounded by the 1800s timeout and the consecutive-tool breaker, not by
+  ;; an iteration kill at 80.
+  (check-true (>= derived-hard (quotient (* 8 (current-gsd-wave-max-iterations)) 5))
+              "derived hard limit should scale with the soft budget"))
 
 ;; ============================================================
 ;; blocked-tools-for
