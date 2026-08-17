@@ -38,7 +38,7 @@
     (check-equal? (gsd-session-iteration-budget 100) 12)
     (check-equal? (gsd-session-iteration-budget 8) 8)))
 
-(test-case "wave iteration budget is high enough for implementation waves (v1.00.03 finding)"
+(test-case "wave iteration budget is high enough for implementation waves"
   ;; The user observed a live /go wave policy-cancelled at iteration 80
   ;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]").
   ;; That hard stop is derived from the wave session's max-iterations budget;
