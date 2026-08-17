@@ -1,3 +1,44 @@
+## [Unreleased]
+
+> v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE — merged via PR #9370 (main `76ae7946`).
+> TUI/GUI event-order parity (W5/W6), BUG-0015 TUI dedup fix, per-wave budget
+> 3600 s + configurable, delivery verifier, edit-limit sandbox 2000.
+
+### Bug Fixes
+
+- **TUI tool-call dedup dropped consecutive same-name calls (BUG-0015).** The `/go` TUI
+  transcript omitted `read` tool calls when several used the same tool name back-to-back:
+  `recent-tool-start?`/`recent-tool-end?` in `tui/state-events/helpers.rkt` keyed dedup on
+  tool **name** within a 10-entry window, so the 2nd+ same-name call was treated as a
+  duplicate and never appended. Dedup now keys on tool-call identity (`tool-call-id` for
+  starts, `result-key` for ends, name-only fallback for legacy payloads). Tests: +4 cases
+  in `test-tool-dedup.rkt`, updated concurrent-tool contract in `test-streaming-transitions.rkt`.
+- **Edit-limit sandbox default raised 500 → 2000.** The sandbox `execute-edit` path still used
+  `DEFAULT-MAX-OLD-TEXT-LEN` 500 while the main-process GSD edit-limit was 2000, so valid
+  large edits (e.g. 1039-char old-text) failed through the sandbox. Aligned `edit-contract.rkt`,
+  `core-tools.rkt` registration text, `prompts.rkt` executor rule, and `editing-rules.md`.
+
+### Features
+
+- **Configurable per-wave campaign budget (default 3600 s).** `/go --wave-timeout=SECONDS`
+  flag > `~/.q/config.json` `wave-timeout-seconds` > default 3600 (was 1800). The resolved
+  value is carried on `campaign-request` (`timeout-sec`) so it applies even though the
+  campaign runs in a separate thread. Retry ceiling stays capped at 900 s.
+- **Delivery verifier for GSD waves.** `extensions/gsd/delivery-verifier.rkt` approves a wave
+  when its listed files exist, are committed, and pass the wave's scoped verify command —
+  unblocks `/go` wave approval that previously fail-closed to `#f`.
+
+### Testing
+
+- **Cross-frontend event-order matrix (W6).** `tests/ux-frontend-event-order-test.rkt` drives
+  the production TUI registry reducers and `make-gui-event-subscriber` through a 7-scenario
+  event-order matrix (normal, reversed terminal orders, interleaved thinking deltas,
+  duplicate completions, thinking-only turn, cancellation and runtime error mid-thinking),
+  asserting identical artifact bodies/ids/lifecycle across both frontends (38 tests).
+- **Single disclosure toggle resolution path (W5).** Unified Ctrl+O fallback with
+  `dispatch-keymap-action`; TUI visual Up/Down composer navigation (W4) refinements.
+- TUI suite green: 88 files / 1,362 tests; full CI green on PR #9370.
+
 ## 1.00.03
 
 Released 2026-08-16.
