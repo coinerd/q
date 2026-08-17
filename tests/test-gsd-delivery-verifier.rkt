@@ -96,16 +96,29 @@
    #:exists 'truncate))
 
 (define (write-state! base-dir idx issue)
-  (call-with-output-file
-   (build-path base-dir ".planning" "STATE.md")
-   (lambda (out)
-     (display (string-append "| W" (number->string idx) " | #" issue " | PENDING |\n") out))
-   #:exists 'truncate))
+  ;; Rows mirror the real tracker format:
+  ;;   | W<n> | #<issue> | PENDING | [waves/W<n>-<slug>.md](waves/W<n>-<slug>.md) |
+  ;; The linked wave doc must match the current plan's slug (fixture = "zero").
+  (call-with-output-file (build-path base-dir ".planning" "STATE.md")
+                         (lambda (out)
+                           (display (string-append "| W"
+                                                   (number->string idx)
+                                                   " | #"
+                                                   issue
+                                                   " | PENDING | [waves/W"
+                                                   (number->string idx)
+                                                   "-zero.md](waves/W"
+                                                   (number->string idx)
+                                                   "-zero.md) |\n")
+                                    out))
+                         #:exists 'truncate))
 
 (define (load-plan* base-dir)
-  ;; minimal plan: one wave with one file
-  (define w0
-    (make-gsd-wave 0 "Wave Zero" "" (list "q/ui-core/preferences.rkt") '() "verify" (list "done")))
+  ;; minimal plan: one wave with the given files
+  (load-plan** base-dir (list "q/ui-core/preferences.rkt")))
+
+(define (load-plan** base-dir files)
+  (define w0 (make-gsd-wave 0 "Wave Zero" "" files '() "verify" (list "done")))
   (gsd-plan (list w0) "" '() '()))
 
 (define (make-git-file-change! base-dir)
@@ -248,6 +261,91 @@
                            #:runner (lambda (_) 'ok)
                            #:verifier (make-delivery-verifier base plan)))
       (check-eq? (campaign-result-status result) 'wave-failed)
+      (cleanup-tmp base))
+
+    (test-case "approves issue-less campaign on main (no per-wave issues)"
+      ;; A campaign that does not use per-wave GitHub issues runs on the
+      ;; current branch (main) and has no STATE.md issue row. The branch
+      ;; check must not invent an expected feature branch.
+      (define base (make-tmp-git-repo))
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       "raco make q/ui-core/preferences.rkt")
+      ;; no write-state!: STATE.md absent → issue-less
+      (define plan (load-plan* base))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result)
+                  "issue-less campaign on main must be approved")
+      (check-false (or (regexp-match? #rx"expected=" (delivery-verification-message result)) #f)
+                   "no spurious expected branch")
+      (cleanup-tmp base))
+
+    (test-case "ignores stale STATE.md issue row from a previous campaign"
+      ;; STATE.md still lists the OLD campaign's issue mapping (different
+      ;; wave-doc slug), so it must be treated as issue-less, not as a
+      ;; feature/issue-N-wave expectation.
+      (define base (make-tmp-git-repo))
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       "raco make q/ui-core/preferences.rkt")
+      ;; stale row linking a different wave doc (old slug "legacy")
+      (call-with-output-file
+       (build-path base ".planning" "STATE.md")
+       (lambda (out)
+         (display "| W0 | #42 | PENDING | [waves/W0-legacy.md](waves/W0-legacy.md) |\n" out))
+       #:exists 'truncate)
+      (define plan (load-plan* base))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result)
+                  "stale issue row referencing a different wave doc must be ignored")
+      (cleanup-tmp base))
+
+    (test-case "compile gate skips non-Racket files (ci.yml, docs)"
+      ;; Waves that touch .yml/.md alongside .rkt must compile only the
+      ;; Racket targets; raco make fails on non-module files.
+      (define base (make-tmp-git-repo))
+      (make-directory* (build-path base "q" ".github" "workflows"))
+      (make-directory* (build-path base "q" "docs" "reports"))
+      (call-with-output-file (build-path base "q" ".github" "workflows" "ci.yml")
+                             (lambda (out) (display "name: ci\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path base "q" "docs" "reports" "x.md")
+                             (lambda (out) (display "# x\n" out))
+                             #:exists 'truncate)
+      (parameterize ([current-directory base])
+        (system*/exit-code GIT "add" "-A")
+        (system*/exit-code GIT "commit" "-q" "-m" "add non-rkt files"))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-git-file-change! base)
+      (call-with-output-file (build-path base "q" ".github" "workflows" "ci.yml")
+                             (lambda (out) (display "name: ci2\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path base "q" "docs" "reports" "x.md")
+                             (lambda (out) (display "# x2\n" out))
+                             #:exists 'truncate)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc!
+       base
+       0
+       "zero"
+       (list "q/ui-core/preferences.rkt" "q/.github/workflows/ci.yml" "q/docs/reports/x.md")
+       "raco make q/ui-core/preferences.rkt")
+      (write-state! base 0 "42")
+      (define plan
+        (load-plan**
+         base
+         (list "q/ui-core/preferences.rkt" "q/.github/workflows/ci.yml" "q/docs/reports/x.md")))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result)
+                  "verify gate must ignore non-Racket changed files")
       (cleanup-tmp base))))
 
 (module+ main

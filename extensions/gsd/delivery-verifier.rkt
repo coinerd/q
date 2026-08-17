@@ -119,16 +119,29 @@
 ;; ============================================================
 
 (define wave-table-rx #rx"^\\| *W([0-9]+) *\\| *#([0-9]+) *\\|")
-
 (define (wave-issue-number base-dir wave-idx)
+  ;; Issue-less campaigns (no per-wave GitHub issues) return #f. A STATE.md
+  ;; row is only honored when it references the CURRENT plan's wave doc for
+  ;; this index: stale rows left by a previous campaign (whose wave docs were
+  ;; replaced) must not be misread as issue mappings. When the campaign has no
+  ;; issues at all, the branch check degrades to "no expected branch" (pass).
   (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define current-slug (wave-slug base-dir wave-idx))
+  (define expected-doc (and current-slug (format "waves/W~a-~a.md" wave-idx current-slug)))
   (cond
-    [(not (file-exists? state-path)) #f]
+    [(or (not (file-exists? state-path)) (not expected-doc)) #f]
     [else
      (define text (call-with-input-file state-path port->string))
      (for/first ([line (in-list (string-split text "\n"))]
-                 #:when (and (regexp-match wave-table-rx line)
-                             (= (string->number (cadr (regexp-match wave-table-rx line))) wave-idx)))
+                 #:when
+                 (let ([m (regexp-match wave-table-rx line)])
+                   (and
+                    m
+                    (= (string->number (cadr m)) wave-idx)
+                    ;; The row must link the current plan's wave doc.
+                    (string-contains?
+                     line
+                     (string-append "waves/W" (number->string wave-idx) "-" current-slug ".md")))))
        (define m (regexp-match wave-table-rx line))
        (cadr (cdr m)))]))
 
@@ -151,10 +164,16 @@
   (define branch (and root (current-branch root)))
   (define expected (expected-wave-branch base-dir wave-idx))
   (define detail (format "branch=~a expected=~a" branch (or expected "?")))
-  (cons "branch"
-        (if (and branch expected (string=? branch expected))
-            (cons #t detail)
-            (cons #f detail))))
+  (cons
+   "branch"
+   (cond
+     ;; Issue-less campaign: no per-wave GitHub issue table in STATE.md,
+     ;; so no expected feature branch exists (work happens on main or the
+     ;; current branch). Only enforce the branch match when the campaign
+     ;; actually declares per-wave issues.
+     [(not expected) (cons #t (string-append detail " (issue-less campaign: no expected branch)"))]
+     [(and branch (string=? branch expected)) (cons #t detail)]
+     [else (cons #f detail)])))
 
 (define (wave-file->git-relative base-dir git-root wave-file)
   ;; Wave files are repo-root-relative (e.g. "q/ui-core/preferences.rkt").
@@ -201,16 +220,21 @@
 ;; ============================================================
 
 (define (build-compile-gate base-dir git-root wave-idx plan)
-  ;; `raco make` on the wave's changed target files from the git root.
+  ;; `raco make` on the wave's changed Racket target files from the git root.
+  ;; Non-Racket artifacts (ci.yml, .md docs, etc.) are excluded because
+  ;; `raco make` fails on them and they carry no compile evidence.
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
     (if wave
         (gsd-wave-files wave)
         '()))
   (define changed (changed-files-set base-dir git-root))
+  (define (racket-source? p)
+    (regexp-match? #rx"[.]rktl?$" p))
   (define targets
     (for/list ([f (in-list files)]
-               #:when (set-member? changed (wave-file->git-relative base-dir git-root f)))
+               #:when (and (racket-source? f)
+                           (set-member? changed (wave-file->git-relative base-dir git-root f))))
       (wave-file->git-relative base-dir git-root f)))
   (if (null? targets)
       #f
@@ -246,20 +270,24 @@
 
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
-  (define command
-    (or (current-gsd-delivery-verify-command)
-        (and root (build-compile-gate base-dir root wave-idx plan))))
+  (define explicit (current-gsd-delivery-verify-command))
+  (define gate (and root (not explicit) (build-compile-gate base-dir root wave-idx plan)))
+  (define (run-cmd command)
+    (let* ([result (run-verify-command command root (current-gsd-delivery-verify-timeout-sec))]
+           [exit-code (car result)]
+           [detail (format "cmd=~a exit=~a" command exit-code)])
+      (cons "verify"
+            (if (eq? exit-code 0)
+                (cons #t detail)
+                (cons #f detail)))))
   (cond
     [(not root) (cons "verify" (cons #f "no git root"))]
-    [(not command) (cons "verify" (cons #f "no verify command derivable"))]
-    [else
-     (let* ([result (run-verify-command command root (current-gsd-delivery-verify-timeout-sec))]
-            [exit-code (car result)]
-            [detail (format "cmd=~a exit=~a" command exit-code)])
-       (cons "verify"
-             (if (eq? exit-code 0)
-                 (cons #t detail)
-                 (cons #f detail))))]))
+    [explicit (run-cmd explicit)]
+    [gate (run-cmd gate)]
+    ;; No Racket targets changed/derivable (docs-only or CI-only wave). The
+    ;; file-changed check already guarantees delivery evidence; there is no
+    ;; compile evidence to gate on.
+    [else (cons "verify" (cons #t "no Racket targets to compile (docs/CI-only change)"))]))
 
 ;; ============================================================
 ;; Composition
