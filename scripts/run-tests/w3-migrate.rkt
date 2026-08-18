@@ -53,9 +53,12 @@
 (define env-unsafe-rx #rx"(?i:putenv|setenv)")
 (define network-unsafe-rx #rx"(?i:tcp-connect|http-connector|open-input-url|url-request)")
 (define subprocess-unsafe-rx
-  #rx"[(]subprocess[[:space:]]|[(]system[[:space:]]|[(]process[[:space:]]|[(]process*[[:space:]]|shell-complete")
+  (regexp (string-append "[(]subprocess[[:space:]]|[(]system[[:space:]]|[(]process[[:space:]]|"
+                         "[(]process*[[:space:]]|shell-complete")))
 (define fs-write-unsafe-rx
-  #rx"call-with-output-file|with-output-to-file|write-to-file|display-to-file|delete-file|delete-directory|copy-file|copy-directory|rename-file-or-directory|make-directory")
+  (regexp (string-append "call-with-output-file|with-output-to-file|write-to-file|display-to-file|"
+                         "delete-file|delete-directory|copy-file|copy-directory|"
+                         "rename-file-or-directory|make-directory")))
 (define exit-unsafe-rx #rx"[(]exit[[:space:]]")
 (define tmux-rx #rx"(?i:tmux)")
 (define integration-name-rx #rx"integration|workflow-")

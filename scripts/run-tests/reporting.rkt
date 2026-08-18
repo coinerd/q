@@ -174,18 +174,20 @@
 ;; snake_case convention: runner-version -> runner_version, etc.
 
 (define known-area-prefixes
-  '("tests/tui/"
-    "tests/workflows/"
-    "tests/security/"
-    "tests/arch/"
-    "tests/runtime/"
-    "tests/extensions/"
-    "tests/interfaces/"
-    "tests/provider/"
-    "tests/skills/"))
+  '("tests/tui/" "tests/workflows/"
+                 "tests/security/"
+                 "tests/arch/"
+                 "tests/runtime/"
+                 "tests/extensions/"
+                 "tests/interfaces/"
+                 "tests/provider/"
+                 "tests/skills/"))
 
 (define (path-area-heuristic? path)
-  (define p (if (path? path) (path->string path) path))
+  (define p
+    (if (path? path)
+        (path->string path)
+        path))
   (ormap (lambda (prefix) (string-prefix? p prefix)) known-area-prefixes))
 
 ;; 'explicit  — file declares @suite (or at least @speed) metadata
@@ -211,12 +213,15 @@
 
 (define (annotate-file-jsexpr js r)
   (hash-set* js
-             'duration_seconds (/ (test-file-result-elapsed-ms r) 1000.0)
+             'duration_seconds
+             (/ (test-file-result-elapsed-ms r) 1000.0)
              'metadata_completeness
              (symbol->string (metadata-completeness (test-file-result-path r)))))
 
 (define (shard->jsexpr shard)
-  (if (pair? shard) (hasheq 'index (car shard) 'total (cdr shard)) 'null))
+  (if (pair? shard)
+      (hasheq 'index (car shard) 'total (cdr shard))
+      'null))
 
 (define (run-summary->jsexpr results
                              #:suite suite
@@ -225,43 +230,59 @@
                              #:mode [mode 'subprocess]
                              #:elapsed-ms [elapsed-ms 0]
                              #:runner-version [runner-version "unknown"])
-  (hasheq 'runner_version runner-version
-          'suite (if (symbol? suite) (symbol->string suite) suite)
-          'profile (if (symbol? profile) (symbol->string profile) profile)
-          'shard (shard->jsexpr shard)
-          'execution_mode (if (symbol? mode) (symbol->string mode) mode)
-          'file_count (length results)
-          'pass (count passed-result? results)
-          'fail (count failed-result? results)
-          'timeout (count timeout-result? results)
-          'skip (count skipped-by-profile-result? results)
-          'wall_clock_seconds (/ elapsed-ms 1000.0)
-          'metadata_completeness (metadata-completeness-counts results)))
+  (hasheq 'runner_version
+          runner-version
+          'suite
+          (if (symbol? suite)
+              (symbol->string suite)
+              suite)
+          'profile
+          (if (symbol? profile)
+              (symbol->string profile)
+              profile)
+          'shard
+          (shard->jsexpr shard)
+          'execution_mode
+          (if (symbol? mode)
+              (symbol->string mode)
+              mode)
+          'file_count
+          (length results)
+          'pass
+          (count passed-result? results)
+          'fail
+          (count failed-result? results)
+          'timeout
+          (count timeout-result? results)
+          'skip
+          (count skipped-by-profile-result? results)
+          'wall_clock_seconds
+          (/ elapsed-ms 1000.0)
+          'metadata_completeness
+          (metadata-completeness-counts results)))
 
-(define (format-run-summary-record results
-                                   suite
-                                   profile
-                                   shard
-                                   mode
-                                   elapsed-ms
-                                   runner-version)
+(define (format-run-summary-record results suite profile shard mode elapsed-ms runner-version)
   (define mc (metadata-completeness-counts results))
-  (format
-   "RUN-SUMMARY runner-version=~a suite=~a profile=~a shard=~a execution-mode=~a file-count=~a pass=~a fail=~a timeout=~a skip=~a wall-clock-seconds=~a metadata-completeness=explicit:~a/heuristic:~a/missing:~a"
-   runner-version
-   suite
-   profile
-   (if shard (format "~a/~a" (car shard) (cdr shard)) "none")
-   mode
-   (length results)
-   (count passed-result? results)
-   (count failed-result? results)
-   (count timeout-result? results)
-   (count skipped-by-profile-result? results)
-   (/ elapsed-ms 1000.0)
-   (hash-ref mc 'explicit)
-   (hash-ref mc 'heuristic)
-   (hash-ref mc 'missing)))
+  (format (string-append "RUN-SUMMARY runner-version=~a suite=~a profile=~a shard=~a "
+                         "execution-mode=~a file-count=~a pass=~a fail=~a timeout=~a "
+                         "skip=~a wall-clock-seconds=~a "
+                         "metadata-completeness=explicit:~a/heuristic:~a/missing:~a")
+          runner-version
+          suite
+          profile
+          (if shard
+              (format "~a/~a" (car shard) (cdr shard))
+              "none")
+          mode
+          (length results)
+          (count passed-result? results)
+          (count failed-result? results)
+          (count timeout-result? results)
+          (count skipped-by-profile-result? results)
+          (/ elapsed-ms 1000.0)
+          (hash-ref mc 'explicit)
+          (hash-ref mc 'heuristic)
+          (hash-ref mc 'missing)))
 
 (define (print-run-summary-record results
                                   #:suite suite
