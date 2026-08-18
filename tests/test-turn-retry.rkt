@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-turn-retry.rkt — W6 (BUG-0011): bounded turn-level auto-retry
 ;; Tests the turn-retry policy shape and with-turn-retry semantics:

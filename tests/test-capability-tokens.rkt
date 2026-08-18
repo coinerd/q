@@ -31,6 +31,7 @@
 
     (test-case "hmac-sha256 rejects empty key"
       ;; M3 (v0.99.10 W3): empty token/HMAC secrets are rejected at the primitive boundary.
+;; @boundary unit
       (check-exn exn:fail:contract? (lambda () (hmac-sha256 "" "message"))))
 
     (test-case "hmac-sha256 handles long key (> block size)"

@@ -2,7 +2,8 @@
 
 ;; @speed fast
 ;; @suite testing
-;; @isolation subprocess
+;; @isolation process
+;; @boundary unit  ;; @mutates fs
 
 ;; tests/test-run-tests-overhead-diagnostics.rkt
 ;; W0: verifies the run-tests overhead diagnostics entry points.

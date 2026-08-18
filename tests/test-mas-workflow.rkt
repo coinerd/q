@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite skills
+;; @boundary unit
 
 ;; tests/test-mas-workflow.rkt
 ;; v0.99.26 W2: MAS Workflow Types + Parser tests.

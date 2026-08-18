@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-loop-messages-trim-assistant.rkt — Test trailing assistant message trimming
 ;; in build-raw-messages (safety guard for qwen3/enable_thinking providers)

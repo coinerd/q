@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
          "../tools/builtins/edit-normalize.rkt")

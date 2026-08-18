@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite tui
+;; @boundary unit
 
 ;; tests/test-tui-event-channel.rkt — BF1-ROOT regression test
 ;;

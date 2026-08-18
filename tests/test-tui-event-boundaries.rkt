@@ -24,6 +24,7 @@
 (define-runtime-path state-events-path "../tui/state-events.rkt")
 
 ;; Dynamic requires to avoid module-load side-effect ordering issues
+;; @boundary unit
 (define helpers-cache (make-hash))
 (define (h-ref sym)
   (hash-ref! helpers-cache sym (lambda () (dynamic-require helpers-path sym))))

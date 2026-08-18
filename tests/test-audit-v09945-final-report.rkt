@@ -1,6 +1,8 @@
 #lang racket
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/runtime-path
          racket/string)

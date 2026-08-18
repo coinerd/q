@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite integration
+;; @boundary integration
 
 ;; tests/test-mcp-integration.rkt — W6 (v0.99.10) MCP End-to-End Integration Tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; test-memory-reflection-w5.rkt — W5: Deterministic memory reflection tests
 

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 
 ;; tests/test-maintainability-terminal-decision.rkt
 ;; v0.99.92 W4 — Repository-wide Maintainability Reassessment terminal ledger.

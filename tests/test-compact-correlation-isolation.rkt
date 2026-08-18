@@ -4,6 +4,7 @@
 ;; @suite runtime
 ;; v0.99.51 W5 F-06: compact request→started→terminal correlation and
 ;; multi-session isolation. Red-first: the subscriber must filter by
+;; @boundary integration
 ;; target session, the TUI must track pending compact request/session
 ;; identity, terminal events must be correlated, and the verifier must
 ;; require a requested→started→terminal chain.

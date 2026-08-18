@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-service-adapter.rkt — F4: service uses adapter interface
 

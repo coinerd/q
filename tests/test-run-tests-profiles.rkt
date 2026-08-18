@@ -2,7 +2,8 @@
 
 ;; @speed fast
 ;; @suite testing
-;; @isolation subprocess
+;; @isolation process
+;; @boundary integration  ;; @mutates fs
 
 (require rackunit
          rackunit/text-ui

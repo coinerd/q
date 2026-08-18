@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-lifecycle-w3.rkt — W3 tests for post-turn auto-extraction lifecycle hook
 (require rackunit
          racket/string

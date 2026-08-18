@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-ipv6-policy.rkt — F3: IPv6 policy classification
 

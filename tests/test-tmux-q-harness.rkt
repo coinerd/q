@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary e2e  ;; @requires terminal
 
 ;; BOUNDARY: unit
 

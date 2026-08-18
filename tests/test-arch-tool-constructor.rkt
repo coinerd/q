@@ -1,5 +1,6 @@
 #lang racket
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 ;; BOUNDARY: integration
 ;; tests/test-arch-tool-constructor.rkt — Raw tool constructor import guard (#15)
 ;;

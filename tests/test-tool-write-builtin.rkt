@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-tool-write-builtin.rkt — T-2 tests for tools/builtins/write.rkt
 

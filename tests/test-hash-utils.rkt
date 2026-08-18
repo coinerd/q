@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; test-hash-utils.rkt — Tests for util/hash-utils.rkt (W4)
 
 (require rackunit

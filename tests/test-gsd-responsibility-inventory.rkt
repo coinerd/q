@@ -3,6 +3,7 @@
 ;; tests/test-gsd-responsibility-inventory.rkt — GSD Responsibility & Effect Inventory fitness
 ;; @speed fast
 ;; @suite arch
+;; @boundary integration
 ;;
 ;; v0.99.87 W2 (#9214): enforces that every GSD module under extensions/gsd/ is
 ;; classified in the machine-readable inventory (no unclassified module), that

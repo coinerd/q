@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; Tests for spawn-execution — child-safe tool schemas, CWD propagation, agent loop.
 

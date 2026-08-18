@@ -6,6 +6,7 @@
 ;; BOUNDARY: contract
 
 ;; tests/test-tool-registry-contracts.rkt -- R3: registry contract boundary tests
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

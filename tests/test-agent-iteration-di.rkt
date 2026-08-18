@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: integration
 
 ;;; test-agent-iteration-di.rkt — Verify that Agent iteration can execute

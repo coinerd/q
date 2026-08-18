@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; W1 regression tests for v0.99.79 structural-split safety and
 ;; per-call max-old-text-len override.

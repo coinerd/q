@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-theme-layout.rkt — Tests for ui-core/theme-protocol and layout-protocol
 

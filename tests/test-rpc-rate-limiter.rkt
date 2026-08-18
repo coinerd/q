@@ -12,6 +12,7 @@
 ;;;   - rate-limiter-check allows requests under limit
 ;;;   - rate-limiter-check rejects requests over limit
 ;;;   - Per-method isolation (different methods have separate counters)
+;; @boundary unit
 ;;;   - Rate limiter integration with dispatch (end-to-end)
 
 (require rackunit

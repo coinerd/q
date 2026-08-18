@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: unit
 ;;
 ;; W3: Parser/string hotspot tests.

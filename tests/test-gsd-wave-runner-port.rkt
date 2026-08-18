@@ -7,6 +7,7 @@
 ;; TDD tests for the executor boundary: ONE structured terminal outcome per
 ;; invocation (done|failed|cancelled|timed-out|interrupted), explicit
 ;; cancellation via the runner port, and a deterministic timeout adapter.
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

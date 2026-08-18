@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-cli-interactive.rkt — v0.70.8 W0
 ;; Extracted from test-cli.rkt: run-cli-interactive tests

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-fsm-unit.rkt — T-7 tests for util/fsm.rkt
 

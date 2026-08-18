@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite runtime
+;; @boundary unit
 
 ;; test-session-config-helpers.rkt — Tests for session config helpers (T3-2/3/4)
 ;; Part of v0.80.5 Polish Sweep

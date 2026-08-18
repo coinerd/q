@@ -11,6 +11,7 @@
 ;; - Cache hit/miss/invalidation (model-resolution-cache)
 ;; - Registry snapshot immutability (agent registry)
 ;; - Box state isolation and thread safety
+;; @boundary unit
 ;; - Cache clear/reset semantics
 ;; - Settings memoization invalidation
 

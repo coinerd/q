@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; tests/test-memory-service.rkt — Memory service boundary tests
+;; @boundary unit
 ;;
 ;; v0.95.13 W1: Tests for runtime/memory/service.rkt
 

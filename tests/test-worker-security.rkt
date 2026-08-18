@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary integration
 
 ;; tests/test-worker-security.rkt
 ;; v0.99.3 W1: Worker security hardening regression tests.

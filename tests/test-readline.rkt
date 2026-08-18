@@ -8,6 +8,7 @@
 ;; tests/test-readline.rkt — Tests for util/readline.rkt
 ;;
 ;; Tests readline utility functions. Since readline requires a real terminal,
+;; @boundary unit
 ;; we test the fallback path (non-stdin ports) and the predicate.
 
 (require rackunit

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-contract-tightening.rkt — Tests for any/c → typed contract tightening (W2)
 ;; Part of v0.81.0

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-custom-renderer.rkt — Tests for gui/extension-slots/custom-renderer.rkt
 

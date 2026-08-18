@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary integration
 
 ;; Test for scripts/abstraction-audit.rkt — W1 v0.99.35
 ;; Verifies the abstraction audit tool works on fixture trees,

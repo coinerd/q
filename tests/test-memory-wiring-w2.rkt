@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-wiring-w2.rkt — W2 tests verifying auto-extraction runtime wiring
 (require rackunit
          "../runtime/memory/auto-extraction.rkt"

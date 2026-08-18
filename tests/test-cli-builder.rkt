@@ -27,6 +27,7 @@
   (make-temporary-file "q-cli-builder-test-~a" 'directory))
 
 ;; ── Test suite ──
+;; @boundary integration
 
 (define-test-suite
  test-cli-builder

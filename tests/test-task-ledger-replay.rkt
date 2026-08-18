@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; tests/test-task-ledger-replay.rkt — Ledger event replay tests
 ;; STABILITY: internal
 

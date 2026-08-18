@@ -8,6 +8,7 @@
 ;; tests/test-metrics-lint-result.rkt — Tests for metrics lint result types
 ;;
 ;; W4 (#8444): Expected-failure/result-boundary pilot.
+;; @boundary unit
 ;; Tests the pure check-metrics function and result-type dispatch.
 
 (require rackunit

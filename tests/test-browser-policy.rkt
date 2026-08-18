@@ -6,6 +6,7 @@
 ;; tests/test-browser-policy.rkt — Browser policy engine tests
 ;;
 ;; TDD test suite for browser/policy.rkt.
+;; @boundary unit
 ;; 43 test cases covering URL validation, IP classification,
 ;; domain allowlist, action risk, and composed policy checks.
 

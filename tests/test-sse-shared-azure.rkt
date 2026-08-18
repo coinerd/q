@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-sse-shared-azure.rkt — Tests for Azure OpenAI SSE dedup (W1)
 ;; Part of v0.81.0

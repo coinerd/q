@@ -5,6 +5,8 @@
 ;; Tests the status-check-result types and check-readme-status function.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/match
          "../scripts/status-result.rkt")

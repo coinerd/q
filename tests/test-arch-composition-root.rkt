@@ -46,6 +46,7 @@
 
 (define (cross-layer-imports filepath)
   ;; Count requires outside runtime/ and util/
+;; @boundary unit
   (define paths (extract-require-paths filepath))
   (for/sum
    ([p (in-list paths)])

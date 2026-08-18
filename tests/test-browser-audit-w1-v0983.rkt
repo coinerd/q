@@ -8,6 +8,8 @@
 ;; SEC-15: Reader dead? flag
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/async-channel
          (only-in racket/base make-semaphore call-with-semaphore)

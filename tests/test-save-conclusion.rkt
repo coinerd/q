@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-save-conclusion.rkt — tests for save-conclusion and set-task-state tools
 ;; v0.75.1 W0: Tool definitions + validation

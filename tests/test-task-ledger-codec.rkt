@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-task-ledger-codec.rkt — Codec serialization tests
 ;; STABILITY: internal
 ;;

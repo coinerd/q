@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-ws-evolution-symbol-compat.rkt
 ;; Regression test: evolve-working-set-for-state must accept raw symbols

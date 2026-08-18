@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-workspace-revision.rkt
 ;; W3B (#8940): Workspace revision — file mutation generation tracking
 ;; for evidence invalidation.

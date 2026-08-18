@@ -2,6 +2,7 @@
 
 ;; tests/test-tool-coordinator-edges.rkt — Edge case tests for tool-coordinator (AXIS3-F24)
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 (require rackunit
          racket/list

@@ -24,6 +24,7 @@
 
 ;; ---------------------------------------------------------------------------
 ;; make-browser-adapter contract: requires procedure args
+;; @boundary unit
 ;; ---------------------------------------------------------------------------
 
 (test-case "make-browser-adapter rejects non-procedure open-fn"

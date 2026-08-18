@@ -6,6 +6,8 @@
 ;; Racket-side observation parser for interactive-elements.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/port
          "../browser/types.rkt")

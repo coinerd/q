@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-blackboard-lifecycle.rkt — W6 (v0.99.7) Session Lifecycle Wiring Tests
 ;;

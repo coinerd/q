@@ -14,6 +14,7 @@
 ;;;   - Hook that blocks a tool call produces blocked error result
 ;;;   - Hook that mutates args + revalidation passes → executes with new args
 ;;;   - Hook that mutates args + revalidation fails → error result
+;; @boundary unit
 ;;;   - Tool exception caught → error result (not crash)
 ;;;   - Unknown tool name → error result
 ;;;   - Empty tool-calls list → empty results

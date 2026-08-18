@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-provider-health.rkt — Provider Health Gate (NR-3) tests
 ;;
 ;; Tests the sliding-window failure tracker that prevents futile retries

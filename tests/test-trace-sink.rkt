@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; BOUNDARY: pure
 
 ;; tests/test-trace-sink.rkt — Trace sink protocol tests (F9)

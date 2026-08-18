@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-prompt-preparation-plan.rkt
 ;; v0.99.92 W1 — Pure prompt preparation extraction (MA-10 trace equivalence).

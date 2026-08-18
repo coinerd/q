@@ -10,6 +10,8 @@
 ;; M1: Reader thread death detection in heartbeat
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/async-channel
          (only-in racket/base make-semaphore call-with-semaphore)

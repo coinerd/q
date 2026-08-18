@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-lint-version-pure.rkt — Tests for pure check functions extracted from
 ;; lint-version.rkt via the I/O abstraction (W6 #8419).

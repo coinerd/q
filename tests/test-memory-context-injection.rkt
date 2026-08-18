@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-context-injection.rkt — Bounded memory prompt injection tests
 ;;
 ;; v0.95.7: Tests that bounded prompt injection works correctly:

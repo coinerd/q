@@ -7,6 +7,7 @@
 ;; Tests for M1-M4 and L2 hardening fixes:
 ;; - M3: extract-response-text handles content-part structs and unknown types
 ;; - M4: verifier LLM timeout raises exn:fail:network
+;; @boundary unit
 ;; - L2: risk threshold override updates reason text
 
 (require rackunit

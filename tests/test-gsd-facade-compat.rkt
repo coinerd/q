@@ -38,6 +38,7 @@
 ;; require extraction
 ;; ============================================================
 ;; extract-requires comes from helpers/arch-utils.rkt — its read-based
+;; @boundary unit
 ;; parser strips the #lang line first (a raw read on the source inside a
 ;; module raises "#lang not allowed again", which would silently yield an
 ;; empty require list). q-dir also comes from arch-utils (robust to raco

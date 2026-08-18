@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-llm-timing.rkt — Unit test for shared timing utility
 ;;

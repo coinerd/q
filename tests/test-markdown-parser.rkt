@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; q/tests/test-markdown-parser.rkt — BUG-0004 GFM table support tests
 ;;
 ;; Parse-level (token structure, alignment variants, malformed fallback)

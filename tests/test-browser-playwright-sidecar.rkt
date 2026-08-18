@@ -3,6 +3,7 @@
 ;; @speed slow
 ;; @suite integration
 ;; @requires browser
+;; @boundary integration
 
 (require rackunit
          net/url

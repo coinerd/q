@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-errors.rkt — Browser error hierarchy tests
 ;;

@@ -9,6 +9,7 @@
 ;;
 ;; Tests run-init-wizard using string ports for input/output.
 ;; v0.28.20: All tests use temp-dir isolation — no ~/.q/ pollution.
+;; @boundary integration
 
 (require rackunit
          racket/port

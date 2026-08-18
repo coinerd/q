@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-blackboard-subscriber.rkt — W4 (v0.99.7) Event Bus Subscriber Tests
 ;;

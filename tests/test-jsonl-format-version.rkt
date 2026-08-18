@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; BOUNDARY: serialization
 
 ;; tests/test-jsonl-format-version.rkt — JSONL format header tests (F8)

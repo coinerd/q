@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-hot-swap-events.rkt — W5 (v0.99.8) Hot-Swap Event Types Tests
 ;;

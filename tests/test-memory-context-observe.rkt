@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-context-observe.rkt — Observe-only memory context retrieval tests
 
 

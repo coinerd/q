@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-session-fsm.rkt — Session lifecycle FSM tests (W2 v0.47.1)
 ;; Tests the derived FSM overlay on agent-session boolean flags.

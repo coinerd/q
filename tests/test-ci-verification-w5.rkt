@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W5 (#8508): CI verification evidence tests.
 ;; Verifies the CI remediation is effective by checking:

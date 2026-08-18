@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; tests/test-audit-v09945-w8-tui.rkt — TUI subsystem real-world audit
 ;;
 ;; Audit of the TUI subsystem covering:

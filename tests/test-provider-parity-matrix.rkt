@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-provider-parity-matrix.rkt — Provider parity matrix (v0.99.87 W3)
 ;;

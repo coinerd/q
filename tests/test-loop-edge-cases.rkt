@@ -12,6 +12,7 @@
 ;; - A5: message-end hook returns 'amend with empty content + tool calls
 ;; - A6: model-response-post hook raises exception
 ;; - 0.1a/b/c: Stream error boundary + chunk limit (v0.12.3 Wave 0)
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

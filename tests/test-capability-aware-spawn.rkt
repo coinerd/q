@@ -4,6 +4,8 @@
 ;; v0.99.21 W2 (§4.2): Tests for capability-aware subagent spawning.
 
 ;; @speed fast
+;; @suite platform
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/list

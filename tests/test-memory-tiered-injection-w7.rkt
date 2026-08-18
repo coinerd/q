@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-tiered-injection-w7.rkt — W7 tests for tiered context injection
 (require rackunit
          racket/string

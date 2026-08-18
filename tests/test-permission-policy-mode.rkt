@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-permission-policy-mode.rkt — Policy mode tests (v0.54.4 W0)
 

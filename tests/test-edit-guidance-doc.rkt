@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; W2 regression tests for v0.99.79 agent editing guidance and recovery.
 

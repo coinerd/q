@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-image-format-contracts.rkt — Contract enforcement for image-format.rkt (#5466)
 ;;

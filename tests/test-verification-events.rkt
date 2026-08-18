@@ -7,6 +7,8 @@
 ;;   verification-escalated-event
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../agent/event-structs/verification-events.rkt"

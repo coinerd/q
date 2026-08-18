@@ -2,7 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
-;; @isolation subprocess
+;; @isolation process
 
 ;; BOUNDARY: integration
 
@@ -10,6 +10,7 @@
 ;;
 ;; NOTE: Only tests script metadata (exists, compiles, help).
 ;; Does NOT invoke full test suite (that would be recursive and slow).
+;; @boundary unit  ;; @mutates fs
 
 (require rackunit
          rackunit/text-ui

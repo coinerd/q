@@ -8,6 +8,7 @@
 ;; tests/test-examples-compile.rkt — Verify all SDK examples compile
 ;;
 ;; Catches missing requires in example files that pass local `raco make`
+;; @boundary unit
 ;; but fail under `raco pkg install` (clean compilation).
 ;; Issue #1340: Would have caught 05-extensions.rkt and 08-full-control.rkt.
 

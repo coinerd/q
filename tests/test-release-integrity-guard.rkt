@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary integration
 
 ;; test-release-integrity-guard.rkt
 ;; Tests for release integrity guard (scripts/release-integrity-guard.rkt)

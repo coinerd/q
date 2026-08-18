@@ -3,6 +3,8 @@
 ;; tests/test-gateway-ipc.rkt — Gateway IPC layer tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/port

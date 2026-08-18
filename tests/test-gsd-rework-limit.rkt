@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-gsd-rework-limit.rkt
 ;; W1 (v0.99.20): Rework-loop protection — prevent infinite verifier-rework cycles.

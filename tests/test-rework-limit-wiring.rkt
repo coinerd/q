@@ -5,6 +5,8 @@
 ;; actually controls the gsd-max-rework-iterations parameter.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../extensions/gsd/state-machine.rkt"

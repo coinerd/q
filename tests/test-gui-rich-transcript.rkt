@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-rich-transcript.rkt — Tests for rich-transcript-view pure helpers
 

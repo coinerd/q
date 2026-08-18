@@ -1,5 +1,6 @@
 #lang racket/base
 ;; @speed fast @suite default
+;; @boundary unit
 ;; tests/test-gap5-conclusion-bridge.rkt — GAP-5 TDD tests
 ;; Validates conclusion bridge activation in profiles
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-loop-dispatch.rkt — T-1b surface tests for agent/loop-dispatch.rkt
 ;;

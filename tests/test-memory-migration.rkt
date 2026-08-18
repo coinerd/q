@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; tests/test-memory-migration.rkt — Migration utility tests
 ;;
 ;; M13-F8: Test export/import/migrate between backends

@@ -3,6 +3,8 @@
 ;; tests/test-ipc-protocol.rkt — IPC protocol unit tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../sandbox/ipc-protocol.rkt")

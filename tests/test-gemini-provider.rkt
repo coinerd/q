@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-gemini-provider.rkt — v0.70.8 W1
 ;; Extracted from test-gemini.rkt: provider construction, HTTP status, API key validation, security

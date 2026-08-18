@@ -14,6 +14,7 @@
 ;;   4. No expired exceptions (revisit-by in the future)
 ;;   5. Pair-precise exemptions — destinations declared; the source crosses
 ;;      its boundary exactly at the declared destinations (no blanket waiver)
+;; @boundary unit
 ;;   6. Runtime and TUI exceptions are reported separately
 ;;
 ;; Positive/negative probes verify the checker against deliberately
@@ -345,5 +346,5 @@
          '("ui-core/ui-state-protocol.rkt")))
       (check-equal? problems '() "Valid permanent pair waiver must produce no problems"))))
 
-(module+ main
-  (exit (run-tests fitness-tests)))
+(module+ test
+  (run-tests fitness-tests))

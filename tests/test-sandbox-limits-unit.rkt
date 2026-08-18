@@ -32,6 +32,7 @@
      (define merged (merge-limits strict permissive))
      (check-pred exec-limits? merged)
      ;; Merged timeout should be the minimum
+;; @boundary unit
      (check-true (<= (exec-limits-timeout-seconds merged)
                      (exec-limits-timeout-seconds strict))))
    ))

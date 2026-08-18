@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-goal-evaluator.rkt — Evaluator unit tests with mock provider
 

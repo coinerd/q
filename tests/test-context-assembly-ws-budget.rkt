@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: integration
 
 ;; tests/test-context-assembly-ws-budget.rkt — Budget pressure integration test

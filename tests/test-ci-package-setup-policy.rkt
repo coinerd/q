@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W4 (#8507): Tests for package-visible script policy enforcement.
 ;; Verifies that the policy doc exists and key package-visible scripts

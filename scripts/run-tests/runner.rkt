@@ -176,6 +176,13 @@
 (define (in-process-eligible? resolved-path)
   (or (module-plus-test-file? resolved-path) (not (file-has-rackunit-tests? resolved-path))))
 
+;; raco test executes each file with current-directory bound to that file's
+;; directory; grouped/in-process execution must do the same or tests that
+;; resolve sibling paths (e.g. "../scripts/foo.rkt") break.
+(define (in-process-cwd resolved-path)
+  (or (and resolved-path (path-only (simplify-path resolved-path)))
+      base-dir))
+
 (define (run-single-file/in-process test-path #:timeout [timeout #f])
   (define resolved-path (resolve-test-path test-path))
   ;; Bare RackUnit files without run-tests/module+ still need raco's discovery output;
@@ -197,11 +204,11 @@
                    (with-handlers ([exn:fail? (lambda (e)
                                                 (displayln (exn->string e) stderr-out)
                                                 (set-box! exit-code 1))])
-                     (parameterize ([current-output-port stdout-out]
-                                    [current-error-port stderr-out]
-                                    [current-directory base-dir]
-                                    [current-command-line-arguments #()]
-                                    [current-namespace (make-base-namespace)])
+                      (parameterize ([current-output-port stdout-out]
+                                     [current-error-port stderr-out]
+                                     [current-directory (in-process-cwd resolved-path)]
+                                     [current-command-line-arguments #()]
+                                     [current-namespace (make-base-namespace)])
                        (dynamic-require (in-process-module-path resolved-path) #f)
                        (set-box! exit-code 0)))))))
      (define completed? (sync/timeout (/ file-timeout 1000.0) worker))

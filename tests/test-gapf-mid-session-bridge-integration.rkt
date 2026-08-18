@@ -5,6 +5,8 @@
 ;; Tests the actual function body, not just the gate condition.
 
 ;; @speed slow
+;; @suite runtime
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/session/session-events.rkt"

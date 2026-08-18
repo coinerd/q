@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W8 v0.99.35: Tests for anthropic-helpers.rkt
 ;; Pure functions extracted from llm/anthropic.rkt.

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-cli-markdown.rkt — v0.70.8 W0
 ;; Extracted from test-cli.rkt: markdown rendering + stream writer tests

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-activation.rkt — v0.95.15 W5: End-to-end memory activation integration test
 ;;;
 ;;; Exercises the full pipeline:

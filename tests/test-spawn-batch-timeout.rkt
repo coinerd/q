@@ -46,6 +46,7 @@
                      #:runtime-settings (hasheq 'provider (make-stub-provider "ok"))))
 
 ;; Build a batch-execution-plan with configurable batch-timeout-ms
+;; @boundary unit
 (define (make-batch-plan job-descs #:batch-timeout-ms [timeout-ms 300000] #:max-parallel [max-par 3])
   (define args
     (hasheq 'jobs

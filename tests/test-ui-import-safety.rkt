@@ -10,6 +10,7 @@
 ;; without requiring a display server (headless-safe).
 ;;
 ;; Static requires prove import safety at compile/load time.
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

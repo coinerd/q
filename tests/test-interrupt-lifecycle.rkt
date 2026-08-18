@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

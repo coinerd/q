@@ -1,5 +1,6 @@
 #lang racket/base
 ;; @speed fast @suite default
+;; @boundary unit
 ;; tests/test-gap2-tool-extraction.rkt — GAP-2 TDD tests
 ;; Validates tool-call-id → tool-name mapping in auto-extraction
 

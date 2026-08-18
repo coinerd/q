@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 ;; Exception-safe and atomic teardown for digest-bound approval requests.
 
@@ -132,4 +133,5 @@
       (check-equal? (pending-approval-count) 0)
       (clear-approval-channel!))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-loop-phases.rkt — Tests for runtime/iteration/loop-phases.rkt (v0.54.3 W1)
 ;;

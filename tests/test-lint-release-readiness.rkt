@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; Tests for scripts/lint-release-readiness.rkt
 ;; BOUNDARY: integration

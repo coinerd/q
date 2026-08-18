@@ -10,6 +10,8 @@
 ;; 4. The follower module works independently of blackboard-subscriber.rkt
 
 ;; @speed fast
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          racket/file

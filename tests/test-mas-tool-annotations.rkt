@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-tool-annotations.rkt — Validate tool capability annotations
 ;; STABILITY: evolving

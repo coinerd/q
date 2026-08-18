@@ -5,6 +5,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-isolation.rkt — Multi-session isolation test (H-05)
+;; @boundary unit
 ;; Verifies that independent gsd-session-ctx instances don't interfere.
 
 (require rackunit

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; tests/test-memory-file-jsonl-backend.rkt — Project-local JSONL backend tests
 ;;
 ;; v0.95.8: Tests for file-jsonl memory backend:

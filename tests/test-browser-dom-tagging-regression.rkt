@@ -6,6 +6,8 @@
 ;; tool handler exports work correctly with interactive-elements.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../browser/types.rkt"
          "../tools/builtins/browser-tools.rkt")

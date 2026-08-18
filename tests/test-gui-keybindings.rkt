@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-keybindings.rkt — Tests for keyboard shortcut registry
 ;;

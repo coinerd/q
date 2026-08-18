@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W5 v0.99.35: Tests for transition-logic.rkt
 ;; Pure GSD state machine transition functions extracted from state-machine.rkt.

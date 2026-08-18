@@ -5,6 +5,8 @@
 ;; FIXED: Tests real project code (observe-memory-for-context #:tags, major-forward-transition?)
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/string

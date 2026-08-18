@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-lifecycle-hooks.rkt — Tests for GUI lifecycle hook dispatch
 ;;

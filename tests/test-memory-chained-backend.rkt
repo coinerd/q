@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-chained-backend.rkt — Chained L1/L2 backend tests
 ;;
 ;; v0.95.11: Tests for chained memory backend:

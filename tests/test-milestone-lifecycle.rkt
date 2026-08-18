@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-milestone-lifecycle.rkt
 ;; W5 (#8545): Tests for scripts/milestone-lifecycle.rkt — the branching
 ;; milestone lifecycle state machine (cancel / rollback / reopen).

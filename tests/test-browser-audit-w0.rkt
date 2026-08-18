@@ -7,6 +7,8 @@
 ;; H8: interactive-elements string→symbol key normalization
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          "../browser/types.rkt"

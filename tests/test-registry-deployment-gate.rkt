@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite default
+;; @boundary unit
 
 ;; tests/test-registry-deployment-gate.rkt
 ;; v0.99.15 W1: Hot-Swap Deployment Gate Tests

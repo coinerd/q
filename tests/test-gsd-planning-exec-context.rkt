@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-gsd-planning-exec-context.rkt — D7 regression tests
 ;;

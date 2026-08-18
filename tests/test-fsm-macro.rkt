@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-fsm-macro.rkt — Tests for define-fsm-machine macro
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-auto-extraction-wiring.rkt — W0/W2/W3 characterization tests
 ;;;
 ;;; W0: Characterize auto-extraction config/wiring gaps.

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-shell-quote.rkt — T-7 tests for util/shell-quote.rkt
 

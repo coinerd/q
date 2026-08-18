@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary e2e
 ;; BOUNDARY: integration
 
 ;; tests/test-universal-user-pinning-e2e.rkt

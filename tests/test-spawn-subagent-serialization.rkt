@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-spawn-subagent-serialization.rkt — TDD regression for JSON serialization
 ;;

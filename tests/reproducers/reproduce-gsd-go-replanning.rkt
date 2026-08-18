@@ -3,6 +3,7 @@
 
 ;; @speed slow
 ;; @suite gsd
+;; @boundary integration
 ;; tests/reproducers/test-gsd-go-replanning.rkt
 ;;
 ;; Reproduce the bug where /go execution falls back into planning mode.

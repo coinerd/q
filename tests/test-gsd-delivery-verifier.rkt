@@ -1,5 +1,6 @@
 #lang racket/base
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 ;; tests/test-gsd-delivery-verifier.rkt — structured delivery verification for /go
 ;;
 ;; TDD tests for the delivery verifier that replaces the hardcoded fail-closed

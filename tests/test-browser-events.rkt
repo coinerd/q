@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-events.rkt — Browser typed events + JSON codec roundtrip
 ;;

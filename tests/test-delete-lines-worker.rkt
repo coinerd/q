@@ -11,6 +11,8 @@
 ;; 5. dispatch-tool routes delete-lines to execute-delete-lines
 
 ;; @speed fast
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          racket/file

@@ -3,6 +3,7 @@
 ;; @speed fast  ;; @suite arch
 
 ;; tests/test-gsd-core-boundary.rkt -- Boundary tests for gsd/core.rkt API
+;; @boundary unit
 ;; v0.74.5: Verify contract-out on GSD core exports.
 
 (require rackunit

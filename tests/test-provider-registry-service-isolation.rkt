@@ -3,6 +3,7 @@
 ;; tests/test-provider-registry-service-isolation.rkt — v0.99.88 W2
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;
 ;; Dual-run characterization (roadmap v0.99.88 W2 risk control):
 ;; the OLD direct registry path (concrete provider-registry calls) and the NEW

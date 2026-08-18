@@ -47,6 +47,7 @@
 (test-case "parse-test-metadata: parses @suite annotation"
   (define parse (meta-ref 'parse-test-metadata))
   (with-temp-test-file "#lang racket\n;; @suite runtime\n(require rackunit)\n"
+;; @boundary integration
                        (lambda (f)
                          (define m (parse f))
                          (check-equal? ((meta-ref 'metadata-suite) m) "runtime")

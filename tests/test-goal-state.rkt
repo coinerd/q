@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; q/tests/test-goal-state.rkt — Tests for runtime/goal-state.rkt
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite ci
+;; @boundary unit
 ;; tests/test-release-dry-run.rkt
 ;; W3 (#8520): Tests for scripts/release-dry-run.rkt
 

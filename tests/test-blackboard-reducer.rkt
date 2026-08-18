@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-blackboard-reducer.rkt — W2 (v0.99.7) Pure Event Reducer Tests
 ;;

@@ -4,6 +4,8 @@
 ;; Verify memory warning, goal-loop wiring, and bounded event channel.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../runtime/session/session-config.rkt"
          "../util/event/event-bus.rkt"

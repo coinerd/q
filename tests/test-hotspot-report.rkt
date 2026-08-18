@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 
 ;; tests/test-hotspot-report.rkt — Tests for hotspot scoring logic
 

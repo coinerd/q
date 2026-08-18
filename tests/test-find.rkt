@@ -8,6 +8,7 @@
 ;; test-find.rkt — tests for tools/builtins/find.rkt
 ;; TDD: tests first, then implementation.
 ;; Uses temporary directories for isolation.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

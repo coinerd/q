@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-events.rkt — SPEC memory event taxonomy and tool emission tests
 
 (require rackunit

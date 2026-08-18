@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration  ;; @isolation process  ;; @mutates fs
 
 ;; BOUNDARY: integration
 

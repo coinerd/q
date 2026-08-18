@@ -12,6 +12,7 @@
 
 ;; ============================================================
 ;; Test suite: util/event/event-bus.rkt — publish/subscribe event bus
+;; @boundary unit
 ;; ============================================================
 
 ;; Helper: create a simple test event

@@ -6,6 +6,7 @@
 
 ;; tests/workflows/gsd/test-self-hosting-validation.rkt
 ;; v0.18.5 Wave 1: Self-hosting validation suite
+;; @boundary integration  ;; @isolation process  ;; @mutates repo
 
 (require rackunit
          rackunit/text-ui

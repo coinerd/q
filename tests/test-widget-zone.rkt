@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-widget-zone.rkt — Tests for gui/extension-slots/widget-zone.rkt
 

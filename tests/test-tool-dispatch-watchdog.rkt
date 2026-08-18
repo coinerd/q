@@ -16,6 +16,7 @@
 ;; synchronous fan-out, so a blocked subscriber stalls the first
 ;; tool.execution.updated emit exactly like the incident), the coordinator
 ;; emits tool.dispatch.timeout and synthesizes error tool-results for every
+;; @boundary integration
 ;; pending call so the turn recovers instead of hanging forever.
 
 (require rackunit

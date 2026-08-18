@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-tool-coordinator-phases.rkt -- N-02: tool-coordinator phase tests
 

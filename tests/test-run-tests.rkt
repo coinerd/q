@@ -17,6 +17,7 @@
          racket/system)
 
 ;; Path segments used by smoke-suite filtering in run-tests.rkt
+;; @boundary integration
 ;; Constructed without literal absolute-path patterns to satisfy lint-tests.rkt
 (define workflows-path-segment (string-append "/" "workflows" "/"))
 (define interfaces-path-segment (string-append "/" "interfaces" "/"))

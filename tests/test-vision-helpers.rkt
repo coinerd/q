@@ -3,6 +3,8 @@
 ;; tests/test-vision-helpers.rkt — Unit tests for llm/vision-helpers.rkt (NF-10/F-07)
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../llm/vision-helpers.rkt")

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite ci
+;; @boundary integration
 ;; tests/test-w9-ci-workflow-verification.rkt
 ;; v0.99.40 W9 (#8526): PR CI and controlled release workflow verification
 ;;

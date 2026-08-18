@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-external-policy.rkt — External backend policy tests
 ;;
 ;; v0.95.11: Tests for external backend safety:

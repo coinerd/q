@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration  ;; @requires network
 
 ;;; tests/test-oauth-callback-nonblocking.rkt — v0.59.12 W0 (#5531)
 ;;; Tests proving OAuth callback completion is nonblocking without a consumer.

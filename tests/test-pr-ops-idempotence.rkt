@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; test-pr-ops-idempotence.rkt — W6 (BUG-0011)
 ;; Pure-function tests for gh-pr create lookup-first idempotence,

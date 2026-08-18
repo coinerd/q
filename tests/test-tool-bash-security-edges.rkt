@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-tool-bash-security-edges.rkt — Tool builtin security edge-case tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
          (only-in "../runtime/goal/goal-runner.rkt"

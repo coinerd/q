@@ -8,6 +8,8 @@
 ;; M7: summarize-tool-result handles image-part
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          "../tools/tool.rkt"

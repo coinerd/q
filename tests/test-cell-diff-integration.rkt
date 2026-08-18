@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; test-cell-diff-integration.rkt — Full pipeline integration tests
 ;;

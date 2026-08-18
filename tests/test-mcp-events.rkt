@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-mcp-events.rkt — W5 (v0.99.9) MCP Events + Blackboard Integration Tests
 ;;

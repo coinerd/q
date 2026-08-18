@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; test-lifecycle-state.rkt — Tests for extracted lifecycle-state struct (A1-05)
 ;; @suite fast
+;; @boundary unit
 
 (require rackunit
          (only-in "../runtime/session/lifecycle-state.rkt"

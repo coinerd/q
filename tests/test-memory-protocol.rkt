@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-protocol.rkt — Memory backend protocol tests
 
 (require rackunit

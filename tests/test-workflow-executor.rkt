@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite skills
+;; @boundary integration
 
 ;; tests/test-workflow-executor.rkt
 ;; v0.99.26 W3: Workflow Executor tests.

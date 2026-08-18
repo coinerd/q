@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite arch
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -14,4 +15,5 @@
       (define provider (make-mock-provider response #:name "bound-provider"))
       (check-equal? (provider-name provider) "bound-provider"))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

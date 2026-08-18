@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-w9-ui-regression.rkt — W9.3 Full UI regression summary
 ;;

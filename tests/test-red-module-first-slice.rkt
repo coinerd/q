@@ -9,6 +9,7 @@
 ;; §2 agent/event-structs.rkt — Facade export inventory (Yellow, risk 8)
 ;; §3 wiring/run-modes.rkt — Mode resolution characterization (Yellow, risk 9)
 ;; §4 scripts/run-tests.rkt — Sub-module boundary characterization (Yellow, risk 10)
+;; @boundary unit
 ;;
 ;; RED modules are NOT modified — tests only.
 

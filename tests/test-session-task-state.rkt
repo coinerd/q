@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-session-task-state.rkt — tests for task-state session fields + persistence
 ;; v0.75.1 W1: Session fields + guarded setters

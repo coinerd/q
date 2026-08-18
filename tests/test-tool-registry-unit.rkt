@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-tool-registry-unit.rkt — T-1b tests for tools/registry.rkt
 

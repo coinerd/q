@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-lifecycle.rkt — F7/F8: exec-context + agent-session lifecycle
 

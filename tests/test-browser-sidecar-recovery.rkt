@@ -5,6 +5,8 @@
 ;; Tests for retry-with-restart logic when the Node.js sidecar crashes.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/match
          json

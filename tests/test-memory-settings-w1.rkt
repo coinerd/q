@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-settings-w1.rkt — W1 tests for auto-extraction settings
 (require rackunit
          "../runtime/settings.rkt")

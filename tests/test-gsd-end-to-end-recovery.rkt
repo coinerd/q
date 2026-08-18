@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-gsd-end-to-end-recovery.rkt — v0.99.90 W5 (#9236)
 ;;

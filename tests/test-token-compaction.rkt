@@ -10,6 +10,7 @@
 ;;   - #687: Configurable keep-recent-tokens and reserve-tokens
 ;;   - #688: Token estimation fallback for messages without usage data
 ;;   - #686: Backward token walk for compaction boundary
+;; @boundary unit
 ;;   - #689: Token-based compaction window split
 
 (require rackunit

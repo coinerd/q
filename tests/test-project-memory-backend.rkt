@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; tests/test-project-memory-backend.rkt
 ;; W5B (#8942): Project-keyed isolated memory backend factory.
 ;; The factory derives a project-keyed memory-root from the canonical

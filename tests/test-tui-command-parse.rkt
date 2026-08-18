@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
          "../tui/command-parse.rkt")

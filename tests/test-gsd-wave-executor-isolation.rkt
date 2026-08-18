@@ -6,6 +6,7 @@
 ;;
 ;; The coordinator consumes ONE structured terminal outcome per runner
 ;; invocation. Deterministic fakes exercise: exactly-once completion, timeout
+;; @boundary integration
 ;; → interrupted (no invented DONE, no outbox event), pending-tool
 ;; cancellation → interrupted (no event), and legacy symbol runner compat.
 

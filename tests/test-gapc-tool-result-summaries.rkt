@@ -4,6 +4,8 @@
 ;; GAP-C: Content summaries include tool-result-parts
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in "../util/content/content-parts.rkt"

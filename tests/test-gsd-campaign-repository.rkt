@@ -6,6 +6,7 @@
 ;; boundary (#9232).
 ;;
 ;; TDD red tests for the .rktd storage boundary:
+;; @boundary integration
 ;;   1. Legacy fixtures load compatibly (backward-compatible loader).
 ;;   2. Corruption matrix fails closed (exn:fail:campaign-corrupt).
 ;;   3. Path containment: plan-id is the only input-derived path component;

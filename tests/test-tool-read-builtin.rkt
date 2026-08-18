@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-tool-read-builtin.rkt — T-2 tests for tools/builtins/read.rkt
 

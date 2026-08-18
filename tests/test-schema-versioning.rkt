@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; tests/test-schema-versioning.rkt — Per-type schema version tests (F6, S8-F1)

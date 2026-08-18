@@ -4,6 +4,8 @@
 ;; v0.97.4 W2: Integration tests for dynamic budget + activation chain
 
 ;; @speed slow
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/config.rkt"

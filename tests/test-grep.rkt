@@ -8,6 +8,7 @@
 ;; test-grep.rkt — tests for tools/builtins/grep.rkt
 ;; TDD: comprehensive tests for tool-grep
 ;; Uses temporary files/dirs for isolation. No external dependencies.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

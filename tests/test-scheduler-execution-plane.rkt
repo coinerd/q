@@ -4,6 +4,8 @@
 ;; Tests for execution-plane routing in the scheduler.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/runtime-path

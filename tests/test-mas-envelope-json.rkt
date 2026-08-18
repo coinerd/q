@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-envelope-json.rkt — JSON serialization regression tests
 ;; STABILITY: evolving

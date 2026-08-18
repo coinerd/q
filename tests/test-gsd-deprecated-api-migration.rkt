@@ -5,6 +5,8 @@
 ;; Production callers should use gsm-ctx-* with explicit context.
 
 ;; @speed fast
+;; @suite extensions
+;; @boundary unit
 (require rackunit
          "../extensions/gsd/state-machine.rkt"
          (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx)

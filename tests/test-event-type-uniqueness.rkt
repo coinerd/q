@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-event-type-uniqueness.rkt — T1-3: Verify ALL event type strings are unique
 ;; STABILITY: evolving

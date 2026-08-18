@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-action-adapters.rkt — Tests for TUI and GUI action adapters
 ;;

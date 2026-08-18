@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-playwright-adapter.rkt — Playwright sidecar adapter tests
 

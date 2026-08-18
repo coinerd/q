@@ -47,6 +47,7 @@
 (define-test-suite
  provider-error-recovery-tests
  ;; TC-01: Provider timeout → auto-retry
+;; @boundary integration
  ;; Verify retry count is displayed correctly (not "?")
  (test-case "TC-01: provider timeout with auto-retry shows attempt count"
    (define s0 (initial-ui-state))

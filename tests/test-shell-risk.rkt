@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-shell-risk.rkt — Shell risk classifier tests (v0.70.3)
 

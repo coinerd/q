@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-scheduler-strategy.rkt — R-15: scheduler strategy tests
 

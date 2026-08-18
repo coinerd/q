@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-parameterized-registries.rkt — R-05/R-14 registry isolation tests
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

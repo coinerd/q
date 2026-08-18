@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: unit
 
 ;; tests/test-browser-error-recovery.rkt

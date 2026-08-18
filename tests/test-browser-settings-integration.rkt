@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-browser-settings-integration.rkt — F5: load-browser-settings
 

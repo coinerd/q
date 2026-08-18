@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 ;;
 ;; tests/test-streaming-hook-isolation.rkt — W1 Hook Isolation tests
+;; @boundary unit
 ;;
 ;; Tests that extension failures during streaming hooks do not hang or crash streaming.
 ;; Tests that hook errors are properly caught and isolated.

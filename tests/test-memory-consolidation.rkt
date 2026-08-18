@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-consolidation.rkt — W0/W6 characterization tests
 ;;;
 ;;; W0: Characterize current management/consolidation gaps.
