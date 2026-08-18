@@ -344,7 +344,8 @@
     (define raw (do-http-request base-url api-key "/chat/completions" body))
     (openai-parse-response raw))
 
-  ;; W-06: Extracted stream request — returns (values response-port stream-timeout cleanup-thunk)
+  ;; W-06: Extracted stream request — returns
+  ;;   (values response-port stream-timeout sse-read-timeout cleanup-thunk)
   (define (openai-stream-request req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))
@@ -365,6 +366,14 @@
       (if stream-model-name
           (effective-request-timeout-for stream-model-name)
           (current-http-request-timeout)))
+    ;; Per-model SSE-read timeout (sse-read config). Controls the per-chunk
+    ;; gap allowed before a stream is considered stalled — applied to the
+    ;; thinking/initial phase cap AND the content-phase per-chunk timeout.
+    ;; #f when the model has no override → callers fall back to phase defaults.
+    (define sse-read-timeout
+      (if stream-model-name
+          (effective-sse-read-timeout-for stream-model-name)
+          #f))
     ;; Own every resource created by http-sendrecv (including resources opened
     ;; before a response port is returned) under a request-scoped custodian.
     ;; Timeout cleanup shuts down that custodian before interrupting the worker;
@@ -424,11 +433,11 @@
       (when (>= status-code 300)
         (define err-body (read-response-body/timeout response-port))
         (check-provider-status! "OpenAI" status-line err-body))
-      (values response-port stream-timeout cleanup-response!)))
+      (values response-port stream-timeout sse-read-timeout cleanup-response!)))
 
   (define (stream req)
     (define _stream-t0 (current-inexact-milliseconds))
-    (define-values (response-port stream-timeout cleanup-thunk)
+    (define-values (response-port stream-timeout sse-read-timeout cleanup-thunk)
       (with-handlers ([exn:fail? (lambda (e)
                                    (if (provider-error? e)
                                        (raise e)
@@ -465,47 +474,54 @@
     ;; emitting zero chunks for minutes (server-side hold). Widening converted a 1-minute
     ;; recovery into a 10-minute recovery. Capping at 120s: a held/stalled request is
     ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
+    ;;
+    ;; v0.99.95: Per-model sse-read override (timeouts.models.<model>.sse-read) now
+    ;; controls the thinking/initial cap AND the content-phase per-chunk timeout.
+    ;; Models with an override (e.g. glm-5.3 sse-read=300) get a wider window;
+    ;; models without one (e.g. deepseek, which keeps sse-read=60) keep the
+    ;; measured-tight defaults. Fallbacks preserve the v0.99.78 behavior exactly.
     (define held-request-detect-secs 120)
+    (define thinking-cap-secs (or sse-read-timeout held-request-detect-secs))
+    (define content-chunk-secs (or sse-read-timeout http-stream-timeout-default))
     (define stream-owns-resources? (box #f))
-    (dynamic-wind
-     void
-     (lambda ()
-       (define gen
-         (stream-sse-events response-port
-                            (lambda (parsed) (list (normalize-openai-chunk parsed)))
-                            #:initial-timeout (min stream-timeout held-request-detect-secs)
-                            #:thinking-timeout (min stream-timeout held-request-detect-secs)
-                            #:stream-timeout http-stream-timeout-default
-                            #:max-total-timeout max-total-timeout))
-       ;; Own the response port for the complete lifetime of the lazy generator.
-       ;; close-port-after-stream preserves the port across yields and also closes
-       ;; it when a consumer abandons and collects the returned generator.
-       (log-stream-setup-timing "openai" _stream-t0)
-       (define provider-gen
-         (generator ()
-                    (with-handlers ([exn:break? (lambda (e)
-                                                  (cleanup-thunk)
-                                                  (raise e))]
-                                    [exn:fail? (lambda (e)
-                                                 (cleanup-thunk)
-                                                 (openai-wrap-stream-error e))])
-                      (let loop ()
-                        (define chunk (gen))
-                        (match chunk
-                          [#f
-                           (cleanup-thunk)
-                           (yield #f)]
-                          [_
-                           (yield chunk)
-                           (loop)])))))
-       (define owned-stream
-         (close-port-after-stream provider-gen response-port #:cleanup cleanup-thunk))
-       ;; Transfer only after finalizer registration succeeds.
-       (set-box! stream-owns-resources? #t)
-       owned-stream)
-     (lambda ()
-       (unless (unbox stream-owns-resources?)
-         (cleanup-thunk)))))
+    (dynamic-wind void
+                  (lambda ()
+                    (define gen
+                      (stream-sse-events response-port
+                                         (lambda (parsed) (list (normalize-openai-chunk parsed)))
+                                         #:initial-timeout (min stream-timeout thinking-cap-secs)
+                                         #:thinking-timeout (min stream-timeout thinking-cap-secs)
+                                         #:stream-timeout content-chunk-secs
+                                         #:max-total-timeout max-total-timeout))
+                    ;; Own the response port for the complete lifetime of the lazy generator.
+                    ;; close-port-after-stream preserves the port across yields and also closes
+                    ;; it when a consumer abandons and collects the returned generator.
+                    (log-stream-setup-timing "openai" _stream-t0)
+                    (define provider-gen
+                      (generator ()
+                                 (with-handlers ([exn:break? (lambda (e)
+                                                               (cleanup-thunk)
+                                                               (raise e))]
+                                                 [exn:fail? (lambda (e)
+                                                              (cleanup-thunk)
+                                                              (openai-wrap-stream-error e))])
+                                   (let loop ()
+                                     (define chunk (gen))
+                                     (match chunk
+                                       [#f
+                                        (cleanup-thunk)
+                                        (yield #f)]
+                                       [_
+                                        (yield chunk)
+                                        (loop)])))))
+                    (define owned-stream
+                      (close-port-after-stream provider-gen response-port #:cleanup cleanup-thunk))
+                    ;; Transfer only after finalizer registration succeeds.
+                    (set-box! stream-owns-resources? #t)
+                    owned-stream)
+                  (lambda ()
+                    (unless (unbox stream-owns-resources?)
+                      (cleanup-thunk)))))
 
   (make-provider (lambda () "openai-compatible")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

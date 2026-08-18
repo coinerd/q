@@ -41,6 +41,7 @@
                        [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
                        ;; Timeout helpers
                        [effective-request-timeout-for (-> (or/c string? #f) positive?)]
+                       [effective-sse-read-timeout-for (-> (or/c string? #f) (or/c positive? #f))]
                        [call-with-request-timeout
                         (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
          ;; Struct and predicates (direct export for match compatibility)
@@ -57,6 +58,7 @@
          ;; Parameters
          current-http-request-timeout
          current-model-timeouts
+         current-model-sse-read-timeouts
          ;; Exception struct
          exn:fail:network:timeout
          exn:fail:network:timeout?
@@ -88,12 +90,25 @@
 ;; v0.14.2 Wave 3: allows model-specific request timeouts.
 (define current-model-timeouts (make-parameter (hash)))
 
+;; Parameter: per-model SSE-read timeout overrides for the current session.
+;; A hash of model-name → sse-read-seconds. Controls the per-chunk gap allowed
+;; before a stream is considered stalled (thinking phase AND content phase).
+;; Set by the runtime from settings (`timeouts.models.<model>.sse-read`);
+;; falls back to per-phase defaults when a model has no override.
+(define current-model-sse-read-timeouts (make-parameter (hash)))
+
 ;; Get the effective request timeout for a specific model.
 ;; Checks per-model overrides first, then falls back to current-http-request-timeout.
 (define (effective-request-timeout-for model-name)
   (define overrides (current-model-timeouts))
   (define model-timeout (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
   (or model-timeout (current-http-request-timeout)))
+
+;; Get the effective SSE-read timeout for a specific model, or #f when the
+;; model has no per-model override (caller falls back to its phase default).
+(define (effective-sse-read-timeout-for model-name)
+  (define overrides (current-model-sse-read-timeouts))
+  (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
 
 ;; call-with-request-timeout : thunk [#:timeout seconds #:cleanup thunk] -> any
 ;; Runs thunk in a separate thread with a channel for results;
