@@ -23,6 +23,14 @@
       (make-tool-call-part (format "tc-~a" n) n (hasheq))))
   (make-message "mid" #f 'assistant 'tool-call content 0 (hasheq)))
 
+;; Helper: create a tool-call message where each spec is (name args-hash)
+(define (make-tool-msg/args . specs)
+  (define content
+    (for/list ([spec (in-list specs)])
+      (match-define (list n args) spec)
+      (make-tool-call-part (format "tc-~a" n) n args)))
+  (make-message "mid-args" #f 'assistant 'tool-call content 0 (hasheq)))
+
 (define (make-text-turn)
   (make-message "mid-text" #f 'assistant 'message '() 0 (hasheq)))
 
@@ -75,6 +83,38 @@
       (define first (compute-next-counters base-counters (list (make-tool-msg '("read")))))
       (define second (compute-next-counters first (list (make-tool-msg '("read")))))
       (check-equal? (loop-counters-consecutive-tool-count second) 2))
+
+    (test-case "BUG-0016: editing a NEW distinct file resets the consecutive-tool count"
+      ;; A bulk-migration turn that edits a file not yet edited in the streak is
+      ;; implementation progress, not circling — the streak must reset so the
+      ;; wave is never policy-killed mid-migration.
+      (define seeded (struct-copy loop-counters base-counters [consecutive-tool-count 190]))
+      (define msgs (list (make-tool-msg/args (list "edit" (hasheq 'path "/tmp/a.rkt")))))
+      (define result (compute-next-counters seeded msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 0)
+      (check-equal? (loop-counters-edited-paths result) '("/tmp/a.rkt")))
+
+    (test-case "BUG-0016: editing the SAME file again does NOT reset the streak"
+      ;; Re-editing an already-edited file is a potential circle on one file; the
+      ;; breaker must keep counting so a same-file loop still fails closed.
+      (define seeded
+        (struct-copy loop-counters
+                     base-counters
+                     [consecutive-tool-count 190]
+                     [edited-paths '("/tmp/a.rkt")]))
+      (define msgs (list (make-tool-msg/args (list "edit" (hasheq 'path "/tmp/a.rkt")))))
+      (define result (compute-next-counters seeded msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 191)
+      (check-equal? (loop-counters-edited-paths result) '("/tmp/a.rkt")))
+
+    (test-case "BUG-0016: multiple distinct-file edits in one turn reset once"
+      (define seeded (struct-copy loop-counters base-counters [consecutive-tool-count 300]))
+      (define msgs
+        (list (make-tool-msg/args (list "edit" (hasheq 'path "/tmp/a.rkt"))
+                                  (list "write" (hasheq 'path "/tmp/b.rkt")))))
+      (define result (compute-next-counters seeded msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 0)
+      (check-equal? (loop-counters-edited-paths result) '("/tmp/a.rkt" "/tmp/b.rkt")))
 
     (test-case "recent-tool-names tracks tools"
       (define msgs (list (make-tool-msg '("bash"))))

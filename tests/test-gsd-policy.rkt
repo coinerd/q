@@ -35,13 +35,14 @@
   ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
   ;; the identical wave completed in the main session with 24-consecutive
   ;; bursts. Live finding (#9366): a W3 executor was killed at 100 after a
-  ;; productive edit-retry loop (read -> grep -> re-edit). 200 is the current
-  ;; ceiling; the runaway guard must stay well above real implementation
-  ;; bursts.
-  (check-true (>= (current-gsd-max-consecutive-tool-calls) 200)
+  ;; productive edit-retry loop (read -> grep -> re-edit). BUG-0016 (2026-08-
+  ;; 18): the breaker is now progress-aware (resets on distinct-file edits)
+  ;; and the campaign ceiling is 600 so a bulk metadata migration touching
+  ;; hundreds of distinct files is never mistaken for a runaway loop.
+  (check-true (>= (current-gsd-max-consecutive-tool-calls) 400)
               "current-gsd-max-consecutive-tool-calls default is too small for implementation waves")
   (check-true
-   (<= (current-gsd-max-consecutive-tool-calls) 400)
+   (<= (current-gsd-max-consecutive-tool-calls) 800)
    "current-gsd-max-consecutive-tool-calls default is unreasonably high (runaway guard lost)"))
 
 (test-case "GSD session iteration budget caps a larger configured budget"

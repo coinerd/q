@@ -13,6 +13,7 @@
          (only-in "loop-state.rkt"
                   loop-counters
                   loop-counters-seen-paths
+                  loop-counters-edited-paths
                   loop-counters-consecutive-tool-count
                   loop-counters-explore-count
                   loop-counters-implement-count
@@ -23,7 +24,7 @@
          (only-in "../../util/tool/tool-types.rkt" tool-call-name)
          (only-in "../../util/content/content-parts.rkt" tool-result-part-is-error?)
          (only-in "../../util/tool/tool-extract.rkt" extract-tool-calls-from-messages)
-         (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most)
+         (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most extract-tool-target-path)
          (only-in "../event-emitter.rkt" emit-typed-event!)
          (only-in "../event-structs/hook-events.rkt" turn-cancelled-event)
          (only-in "../../util/loop-result.rkt" make-loop-result)
@@ -40,13 +41,30 @@
   (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
   (define-values (new-seen-paths _new-exploration-path?)
     (update-seen-paths current-tool-calls (loop-counters-seen-paths counters)))
+  ;; BUG-0016: progress-aware consecutive-tool breaker. A turn that edits a
+  ;; NEW distinct file (a path not already edited in the current streak) is
+  ;; implementation progress, not circling — reset the streak so a bulk
+  ;; migration touching hundreds of distinct files is never policy-killed.
+  (define edited-now
+    (for*/list ([tc (in-list current-tool-calls)]
+                #:when (member (tool-call-name tc) '("edit" "write"))
+                [p (in-value (extract-tool-target-path tc))]
+                #:when (and p (string? p) (not (string=? p ""))))
+      p))
+  (define distinct-file-edit?
+    (for/or ([p (in-list edited-now)])
+      (not (member p (loop-counters-edited-paths counters)))))
+  (define new-edited-paths
+    (remove-duplicates (append edited-now (loop-counters-edited-paths counters))))
   ;; This counter is the number of consecutive assistant turns that emitted
   ;; one or more tool calls. It is independent of path novelty and tool class,
-  ;; and resets as soon as a turn emits no tool calls.
+  ;; and resets as soon as a turn emits no tool calls OR edits a distinct file.
   (define effective-tool-count
     (cond
       ;; No messages means no assistant turn occurred; preserve the counter.
       [(null? new-msgs) (loop-counters-consecutive-tool-count counters)]
+      ;; A distinct-file edit is progress — reset the streak.
+      [distinct-file-edit? 0]
       [(pair? current-tool-calls) (add1 (loop-counters-consecutive-tool-count counters))]
       [else 0]))
   (define new-explore-count
@@ -68,6 +86,10 @@
   (struct-copy loop-counters
                counters
                [seen-paths new-seen-paths]
+               [edited-paths
+                (if (null? new-msgs)
+                    (loop-counters-edited-paths counters)
+                    new-edited-paths)]
                [consecutive-tool-count effective-tool-count]
                [explore-count new-explore-count]
                [implement-count new-implement-count]
