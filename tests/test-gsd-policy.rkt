@@ -24,11 +24,17 @@
   (check-true (exact-positive-integer? (current-gsd-wave-max-iterations)))
   (check-true (exact-positive-integer? (current-gsd-max-consecutive-tool-calls))))
 
-(test-case "wave timeout default is 3600 s (per-wave budget)"
-  ;; User request: raise the 1800 s default to 3600 s so implementation waves
-  ;; with scoped verify commands are not policy-cancelled mid-edit. The
-  ;; parameter remains overridable per-campaign (flag / config / parameterize).
-  (check-equal? (current-gsd-wave-timeout-seconds) 3600))
+(test-case "wave timeout default is 7200 s (per-wave budget)"
+  ;; 2026-08-18 (BUG-0017 follow-up): raised 3600 → 7200 s. A live W3 wave
+  ;; performing area-by-area metadata migration + a grouped-runner audit
+  ;; consumed the full 3600 s budget while making steady, verifiable progress
+  ;; and was killed mid-fix on a real runner defect (ZERO_PARSED/exit-guard).
+  ;; The parameter remains overridable per-campaign (flag / config / parameterize).
+  (check-equal? (current-gsd-wave-timeout-seconds) 7200)
+  ;; BUG-0017 follow-up: the coordinator retries a timed-out wave run with a
+  ;; fresh session up to this many times, mirroring the LLM provider-retry
+  ;; ceiling (current-provider-retry-max-retries = 5).
+  (check-equal? (current-gsd-wave-timeout-retries) 5))
 
 (test-case "executor tool-loop limit clears implementation workloads (D3, issue #9351)"
   ;; Incident 81f9be4b W2: the executor died at the old default of 30
@@ -64,7 +70,7 @@
   (define derived-hard (resolve-max-iterations-hard cfg (current-gsd-wave-max-iterations)))
   ;; resolve-max-iterations-hard = max(iter*8/5, 80). With the raised budget the
   ;; hard ceiling is comfortably in the thousands (e.g. 3200 at 2000), so a wave
-  ;; is bounded by the 3600s timeout and the consecutive-tool breaker, not by
+  ;; is bounded by the 7200s timeout and the consecutive-tool breaker, not by
   ;; an iteration kill at 80.
   (check-true (>= derived-hard (quotient (* 8 (current-gsd-wave-max-iterations)) 5))
               "derived hard limit should scale with the soft budget"))
