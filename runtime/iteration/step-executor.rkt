@@ -511,7 +511,17 @@
         (directive-stop result)])]
     ['stop
      (define stop-result (handle-stop-action result new-msgs infra counters ws config))
-     (directive-stop stop-result)]
+     ;; BUG-0016: propagate the consecutive-tool breaker flag onto the final
+     ;; loop-result metadata so the wave runner can distinguish a deliberate
+     ;; breaker-stop ("tool loop limit reached") from a genuinely dropped tool
+     ;; result ("tool calls remain pending").
+     (define final-stop
+       (if (hash-ref (step-result-metadata step-res) 'toolLoopLimit #f)
+           (make-loop-result (loop-result-messages stop-result)
+                             (loop-result-termination-reason stop-result)
+                             (hash-set (loop-result-metadata stop-result) 'toolLoopLimit #t))
+           stop-result))
+     (directive-stop final-stop)]
     ['stop-hard-limit
      ;; effect extraction for fire-and-forget side effects
      (run-step-effects!

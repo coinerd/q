@@ -30,8 +30,11 @@
 ;; A model that emits only tool-calls (no text, no terminating condition) for
 ;; many consecutive iterations is circling (observed: 262 consecutive tool-only
 ;; turns in a GSD /go execution, burning LLM calls until max-iterations).
-;; Default 30 consecutive tool-only iterations before the loop stops.
-(define current-max-consecutive-tool-calls (make-parameter 30))
+;; Default 300 consecutive tool-only iterations before the loop stops
+;; (BUG-0016: raised from 30 — bulk implementation waves legitimately exceed
+;; the old default; the breaker is progress-aware via compute-next-counters,
+;; resetting on distinct-file edits).
+(define current-max-consecutive-tool-calls (make-parameter 300))
 
 (struct step-result
         (action ; symbol: 'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit

@@ -26,7 +26,15 @@
          (only-in "../util/loop-result.rkt"
                   loop-result?
                   loop-result-termination-reason
-                  loop-result-messages))
+                  loop-result-messages
+                  loop-result-metadata
+                  make-loop-result)
+         (only-in "../util/iteration/decision.rkt" step-result step-result-metadata)
+         (only-in "../util/iteration/directive.rkt"
+                  directive-stop
+                  directive-stop-result
+                  directive-stop?)
+         (only-in "../runtime/iteration/step-executor.rkt" interpret-step))
 
 ;; ============================================================
 ;; Helpers
@@ -82,6 +90,25 @@
       (define result (run-iteration-loop ctx prov bus #f #f "/tmp/test-log" "test-session" 10))
       (check-pred loop-result? result)
       (check-equal? (loop-result-termination-reason result) 'completed))
+
+    (test-case "BUG-0016: breaker-stop stamps toolLoopLimit onto the final loop-result"
+      ;; The wave runner must distinguish a deliberate consecutive-tool breaker
+      ;; stop ("tool loop limit reached") from a genuinely dropped tool result
+      ;; ("tool calls remain pending"). The flag lives on the step-result; the
+      ;; step interpreter must propagate it to the loop-result metadata.
+      (define bus (make-event-bus))
+      (define infra (loop-infra '(ctx) #f #f bus "test-session" "/tmp/test-log" #f))
+      (define counters (make-initial-counters))
+      (define snap (iteration-snapshot counters #f #f #f 10 100))
+      (define step-res (step-result 'stop 'tool-calls-pending counters (hasheq 'toolLoopLimit #t)))
+      (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
+      (define directive (interpret-step step-res result '() infra snap))
+      (check-true (directive-stop? directive))
+      (define final-result (directive-stop-result directive))
+      (check-pred loop-result? final-result)
+      (check-equal? (loop-result-termination-reason final-result) 'tool-calls-pending)
+      (check-true (hash-ref (loop-result-metadata final-result) 'toolLoopLimit #f)
+                  "toolLoopLimit must reach the final loop-result metadata"))
 
     (test-case "stop-hard-limit: max-iterations=1 with tool calls triggers limit"
       ;; Provider returns tool calls but no registry to execute them

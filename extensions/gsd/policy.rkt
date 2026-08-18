@@ -89,10 +89,13 @@
 ;; loop (read -> grep -> re-edit after a leading-whitespace mismatch) and was
 ;; policy-killed at the ceiling. The edit-tool whitespace auto-fallback
 ;; (#9366) removes the root-cause trigger, but recovery loops that re-read and
-;; re-grep before retrying should not be killed either; 200 keeps the runaway
-;; guard while giving recovery room.
+;; re-grep before retrying should not be killed either.
+;; BUG-0016 (2026-08-18): the breaker is now progress-aware (compute-next-
+;; counters resets on distinct-file edits), and the campaign ceiling is 600
+;; so a bulk metadata migration that touches hundreds of distinct files is
+;; never mistaken for a runaway loop.
 (define current-gsd-max-consecutive-tool-calls
-  (make-parameter 200 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
+  (make-parameter 600 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
 
 (define (gsd-session-iteration-budget configured-max)
   (unless (exact-positive-integer? configured-max)
