@@ -34,19 +34,40 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "browser-observation has interactive-elements field"
-  (define obs (browser-observation
-               "https://example.com" "Example" "text" "visible"
-               #f #f #f #f '() '() (hash 'width 1280 'height 720)
-               '() #f))
+  (define obs
+    (browser-observation "https://example.com"
+                         "Example"
+                         "text"
+                         "visible"
+                         #f
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         (hash 'width 1280 'height 720)
+                         '()
+                         #f))
   (check-equal? (browser-observation-interactive-elements obs) '()))
 
 (test-case "observation with interactive-elements round-trips through serialization"
-  (define elements (list (hasheq 'qId "0" 'tag "button" 'text "Submit")
-                         (hasheq 'qId "1" 'tag "a" 'text "Link" 'href "/about")))
-  (define obs (browser-observation
-               "https://example.com" "Example" "text" "visible"
-               #f #f #f #f '() '() (hash 'width 1280 'height 720)
-               elements #f))
+  (define elements
+    (list (hasheq 'qId "0" 'tag "button" 'text "Submit")
+          (hasheq 'qId "1" 'tag "a" 'text "Link" 'href "/about")))
+  (define obs
+    (browser-observation "https://example.com"
+                         "Example"
+                         "text"
+                         "visible"
+                         #f
+                         #f
+                         #f
+                         #f
+                         '()
+                         '()
+                         (hash 'width 1280 'height 720)
+                         elements
+                         #f))
   ;; Serialize and deserialize
   (define j (browser-observation->jsexpr obs))
   (define obs2 (jsexpr->browser-observation j))
@@ -55,9 +76,7 @@
   (check-equal? (hash-ref (cadr (browser-observation-interactive-elements obs2)) 'tag) "a"))
 
 (test-case "observation without interactive-elements is backward compatible"
-  (define j (hasheq 'url "https://example.com"
-                    'title "Example"
-                    'text-content "text"
-                    'visible-text "visible"))
+  (define j
+    (hasheq 'url "https://example.com" 'title "Example" 'text-content "text" 'visible-text "visible"))
   (define obs (jsexpr->browser-observation j))
   (check-equal? (browser-observation-interactive-elements obs) '()))

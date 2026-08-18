@@ -39,8 +39,7 @@
     ;; ── Invalid mode is rejected by contract ──
     (test-case "invalid policy-mode is rejected by contract"
       (check-exn exn:fail:contract?
-                 (lambda ()
-                   (make-default-permission-config #:policy-mode 'bogus))))
+                 (lambda () (make-default-permission-config #:policy-mode 'bogus))))
 
     ;; ── Policy mode is accessible ──
     (test-case "policy-mode accessor works"
@@ -51,16 +50,13 @@
 
     ;; ── Approval callback still works with policy mode ──
     (test-case "approval callback works with strict mode"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'strict
-                   #:callback (lambda (name args) #f)))
+      (define cfg
+        (make-default-permission-config #:policy-mode 'strict #:callback (lambda (name args) #f)))
       (check-false (request-approval cfg "bash" (hash))))
 
-
     (test-case "approval callback works with permissive mode"
-      (define cfg (make-default-permission-config
-                   #:policy-mode 'permissive
-                   #:callback (lambda (name args) #t)))
+      (define cfg
+        (make-default-permission-config #:policy-mode 'permissive #:callback (lambda (name args) #t)))
       (check-true (request-approval cfg "unknown-tool" (hash))))))
 
 (run-tests policy-mode-suite)

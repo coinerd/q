@@ -70,7 +70,8 @@
                              #:model-name "gpt-4"
                              #:system-instructions '("Be helpful")
                              #:active? #f
-                             #:lifecycle (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f #f #f #f)))
+                             #:lifecycle
+                             (lifecycle-state #f #f #t #f #f #f #f '() '() #f #f #f #f #f)))
       (check-equal? (agent-session-model-name sess) "gpt-4")
       (check-equal? (agent-session-system-instructions sess) '("Be helpful"))
       (check-false (agent-session-active? sess))

@@ -20,13 +20,20 @@
 
 (test-case "cmd-ctx-goal-cancel-box accessor works"
   (define cancel-box (box #f))
-  (define cctx (cmd-ctx (box (initial-ui-state))
-                        (box #t)
-                        #f #f
-                        (box #f) #f (box #f) #f
-                        (box "") #f #f
-                        (box #f)
-                        cancel-box))
+  (define cctx
+    (cmd-ctx (box (initial-ui-state))
+             (box #t)
+             #f
+             #f
+             (box #f)
+             #f
+             (box #f)
+             #f
+             (box "")
+             #f
+             #f
+             (box #f)
+             cancel-box))
   (check-eq? (cmd-ctx-goal-cancel-box cctx) cancel-box)
   ;; Set the cancel flag
   (set-box! cancel-box #t)
@@ -38,13 +45,20 @@
 
 (test-case "cmd-ctx-agent-session-box accessor works"
   (define sess-box (box 'mock-session))
-  (define cctx (cmd-ctx (box (initial-ui-state))
-                        (box #t)
-                        #f #f
-                        (box #f) #f (box #f) #f
-                        (box "") #f #f
-                        sess-box
-                        (box #f)))
+  (define cctx
+    (cmd-ctx (box (initial-ui-state))
+             (box #t)
+             #f
+             #f
+             (box #f)
+             #f
+             (box #f)
+             #f
+             (box "")
+             #f
+             #f
+             sess-box
+             (box #f)))
   (check-eq? (cmd-ctx-agent-session-box cctx) sess-box)
   (check-equal? (unbox (cmd-ctx-agent-session-box cctx)) 'mock-session))
 
@@ -55,12 +69,28 @@
 (test-case "tui-ctx-agent-session-box and tui-ctx-goal-cancel-box work"
   (define sess-box (box 'session))
   (define cancel-box (box #f))
-  (define ctx (tui-ctx (box (initial-ui-state))
-                       (box 'input)
-                       #f #f (box #t)
-                       #f #f #f #f #f #f #f #f #f #f #f #f #f #f
-                       sess-box
-                       cancel-box))
+  (define ctx
+    (tui-ctx (box (initial-ui-state))
+             (box 'input)
+             #f
+             #f
+             (box #t)
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             #f
+             sess-box
+             cancel-box))
   (check-eq? (tui-ctx-agent-session-box ctx) sess-box)
   (check-eq? (tui-ctx-goal-cancel-box ctx) cancel-box))
 
@@ -73,8 +103,7 @@
   (define running-box (box #t))
   ;; Simulate the shutdown-check logic from commands.rkt
   (define (shutdown-check)
-    (or (unbox cancel-box)
-        (not (unbox running-box))))
+    (or (unbox cancel-box) (not (unbox running-box))))
   (check-false (shutdown-check) "not cancelled, still running")
   (set-box! cancel-box #t)
   (check-true (shutdown-check) "cancel-box set => should stop")
@@ -92,12 +121,9 @@
   ;; Simulate the write-back logic from commands.rkt
   (define was-cancelled (unbox cancel-box))
   (unless was-cancelled
-    (set-box! state-box
-              (struct-copy ui-state (unbox state-box) [active-goal 'some-info])))
+    (set-box! state-box (struct-copy ui-state (unbox state-box) [active-goal 'some-info])))
   ;; State should remain unchanged
   (check-false (ui-state-active-goal (unbox state-box)))
   ;; Reset for next goal
   (set-box! cancel-box #f)
   (check-false (unbox cancel-box)))
-
-

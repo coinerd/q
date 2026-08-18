@@ -26,9 +26,10 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "uuid-string uniqueness"
-  (define ids (for/list ([_ (in-range 1000)]) (uuid-string)))
-  (check-equal? (length ids) (length (remove-duplicates ids))
-                "1000 UUIDs should all be unique"))
+  (define ids
+    (for/list ([_ (in-range 1000)])
+      (uuid-string)))
+  (check-equal? (length ids) (length (remove-duplicates ids)) "1000 UUIDs should all be unique"))
 
 ;; ---------------------------------------------------------------------------
 ;; Test: uuid-string format is correct (UUID v4 variant)
@@ -54,7 +55,9 @@
 
 (test-case "uuid-string is crypto-quality"
   ;; Generate 100 IDs rapidly — none should be millisecond-based
-  (define ids (for/list ([_ (in-range 100)]) (uuid-string)))
+  (define ids
+    (for/list ([_ (in-range 100)])
+      (uuid-string)))
   (define ms (current-milliseconds))
   ;; None should contain the raw milliseconds value
   (for ([id (in-list ids)])
@@ -67,9 +70,7 @@
 
 (test-case "sidecar-recovery: send-command-with-recovery! signature exists"
   ;; Verify the function accepts the expected keyword arguments
-  (check-not-exn
-   (lambda ()
-     (procedure-arity-includes? send-command-with-recovery! 3))))
+  (check-not-exn (lambda () (procedure-arity-includes? send-command-with-recovery! 3))))
 
 ;; ---------------------------------------------------------------------------
 ;; Test: restart-sidecar! is not exported (internal)

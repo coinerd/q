@@ -27,7 +27,7 @@
 
     ;; ============================================================
     ;; Previous task FSM state — session isolation
-;; @boundary unit
+    ;; @boundary unit
     ;; ============================================================
 
     (test-suite "prev-task-fsm-state-isolation"

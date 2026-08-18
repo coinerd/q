@@ -15,7 +15,19 @@
          "../runtime/auth/oauth-callback.rkt")
 
 (define (make-test-cctx)
-  (cmd-ctx (box (initial-ui-state)) (box #t) #f #f (box #f) #f (box #f) #f (box "") #f #f (box #f) (box #f)))
+  (cmd-ctx (box (initial-ui-state))
+           (box #t)
+           #f
+           #f
+           (box #f)
+           #f
+           (box #f)
+           #f
+           (box "")
+           #f
+           #f
+           (box #f)
+           (box #f)))
 
 (define login-tests
   (test-suite "/login command"

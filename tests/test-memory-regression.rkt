@@ -8,7 +8,6 @@
 ;; Verifies that existing tools (session_recall) and config are unaffected
 ;; by the memory system. No behavior change when memory enabled/disabled.
 
-
 (require rackunit
          "../runtime/session/session-config.rkt"
          "../tools/builtins/memory-tools.rkt"

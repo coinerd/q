@@ -27,8 +27,9 @@
                   mutating-file?
                   restore-repo-surfaces!
                   clean-stale-bytecode!
-                  file-has-rackunit-tests?
-                  shard-files)
+                   file-has-rackunit-tests?
+                   shard-files
+                   print-lint-report)
          (only-in "parse.rkt"
                   test-file-result
                   test-file-result-path
@@ -43,7 +44,8 @@
                   save-failure-logs
                   summary-exit-code
                   write-json-results!
-                  print-ledger-summary)
+                  print-ledger-summary
+                  print-run-summary-record)
          (only-in "ledger.rkt" load-known-failure-ledger)
          (only-in "cli.rkt" parse-args validate-args!)
          (only-in "profiles.rkt" profile-skips-test? make-skipped-result)
@@ -180,8 +182,7 @@
 ;; directory; grouped/in-process execution must do the same or tests that
 ;; resolve sibling paths (e.g. "../scripts/foo.rkt") break.
 (define (in-process-cwd resolved-path)
-  (or (and resolved-path (path-only (simplify-path resolved-path)))
-      base-dir))
+  (or (and resolved-path (path-only (simplify-path resolved-path))) base-dir))
 
 (define (run-single-file/in-process test-path #:timeout [timeout #f])
   (define resolved-path (resolve-test-path test-path))
@@ -204,11 +205,11 @@
                    (with-handlers ([exn:fail? (lambda (e)
                                                 (displayln (exn->string e) stderr-out)
                                                 (set-box! exit-code 1))])
-                      (parameterize ([current-output-port stdout-out]
-                                     [current-error-port stderr-out]
-                                     [current-directory (in-process-cwd resolved-path)]
-                                     [current-command-line-arguments #()]
-                                     [current-namespace (make-base-namespace)])
+                     (parameterize ([current-output-port stdout-out]
+                                    [current-error-port stderr-out]
+                                    [current-directory (in-process-cwd resolved-path)]
+                                    [current-command-line-arguments #()]
+                                    [current-namespace (make-base-namespace)])
                        (dynamic-require (in-process-module-path resolved-path) #f)
                        (set-box! exit-code 0)))))))
      (define completed? (sync/timeout (/ file-timeout 1000.0) worker))
@@ -270,6 +271,14 @@
     [(eq? requested-mode 'auto) (if (string=? suite-label "unit-fast") 'grouped 'subprocess)]
     [else requested-mode]))
 
+;; Read q-version from util/version.rkt without loading the module
+;; (keeps runner startup free of contract instantiation).
+(define (detect-runner-version)
+  (define version-path (build-path base-dir "util" "version.rkt"))
+  (with-handlers ([exn:fail? (lambda (_) "unknown")])
+    (define m (regexp-match #rx"q-version[ \t]+\"([^\"]+)\"" (file->string version-path)))
+    (if m (cadr m) "unknown")))
+
 (define (run-suite-once suite-files
                         jobs
                         timeout-ms
@@ -280,7 +289,8 @@
                         mode
                         json-out
                         ledger
-                        profile)
+                        profile
+                        #:shard [shard #f])
   (define t0 (current-inexact-milliseconds))
   (define-values (skipped-files runnable-files)
     (partition (lambda (f)
@@ -322,7 +332,15 @@
           <
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
+  (define runner-version (detect-runner-version))
   (print-summary results total-elapsed)
+  (print-run-summary-record results
+                            #:suite suite-label
+                            #:profile profile
+                            #:shard shard
+                            #:mode mode
+                            #:elapsed-ms total-elapsed
+                            #:runner-version runner-version)
   (when json-out
     (write-json-results! json-out
                          results
@@ -330,7 +348,9 @@
                          #:mode mode
                          #:elapsed-ms total-elapsed
                          #:ledger ledger
-                         #:profile profile))
+                         #:profile profile
+                         #:shard shard
+                         #:runner-version runner-version))
   (when ledger
     (print-ledger-summary ledger results))
   (save-failure-logs results)
@@ -396,10 +416,11 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
-                  json-out
-                  ledger-path
-                  profile)
-    (parse-args (vector->list filtered-args)))
+                   json-out
+                   ledger-path
+                   profile
+                   lint-metadata?)
+     (parse-args (vector->list filtered-args)))
   (validate-args! jobs
                   sequential?
                   timeout
@@ -413,9 +434,15 @@
                   requested-mode
                   json-out
                   ledger-path
-                  profile)
+                  profile
+                  lint-metadata?)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
+    (exit 0))
+  (when lint-metadata?
+    (print-lint-report (if (pair? extra-files)
+                           (map normalize-test-path extra-files)
+                           (collect-test-files suite)))
     (exit 0))
   (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
   (when (> cleaned-dirs 0)
@@ -479,7 +506,8 @@
                       mode
                       json-out
                       ledger
-                      profile))
+                      profile
+                      #:shard (and (> shard-total 1) (cons shard-index shard-total))))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (exit exit-code)))

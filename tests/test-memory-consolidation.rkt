@@ -64,9 +64,11 @@
   ((memory-backend-store! be) (make-test-item "d1" "Same content here" 'semantic 'session))
   ((memory-backend-store! be) (make-test-item "d2" "Same content here" 'semantic 'session))
   ;; Hash backend deduplicates identical content (idempotent)
-  (define all ((memory-backend-list be)
-               (memory-query #f 'session #f #f #f #f 100 #f)))
-  (define items (if (memory-result? all) (memory-result-value all) all))
+  (define all ((memory-backend-list be) (memory-query #f 'session #f #f #f #f 100 #f)))
+  (define items
+    (if (memory-result? all)
+        (memory-result-value all)
+        all))
   (check-equal? (length items) 1 "identical content should be deduped"))
 
 (test-case "W0: consolidation placeholder — no auto-merge"

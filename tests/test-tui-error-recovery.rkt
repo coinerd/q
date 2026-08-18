@@ -77,9 +77,10 @@
                (format "hint mentions internal: ~a" hint-text)))
  (test-case "error recovery: streaming state cleared on error"
    (define s0
-     (set-streaming-thinking (set-streaming-text (set-busy (initial-ui-state #:session-id "test-session") #t)
-                                                 "partial code...")
-                             "thinking..."))
+     (set-streaming-thinking
+      (set-streaming-text (set-busy (initial-ui-state #:session-id "test-session") #t)
+                          "partial code...")
+      "thinking..."))
    (define evt (make-test-event "runtime.error" (hasheq 'error "timeout" 'errorType 'timeout)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-streaming-text s1) "streaming-text cleared")

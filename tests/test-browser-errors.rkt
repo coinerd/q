@@ -37,10 +37,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "raise-browser-error raises q-browser-error"
-  (check-exn
-   q-browser-error?
-   (lambda ()
-     (raise-browser-error "test error" 'action-failed))))
+  (check-exn q-browser-error? (lambda () (raise-browser-error "test error" 'action-failed))))
 
 (test-case "raise-browser-error with context"
   (check-exn
@@ -48,9 +45,7 @@
      (and (q-browser-error? e)
           (equal? (q-browser-error-category e) 'navigation-blocked)
           (equal? (hash-ref (q-error-context e) 'url) "https://blocked.com")))
-   (lambda ()
-     (raise-browser-error "blocked" 'navigation-blocked
-                          (hash 'url "https://blocked.com")))))
+   (lambda () (raise-browser-error "blocked" 'navigation-blocked (hash 'url "https://blocked.com")))))
 
 ;; ---------------------------------------------------------------------------
 ;; Category predicates (7 categories)
@@ -87,8 +82,7 @@
                (q-browser-error "x" (current-continuation-marks) (hash) 'session-expired))))
 
 (test-case "predicates reject other q-error types"
-  (check-false (browser-adapter-unavailable?
-                (q-error "x" (current-continuation-marks) (hash)))))
+  (check-false (browser-adapter-unavailable? (q-error "x" (current-continuation-marks) (hash)))))
 
 (test-case "browser-url-blocked-error? predicate"
   (check-true (browser-url-blocked-error?

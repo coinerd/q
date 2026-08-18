@@ -61,7 +61,8 @@
                       _mode
                       _json
                       _ledger
-                      profile)
+                      profile
+                      _lint-metadata?)
         (parse-args '("--profile" "vps")))
       (check-equal? profile 'vps))
 

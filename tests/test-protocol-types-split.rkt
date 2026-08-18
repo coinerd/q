@@ -33,22 +33,19 @@
   ;; ── Content parts (from facade and direct) ─────────────────
   (check-equal? (text-part-text (make-text-part "hello")) "hello")
   (check-equal? (tool-call-part-name (make-tool-call-part "1" "bash" (hash))) "bash")
-  (check-equal? (tool-result-part-tool-call-id (make-tool-result-part "1" "ok" #f)) "1")
-)
+  (check-equal? (tool-result-part-tool-call-id (make-tool-result-part "1" "ok" #f)) "1"))
 
 ;; JSON round-trip
 (define tp (make-text-part "test"))
 (test-case "test-protocol-types-split: checks block 7"
-  (check-equal? (jsexpr->content-part (content-part->jsexpr tp)) tp)
-)
+  (check-equal? (jsexpr->content-part (content-part->jsexpr tp)) tp))
 
 ;; ── Message (from facade and direct) ───────────────────────
 (define msg (make-message "m1" #f 'user 'message (list tp) 1000 (hash)))
 (test-case "test-protocol-types-split: checks block 6"
   (check-equal? (message-id msg) "m1")
   (check-equal? (message-role msg) 'user)
-  (check-equal? (jsexpr->message (message->jsexpr msg)) msg)
-)
+  (check-equal? (jsexpr->message (message->jsexpr msg)) msg))
 
 ;; ── Event (from facade and direct) ─────────────────────────
 (define evt (make-event "test-event" 1000 "sess1" "t1" (hash 'key "value")))
@@ -66,8 +63,7 @@
   (check-pred any-tool-result-entry? tr-msg)
   (define bash-msg (make-message "m3" #f 'system 'bash-execution '() 1000 (hash)))
   (check-pred bash-execution-entry? bash-msg)
-  (check-pred any-tool-result-entry? bash-msg)
-)
+  (check-pred any-tool-result-entry? bash-msg))
 
 ;; ── Tree entries ───────────────────────────────────────────
 (define be (make-branch-entry "b1" "parent1" "my-branch"))
@@ -86,15 +82,13 @@
   (check-true (branch-summary-entry? bse))
   (check-true (tree-entry? bse))
   (check-equal? (branch-summary-entry-summary bse) "summary text")
-  (check-equal? (branch-summary-entry-entry-range bse) "1..10")
-)
+  (check-equal? (branch-summary-entry-entry-range bse) "1..10"))
 
 ;; ── Loop result ────────────────────────────────────────────
 (define lr (make-loop-result '(msg1 msg2) 'max-turns (hash)))
 (test-case "test-protocol-types-split: checks block 3"
   (check-equal? (loop-result-messages lr) '(msg1 msg2))
-  (check-equal? (loop-result-termination-reason lr) 'max-turns)
-)
+  (check-equal? (loop-result-termination-reason lr) 'max-turns))
 
 ;; ── Custom entry ───────────────────────────────────────────
 (define ce (make-custom-entry "ext1" "key1" "data1"))
@@ -102,8 +96,7 @@
   (check-true (custom-entry? ce))
   (check-equal? (custom-entry-extension ce) "ext1")
   (check-equal? (custom-entry-key ce) "key1")
-  (check-equal? (custom-entry-data ce) "data1")
-)
+  (check-equal? (custom-entry-data ce) "data1"))
 
 ;; ── Tool-call / tool-result (still in facade) ──────────────
 (define tc (tool-call "tc1" "read" (hash 'path "/tmp")))
@@ -113,5 +106,4 @@
 
   (define tr (tool-result "result content" (hash 'duration 1.5) #f))
   (check-equal? (tool-result-content tr) "result content")
-  (check-false (tool-result-is-error? tr))
-)
+  (check-false (tool-result-is-error? tr)))

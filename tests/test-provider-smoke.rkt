@@ -31,8 +31,7 @@
   ;; Require a module and verify a specific export satisfies a predicate
   (check-not-exn (lambda () (dynamic-require modpath #f)))
   (define val (dynamic-require modpath export-name))
-  (check-pred predicate val
-              (format "~a should export ~a as ~a" modpath export-name predicate)))
+  (check-pred predicate val (format "~a should export ~a as ~a" modpath export-name predicate)))
 
 ;; ============================================================
 ;; Provider module smoke tests — compilation + key export checks
@@ -40,26 +39,23 @@
 
 (test-case "openai-compatible-provider-compiles-and-exports"
   (check-not-exn (lambda () (dynamic-require (q-modpath "llm/openai-compatible.rkt") #f)))
-  (define make-fn (dynamic-require (q-modpath "llm/openai-compatible.rkt")
-                                    'make-openai-compatible-provider))
+  (define make-fn
+    (dynamic-require (q-modpath "llm/openai-compatible.rkt") 'make-openai-compatible-provider))
   (check-pred procedure? make-fn))
 
 (test-case "anthropic-provider-compiles-and-exports"
   (check-not-exn (lambda () (dynamic-require (q-modpath "llm/anthropic.rkt") #f)))
-  (define make-fn (dynamic-require (q-modpath "llm/anthropic.rkt")
-                                    'make-anthropic-provider))
+  (define make-fn (dynamic-require (q-modpath "llm/anthropic.rkt") 'make-anthropic-provider))
   (check-pred procedure? make-fn))
 
 (test-case "gemini-provider-compiles-and-exports"
   (check-not-exn (lambda () (dynamic-require (q-modpath "llm/gemini.rkt") #f)))
-  (define make-fn (dynamic-require (q-modpath "llm/gemini.rkt")
-                                    'make-gemini-provider))
+  (define make-fn (dynamic-require (q-modpath "llm/gemini.rkt") 'make-gemini-provider))
   (check-pred procedure? make-fn))
 
 (test-case "azure-openai-provider-compiles-and-exports"
   (check-not-exn (lambda () (dynamic-require (q-modpath "llm/azure-openai.rkt") #f)))
-  (define make-fn (dynamic-require (q-modpath "llm/azure-openai.rkt")
-                                    'make-azure-openai-provider))
+  (define make-fn (dynamic-require (q-modpath "llm/azure-openai.rkt") 'make-azure-openai-provider))
   (check-pred procedure? make-fn))
 
 (test-case "provider-base-compiles-and-exports"

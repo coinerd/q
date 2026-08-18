@@ -86,7 +86,8 @@
 
 (test-case "URL https://[::ffff:169.254.169.254]/metadata blocked (cloud metadata)"
   (define settings (make-browser-policy-settings))
-  (define-values (ok? reason) (validate-browser-url "https://[::ffff:169.254.169.254]/metadata" settings))
+  (define-values (ok? reason)
+    (validate-browser-url "https://[::ffff:169.254.169.254]/metadata" settings))
   (check-false ok?))
 
 (test-case "URL https://[fd00::1]/internal blocked (private ULA)"

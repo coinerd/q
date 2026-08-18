@@ -43,4 +43,4 @@
 
 (test-case "arch-boundary: no runtime module imports tools/builtins/memory-tools"
   ;; This test verifies M13-F1 is resolved
-  (check-true #t))  ; Placeholder; actual grep check in release gates
+  (check-true #t)) ; Placeholder; actual grep check in release gates

@@ -21,11 +21,13 @@
   (when target-state
     (case target-state
       [(exploring) (gsm-transition-to! 'exploring)]
-      [(plan-written) (gsm-transition-to! 'exploring)
-                      (gsm-transition-to! 'plan-written)]
-      [(executing) (gsm-transition-to! 'exploring)
-                   (gsm-transition-to! 'plan-written)
-                   (gsm-transition-to! 'executing)]))
+      [(plan-written)
+       (gsm-transition-to! 'exploring)
+       (gsm-transition-to! 'plan-written)]
+      [(executing)
+       (gsm-transition-to! 'exploring)
+       (gsm-transition-to! 'plan-written)
+       (gsm-transition-to! 'executing)]))
   (dynamic-wind void thunk (lambda () (reset-all-gsd-state!))))
 
 (define dispatch-suite
@@ -53,7 +55,8 @@
 
     (test-case "/plan <text> routes to 'plan-submit action"
       (define parsed (parse-gsd-command "/plan" "/plan implement foo"))
-      (define-values (action result) (dispatch-gsd-command parsed "/plan implement foo" (current-directory)))
+      (define-values (action result)
+        (dispatch-gsd-command parsed "/plan implement foo" (current-directory)))
       (check-equal? action 'plan-submit)
       (check-true (string? result)))
 
@@ -66,102 +69,114 @@
 
     (test-case "/reset dispatches from executing state"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/reset" "/reset"))
-          (define-values (action result) (dispatch-gsd-command parsed "/reset" (current-directory)))
-          (check-equal? action 'reset)
-          (check-true (gsd-cmd-reset? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/reset" "/reset"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/reset" (current-directory)))
+                              (check-equal? action 'reset)
+                              (check-true (gsd-cmd-reset? result)))))
 
     (test-case "/replan dispatches from plan-written state"
       (with-clean-gsd-state 'plan-written
-        (lambda ()
-          (define parsed (parse-gsd-command "/replan" "/replan"))
-          (define-values (action result) (dispatch-gsd-command parsed "/replan" (current-directory)))
-          (check-equal? action 'replan)
-          (check-true (gsd-cmd-replan? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/replan" "/replan"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/replan" (current-directory)))
+                              (check-equal? action 'replan)
+                              (check-true (gsd-cmd-replan? result)))))
 
     (test-case "/replan dispatches from executing state"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/replan" "/replan"))
-          (define-values (action result) (dispatch-gsd-command parsed "/replan" (current-directory)))
-          (check-equal? action 'replan)
-          (check-true (gsd-cmd-replan? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/replan" "/replan"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/replan" (current-directory)))
+                              (check-equal? action 'replan)
+                              (check-true (gsd-cmd-replan? result)))))
 
     (test-case "/replan routes from idle state (execute will fail)"
       (with-clean-gsd-state #f
-        (lambda ()
-          (define parsed (parse-gsd-command "/replan" "/replan"))
-          (define-values (action result) (dispatch-gsd-command parsed "/replan" (current-directory)))
-          (check-equal? action 'replan)
-          (check-true (gsd-cmd-replan? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/replan" "/replan"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/replan" (current-directory)))
+                              (check-equal? action 'replan)
+                              (check-true (gsd-cmd-replan? result)))))
 
     (test-case "/skip dispatches from executing state"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/skip" "/skip 1"))
-          (define-values (action result) (dispatch-gsd-command parsed "/skip 1" (current-directory)))
-          (check-equal? action 'skip)
-          (check-true (gsd-cmd-skip? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/skip" "/skip 1"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/skip 1" (current-directory)))
+                              (check-equal? action 'skip)
+                              (check-true (gsd-cmd-skip? result)))))
 
     (test-case "/wave-done dispatches to parsed struct"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/wave-done" "/wave-done 0"))
-          (define-values (action result) (dispatch-gsd-command parsed "/wave-done 0" (current-directory)))
-          (check-equal? action 'wave-done)
-          (check-true (gsd-cmd-wave-done? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/wave-done" "/wave-done 0"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/wave-done 0" (current-directory)))
+                              (check-equal? action 'wave-done)
+                              (check-true (gsd-cmd-wave-done? result)))))
 
     (test-case "/done dispatches to parsed struct"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/done" "/done"))
-          (define-values (action result) (dispatch-gsd-command parsed "/done" (current-directory)))
-          (check-equal? action 'done)
-          (check-true (gsd-cmd-done? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/done" "/done"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/done" (current-directory)))
+                              (check-equal? action 'done)
+                              (check-true (gsd-cmd-done? result)))))
 
     ;; -- Edge-case tests (CF-01) --
 
     (test-case "/replan from exploring state routes correctly"
       (with-clean-gsd-state 'exploring
-        (lambda ()
-          (define parsed (parse-gsd-command "/replan" "/replan"))
-          (define-values (action result) (dispatch-gsd-command parsed "/replan" (current-directory)))
-          (check-equal? action 'replan)
-          (check-true (gsd-cmd-replan? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/replan" "/replan"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/replan" (current-directory)))
+                              (check-equal? action 'replan)
+                              (check-true (gsd-cmd-replan? result)))))
 
     (test-case "/skip from idle state routes correctly"
       (with-clean-gsd-state #f
-        (lambda ()
-          (define parsed (parse-gsd-command "/skip" "/skip"))
-          (define-values (action result) (dispatch-gsd-command parsed "/skip" (current-directory)))
-          (check-equal? action 'skip)
-          (check-true (gsd-cmd-skip? result))
-          (check-equal? (gsd-cmd-skip-skip-arg result) ""))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/skip" "/skip"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/skip" (current-directory)))
+                              (check-equal? action 'skip)
+                              (check-true (gsd-cmd-skip? result))
+                              (check-equal? (gsd-cmd-skip-skip-arg result) ""))))
 
     (test-case "/skip with non-numeric arg routes correctly"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/skip" "/skip abc"))
-          (define-values (action result) (dispatch-gsd-command parsed "/skip abc" (current-directory)))
-          (check-equal? action 'skip)
-          (check-equal? (gsd-cmd-skip-skip-arg result) "abc"))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/skip" "/skip abc"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/skip abc" (current-directory)))
+                              (check-equal? action 'skip)
+                              (check-equal? (gsd-cmd-skip-skip-arg result) "abc"))))
 
     (test-case "/wave-done with empty args routes correctly"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/wave-done" "/wave-done"))
-          (define-values (action result) (dispatch-gsd-command parsed "/wave-done" (current-directory)))
-          (check-equal? action 'wave-done)
-          (check-equal? (gsd-cmd-wave-done-wave-arg result) ""))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/wave-done" "/wave-done"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/wave-done" (current-directory)))
+                              (check-equal? action 'wave-done)
+                              (check-equal? (gsd-cmd-wave-done-wave-arg result) ""))))
 
     (test-case "/done --force flag parsed correctly"
       (with-clean-gsd-state 'executing
-        (lambda ()
-          (define parsed (parse-gsd-command "/done" "/done --force"))
-          (define-values (action result) (dispatch-gsd-command parsed "/done --force" (current-directory)))
-          (check-equal? action 'done)
-          (check-true (gsd-cmd-done-force? result)))))
+                            (lambda ()
+                              (define parsed (parse-gsd-command "/done" "/done --force"))
+                              (define-values (action result)
+                                (dispatch-gsd-command parsed "/done --force" (current-directory)))
+                              (check-equal? action 'done)
+                              (check-true (gsd-cmd-done-force? result)))))
 
     (test-case "/plan with no text routes to artifact"
       (define parsed (parse-gsd-command "/plan" "/plan"))

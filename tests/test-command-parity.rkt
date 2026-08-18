@@ -55,8 +55,7 @@
         "/goal"
         "/g" ;; goal
         "/toggle-detail"
-        "/expand-reasoning"
-        ))
+        "/expand-reasoning"))
 
 (define parity-suite
   (test-suite "Command conformance parity"

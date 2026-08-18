@@ -47,7 +47,7 @@
   (check-false (eval-result-value result))
   (check-true (string? (eval-result-error result)))
   ;; Should have been killed well before 10 seconds (generous timeout)
-;; @boundary integration  ;; @requires network
+  ;; @boundary integration  ;; @requires network
   (check-true (< (eval-result-elapsed-ms result) 5000)))
 
 ;; ============================================================

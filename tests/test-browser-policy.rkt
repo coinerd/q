@@ -32,28 +32,25 @@
 ;; ---------------------------------------------------------------------------
 
 (define test-settings
-  (make-browser-policy-settings
-   #:allowed-schemes '("https" "http")
-   #:allowed-domains '()
-   #:allowed-localhost-ports '(3000 8080 5173)
-   #:blocked-private-networks? #t
-   #:blocked-paths '("/admin" "/debug" "/internal")))
+  (make-browser-policy-settings #:allowed-schemes '("https" "http")
+                                #:allowed-domains '()
+                                #:allowed-localhost-ports '(3000 8080 5173)
+                                #:blocked-private-networks? #t
+                                #:blocked-paths '("/admin" "/debug" "/internal")))
 
 (define strict-settings
-  (make-browser-policy-settings
-   #:allowed-schemes '("https")
-   #:allowed-domains '("example.com" "docs.racket-lang.org")
-   #:allowed-localhost-ports '()
-   #:blocked-private-networks? #t
-   #:blocked-paths '()))
+  (make-browser-policy-settings #:allowed-schemes '("https")
+                                #:allowed-domains '("example.com" "docs.racket-lang.org")
+                                #:allowed-localhost-ports '()
+                                #:blocked-private-networks? #t
+                                #:blocked-paths '()))
 
 (define permissive-settings
-  (make-browser-policy-settings
-   #:allowed-schemes '("https" "http" "file")
-   #:allowed-domains '()
-   #:allowed-localhost-ports '(3000 8080)
-   #:blocked-private-networks? #f
-   #:blocked-paths '()))
+  (make-browser-policy-settings #:allowed-schemes '("https" "http" "file")
+                                #:allowed-domains '()
+                                #:allowed-localhost-ports '(3000 8080)
+                                #:blocked-private-networks? #f
+                                #:blocked-paths '()))
 
 ;; ---------------------------------------------------------------------------
 ;; 1. Scheme validation (10 tests)
@@ -219,41 +216,34 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "composed: valid target + read action passes"
-  (check-not-exn
-   (lambda ()
-     (check-browser-policy!
-      (browser-target "https://example.com" #f #f #f)
-      (browser-action-scroll "down" 100)
-      test-settings))))
+  (check-not-exn (lambda ()
+                   (check-browser-policy! (browser-target "https://example.com" #f #f #f)
+                                          (browser-action-scroll "down" 100)
+                                          test-settings))))
 
 (test-case "composed: blocked URL raises q-browser-error"
   (check-exn q-browser-error?
              (lambda ()
-               (check-browser-policy!
-                (browser-target "file:///etc/passwd" #f #f #f)
-                (browser-action-navigate "file:///etc/passwd" "load")
-                test-settings))))
+               (check-browser-policy! (browser-target "file:///etc/passwd" #f #f #f)
+                                      (browser-action-navigate "file:///etc/passwd" "load")
+                                      test-settings))))
 
 (test-case "composed: blocked path raises error"
   (check-exn q-browser-error?
              (lambda ()
-               (check-browser-policy!
-                (browser-target "https://example.com/admin" #f #f #f)
-                (browser-action-navigate "https://example.com/admin" "load")
-                test-settings))))
+               (check-browser-policy! (browser-target "https://example.com/admin" #f #f #f)
+                                      (browser-action-navigate "https://example.com/admin" "load")
+                                      test-settings))))
 
 (test-case "composed: write action on localhost allowed port"
-  (check-not-exn
-   (lambda ()
-     (check-browser-policy!
-      (browser-target "http://localhost:3000/form" #f #f #f)
-      (browser-action-click "#submit" "left")
-      test-settings))))
+  (check-not-exn (lambda ()
+                   (check-browser-policy! (browser-target "http://localhost:3000/form" #f #f #f)
+                                          (browser-action-click "#submit" "left")
+                                          test-settings))))
 
 (test-case "composed: private IP blocked even for read"
   (check-exn q-browser-error?
              (lambda ()
-               (check-browser-policy!
-                (browser-target "http://10.0.0.1/page" #f #f #f)
-                (browser-action-scroll "down" 100)
-                test-settings))))
+               (check-browser-policy! (browser-target "http://10.0.0.1/page" #f #f #f)
+                                      (browser-action-scroll "down" 100)
+                                      test-settings))))

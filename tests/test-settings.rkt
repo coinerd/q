@@ -40,6 +40,26 @@
 (define (write-json-file path data)
   (call-with-output-file path (λ (out) (write-json data out)) #:exists 'replace))
 
+(define (call-with-temp-dir proc)
+  (define tmp (make-temp-dir))
+  (dynamic-wind
+   void
+   (lambda () (proc tmp))
+   (lambda () (cleanup-dir tmp))))
+
+;; W2: two-directory variant for tests that need distinct home/project roots.
+(define (call-with-temp-dirs2 proc)
+  (define dir1 (make-temp-dir))
+  (define dir2 (make-temp-dir))
+  (dynamic-wind
+   void
+   (lambda () (proc dir1 dir2))
+   (lambda ()
+     (cleanup-dir dir1)
+     (cleanup-dir dir2))))
+
+
+
 (define sample-global-config
   (hash 'default-provider
         "openai"
@@ -207,134 +227,129 @@
 ;; ============================================================
 
 (test-case "load-global-settings: reads config from home-dir/.q/config.json"
-  (define tmp (make-temp-dir))
-  (define q-dir (build-path tmp ".q"))
-  (make-directory q-dir)
-  (write-json-file (build-path q-dir "config.json") (hash 'default-provider "test-global"))
-  (define result (load-global-settings tmp))
-  (check-equal? (hash-ref result 'default-provider) "test-global")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define q-dir (build-path tmp ".q"))
+    (make-directory q-dir)
+    (write-json-file (build-path q-dir "config.json") (hash 'default-provider "test-global"))
+    (define result (load-global-settings tmp))
+    (check-equal? (hash-ref result 'default-provider) "test-global"))))
 
 (test-case "load-global-settings: returns empty hash when .q dir missing"
-  (define tmp (make-temp-dir))
-  (define result (load-global-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define result (load-global-settings tmp))
+    (check-equal? result (hash)))))
 
 (test-case "load-global-settings: returns empty hash when config.json missing"
-  (define tmp (make-temp-dir))
-  (make-directory (build-path tmp ".q"))
-  (define result (load-global-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (make-directory (build-path tmp ".q"))
+    (define result (load-global-settings tmp))
+    (check-equal? result (hash)))))
 
 (test-case "load-global-settings: returns empty hash for malformed JSON"
-  (define tmp (make-temp-dir))
-  (define q-dir (build-path tmp ".q"))
-  (make-directory q-dir)
-  (call-with-output-file (build-path q-dir "config.json")
-                         (λ (out) (display "THIS IS NOT {JSON}" out))
-                         #:exists 'replace)
-  (define result (load-global-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define q-dir (build-path tmp ".q"))
+    (make-directory q-dir)
+    (call-with-output-file (build-path q-dir "config.json")
+                           (λ (out) (display "THIS IS NOT {JSON}" out))
+                           #:exists 'replace)
+    (define result (load-global-settings tmp))
+    (check-equal? result (hash)))))
 
 (test-case "load-global-settings: returns empty hash for non-object JSON (array)"
-  (define tmp (make-temp-dir))
-  (define q-dir (build-path tmp ".q"))
-  (make-directory q-dir)
-  (write-json-file (build-path q-dir "config.json") (list 1 2 3))
-  (define result (load-global-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define q-dir (build-path tmp ".q"))
+    (make-directory q-dir)
+    (write-json-file (build-path q-dir "config.json") (list 1 2 3))
+    (define result (load-global-settings tmp))
+    (check-equal? result (hash)))))
 
 ;; ============================================================
 ;; 6. load-project-settings — file loading
 ;; ============================================================
 
 (test-case "load-project-settings: reads config from project-dir/.q/config.json"
-  (define tmp (make-temp-dir))
-  (make-directory (build-path tmp ".q"))
-  (write-json-file (build-path tmp ".q" "config.json") (hash 'default-model "project-model"))
-  (define result (load-project-settings tmp))
-  (check-equal? (hash-ref result 'default-model) "project-model")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (make-directory (build-path tmp ".q"))
+    (write-json-file (build-path tmp ".q" "config.json") (hash 'default-model "project-model"))
+    (define result (load-project-settings tmp))
+    (check-equal? (hash-ref result 'default-model) "project-model"))))
 
 (test-case "load-project-settings: falls back to .pi/config.json when .q/ missing"
-  (define tmp (make-temp-dir))
-  (make-directory (build-path tmp ".pi"))
-  (write-json-file (build-path tmp ".pi" "config.json") (hash 'default-model "pi-model"))
-  (define result (load-project-settings tmp))
-  (check-equal? (hash-ref result 'default-model) "pi-model")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (make-directory (build-path tmp ".pi"))
+    (write-json-file (build-path tmp ".pi" "config.json") (hash 'default-model "pi-model"))
+    (define result (load-project-settings tmp))
+    (check-equal? (hash-ref result 'default-model) "pi-model"))))
 
 (test-case "load-project-settings: prefers .q/ over .pi/"
-  (define tmp (make-temp-dir))
-  (make-directory (build-path tmp ".q"))
-  (make-directory (build-path tmp ".pi"))
-  (write-json-file (build-path tmp ".q" "config.json") (hash 'source "q-dir"))
-  (write-json-file (build-path tmp ".pi" "config.json") (hash 'source "pi-dir"))
-  (define result (load-project-settings tmp))
-  (check-equal? (hash-ref result 'source) "q-dir")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (make-directory (build-path tmp ".q"))
+    (make-directory (build-path tmp ".pi"))
+    (write-json-file (build-path tmp ".q" "config.json") (hash 'source "q-dir"))
+    (write-json-file (build-path tmp ".pi" "config.json") (hash 'source "pi-dir"))
+    (define result (load-project-settings tmp))
+    (check-equal? (hash-ref result 'source) "q-dir"))))
 
 (test-case "load-project-settings: returns empty hash when both .q/ and .pi/ missing"
-  (define tmp (make-temp-dir))
-  (define result (load-project-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define result (load-project-settings tmp))
+    (check-equal? result (hash)))))
 
 (test-case "load-project-settings: returns empty hash for malformed JSON"
-  (define tmp (make-temp-dir))
-  (make-directory (build-path tmp ".q"))
-  (call-with-output-file (build-path tmp ".q" "config.json")
-                         (λ (out) (display "{{{broken" out))
-                         #:exists 'replace)
-  (define result (load-project-settings tmp))
-  (check-equal? result (hash))
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (make-directory (build-path tmp ".q"))
+    (call-with-output-file (build-path tmp ".q" "config.json")
+                           (λ (out) (display "{{{broken" out))
+                           #:exists 'replace)
+    (define result (load-project-settings tmp))
+    (check-equal? result (hash)))))
 
 ;; ============================================================
 ;; 7. load-settings — integration (load + merge)
 ;; ============================================================
 
 (test-case "load-settings: returns q-settings with global, project, and merged"
-  (define tmp-home (make-temp-dir))
-  (define tmp-proj (make-temp-dir))
+  (call-with-temp-dirs2
+   (lambda (tmp-home tmp-proj)
 
-  ;; Global config
-  (make-directory (build-path tmp-home ".q"))
-  (write-json-file (build-path tmp-home ".q" "config.json")
-                   (hash 'default-provider "openai" 'max-iterations 5))
+    ;; Global config
+    (make-directory (build-path tmp-home ".q"))
+    (write-json-file (build-path tmp-home ".q" "config.json")
+                     (hash 'default-provider "openai" 'max-iterations 5))
 
-  ;; Project config
-  (make-directory (build-path tmp-proj ".q"))
-  (write-json-file (build-path tmp-proj ".q" "config.json")
-                   (hash 'default-provider "anthropic" 'extra-key "project-value"))
+    ;; Project config
+    (make-directory (build-path tmp-proj ".q"))
+    (write-json-file (build-path tmp-proj ".q" "config.json")
+                     (hash 'default-provider "anthropic" 'extra-key "project-value"))
 
-  (define settings (load-settings tmp-proj #:home-dir tmp-home))
+    (define settings (load-settings tmp-proj #:home-dir tmp-home))
 
-  ;; Check struct fields
-  (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "openai")
-  (check-equal? (hash-ref (q-settings-project settings) 'default-provider) "anthropic")
+    ;; Check struct fields
+    (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "openai")
+    (check-equal? (hash-ref (q-settings-project settings) 'default-provider) "anthropic")
 
-  ;; Merged should have project override + global extras
-  (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "anthropic")
-  (check-equal? (hash-ref (q-settings-merged settings) 'max-iterations) 5)
-  (check-equal? (hash-ref (q-settings-merged settings) 'extra-key) "project-value")
-
-  (cleanup-dir tmp-home)
-  (cleanup-dir tmp-proj))
+    ;; Merged should have project override + global extras
+    (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "anthropic")
+    (check-equal? (hash-ref (q-settings-merged settings) 'max-iterations) 5)
+    (check-equal? (hash-ref (q-settings-merged settings) 'extra-key) "project-value"))))
 
 (test-case "load-settings: works when both configs missing"
-  (define tmp-home (make-temp-dir))
-  (define tmp-proj (make-temp-dir))
-  (define settings (load-settings tmp-proj #:home-dir tmp-home))
-  (check-equal? (q-settings-global settings) (hash))
-  (check-equal? (q-settings-project settings) (hash))
-  (check-equal? (q-settings-merged settings) (hash))
-  (cleanup-dir tmp-home)
-  (cleanup-dir tmp-proj))
+  (call-with-temp-dirs2
+   (lambda (tmp-home tmp-proj)
+    (define settings (load-settings tmp-proj #:home-dir tmp-home))
+    (check-equal? (q-settings-global settings) (hash))
+    (check-equal? (q-settings-project settings) (hash))
+    (check-equal? (q-settings-merged settings) (hash)))))
 
 (test-case "load-settings: q-settings is transparent"
   (define s (q-settings (hash 'a 1) (hash) (hash 'a 1)))
@@ -385,53 +400,51 @@
 ;; ============================================================
 
 (test-case "load-settings: #:config-path uses explicit config file"
-  (define tmp-dir (make-temp-dir))
-  (define config-path (build-path tmp-dir "custom.json"))
-  (write-json-file config-path
-                   (hash 'default-provider
-                         "custom-provider"
-                         'providers
-                         (hash 'custom-provider (hash 'base-url "https://custom.example.com/v1"))))
-  (define settings (load-settings tmp-dir #:config-path config-path))
-  ;; Global should come from the custom config file
-  (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "custom-provider")
-  ;; Merged should include the custom config
-  (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "custom-provider")
-  (cleanup-dir tmp-dir))
+  (call-with-temp-dir
+   (lambda (tmp-dir)
+    (define config-path (build-path tmp-dir "custom.json"))
+    (write-json-file config-path
+                     (hash 'default-provider
+                           "custom-provider"
+                           'providers
+                           (hash 'custom-provider (hash 'base-url "https://custom.example.com/v1"))))
+    (define settings (load-settings tmp-dir #:config-path config-path))
+    ;; Global should come from the custom config file
+    (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "custom-provider")
+    ;; Merged should include the custom config
+    (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "custom-provider"))))
 
 (test-case "load-settings: #:config-path #f loads default paths"
-  (define tmp-home (make-temp-dir))
-  (define tmp-proj (make-temp-dir))
-  (make-directory (build-path tmp-home ".q"))
-  (write-json-file (build-path tmp-home ".q" "config.json") (hash 'default-provider "home-provider"))
-  (define settings (load-settings tmp-proj #:home-dir tmp-home #:config-path #f))
-  (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "home-provider")
-  (cleanup-dir tmp-home)
-  (cleanup-dir tmp-proj))
+  (call-with-temp-dirs2
+   (lambda (tmp-home tmp-proj)
+    (make-directory (build-path tmp-home ".q"))
+    (write-json-file (build-path tmp-home ".q" "config.json") (hash 'default-provider "home-provider"))
+    (define settings (load-settings tmp-proj #:home-dir tmp-home #:config-path #f))
+    (check-equal? (hash-ref (q-settings-global settings) 'default-provider) "home-provider"))))
 
 (test-case "load-settings: #:config-path non-existent file returns empty global"
-  (define tmp-dir (make-temp-dir))
-  (define config-path (build-path tmp-dir "nonexistent.json"))
-  (define settings (load-settings tmp-dir #:config-path config-path))
-  (check-equal? (q-settings-global settings) (hash))
-  (cleanup-dir tmp-dir))
+  (call-with-temp-dir
+   (lambda (tmp-dir)
+    (define config-path (build-path tmp-dir "nonexistent.json"))
+    (define settings (load-settings tmp-dir #:config-path config-path))
+    (check-equal? (q-settings-global settings) (hash)))))
 
 (test-case "load-settings: #:config-path merges with project settings"
-  (define tmp-dir (make-temp-dir))
-  (define config-path (build-path tmp-dir "global.json"))
-  (write-json-file config-path (hash 'default-model "gpt-4o" 'max-iterations 20))
-  ;; Project config
-  (make-directory (build-path tmp-dir ".q"))
-  (write-json-file (build-path tmp-dir ".q" "config.json") (hash 'default-provider "openai"))
-  (define settings (load-settings tmp-dir #:config-path config-path))
-  ;; Global comes from config-path
-  (check-equal? (hash-ref (q-settings-global settings) 'default-model) "gpt-4o")
-  ;; Project comes from .q/config.json
-  (check-equal? (hash-ref (q-settings-project settings) 'default-provider) "openai")
-  ;; Merged has both
-  (check-equal? (hash-ref (q-settings-merged settings) 'default-model) "gpt-4o")
-  (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "openai")
-  (cleanup-dir tmp-dir))
+  (call-with-temp-dir
+   (lambda (tmp-dir)
+    (define config-path (build-path tmp-dir "global.json"))
+    (write-json-file config-path (hash 'default-model "gpt-4o" 'max-iterations 20))
+    ;; Project config
+    (make-directory (build-path tmp-dir ".q"))
+    (write-json-file (build-path tmp-dir ".q" "config.json") (hash 'default-provider "openai"))
+    (define settings (load-settings tmp-dir #:config-path config-path))
+    ;; Global comes from config-path
+    (check-equal? (hash-ref (q-settings-global settings) 'default-model) "gpt-4o")
+    ;; Project comes from .q/config.json
+    (check-equal? (hash-ref (q-settings-project settings) 'default-provider) "openai")
+    ;; Merged has both
+    (check-equal? (hash-ref (q-settings-merged settings) 'default-model) "gpt-4o")
+    (check-equal? (hash-ref (q-settings-merged settings) 'default-provider) "openai"))))
 
 ;; ============================================================
 ;; 11. parallel-tools-enabled?
@@ -453,62 +466,60 @@
   (check-true (parallel-tools-enabled? settings)))
 
 (test-case "parallel-tools-enabled?: loaded from file"
-  (define tmp-home (make-temp-dir))
-  (define tmp-proj (make-temp-dir))
-  (make-directory (build-path tmp-home ".q"))
-  (write-json-file (build-path tmp-home ".q" "config.json") (hash 'parallel-tools #t))
-  (define settings (load-settings tmp-proj #:home-dir tmp-home))
-  (check-true (parallel-tools-enabled? settings))
-  (cleanup-dir tmp-home)
-  (cleanup-dir tmp-proj))
+  (call-with-temp-dirs2
+   (lambda (tmp-home tmp-proj)
+    (make-directory (build-path tmp-home ".q"))
+    (write-json-file (build-path tmp-home ".q" "config.json") (hash 'parallel-tools #t))
+    (define settings (load-settings tmp-proj #:home-dir tmp-home))
+    (check-true (parallel-tools-enabled? settings)))))
 
 ;; ============================================================
 ;; 12. Issue #146: Config parse errors warn to stderr
 ;; ============================================================
 
 (test-case "Issue #146: malformed JSON produces warning on stderr"
-  (define tmp (make-temp-dir))
-  (define q-dir (build-path tmp ".q"))
-  (make-directory q-dir)
-  (call-with-output-file (build-path q-dir "config.json")
-                         (λ (out) (display "NOT VALID JSON!!!" out))
-                         #:exists 'replace)
-  ;; Capture stderr to verify warning
-  (define err-port (open-output-string))
-  (define result
-    (parameterize ([current-error-port err-port])
-      (load-global-settings tmp)))
-  (define stderr-output (get-output-string err-port))
-  ;; Should return empty hash (graceful fallback)
-  (check-equal? result (hash))
-  ;; Should have printed a warning
-  (check-true (string-contains? stderr-output "WARNING")
-              "stderr should contain WARNING for malformed JSON")
-  (check-true (string-contains? stderr-output "invalid JSON") "stderr should mention invalid JSON")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define q-dir (build-path tmp ".q"))
+    (make-directory q-dir)
+    (call-with-output-file (build-path q-dir "config.json")
+                           (λ (out) (display "NOT VALID JSON!!!" out))
+                           #:exists 'replace)
+    ;; Capture stderr to verify warning
+    (define err-port (open-output-string))
+    (define result
+      (parameterize ([current-error-port err-port])
+        (load-global-settings tmp)))
+    (define stderr-output (get-output-string err-port))
+    ;; Should return empty hash (graceful fallback)
+    (check-equal? result (hash))
+    ;; Should have printed a warning
+    (check-true (string-contains? stderr-output "WARNING")
+                "stderr should contain WARNING for malformed JSON")
+    (check-true (string-contains? stderr-output "invalid JSON") "stderr should mention invalid JSON"))))
 
 (test-case "Issue #146: valid JSON does NOT produce warning"
-  (define tmp (make-temp-dir))
-  (define q-dir (build-path tmp ".q"))
-  (make-directory q-dir)
-  (write-json-file (build-path q-dir "config.json") (hash 'default-provider "test"))
-  (define err-port (open-output-string))
-  (define result
-    (parameterize ([current-error-port err-port])
-      (load-global-settings tmp)))
-  (define stderr-output (get-output-string err-port))
-  (check-false (string-contains? stderr-output "WARNING") "valid JSON should not produce warning")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define q-dir (build-path tmp ".q"))
+    (make-directory q-dir)
+    (write-json-file (build-path q-dir "config.json") (hash 'default-provider "test"))
+    (define err-port (open-output-string))
+    (define result
+      (parameterize ([current-error-port err-port])
+        (load-global-settings tmp)))
+    (define stderr-output (get-output-string err-port))
+    (check-false (string-contains? stderr-output "WARNING") "valid JSON should not produce warning"))))
 
 (test-case "Issue #146: missing file does NOT produce warning"
-  (define tmp (make-temp-dir))
-  (define err-port (open-output-string))
-  (define result
-    (parameterize ([current-error-port err-port])
-      (load-global-settings tmp)))
-  (define stderr-output (get-output-string err-port))
-  (check-false (string-contains? stderr-output "WARNING") "missing file should not produce warning")
-  (cleanup-dir tmp))
+  (call-with-temp-dir
+   (lambda (tmp)
+    (define err-port (open-output-string))
+    (define result
+      (parameterize ([current-error-port err-port])
+        (load-global-settings tmp)))
+    (define stderr-output (get-output-string err-port))
+    (check-false (string-contains? stderr-output "WARNING") "missing file should not produce warning"))))
 
 ;; ============================================================
 ;; GC-02: Sandbox settings

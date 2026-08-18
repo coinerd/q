@@ -29,9 +29,7 @@
 
 (define-test-suite
  test-gui-tool-display
-
  ;; ─── Tool-start entries ───
-
  (test-case "tool.call.started produces kind=tool-start"
    (define sb (fresh-box))
    (define sub (make-gui-event-subscriber sb))
@@ -40,7 +38,6 @@
    (check-equal? (length msgs) 1)
    (check-equal? (gui-message-kind (car msgs)) 'tool-start)
    (check-equal? (gui-message-role (car msgs)) "tool"))
-
  (test-case "tool-start shows arg summary in text"
    (define sb (fresh-box))
    (define sub (make-gui-event-subscriber sb))
@@ -48,19 +45,17 @@
    (define msg (car (gui-state-messages (unbox sb))))
    (check-not-false (regexp-match? #rx"bash" (gui-message-text msg)))
    (check-not-false (regexp-match? #rx"command" (gui-message-text msg))))
-
  ;; ─── Tool-end entries ───
-
  (test-case "tool.execution.completed produces kind=tool-end"
    (define sb (fresh-box))
    (define sub (make-gui-event-subscriber sb))
    (sub (mk-event "tool.call.started" (hash 'name "read")))
-   (sub (mk-event "tool.execution.completed" (hash 'toolName "read" 'resultSummary "file contents here")))
+   (sub (mk-event "tool.execution.completed"
+                  (hash 'toolName "read" 'resultSummary "file contents here")))
    (define msgs (gui-state-messages (unbox sb)))
    (check-equal? (length msgs) 2)
    (check-equal? (gui-message-kind (cadr msgs)) 'tool-end)
    (check-not-false (regexp-match? #rx"read" (gui-message-text (cadr msgs)))))
-
  (test-case "result text is truncated to 80 chars"
    (define sb (fresh-box))
    (define sub (make-gui-event-subscriber sb))
@@ -72,9 +67,7 @@
    (define text (gui-message-text msg))
    (check-true (<= (string-length text) 120)
                (format "text length ~a should be reasonable" (string-length text))))
-
  ;; ─── Tool-fail entries ───
-
  (test-case "error resultSummary produces kind=tool-fail"
    (define sb (fresh-box))
    (define sub (make-gui-event-subscriber sb))
@@ -83,23 +76,16 @@
    (define msgs (gui-state-messages (unbox sb)))
    (check-equal? (length msgs) 2)
    (check-equal? (gui-message-kind (cadr msgs)) 'tool-fail))
-
  ;; ─── Kind-aware coloring ───
-
  (test-case "kind->color returns accent for tool-start"
    (check-equal? (kind->color 'tool-start dark-theme) (theme-ref dark-theme 'accent)))
-
  (test-case "kind->color returns green for tool-end"
    (check-equal? (kind->color 'tool-end dark-theme) "#a6e3a1"))
-
  (test-case "kind->color returns red for tool-fail"
    (check-equal? (kind->color 'tool-fail dark-theme) "#f38ba8"))
-
  (test-case "kind->color returns #f for message"
    (check-false (kind->color 'message dark-theme)))
-
  ;; ─── Render plan with kind ───
-
  (test-case "render-message-descriptor uses kind color for tool-start"
    (define msg-h (hash 'role "tool" 'text "[bash] ls" 'kind 'tool-start 'meta (hasheq)))
    (define plan (render-message-descriptor msg-h dark-theme))
@@ -109,7 +95,6 @@
    (define role-seg (car segments))
    (define style (hash-ref role-seg 'style))
    (check-equal? (hash-ref style 'color) (theme-ref dark-theme 'accent)))
-
  (test-case "render-message-descriptor uses green for tool-end"
    (define msg-h (hash 'role "tool" 'text "[read] → OK" 'kind 'tool-end 'meta (hasheq)))
    (define plan (render-message-descriptor msg-h dark-theme))

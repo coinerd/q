@@ -4,6 +4,31 @@
 ;; @suite testing
 ;; @isolation process
 ;; @boundary integration  ;; @mutates fs
+;; W2 PARALLEL-MODE FAILURE RECORD (fixed in W2)
+;; ------------------------------------------------------------------
+;; Repro:  cd q && racket scripts/run-tests.rkt --suite testing --jobs 3
+;;         (any --jobs value; also reproducible file-by-file)
+;; Standalone (before fix): racket tests/test-run-tests-ledger.rkt printed
+;;   "2 success(es) 0 failure(s) 1 error(s) 3 test(s) run" but STILL exited 0,
+;;   because a bare (run-tests suite) never sets the process exit code, which
+;;   previously masked real errors behind exit 0. See the standalone exit
+;;   record at the bottom of this file.
+
+;;   reported FAILED by the runner while "passing" standalone.
+;; Cause:  "parse-args accepts --ledger" destructured 14 values, but
+;;   scripts/run-tests/cli.rkt parse-args returns 15 since --lint-metadata
+;;   landed → "result arity mismatch; expected: 14, received: 15" ERROR.
+;; Fix:    (1) bind the 15th value (_lint-metadata?);
+;;         (2) exit non-zero from module+ main when rackunit reports any
+;;             failure/error, so standalone runs fail loudly;
+;;         (3) parse-args is exercised against a COPIED fixture ledger in a
+;;             per-test temp file — the checked-in tests/test-suite-ledger.json
+;;             is never read or mutated by this test.
+;; Retained exemption: @isolation subprocess is kept because the CLI test
+;;   spawns `racket scripts/run-tests.rkt`, whose startup performs repo-wide
+;;   stale-bytecode cleaning (see scripts/run-tests/classify-filters.rkt) —
+;;   a genuine shared repository-tree surface that cannot be isolated inside
+;;   this test. Documented in tests/helpers/README.md.
 
 (require rackunit
          rackunit/text-ui
@@ -60,22 +85,32 @@
 (define suite
   (test-suite "run-tests known-failure ledger"
     (test-case "parse-args accepts --ledger"
-      (define-values (_jobs
-                      _seq?
-                      _timeout
-                      _strict?
-                      _suite
-                      _extra
-                      _repeat
-                      _record?
-                      _inventory?
-                      _diagnose?
-                      _mode
-                      _json-out
-                      ledger
-                      _profile)
-        (parse-args '("--ledger" "tests/test-suite-ledger.json")))
-      (check-equal? ledger "tests/test-suite-ledger.json"))
+      ;; W2: operate on a copied fixture ledger in per-test scratch space,
+      ;; never on the checked-in tests/test-suite-ledger.json.
+      (define fixture (build-path project-root "tests/test-suite-ledger.json"))
+      (define ledger-copy (make-temporary-file "q-ledger-fixture-~a.json"))
+      (when (file-exists? fixture)
+        (copy-file fixture ledger-copy #t))
+      (dynamic-wind void
+                    (lambda ()
+                      (define-values (_jobs
+                                      _seq?
+                                      _timeout
+                                      _strict?
+                                      _suite
+                                      _extra
+                                      _repeat
+                                      _record?
+                                      _inventory?
+                                      _diagnose?
+                                      _mode
+                                      _json-out
+                                      ledger
+                                      _profile
+                                      _lint-metadata?)
+                        (parse-args (list "--ledger" (path->string ledger-copy))))
+                      (check-equal? ledger (path->string ledger-copy)))
+                    (lambda () (delete-file/safe ledger-copy))))
 
     (test-case "known-failure ledger classifies known, new, unclassified, and resolved failures"
       (define ledger-path
@@ -176,5 +211,10 @@
        (lambda ()
          (delete-file/safe ledger-path)
          (delete-file/safe missing-file))))))
+;; W2: standalone runs must fail loudly. A bare (run-tests suite) never sets
+;; the process exit code, which previously masked real errors behind exit 0.
+(define failures (run-tests suite))
 
-(run-tests suite)
+(module+ main
+  (when (positive? failures)
+    (exit 1)))

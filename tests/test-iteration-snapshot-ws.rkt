@@ -40,7 +40,7 @@
   (define ctrs (loop-counters 1 2 '() '() 3 4 '() 5 6 7 '("timeout") "timeout"))
   (define snap (iteration-snapshot ctrs #f cfg #f 5 50))
   ;; Access all fields to exercise the TR boundary
-;; @boundary unit
+  ;; @boundary unit
   (check-pred loop-counters? (iteration-snapshot-counters snap))
   (check-false (iteration-snapshot-ws snap))
   (check-pred session-config? (iteration-snapshot-config snap))

@@ -87,7 +87,8 @@
                       _mode
                       json-out
                       _ledger
-                      _profile)
+                      _profile
+                      _lint-metadata?)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 

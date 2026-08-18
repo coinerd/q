@@ -6,6 +6,20 @@
 
 ;; BOUNDARY: integration
 
+;; PARALLEL-MODE REPRODUCTION (W2): failed only under
+;;   cd q && racket scripts/run-tests.rkt --suite fast --jobs 3
+;; (parallel subprocess mode); standalone (`racket tests/test-interfaces-tui.rkt`)
+;; always exited 0. Audit found NO in-file shared mutable surface: zero
+;; putenv/getenv/current-directory mutations, no fixed ports, no repo-tree
+;; writes, and every event bus is constructed per-test in a local `let`
+;; (lines 68/351/360 — no module-level singleton). Cause: contention external
+;; to the test — concurrent racket subprocesses racing on the shared compiled
+;; cache during first-time compilation produced spurious per-file failures.
+;; Fix: none needed inside the file beyond the audit (bus wiring already
+;; test-local); reliability comes from the runner's per-file subprocess
+;; isolation. Verified passing under --jobs 3 together with the other two
+;; former offenders.
+
 ;; tests/interfaces/tui.rkt — Tests for interfaces/tui module
 ;;
 ;; Tests the TUI wiring logic (handle-key, process-slash-command,

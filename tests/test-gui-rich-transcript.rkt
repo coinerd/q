@@ -159,222 +159,184 @@
 (run-tests test-gui-rich-transcript)
 (run-tests test-transcript-diff)
 
-
 ;; ── Auto-scroll state tests ──
 
-(define-test-suite test-scroll-state
-
-  (test-case "gui-rich-transcript: make-scroll-state defaults to auto-scroll enabled"
-    (define ss (make-scroll-state))
-    (check-true (scroll-state-auto-scroll? ss))
-    (check-false (scroll-state-user-scrolled-up? ss)))
-
-  (test-case "gui-rich-transcript: make-scroll-state can be created with auto disabled"
-    (define ss (make-scroll-state #f))
-    (check-false (scroll-state-auto-scroll? ss)))
-
-  (test-case "gui-rich-transcript: scroll-state-on-scroll near bottom enables auto-scroll"
-    (define ss (make-scroll-state #f))
-    (define updated (scroll-state-on-scroll ss 0.97))
-    (check-true (scroll-state-auto-scroll? updated))
-    (check-false (scroll-state-user-scrolled-up? updated)))
-
-  (test-case "gui-rich-transcript: scroll-state-on-scroll mid-way disables auto-scroll"
-    (define ss (make-scroll-state))
-    (define updated (scroll-state-on-scroll ss 0.5))
-    (check-false (scroll-state-auto-scroll? updated))
-    (check-true (scroll-state-user-scrolled-up? updated)))
-
-  (test-case "gui-rich-transcript: scroll-state-on-scroll at top disables auto-scroll"
-    (define ss (make-scroll-state))
-    (define updated (scroll-state-on-scroll ss 0.0))
-    (check-false (scroll-state-auto-scroll? updated)))
-
-  (test-case "gui-rich-transcript: scroll-state-on-submit re-enables auto-scroll"
-    (define ss (hash 'auto-scroll #f 'scroll-ratio 0.3 'user-scrolled-up #t))
-    (define updated (scroll-state-on-submit ss))
-    (check-true (scroll-state-auto-scroll? updated))
-    (check-false (scroll-state-user-scrolled-up? updated)))
-
-  (test-case "gui-rich-transcript: scroll-state-on-scroll boundary at 0.95"
-    (define ss (make-scroll-state #f))
-    (define at-boundary (scroll-state-on-scroll ss 0.95))
-    (check-true (scroll-state-auto-scroll? at-boundary))
-    (define below-boundary (scroll-state-on-scroll ss 0.94))
-    (check-false (scroll-state-auto-scroll? below-boundary))))
+(define-test-suite
+ test-scroll-state
+ (test-case "gui-rich-transcript: make-scroll-state defaults to auto-scroll enabled"
+   (define ss (make-scroll-state))
+   (check-true (scroll-state-auto-scroll? ss))
+   (check-false (scroll-state-user-scrolled-up? ss)))
+ (test-case "gui-rich-transcript: make-scroll-state can be created with auto disabled"
+   (define ss (make-scroll-state #f))
+   (check-false (scroll-state-auto-scroll? ss)))
+ (test-case "gui-rich-transcript: scroll-state-on-scroll near bottom enables auto-scroll"
+   (define ss (make-scroll-state #f))
+   (define updated (scroll-state-on-scroll ss 0.97))
+   (check-true (scroll-state-auto-scroll? updated))
+   (check-false (scroll-state-user-scrolled-up? updated)))
+ (test-case "gui-rich-transcript: scroll-state-on-scroll mid-way disables auto-scroll"
+   (define ss (make-scroll-state))
+   (define updated (scroll-state-on-scroll ss 0.5))
+   (check-false (scroll-state-auto-scroll? updated))
+   (check-true (scroll-state-user-scrolled-up? updated)))
+ (test-case "gui-rich-transcript: scroll-state-on-scroll at top disables auto-scroll"
+   (define ss (make-scroll-state))
+   (define updated (scroll-state-on-scroll ss 0.0))
+   (check-false (scroll-state-auto-scroll? updated)))
+ (test-case "gui-rich-transcript: scroll-state-on-submit re-enables auto-scroll"
+   (define ss (hash 'auto-scroll #f 'scroll-ratio 0.3 'user-scrolled-up #t))
+   (define updated (scroll-state-on-submit ss))
+   (check-true (scroll-state-auto-scroll? updated))
+   (check-false (scroll-state-user-scrolled-up? updated)))
+ (test-case "gui-rich-transcript: scroll-state-on-scroll boundary at 0.95"
+   (define ss (make-scroll-state #f))
+   (define at-boundary (scroll-state-on-scroll ss 0.95))
+   (check-true (scroll-state-auto-scroll? at-boundary))
+   (define below-boundary (scroll-state-on-scroll ss 0.94))
+   (check-false (scroll-state-auto-scroll? below-boundary))))
 
 (run-tests test-scroll-state)
 
-
 ;; ── Code block detection tests ──
 
-(define-test-suite test-code-block-detection
-
-  (test-case "contains-code-blocks? detects triple backticks"
-    (check-true (contains-code-blocks? "some ```code``` here"))
-    (check-true (contains-code-blocks? "```racket\n(define x 1)```"))
-    (check-false (contains-code-blocks? "no code blocks here"))
-    (check-false (contains-code-blocks? ""))
-    (check-false (contains-code-blocks? 42)))
-
-  (test-case "parse-code-blocks plain text returns single text segment"
-    (define result (parse-code-blocks "hello world"))
-    (check-equal? (length result) 1)
-    (check-equal? (hash-ref (car result) 'type) 'text)
-    (check-equal? (hash-ref (car result) 'text) "hello world"))
-
-  (test-case "parse-code-blocks with inline code"
-    (define result (parse-code-blocks "before ```code``` after"))
-    (check >= (length result) 2)
-    ;; Should have text + code-block segments
-    (define types (map (lambda (s) (hash-ref s 'type)) result))
-    (check-not-false (member 'text types))
-    (check-not-false (member 'code-block types)))
-
-  (test-case "parse-code-blocks with fenced code block and language"
-    (define result (parse-code-blocks "```racket\n(define x 1)\n```"))
-    (check >= (length result) 1)
-    (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
-    (check-not-false code-seg)
-    (when code-seg
-      (check-equal? (hash-ref code-seg 'lang) "racket")
-      (check-not-false (string-contains? (hash-ref code-seg 'text "") "define"))))
-
-  (test-case "parse-code-blocks with fenced code block no language"
-    (define result (parse-code-blocks "```\nsome code\n```"))
-    (check >= (length result) 1)
-    (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
-    (check-not-false code-seg))
-
-  (test-case "parse-code-blocks mixed text and code"
-    (define result (parse-code-blocks "Here is code:\n```python\nprint(1)\n```\nDone."))
-    (define types (map (lambda (s) (hash-ref s 'type)) result))
-    (check >= (length result) 2)
-    (check-not-false (member 'text types))
-    (check-not-false (member 'code-block types)))
-
-  (test-case "parse-code-blocks handles non-string input"
-    (define result (parse-code-blocks 42))
-    (check-equal? (length result) 1)
-    (check-equal? (hash-ref (car result) 'type) 'text)
-    (check-equal? (hash-ref (car result) 'text) "42"))
-
-  (test-case "render-message-with-code-blocks produces segments"
-    (define msg (hash 'role "assistant" 'text "Try this:\n```racket\n(+ 1 2)\n```"))
-    (define result (render-message-with-code-blocks msg (default-theme)))
-    (check-not-false (hash-ref result 'segments #f))
-    (define segs (hash-ref result 'segments))
-    (check >= (length segs) 2)
-    ;; First segment should be role label
-    (check-not-false (string-contains? (hash-ref (car segs) 'text "") "Assistant"))
-    ;; Should have a code-block segment
-    (define code-segs (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
-    (check >= (length code-segs) 1)))
+(define-test-suite
+ test-code-block-detection
+ (test-case "contains-code-blocks? detects triple backticks"
+   (check-true (contains-code-blocks? "some ```code``` here"))
+   (check-true (contains-code-blocks? "```racket\n(define x 1)```"))
+   (check-false (contains-code-blocks? "no code blocks here"))
+   (check-false (contains-code-blocks? ""))
+   (check-false (contains-code-blocks? 42)))
+ (test-case "parse-code-blocks plain text returns single text segment"
+   (define result (parse-code-blocks "hello world"))
+   (check-equal? (length result) 1)
+   (check-equal? (hash-ref (car result) 'type) 'text)
+   (check-equal? (hash-ref (car result) 'text) "hello world"))
+ (test-case "parse-code-blocks with inline code"
+   (define result (parse-code-blocks "before ```code``` after"))
+   (check >= (length result) 2)
+   ;; Should have text + code-block segments
+   (define types (map (lambda (s) (hash-ref s 'type)) result))
+   (check-not-false (member 'text types))
+   (check-not-false (member 'code-block types)))
+ (test-case "parse-code-blocks with fenced code block and language"
+   (define result (parse-code-blocks "```racket\n(define x 1)\n```"))
+   (check >= (length result) 1)
+   (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
+   (check-not-false code-seg)
+   (when code-seg
+     (check-equal? (hash-ref code-seg 'lang) "racket")
+     (check-not-false (string-contains? (hash-ref code-seg 'text "") "define"))))
+ (test-case "parse-code-blocks with fenced code block no language"
+   (define result (parse-code-blocks "```\nsome code\n```"))
+   (check >= (length result) 1)
+   (define code-seg (findf (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) result))
+   (check-not-false code-seg))
+ (test-case "parse-code-blocks mixed text and code"
+   (define result (parse-code-blocks "Here is code:\n```python\nprint(1)\n```\nDone."))
+   (define types (map (lambda (s) (hash-ref s 'type)) result))
+   (check >= (length result) 2)
+   (check-not-false (member 'text types))
+   (check-not-false (member 'code-block types)))
+ (test-case "parse-code-blocks handles non-string input"
+   (define result (parse-code-blocks 42))
+   (check-equal? (length result) 1)
+   (check-equal? (hash-ref (car result) 'type) 'text)
+   (check-equal? (hash-ref (car result) 'text) "42"))
+ (test-case "render-message-with-code-blocks produces segments"
+   (define msg (hash 'role "assistant" 'text "Try this:\n```racket\n(+ 1 2)\n```"))
+   (define result (render-message-with-code-blocks msg (default-theme)))
+   (check-not-false (hash-ref result 'segments #f))
+   (define segs (hash-ref result 'segments))
+   (check >= (length segs) 2)
+   ;; First segment should be role label
+   (check-not-false (string-contains? (hash-ref (car segs) 'text "") "Assistant"))
+   ;; Should have a code-block segment
+   (define code-segs (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
+   (check >= (length code-segs) 1)))
 
 (run-tests test-code-block-detection)
-
 
 ;; ── Code block style helper tests ──
 
 (define-test-suite test-code-block-style
-
-  (test-case "code-block-style returns hash with expected keys"
-    (define s (code-block-style (default-theme)))
-    (check-not-false (hash-ref s 'background #f))
-    (check-not-false (hash-ref s 'foreground #f))
-    (check-not-false (hash-ref s 'font #f))
-    (check-equal? (hash-ref s 'font) "monospace"))
-
-  (test-case "code-block-header-style with language"
-    (define h (code-block-header-style "racket"))
-    (check-equal? (hash-ref h 'text) "racket")
-    (check-not-false (hash-ref h 'style #f)))
-
-  (test-case "code-block-header-style with #f lang"
-    (define h (code-block-header-style #f))
-    (check-equal? (hash-ref h 'text) ""))
-
-  (test-case "render-message-descriptor uses code-block parsing"
-    ;; Message with code blocks should produce multiple content segments
-    (define msg (hash 'role "assistant" 'text "```racket\n(+ 1 2)\n```\nDone."))
-    (define desc (render-message-descriptor msg (default-theme)))
-    (define segs (hash-ref desc 'segments))
-    (check >= (length segs) 3)  ;; role-label + code-block + "Done."
-    (define code-segs (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
-    (check >= (length code-segs) 1)))
+                   (test-case "code-block-style returns hash with expected keys"
+                     (define s (code-block-style (default-theme)))
+                     (check-not-false (hash-ref s 'background #f))
+                     (check-not-false (hash-ref s 'foreground #f))
+                     (check-not-false (hash-ref s 'font #f))
+                     (check-equal? (hash-ref s 'font) "monospace"))
+                   (test-case "code-block-header-style with language"
+                     (define h (code-block-header-style "racket"))
+                     (check-equal? (hash-ref h 'text) "racket")
+                     (check-not-false (hash-ref h 'style #f)))
+                   (test-case "code-block-header-style with #f lang"
+                     (define h (code-block-header-style #f))
+                     (check-equal? (hash-ref h 'text) ""))
+                   (test-case "render-message-descriptor uses code-block parsing"
+                     ;; Message with code blocks should produce multiple content segments
+                     (define msg (hash 'role "assistant" 'text "```racket\n(+ 1 2)\n```\nDone."))
+                     (define desc (render-message-descriptor msg (default-theme)))
+                     (define segs (hash-ref desc 'segments))
+                     (check >= (length segs) 3) ;; role-label + code-block + "Done."
+                     (define code-segs
+                       (filter (lambda (s) (equal? (hash-ref s 'type #f) 'code-block)) segs))
+                     (check >= (length code-segs) 1)))
 
 (run-tests test-code-block-style)
 
-
 ;; ── Multiline input helper tests ──
 
-(define-test-suite test-multiline-input
-
-  (test-case "gui-rich-transcript: input-key-should-submit? Enter without modifiers"
-    (check-true (input-key-should-submit? 'return #f #f)))
-
-  (test-case "gui-rich-transcript: input-key-should-submit? Shift+Enter does not submit"
-    (check-false (input-key-should-submit? 'return #t #f)))
-
-  (test-case "gui-rich-transcript: input-key-should-submit? Control+Enter does not submit"
-    (check-false (input-key-should-submit? 'return #f #t)))
-
-  (test-case "gui-rich-transcript: input-key-should-submit? non-return key does not submit"
-    (check-false (input-key-should-submit? 'space #f #f)))
-
-  (test-case "gui-rich-transcript: prepare-input-for-submit trims trailing whitespace"
-    (check-equal? (prepare-input-for-submit "hello   ") "hello")
-    (check-equal? (prepare-input-for-submit "hello") "hello"))
-
-  (test-case "gui-rich-transcript: input-line-count single line"
-    (check-equal? (input-line-count "hello") 1))
-
-  (test-case "gui-rich-transcript: input-line-count multiple lines"
-    (check-equal? (input-line-count "line1\nline2\nline3") 3))
-
-  (test-case "gui-rich-transcript: input-looks-like-code? detects racket"
-    (check-true (input-looks-like-code? "(define x 1)"))
-    (check-true (input-looks-like-code? "(let ([x 1]) x)")))
-
-  (test-case "gui-rich-transcript: input-looks-like-code? plain text"
-    (check-false (input-looks-like-code? "Hello, how are you?"))))
+(define-test-suite
+ test-multiline-input
+ (test-case "gui-rich-transcript: input-key-should-submit? Enter without modifiers"
+   (check-true (input-key-should-submit? 'return #f #f)))
+ (test-case "gui-rich-transcript: input-key-should-submit? Shift+Enter does not submit"
+   (check-false (input-key-should-submit? 'return #t #f)))
+ (test-case "gui-rich-transcript: input-key-should-submit? Control+Enter does not submit"
+   (check-false (input-key-should-submit? 'return #f #t)))
+ (test-case "gui-rich-transcript: input-key-should-submit? non-return key does not submit"
+   (check-false (input-key-should-submit? 'space #f #f)))
+ (test-case "gui-rich-transcript: prepare-input-for-submit trims trailing whitespace"
+   (check-equal? (prepare-input-for-submit "hello   ") "hello")
+   (check-equal? (prepare-input-for-submit "hello") "hello"))
+ (test-case "gui-rich-transcript: input-line-count single line"
+   (check-equal? (input-line-count "hello") 1))
+ (test-case "gui-rich-transcript: input-line-count multiple lines"
+   (check-equal? (input-line-count "line1\nline2\nline3") 3))
+ (test-case "gui-rich-transcript: input-looks-like-code? detects racket"
+   (check-true (input-looks-like-code? "(define x 1)"))
+   (check-true (input-looks-like-code? "(let ([x 1]) x)")))
+ (test-case "gui-rich-transcript: input-looks-like-code? plain text"
+   (check-false (input-looks-like-code? "Hello, how are you?"))))
 
 (run-tests test-multiline-input)
-
 
 ;; ── Keyboard shortcut tests ──
 
 (define-test-suite test-keyboard-shortcuts
-
-  (test-case "key-event->action Ctrl+L returns clear"
-    (check-equal? (key-event->action #\l #t) 'clear))
-
-  (test-case "key-event->action Ctrl+K returns compact"
-    (check-equal? (key-event->action #\k #t) 'compact))
-
-  (test-case "key-event->action Ctrl+C returns interrupt"
-    (check-equal? (key-event->action #\c #t) 'interrupt))
-
-  (test-case "key-event->action Ctrl+S returns save"
-    (check-equal? (key-event->action #\s #t) 'save))
-
-  (test-case "key-event->action Ctrl+Q returns quit"
-    (check-equal? (key-event->action #\q #t) 'quit))
-
-  (test-case "key-event->action without ctrl returns #f"
-    (check-false (key-event->action #\l #f)))
-
-  (test-case "key-event->action unknown key returns #f"
-    (check-false (key-event->action #\z #t)))
-
-  (test-case "lookup-keybinding returns hash or #f"
-    (check-not-false (lookup-keybinding #\l #t))
-    (check-false (lookup-keybinding #\l #f)))
-
-  (test-case "list-keybindings returns pairs"
-    (define kbs (list-keybindings))
-    (check >= (length kbs) 5)
-    (for ([kb (in-list kbs)])
-      (check-pred pair? kb))))
+                   (test-case "key-event->action Ctrl+L returns clear"
+                     (check-equal? (key-event->action #\l #t) 'clear))
+                   (test-case "key-event->action Ctrl+K returns compact"
+                     (check-equal? (key-event->action #\k #t) 'compact))
+                   (test-case "key-event->action Ctrl+C returns interrupt"
+                     (check-equal? (key-event->action #\c #t) 'interrupt))
+                   (test-case "key-event->action Ctrl+S returns save"
+                     (check-equal? (key-event->action #\s #t) 'save))
+                   (test-case "key-event->action Ctrl+Q returns quit"
+                     (check-equal? (key-event->action #\q #t) 'quit))
+                   (test-case "key-event->action without ctrl returns #f"
+                     (check-false (key-event->action #\l #f)))
+                   (test-case "key-event->action unknown key returns #f"
+                     (check-false (key-event->action #\z #t)))
+                   (test-case "lookup-keybinding returns hash or #f"
+                     (check-not-false (lookup-keybinding #\l #t))
+                     (check-false (lookup-keybinding #\l #f)))
+                   (test-case "list-keybindings returns pairs"
+                     (define kbs (list-keybindings))
+                     (check >= (length kbs) 5)
+                     (for ([kb (in-list kbs)])
+                       (check-pred pair? kb))))
 
 (run-tests test-keyboard-shortcuts)

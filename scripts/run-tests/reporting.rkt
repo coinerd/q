@@ -10,6 +10,7 @@
          racket/path
          racket/list
          json
+         (only-in "classify-metadata.rkt" get-file-metadata)
          (only-in "ledger.rkt"
                   summarize-ledger-results
                   ledger-summary-counts
@@ -38,7 +39,11 @@
          test-result->jsexpr
          write-json-results!
          print-ledger-summary
-         format-verdict-line)
+         format-verdict-line
+         metadata-completeness
+         run-summary->jsexpr
+         format-run-summary-record
+         print-run-summary-record)
 
 (define (format-duration ms)
   (define total-secs (/ ms 1000.0))
@@ -162,13 +167,121 @@
                  (hash-ref entry 'release_blocking))
       (hash-set base 'known_failure #f)))
 
+;; ============================================================
+;; Run-summary record (W0 baseline measurement)
+;; ============================================================
+;; Stable schema for CI-retained baselines. Field names use the file's
+;; snake_case convention: runner-version -> runner_version, etc.
+
+(define known-area-prefixes
+  '("tests/tui/"
+    "tests/workflows/"
+    "tests/security/"
+    "tests/arch/"
+    "tests/runtime/"
+    "tests/extensions/"
+    "tests/interfaces/"
+    "tests/provider/"
+    "tests/skills/"))
+
+(define (path-area-heuristic? path)
+  (define p (if (path? path) (path->string path) path))
+  (ormap (lambda (prefix) (string-prefix? p prefix)) known-area-prefixes))
+
+;; 'explicit  — file declares @suite (or at least @speed) metadata
+;; 'heuristic — no suite metadata, but a path/area classifier still applies
+;; 'missing   — no metadata and no area heuristic (filename pattern only)
+(define (metadata-completeness path)
+  (define m (get-file-metadata path))
+  (cond
+    [(or (hash-ref m 'suite #f) (hash-ref m 'speed #f)) 'explicit]
+    [(path-area-heuristic? path) 'heuristic]
+    [else 'missing]))
+
+(define (metadata-completeness-counts results)
+  (define explicit 0)
+  (define heuristic 0)
+  (define missing 0)
+  (for ([r (in-list results)])
+    (case (metadata-completeness (test-file-result-path r))
+      [(explicit) (set! explicit (add1 explicit))]
+      [(heuristic) (set! heuristic (add1 heuristic))]
+      [else (set! missing (add1 missing))]))
+  (hasheq 'explicit explicit 'heuristic heuristic 'missing missing))
+
+(define (annotate-file-jsexpr js r)
+  (hash-set* js
+             'duration_seconds (/ (test-file-result-elapsed-ms r) 1000.0)
+             'metadata_completeness
+             (symbol->string (metadata-completeness (test-file-result-path r)))))
+
+(define (shard->jsexpr shard)
+  (if (pair? shard) (hasheq 'index (car shard) 'total (cdr shard)) 'null))
+
+(define (run-summary->jsexpr results
+                             #:suite suite
+                             #:profile [profile 'local]
+                             #:shard [shard #f]
+                             #:mode [mode 'subprocess]
+                             #:elapsed-ms [elapsed-ms 0]
+                             #:runner-version [runner-version "unknown"])
+  (hasheq 'runner_version runner-version
+          'suite (if (symbol? suite) (symbol->string suite) suite)
+          'profile (if (symbol? profile) (symbol->string profile) profile)
+          'shard (shard->jsexpr shard)
+          'execution_mode (if (symbol? mode) (symbol->string mode) mode)
+          'file_count (length results)
+          'pass (count passed-result? results)
+          'fail (count failed-result? results)
+          'timeout (count timeout-result? results)
+          'skip (count skipped-by-profile-result? results)
+          'wall_clock_seconds (/ elapsed-ms 1000.0)
+          'metadata_completeness (metadata-completeness-counts results)))
+
+(define (format-run-summary-record results
+                                   suite
+                                   profile
+                                   shard
+                                   mode
+                                   elapsed-ms
+                                   runner-version)
+  (define mc (metadata-completeness-counts results))
+  (format
+   "RUN-SUMMARY runner-version=~a suite=~a profile=~a shard=~a execution-mode=~a file-count=~a pass=~a fail=~a timeout=~a skip=~a wall-clock-seconds=~a metadata-completeness=explicit:~a/heuristic:~a/missing:~a"
+   runner-version
+   suite
+   profile
+   (if shard (format "~a/~a" (car shard) (cdr shard)) "none")
+   mode
+   (length results)
+   (count passed-result? results)
+   (count failed-result? results)
+   (count timeout-result? results)
+   (count skipped-by-profile-result? results)
+   (/ elapsed-ms 1000.0)
+   (hash-ref mc 'explicit)
+   (hash-ref mc 'heuristic)
+   (hash-ref mc 'missing)))
+
+(define (print-run-summary-record results
+                                  #:suite suite
+                                  #:profile [profile 'local]
+                                  #:shard [shard #f]
+                                  #:mode [mode 'subprocess]
+                                  #:elapsed-ms [elapsed-ms 0]
+                                  #:runner-version [runner-version "unknown"])
+  (printf "~a~n"
+          (format-run-summary-record results suite profile shard mode elapsed-ms runner-version)))
+
 (define (write-json-results! path
                              results
                              #:suite [suite 'all]
                              #:mode [mode 'subprocess]
                              #:elapsed-ms [elapsed-ms 0]
                              #:ledger [ledger #f]
-                             #:profile [profile 'local])
+                             #:profile [profile 'local]
+                             #:shard [shard #f]
+                             #:runner-version [runner-version "unknown"])
   (define passed-files (count passed-result? results))
   (define failed-files (count failed-result? results))
   (define timeout-files (count timeout-result? results))
@@ -207,10 +320,19 @@
             (category-counts->jsexpr counts)
             'ledger
             (and ledger-summary (ledger-summary-counts ledger-summary))
+            'run_summary
+            (run-summary->jsexpr results
+                                 #:suite suite
+                                 #:profile profile
+                                 #:shard shard
+                                 #:mode mode
+                                 #:elapsed-ms elapsed-ms
+                                 #:runner-version runner-version)
             'files
             (if ledger
-                (map (lambda (r) (test-result->ledger-jsexpr r ledger)) results)
-                (map test-result->jsexpr results))))
+                (map (lambda (r) (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger) r))
+                     results)
+                (map (lambda (r) (annotate-file-jsexpr (test-result->jsexpr r) r)) results))))
   (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload out))))
 
 (define (print-ledger-summary ledger results)

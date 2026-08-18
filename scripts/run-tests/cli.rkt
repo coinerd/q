@@ -33,6 +33,7 @@
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
   (displayln "  --diagnose-overhead     Measure Racket/raco per-file startup overhead and exit")
+  (displayln "  --lint-metadata         Lint test metadata against schema v1 (report-only) and exit")
   (displayln "  --json-out PATH         Write structured per-file JSON results")
   (displayln
    "  --ledger PATH           Read known-failure ledger JSON and report known/new/resolved failures")
@@ -89,7 +90,8 @@
              [mode 'auto]
              [json-out #f]
              [ledger #f]
-             [profile 'local])
+             [profile 'local]
+             [lint-metadata? #f])
     (define (continue rest
                       #:jobs [jobs* jobs]
                       #:sequential? [sequential?* sequential?]
@@ -103,8 +105,9 @@
                       #:diagnose-overhead? [diagnose-overhead?* diagnose-overhead?]
                       #:mode [mode* mode]
                       #:json-out [json-out* json-out]
-                      #:ledger [ledger* ledger]
-                      #:profile [profile* profile])
+                       #:ledger [ledger* ledger]
+                       #:profile [profile* profile]
+                       #:lint-metadata? [lint-metadata?* lint-metadata?])
       (loop rest
             jobs*
             sequential?*
@@ -117,9 +120,10 @@
             inventory?*
             diagnose-overhead?*
             mode*
-            json-out*
-            ledger*
-            profile*))
+             json-out*
+             ledger*
+             profile*
+             lint-metadata?*))
     (match rest
       ['()
        (values jobs
@@ -133,9 +137,10 @@
                inventory?
                diagnose-overhead?
                mode
-               json-out
-               ledger
-               profile)]
+                json-out
+                ledger
+                profile
+                lint-metadata?)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -148,7 +153,8 @@
       [(list "--repeat" n rest ...) (continue rest #:repeat (string->number n))]
       [(list "--record-gate-evidence" rest ...) (continue rest #:record-gate? #t)]
       [(list "--inventory" rest ...) (continue rest #:inventory? #t)]
-      [(list "--diagnose-overhead" rest ...) (continue rest #:diagnose-overhead? #t)]
+       [(list "--diagnose-overhead" rest ...) (continue rest #:diagnose-overhead? #t)]
+       [(list "--lint-metadata" rest ...) (continue rest #:lint-metadata? #t)]
       [(list "--json-out" path rest ...) (continue rest #:json-out path)]
       [(list "--ledger" path rest ...) (continue rest #:ledger path)]
       [(list "--profile" name rest ...) (continue rest #:profile (string->symbol name))]
@@ -170,10 +176,11 @@
                         inventory?
                         diagnose-overhead?
                         mode
-                        json-out
-                        ledger
-                        profile)
-  (unless (memq suite known-suites)
+                         json-out
+                         ledger
+                         profile
+                         lint-metadata?)
+   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
                       suite
@@ -210,4 +217,5 @@
           mode
           json-out
           ledger
-          profile))
+          profile
+          lint-metadata?))

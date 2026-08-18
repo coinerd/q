@@ -102,12 +102,17 @@
 
 (test-case "agent-session-lifecycle returns lifecycle-state"
   (define bus (make-event-bus))
-  (define sess (make-agent-session
-                (hasheq 'provider #f
-                        'tool-registry #f
-                        'event-bus bus
-                        'session-dir "/tmp/q-lifecycle-test"
-                        'model-name "test")))
+  (define sess
+    (make-agent-session (hasheq 'provider
+                                #f
+                                'tool-registry
+                                #f
+                                'event-bus
+                                bus
+                                'session-dir
+                                "/tmp/q-lifecycle-test"
+                                'model-name
+                                "test")))
   (define ls (agent-session-lifecycle sess))
   (check-true (lifecycle-state? ls))
   (check-false (lifecycle-state-compacting? ls))

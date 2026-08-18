@@ -80,13 +80,10 @@
   (delete-file tmp))
 
 (test-case "F3: deep-merge-hash rejects non-hash left (contract enforced)"
-  (check-exn exn:fail:contract?
-             (lambda () (deep-merge-hash "not-a-hash" (hash 'a 1)))))
+  (check-exn exn:fail:contract? (lambda () (deep-merge-hash "not-a-hash" (hash 'a 1)))))
 
 (test-case "F3: deep-merge-hash rejects non-hash right (contract enforced)"
-  (check-exn exn:fail:contract?
-             (lambda () (deep-merge-hash (hash 'a 1) "not-a-hash"))))
+  (check-exn exn:fail:contract? (lambda () (deep-merge-hash (hash 'a 1) "not-a-hash"))))
 
 (test-case "F3: deep-merge-hash rejects both non-hash (contract enforced)"
-  (check-exn exn:fail:contract?
-             (lambda () (deep-merge-hash 42 "string"))))
+  (check-exn exn:fail:contract? (lambda () (deep-merge-hash 42 "string"))))

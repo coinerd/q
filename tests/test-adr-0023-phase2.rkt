@@ -100,8 +100,7 @@
 ;; GAP-5: WS evolution guard on state change
 ;; ═══════════════════════════════════════════════════════════════
 
-(require (only-in "../runtime/working-set.rkt"
-                  make-working-set)
+(require (only-in "../runtime/working-set.rkt" make-working-set)
          (only-in "../runtime/context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state/result
                   evolution-result?))

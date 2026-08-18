@@ -13,7 +13,6 @@
 ;; - Deterministic ordering
 ;; - Adversarial content is delimited/truncated, not instructions
 
-
 (require rackunit
          racket/string
          "../runtime/context-assembly/memory-builder.rkt"
@@ -108,9 +107,7 @@
   (define section (build-memory-section items #:budget-tokens 10000 #:max-entries 3))
   (check-true (string? section))
   ;; Should contain exactly 3 entry lines (plus header + group header)
-  (define entry-lines
-    (filter (lambda (l) (string-contains? l "- id="))
-            (string-split section "\n")))
+  (define entry-lines (filter (lambda (l) (string-contains? l "- id=")) (string-split section "\n")))
   (check-equal? (length entry-lines) 3 "Should have exactly 3 entries"))
 
 (test-case "build-memory-section: respects token budget"
@@ -369,8 +366,16 @@
                    'semantic
                    'project
                    "HF2 project-scoped memory content"
-                   (hasheq 'project-root "/test" 'session-id "sess-hf2" 'tags '()
-                           'source 'test 'origin-message-id "msg-hf2")
+                   (hasheq 'project-root
+                           "/test"
+                           'session-id
+                           "sess-hf2"
+                           'tags
+                           '()
+                           'source
+                           'test
+                           'origin-message-id
+                           "msg-hf2")
                    (hasheq 'sensitivity 'public 'confidence 0.9 'supersedes '())
                    "2026-06-07T12:00:00Z"
                    "2026-06-07T12:00:00Z"))

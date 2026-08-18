@@ -25,8 +25,7 @@
          (only-in "helpers/session-fixture.rkt" make-test-session)
          (only-in "../util/event/event-bus.rkt" make-event-bus publish! subscribe!)
          (only-in "../util/event/event.rkt" make-event event-ev event-payload)
-         (only-in "../runtime/session/session-events.rkt"
-                  wire-session-event-handlers!)
+         (only-in "../runtime/session/session-events.rkt" wire-session-event-handlers!)
          (only-in "../runtime/context-assembly/state-aware-builder.rkt"
                   current-ws-evolution-enabled?))
 
@@ -91,31 +90,30 @@
     ;; doesn't have access to the working-set (which lives in session config scope).
     ;; Skipping this test until a replacement mechanism is implemented.
     #;(test-case "WS evolution subscriber emits context.ws-evolve-requested event (M1)"
-      (define bus (make-event-bus))
-      (define sess (make-test-session #:event-bus bus))
-      (define received-events '())
-      ;; Subscribe to capture emitted events
-      (subscribe! bus
-                  (lambda (evt) (set! received-events (cons evt received-events)))
-                  #:filter (lambda (evt) (equal? (event-ev evt) "context.ws-evolve-requested")))
-      (wire-session-event-handlers! sess (lambda (s e) s))
-      ;; Set initial state
-      (guarded-set-task-fsm-state! sess 'exploration)
-      ;; Enable WS evolution
-      (parameterize ([current-ws-evolution-enabled? #t])
-        ;; Publish state transition event
-        (publish! bus
-                  (make-event "task.state.transitioned"
-                              (current-seconds)
-                              (agent-session-session-id sess)
-                              #f
-                              (hasheq 'state 'planning 'old-state 'exploration))))
-      ;; Verify event was emitted
-      (check-true (>= (length received-events) 1))
-      (define evt (car received-events))
-      (define payload (event-payload evt))
-      (check-equal? (hash-ref payload 'old-state) 'exploration)
-      (check-equal? (hash-ref payload 'new-state) 'planning))))
-
+        (define bus (make-event-bus))
+        (define sess (make-test-session #:event-bus bus))
+        (define received-events '())
+        ;; Subscribe to capture emitted events
+        (subscribe! bus
+                    (lambda (evt) (set! received-events (cons evt received-events)))
+                    #:filter (lambda (evt) (equal? (event-ev evt) "context.ws-evolve-requested")))
+        (wire-session-event-handlers! sess (lambda (s e) s))
+        ;; Set initial state
+        (guarded-set-task-fsm-state! sess 'exploration)
+        ;; Enable WS evolution
+        (parameterize ([current-ws-evolution-enabled? #t])
+          ;; Publish state transition event
+          (publish! bus
+                    (make-event "task.state.transitioned"
+                                (current-seconds)
+                                (agent-session-session-id sess)
+                                #f
+                                (hasheq 'state 'planning 'old-state 'exploration))))
+        ;; Verify event was emitted
+        (check-true (>= (length received-events) 1))
+        (define evt (car received-events))
+        (define payload (event-payload evt))
+        (check-equal? (hash-ref payload 'old-state) 'exploration)
+        (check-equal? (hash-ref payload 'new-state) 'planning))))
 
 (run-tests suite)

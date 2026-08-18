@@ -28,23 +28,36 @@
 
     ;; -- jsexpr->typed-event ignores unknown fields (forward compat) --
     (test-case "jsexpr->typed-event ignores unknown future fields"
-      (define h (hasheq 'type "unknown.future"
-                        'timestamp 999
-                        'sessionId "sid-future"
-                        'turnId "tid-future"
-                        'schemaVersion 2
-                        'futureField "hello"))
+      (define h
+        (hasheq 'type
+                "unknown.future"
+                'timestamp
+                999
+                'sessionId
+                "sid-future"
+                'turnId
+                "tid-future"
+                'schemaVersion
+                2
+                'futureField
+                "hello"))
       (define evt (jsexpr->typed-event h))
       (check-equal? (typed-event-type evt) "unknown.future")
       (check-equal? (typed-event-session-id evt) "sid-future"))
 
     ;; -- jsexpr->typed-event works with schemaVersion=1 --
     (test-case "jsexpr->typed-event round-trips schemaVersion=1"
-      (define h (hasheq 'type "session.started"
-                        'timestamp 1000
-                        'sessionId "sid-2"
-                        'turnId #f
-                        'schemaVersion 1))
+      (define h
+        (hasheq 'type
+                "session.started"
+                'timestamp
+                1000
+                'sessionId
+                "sid-2"
+                'turnId
+                #f
+                'schemaVersion
+                1))
       (define evt (jsexpr->typed-event h))
       (check-equal? (typed-event-type evt) "session.started")
       (check-equal? (typed-event-timestamp evt) 1000))

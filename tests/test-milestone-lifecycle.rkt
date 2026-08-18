@@ -81,11 +81,9 @@
   (check-false (milestone-lifecycle-transition-result-ok? bad))
   (check-true (string-contains? (milestone-lifecycle-transition-result-reason bad)
                                 "invalid transition"))
-  (check-true (string-contains? (milestone-lifecycle-transition-result-reason bad)
-                                "cancel"))
+  (check-true (string-contains? (milestone-lifecycle-transition-result-reason bad) "cancel"))
   ;; Descriptive: mentions what IS allowed from the state.
-  (check-true (string-contains? (milestone-lifecycle-transition-result-reason bad)
-                                "advance")))
+  (check-true (string-contains? (milestone-lifecycle-transition-result-reason bad) "advance")))
 
 (test-case "apply-transition!: functional, records history + explicit reason"
   (define st0 (milestone-lifecycle-state 'release_ready '()))
@@ -93,12 +91,12 @@
   (check-equal? (milestone-lifecycle-state-state st1) 'planned)
   (check-equal? (transition-reason st1) "release assets corrupted")
   (check-equal? (length (milestone-lifecycle-state-history st1)) 1)
-  (check-equal? (milestone-lifecycle-transition-result-from
-                 (car (milestone-lifecycle-state-history st1)))
-                'release_ready)
-  (check-equal? (milestone-lifecycle-transition-result-to
-                 (car (milestone-lifecycle-state-history st1)))
-                'planned)
+  (check-equal?
+   (milestone-lifecycle-transition-result-from (car (milestone-lifecycle-state-history st1)))
+   'release_ready)
+  (check-equal?
+   (milestone-lifecycle-transition-result-to (car (milestone-lifecycle-state-history st1)))
+   'planned)
   (check-true (milestone-lifecycle-transition-result-ok?
                (car (milestone-lifecycle-state-history st1))))
   ;; Functional: original state unchanged, no reason recorded.
@@ -107,15 +105,11 @@
 
 (test-case "apply-transition!: cancel and reopen reach expected states"
   (define cancelled
-    (apply-transition! (milestone-lifecycle-state 'in_progress '())
-                       'cancel
-                       "scope abandoned"))
+    (apply-transition! (milestone-lifecycle-state 'in_progress '()) 'cancel "scope abandoned"))
   (check-equal? (milestone-lifecycle-state-state cancelled) 'cancelled)
   (check-equal? (transition-reason cancelled) "scope abandoned")
   (define reopened
-    (apply-transition! (milestone-lifecycle-state 'closed '())
-                       'reopen
-                       "follow-up work required"))
+    (apply-transition! (milestone-lifecycle-state 'closed '()) 'reopen "follow-up work required"))
   (check-equal? (milestone-lifecycle-state-state reopened) 'planned)
   (check-equal? (transition-reason reopened) "follow-up work required"))
 
@@ -126,24 +120,24 @@
   (check-equal? (milestone-lifecycle-state-state st2) 'planned)
   (check-equal? (length (milestone-lifecycle-state-history st2)) 2)
   ;; Most recent first: rollback in_progress → planned, then advance planned → in_progress.
-  (check-equal? (milestone-lifecycle-transition-result-from
-                 (car (milestone-lifecycle-state-history st2)))
-                'in_progress)
-  (check-equal? (milestone-lifecycle-transition-result-to
-                 (car (milestone-lifecycle-state-history st2)))
-                'planned)
-  (check-equal? (milestone-lifecycle-transition-result-from
-                 (cadr (milestone-lifecycle-state-history st2)))
-                'planned)
-  (check-equal? (milestone-lifecycle-transition-result-to
-                 (cadr (milestone-lifecycle-state-history st2)))
-                'in_progress)
-  (check-equal? (milestone-lifecycle-transition-result-reason
-                 (car (milestone-lifecycle-state-history st2)))
-                "bad release assets")
-  (check-equal? (milestone-lifecycle-transition-result-reason
-                 (cadr (milestone-lifecycle-state-history st2)))
-                "gate check passed"))
+  (check-equal?
+   (milestone-lifecycle-transition-result-from (car (milestone-lifecycle-state-history st2)))
+   'in_progress)
+  (check-equal?
+   (milestone-lifecycle-transition-result-to (car (milestone-lifecycle-state-history st2)))
+   'planned)
+  (check-equal?
+   (milestone-lifecycle-transition-result-from (cadr (milestone-lifecycle-state-history st2)))
+   'planned)
+  (check-equal?
+   (milestone-lifecycle-transition-result-to (cadr (milestone-lifecycle-state-history st2)))
+   'in_progress)
+  (check-equal?
+   (milestone-lifecycle-transition-result-reason (car (milestone-lifecycle-state-history st2)))
+   "bad release assets")
+  (check-equal?
+   (milestone-lifecycle-transition-result-reason (cadr (milestone-lifecycle-state-history st2)))
+   "gate check passed"))
 
 (test-case "apply-transition!: invalid transitions raise descriptive errors"
   (check-exn (regexp "invalid transition")
@@ -156,11 +150,9 @@
                (apply-transition! (milestone-lifecycle-state 'planned '())
                                   'rollback
                                   "not rollbackable from planned")))
-  (check-exn (regexp "invalid transition")
-             (lambda ()
-               (apply-transition! (milestone-lifecycle-state 'closed '())
-                                  'advance
-                                  "at end of chain")))
+  (check-exn
+   (regexp "invalid transition")
+   (lambda () (apply-transition! (milestone-lifecycle-state 'closed '()) 'advance "at end of chain")))
   (check-exn (regexp "invalid transition")
              (lambda ()
                (apply-transition! (milestone-lifecycle-state 'in_progress '())
@@ -171,8 +163,7 @@
                (apply-transition! (milestone-lifecycle-state 'planned '())
                                   'rollback
                                   "not rollbackable from planned")))
-  (check-exn exn:fail?
-             (lambda ()
-               (apply-transition! (milestone-lifecycle-state 'planned '())
-                                  'sideways
-                                  "no such transition"))))
+  (check-exn
+   exn:fail?
+   (lambda ()
+     (apply-transition! (milestone-lifecycle-state 'planned '()) 'sideways "no such transition"))))

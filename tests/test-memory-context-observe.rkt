@@ -5,7 +5,6 @@
 ;; @boundary unit
 ;; tests/test-memory-context-observe.rkt — Observe-only memory context retrieval tests
 
-
 (require rackunit
          "../runtime/context-assembly/memory-builder.rkt"
          "../runtime/memory/types.rkt"

@@ -38,5 +38,4 @@
 (test-case "W0: redact-content removes sensitive data"
   (define result (redact-content "My key is sk-1234567890abcdef and password=secret"))
   (check-true (string? result))
-  (check-false (string-contains? result "sk-1234567890")
-               "redaction should remove secrets"))
+  (check-false (string-contains? result "sk-1234567890") "redaction should remove secrets"))

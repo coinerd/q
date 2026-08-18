@@ -30,7 +30,7 @@
       (subprocess #f #f #f (find-executable-path "racket") "scripts/pre-commit.rkt" "--no-tests")))
   (close-output-port in)
   ;; Wait with timeout (lint-all can be slow on first run)
-;; @boundary integration  ;; @isolation process  ;; @mutates fs
+  ;; @boundary integration  ;; @isolation process  ;; @mutates fs
   (define result (sync/timeout 120 sp))
   (when (not result)
     (subprocess-kill sp #t))

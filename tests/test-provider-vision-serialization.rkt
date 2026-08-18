@@ -30,9 +30,10 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "build-raw-messages: user with image produces content array"
-  (define msgs (list (test-msg 'user
-                                (list (make-text-part "What do you see?")
-                                      (make-image-part "image/png" "abc123==" "high")))))
+  (define msgs
+    (list (test-msg 'user
+                    (list (make-text-part "What do you see?")
+                          (make-image-part "image/png" "abc123==" "high")))))
   (define raw (build-raw-messages msgs))
   (check-equal? (length raw) 1)
   (define msg (car raw))
@@ -54,9 +55,8 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "build-raw-messages: image without detail defaults to auto"
-  (define msgs (list (test-msg 'user
-                                (list (make-text-part "look")
-                                      (make-image-part "image/jpeg" "data")))))
+  (define msgs
+    (list (test-msg 'user (list (make-text-part "look") (make-image-part "image/jpeg" "data")))))
   (define raw (build-raw-messages msgs))
   (define content (hash-ref (car raw) 'content))
   (define img-url (hash-ref (hash-ref (cadr content) 'image_url) 'detail))

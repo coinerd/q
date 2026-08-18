@@ -107,7 +107,26 @@ jobs:
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total 3 \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — fast shard ${{ matrix.shard }}/3"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Test failure summary
         if: failure()
@@ -123,6 +142,15 @@ jobs:
         with:
           name: test-shard-${{ matrix.shard }}
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-fast-${{ matrix.shard }}
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -166,7 +194,26 @@ jobs:
         run: |
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite platform --jobs 4 \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — platform subset"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Platform failure summary
         if: failure()
@@ -182,6 +229,15 @@ jobs:
         with:
           name: test-platform-macos
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-platform
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -213,7 +269,26 @@ jobs:
         run: |
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — cross-version (Racket 8.11)"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload cross-version test log
         if: always()
@@ -221,6 +296,15 @@ jobs:
         with:
           name: test-cross-version-811
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-cross-version-811
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -245,7 +329,25 @@ jobs:
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run security test suite (parallel)
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 2>&1 | tee test-output.log
+        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — security"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload security test log
         if: always()
@@ -253,6 +355,15 @@ jobs:
         with:
           name: security-test-output
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-security
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -373,7 +484,26 @@ jobs:
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite workflows --jobs 2 --timeout 90 \
             --shard-index ${{ matrix.shard }} --shard-total 2 \
+            --json-out test-results.json \
             2>&1 | tee workflow-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — workflows shard ${{ matrix.shard }}/2"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' workflow-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Workflow failure summary
         if: failure()
@@ -389,6 +519,15 @@ jobs:
         with:
           name: workflow-test-output-${{ matrix.shard }}
           path: workflow-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-workflows-${{ matrix.shard }}
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -503,16 +642,42 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run fast suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
 
       - name: Run TUI suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
 
       - name: Run arch suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
 
       - name: Run workflows suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
+
+      - name: Gate evidence summary
+        if: always()
+        run: |
+          {
+            for suite in fast tui arch workflows; do
+              echo "## Gate evidence — $suite"
+              f="test-results-$suite.json"
+              if [ -f "$f" ] && command -v jq >/dev/null 2>&1; then
+                jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                       "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)",
+                       "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)"' "$f" || true
+              else
+                grep -m1 'RUN-SUMMARY' "gate-$suite.log" | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gate-evidence JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-gate-evidence
+          path: test-results-*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Strict release readiness check
         run: racket scripts/lint-release-readiness.rkt --strict

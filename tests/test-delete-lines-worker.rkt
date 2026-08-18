@@ -43,32 +43,25 @@
 
     (test-case "execute-delete-lines removes correct line range"
       (define f (make-test-file "dl-test-1.txt" "line1\nline2\nline3\nline4\nline5"))
-      (define resp
-        (execute-delete-lines
-         (hash 'path (path->string f) 'start-line 2 'end-line 3)))
+      (define resp (execute-delete-lines (hash 'path (path->string f) 'start-line 2 'end-line 3)))
       (check-equal? (ipc-response-status resp) 'ok)
       (define remaining (file->lines f))
       (check-equal? remaining '("line1" "line4" "line5")))
 
     (test-case "execute-delete-lines rejects paths outside allowed roots"
-      (define resp
-        (execute-delete-lines
-         (hash 'path "/etc/passwd" 'start-line 1 'end-line 2)))
+      (define resp (execute-delete-lines (hash 'path "/etc/passwd" 'start-line 1 'end-line 2)))
       (check-equal? (ipc-response-status resp) 'error))
 
     (test-case "execute-delete-lines validates line range"
       (define f (make-test-file "dl-test-2.txt" "only-line"))
-      (define resp
-        (execute-delete-lines
-         (hash 'path (path->string f) 'start-line 1 'end-line 5)))
+      (define resp (execute-delete-lines (hash 'path (path->string f) 'start-line 1 'end-line 5)))
       (check-equal? (ipc-response-status resp) 'error)
-      (check-true (string-contains? (or (ipc-response-error-message resp) "")
-                                    "exceeds file length")))
+      (check-true (string-contains? (or (ipc-response-error-message resp) "") "exceeds file length")))
 
     (test-case "dispatch-tool routes delete-lines"
       (define f (make-test-file "dl-test-3.txt" "a\nb\nc"))
-      (define resp (dispatch-tool "delete-lines"
-                                  (hash 'path (path->string f) 'start-line 1 'end-line 1)))
+      (define resp
+        (dispatch-tool "delete-lines" (hash 'path (path->string f) 'start-line 1 'end-line 1)))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (file->lines f) '("b" "c")))))
 

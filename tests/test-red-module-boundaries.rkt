@@ -19,7 +19,7 @@
          rackunit/text-ui
          racket/list
          ;; Direct requires — these modules are already loaded by other tests
-;; @boundary unit
+         ;; @boundary unit
          (only-in "../cli/args.rkt"
                   cli-config
                   cli-config?

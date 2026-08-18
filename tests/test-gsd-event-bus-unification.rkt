@@ -78,12 +78,12 @@
       (define ctx-b (make-gsd-context))
       (define events-a (box '()))
       (define events-b (box '()))
-      (gsd-ctx-set-event-bus!
-       ctx-a
-       (lambda (name data) (set-box! events-a (cons (hash-ref data 'data #f) (unbox events-a)))))
-      (gsd-ctx-set-event-bus!
-       ctx-b
-       (lambda (name data) (set-box! events-b (cons (hash-ref data 'data #f) (unbox events-b)))))
+      (gsd-ctx-set-event-bus! ctx-a
+                              (lambda (name data)
+                                (set-box! events-a (cons (hash-ref data 'data #f) (unbox events-a)))))
+      (gsd-ctx-set-event-bus! ctx-b
+                              (lambda (name data)
+                                (set-box! events-b (cons (hash-ref data 'data #f) (unbox events-b)))))
       (ctx-emit-gsd-event! ctx-a 'gsd.wave.started (hasheq 'wave 0))
       (ctx-emit-gsd-event! ctx-a 'gsd.wave.completed (hasheq 'wave 0))
       (ctx-emit-gsd-event! ctx-b 'gsd.wave.started (hasheq 'wave 1))
