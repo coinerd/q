@@ -35,6 +35,7 @@
          (only-in "plan-context-builder.rkt" current-git-root)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
+                  current-gsd-wave-timeout-retries
                   current-gsd-max-consecutive-tool-calls)
          (only-in "delivery-verifier.rkt"
                   delivery-verification?
@@ -301,7 +302,8 @@
                            #:verifier [verifier default-verifier]
                            #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
                            #:fence-token [requested-fence #f]
-                           #:timeout-sec [timeout-sec #f])
+                           #:timeout-sec [timeout-sec #f]
+                           #:timeout-retries [timeout-retries (current-gsd-wave-timeout-retries)])
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
@@ -347,7 +349,20 @@
        (if timeout-sec
            (lambda (idx) (run-wave-with-timeout runner-port timeout-sec idx))
            (gsd-wave-runner-port-run runner-port)))
-     (define run-result (coerce-run-result (run-one wave-idx)))
+     ;; BUG-0017 follow-up: retry a wave whose run exceeds the per-wave budget
+     ;; (timed-out) with a FRESH session (each run-one invocation re-enters the
+     ;; runner port, which the TUI/GUI factory maps to a new session). The
+     ;; attempt is NOT consumed by retries — only final exhaustion persists
+     ;; interrupted (at-least-once). Mirrors the LLM provider-retry ceiling
+     ;; (current-provider-retry-max-retries = 5).
+     (define (run-with-timeout-retry retries-left)
+       (define result (coerce-run-result (run-one wave-idx)))
+       (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
+           (begin
+             (log-info "wave ~a timed out; retrying (~a retries left)" wave-idx (sub1 retries-left))
+             (run-with-timeout-retry (sub1 retries-left)))
+           result))
+     (define run-result (run-with-timeout-retry timeout-retries))
      (define outcome (wave-execution-outcome-kind run-result))
      (define after-run (observe))
      (cond
@@ -444,7 +459,16 @@
           ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
           ;; completion — the durable record says interrupted, so a restart
           ;; re-attempts the wave (at-least-once, exactly-once event).
-          [(timed-out) (interrupt-current! (wave-execution-outcome-message run-result))]
+          [(timed-out)
+           ;; All retries exhausted. Persist INTERRUPTED per D1 (cancelled/
+           ;; error/timeout stop the campaign) and never emit a completion —
+           ;; the durable record says interrupted, so a restart re-attempts
+           ;; the wave (at-least-once, exactly-once event).
+           (interrupt-current! (if (> timeout-retries 0)
+                                   (format "~a after ~a retries"
+                                           (wave-execution-outcome-message run-result)
+                                           timeout-retries)
+                                   (wave-execution-outcome-message run-result)))]
           [else
            (if (persist-current-status! 'failed)
                (begin
@@ -516,7 +540,8 @@
                                    #:verifier verifier
                                    #:meta-fix-predicate meta-fix-predicate
                                    #:fence-token (add1 (campaign-fence-token current))
-                                   #:timeout-sec timeout-sec))
+                                   #:timeout-sec timeout-sec
+                                   #:timeout-retries (current-gsd-wave-timeout-retries)))
               (define observed (load-campaign-record base-dir plan-id))
               (mirror-durable-statuses! rec observed)
               (case (campaign-result-status result)

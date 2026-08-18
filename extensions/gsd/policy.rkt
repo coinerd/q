@@ -19,6 +19,7 @@
          gsd-decide-action
          blocked-tools-for
          current-gsd-wave-timeout-seconds
+         current-gsd-wave-timeout-retries
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
          gsd-session-iteration-budget)
@@ -57,6 +58,12 @@
         value
         (raise-argument-error who "exact-positive-integer?" value))))
 
+(define (nonnegative-integer-guard who)
+  (lambda (value)
+    (if (exact-nonnegative-integer? value)
+        value
+        (raise-argument-error who "exact-nonnegative-integer?" value))))
+
 ;; One wave owns one fresh runtime session and cannot run indefinitely. These
 ;; parameters make the production policy explicit while keeping focused tests
 ;; deterministic. Tool calls are bounded by the runtime's existing
@@ -67,8 +74,20 @@
 ;; that were mid-edit on a large TUI file. The budget is now also overridable
 ;; per-campaign via ~/.q/config.json (wave-timeout-seconds) and via
 ;; /go --wave-timeout=SECONDS.
+;; 2026-08-18 (BUG-0017 follow-up): default raised 3600 → 7200 s. A live W3
+;; wave performing area-by-area metadata migration + a grouped-runner audit
+;; consumed the full 3600 s budget while making steady, verifiable progress
+;; and was killed mid-fix on a real runner defect (ZERO_PARSED/exit-guard).
 (define current-gsd-wave-timeout-seconds
-  (make-parameter 3600 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+  (make-parameter 7200 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+
+;; BUG-0017 follow-up (2026-08-18): a wave whose run exceeds the per-wave
+;; budget (timed-out) is retried with a fresh session up to this many times,
+;; mirroring the campaign's LLM provider-retry ceiling
+;; (current-provider-retry-max-retries = 5 in go-orchestrator). The attempt is
+;; NOT consumed by retries — only final exhaustion persists interrupted.
+(define current-gsd-wave-timeout-retries
+  (make-parameter 5 (nonnegative-integer-guard 'current-gsd-wave-timeout-retries)))
 ;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
 ;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
 ;; real implementation wave was policy-cancelled at iteration 80 mid-work
