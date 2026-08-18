@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-event-type-uniqueness.rkt — T1-3: Verify ALL event type strings are unique
 ;; STABILITY: evolving
@@ -16,71 +17,70 @@
 ;; *-event-type are exported as string constants by define-typed-event.
 
 (define all-type-strings
-  (list
-   ;; turn-events
-   turn-start-event-type
-   turn-end-event-type
-   turn-cancelled-event-type
-   ;; message-events
-   message-start-event-type
-   message-update-event-type
-   message-end-event-type
-   ;; tool-events
-   tool-execution-start-event-type
-   tool-execution-update-event-type
-   tool-execution-end-event-type
-   tool-call-event-type
-   tool-result-event-type
-   ;; provider-events
-   provider-request-event-type
-   provider-response-event-type
-   model-stream-delta-event-type
-   model-stream-thinking-event-type
-   model-stream-completed-event-type
-   ;; session-events
-   session-start-event-type
-   session-shutdown-event-type
-   input-event-type
-   model-select-event-type
-   agent-start-event-type
-   agent-end-event-type
-   ;; context-events
-   context-event-type
-   context-assembled-event-type
-   context-blocked-event-type
-   working-set-injected-event-type
-   context-assembly-detail-event-type
-   ;; goal-events
-   goal-start-event-type
-   goal-turn-start-event-type
-   goal-evaluated-event-type
-   goal-check-event-type
-   goal-achieved-event-type
-   goal-failed-event-type
-   ;; retry-events
-   auto-retry-event-type
-   auto-retry-start-event-type
-   ;; compaction-events
-   compaction-event-type
-   injection-event-type
-   ;; iteration-events
-   iteration-decision-event-type
-   model-request-blocked-event-type
-   message-blocked-event-type
-   ;; hook-events
-   assistant-message-completed-event-type
-   ;; stream-events
-   stream-completed-event-type
-   stream-delta-event-type
-   stream-tool-call-delta-event-type
-   stream-thinking-event-type
-   stream-message-start-event-type
-   stream-message-delta-event-type
-   stream-message-end-event-type
-   stream-turn-completed-event-type
-   stream-turn-cancelled-event-type
-   stream-tool-call-started-event-type
-   stream-assistant-msg-completed-event-type))
+  ;; turn-events
+  (list turn-start-event-type
+        turn-end-event-type
+        turn-cancelled-event-type
+        ;; message-events
+        message-start-event-type
+        message-update-event-type
+        message-end-event-type
+        ;; tool-events
+        tool-execution-start-event-type
+        tool-execution-update-event-type
+        tool-execution-end-event-type
+        tool-call-event-type
+        tool-result-event-type
+        ;; provider-events
+        provider-request-event-type
+        provider-response-event-type
+        model-stream-delta-event-type
+        model-stream-thinking-event-type
+        model-stream-completed-event-type
+        ;; session-events
+        session-start-event-type
+        session-shutdown-event-type
+        input-event-type
+        model-select-event-type
+        agent-start-event-type
+        agent-end-event-type
+        ;; context-events
+        context-event-type
+        context-assembled-event-type
+        context-blocked-event-type
+        working-set-injected-event-type
+        context-assembly-detail-event-type
+        ;; goal-events
+        goal-start-event-type
+        goal-turn-start-event-type
+        goal-evaluated-event-type
+        goal-check-event-type
+        goal-achieved-event-type
+        goal-failed-event-type
+        ;; retry-events
+        auto-retry-event-type
+        auto-retry-start-event-type
+        ;; compaction-events
+        compaction-event-type
+        injection-event-type
+        ;; iteration-events
+        iteration-decision-event-type
+        model-request-blocked-event-type
+        message-blocked-event-type
+        ;; hook-events
+        assistant-message-completed-event-type
+        ;; stream-events
+        stream-completed-event-type
+        stream-delta-event-type
+        stream-tool-call-delta-event-type
+        stream-thinking-event-type
+        stream-message-start-event-type
+        stream-message-delta-event-type
+        stream-message-end-event-type
+        stream-turn-completed-event-type
+        stream-turn-cancelled-event-type
+        stream-tool-call-started-event-type
+        stream-assistant-msg-completed-event-type))
 
 ;; ── Test Suite ──
 
@@ -117,9 +117,9 @@
 
     (test-case "hook assistant-message differs from stream assistant-msg"
       (check-not-equal? assistant-message-completed-event-type
-                         stream-assistant-msg-completed-event-type
-                         (format "hook=~a stream=~a"
-                                 assistant-message-completed-event-type
-                                 stream-assistant-msg-completed-event-type)))))
+                        stream-assistant-msg-completed-event-type
+                        (format "hook=~a stream=~a"
+                                assistant-message-completed-event-type
+                                stream-assistant-msg-completed-event-type)))))
 
 (run-tests suite)

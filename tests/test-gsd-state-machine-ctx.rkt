@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-gsd-state-machine-ctx.rkt
 ;; TDD test for W6: ctx-aware state-machine API

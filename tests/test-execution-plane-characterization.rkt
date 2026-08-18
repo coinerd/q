@@ -12,6 +12,7 @@
 ;; IMPORTANT CONTEXT (raco test vs racket discrepancy):
 ;; All execution plane tests pass under `racket tests/<file>.rkt` but many
 ;; FAIL under `raco test tests/<file>.rkt`. This characterization suite
+;; @boundary unit
 ;; uses `racket`-compatible patterns to establish the baseline.
 
 (require rackunit

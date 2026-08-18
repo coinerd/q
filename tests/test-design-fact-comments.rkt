@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W9 (#8483): Verify that design-fact comments added in v0.99.38 W9
 ;; are present in the source files. These comments document concrete

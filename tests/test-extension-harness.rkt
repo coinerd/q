@@ -15,6 +15,7 @@
 ;;   5. check-hook-payload — payload assertion
 ;;   6. make-test-extension — convenience constructor
 ;;   7. Registry isolation between tests
+;; @boundary unit
 
 (require rackunit
          "../extensions/hooks.rkt"

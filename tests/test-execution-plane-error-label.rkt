@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite tools
+;; @boundary unit
 
 ;; tests/test-execution-plane-error-label.rkt
 ;; v0.99.26 W1b: Verify F-2 fix — error messages from tool execution

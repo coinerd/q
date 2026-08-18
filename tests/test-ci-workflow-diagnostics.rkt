@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary integration
 
 ;; W3 (#8506): Tests for CI workflow diagnostic improvements.
 ;; Verifies the composite action has explicit step naming and

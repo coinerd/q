@@ -1,6 +1,7 @@
 #lang racket
 ;; @speed fast
 ;; @suite extensions
+;; @boundary unit
 
 ;; v0.99.90 W4 (#9235): GitHub/Release side-effect adapter — idempotent
 ;; correlated commands; dry-run default; SHA assertions; token redaction.

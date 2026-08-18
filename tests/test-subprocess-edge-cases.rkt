@@ -25,6 +25,7 @@
 
 ;; W1 v0.99.77: process-group kill is only possible where `setsid` exists
 ;; (Linux util-linux). On macOS (no setsid) the timeout path still sends
+;; @boundary integration
 ;; SIGTERM then SIGKILL to the direct child, but cannot signal the whole
 ;; group — so survivor assertions are conditional on setsid availability.
 (define setsid-available? (not (false? (find-executable-path "setsid"))))

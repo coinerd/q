@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-browser-permission-tiers.rkt — F6: browser tool risk tiers
 

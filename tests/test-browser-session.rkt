@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-browser-session.rkt — Browser session manager tests
 ;;
@@ -16,9 +17,12 @@
 ;; ---------------------------------------------------------------------------
 
 (define (make-test-info)
-  (browser-session-info "test-session" 'active
-                        (current-milliseconds) (current-milliseconds)
-                        'ephemeral "/tmp/test"))
+  (browser-session-info "test-session"
+                        'active
+                        (current-milliseconds)
+                        (current-milliseconds)
+                        'ephemeral
+                        "/tmp/test"))
 
 ;; ---------------------------------------------------------------------------
 ;; Create / Get / List / Count
@@ -66,9 +70,7 @@
 
 (test-case "destroy non-existent raises error"
   (define mgr (make-browser-session-manager))
-  (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-destroy! mgr "nope"))))
+  (check-exn q-browser-error? (lambda () (browser-session-manager-destroy! mgr "nope"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Max sessions enforcement
@@ -80,23 +82,19 @@
   (browser-session-manager-create! mgr "s2" (make-test-info))
   (browser-session-manager-create! mgr "s3" (make-test-info))
   (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-create! mgr "s4" (make-test-info)))))
+             (lambda () (browser-session-manager-create! mgr "s4" (make-test-info)))))
 
 (test-case "max-sessions configurable"
   (define mgr (make-browser-session-manager #:max-sessions 1))
   (browser-session-manager-create! mgr "s1" (make-test-info))
   (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-create! mgr "s2" (make-test-info)))))
+             (lambda () (browser-session-manager-create! mgr "s2" (make-test-info)))))
 
 (test-case "destroy frees session slot"
   (define mgr (make-browser-session-manager #:max-sessions 1))
   (browser-session-manager-create! mgr "s1" (make-test-info))
   (browser-session-manager-destroy! mgr "s1")
-  (check-not-exn
-   (lambda ()
-     (browser-session-manager-create! mgr "s2" (make-test-info)))))
+  (check-not-exn (lambda () (browser-session-manager-create! mgr "s2" (make-test-info)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Action counting + max-actions
@@ -115,15 +113,11 @@
   (browser-session-manager-create! mgr "s1" (make-test-info))
   (browser-session-manager-record-action! mgr "s1")
   (browser-session-manager-record-action! mgr "s1")
-  (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-record-action! mgr "s1"))))
+  (check-exn q-browser-error? (lambda () (browser-session-manager-record-action! mgr "s1"))))
 
 (test-case "record-action on missing session raises error"
   (define mgr (make-browser-session-manager))
-  (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-record-action! mgr "nope"))))
+  (check-exn q-browser-error? (lambda () (browser-session-manager-record-action! mgr "nope"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Duplicate session id
@@ -133,5 +127,4 @@
   (define mgr (make-browser-session-manager))
   (browser-session-manager-create! mgr "s1" (make-test-info))
   (check-exn q-browser-error?
-             (lambda ()
-               (browser-session-manager-create! mgr "s1" (make-test-info)))))
+             (lambda () (browser-session-manager-create! mgr "s1" (make-test-info)))))

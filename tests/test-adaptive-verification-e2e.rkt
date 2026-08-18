@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary e2e
 
 ;; tests/test-adaptive-verification-e2e.rkt
 ;; v0.99.24 W2: End-to-End integration tests for adaptive verification.

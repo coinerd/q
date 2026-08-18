@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; Tests for util/exn.rkt — stream-error exception with recovery data.
 
 (require rackunit

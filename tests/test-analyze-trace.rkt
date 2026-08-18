@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -12,7 +13,10 @@
 (require rackunit
          rackunit/text-ui
          "../scripts/analyze-trace.rkt"
-         (only-in "../util/message/protocol-types.rkt" make-message make-text-part make-tool-call-part))
+         (only-in "../util/message/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  make-tool-call-part))
 
 ;; ── Helpers ──
 

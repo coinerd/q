@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-mcp-config.rkt — W4 (v0.99.9) MCP Config Settings Tests
 ;;

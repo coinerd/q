@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite extensions
+;; @boundary unit
 ;; tests/test-gsd-adapter.rkt
 ;; W3C (#8940): GSD adapter — translates GSD state-machine transitions,
 ;; task-state transitions, conclusions, and checkpoints into

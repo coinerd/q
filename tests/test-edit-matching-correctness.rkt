@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 (require rackunit
          "../tools/builtins/edit-contract.rkt"
          "../tools/registry-table/core-tools.rkt"

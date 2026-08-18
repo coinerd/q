@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: integration
 
 ;;; test-agent-memory-decoupling.rkt — Verify Agent Core has no

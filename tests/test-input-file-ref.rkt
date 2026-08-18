@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

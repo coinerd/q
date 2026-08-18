@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; test-memory-consolidation-tool-g3.rkt — W4: consolidate-memory tool tests
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-types.rkt — Browser domain type tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-audit-v09945-w5-tools.rkt — Tools subsystem real-world audit
 ;;
 ;; Audit of the Tools subsystem covering:

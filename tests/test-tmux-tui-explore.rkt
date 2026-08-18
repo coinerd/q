@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @isolation process
+;; @boundary e2e  ;; @mutates env  ;; @requires terminal
 
 (require json
          rackunit

@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary integration
 
 ;; tests/test-routing-policy-integration.rkt — W4 (v0.99.10) Routing Policy Integration Remediation
 ;;

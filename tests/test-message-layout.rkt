@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-message-layout.rkt — Tests for tui/render/message-layout.rkt
 ;; Regression tests for wrap-styled-line ordering, leading-space stripping,
@@ -181,7 +182,6 @@
   (define pos (find-break-pos "helloworld" 0 5))
   (check-equal? pos 5))
 
-
 ;; ============================================================
 ;; BUG-0002 (W2): tool-fail lines must wrap at terminal width
 ;; ============================================================
@@ -190,14 +190,12 @@
   (transcript-entry 'tool-fail text 1000 (hasheq 'name 'bash) #f))
 
 (define (entry-line-widths entry width)
-  (map (lambda (l) (string-visible-width (styled-line->text l)))
-       (format-entry entry width)))
+  (map (lambda (l) (string-visible-width (styled-line->text l))) (format-entry entry width)))
 
 (test-case "BUG-0002: 3x-width failure payload wraps into multiple lines each <= width"
   (define payload (make-string 240 #\e))
   (define lines (format-entry (make-fail-entry payload) 80))
-  (check >= (length lines) 2
-         (format "expected wrapping, got ~a line(s)" (length lines)))
+  (check >= (length lines) 2 (format "expected wrapping, got ~a line(s)" (length lines)))
   (for ([w (entry-line-widths (make-fail-entry payload) 80)]
         [i (in-naturals)])
     (check-true (<= w 80) (format "line ~a visible width ~a exceeds 80" i w))))
@@ -211,10 +209,7 @@
 (test-case "BUG-0002: wrapped output preserves the full payload"
   (define payload (string-append "boom " (make-string 200 #\x)))
   (define lines (format-entry (make-fail-entry payload) 80))
-  (define joined (string-join (map (lambda (l)
-                                     (string-trim (styled-line->text l)))
-                                   lines)
-                              " "))
+  (define joined (string-join (map (lambda (l) (string-trim (styled-line->text l))) lines) " "))
   (define expected (string-trim (string-replace (format "[FAIL] bash: ~a" payload) "\n" " ")))
   ;; Word-wrap may split the long unbroken x-run across lines; joining with
   ;; spaces then changes the length. Compare space-stripped text instead:
@@ -233,8 +228,7 @@
                    (format "segment on line ~a contains raw newline" i)))
     (check-true (<= (string-visible-width (styled-line->text l)) 40)
                 (format "line ~a exceeds narrow width 40" i)))
-  (check-true (ormap (lambda (l) (string-contains? (styled-line->text l) "line three"))
-                     lines)
+  (check-true (ormap (lambda (l) (string-contains? (styled-line->text l) "line three")) lines)
               "flattened tail content missing after wrapping"))
 
 (test-case "BUG-0002: short failure stays a single line"

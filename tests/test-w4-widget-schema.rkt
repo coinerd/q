@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-w4-widget-schema.rkt — W4 widget + schema tests
 ;;

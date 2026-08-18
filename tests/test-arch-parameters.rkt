@@ -11,6 +11,7 @@
 ;;   1. Agent → Runtime boundary: agent/iteration/ must not acquire NEW
 ;;      runtime/ dependencies beyond the documented exceptions in
 ;;      dependency-policy.rktd's agent-iteration-boundary section.
+;; @boundary unit
 ;;   2. session-config: agent/iteration/ must never import the concrete
 ;;      runtime/session/session-config.rkt implementation. Only the neutral
 ;;      opaque type predicate (util/types/session-config.rkt) is allowed.

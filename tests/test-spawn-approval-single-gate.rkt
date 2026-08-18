@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -46,4 +47,5 @@
       (check-equal? (unbox generic-callback-count) 0)
       (check-equal? (unbox executed-count) 1))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

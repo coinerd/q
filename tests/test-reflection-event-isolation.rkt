@@ -1,6 +1,8 @@
 #lang racket/base
 
 ;; Session isolation tests for pending-reflection-event lifecycle-state field.
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; v0.99.89: Replaced process-global current-reflection-event parameter
 ;; with session-owned lifecycle-state.pending-reflection-event.
 

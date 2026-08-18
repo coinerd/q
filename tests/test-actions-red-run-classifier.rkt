@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-actions-red-run-classifier.rkt
 ;;
 ;; W7 (#8547): Actions red-run classifier tests.

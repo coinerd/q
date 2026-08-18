@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;;; tests/test-compaction-command.rkt — /compact command tests
 

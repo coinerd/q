@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-blackboard.rkt — W1 (v0.99.7) Blackboard State Tests
 ;;

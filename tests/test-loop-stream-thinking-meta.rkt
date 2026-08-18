@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;;; test-loop-stream-thinking-meta.rkt — v0.99.78 Bug B part 2 regression:
 ;;; build-stream-result MUST persist the accumulated reasoning_content into the

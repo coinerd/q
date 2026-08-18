@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-token-metrics.rkt — Token metrics validation tests
 ;; v0.76.2 W2: Verify measurement functions are accurate.
@@ -23,7 +24,11 @@
                   category-breakdown
                   compute-conclusion-coverage
                   measure-context-assembly)
-         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-kind message-role)
+         (only-in "../util/message/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  message-kind
+                  message-role)
          (only-in "../runtime/context-assembly/context-floor.rkt"
                   tiered-context?
                   tiered-context-tier-a

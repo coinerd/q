@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-capability-token-hardening.rkt — W3 (v0.99.10) Capability Token Hardening Remediation
 ;;

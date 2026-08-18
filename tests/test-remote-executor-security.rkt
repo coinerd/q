@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-remote-executor-security.rkt — W4 (v0.99.12) Adversarial Security Tests
 ;;

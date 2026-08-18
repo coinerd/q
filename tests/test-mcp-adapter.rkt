@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-mcp-adapter.rkt — W2 (v0.99.9) MCP Adapter Tests
 ;;

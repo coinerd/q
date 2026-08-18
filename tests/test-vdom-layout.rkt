@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-vdom-layout.rkt — Tests for tui/vdom-layout.rkt
 

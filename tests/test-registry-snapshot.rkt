@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; tests/test-registry-snapshot.rkt — with-registry-snapshot tests (F12)

@@ -8,6 +8,7 @@
 ;; Tests compute-next-counters with real message structures.
 ;; check-cancellation is impure (emits events) -- integration-level test needed.
 ;; Documented gap: check-cancellation requires event bus mock.
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

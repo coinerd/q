@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-provider-conformance.rkt — Abstract provider conformance test suite
+;; @boundary unit
 ;;
 ;; Validates that every LLM provider adapter satisfies the structural contract:
 ;;   - Provider construction (provider?, name, capabilities)

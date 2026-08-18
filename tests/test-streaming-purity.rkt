@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-streaming-purity.rkt — Cost tracker purity tests
 
@@ -28,10 +29,8 @@
   (define t1 (make-cost-tracker))
   (define t2 (cost-tracker-update t1 200 100))
   (define t3 (cost-tracker-update t1 200 100))
-  (check-equal? (cost-tracker-input-tokens-total t2)
-                (cost-tracker-input-tokens-total t3))
-  (check-equal? (cost-tracker-output-tokens-total t2)
-                (cost-tracker-output-tokens-total t3)))
+  (check-equal? (cost-tracker-input-tokens-total t2) (cost-tracker-input-tokens-total t3))
+  (check-equal? (cost-tracker-output-tokens-total t2) (cost-tracker-output-tokens-total t3)))
 
 (test-case "cost-tracker-update chains correctly"
   (define t1 (make-cost-tracker))

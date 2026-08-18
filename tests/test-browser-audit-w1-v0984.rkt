@@ -4,6 +4,8 @@
 ;; NF-03, NF-04, NF-05, NF-06: Sidecar lifecycle hardening
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/async-channel
          "../browser/adapters/playwright-sidecar.rkt"

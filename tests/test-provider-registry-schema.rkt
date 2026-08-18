@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;;; tests/test-provider-registry-schema.rkt — Provider schema loading and registry tests
 ;;;

@@ -4,6 +4,8 @@
 ;; v0.97.3 W2: Integration tests for distillation pipeline
 
 ;; @speed slow
+;; @suite default
+;; @boundary integration
 (require rackunit
          racket/list
          racket/string

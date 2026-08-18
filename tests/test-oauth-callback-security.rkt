@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary integration  ;; @requires network
 
 ;;; tests/test-oauth-callback-security.rkt — OAuth2 security regression tests
 ;;;

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-task-ledger-types.rkt — Task-ledger type contracts
 ;; STABILITY: internal
 ;;

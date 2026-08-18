@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: unit
 ;; Tests for strict argument validation in run-tests.rkt (v0.83.1 W0)

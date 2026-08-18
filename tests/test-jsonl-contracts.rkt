@@ -5,6 +5,7 @@
 ;; BOUNDARY: serialization
 
 ;; tests/test-jsonl-contracts.rkt — Contract boundary tests for jsonl.rkt
+;; @boundary unit
 
 (require rackunit
          "../util/json/jsonl.rkt")

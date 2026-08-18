@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite default
+;; @boundary unit
 
 ;; tests/test-verifier-deployment-gate.rkt
 ;; v0.99.15 W0: Verifier Characterization & Pre-Implementation Safety Net

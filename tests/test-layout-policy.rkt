@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-layout-policy.rkt — Layout breakpoint and policy tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; test-memory-reflection-w5.rkt — W5: Deterministic memory reflection tests
 
@@ -30,7 +31,10 @@
                   memory-result-ok?
                   memory-result-value
                   memory-result)
-         (only-in "../runtime/memory/protocol.rkt" gen:store-memory! gen:retrieve-memory memory-backend))
+         (only-in "../runtime/memory/protocol.rkt"
+                  gen:store-memory!
+                  gen:retrieve-memory
+                  memory-backend))
 
 (define (make-test-item id content [tags '()] [scope 'session])
   (memory-item
@@ -177,12 +181,14 @@
   (define backend1 (make-memory-hash-backend))
   (gen:store-memory! backend1 (make-test-item "m1" "alpha about memory" '("t")))
   (gen:store-memory! backend1 (make-test-item "m2" "beta about memory" '("t")))
-  (define r1 (reflect-session-memories! backend1 #:session-id "s1" #:project-root "." #:min-group-size 2))
+  (define r1
+    (reflect-session-memories! backend1 #:session-id "s1" #:project-root "." #:min-group-size 2))
 
   (define backend2 (make-memory-hash-backend))
   (gen:store-memory! backend2 (make-test-item "m1" "alpha about memory" '("t")))
   (gen:store-memory! backend2 (make-test-item "m2" "beta about memory" '("t")))
-  (define r2 (reflect-session-memories! backend2 #:session-id "s1" #:project-root "." #:min-group-size 2))
+  (define r2
+    (reflect-session-memories! backend2 #:session-id "s1" #:project-root "." #:min-group-size 2))
 
   (check-equal? (memory-item-content (car r1)) (memory-item-content (car r2)))
   (check-equal? (memory-item-id (car r1)) (memory-item-id (car r2))))
@@ -222,18 +228,16 @@
        (memory-result #f #f (hasheq 'code 'store-failed 'message "mock failure") (hasheq)))
      ;; retrieve — returns 3 items that form a group (shared tags, min-group-size=3)
      (lambda (query)
-       (memory-result
-        #t
-        (list (make-test-item "lf1-a" "alpha reflection" '("shared" "lf1"))
-              (make-test-item "lf1-b" "beta reflection" '("shared" "lf1"))
-              (make-test-item "lf1-c" "gamma reflection" '("shared" "lf1")))
-        #f (hasheq)))
+       (memory-result #t
+                      (list (make-test-item "lf1-a" "alpha reflection" '("shared" "lf1"))
+                            (make-test-item "lf1-b" "beta reflection" '("shared" "lf1"))
+                            (make-test-item "lf1-c" "gamma reflection" '("shared" "lf1")))
+                      #f
+                      (hasheq)))
      ;; update!
-     (lambda (id patch)
-       (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
+     (lambda (id patch) (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
      ;; delete!
-     (lambda (id scope)
-       (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
+     (lambda (id scope) (memory-result #f #f (hasheq 'code 'not-supported 'message "mock") (hasheq)))
      ;; list
      (lambda () (list))
      ;; available?

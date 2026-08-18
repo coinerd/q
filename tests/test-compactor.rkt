@@ -8,6 +8,7 @@
 ;;; tests/test-compactor.rkt — tests for runtime/compactor.rkt
 ;;;
 ;;; TDD test suite for the context compactor module.
+;; @boundary integration
 ;;; Covers:
 ;;;   - build-summary-window splitting logic
 ;;;   - compact-history producing shorter message lists

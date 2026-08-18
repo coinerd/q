@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-goal-evidence.rkt — Evidence prompt + no-progress detection tests
 

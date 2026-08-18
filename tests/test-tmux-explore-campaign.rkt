@@ -3,6 +3,8 @@
 ;; tests/test-tmux-explore-campaign.rkt — W7 campaign orchestrator tests
 
 ;; @speed slow
+;; @suite default
+;; @boundary e2e  ;; @requires terminal
 (require rackunit
          racket/file
          racket/hash

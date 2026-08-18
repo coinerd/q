@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-blackboard-integration.rkt — W7 (v0.99.7) End-to-End Integration Tests
 ;;

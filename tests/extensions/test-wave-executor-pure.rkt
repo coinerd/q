@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: pure
 

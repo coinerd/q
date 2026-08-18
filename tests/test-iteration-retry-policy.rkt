@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 ;; BOUNDARY: pure
 ;; BOUNDARY: unit
 ;; tests/test-iteration-retry-policy.rkt -- Pure retry-policy tests (T-1a)

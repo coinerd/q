@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; tests/test-audit-v09945-w6-session.rkt — Session subsystem real-world audit
 ;;
 ;; Audit of the Session subsystem covering:

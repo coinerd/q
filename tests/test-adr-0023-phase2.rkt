@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; ADR-0023 Phase 2 test scaffolding — GAP-4, GAP-5, GAP-8
 ;; TDD red phase: tests verify behaviors that need fixing.
 
@@ -99,8 +100,7 @@
 ;; GAP-5: WS evolution guard on state change
 ;; ═══════════════════════════════════════════════════════════════
 
-(require (only-in "../runtime/working-set.rkt"
-                  make-working-set)
+(require (only-in "../runtime/working-set.rkt" make-working-set)
          (only-in "../runtime/context-assembly/ws-evolution.rkt"
                   evolve-working-set-for-state/result
                   evolution-result?))

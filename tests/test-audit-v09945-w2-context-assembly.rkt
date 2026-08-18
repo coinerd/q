@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-audit-v09945-w2-context-assembly.rkt — Context assembly real-world audit
 ;;
 ;; Audit of the context assembly subsystem covering:

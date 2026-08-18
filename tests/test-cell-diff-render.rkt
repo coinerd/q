@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-cell-diff-render.rkt — Tests for tui/cell-diff-render.rkt
 

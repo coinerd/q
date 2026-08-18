@@ -7,6 +7,8 @@
 ;; and that the flag can still be explicitly disabled.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/settings-core.rkt" q-settings)

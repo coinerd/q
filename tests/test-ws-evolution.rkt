@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-ws-evolution.rkt — Working-set evolution tests
 ;; v0.75.4 W0: Verify ws-evolution behavior on state transitions.

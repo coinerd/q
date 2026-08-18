@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite tools
+;; @boundary unit
 
 ;; tests/test-subagent-retry.rkt
 ;; v0.99.26 W1b: Verify subagent auto-retry (F-1a) and max-turns default (F-1b).

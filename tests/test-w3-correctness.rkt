@@ -46,6 +46,8 @@
       (check-eq? (current-tool-executor) default-tool-executor))
 
     ;; ── L7: current-execution-plane-timeout-ms is a parameter ──
+;; @suite default
+;; @boundary unit
     (test-case "L7: current-execution-plane-timeout-ms parameter exists"
       (check-true (procedure? current-execution-plane-timeout-ms))
       ;; Verify it defaults to 120000

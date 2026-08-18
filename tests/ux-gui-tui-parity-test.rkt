@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; q/tests/ux-gui-tui-parity-test.rkt — W4 (v0.99.96) semantic parity.
 ;;
 ;; These tests assert SEMANTIC parity between the GUI and TUI composer paths:

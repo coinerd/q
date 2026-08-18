@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-surface-characterization.rkt — Characterization tests for ui-surface
 ;;

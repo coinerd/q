@@ -2,14 +2,12 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
-         (only-in "../runtime/goal/goal-runner.rkt"
-                  extract-transcript-from-result)
-         (only-in "../util/loop-result.rkt"
-                  make-loop-result)
-         (only-in "../runtime/session/session-config.rkt"
-                  current-goal-loop-enabled?))
+         (only-in "../runtime/goal/goal-runner.rkt" extract-transcript-from-result)
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../runtime/session/session-config.rkt" current-goal-loop-enabled?))
 
 (test-case "extract-transcript-from-result handles loop-result? struct"
   (define msgs (list 'msg1 'msg2))

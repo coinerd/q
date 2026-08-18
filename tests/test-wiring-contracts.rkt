@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; test-wiring-contracts.rkt — Verify tightened wiring/run-modes contracts (C2-03)
 ;; @suite fast
+;; @boundary unit
 
 (require rackunit
          racket/port

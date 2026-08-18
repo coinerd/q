@@ -6,6 +6,8 @@
 ;; (q/ui-core/composer-model.rkt + q/ui-core/composer-layout.rkt), not
 ;; the legacy single-line viewport. They cover grapheme clusters, emoji
 ;; (ZWJ), CJK wide chars, combining marks, boundary-at-width wraps,
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; newline insertion, visual-line navigation, and resize stability.
 ;;
 ;; Run: raco test q/tests/ux-composer-property-test.rkt

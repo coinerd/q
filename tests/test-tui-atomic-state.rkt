@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite tui
+;; @boundary unit
 
 ;; q/tests/test-tui-atomic-state.rkt — Regression test for AXIS2-F05
 ;; Verify that atomic-state-update! prevents data loss under concurrent writes.

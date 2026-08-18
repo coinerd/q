@@ -34,6 +34,7 @@
 
 ;; ============================================================
 ;; Test suite
+;; @boundary unit
 ;; ============================================================
 
 (test-case "check-mid-turn-budget: no event when under budget"

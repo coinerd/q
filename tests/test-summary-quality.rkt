@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-summary-quality.rkt — Tests for summary quality gates (SAL-04, CA-04)
 ;;

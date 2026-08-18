@@ -7,6 +7,7 @@
 
 ;; test-file-tools.rkt — tests for read.rkt, write.rkt, edit.rkt
 ;; Uses temporary files for isolation. No external dependencies.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

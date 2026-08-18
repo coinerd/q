@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; tests/test-project-memory-migration.rkt
 ;; W5C (#8942): Migration from old namespaces to project-keyed storage.
 ;; Tests that migration is idempotent, resumable, quarantine-safe.

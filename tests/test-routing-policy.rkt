@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite agent
+;; @boundary unit
 
 ;; tests/test-routing-policy.rkt — W3 (v0.99.9) Risk-Based Routing Policy Tests
 ;;

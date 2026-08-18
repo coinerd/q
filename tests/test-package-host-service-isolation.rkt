@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-package-host-service-isolation.rkt — v0.99.88 W3 dual-run
+;; @boundary integration
 ;; characterization for the neutral package-host-service (MA-04).
 ;;
 ;; Proves behavioral equivalence between the OLD direct path

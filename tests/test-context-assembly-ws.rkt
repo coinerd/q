@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: integration
 
 ;; tests/test-context-assembly-ws.rkt — Working set integration into context assembly

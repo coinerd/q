@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary integration
 ;; tests/test-release-workflow-contract.rkt
 ;; W9 (#8773): Static contract tests for the release/release-core/release-repair workflows.
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require racket/file
          rackunit
@@ -24,17 +25,18 @@
 
     (test-case "heredoc payload with literal parentheses and ampersand returns a tool result"
       (with-temp-dir (tmp)
-        (define output-path (build-path tmp "index.html"))
-        (define command
-          (format "cat > ~a <<'EOF'\nlinear-gradient(135deg, #111, #222) &copy;\nEOF"
-                  (path->string output-path)))
-        (define result (call-with-timeout 2 (lambda () (tool-bash (hasheq 'command command)))))
-        (check-not-false result)
-        (check-pred tool-result? result)
-        (check-false (tool-result-is-error? result))
-        (check-equal? (hash-ref (tool-result-details result) 'exit-code) 0)
-        (check-true (file-exists? output-path))
-        (check-regexp-match #rx"Command produced no output"
-                            (hash-ref (car (tool-result-content result)) 'text))))))
+                     (define output-path (build-path tmp "index.html"))
+                     (define command
+                       (format "cat > ~a <<'EOF'\nlinear-gradient(135deg, #111, #222) &copy;\nEOF"
+                               (path->string output-path)))
+                     (define result
+                       (call-with-timeout 2 (lambda () (tool-bash (hasheq 'command command)))))
+                     (check-not-false result)
+                     (check-pred tool-result? result)
+                     (check-false (tool-result-is-error? result))
+                     (check-equal? (hash-ref (tool-result-details result) 'exit-code) 0)
+                     (check-true (file-exists? output-path))
+                     (check-regexp-match #rx"Command produced no output"
+                                         (hash-ref (car (tool-result-content result)) 'text))))))
 
 (run-tests bash-f1-tests)

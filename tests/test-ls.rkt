@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 
@@ -248,7 +249,7 @@
                        ;; Should not crash on broken symlink
                        (define c (result-content-str r))
                        (check-true (regexp-match? #rx"dangling-link" c)
-                                  (format "Expected dangling-link in output, got: ~a" c)))))
+                                   (format "Expected dangling-link in output, got: ~a" c)))))
 
     (test-case "invalid sort-by value falls through to name"
       (with-test-dir (λ (dir)
@@ -261,12 +262,12 @@
 
     (test-case "unreadable directory returns error or raises exception"
       ;; /root is typically unreadable on Linux — tool should handle gracefully
-      (define r (with-handlers ([exn:fail? (λ (e) #f)])
-                  (tool-ls (hasheq 'path "/root"))))
+      (define r
+        (with-handlers ([exn:fail? (λ (e) #f)])
+          (tool-ls (hasheq 'path "/root"))))
       ;; Either returns an error result or raises an exception — both are acceptable
       (when r
-        (check-true (result-is-error? r)
-                    (format "Expected error for /root, got: ~a" r))))))
+        (check-true (result-is-error? r) (format "Expected error for /root, got: ~a" r))))))
 
 ;; ============================================================
 ;; Run

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-error-classify.rkt — Failure-domain classifier unit tests
 ;;

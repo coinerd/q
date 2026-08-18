@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/bench-streaming-render.rkt — Streaming render benchmarks
 ;;

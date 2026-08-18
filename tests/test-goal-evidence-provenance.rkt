@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; q/tests/test-goal-evidence-provenance.rkt — W3 v0.99.78 (G-5)
 ;;
 ;; Contract: verification evidence is bound to the exact code state it was

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite arch
+;; @boundary unit
 ;; BOUNDARY: architecture
 
 (require rackunit

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-spawn-subagent-facade.rkt — Tests for spawn-subagent capability facade
 ;; STABILITY: evolving

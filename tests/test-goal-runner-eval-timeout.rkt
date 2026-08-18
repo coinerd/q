@@ -3,6 +3,7 @@
 ;; @speed fast  ;; @suite runtime
 
 ;;; test-goal-runner-eval-timeout.rkt — v0.99.78 regression:
+;; @boundary unit
 ;;; The goal-loop evaluator LLM request must be wall-clock bounded so a
 ;;; stalled (held) request can't freeze the loop indefinitely.
 

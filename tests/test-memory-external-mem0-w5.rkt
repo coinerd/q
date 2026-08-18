@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-external-mem0-w5.rkt — W5 tests for Mem0 external adapter
 (require rackunit
          racket/string

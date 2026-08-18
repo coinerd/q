@@ -11,6 +11,7 @@
 ;; Key decisions documented:
 ;; D1: handle-user-submit! contract is now truthful: (-> tui-ctx? string? void?).
 ;;     It mutates the TUI state box and starts runner work internally.
+;; @boundary unit
 ;; D2: handle-key dispatches configurable keymap first, then falls through to
 ;;     hardcoded behavior. Fallthrough is the primary path for submit.
 ;; D3: check-busy-watchdog is pure and testable.

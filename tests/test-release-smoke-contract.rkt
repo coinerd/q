@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite release-smoke testing
 ;; Tests for the release-smoke suite contract.
+;; @boundary unit
 
 (require racket/string
          rackunit

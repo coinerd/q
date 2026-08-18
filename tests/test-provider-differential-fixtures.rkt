@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 ;; BOUNDARY: integration
 ;; v0.99.91 W2-B (#9239): versioned provider-specific wire evidence.

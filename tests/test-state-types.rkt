@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-state-types.rkt — Regression tests for state-types module (AXIS1-F05)
 ;; STABILITY: evolving

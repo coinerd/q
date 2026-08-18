@@ -4,6 +4,7 @@
 ;; @suite default
 
 ;; tests/test-tool-timeout-scheduler.rkt — v0.70.7 W1
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-envelope.rkt — Unit tests for MAS envelope and capability taxonomy
 ;; STABILITY: evolving

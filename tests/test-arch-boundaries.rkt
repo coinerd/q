@@ -5,6 +5,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-arch-boundaries.rkt — Architecture layer boundary tests
+;; @boundary unit
 ;;
 ;; Verifies that layering constraints are maintained:
 ;;   - Only known exceptions in runtime/ may import from tools/ or extensions/

@@ -6,6 +6,7 @@
 ;; CHARACTERIZATION TEST — documents current state for v0.57.1 remediation
 
 ;; tests/test-gsd-production-session-isolation.rkt
+;; @boundary unit
 ;; Pins current production GSD state leakage patterns.
 ;; These tests document WHAT IS (not what should be).
 ;; When v0.57.1 fixes these, some tests will flip from "leak observed" to "isolated".

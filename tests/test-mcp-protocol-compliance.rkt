@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-mcp-protocol-compliance.rkt — W2 (v0.99.10) MCP Protocol Compliance Remediation
 ;;

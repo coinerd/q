@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: unit
 ;; Tests for CWD-independent module loading patterns (v0.99.38 W2)

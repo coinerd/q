@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; Regression coverage for v0.99.95 W1: a canonical prompt terminal owns
 ;; current-session cleanup even when its turn identifier is stale. Interrupt

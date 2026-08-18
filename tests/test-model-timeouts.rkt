@@ -13,6 +13,7 @@
 ;;   3. current-model-timeouts parameter isolation
 ;;   4. get-model-timeout from settings
 ;;   5. effective-request-timeout from settings
+;; @boundary unit
 ;;   6. Wiring: build-runtime-from-cli sets parameters (integration-level)
 
 (require rackunit

@@ -5,6 +5,7 @@
 ;;   message-inject, quarantine, catalog, compact-context
 ;; @suite default
 ;; @speed fast
+;; @boundary integration
 
 (require rackunit
          racket/list

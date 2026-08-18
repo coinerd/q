@@ -4,6 +4,8 @@
 ;; v0.97.5 W2: Integration tests for GAP-F+G memory pipeline
 
 ;; @speed slow
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          racket/string

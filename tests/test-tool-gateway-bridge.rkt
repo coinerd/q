@@ -3,6 +3,8 @@
 ;; tests/test-tool-gateway-bridge.rkt — Bridge and tool-gateway activation tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/match

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-cli-flags.rkt
 ;; v0.99.23 §5.1: Tests for --agent-pool and --parallel CLI flags.

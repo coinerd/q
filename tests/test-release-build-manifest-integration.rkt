@@ -2,6 +2,7 @@
 
 ;; @suite release-smoke
 ;; @speed fast
+;; @boundary integration
 ;; W1 (#9071): production-path RED contracts for release build → manifest → verify.
 
 (require rackunit

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 ;; Safe, digest-bound approval broker channel tests.
 
@@ -82,4 +83,5 @@
                       (check-equal? (pending-approval-count) 0))
                     #:timeout-ms 10))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

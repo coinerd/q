@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-partial-result-preservation.rkt
 ;; W3 NR-4: Partial result preservation tests.
 ;;

@@ -2,6 +2,7 @@
 
 ;; tests/test-compactor-llm-bridge.rkt — Tests for compaction LLM bridge (AXIS3-F10)
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 (require rackunit
          (only-in "../llm/model.rkt" make-model-response)

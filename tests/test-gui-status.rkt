@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-status.rkt — Tests for gui/views/status.rkt
 

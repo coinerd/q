@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-thinking-artifact-parity.rkt — W2 verification
 ;;

@@ -40,6 +40,7 @@
    (define-values (bus get-events) (make-capture-bus))
 
    ;; Create a thunk that always fails with a retryable timeout error
+   ;; @boundary unit
    (define attempt-count (box 0))
    (define (failing-attempt ctx settings)
      (set-box! attempt-count (add1 (unbox attempt-count)))

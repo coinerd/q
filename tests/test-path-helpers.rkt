@@ -27,6 +27,7 @@
 
 ;; ============================================================
 ;; Test suite: expand-home-path
+;; @boundary integration
 ;; ============================================================
 
 (test-case "expand-home-path: expands ~/ to home directory (no double-slash)"

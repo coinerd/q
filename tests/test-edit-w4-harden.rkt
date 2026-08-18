@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; W4: Filesystem hardening tests
 ;;

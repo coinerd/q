@@ -10,6 +10,8 @@
 ;; Fix: Added (void) as last expression in browser-close! body.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit)
 
 ;; ── Unit test: browser-close! contract return type ──

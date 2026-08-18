@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-verifier-risk-threshold.rkt
 ;; v0.99.22 §6.2: Tests for dynamic risk threshold based on wave capability profile.

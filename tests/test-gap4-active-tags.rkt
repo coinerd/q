@@ -1,5 +1,6 @@
 #lang racket/base
 ;; @speed fast @suite default
+;; @boundary unit
 ;; tests/test-gap4-active-tags.rkt — GAP-4 TDD tests
 ;; Validates active tag extraction from working-set messages
 

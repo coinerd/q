@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; test-hash-utils.rkt — Tests for util/hash-utils.rkt (W4)
 
 (require rackunit
@@ -13,8 +14,7 @@
 
 (test-case "hash-ref*: equivalent to nested hash-ref"
   (define h (hash 'a (hash 'b (hash 'c 7))))
-  (check-equal? (hash-ref* h '(a b c))
-                (hash-ref (hash-ref (hash-ref h 'a) 'b) 'c)))
+  (check-equal? (hash-ref* h '(a b c)) (hash-ref (hash-ref (hash-ref h 'a) 'b) 'c)))
 
 (test-case "hash-ref*: missing key returns explicit default"
   (define h (hash 'a (hash 'b 1)))

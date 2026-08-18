@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; Deterministic regressions for edit write integrity.
 

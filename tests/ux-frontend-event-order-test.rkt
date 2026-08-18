@@ -12,6 +12,8 @@
 ;;   * the SAME artifact lifecycle state.
 ;; Companion to tests/ux-gui-tui-parity-test.rkt (which pins producer-event
 ;; semantics).  This suite extends the parity contract to the production
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; frontend subscriptions and to event ORDER independence.  Only artifacts are
 ;; asserted; no private streaming buffers are inspected.
 ;;

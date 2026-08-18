@@ -4,6 +4,8 @@
 ;;
 ;; Covers the W3 Done criteria that are not already covered by the
 ;; in-module suite (ui-core/preferences.rkt) or the parity suite
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; (ux-gui-tui-parity-test.rkt):
 ;;
 ;;   1. Loader: valid config file -> merged snapshot (every schema key)

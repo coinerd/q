@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite skills
+;; @boundary unit
 
 ;; tests/test-frontmatter-extended.rkt
 ;; v0.99.26 W1: Extended frontmatter parser tests.

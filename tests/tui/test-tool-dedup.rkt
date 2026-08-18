@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: io
 
@@ -132,6 +133,6 @@
 ;; Run tests
 ;; ============================================================
 
-(module+ main
+(module+ test
   (require rackunit/text-ui)
-  (exit (run-tests tool-start-dedup-tests)))
+  (run-tests tool-start-dedup-tests))

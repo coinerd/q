@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-rollback-actions.rkt — Rollback action model tests
 ;; v0.77.10 M2: Updated to verify real execution via injectable callbacks

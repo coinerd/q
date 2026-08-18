@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-command-intent.rkt — Command intent boundary + corpus tests
+;; @boundary unit
 ;;
 ;; v0.99.89 W3 "Command Parsing & Intent Boundary": the parser stays I/O-free
 ;; and command INTENT is classified purely (command-parser.rkt

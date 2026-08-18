@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; tests/test-memory-service.rkt — Memory service boundary tests
+;; @boundary unit
 ;;
 ;; v0.95.13 W1: Tests for runtime/memory/service.rkt
 
@@ -42,4 +43,4 @@
 
 (test-case "arch-boundary: no runtime module imports tools/builtins/memory-tools"
   ;; This test verifies M13-F1 is resolved
-  (check-true #t))  ; Placeholder; actual grep check in release gates
+  (check-true #t)) ; Placeholder; actual grep check in release gates

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-spawn-subagent-terminal-outcomes.rkt
 ;; W1 (TMUX-04): Typed terminal outcomes, provider request two, safe metadata.

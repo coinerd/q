@@ -13,6 +13,7 @@
 ;;   - Auto-cleanup on extension unload
 ;;   - Filtered subscriptions
 ;;   - Multi-extension isolation
+;; @boundary unit
 
 (require rackunit
          "../util/event/event-bus.rkt"

@@ -5,6 +5,8 @@
 ;; GAP-B: Unique conclusion IDs via generate-id
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/list
          racket/string

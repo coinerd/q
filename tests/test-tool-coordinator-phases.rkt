@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-tool-coordinator-phases.rkt -- N-02: tool-coordinator phase tests
 
@@ -18,11 +19,8 @@
 
     (test-case "classify-tool-results: mixed success and error"
       (define tcs
-        (list (make-tool-call "tc1" "bash" (hasheq))
-              (make-tool-call "tc2" "read" (hasheq))))
-      (define results
-        (list (make-success-result "ok")
-              (make-error-result "failed")))
+        (list (make-tool-call "tc1" "bash" (hasheq)) (make-tool-call "tc2" "read" (hasheq))))
+      (define results (list (make-success-result "ok") (make-error-result "failed")))
       (define classified (classify-tool-results tcs results))
       (check-equal? (length classified) 2)
       (check-equal? (hash-ref (first classified) 'name) "bash")
@@ -35,8 +33,7 @@
 
     (test-case "build-blocked-tool-results: blocked tool calls"
       (define tcs
-        (list (make-tool-call "tc1" "bash" (hasheq))
-              (make-tool-call "tc2" "read" (hasheq))))
+        (list (make-tool-call "tc1" "bash" (hasheq)) (make-tool-call "tc2" "read" (hasheq))))
       (define blocked (build-blocked-tool-results tcs))
       (check-equal? (length blocked) 2)
       (check-true (tool-result? (first blocked)))
@@ -48,20 +45,15 @@
         (list (make-tool-call "tc1" "bash" (hasheq))
               (make-tool-call "tc2" "read" (hasheq))
               (make-tool-call "tc3" "edit" (hasheq))))
-      (define results
-        (list (make-success-result "ok")
-              (make-error-result "failed")))
+      (define results (list (make-success-result "ok") (make-error-result "failed")))
       (define classified (classify-tool-results tcs results))
       (check-equal? (length classified) 2)
       (check-equal? (hash-ref (first classified) 'name) "bash")
       (check-equal? (hash-ref (second classified) 'name) "read"))
 
     (test-case "classify-tool-results: more results than calls truncates"
-      (define tcs
-        (list (make-tool-call "tc1" "bash" (hasheq))))
-      (define results
-        (list (make-success-result "ok")
-              (make-error-result "extra")))
+      (define tcs (list (make-tool-call "tc1" "bash" (hasheq))))
+      (define results (list (make-success-result "ok") (make-error-result "extra")))
       (define classified (classify-tool-results tcs results))
       (check-equal? (length classified) 1)
       (check-equal? (hash-ref (first classified) 'status) 'completed))))

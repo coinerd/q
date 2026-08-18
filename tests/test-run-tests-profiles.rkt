@@ -2,7 +2,8 @@
 
 ;; @speed fast
 ;; @suite testing
-;; @isolation subprocess
+;; @isolation process
+;; @boundary integration  ;; @mutates fs
 
 (require rackunit
          rackunit/text-ui
@@ -60,7 +61,8 @@
                       _mode
                       _json
                       _ledger
-                      profile)
+                      profile
+                      _lint-metadata?)
         (parse-args '("--profile" "vps")))
       (check-equal? profile 'vps))
 

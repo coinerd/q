@@ -6,6 +6,7 @@
 ;;
 ;; Campaign 81f9be4b W3 attempt-4: 30/30 tool calls completed, then ONE
 ;; transient 120 s SSE read timeout → progressive-stall circuit break →
+;; @boundary integration
 ;; turn error → wave-failed, attempt consumed. The executor inherited the
 ;; interactive provider-retry policy (max-retries 2, stall-breaker 2,
 ;; 300 s ceiling) against the then-1800 s wave budget (the current default is

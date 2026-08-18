@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: regression
 ;; tests/test-effect-update-fsm-contract.rkt — Regression for effect:update-fsm contract mismatch (v0.55.4)

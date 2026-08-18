@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-strict-runner.rkt — Strict summary mode tests (v0.54.5 W0)
 

@@ -3,6 +3,7 @@
 ;; Tests: provider registry, auto-retry, settings, sandbox limits, IPC protocol
 ;; @suite default
 ;; @speed fast
+;; @boundary integration
 
 (require rackunit
          racket/list

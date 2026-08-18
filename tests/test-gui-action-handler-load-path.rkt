@@ -1,6 +1,8 @@
 #lang racket/base
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../gui/main.rkt")
 

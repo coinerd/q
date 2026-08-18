@@ -4,6 +4,8 @@
 ;; Wave W0: F1 — Verify typed contracts on all exported functions.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/contract
          (only-in racket/port)

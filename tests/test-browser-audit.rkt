@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-browser-audit.rkt — Browser audit logging tests
 

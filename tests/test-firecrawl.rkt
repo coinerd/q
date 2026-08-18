@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 
@@ -84,16 +85,15 @@
     (test-case "firecrawl-api-key returns #f when no env/config"
       ;; Temporarily clear env var with proper cleanup
       (define old-env (getenv "FIRECRAWL_API_KEY"))
-      (dynamic-wind
-        (lambda () (putenv "FIRECRAWL_API_KEY" ""))
-        (lambda ()
-          (define key (firecrawl-api-key))
-          ;; key may be #f or the config value — just check it doesn't crash
-          (check-true (or (not key) (string? key))))
-        (lambda ()
-          (if old-env
-              (putenv "FIRECRAWL_API_KEY" old-env)
-              (putenv "FIRECRAWL_API_KEY" "")))))
+      (dynamic-wind (lambda () (putenv "FIRECRAWL_API_KEY" ""))
+                    (lambda ()
+                      (define key (firecrawl-api-key))
+                      ;; key may be #f or the config value — just check it doesn't crash
+                      (check-true (or (not key) (string? key))))
+                    (lambda ()
+                      (if old-env
+                          (putenv "FIRECRAWL_API_KEY" old-env)
+                          (putenv "FIRECRAWL_API_KEY" "")))))
 
     ;; ---- Format helpers ----
 
@@ -105,7 +105,8 @@
 
     (test-case "truncate-string respects custom threshold"
       (define str (make-string 100 #\x))
-      (check-equal? (truncate-string str 50) (string-append (substring (make-string 100 #\x) 0 47) "..."))
+      (check-equal? (truncate-string str 50)
+                    (string-append (substring (make-string 100 #\x) 0 47) "..."))
       (check-equal? (truncate-string str 200) str))
 
     (test-case "truncate-string leaves short strings unchanged"

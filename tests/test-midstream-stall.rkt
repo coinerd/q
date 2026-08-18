@@ -9,6 +9,8 @@
          "../llm/stream.rkt")
 
 ;; Helper: construct a stream timeout exception with output-chars
+;; @speed fast  ;; @suite default
+;; @boundary unit
 (define (stream-timeout-exn #:heartbeats? [hb? #f]
                             #:any-data? [any? #t]
                             #:phase [phase 'content]

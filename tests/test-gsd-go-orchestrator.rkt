@@ -6,6 +6,7 @@
 ;;
 ;; TDD tests for:
 ;;   1. One runner call per wave, prompt isolation.
+;; @boundary integration
 ;;   2. No advancement on failure/cancellation.
 ;;   3. Verifier rejection prevents DONE.
 ;;   4. /go N assertion rejects non-earliest wave.

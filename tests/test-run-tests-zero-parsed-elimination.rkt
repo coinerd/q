@@ -3,6 +3,8 @@
 ;; Regression coverage for v0.99.30 W2 zero-parsed false-green elimination.
 
 ;; @speed slow
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../scripts/run-tests.rkt")

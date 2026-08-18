@@ -5,6 +5,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-per-session-ctx.rkt — Per-session GSD context isolation (C-01, v0.35.1)
+;; @boundary unit
 ;;
 ;; Tests that gsd-session-ctx instances don't share state,
 ;; that per-session accessors work, and that with-gsd-transaction is isolated.

@@ -1,6 +1,7 @@
 #lang racket
 ;; @speed fast
 ;; @suite extensions
+;; @boundary unit
 
 (require rackunit
          racket/runtime-path

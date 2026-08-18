@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-context-assembly-pure.rkt — Pure context assembly selection tests (F23)
 ;; BOUNDARY: pure

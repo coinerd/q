@@ -21,6 +21,8 @@
          (all-from-out "classify-filters.rkt")
          ;; Shard support
          shard-files
+         ;; Metadata classification provenance (W1)
+         file-metadata-classification
          ;; Path utilities
          normalize-test-path
          ;; File collection
@@ -44,6 +46,18 @@
              [i (in-naturals)]
              #:when (= (modulo i shard-total) shard-index))
     f))
+
+;; ============================================================
+;; Metadata classification provenance (W1)
+;; ============================================================
+
+;; All metadata parsing routes through the schema-aware parser in
+;; classify-metadata.rkt (see `validate-file` there for schema v1 and the
+;; report-only lint). Heuristic (filename/path-based) classification results
+;; are labeled 'heuristic rather than 'explicit so downstream reports can
+;; distinguish declarative metadata from heuristic fallbacks.
+(define (file-metadata-classification f)
+  (hash-ref (get-file-metadata f) 'classification 'heuristic))
 
 ;; ============================================================
 ;; Path utilities

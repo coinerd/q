@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;
 ;; Regression tests for spawn-subagents result extraction bugs:
 ;; Bug 1: extract-text-summary truncated to 200 chars (now 4000)

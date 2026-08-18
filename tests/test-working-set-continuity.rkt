@@ -14,6 +14,7 @@
 ;; the lifecycle unconditionally called working-set-reset!.
 ;;
 ;; The fix classifies the prompt boundary:
+;; @boundary unit
 ;;   continuation  → retain working set
 ;;   narrowing     → retain working set
 ;;   superseding   → retain working set (update objective)

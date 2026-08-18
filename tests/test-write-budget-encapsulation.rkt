@@ -25,6 +25,7 @@
          (only-in "../tools/tool.rkt" tool-result? tool-result-is-error?))
 
 ;; ── Parameter+box isolation ──
+;; @boundary integration
 
 (test-case "init-session-writes!-creates-fresh-box"
   (init-session-writes!)

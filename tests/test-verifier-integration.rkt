@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite verifier
+;; @boundary integration
 
 ;; tests/test-verifier-integration.rkt — W7 (v0.99.5) Integration Tests
 ;;

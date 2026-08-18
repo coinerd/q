@@ -1,6 +1,7 @@
 #lang racket/base
 ;; @speed fast
 ;; @suite default
+;; @boundary e2e  ;; @requires terminal
 ;; W6 evidence manifest tests (F-03/F-08).
 
 (require rackunit

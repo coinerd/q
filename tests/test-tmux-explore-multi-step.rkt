@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; W6 red-first: multi-step explorer drivers, step isolation, and credential defense.
+;; @boundary e2e  ;; @requires terminal
 
 (require rackunit
          racket/string

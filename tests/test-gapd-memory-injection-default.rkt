@@ -4,6 +4,8 @@
 ;; v0.97.4 W1: GAP-D default memory injection budget
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
