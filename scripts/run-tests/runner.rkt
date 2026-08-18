@@ -27,9 +27,9 @@
                   mutating-file?
                   restore-repo-surfaces!
                   clean-stale-bytecode!
-                   file-has-rackunit-tests?
-                   shard-files
-                   print-lint-report)
+                  file-has-rackunit-tests?
+                  shard-files
+                  print-lint-report)
          (only-in "parse.rkt"
                   test-file-result
                   test-file-result-path
@@ -277,7 +277,9 @@
   (define version-path (build-path base-dir "util" "version.rkt"))
   (with-handlers ([exn:fail? (lambda (_) "unknown")])
     (define m (regexp-match #rx"q-version[ \t]+\"([^\"]+)\"" (file->string version-path)))
-    (if m (cadr m) "unknown")))
+    (if m
+        (cadr m)
+        "unknown")))
 
 (define (run-suite-once suite-files
                         jobs
@@ -416,11 +418,11 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
-                   json-out
-                   ledger-path
-                   profile
-                   lint-metadata?)
-     (parse-args (vector->list filtered-args)))
+                  json-out
+                  ledger-path
+                  profile
+                  lint-metadata?)
+    (parse-args (vector->list filtered-args)))
   (validate-args! jobs
                   sequential?
                   timeout

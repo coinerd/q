@@ -105,9 +105,9 @@
                       #:diagnose-overhead? [diagnose-overhead?* diagnose-overhead?]
                       #:mode [mode* mode]
                       #:json-out [json-out* json-out]
-                       #:ledger [ledger* ledger]
-                       #:profile [profile* profile]
-                       #:lint-metadata? [lint-metadata?* lint-metadata?])
+                      #:ledger [ledger* ledger]
+                      #:profile [profile* profile]
+                      #:lint-metadata? [lint-metadata?* lint-metadata?])
       (loop rest
             jobs*
             sequential?*
@@ -120,10 +120,10 @@
             inventory?*
             diagnose-overhead?*
             mode*
-             json-out*
-             ledger*
-             profile*
-             lint-metadata?*))
+            json-out*
+            ledger*
+            profile*
+            lint-metadata?*))
     (match rest
       ['()
        (values jobs
@@ -137,10 +137,10 @@
                inventory?
                diagnose-overhead?
                mode
-                json-out
-                ledger
-                profile
-                lint-metadata?)]
+               json-out
+               ledger
+               profile
+               lint-metadata?)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -153,8 +153,8 @@
       [(list "--repeat" n rest ...) (continue rest #:repeat (string->number n))]
       [(list "--record-gate-evidence" rest ...) (continue rest #:record-gate? #t)]
       [(list "--inventory" rest ...) (continue rest #:inventory? #t)]
-       [(list "--diagnose-overhead" rest ...) (continue rest #:diagnose-overhead? #t)]
-       [(list "--lint-metadata" rest ...) (continue rest #:lint-metadata? #t)]
+      [(list "--diagnose-overhead" rest ...) (continue rest #:diagnose-overhead? #t)]
+      [(list "--lint-metadata" rest ...) (continue rest #:lint-metadata? #t)]
       [(list "--json-out" path rest ...) (continue rest #:json-out path)]
       [(list "--ledger" path rest ...) (continue rest #:ledger path)]
       [(list "--profile" name rest ...) (continue rest #:profile (string->symbol name))]
@@ -176,11 +176,11 @@
                         inventory?
                         diagnose-overhead?
                         mode
-                         json-out
-                         ledger
-                         profile
-                         lint-metadata?)
-   (unless (memq suite known-suites)
+                        json-out
+                        ledger
+                        profile
+                        lint-metadata?)
+  (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
                       suite

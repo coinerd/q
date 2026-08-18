@@ -133,17 +133,17 @@
 
 (define (header-lines path)
   (with-handlers ([exn:fail? (lambda (_) '())])
-    (call-with-input-file*
-     (if (absolute-path? path) path (build-path base-dir path))
-     (lambda (port)
-       (for/list ([_ (in-range 50)]
-                  #:break (eof-object? (peek-byte port)))
-         (define line (read-line port))
-         (if (string? line) line ""))))))
+    (call-with-input-file* (if (absolute-path? path)
+                               path
+                               (build-path base-dir path))
+                           (lambda (port)
+                             (for/list ([_ (in-range 50)]
+                                        #:break (eof-object? (peek-byte port)))
+                               (define line (read-line port))
+                               (if (string? line) line ""))))))
 
 (define (raw-tag-present? header field)
-  (define pattern
-    (pregexp (format "@~a(?:[[:space:]]|$)" (regexp-quote (symbol->string field)))))
+  (define pattern (pregexp (format "@~a(?:[[:space:]]|$)" (regexp-quote (symbol->string field)))))
   (for/or ([line (in-list header)])
     (and (regexp-match? pattern line) #t)))
 
@@ -165,16 +165,19 @@
     [else 'missing]))
 
 (define (collect-test-star-files)
-  (sort
-   (for/list ([f (in-directory (build-path base-dir "tests"))]
-              #:when (and (file-exists? f)
-                          (regexp-match? #rx"(^|/)test-[^/]*\\.rkt$" (path->string f))
-                          (not (string-contains? (path->string f) "/compiled/"))))
-     (path->string (find-relative-path base-dir f)))
-   string<?))
+  (sort (for/list ([f (in-directory (build-path base-dir "tests"))]
+                   #:when (and (file-exists? f)
+                               (regexp-match? #rx"(^|/)test-[^/]*\\.rkt$" (path->string f))
+                               (not (string-contains? (path->string f) "/compiled/"))))
+          (path->string (find-relative-path base-dir f)))
+        string<?))
 
 (define (file-area f)
-  (define parts (string-split (if (path? f) (path->string f) f) "/"))
+  (define parts
+    (string-split (if (path? f)
+                      (path->string f)
+                      f)
+                  "/"))
   (cond
     [(and (>= (length parts) 3) (string=? (car parts) "tests")) (cadr parts)]
     [(and (>= (length parts) 2) (string=? (car parts) "tests")) "(root)"]
@@ -185,10 +188,14 @@
   (define statuses
     (for/hasheq ([field (in-list metadata-fields)])
       (values field (field-status f header field))))
-  (hasheq 'file f
-          'area (file-area f)
-          'metadata_completeness (symbol->string (metadata-completeness f))
-          'fields statuses))
+  (hasheq 'file
+          f
+          'area
+          (file-area f)
+          'metadata_completeness
+          (symbol->string (metadata-completeness f))
+          'fields
+          statuses))
 
 (define (status->flag field status)
   (case status
@@ -202,32 +209,36 @@
     (for/hasheq ([field (in-list metadata-fields)])
       (values field
               (hasheq 'missing
-                      (count (lambda (rec)
-                               (eq? 'missing (hash-ref (hash-ref rec 'fields) field)))
+                      (count (lambda (rec) (eq? 'missing (hash-ref (hash-ref rec 'fields) field)))
                              records)
                       'invalid
-                      (count (lambda (rec)
-                               (eq? 'invalid (hash-ref (hash-ref rec 'fields) field)))
+                      (count (lambda (rec) (eq? 'invalid (hash-ref (hash-ref rec 'fields) field)))
                              records)))))
   (define per-area
     (for/hash ([area (in-list (remove-duplicates (map (lambda (rec) (hash-ref rec 'area)) records)))])
-      (values area
-              (count (lambda (rec) (string=? (hash-ref rec 'area) area)) records))))
+      (values area (count (lambda (rec) (string=? (hash-ref rec 'area) area)) records))))
   (define-values (explicit heuristic missing)
-    (for/fold ([explicit 0] [heuristic 0] [missing 0])
+    (for/fold ([explicit 0]
+               [heuristic 0]
+               [missing 0])
               ([rec (in-list records)])
       (case (string->symbol (hash-ref rec 'metadata_completeness))
         [(explicit) (values (add1 explicit) heuristic missing)]
         [(heuristic) (values explicit (add1 heuristic) missing)]
         [else (values explicit heuristic (add1 missing))])))
-  (hasheq 'file_count (length records)
-          'fields metadata-fields
-          'per_field per-field
-          'per_area (for/hasheq ([(area n) (in-hash per-area)])
-                      (values (string->symbol area) n))
+  (hasheq 'file_count
+          (length records)
+          'fields
+          metadata-fields
+          'per_field
+          per-field
+          'per_area
+          (for/hasheq ([(area n) (in-hash per-area)])
+            (values (string->symbol area) n))
           'metadata_completeness
           (hasheq 'explicit explicit 'heuristic heuristic 'missing missing)
-          'files records))
+          'files
+          records))
 
 (define (run-metadata-quality-report #:json-out [json-out #f])
   (define files (collect-test-star-files))
@@ -251,12 +262,12 @@
   (printf ";; heuristic-only classification (no @suite/@speed): ~a files~n~n"
           (+ (hash-ref completeness 'heuristic) (hash-ref completeness 'missing)))
   ;; Per-module-area listing
-  (define areas
-    (sort (remove-duplicates (map (lambda (rec) (hash-ref rec 'area)) records)) string<?))
+  (define areas (sort (remove-duplicates (map (lambda (rec) (hash-ref rec 'area)) records)) string<?))
   (for ([area (in-list areas)])
-    (define area-records
-      (filter (lambda (rec) (string=? (hash-ref rec 'area) area)) records))
-    (printf ";; [area: ~a] ~a file~a~n" area (length area-records)
+    (define area-records (filter (lambda (rec) (string=? (hash-ref rec 'area) area)) records))
+    (printf ";; [area: ~a] ~a file~a~n"
+            area
+            (length area-records)
             (if (= (length area-records) 1) "" "s"))
     (for ([rec (in-list area-records)])
       (define flags
@@ -264,10 +275,7 @@
                 (for/list ([field (in-list metadata-fields)])
                   (status->flag field (hash-ref (hash-ref rec 'fields) field)))))
       (cond
-        [(pair? flags)
-         (printf "  ~a  [~a]~n"
-                 (hash-ref rec 'file)
-                 (string-join flags " "))]
+        [(pair? flags) (printf "  ~a  [~a]~n" (hash-ref rec 'file) (string-join flags " "))]
         [(string=? (hash-ref rec 'metadata_completeness) "explicit")
          (printf "  ~a  [complete]~n" (hash-ref rec 'file))]
         [else
@@ -277,15 +285,21 @@
     (newline))
   (when json-out
     (define payload
-      (hasheq 'generator "inventory.rkt --metadata-quality"
-              'file_count (hash-ref summary 'file_count)
-              'per_field (hash-ref summary 'per_field)
-              'per_area (hash-ref summary 'per_area)
-              'metadata_completeness completeness
-              'files records))
-    (call-with-output-file json-out #:exists 'truncate/replace
-      (lambda (out)
-        (write-json payload out)))
+      (hasheq 'generator
+              "inventory.rkt --metadata-quality"
+              'file_count
+              (hash-ref summary 'file_count)
+              'per_field
+              (hash-ref summary 'per_field)
+              'per_area
+              (hash-ref summary 'per_area)
+              'metadata_completeness
+              completeness
+              'files
+              records))
+    (call-with-output-file json-out
+                           #:exists 'truncate/replace
+                           (lambda (out) (write-json payload out)))
     (printf ";; JSON report written to ~a~n" json-out))
   summary)
 
@@ -295,7 +309,8 @@
     (match rest
       ['() (void)]
       [(or (list "--help" _) (list "-h" _))
-       (displayln "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
+       (displayln
+        "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
        (exit 0)]
       [(list "--metadata-quality" rest ...) (loop rest)]
       [(list "--json-out" p rest ...)
@@ -303,7 +318,8 @@
        (loop rest)]
       [(list other rest ...)
        (printf "unknown argument: ~a~n" other)
-       (displayln "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
+       (displayln
+        "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
        (exit 2)
        (loop rest)]))
   (when (member "--metadata-quality" argv)

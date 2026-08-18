@@ -19,11 +19,11 @@
 ;; Re-export the full extracted API surface for backward compatibility.
 (provide (all-from-out "classify-metadata.rkt")
          (all-from-out "classify-filters.rkt")
-;; Shard support
-          shard-files
-          ;; Metadata classification provenance (W1)
-          file-metadata-classification
-          ;; Path utilities
+         ;; Shard support
+         shard-files
+         ;; Metadata classification provenance (W1)
+         file-metadata-classification
+         ;; Path utilities
          normalize-test-path
          ;; File collection
          collect-test-files

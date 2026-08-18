@@ -12,32 +12,32 @@
          racket/file)
 
 (provide base-dir
-          q-root-candidate?
-          resolve-base-dir
-          metadata-cache
-          clear-metadata-cache!
-          metadata-tokens
-          metadata-bool
-          metadata-line-match
-          get-file-metadata
-          ;; Schema v1 + report-only lint (W1)
-          metadata-schema-version
-          schema-known-tags
-          schema-reserved-tags
-          schema-required-tags
-          schema-suite-values
-          schema-speed-values
-          schema-boundary-values
-          schema-mutates-values
-          schema-isolation-values
-          canonical-isolation
-          deprecated-isolation-alias?
-          validate-file
-          validate-files
-          summarize-findings
-          findings->jsexpr
-          lint-summary->jsexpr
-          print-lint-report)
+         q-root-candidate?
+         resolve-base-dir
+         metadata-cache
+         clear-metadata-cache!
+         metadata-tokens
+         metadata-bool
+         metadata-line-match
+         get-file-metadata
+         ;; Schema v1 + report-only lint (W1)
+         metadata-schema-version
+         schema-known-tags
+         schema-reserved-tags
+         schema-required-tags
+         schema-suite-values
+         schema-speed-values
+         schema-boundary-values
+         schema-mutates-values
+         schema-isolation-values
+         canonical-isolation
+         deprecated-isolation-alias?
+         validate-file
+         validate-files
+         summarize-findings
+         findings->jsexpr
+         lint-summary->jsexpr
+         print-lint-report)
 
 ;; ============================================================
 ;; Base directory resolution
@@ -102,9 +102,9 @@
         (define not-test? #f)
         (define mutates #f)
         (define boundary #f)
-         (define isolation #f)
-         (define isolation-raw #f)
-         (define timeout #f)
+        (define isolation #f)
+        (define isolation-raw #f)
+        (define timeout #f)
         (with-handlers ([exn:fail? (lambda (_) (void))])
           (call-with-input-file full-path
                                 (lambda (port)
@@ -140,39 +140,39 @@
                                         (regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line))
                                       (when timeout-match
                                         (set! timeout (string->number (cadr timeout-match)))))))))
-         ;; Schema v1 normalization (W1): `subprocess` is a deprecated alias
-         ;; for the canonical `process` isolation value. Normalize on parse so
-         ;; every consumer sees the canonical spelling; retain the raw value
-         ;; under 'isolation-raw so the lint can flag it for migration.
-         (define canonical-iso (and isolation (canonical-isolation isolation)))
-         (when (and isolation canonical-iso (not (string=? isolation canonical-iso)))
-           (set! isolation-raw isolation)
-           (set! isolation canonical-iso))
-         (hash 'speed
-               speed
-               'suite
-               suite
-               'suites
-               suites
-               'requires
-               requires
-               'not-test?
-               not-test?
-               'mutates
-               mutates
-               'boundary
-               boundary
-               'isolation
-               isolation
-               'isolation-raw
-               isolation-raw
-               'timeout
-               timeout
-               ;; Classification provenance: 'explicit when the file carries
-               ;; @suite/@speed metadata; 'heuristic when selection relies on
-               ;; filename/path heuristics.
-               'classification
-               (if (or suite speed) 'explicit 'heuristic))]))))
+        ;; Schema v1 normalization (W1): `subprocess` is a deprecated alias
+        ;; for the canonical `process` isolation value. Normalize on parse so
+        ;; every consumer sees the canonical spelling; retain the raw value
+        ;; under 'isolation-raw so the lint can flag it for migration.
+        (define canonical-iso (and isolation (canonical-isolation isolation)))
+        (when (and isolation canonical-iso (not (string=? isolation canonical-iso)))
+          (set! isolation-raw isolation)
+          (set! isolation canonical-iso))
+        (hash 'speed
+              speed
+              'suite
+              suite
+              'suites
+              suites
+              'requires
+              requires
+              'not-test?
+              not-test?
+              'mutates
+              mutates
+              'boundary
+              boundary
+              'isolation
+              isolation
+              'isolation-raw
+              isolation-raw
+              'timeout
+              timeout
+              ;; Classification provenance: 'explicit when the file carries
+              ;; @suite/@speed metadata; 'heuristic when selection relies on
+              ;; filename/path heuristics.
+              'classification
+              (if (or suite speed) 'explicit 'heuristic))]))))
 
 ;; ============================================================
 ;; Metadata schema (v1) and report-only lint (W1)
@@ -196,10 +196,32 @@
 
 ;; Allowed values per tag (strings exactly as they appear in the header).
 (define schema-suite-values
-  '("all" "broad" "fast" "unit" "unit-fast" "slow" "smoke" "release-smoke" "tui"
-    "tui-tmux" "security" "arch" "runtime" "extensions" "workflows" "platform"
-    "mutating" "skills" "ci" "testing" "integration" "tools" "provider" "gsd"
-    "verifier" "harness" "default"))
+  '("all" "broad"
+          "fast"
+          "unit"
+          "unit-fast"
+          "slow"
+          "smoke"
+          "release-smoke"
+          "tui"
+          "tui-tmux"
+          "security"
+          "arch"
+          "runtime"
+          "extensions"
+          "workflows"
+          "platform"
+          "mutating"
+          "skills"
+          "ci"
+          "testing"
+          "integration"
+          "tools"
+          "provider"
+          "gsd"
+          "verifier"
+          "harness"
+          "default"))
 (define schema-speed-values '("fast" "slow"))
 (define schema-boundary-values '("unit" "integration" "e2e"))
 (define schema-mutates-values '("none" "env" "cwd" "fs" "repo" "temp" "home"))
@@ -215,7 +237,9 @@
 
 (define (canonical-isolation v)
   (cond
-    [(assoc v schema-isolation-deprecated-aliases) => cdr]
+    [(assoc v schema-isolation-deprecated-aliases)
+     =>
+     cdr]
     [else v]))
 
 (define (deprecated-isolation-alias? v)
@@ -228,34 +252,35 @@
 ;; (`;; @speed fast @suite default`). Every `@tag [value]` occurrence in a
 ;; comment line is scanned; a value ends at the next `@` or `;`.
 (define header-comment-line-pattern #rx"^[ \t]*;+")
-(define header-chunk-tag-pattern
-  (pregexp "^([A-Za-z][A-Za-z0-9_-]*)(?:[ \t]+(.*))?"))
+(define header-chunk-tag-pattern (pregexp "^([A-Za-z][A-Za-z0-9_-]*)(?:[ \t]+(.*))?"))
 
 (define (clean-tag-value v)
   (string-trim (regexp-replace* #rx";.*$" (or v "") "")))
 
 (define (extract-header-tags f)
-  (define full-path (if (absolute-path? f) f (build-path base-dir f)))
+  (define full-path
+    (if (absolute-path? f)
+        f
+        (build-path base-dir f)))
   (cond
     [(not (file-exists? full-path)) '()]
     [else
      (define acc '())
      (with-handlers ([exn:fail? (lambda (_) (void))])
-       (call-with-input-file full-path
-         (lambda (port)
-           (for ([_ (in-range 50)]
-                 #:break (eof-object? (peek-byte port)))
-             (define line (read-line port))
-             (when (and (string? line)
-                        (regexp-match? header-comment-line-pattern line))
-               (define chunks (regexp-split #rx"@" line))
-               (for ([chunk (in-list (cdr chunks))])
-                 (define m (regexp-match header-chunk-tag-pattern chunk))
-                 (when (and m (cadr m))
-                   (set! acc
-                         (cons (cons (string-downcase (cadr m))
-                                     (clean-tag-value (caddr m)))
-                               acc)))))))))
+       (call-with-input-file
+        full-path
+        (lambda (port)
+          (for ([_ (in-range 50)]
+                #:break (eof-object? (peek-byte port)))
+            (define line (read-line port))
+            (when (and (string? line) (regexp-match? header-comment-line-pattern line))
+              (define chunks (regexp-split #rx"@" line))
+              (for ([chunk (in-list (cdr chunks))])
+                (define m (regexp-match header-chunk-tag-pattern chunk))
+                (when (and m (cadr m))
+                  (set! acc
+                        (cons (cons (string-downcase (cadr m)) (clean-tag-value (caddr m)))
+                              acc)))))))))
      (reverse acc)]))
 
 (define (raw-tag-value tags tag)
@@ -269,7 +294,10 @@
   (hasheq 'kind kind 'code code 'tag tag 'message message))
 
 (define (lint-area f)
-  (define p (if (path? f) (path->string f) f))
+  (define p
+    (if (path? f)
+        (path->string f)
+        f))
   (define m (regexp-match #rx"^tests/([^/]+)/" p))
   (cond
     [(and m (cadr m)) (string-append "(" (cadr m) ")")]
@@ -296,13 +324,20 @@
     (cond
       [(member tag schema-known-tags)
        (when (member tag schema-reserved-tags)
-         (add! 'info 'reserved-tag tag
+         (add! 'info
+               'reserved-tag
+               tag
                "forward-reserved tag: accepted by schema v1, value not yet enforced"))]
       [else
-       (add! 'error 'unknown-tag tag
+       (add! 'error
+             'unknown-tag
+             tag
              (format "unknown tag @~a (schema v~a vocabulary: ~a)"
-                     tag metadata-schema-version (string-join schema-known-tags " ")))]))
-  (define (raw tag) (raw-tag-value tags tag))
+                     tag
+                     metadata-schema-version
+                     (string-join schema-known-tags " ")))]))
+  (define (raw tag)
+    (raw-tag-value tags tag))
   ;; 2. Enum validations. These use the RAW header value so malformed
   ;;    spellings that the lenient parser silently drops are still visible
   ;;    to the lint.
@@ -310,77 +345,107 @@
   (when suite-raw
     (for ([tok (in-list (metadata-tokens suite-raw))])
       (unless (member tok schema-suite-values)
-        (add! 'error 'invalid-suite "suite"
-               (format "unknown suite value `~a` (valid: ~a)"
-                       tok (string-join schema-suite-values " "))))))
+        (add!
+         'error
+         'invalid-suite
+         "suite"
+         (format "unknown suite value `~a` (valid: ~a)" tok (string-join schema-suite-values " "))))))
   (define speed-raw (raw "speed"))
   (when speed-raw
     (for ([tok (in-list (metadata-tokens speed-raw))])
       (unless (member tok schema-speed-values)
-        (add! 'error 'invalid-speed "speed"
-               (format "invalid speed `~a` (valid: fast slow)" tok)))))
+        (add! 'error 'invalid-speed "speed" (format "invalid speed `~a` (valid: fast slow)" tok)))))
   (define boundary-raw (raw "boundary"))
   (when boundary-raw
     (unless (member boundary-raw schema-boundary-values)
-      (add! 'error 'invalid-boundary "boundary"
-             (format "invalid boundary `~a` (valid: ~a)"
-                     boundary-raw (string-join schema-boundary-values " ")))))
+      (add! 'error
+            'invalid-boundary
+            "boundary"
+            (format "invalid boundary `~a` (valid: ~a)"
+                    boundary-raw
+                    (string-join schema-boundary-values " ")))))
   (define mutates-raw (raw "mutates"))
   (when mutates-raw
     (for ([tok (in-list (metadata-tokens mutates-raw))])
       (unless (member tok schema-mutates-values)
-        (add! 'error 'invalid-mutates "mutates"
-               (format "invalid mutates token `~a` (valid: ~a)"
-                       tok (string-join schema-mutates-values " "))))))
+        (add! 'error
+              'invalid-mutates
+              "mutates"
+              (format "invalid mutates token `~a` (valid: ~a)"
+                      tok
+                      (string-join schema-mutates-values " "))))))
   (define isolation-header-raw (raw "isolation"))
   (cond
     [(not isolation-header-raw) (void)]
     [(deprecated-isolation-alias? isolation-header-raw)
-     (add! 'warning 'deprecated-isolation-alias "isolation"
+     (add! 'warning
+           'deprecated-isolation-alias
+           "isolation"
            (format "deprecated alias `~a` normalizes to `~a`"
-                   isolation-header-raw (canonical-isolation isolation-header-raw)))]
+                   isolation-header-raw
+                   (canonical-isolation isolation-header-raw)))]
     [(not (member isolation-header-raw schema-isolation-values))
-     (add! 'error 'invalid-isolation "isolation"
+     (add! 'error
+           'invalid-isolation
+           "isolation"
            (format "invalid isolation `~a` (canonical vocabulary: ~a)"
-                   isolation-header-raw (string-join schema-isolation-values " ")))])
+                   isolation-header-raw
+                   (string-join schema-isolation-values " ")))])
   (define timeout-raw (raw "timeout"))
   (when (and timeout-raw
              (not (or (string=? timeout-raw "")
                       (regexp-match? schema-timeout-value-pattern timeout-raw))))
-    (add! 'error 'malformed-timeout "timeout"
-          (format "malformed timeout `~a` (expected positive integer seconds)"
-                  timeout-raw)))
+    (add! 'error
+          'malformed-timeout
+          "timeout"
+          (format "malformed timeout `~a` (expected positive integer seconds)" timeout-raw)))
   (define requires-raw (raw "requires"))
   (when requires-raw
     (for ([tok (in-list (metadata-tokens requires-raw))])
       (unless (member tok schema-requires-values)
-        (add! 'error 'unknown-requires-token "requires"
-               (format "unknown requirement `~a` (valid: ~a)"
-                       tok (string-join schema-requires-values " "))))))
+        (add! 'error
+              'unknown-requires-token
+              "requires"
+              (format "unknown requirement `~a` (valid: ~a)"
+                      tok
+                      (string-join schema-requires-values " "))))))
   ;; 3. Required tags.
   (for ([tag (in-list schema-required-tags)])
     (unless (raw tag)
-      (add! 'warning 'missing-required tag
-            (format "missing required tag @~a (schema v~a)"
-                    tag metadata-schema-version))))
+      (add! 'warning
+            'missing-required
+            tag
+            (format "missing required tag @~a (schema v~a)" tag metadata-schema-version))))
   ;; 4. Provenance: heuristic-only files are selected by filename/path.
   (define classification (hash-ref meta 'classification 'heuristic))
   (when (eq? classification 'heuristic)
-    (add! 'info 'heuristic-classification "suite"
+    (add! 'info
+          'heuristic-classification
+          "suite"
           "no @suite/@speed: classification relies on filename/path heuristics"))
   (hasheq 'file
-          (if (path? f) (path->string f) f)
-          'area (lint-area f)
-          'classification classification
-          'findings (reverse findings)
+          (if (path? f)
+              (path->string f)
+              f)
+          'area
+          (lint-area f)
+          'classification
+          classification
+          'findings
+          (reverse findings)
           'normalized
-          (hasheq 'isolation (canonical-isolation (hash-ref meta 'isolation #f))
-                  'isolation-raw (hash-ref meta 'isolation-raw #f)
-                  'suite (hash-ref meta 'suite #f)
-                  'speed (hash-ref meta 'speed #f))))
+          (hasheq 'isolation
+                  (canonical-isolation (hash-ref meta 'isolation #f))
+                  'isolation-raw
+                  (hash-ref meta 'isolation-raw #f)
+                  'suite
+                  (hash-ref meta 'suite #f)
+                  'speed
+                  (hash-ref meta 'speed #f))))
 
 ;; validate-files : (listof path-string?) -> (listof hash?)
-(define (validate-files files) (map validate-file files))
+(define (validate-files files)
+  (map validate-file files))
 
 ;; ---- Aggregation ----
 
@@ -394,7 +459,8 @@
   (for ([r (in-list results)])
     (define area (hash-ref r 'area "(other)"))
     (define a
-      (hash-ref! per-area area
+      (hash-ref! per-area
+                 area
                  (lambda ()
                    (make-hash (list (cons 'invalid 0)
                                     (cons 'deprecated_alias 0)
@@ -416,40 +482,62 @@
     (if (eq? (hash-ref r 'classification) 'explicit)
         (set! explicit (add1 explicit))
         (set! heuristic (add1 heuristic))))
-  (hasheq 'schema_version metadata-schema-version
-          'file_count (length results)
-          'invalid_count invalid
-          'deprecated_alias_count deprecated
-          'missing_required_count missing-required
-          'classification (hasheq 'explicit explicit 'heuristic heuristic)
-          'per_area (for/hasheq ([(area a) (in-hash per-area)])
-                      (values (string->symbol area)
-                              (make-immutable-hasheq (hash->list a))))))
+  (hasheq 'schema_version
+          metadata-schema-version
+          'file_count
+          (length results)
+          'invalid_count
+          invalid
+          'deprecated_alias_count
+          deprecated
+          'missing_required_count
+          missing-required
+          'classification
+          (hasheq 'explicit explicit 'heuristic heuristic)
+          'per_area
+          (for/hasheq ([(area a) (in-hash per-area)])
+            (values (string->symbol area) (make-immutable-hasheq (hash->list a))))))
 
 ;; ---- jsexpr helpers (for --json-out payloads) ----
 
 (define (finding->jsexpr f)
-  (hasheq 'kind (symbol->string (hash-ref f 'kind))
-          'code (symbol->string (hash-ref f 'code))
-          'tag (hash-ref f 'tag)
-          'message (hash-ref f 'message)))
+  (hasheq 'kind
+          (symbol->string (hash-ref f 'kind))
+          'code
+          (symbol->string (hash-ref f 'code))
+          'tag
+          (hash-ref f 'tag)
+          'message
+          (hash-ref f 'message)))
 
 (define (file-result->jsexpr r)
-  (hasheq 'file (hash-ref r 'file)
-          'area (hash-ref r 'area)
-          'classification (symbol->string (hash-ref r 'classification))
-          'findings (map finding->jsexpr (hash-ref r 'findings))))
+  (hasheq 'file
+          (hash-ref r 'file)
+          'area
+          (hash-ref r 'area)
+          'classification
+          (symbol->string (hash-ref r 'classification))
+          'findings
+          (map finding->jsexpr (hash-ref r 'findings))))
 
-(define (findings->jsexpr results) (map file-result->jsexpr results))
+(define (findings->jsexpr results)
+  (map file-result->jsexpr results))
 
 (define (lint-summary->jsexpr s)
-  (hasheq 'schema_version (hash-ref s 'schema_version)
-          'file_count (hash-ref s 'file_count)
-          'invalid_count (hash-ref s 'invalid_count)
-          'deprecated_alias_count (hash-ref s 'deprecated_alias_count)
-          'missing_required_count (hash-ref s 'missing_required_count)
-          'classification (hash-ref s 'classification)
-          'per_area (hash-ref s 'per_area)))
+  (hasheq 'schema_version
+          (hash-ref s 'schema_version)
+          'file_count
+          (hash-ref s 'file_count)
+          'invalid_count
+          (hash-ref s 'invalid_count)
+          'deprecated_alias_count
+          (hash-ref s 'deprecated_alias_count)
+          'missing_required_count
+          (hash-ref s 'missing_required_count)
+          'classification
+          (hash-ref s 'classification)
+          'per_area
+          (hash-ref s 'per_area)))
 
 ;; ---- Report-only CLI lint (W1) ----
 ;; Prints per-file findings (errors and warnings; info findings stay in the
@@ -463,8 +551,7 @@
   (printf ";; ════════════════════════════════════════════════════════════~n")
   (for ([r (in-list results)])
     (define fs
-      (filter (lambda (f) (memq (hash-ref f 'kind) '(error warning)))
-              (hash-ref r 'findings '())))
+      (filter (lambda (f) (memq (hash-ref f 'kind) '(error warning))) (hash-ref r 'findings '())))
     (when (pair? fs)
       (printf "~a  [~a]~n" (hash-ref r 'file) (hash-ref r 'classification))
       (for ([f (in-list fs)])
@@ -475,15 +562,17 @@
                 (hash-ref f 'message)))))
   (define s (summarize-findings results))
   (newline)
-  (printf ";; aggregate: files=~a invalid=~a deprecated-alias=~a missing-required=~a explicit=~a heuristic-only=~a~n"
-          (hash-ref s 'file_count)
-          (hash-ref s 'invalid_count)
-          (hash-ref s 'deprecated_alias_count)
-          (hash-ref s 'missing_required_count)
-          (hash-ref (hash-ref s 'classification) 'explicit)
-          (hash-ref (hash-ref s 'classification) 'heuristic))
+  (printf
+   ";; aggregate: files=~a invalid=~a deprecated-alias=~a missing-required=~a explicit=~a heuristic-only=~a~n"
+   (hash-ref s 'file_count)
+   (hash-ref s 'invalid_count)
+   (hash-ref s 'deprecated_alias_count)
+   (hash-ref s 'missing_required_count)
+   (hash-ref (hash-ref s 'classification) 'explicit)
+   (hash-ref (hash-ref s 'classification) 'heuristic))
   (define areas
-    (sort (for/list ([(k v) (in-hash (hash-ref s 'per_area))]) k)
+    (sort (for/list ([(k v) (in-hash (hash-ref s 'per_area))])
+            k)
           (lambda (x y) (string<? (symbol->string x) (symbol->string y)))))
   (for ([area (in-list areas)])
     (define a (hash-ref (hash-ref s 'per_area) area))
