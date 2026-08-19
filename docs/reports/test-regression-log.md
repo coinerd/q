@@ -199,3 +199,20 @@ genuine failure (shard 3/6) + shard-JSON evidence infra defect + macOS job
 outcome (appended below). Release-blocking until #9384 and the workflow-infra
 follow-ups land and a green full-regression run with intact per-shard JSON is
 recorded here.
+
+### Run completion addendum (all jobs final)
+
+| Job | Conclusion | Detail |
+|---|---|---|
+| test shard 0–5/6 | failure | as tabled above (1 genuine fail in shard 3/6; all shards red on JSON-infra defect) |
+| workflows-suite | failure | as tabled above |
+| test-platform (macos-14) | **cancelled** | `setup-racket` step ran 2,538 s (42.3 min) then "The operation was canceled" — setup-budget/step-timeout exhaustion; suite never started; evidence artifact uploaded empty-of-results. **Classification: platform timeout (setup)**, same class and cause as run 32288930966. |
+| summarize | failure | expected: zero shard-JSON inputs (infra defect) → all shards classified missing-evidence, per design |
+| mutation-pilot | skipped | per workflow gating |
+| report | success | run-level report published despite failures (as designed) |
+
+Run-level conclusion: **`failure`** (gh: `completed / failure`). Definitive
+overall status for main @ `1764ed84`: **`fail`** — deterministic DEEP-9 test
+failure (shard 3/6, #9384) + systemic per-shard JSON evidence defect + macOS
+platform setup timeout. No new triage events beyond those tabled above;
+follow-ups already tracked in #9384 and the infra ticket from run 32288930966.
