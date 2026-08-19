@@ -99,6 +99,72 @@ Selection is conservative by design:
   reason. The summary is a pointer, not the source of truth — full results
   and failure logs remain available unchanged.
 
+## Local impact selection (opt-in)
+
+Change-impact selection (implemented in `scripts/run-tests/impact.rkt`, driven
+through the `scripts/run-tests.rkt` CLI) is an **opt-in local developer
+workflow**. It is never invoked by CI (rationale below) and never replaces the
+normal suites.
+
+### Always start with the dry run and the explanation
+
+Never execute a blind impact run. First inspect what would be selected — and
+why — for your change range:
+
+```bash
+racket scripts/run-tests.rkt --impact-dry-run \
+  --changed-base <base> --changed-head <head> --explain
+```
+
+`<base>` is typically `origin/main` (or `$(git merge-base origin/main HEAD)`);
+`<head>` defaults to `HEAD`. Nothing executes: the run prints the reasoned
+selection and exits 0.
+
+### Reading the output
+
+- **Deterministic selection reasons.** Every selected test reports its reason
+  code (changed test file, direct `@covers` match, transitive dependent with
+  its dependency path, changed-boundary contract), the changed file it traces
+  back to, and the mapping source. Selection is a pure function of the change
+  range: same range, same set, same reasons.
+- **Escalations widen the set to the declared fallback (`fast` plus the area
+  suites of the changed files) — they never narrow it.** When the selector is
+  uncertain it escalates and runs the declared broad fallback. Escalation
+  cases: dynamic loading (`dynamic-require`, unresolvable requires), macro
+  definitions in the changed cone, generated/configuration/fixture/
+  runner-helper changes, dependency-graph parse failures (unparseable
+  modules), unmapped sources (no `@covers` mapping reaches the changed module
+  directly or transitively), and any git failure. Each escalation prints its
+  code, the triggering file, and the fallback suites. An escalated run is a
+  broad run by design — that is the fail-open contract, not a defect.
+
+### When to execute the selected set
+
+Execute the selected set only when it is useful for the change under
+development — e.g. iterating on a focused change where the transitive-impact
+set is meaningful:
+
+```bash
+racket scripts/run-tests.rkt --changed-base <base> --changed-head <head> --prioritize impact
+```
+
+(`--prioritize impact` only reorders the already-selected set; it never
+changes which tests run.) Otherwise, use the normal `fast` profile
+(`--suite fast`) — it is what PR CI executes and remains the default local
+loop.
+
+### Why this is not a CI gate
+
+Impact selection is **not a PR or scheduled CI gate**. The former `test-impact`
+GitHub job was removed because it exceeded the repository's 30-minute job
+runtime limit; do not reintroduce it into `.github/workflows/`. The
+authoritative CI protection remains the static gates in
+`.github/workflows/ci.yml` — the three-shard `fast` suite on every PR/push
+plus the platform, security, smoke, and workflow gates. The non-CI boundary is
+enforced by grepping `.github/workflows/` for `--changed-base`,
+`--changed-head`, `--impact-dry-run`, and `--prioritize impact` (zero matches
+expected).
+
 ## Known Flaky Tests
 
 The following tests are known to fail in parallel/subprocess mode but pass
