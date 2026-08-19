@@ -1,5 +1,10 @@
 # Test Conventions
 
+Governance: the canonical test-strategy governance document is
+[`docs/TDD-TEST-STRATEGY-PLAN.md`](TDD-TEST-STRATEGY-PLAN.md) (adopted in v1.00.04;
+supersedes PR #9348). This file records the day-to-day conventions
+that implement it.
+
 ## Suites
 
 | Suite | Speed | Purpose | Command |
