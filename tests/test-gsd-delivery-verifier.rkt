@@ -181,6 +181,31 @@
                    "wrong branch must fail delivery verification")
       (cleanup-tmp base))
 
+    (test-case "approves committed delivery (wave committed + pushed + PR)"
+      ;; A wave doc may instruct the agent to commit + push + open a PR. In
+      ;; that flow the working tree is clean at verification time, so the
+      ;; evidence is the commits on the current branch relative to its base
+      ;; (origin/main or main), not an uncommitted working-tree diff.
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      ;; commit the change on the feature branch (no uncommitted diff)
+      (make-git-file-change! base)
+      (parameterize ([current-directory base])
+        (system*/exit-code GIT "add" "-A")
+        (system*/exit-code GIT "commit" "-q" "-m" "wave delivery"))
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       "raco make q/ui-core/preferences.rkt")
+      (write-state! base 0 "42")
+      (define plan (load-plan* base))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result)
+                  "committed delivery on a feature branch must be approved")
+      (cleanup-tmp base))
+
     (test-case "rejects when wave files unchanged"
       (define base (make-tmp-git-repo))
       (make-git-branch! base "feature/issue-42-wave")
