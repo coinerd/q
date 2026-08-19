@@ -213,11 +213,18 @@ jobs:
       - name: Observed round-robin wall clocks
         id: observed
         run: |
-          {
-            echo "observed=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null || echo 0)"
-          } >> "$GITHUB_OUTPUT"
+          obs=null
+          if compgen -G "durations/*.json" > /dev/null; then
+            obs=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null) || obs=null
+          fi
+          printf 'observed=%s\n' "$obs" >> "$GITHUB_OUTPUT"
       - name: Build duration-aware plan (report-only)
+        if: always()
         run: |
+          if ! compgen -G "durations/*.json" > /dev/null; then
+            echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
+            exit 0
+          fi
           racket scripts/run-tests.rkt \
             --suite fast --shard-total 3 \
             --shard-plan report --durations durations \
@@ -231,13 +238,17 @@ jobs:
             grep -E 'shard [0-9]+/3:|^;; ' shard-plan-report.log || true
             echo '```'
             if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
-              echo "- Observed round-robin max shard wall clock: ${{ steps.observed.outputs.observed }}s"
+              echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
               echo "- Inventory check: planned files must equal the summed per-shard file counts"
               jq -s '[.[].run_summary.file_count] | add' durations/*.json \
                 | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
+            else
+              echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
             fi
             echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
           } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          OBSERVED: ${{ steps.observed.outputs.observed }}
       - name: Upload shard-plan report
         if: always()
         uses: actions/upload-artifact@v7
