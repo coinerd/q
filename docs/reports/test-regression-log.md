@@ -209,3 +209,93 @@ active planning executed: `PLAN_ARGS="--shard-plan active"`,
   `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off`.
 - Next step: refresh `docs/reports/test-durations.rktd` from this run's
   `test-results-fast-*` artifacts so future predictions track the active-plan layout.
+
+## Run 32297908687 — re-dispatch on current main (`1764ed84`)
+
+Dispatched because main advanced past `c445f436` (now `1764ed84`,
+"fix(gsd): strip wave-doc path annotations + retry-with-adaptation on
+wave-failed (#9386)") and release evidence must attach to the *current* main
+revision, not the previously recorded one.
+
+| Field | Value |
+|---|---|
+| Run ID | 32297908687 |
+| Dispatch | `workflow_dispatch` on `main` |
+| Head revision | `1764ed84` |
+| Workflow | `full-regression.yml` @ main |
+| **Definitive overall status** | **`fail`** (same deterministic linux failure pattern as run 32288930966; macOS job pending at linux-recording time, appended below on completion) |
+| Runner version / mode | `1.00.03`, `execution-mode=subprocess` (all shards) |
+| Execution profile | `profile=ci` (shards), `profile=local` (workflows suite) |
+
+### Per-job outcomes (linux, completed)
+
+| Job | Platform | Job conclusion | Suite verdict (RUN-SUMMARY) | Wall clock | Classification |
+|---|---|---|---|---|---|
+| test shard 0/6 | ubuntu | failure | pass=213 fail=0 timeout=0 skip=4 (217 files) | 262.2 s | no JSON evidence (infra: `shard-results/` still not created) |
+| test shard 1/6 | ubuntu | failure | pass=212 fail=0 timeout=0 skip=5 (217 files) | 243.5 s | no JSON evidence (infra, same) |
+| test shard 2/6 | ubuntu | failure | pass=211 fail=0 timeout=0 skip=5 (216 files) | 251.5 s | no JSON evidence (infra, same) |
+| test shard 3/6 | ubuntu | failure | pass=211 **fail=1** timeout=0 skip=4 (216 files) | 149.5 s | **genuine failure** (see below) + no JSON evidence (infra, same) |
+| test shard 4/6 | ubuntu | failure | pass=212 fail=0 timeout=0 skip=4 (216 files) | 287.2 s (max) | no JSON evidence (infra, same) |
+| test shard 5/6 | ubuntu | failure | pass=212 fail=0 timeout=0 skip=4 (216 files) | 141.8 s | no JSON evidence (infra, same) |
+| workflows-suite | ubuntu | failure | pass=29 fail=0 timeout=0 skip=0 (29 files) | 38.8 s | no JSON evidence (infra, same) |
+| test-platform | macos-14 | pending at recording time | — | — | pending; run-level conclusion appended on completion |
+
+**Max shard duration:** 287.2 s (shard 4/6) — far below the 90-min job budget;
+no timeout classification on linux. **Totals (linux):** 1,298 file checks,
+1,271 pass, 1 fail, 26 skip, 0 timeout.
+
+### Retained-artifact review
+
+All seven linux artifacts (`results-shard-0..5`, `results-workflows`) were
+downloaded and inspected (`gh run download 32297908687`). Every artifact again
+contains a complete `test-output.log` (RUN-SUMMARY lines quoted above) and
+**no `shard-<N>.json`**: the `open-output-file` error fires identically in all
+seven logs because the follow-up fix (`mkdir -p shard-results` + `summarize`
+glob) from run 32288930966 has **not landed on main yet**. `summarize` will
+therefore again see zero shard JSON and classify all shards as missing
+evidence.
+
+### Failure detail (shard 3/6)
+
+`tests/test-self-hosting-deep.rkt` — `[ASSERTION_FAILURE]` (exit=1,
+9 passed, 1 failed, 7.798 s). This is the **same deterministic failure**
+already isolated and root-caused in run 32288930966 (DEEP-9 stale-semver
+assertion; issue **#9384**, still OPEN at dispatch time). A second consecutive
+red run of the identical file/shard confirms determinism; no new triage
+investigation is required — Event 1 follow-up already tracks it.
+
+## Triage (run 32297908687)
+
+- **Event 1 — green PR gate, red full regression:** recurring instance of
+  #9384 (already tracked; isolation rerun and impact-selection no-miss
+  assessment recorded under run 32288930966 above). No new regression issue
+  needed; this run is appended as corroborating evidence to #9384's timeline.
+- **Event 2 (timeout) / Event 3 (flake):** not triggered on linux (zero
+  timeouts; failure is a repeat, not intermittent).
+- **Event 4 (unavailable scheduled run):** resolved via this fresh manual
+  `workflow_dispatch` on main.
+
+## Verdict for main @ `1764ed84`
+
+**fail** — identical classification and cause set as `c445f436`: DEEP-9
+genuine failure (shard 3/6) + shard-JSON evidence infra defect + macOS job
+outcome (appended below). Release-blocking until #9384 and the workflow-infra
+follow-ups land and a green full-regression run with intact per-shard JSON is
+recorded here.
+
+### Run completion addendum (all jobs final)
+
+| Job | Conclusion | Detail |
+|---|---|---|
+| test shard 0–5/6 | failure | as tabled above (1 genuine fail in shard 3/6; all shards red on JSON-infra defect) |
+| workflows-suite | failure | as tabled above |
+| test-platform (macos-14) | **cancelled** | `setup-racket` step ran 2,538 s (42.3 min) then "The operation was canceled" — setup-budget/step-timeout exhaustion; suite never started; evidence artifact uploaded empty-of-results. **Classification: platform timeout (setup)**, same class and cause as run 32288930966. |
+| summarize | failure | expected: zero shard-JSON inputs (infra defect) → all shards classified missing-evidence, per design |
+| mutation-pilot | skipped | per workflow gating |
+| report | success | run-level report published despite failures (as designed) |
+
+Run-level conclusion: **`failure`** (gh: `completed / failure`). Definitive
+overall status for main @ `1764ed84`: **`fail`** — deterministic DEEP-9 test
+failure (shard 3/6, #9384) + systemic per-shard JSON evidence defect + macOS
+platform setup timeout. No new triage events beyond those tabled above;
+follow-ups already tracked in #9384 and the infra ticket from run 32288930966.

@@ -212,6 +212,28 @@
             #:when (not (string=? (string-trim p) "")))
     (string-trim p)))
 
+;; Does the changed-file set satisfy this wave target?
+;; - exact path match (existing behavior): a wave target that is a concrete
+;;   file is satisfied only when that file changed;
+;; - directory match: a wave target ending in "/" (e.g. "q/tests/memory/") is
+;;   satisfied when ANY changed file lives under that directory. git diff
+;;   lists files, never directories, so a directory target must be matched
+;;   by prefix. This supports wave docs that scope a target to a directory
+;;   ("existing tests + new focused tests under q/tests/memory/").
+(define (wave-file-changed? changed git-relative wave-file)
+  (cond
+    [(set-member? changed git-relative) #t]
+    ;; directory target: original wave-file ends with "/" (find-relative-path
+    ;; strips the trailing slash from git-relative, so detect via wave-file)
+    [(and (string? wave-file) (string-suffix? (string-trim wave-file) "/"))
+     (define dir
+       (if (string-suffix? git-relative "/")
+           git-relative
+           (string-append git-relative "/")))
+     (for/or ([c (in-set changed)])
+       (string-prefix? c dir))]
+    [else #f]))
+
 (define (check-wave-files-changed base-dir wave-idx plan)
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
@@ -226,7 +248,8 @@
      (let* ([changed (changed-files-set base-dir root)]
             [changed-wave-files
              (for/list ([f (in-list files)]
-                        #:when (set-member? changed (wave-file->git-relative base-dir root f)))
+                        #:when
+                        (wave-file-changed? changed (wave-file->git-relative base-dir root f) f))
                f)])
        (cons "files"
              (if (pair? changed-wave-files)
