@@ -102,15 +102,36 @@
       (dynamic-wind
        void
        (lambda ()
+         ;; Real character mismatch (x vs z): must reach the error path and
+         ;; report the nearest region, not the file start.
          (define result
-           (call-edit (hasheq 'path p 'old-text "    (let loop ([y x])" 'new-text "replacement")))
+           (call-edit (hasheq 'path p 'old-text "  (let loop ([y z])" 'new-text "replacement")))
          (check-true (tool-result-is-error? result))
          (define txt (error-text result))
          (check-true (string-contains? txt "Nearest match at line 4"))
-         (check-true (string-contains? txt "First differing offset: 2 (U+28 vs U+20)"))
-         (check-true (string-contains? txt "Context around mismatch in file:  [U+20 U+20 U+28 U+6c"))
-         (check-true (string-contains? txt "file line has 2 leading spaces, old-text has 4"))
+         (check-true (string-contains? txt "First differing offset: 16 (U+78 vs U+7a)"))
+         (check-true (string-contains? txt "Context around mismatch in file:  [U+70 U+20 U+28 U+5b U+79 U+20 U+78 U+5d U+29"))
+         (check-true (string-contains? txt "file line has 2 leading spaces, old-text has 2"))
          (check-false (string-contains? txt "Context around mismatch in file:  [U+23")))
+       (lambda () (cleanup-path p))))
+
+    (test-case "indentation-only mismatch still matches (lenient leading whitespace)"
+      (define p
+        (make-temp-file
+         "#lang racket/base\n\n(define (foo x)\n  (let loop ([y x])\n    (displayln y)))\n"))
+      (dynamic-wind
+       void
+       (lambda ()
+         ;; Indentation-only difference: the edit tool falls back to
+         ;; leading-whitespace-insensitive matching and succeeds.
+         (define result
+           (call-edit (hasheq 'path p 'old-text "    (let loop ([y x])" 'new-text "replacement")))
+         (check-pred tool-result? result)
+         (check-false (tool-result-is-error? result))
+         (check-true (string-contains? (error-text result) "replaced 1 occurrence"))
+         (check-true (string-contains? (error-text result) "ignoring leading whitespace"))
+         (check-true (string-contains? (file->string p) "replacement"))
+         (check-false (string-contains? (file->string p) "(let loop")))
        (lambda () (cleanup-path p))))))
 
 (module+ test
