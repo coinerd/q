@@ -1,8 +1,9 @@
 name: full-regression
 
 # W8: Scheduled/manual full regression. The PR gate is deliberately fast and
-# impact-selected; this workflow is the definitive execution + evidence source
-# for the slow/full/profile-aware suites.
+# statically sharded (impact selection is opt-in local-only — never a CI gate,
+# see docs/TEST_CONVENTIONS.md); this workflow is the definitive execution and
+# evidence source for the slow/full/profile-aware suites.
 # Status semantics (W0 schema): pass | fail | timeout | skip. A timed-out
 # shard fails the whole run with status "timeout" — never success.
 # Release linkage: release readiness depends on this workflow's evidence (a
