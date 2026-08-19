@@ -107,3 +107,22 @@ failure reproduces deterministically and is not intermittent.
 
 **fail** — release-blocking until the DEEP-9 failure is fixed and a green
 full-regression run (with intact per-shard JSON) is recorded here.
+
+## Addendum — run-level completion (appended after test-platform finished)
+
+Run 32288930966 completed at 45m57s total; **GitHub run conclusion: `failure`**
+(consistent with the definitive `fail` above). Final job conclusions:
+
+| Job | Conclusion |
+|---|---|
+| test shard 0–5/6 | failure (infra: missing `shard-results`; suites green except DEEP-9 on 3/6) |
+| workflows-suite | failure (infra, suite green) |
+| **test-platform (macos-14)** | **cancelled — timeout**: killed by the job's 45-min budget inside `setup-racket` (18:43:22 → 19:28:41 = 45m19s); no tests executed, no platform evidence uploaded → classified **timeout / missing evidence** |
+| summarize | failure (as predicted: zero shard JSON present) |
+| report | success |
+| mutation-pilot | skipped (opt-in) |
+
+Net classification for this run: **1 genuine test failure (DEEP-9, shard 3/6) +
+1 platform timeout (macOS setup) + 1 systemic evidence-infra defect (missing
+`shard-results` dir; summarize glob)**. All recorded in #9384. Definitive
+overall status for main @ `c445f436`: **`fail`**.
