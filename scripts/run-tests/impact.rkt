@@ -916,7 +916,9 @@
 ;; value) or hashes with a 'file key (older callers); both embed as
 ;; plain strings so the CI contract (changed_files: [string]) holds.
 (define (changed->path c)
-  (if (string? c) c (hash-ref c 'file)))
+  (if (string? c)
+      c
+      (hash-ref c 'file)))
 
 (define (embed-impact-in-results! results-path selection prioritize-payload changed)
   ;; Evidence embedding MUST NOT be a silent green (W5 contract): a
@@ -925,8 +927,9 @@
   ;; empty selection. Surface the reason on stderr instead of (void).
   (with-handlers ([exn:fail?
                    (lambda (e)
-                     (eprintf ";; embed-impact-in-results!: FAILED, results JSON left unaugmented: ~a~n"
-                              (exn-message e)))])
+                     (eprintf
+                      ";; embed-impact-in-results!: FAILED, results JSON left unaugmented: ~a~n"
+                      (exn-message e)))])
     (when (file-exists? results-path)
       (define j (call-with-input-file results-path read-json))
       (when (hash? j)
