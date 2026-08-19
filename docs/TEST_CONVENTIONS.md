@@ -204,6 +204,31 @@ The runner reads these tags for classification. Files without tags use heuristic
 | `@isolation` | `none`, `mutating`, `process` | `mutating`/`process` forces sandbox setup; overrides heuristic |
 | `@timeout` | integer (seconds) | Per-file timeout override; replaces default timeout |
 
+### Test metadata schema: required vs conditional
+
+Not every field applies to every file. The schema distinguishes fields that are
+mandatory on **every** test file from fields that are **conditional** (required
+only when the stated condition holds). CI surfaces missing mandatory tags via
+the report-only `metadata-lint` step in `.github/workflows/ci.yml`
+(`continue-on-error: true`); invalid tags are always hard failures and are not
+weakened by the report-only mode.
+
+| Field | Status | Condition |
+|-------|--------|-----------|
+| `@speed` | **Mandatory on every test file** | — (near-100% coverage: 1,298 of 1,298 files) |
+| `@boundary` | **Mandatory on every test file** | — (near-100% coverage: 1,280 of 1,298 files) |
+| `@area` | **Mandatory on every test file** | — (ownership map complete) |
+| `@suite` | Conditional | Required when the test belongs to a named suite (`runtime`, `tui`, `cli`, `llm`, `tools`, `extensions`) |
+| `@mutates` | Conditional | Required when the test mutates persistent state (values other than `none`) |
+| `@isolation` | Conditional | Required when the test needs non-default isolation (`mutating` or `process`) |
+| `@timeout` | Conditional | Required when the test needs a non-default timeout |
+
+**Enforcement date:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
+stay report-only until the next minor milestone, where enforcement flips in
+**v1.00.05** and the `metadata-lint` CI step changes from `continue-on-error:
+true` to blocking. Until that date the report-only mode stays in place so
+existing gaps are visible in the run log/summary without gating merges.
+
 ## Test Sandbox
 
 Use `with-test-sandbox` for tests that need isolated filesystem:

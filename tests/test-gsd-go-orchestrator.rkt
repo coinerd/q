@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/go-orchestrator.rkt
 
 ;; @speed fast  ;; @suite extensions
 

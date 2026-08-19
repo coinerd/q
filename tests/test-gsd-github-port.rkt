@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/github-port.rkt
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary unit

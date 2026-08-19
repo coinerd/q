@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/github/helpers.rkt
 
 ;; @speed fast
 ;; @suite default

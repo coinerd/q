@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers tui/state.rkt
 
 ;; @speed fast
 ;; @suite tui

@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/wave-status.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

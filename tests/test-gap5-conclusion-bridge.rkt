@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/memory/conclusion-bridge.rkt
 ;; @speed fast @suite default
 ;; @boundary unit
 ;; tests/test-gap5-conclusion-bridge.rkt — GAP-5 TDD tests

@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/memory/types.rkt
 
 ;; @speed fast
 ;; @suite default

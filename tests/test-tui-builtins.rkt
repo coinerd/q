@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/builtins.rkt
 
 ;; @speed fast  ;; @suite tui
 ;; @boundary unit

@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/plan-validator.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

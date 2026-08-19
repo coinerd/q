@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/approval/broker.rkt
 
 ;; @speed fast
 ;; @suite security

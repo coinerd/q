@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/wave-docs.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary integration

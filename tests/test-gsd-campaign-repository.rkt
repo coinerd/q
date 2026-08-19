@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/campaign-repository.rkt
 
 ;; @speed fast  ;; @suite extensions
 

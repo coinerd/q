@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers tools/middleware.rkt
 
 ;; @speed fast
 ;; @suite default

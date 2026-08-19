@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/prompts.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit
