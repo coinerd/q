@@ -183,13 +183,31 @@
   (define rel (find-relative-path git-root abs))
   (path->string rel))
 
+(define (base-branch-ref git-root)
+  ;; The branch the current branch diverged from, used to attribute committed
+  ;; delivery changes. Prefers origin/main (the integration branch); falls
+  ;; back to local main. Returns #f when neither resolves.
+  (for/or ([ref (in-list '("origin/main" "main"))]
+           #:when (git-exit-ok? (run-git* git-root (list "rev-parse" "--verify" ref))))
+    ref))
+
 (define (changed-files-set base-dir git-root)
-  ;; returns a set of git-relative paths changed vs HEAD or untracked-new.
+  ;; Returns a set of git-relative paths that constitute delivery evidence:
+  ;; uncommitted working-tree changes vs HEAD, untracked-new files, and
+  ;; commits on the current branch relative to its base (waves that commit
+  ;; + push + open a PR per their wave doc deliver their work as commits).
   (define diff-result (run-git* git-root (list "diff" "--name-only" "HEAD")))
   (define untracked-result (run-git* git-root (list "ls-files" "--others" "--exclude-standard")))
+  (define committed-result
+    (let ([base (base-branch-ref git-root)])
+      (if base
+          ;; Three-dot diff: changes introduced on HEAD since diverging from base.
+          (run-git* git-root (list "diff" "--name-only" (format "~a...HEAD" base)))
+          (list 1 "" ""))))
   (define paths
     (append (string-split (git-stdout diff-result) "\n")
-            (string-split (git-stdout untracked-result) "\n")))
+            (string-split (git-stdout untracked-result) "\n")
+            (string-split (git-stdout committed-result) "\n")))
   (for/set ([p (in-list paths)]
             #:when (not (string=? (string-trim p) "")))
     (string-trim p)))
