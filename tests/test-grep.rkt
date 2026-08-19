@@ -1,5 +1,8 @@
 #lang racket
 
+;; @covers tools/builtins/grep.rkt
+;; @covers tools/tool.rkt
+
 ;; @speed fast
 ;; @suite default
 

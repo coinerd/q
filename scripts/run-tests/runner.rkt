@@ -17,6 +17,7 @@
          racket/system
          racket/port
          racket/list
+         json
          racket/future
          racket/exn
          (only-in "classify.rkt"
@@ -49,9 +50,25 @@
          (only-in "ledger.rkt" load-known-failure-ledger)
          (only-in "cli.rkt" parse-args validate-args!)
          (only-in "profiles.rkt" profile-skips-test? make-skipped-result)
+         (only-in "shard-plan.rkt"
+                  build-shard-plan/safe
+                  plan-shard-files
+                  print-shard-plan-report
+                  load-duration-snapshot
+                  shard-plan-mode)
          (only-in "gate-evidence.rkt" record-gate-evidence!)
          (only-in "inventory.rkt" print-inventory compute-inventory-hash)
-         (only-in "overhead.rkt" print-overhead-diagnostics))
+         (only-in "overhead.rkt" print-overhead-diagnostics)
+         (only-in "impact.rkt"
+                  run-impact-selection!
+                  print-impact-explain
+                  selection->jsexpr
+                  write-covers-manifest!
+                  load-failure-history
+                  make-prioritize-ctx
+                  prioritize-partition
+                  partition-entries->jsexpr
+                  embed-impact-in-results!))
 
 (provide run-single-file
          run-all-files
@@ -167,22 +184,45 @@
           ctrl)))
   (build-result-from-process test-path stdout-out stderr-out ctrl file-timeout elapsed))
 
+;; Line-anchored: "(module+ test" mentioned inside a comment (e.g. W3
+;; reconciliation notes) must not make a file count as grouped-eligible —
+;; requiring (submod _ test) on such files crashed with "unknown module"
+;; and produced zero-parsed results.
 (define (module-plus-test-file? path)
-  (and (file-exists? path) (regexp-match? #px"\\(module\\+\\s+test\\b" (file->string path))))
+  (and (file-exists? path)
+       (regexp-match? #px"(?m:^\\s*\\(module\\+\\s+test\\b)" (file->string path))))
 
 (define (in-process-module-path resolved-path)
   (if (module-plus-test-file? resolved-path)
       (make-resolved-module-path (cons resolved-path '(test)))
       (make-resolved-module-path resolved-path)))
 
+;; Grouped/in-process execution requires a real (module+ test ...) submodule:
+;; that is the only form whose dynamic-require both runs the tests and keeps
+;; rackunit reporting intact. Anything else — module+ main suites, top-level
+;; checks, comment-only mentions — runs as a raco subprocess (W3 policy).
 (define (in-process-eligible? resolved-path)
-  (or (module-plus-test-file? resolved-path) (not (file-has-rackunit-tests? resolved-path))))
+  (module-plus-test-file? resolved-path))
 
 ;; raco test executes each file with current-directory bound to that file's
 ;; directory; grouped/in-process execution must do the same or tests that
 ;; resolve sibling paths (e.g. "../scripts/foo.rkt") break.
 (define (in-process-cwd resolved-path)
   (or (and resolved-path (path-only (simplify-path resolved-path))) base-dir))
+
+;; A test file that calls (exit ...) during grouped/in-process execution must
+;; not terminate the host runner: custodians do not guard the exit handler, so
+;; an unguarded (exit 0) silently kills the whole suite (observed W3: output
+;; truncated at file 323 with process exit 0). Redirect exit to an exception
+;; so the worker thread records the file's intended exit code instead.
+(struct in-process-test-exit exn:fail (code))
+
+(define (make-in-process-exit-handler exit-box)
+  (lambda (code)
+    (raise (in-process-test-exit (format "test file requested (exit ~a) during in-process execution"
+                                         code)
+                                 (current-continuation-marks)
+                                 (if (and (number? code) (= code 0)) 0 1)))))
 
 (define (run-single-file/in-process test-path #:timeout [timeout #f])
   (define resolved-path (resolve-test-path test-path))
@@ -202,13 +242,16 @@
      (define worker
        (parameterize ([current-custodian cust])
          (thread (lambda ()
-                   (with-handlers ([exn:fail? (lambda (e)
+                   (with-handlers ([in-process-test-exit?
+                                    (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
+                                   [exn:fail? (lambda (e)
                                                 (displayln (exn->string e) stderr-out)
                                                 (set-box! exit-code 1))])
                      (parameterize ([current-output-port stdout-out]
                                     [current-error-port stderr-out]
                                     [current-directory (in-process-cwd resolved-path)]
                                     [current-command-line-arguments #()]
+                                    [exit-handler (make-in-process-exit-handler exit-code)]
                                     [current-namespace (make-base-namespace)])
                        (dynamic-require (in-process-module-path resolved-path) #f)
                        (set-box! exit-code 0)))))))
@@ -218,7 +261,21 @@
      (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
      (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
      (if completed?
-         (parse-result-bytes test-path stdout-bytes stderr-bytes (or (unbox exit-code) 0) (elapsed))
+         (let ([result (parse-result-bytes test-path
+                                           stdout-bytes
+                                           stderr-bytes
+                                           (or (unbox exit-code) 0)
+                                           (elapsed))])
+           (if (and (= (test-file-result-exit-code result) 0) (= (test-file-result-total result) 0))
+               ;; W6: grouped loading runs the module body, but files whose
+               ;; tests are bare test-case/check-* forms (no rackunit/text-ui
+               ;; run-tests self-report) pass silently — dynamic-require
+               ;; produces no per-check output. raco test's discovery wrapper
+               ;; prints pass counts, so re-run such files as a subprocess
+               ;; instead of surfacing a zero-parsed strict failure. This
+               ;; reproduces the pre-grouped (subprocess) behavior exactly.
+               (run-single-file/subprocess test-path #:timeout timeout)
+               result))
          (test-file-result test-path 2 stdout-bytes stderr-bytes (elapsed) 0 0 0))]))
 
 (define (run-single-file test-path #:timeout [timeout #f] #:mode [mode 'subprocess])
@@ -355,7 +412,7 @@
                          #:runner-version runner-version))
   (when ledger
     (print-ledger-summary ledger results))
-  (save-failure-logs results)
+  (save-failure-logs results #:profile profile #:mode mode)
   (define failed-files
     (count (lambda (r)
              (and (not (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
@@ -421,7 +478,16 @@
                   json-out
                   ledger-path
                   profile
-                  lint-metadata?)
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  shard-plan
+                  durations)
     (parse-args (vector->list filtered-args)))
   (validate-args! jobs
                   sequential?
@@ -437,33 +503,202 @@
                   json-out
                   ledger-path
                   profile
-                  lint-metadata?)
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  shard-plan
+                  durations)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
   (when lint-metadata?
-    (print-lint-report (if (pair? extra-files)
-                           (map normalize-test-path extra-files)
-                           (collect-test-files suite)))
+    (define summary
+      (print-lint-report (if (pair? extra-files)
+                             (map normalize-test-path extra-files)
+                             (collect-test-files suite))))
+    ;; W3: the schema-v1 lint is enforced. Invalid tags/unknown tags/malformed
+    ;; values are errors and fail the invocation (exit 1). Missing required
+    ;; tags remain warnings — they do not fail the lint.
+    (exit (if (> (hash-ref summary 'invalid_count 0) 0) 1 0)))
+  ;; ── @covers manifest regeneration (W4 action 2) ──────────────────────
+  (when generate-covers-manifest?
+    (define written (write-covers-manifest! base-dir (detect-runner-version)))
+    (define entries (hash-ref written 'entries '()))
+    (printf ";; run-tests: @covers manifest written → tests/.coverage-manifest.json~n")
+    (printf ";; run-tests: entries=~a manual-review=~a runner-version=~a~n"
+            (length entries)
+            (count (lambda (e) (equal? (hash-ref e 'source #f) "manual-review")) entries)
+            (hash-ref written 'runner_version))
     (exit 0))
+  ;; ── Impact selection (W4) + deterministic prioritization (W6) ────────
+  ;; With --changed-base the impact selection REPLACES the static suite
+  ;; list (escalations run their declared fallback suites). Explicit
+  ;; extra files stay honored: they are also the top `explicit` tier
+  ;; under --prioritize impact (the L0 current-test loop).
+  (define impact-plan (box #f))
+  (define impact-selection #f)
+  (define impact-changed '())
+  (define prioritize-payload #f)
+  (when changed-base
+    (define-values (sel-files sel changed)
+      (run-impact-selection! changed-base
+                             (or changed-head "HEAD")
+                             #:root base-dir
+                             #:collect collect-test-files))
+    (set! impact-selection sel)
+    (set! impact-changed changed)
+    (when explain?
+      (print-impact-explain sel #:base changed-base #:head (or changed-head "HEAD"))
+      ;; --explain is a VIEW (help text: "print ... and exit"): it never
+      ;; executes tests, not even fallback suites. JSON evidence still
+      ;; lands in --json-out when given.
+      (when json-out
+        (call-with-output-file json-out
+                               #:exists 'truncate/replace
+                               (lambda (out)
+                                 (write-json (hasheq 'explain #t 'selection (selection->jsexpr sel))
+                                             out)
+                                 (newline out))))
+      (exit 0))
+    ;; Doc-only changes are an explicit zero-source-change no-op with JSON
+    ;; evidence — never a silent green with zero tests.
+    (when (hash-ref sel 'doc-only?)
+      (printf ";; run-tests: doc-only change — zero-source-change no-op~n")
+      (when json-out
+        (call-with-output-file json-out
+                               #:exists 'truncate/replace
+                               (lambda (out)
+                                 (write-json (hasheq 'doc_only #t 'selection (selection->jsexpr sel))
+                                             out)
+                                 (newline out))))
+      (exit 0))
+    (define explicit (map normalize-test-path extra-files))
+    (define merged (remove-duplicates (append explicit sel-files)))
+    ;; Empty selection with a non-doc-only change is an ERROR (exit 3 with
+    ;; the reasoned selection JSON), never a silent pass.
+    (unless (pair? merged)
+      (printf ";; run-tests: ERROR impact selection is empty — refusing to run zero tests~n")
+      (when json-out
+        (call-with-output-file
+         json-out
+         #:exists 'truncate/replace
+         (lambda (out)
+           (write-json (hasheq 'error 'empty-selection 'selection (selection->jsexpr sel)) out)
+           (newline out))))
+      (exit 3))
+    ;; Deterministic prioritization (W6 action 1): ordering ONLY — the
+    ;; selected set is never altered. Serial (mutation-sensitive) and
+    ;; parallel partitions are prioritized independently; serialization
+    ;; semantics are preserved exactly.
+    (when (equal? prioritize "impact")
+      (define-values (hist-weights hist-status) (load-failure-history failure-history))
+      (printf ";; run-tests: prioritize=impact history=~a (neutral path order when absent/corrupt)~n"
+              hist-status)
+      (define boundaries
+        (for/hash ([f (in-list merged)]
+                   #:when (hash-ref (get-file-metadata f) 'boundary #f))
+          (values f (hash-ref (get-file-metadata f) 'boundary))))
+      (define ctx (make-prioritize-ctx explicit (hash-ref sel 'selected '()) hist-weights boundaries))
+      (define serial-part (filter mutating-file? merged))
+      (define parallel-part (filter (lambda (f) (not (mutating-file? f))) merged))
+      (define-values (s-files s-entries) (prioritize-partition serial-part ctx))
+      (define-values (p-files p-entries) (prioritize-partition parallel-part ctx))
+      (set! merged (append s-files p-files))
+      (set! prioritize-payload (partition-entries->jsexpr s-entries p-entries hist-status)))
+    ;; Dry run: print the machine-readable plan, execute nothing, exit 0.
+    (when impact-dry-run?
+      (printf ";; run-tests: impact dry run — executing nothing~n")
+      (define plan
+        (hasheq 'plan
+                merged
+                'selection
+                (selection->jsexpr sel)
+                'prioritization
+                (or prioritize-payload (hasheq 'prioritized #f))))
+      (if json-out
+          (call-with-output-file json-out
+                                 #:exists 'truncate/replace
+                                 (lambda (out)
+                                   (write-json plan out)
+                                   (newline out)))
+          (begin
+            (write-json plan)
+            (newline)))
+      (exit 0))
+    (set-box! impact-plan merged))
   (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
   (when (> cleaned-dirs 0)
     (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
             cleaned-dirs
             (if (= cleaned-dirs 1) "y" "ies")))
   (define all-suite-files
-    (if (pair? extra-files)
-        (map normalize-test-path extra-files)
-        (collect-test-files suite)))
+    (cond
+      [(unbox impact-plan) (unbox impact-plan)]
+      [(pair? extra-files) (map normalize-test-path extra-files)]
+      [else (collect-test-files suite)]))
+  ;; ── W7: duration-aware shard planning (report | active) ─────────────
+  ;; `report` prints the plan + predicted per-shard durations and changes
+  ;; nothing (exits 0). `active` consumes the plan: each shard runs exactly
+  ;; its planned file list instead of the round-robin slice. Execution
+  ;; semantics (subprocess vs grouped, serial-ahead for mutation-sensitive
+  ;; files) are unchanged — only the shard assignment differs.
+  (define plan-mode
+    (cond
+      [(equal? shard-plan "report") 'report]
+      [(equal? shard-plan "active") 'active]
+      [else #f]))
+  (define active-plan (box #f))
+  ;; W7: `report` is informational only and works for any --shard-total
+  ;; (a 1-shard plan is a degenerate-but-valid plan: all files on shard 0).
+  ;; `active` needs a real partition, so it stays gated on shard-total > 1.
+  (when (and plan-mode (eq? plan-mode 'active) (not (> shard-total 1)))
+    ;; Planning without sharding is a no-op (there is only one shard); state
+    ;; it explicitly so CI logs never hide the effective configuration.
+    (printf ";; run-tests: --shard-plan ~a ignored — --shard-total=~a (unsharded)~n"
+            shard-plan
+            shard-total))
+  (when (and plan-mode (or (eq? plan-mode 'report) (> shard-total 1)))
+    (define dur-source (and (string? durations) (non-empty-string? durations) durations))
+    (define-values (dur dur-status) (load-duration-snapshot dur-source))
+    (printf ";; run-tests: shard-plan=~a durations=~a status=~a known=~a~n"
+            shard-plan
+            (or dur-source "<none>")
+            dur-status
+            (hash-count dur))
+    (unless (eq? dur-status 'ok)
+      (printf ";; run-tests: unmeasured files use the conservative p95 default duration~n"))
+    (define plan
+      (build-shard-plan/safe
+       all-suite-files
+       shard-total
+       #:durations dur
+       #:profile-skips?
+       (lambda (f) (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
+       #:duration-source dur-source))
+    (when (eq? plan-mode 'report)
+      (print-shard-plan-report plan)
+      (exit 0))
+    (printf ";; run-tests: duration-aware plan (~a) replaces round-robin for shard ~a/~a~n"
+            (shard-plan-mode plan)
+            shard-index
+            shard-total)
+    (set-box! active-plan plan))
   (define suite-files
-    (if (> shard-total 1)
-        (begin
-          (printf ";; run-tests: sharding ~a files — shard ~a/~a~n"
-                  (length all-suite-files)
-                  shard-index
-                  shard-total)
-          (shard-files all-suite-files shard-index shard-total))
-        all-suite-files))
+    (cond
+      [(unbox active-plan) (plan-shard-files (unbox active-plan) shard-index)]
+      [(> shard-total 1)
+       (begin
+         (printf ";; run-tests: sharding ~a files — shard ~a/~a~n"
+                 (length all-suite-files)
+                 shard-index
+                 shard-total)
+         (shard-files all-suite-files shard-index shard-total))]
+      [else all-suite-files]))
   (when inventory?
     (if (pair? suite-files)
         (begin
@@ -476,7 +711,10 @@
     (displayln "No test files matched the selected suite.")
     (exit 1))
   (define timeout-ms (and timeout (* timeout 1000)))
-  (define suite-label (symbol->string suite))
+  (define suite-label
+    (if changed-base
+        "impact"
+        (symbol->string suite)))
   (define mode (effective-mode requested-mode suite-label))
   (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
@@ -494,6 +732,29 @@
             repeat
             (if (= repeat 1) "" "s")))
   (define last-results (box '()))
+  ;; W5/W6 post-run evidence: embed selection + prioritization + changed
+  ;; files into the results JSON, and surface the FIRST failing selected
+  ;; test (with its selection and priority reason) on prioritized runs.
+  ;; The summary is a pointer, not the source of truth — full results and
+  ;; failure logs remain available as before.
+  (define (emit-impact-evidence!)
+    (when (and changed-base json-out impact-selection)
+      (embed-impact-in-results! json-out impact-selection prioritize-payload impact-changed))
+    (when (and (equal? prioritize "impact") prioritize-payload (pair? (unbox last-results)))
+      (define first-fail
+        (for/or ([r (in-list (unbox last-results))])
+          (and (not (zero? (test-file-result-exit-code r))) r)))
+      (when first-fail
+        (define f (test-file-result-path first-fail))
+        (printf "~n;; ── first failing test (prioritized order) ──~n")
+        (for ([e (in-list (append (hash-ref prioritize-payload 'serial '())
+                                  (hash-ref prioritize-payload 'parallel '())))]
+              #:when (equal? (hash-ref e 'file) f))
+          (printf ";;   file: ~a~n;;   tier: ~a  priority: ~a  selected-because: ~a~n"
+                  f
+                  (hash-ref e 'tier)
+                  (hash-ref e 'priority-reason)
+                  (hash-ref e 'selection-reason-code))))))
   (for ([run-num (in-range 1 (add1 repeat))])
     (when (> repeat 1)
       (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
@@ -512,7 +773,9 @@
                       #:shard (and (> shard-total 1) (cons shard-index shard-total))))
     (set-box! last-results results)
     (unless (zero? exit-code)
+      (emit-impact-evidence!)
       (exit exit-code)))
+  (emit-impact-evidence!)
   (when record-gate?
     (define inv-hash (compute-inventory-hash suite-files))
     (record-gate-evidence! suite-label

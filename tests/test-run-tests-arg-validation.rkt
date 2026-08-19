@@ -27,7 +27,7 @@
 ;; New args added after inventory?: diagnose-overhead?, mode, json-out, ledger, profile
 ;; Default test args: #f 'auto #f #f 'local
 ;; Args are: diagnose-overhead? mode json-out ledger profile
-(define default-new-args (list #f 'auto #f #f 'local))
+(define default-new-args (list #f 'auto #f #f 'local #f #f #f #f #f #f #f #f #f #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Unit tests: validate-args!

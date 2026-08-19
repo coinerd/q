@@ -21,7 +21,8 @@
                   compute-verdict
                   summary-exit-code
                   print-summary
-                  format-verdict-line))
+                  format-verdict-line
+                  test-result->ledger-jsexpr))
 
 ;; Helpers for constructing results
 (define (make-passed path n)
@@ -115,8 +116,64 @@
    ;; Should still pass since some tests ran
    (check-true (string-contains? output "PASS"))))
 
+(define-test-suite
+ ledger-jsexpr-escalation-tests
+ (test-case "expired quarantine flags per-file JSON as escalating failure"
+   ;; W8: an entry past expires_on must surface escalate=#t in the per-file
+   ;; record so shard JSON evidence cannot read as a tolerated known failure.
+   (define expired-entry
+     (hasheq 'file
+             "tests/legacy-fail.rkt"
+             'category
+             "ASSERTION_FAILURE"
+             'owner
+             "runtime"
+             'first_seen
+             "1.0.0"
+             'release_blocking
+             #f
+             'issue
+             "#9502"
+             'notes
+             "stale quarantine"
+             'expires_on
+             "2020-01-01"))
+   (define active-entry
+     (hasheq 'file
+             "tests/active-flake.rkt"
+             'category
+             "ASSERTION_FAILURE"
+             'owner
+             "runtime"
+             'first_seen
+             "1.0.0"
+             'release_blocking
+             #f
+             'issue
+             "#9501"
+             'notes
+             "active flake quarantine"
+             'expires_on
+             "2999-12-31"))
+   (define ledger (list active-entry expired-entry))
+   (define expired-record (test-result->ledger-jsexpr (make-failed "tests/legacy-fail.rkt" 3) ledger))
+   (check-true (hash-ref expired-record 'known_failure))
+   (check-true (hash-ref expired-record 'escalate))
+   (check-true (hash-ref expired-record 'quarantine_expired))
+   (check-equal? (hash-ref expired-record 'expires_on) "2020-01-01")
+   ;; An unexpired quarantine stays tolerated: no escalation flags.
+   (define active-record (test-result->ledger-jsexpr (make-failed "tests/active-flake.rkt" 3) ledger))
+   (check-true (hash-ref active-record 'known_failure))
+   (check-false (hash-ref active-record 'escalate #f))
+   (check-false (hash-ref active-record 'quarantine_expired #f))
+   ;; Unlisted failures carry known_failure=#f only.
+   (define unknown-record
+     (test-result->ledger-jsexpr (make-failed "tests/brand-new-fail.rkt" 3) ledger))
+   (check-false (hash-ref unknown-record 'known_failure))))
+
 (run-tests (make-test-suite "run-tests reporting truthfulness"
                             (list compute-verdict-tests
                                   summary-exit-code-tests
                                   format-verdict-line-tests
-                                  print-summary-verdict-tests)))
+                                  print-summary-verdict-tests
+                                  ledger-jsexpr-escalation-tests)))

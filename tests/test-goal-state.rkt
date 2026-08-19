@@ -1,5 +1,9 @@
 #lang racket/base
 
+;; @covers runtime/goal/goal-state.rkt
+;; @covers runtime/session/session-store.rkt
+;; @covers runtime/session/session-store-goal-task.rkt
+
 ;; @speed fast
 ;; @suite default
 ;; @boundary integration

@@ -216,8 +216,8 @@
         (hash-set! counts (caddr e) (add1 (hash-ref counts (caddr e) 0))))
       (displayln (format "INFO: parameter inventory distribution: ~a" (hash->list counts)))
       (check-equal? (length inventory-entries)
-                    187
-                    "parameter inventory should contain 187 audited parameters"))))
+                    194
+                    "parameter inventory should contain 194 audited parameters"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

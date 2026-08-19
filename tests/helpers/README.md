@@ -33,7 +33,8 @@ These files carry explicit `@isolation` metadata so the runner schedules
 them serially (ahead of the parallel batches); each exemption is owned
 and has a documented reason here:
 
-- `tests/test-run-tests-ledger.rkt` — `@isolation subprocess`. It spawns
+- `tests/test-run-tests-ledger.rkt` — `@isolation process` (canonical value;
+  the `subprocess` spelling is a deprecated alias for `process`). It spawns
   `racket scripts/run-tests.rkt` as a child process, and that script's
   startup performs repo-wide stale-bytecode cleaning
   (`scripts/run-tests/classify-filters.rkt`). Concurrent runs would

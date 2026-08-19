@@ -62,7 +62,16 @@
                       _json
                       _ledger
                       profile
-                      _lint-metadata?)
+                      _lint-metadata?
+                      _changed-base
+                      _changed-head
+                      _explain?
+                      _impact-dry-run?
+                      _prioritize
+                      _failure-history
+                      _generate-covers-manifest?
+                      _shard-plan
+                      _durations)
         (parse-args '("--profile" "vps")))
       (check-equal? profile 'vps))
 

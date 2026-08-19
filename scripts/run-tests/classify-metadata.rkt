@@ -84,95 +84,104 @@
   (and m (list line (string-trim (or (cadr m) "")))))
 
 (define (get-file-metadata f)
-  (hash-ref!
-   metadata-cache
-   f
-   (lambda ()
-     (define full-path
-       (if (absolute-path? f)
-           f
-           (build-path base-dir f)))
-     (cond
-       [(not (file-exists? full-path)) (hash)]
-       [else
-        (define speed #f)
-        (define suite #f)
-        (define suites '())
-        (define requires '())
-        (define not-test? #f)
-        (define mutates #f)
-        (define boundary #f)
-        (define isolation #f)
-        (define isolation-raw #f)
-        (define timeout #f)
-        (with-handlers ([exn:fail? (lambda (_) (void))])
-          (call-with-input-file full-path
-                                (lambda (port)
-                                  (for ([_ (in-range 50)]
-                                        #:break (eof-object? (peek-byte port)))
-                                    (define line (read-line port))
-                                    (when (string? line)
-                                      (define speed-match (metadata-line-match line "speed"))
-                                      (when speed-match
-                                        (define toks (metadata-tokens (cadr speed-match)))
-                                        (when (pair? toks)
-                                          (set! speed (string->symbol (car toks)))))
-                                      (define suite-match (metadata-line-match line "suite"))
-                                      (when suite-match
-                                        (set! suites (metadata-tokens (cadr suite-match)))
-                                        (set! suite (and (pair? suites) (car suites))))
-                                      (define requires-match (metadata-line-match line "requires"))
-                                      (when requires-match
-                                        (set! requires (metadata-tokens (cadr requires-match))))
-                                      (define not-test-match (metadata-line-match line "not-test"))
-                                      (when not-test-match
-                                        (set! not-test? (metadata-bool (cadr not-test-match) #t)))
-                                      (define mutates-match (metadata-line-match line "mutates"))
-                                      (when mutates-match
-                                        (set! mutates (string-trim (cadr mutates-match))))
-                                      (define boundary-match (metadata-line-match line "boundary"))
-                                      (when boundary-match
-                                        (set! boundary (string-trim (cadr boundary-match))))
-                                      (define isolation-match (metadata-line-match line "isolation"))
-                                      (when isolation-match
-                                        (set! isolation (string-trim (cadr isolation-match))))
-                                      (define timeout-match
-                                        (regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line))
-                                      (when timeout-match
-                                        (set! timeout (string->number (cadr timeout-match)))))))))
-        ;; Schema v1 normalization (W1): `subprocess` is a deprecated alias
-        ;; for the canonical `process` isolation value. Normalize on parse so
-        ;; every consumer sees the canonical spelling; retain the raw value
-        ;; under 'isolation-raw so the lint can flag it for migration.
-        (define canonical-iso (and isolation (canonical-isolation isolation)))
-        (when (and isolation canonical-iso (not (string=? isolation canonical-iso)))
-          (set! isolation-raw isolation)
-          (set! isolation canonical-iso))
-        (hash 'speed
-              speed
-              'suite
-              suite
-              'suites
-              suites
-              'requires
-              requires
-              'not-test?
-              not-test?
-              'mutates
-              mutates
-              'boundary
-              boundary
-              'isolation
-              isolation
-              'isolation-raw
-              isolation-raw
-              'timeout
-              timeout
-              ;; Classification provenance: 'explicit when the file carries
-              ;; @suite/@speed metadata; 'heuristic when selection relies on
-              ;; filename/path heuristics.
-              'classification
-              (if (or suite speed) 'explicit 'heuristic))]))))
+  (hash-ref! metadata-cache
+             f
+             (lambda ()
+               (define full-path
+                 (if (absolute-path? f)
+                     f
+                     (build-path base-dir f)))
+               (cond
+                 [(not (file-exists? full-path)) (hash)]
+                 [else
+                  (define speed #f)
+                  (define suite #f)
+                  (define suites '())
+                  (define requires '())
+                  (define covers '())
+                  (define not-test? #f)
+                  (define mutates #f)
+                  (define boundary #f)
+                  (define isolation #f)
+                  (define isolation-raw #f)
+                  (define timeout #f)
+                  (with-handlers ([exn:fail? (lambda (_) (void))])
+                    (call-with-input-file
+                     full-path
+                     (lambda (port)
+                       (for ([_ (in-range 50)]
+                             #:break (eof-object? (peek-byte port)))
+                         (define line (read-line port))
+                         (when (string? line)
+                           (define speed-match (metadata-line-match line "speed"))
+                           (when speed-match
+                             (define toks (metadata-tokens (cadr speed-match)))
+                             (when (pair? toks)
+                               (set! speed (string->symbol (car toks)))))
+                           (define suite-match (metadata-line-match line "suite"))
+                           (when suite-match
+                             (set! suites (metadata-tokens (cadr suite-match)))
+                             (set! suite (and (pair? suites) (car suites))))
+                           (define requires-match (metadata-line-match line "requires"))
+                           (when requires-match
+                             (set! requires (metadata-tokens (cadr requires-match))))
+                           ;; @covers (W4): production modules/contracts a test
+                           ;; directly validates, repo-root-relative paths.
+                           ;; Multiple @covers lines accumulate in order.
+                           (define covers-match (metadata-line-match line "covers"))
+                           (when covers-match
+                             (set! covers (append covers (metadata-tokens (cadr covers-match)))))
+                           (define not-test-match (metadata-line-match line "not-test"))
+                           (when not-test-match
+                             (set! not-test? (metadata-bool (cadr not-test-match) #t)))
+                           (define mutates-match (metadata-line-match line "mutates"))
+                           (when mutates-match
+                             (set! mutates (string-trim (cadr mutates-match))))
+                           (define boundary-match (metadata-line-match line "boundary"))
+                           (when boundary-match
+                             (set! boundary (string-trim (cadr boundary-match))))
+                           (define isolation-match (metadata-line-match line "isolation"))
+                           (when isolation-match
+                             (set! isolation (string-trim (cadr isolation-match))))
+                           (define timeout-match
+                             (regexp-match #rx";+[ \t]*@timeout[ \t]+([0-9]+)" line))
+                           (when timeout-match
+                             (set! timeout (string->number (cadr timeout-match)))))))))
+                  ;; Schema v1 normalization (W1): `subprocess` is a deprecated alias
+                  ;; for the canonical `process` isolation value. Normalize on parse so
+                  ;; every consumer sees the canonical spelling; retain the raw value
+                  ;; under 'isolation-raw so the lint can flag it for migration.
+                  (define canonical-iso (and isolation (canonical-isolation isolation)))
+                  (when (and isolation canonical-iso (not (string=? isolation canonical-iso)))
+                    (set! isolation-raw isolation)
+                    (set! isolation canonical-iso))
+                  (hash 'speed
+                        speed
+                        'suite
+                        suite
+                        'suites
+                        suites
+                        'requires
+                        requires
+                        'covers
+                        covers
+                        'not-test?
+                        not-test?
+                        'mutates
+                        mutates
+                        'boundary
+                        boundary
+                        'isolation
+                        isolation
+                        'isolation-raw
+                        isolation-raw
+                        'timeout
+                        timeout
+                        ;; Classification provenance: 'explicit when the file carries
+                        ;; @suite/@speed metadata; 'heuristic when selection relies on
+                        ;; filename/path heuristics.
+                        'classification
+                        (if (or suite speed) 'explicit 'heuristic))]))))
 
 ;; ============================================================
 ;; Metadata schema (v1) and report-only lint (W1)
@@ -186,12 +195,13 @@
 
 (define metadata-schema-version 1)
 
-;; Full tag vocabulary. `covers` is forward-reserved: recognized by the
-;; schema and accepted by the parser, but its value is not yet validated
-;; or consumed anywhere.
+;; Full tag vocabulary. `covers` (W4): repo-root-relative production
+;; modules/contracts the test directly validates; parsed by the metadata
+;; parser, validated by manifest generation (generate-covers-manifest /
+;; write-covers-manifest!), and consumed by impact selection.
 (define schema-known-tags
   '("suite" "speed" "boundary" "mutates" "isolation" "timeout" "requires" "covers"))
-(define schema-reserved-tags '("covers"))
+(define schema-reserved-tags '())
 (define schema-required-tags '("suite" "speed"))
 
 ;; Allowed values per tag (strings exactly as they appear in the header).
@@ -218,6 +228,7 @@
           "integration"
           "tools"
           "provider"
+          "session"
           "gsd"
           "verifier"
           "harness"
@@ -546,7 +557,7 @@
 
 (define (print-lint-report files)
   (define results (validate-files files))
-  (printf ";; METADATA LINT — schema v~a — REPORT-ONLY (enforcement deferred to W3)~n"
+  (printf ";; METADATA LINT — schema v~a — ENFORCED (invalid tags fail; missing tags warn)~n"
           metadata-schema-version)
   (printf ";; ════════════════════════════════════════════════════════════~n")
   (for ([r (in-list results)])

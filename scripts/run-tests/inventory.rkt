@@ -26,7 +26,9 @@
          classify-exclusion-reason
          detect-high-risk-flags
          compute-inventory-hash
-         run-metadata-quality-report)
+         run-metadata-quality-report
+         run-unit-fast-audit
+         run-ownership-map)
 
 (define (classify-exclusion-reason f)
   (cond
@@ -303,30 +305,357 @@
     (printf ";; JSON report written to ~a~n" json-out))
   summary)
 
+(require racket/port
+         racket/file
+         (only-in "classify.rkt" collect-test-files)
+         (only-in "classify-filters.rkt" unit-fast-file?))
+
+;; ============================================================
+;; unit-fast eligibility audit (W3)
+;; ============================================================
+;; Lists unit-fast candidates and flags files that must NOT join the
+;; grouped in-process execution mode: declared mutations, declared or
+;; lexically-detected env/filesystem/network/process side effects, or
+;; a missing `module+ test` form (no RackUnit discovery point for
+;; grouped execution).
+
+(define (file-content f)
+  (with-handlers ([exn:fail? (lambda (_) "")])
+    (file->string (if (absolute-path? f)
+                      f
+                      (build-path base-dir f)))))
+
+(define (has-module-plus-test? f)
+  (regexp-match? #px"\\(module\\+\\s+test\\b" (file-content f)))
+
+(define (metadata-value->string v)
+  (if v
+      (format "~a" v)
+      ""))
+
+(define (metadata-suite=? f suite-name)
+  (define v (metadata-value->string (hash-ref (get-file-metadata f) 'suite #f)))
+  (string=? v suite-name))
+
+(define (declared-mutation f)
+  (define v (hash-ref (get-file-metadata f) 'mutates #f))
+  (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
+
+(define (audit-unsafe-reasons f)
+  (define content (file-content f))
+  (define reasons '())
+  (define (flag! r)
+    (set! reasons (cons r reasons)))
+  (cond
+    [(declared-mutation f)
+     =>
+     (lambda (v) (flag! (format "declared-mutation:@mutates=~a" v)))])
+  (when (regexp-match? #rx"getenv|putenv" content)
+    (flag! "side-effect:env"))
+  (when (regexp-match? #rx"make-temporary-file|make-temporary-directory" content)
+    (flag! "side-effect:temp-file"))
+  (when (regexp-match? #rx"delete-file|delete-directory|copy-file|rename-file-or-directory" content)
+    (flag! "side-effect:filesystem-write"))
+  (when (regexp-match? #rx"current-directory" content)
+    (flag! "side-effect:cwd"))
+  (when (regexp-match? #rx"subprocess|process\\*? " content)
+    (flag! "side-effect:subprocess"))
+  (when (regexp-match? #rx"tcp-connect|ssl-connect|get-pure-port|post-pure-port|http-send" content)
+    (flag! "side-effect:network"))
+  (unless (has-module-plus-test? f)
+    (flag! "missing:module+test-form"))
+  (reverse reasons))
+
+(define (unit-fast-candidates)
+  (sort (remove-duplicates (append (collect-test-files 'unit-fast)
+                                   (filter unit-fast-file? (collect-test-files 'all))))
+        string<?))
+
+(define (audit-unit-fast-records)
+  (for/list ([f (in-list (unit-fast-candidates))])
+    (define reasons (audit-unsafe-reasons f))
+    (hasheq 'file f 'eligible (null? reasons) 'reasons reasons)))
+
+(define (run-unit-fast-audit #:json-out [json-out #f])
+  (define records (audit-unit-fast-records))
+  (define eligible (filter (lambda (r) (hash-ref r 'eligible)) records))
+  (define flagged (filter (lambda (r) (not (hash-ref r 'eligible))) records))
+  (define missing-form
+    (filter (lambda (r) (member "missing:module+test-form" (hash-ref r 'reasons))) records))
+  (printf ";; UNIT-FAST ELIGIBILITY AUDIT (W3)~n")
+  (printf ";; ═════════════════════════════════════~n")
+  (printf ";; Candidates (metadata @suite unit-fast + unit-fast classifier): ~a~n" (length records))
+  (printf ";; Grouped/in-process eligible: ~a~n" (length eligible))
+  (printf ";; Flagged unsafe (excluded from grouped mode): ~a~n" (length flagged))
+  (printf ";; Of which missing `module+ test` form: ~a~n~n" (length missing-form))
+  (for ([r (in-list (sort flagged string<? #:key (lambda (r) (hash-ref r 'file))))])
+    (printf "  ~a  [~a]~n" (hash-ref r 'file) (string-join (hash-ref r 'reasons) " ")))
+  (when (null? flagged)
+    (displayln "  (no unsafe candidates — all candidates eligible for grouped mode)"))
+  (when json-out
+    (define payload
+      (hasheq 'generator
+              "inventory.rkt --unit-fast-audit"
+              'candidates
+              (length records)
+              'eligible
+              (length eligible)
+              'flagged
+              (length flagged)
+              'missing_module_plus_test
+              (length missing-form)
+              'files
+              (sort records string<? #:key (lambda (r) (hash-ref r 'file)))))
+    (ensure-parent-dir! json-out)
+    (call-with-output-file json-out
+                           #:exists 'truncate/replace
+                           (lambda (out) (write-json payload out)))
+    (printf ";; JSON report written to ~a~n" json-out))
+  (hasheq 'candidates
+          (length records)
+          'eligible
+          (length eligible)
+          'flagged
+          (length flagged)
+          'missing_module_plus_test
+          (length missing-form)))
+
+;; ============================================================
+;; Test ownership map (W3)
+;; ============================================================
+;; Maps each production area to its accountable test destination
+;; (suite tag, boundary tags, owning path). A production area with no
+;; test destination is reported as a GAP. Output is deterministic.
+
+(define (session-file? f)
+  ;; Agent-session behaviour tests currently live flat in tests/ under
+  ;; @suite runtime; they are the session area's accountable destination.
+  (or (regexp-match? #rx"^tests/test-agent-(session|loop-fsm|iteration|queue|registry|state)" f)
+      (string-prefix? f "tests/agent/")
+      (string-prefix? f "tests/session/")))
+
+(define ownership-area-definitions
+  (list (hasheq 'area
+                "runtime"
+                'source
+                "runtime/"
+                'suite
+                "runtime"
+                'predicate
+                'runtime-file?
+                'dirs
+                '("tests/runtime"))
+        (hasheq 'area
+                "provider"
+                'source
+                "llm/ (provider adapters)"
+                'suite
+                "provider"
+                'predicate
+                #f
+                'dirs
+                '("tests/llm" "tests/provider"))
+        (hasheq 'area
+                "session"
+                'source
+                "agent/ (agent session)"
+                'suite
+                "runtime"
+                'predicate
+                'session-file?
+                'dirs
+                '("tests/agent" "tests/session"))
+        (hasheq 'area
+                "tools"
+                'source
+                "tools/ + agent/roles/tool-gateway"
+                'suite
+                "tools"
+                'predicate
+                #f
+                'dirs
+                '("tests/tools"))
+        (hasheq 'area
+                "extensions"
+                'source
+                "extensions/"
+                'suite
+                "extensions"
+                'predicate
+                'extensions-file?
+                'dirs
+                '("tests/extensions"))
+        (hasheq 'area "tui" 'source "tui/" 'suite "tui" 'predicate 'tui-file? 'dirs '("tests/tui"))
+        (hasheq 'area
+                "workflows"
+                'source
+                "scripts/run-tests/workflows/ + GSD"
+                'suite
+                "workflows"
+                'predicate
+                'workflows-file?
+                'dirs
+                '("tests/workflows" "tests/gsd"))))
+
+(define (area-predicate-match? pred-sym f)
+  (case pred-sym
+    [(runtime-file?) (runtime-file? f)]
+    [(session-file?) (session-file? f)]
+    [(extensions-file?) (extensions-file? f)]
+    [(tui-file?) (tui-file? f)]
+    [(workflows-file?) (workflows-file? f)]
+    [else #f]))
+
+(define (parent-dir s)
+  (define m (regexp-match-positions #rx"/[^/]*$" s))
+  (if m
+      (substring s 0 (car (car m)))
+      "."))
+
+(define (ensure-parent-dir! p)
+  (define parent (path-only p))
+  (when parent
+    (make-directory* parent)))
+
+(define (ownership-records)
+  (define all (collect-test-files 'all))
+  (for/list ([def (in-list ownership-area-definitions)])
+    (define suite-name (hash-ref def 'suite))
+    (define dirs (hash-ref def 'dirs))
+    (define tests
+      (sort (remove-duplicates (filter (lambda (f)
+                                         (or (metadata-suite=? f suite-name)
+                                             (area-predicate-match? (hash-ref def 'predicate) f)
+                                             (for/or ([d (in-list dirs)])
+                                               (string-prefix? f d))))
+                                       all))
+            string<?))
+    (define boundaries
+      (sort (remove-duplicates (filter (lambda (s) (non-empty-string? s))
+                                       (for/list ([f (in-list tests)])
+                                         (metadata-value->string
+                                          (hash-ref (get-file-metadata f) 'boundary #f)))))
+            string<?))
+    (define owning-path
+      (and (pair? tests)
+           (let* ([counts (for/fold ([acc (hash)]) ([f (in-list tests)])
+                            (hash-update acc (parent-dir f) add1 0))]
+                  [keys (for/list ([(k v) (in-hash counts)])
+                          k)])
+             (first (sort keys
+                          (lambda (a b)
+                            (or (> (hash-ref counts a) (hash-ref counts b))
+                                (and (= (hash-ref counts a) (hash-ref counts b))
+                                     (string<? a b)))))))))
+    (hasheq 'area
+            (hash-ref def 'area)
+            'production_source
+            (hash-ref def 'source)
+            'suite
+            suite-name
+            'test_count
+            (length tests)
+            'boundary_tags
+            boundaries
+            'owning_path
+            owning-path
+            'gap?
+            (null? tests))))
+
+(define (ownership-markdown records)
+  (string-append "# Test Ownership Map (generated — do not edit)\n\n"
+                 "Generated by `scripts/run-tests/inventory.rkt --ownership-map` (W3).\n"
+                 "Every production area must have an accountable test destination.\n\n"
+                 "| Area | Production source | Suite | Tests | Boundary tags | Owning path |\n"
+                 "|---|---|---|---|---|---|\n"
+                 (apply string-append
+                        (for/list ([r (in-list records)])
+                          (format "| ~a | ~a | ~a | ~a | ~a | ~a |\n"
+                                  (hash-ref r 'area)
+                                  (hash-ref r 'production_source)
+                                  (hash-ref r 'suite)
+                                  (hash-ref r 'test_count)
+                                  (string-join (hash-ref r 'boundary_tags) ", ")
+                                  (or (hash-ref r 'owning_path) "**none**"))))
+                 "\n"
+                 (if (for/or ([r (in-list records)])
+                       (hash-ref r 'gap?))
+                     "**GAPS:** areas above with `**none**` have no test destination.\n"
+                     "No gaps: every production area has a test destination.\n")))
+
+(define (run-ownership-map #:md-out [md-out #f] #:json-out [json-out #f])
+  (define records (ownership-records))
+  (define gaps (filter (lambda (r) (hash-ref r 'gap?)) records))
+  (printf ";; TEST OWNERSHIP MAP (W3)~n")
+  (printf ";; ═══════════════════════~n")
+  (for ([r (in-list records)])
+    (printf ";; ~a (source: ~a) -> suite ~a: ~a test(s), boundaries [~a], owner: ~a~a~n"
+            (hash-ref r 'area)
+            (hash-ref r 'production_source)
+            (hash-ref r 'suite)
+            (hash-ref r 'test_count)
+            (string-join (hash-ref r 'boundary_tags) ",")
+            (or (hash-ref r 'owning_path) "<none>")
+            (if (hash-ref r 'gap?) "  ** GAP: no test destination **" "")))
+  (printf ";; areas: ~a, gaps: ~a~n~n" (length records) (length gaps))
+  (define md-path (or md-out (build-path base-dir "reports" "test-ownership-map.md")))
+  (define json-path (or json-out (build-path base-dir "reports" "test-ownership-map.json")))
+  (ensure-parent-dir! md-path)
+  (call-with-output-file md-path
+                         #:exists 'truncate/replace
+                         (lambda (out) (display (ownership-markdown records) out)))
+  (ensure-parent-dir! json-path)
+  (call-with-output-file
+   json-path
+   #:exists 'truncate/replace
+   (lambda (out) (write-json (hasheq 'generator "inventory.rkt --ownership-map" 'areas records) out)))
+  (printf ";; markdown report written to ~a~n" md-path)
+  (printf ";; json report written to ~a~n" json-path)
+  (hasheq 'areas (length records) 'gaps (length gaps)))
+
+(define (inventory-usage)
+  (displayln "usage: racket scripts/run-tests/inventory.rkt MODE [--json-out PATH] [--md-out PATH]")
+  (displayln "  MODE is one of:")
+  (displayln "    --metadata-quality   metadata tag quality report (missing/invalid/explicit)")
+  (displayln "    --unit-fast-audit    unit-fast grouped-execution eligibility audit")
+  (displayln "    --ownership-map      production-area test ownership map (md + json)"))
+
 (define (inventory-main argv)
   (define json-out #f)
+  (define md-out #f)
+  (define mode #f)
   (let loop ([rest argv])
     (match rest
       ['() (void)]
       [(or (list "--help" _) (list "-h" _))
-       (displayln
-        "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
+       (inventory-usage)
        (exit 0)]
-      [(list "--metadata-quality" rest ...) (loop rest)]
+      [(list "--metadata-quality" rest ...)
+       (set! mode 'metadata-quality)
+       (loop rest)]
+      [(list "--unit-fast-audit" rest ...)
+       (set! mode 'unit-fast-audit)
+       (loop rest)]
+      [(list "--ownership-map" rest ...)
+       (set! mode 'ownership-map)
+       (loop rest)]
       [(list "--json-out" p rest ...)
        (set! json-out p)
        (loop rest)]
+      [(list "--md-out" p rest ...)
+       (set! md-out p)
+       (loop rest)]
       [(list other rest ...)
        (printf "unknown argument: ~a~n" other)
-       (displayln
-        "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
-       (exit 2)
-       (loop rest)]))
-  (when (member "--metadata-quality" argv)
-    (run-metadata-quality-report #:json-out json-out))
-  (unless (member "--metadata-quality" argv)
-    (displayln "usage: racket scripts/run-tests/inventory.rkt --metadata-quality [--json-out PATH]")
-    (exit 2)))
+       (inventory-usage)
+       (exit 2)]))
+  (case mode
+    [(metadata-quality) (run-metadata-quality-report #:json-out json-out)]
+    [(unit-fast-audit) (run-unit-fast-audit #:json-out json-out)]
+    [(ownership-map) (run-ownership-map #:md-out md-out #:json-out json-out)]
+    [else
+     (inventory-usage)
+     (exit 2)]))
 
 (define invoked-directly?
   (let ([run-file (find-system-path 'run-file)])

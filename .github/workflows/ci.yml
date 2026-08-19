@@ -103,10 +103,22 @@ jobs:
         run: raco make main.rkt
 
       - name: Run test shard ${{ matrix.shard }}/3
+        # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
+        # variable FAST_SHARD_PLAN=active ONLY after the shard-plan-report
+        # job below prints `activate` (predicted max-shard duration improves
+        # over round-robin with test inventory preserved). Default `off`
+        # keeps the round-robin behavior byte-identical.
+        env:
+          FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
         run: |
+          PLAN_ARGS=""
+          if [ "$FAST_SHARD_PLAN" = "active" ]; then
+            PLAN_ARGS="--shard-plan active"
+          fi
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total 3 \
+            $PLAN_ARGS \
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
@@ -161,6 +173,90 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "All test shards and platform checks passed."
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2b+: Shard-plan report (W7) — report-only, never fails CI
+  # Compares the duration-aware plan (built from this run's retained
+  # per-shard artifacts, W0 schema) against the actual round-robin
+  # shard wall clocks. Activation is a human decision gated on the
+  # printed evidence: set FAST_SHARD_PLAN=active only when this job
+  # reports `activate` (predicted max-shard improves, inventory
+  # preserved). Workflow shards follow later under the same rule.
+  # ────────────────────────────────────────────────────────────
+  shard-plan-report:
+    needs: [test-aggregate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+      - name: Download retained fast-shard artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: test-results-fast-*
+          path: durations-raw
+      - name: Stage per-shard duration JSONs
+        run: |
+          mkdir -p durations
+          i=0
+          for d in durations-raw/test-results-fast-*; do
+            [ -d "$d" ] || continue
+            if [ -f "$d/test-results.json" ]; then
+              cp "$d/test-results.json" "durations/shard-$i.json"
+            fi
+            i=$((i+1))
+          done
+          ls -1 durations/ || true
+      - name: Observed round-robin wall clocks
+        id: observed
+        run: |
+          obs=null
+          if compgen -G "durations/*.json" > /dev/null; then
+            obs=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null) || obs=null
+          fi
+          printf 'observed=%s\n' "$obs" >> "$GITHUB_OUTPUT"
+      - name: Build duration-aware plan (report-only)
+        if: always()
+        run: |
+          if ! compgen -G "durations/*.json" > /dev/null; then
+            echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
+            exit 0
+          fi
+          racket scripts/run-tests.rkt \
+            --suite fast --shard-total 3 \
+            --shard-plan report --durations durations \
+            2>&1 | tee shard-plan-report.log
+      - name: Post predicted-vs-observed summary
+        if: always()
+        run: |
+          {
+            echo "## Shard plan report (W7, report-only)"
+            echo '```'
+            grep -E 'shard [0-9]+/3:|^;; ' shard-plan-report.log || true
+            echo '```'
+            if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
+              echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
+              echo "- Inventory check: planned files must equal the summed per-shard file counts"
+              jq -s '[.[].run_summary.file_count] | add' durations/*.json \
+                | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
+            else
+              echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
+            fi
+            echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          OBSERVED: ${{ steps.observed.outputs.observed }}
+      - name: Upload shard-plan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shard-plan-report
+          path: shard-plan-report.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ────────────────────────────────────────────────────────────
   # Gate 2c: Platform-cross verification
@@ -692,3 +788,4 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -20 triple-gate.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+

@@ -1,5 +1,8 @@
 #lang racket
 
+;; @covers runtime/context/context-assembly.rkt
+;; @covers runtime/session-index.rkt
+
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit

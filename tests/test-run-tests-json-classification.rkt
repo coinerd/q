@@ -88,7 +88,16 @@
                       json-out
                       _ledger
                       _profile
-                      _lint-metadata?)
+                      _lint-metadata?
+                      _changed-base
+                      _changed-head
+                      _explain?
+                      _impact-dry-run?
+                      _prioritize
+                      _failure-history
+                      _generate-covers-manifest?
+                      _shard-plan
+                      _durations)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 
