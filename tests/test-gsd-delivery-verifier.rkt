@@ -223,6 +223,44 @@
       (check-false (delivery-verification-approved? result) "no delivery artifact must fail")
       (cleanup-tmp base))
 
+    (test-case "approves directory target when a file under it changed"
+      ;; A wave may scope a target to a DIRECTORY (e.g. "q/tests/memory/") for
+      ;; "existing tests + new focused tests under this dir". git diff lists
+      ;; files, never directories, so a directory target must be satisfied by
+      ;; prefix: ANY changed file under the directory counts as delivery.
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      ;; create the target directory + a changed file inside it
+      (make-directory* (build-path base "q" "tests" "memory"))
+      (call-with-output-file (build-path base "q" "tests" "memory" "policy-boundary-test.rkt")
+                             (lambda (out)
+                               (display "#lang racket/base\n(provide x)\n(define x 1)\n" out))
+                             #:exists 'truncate)
+      (parameterize ([current-directory base])
+        (system*/exit-code GIT "add" "-A")
+        (system*/exit-code GIT "commit" "-q" "-m" "wave delivery under dir"))
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base 0 "zero" '("q/tests/memory/") "true")
+      (write-state! base 0 "42")
+      (define plan (load-plan** base '("q/tests/memory/")))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result)
+                  "directory target satisfied by a changed file under it")
+      (cleanup-tmp base))
+
+    (test-case "rejects directory target when nothing under it changed"
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-directory* (build-path base "q" "tests" "memory"))
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base 0 "zero" '("q/tests/memory/") "true")
+      (write-state! base 0 "42")
+      (define plan (load-plan** base '("q/tests/memory/")))
+      (define result (run-delivery-verification base plan 0))
+      (check-false (delivery-verification-approved? result)
+                   "directory target with no changed file under it must fail")
+      (cleanup-tmp base))
+
     (test-case "rejects when verify command fails"
       (define base (make-tmp-git-repo))
       (make-git-branch! base "feature/issue-42-wave")
