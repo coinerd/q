@@ -19,6 +19,11 @@
 ;;       --modules runtime/memory/policy.rkt \
 ;;       --tests-for runtime/memory/policy.rkt=tests/memory/policy-boundary-test.rkt,tests/test-memory-policy.rkt \
 ;;       --budget 900 --out artifacts/mutation-pilot/run-6
+;;   re-verify (artifacts/mutation-pilot/run-8, stale .zo caches purged):
+;;     killed 16/18, survived 2 — same two equivalent mutants. (run-7 without
+;;     the cache purge spuriously survived line 146 boolean-and->or; killed
+;;     again in run-6 and run-8, i.e. a pilot bytecode-cache artifact, not a
+;;     test gap.)
 ;;
 ;; The two remaining survivors are documented EQUIVALENT mutants (no test can
 ;; kill them; they are not evidence of a suite gap):
@@ -43,14 +48,21 @@
 ;; required keys incl. an origin id, validity carries sensitivity/confidence/
 ;; supersedes. The existing suite's helper omits supersedes/origin, so its
 ;; items are invalid — which is why store-policy boundary mutants survived.
-(define (valid-item content #:sensitivity [sensitivity 'public]
-                    #:scope [scope 'project])
+(define (valid-item content #:sensitivity [sensitivity 'public] #:scope [scope 'project])
   (memory-item "id"
                'semantic
                scope
                content
-               (hasheq 'tags '() 'source 'tool 'project-root "/tmp/project"
-                       'session-id "sess" 'origin-message-id "m1")
+               (hasheq 'tags
+                       '()
+                       'source
+                       'tool
+                       'project-root
+                       "/tmp/project"
+                       'session-id
+                       "sess"
+                       'origin-message-id
+                       "m1")
                (hasheq 'sensitivity sensitivity 'confidence 1.0 'supersedes #f)
                "2026-01-01T00:00:00Z"
                "2026-01-01T00:00:00Z"))
@@ -86,10 +98,10 @@
 
 (test-case "policy-allows-retrieve?: zero-count boundary (kills <=->< and 0->1 line 195)"
   (define p (make-memory-policy #:max-retrieve-count 3))
-  (check-true (policy-allows-retrieve? p 0))    ; strict < and (<= 1 ..) both flip this
-  (check-true (policy-allows-retrieve? p 3))    ; at-threshold upper boundary
-  (check-false (policy-allows-retrieve? p 4))   ; just above threshold (polarity)
-  (check-false (policy-allows-retrieve? p -1))  ; below lower bound (polarity)
+  (check-true (policy-allows-retrieve? p 0)) ; strict < and (<= 1 ..) both flip this
+  (check-true (policy-allows-retrieve? p 3)) ; at-threshold upper boundary
+  (check-false (policy-allows-retrieve? p 4)) ; just above threshold (polarity)
+  (check-false (policy-allows-retrieve? p -1)) ; below lower bound (polarity)
   (check-false (policy-allows-retrieve? p 1.5)) ; integer? guard branch
   (check-false (policy-allows-retrieve? p 'three)))
 
@@ -118,9 +130,9 @@
 
 (test-case "policy-within-budget?: at-threshold boundary (kills <=->< line 203)"
   (define p (make-memory-policy #:max-retrieve-count 3))
-  (check-true (policy-within-budget? p '()))              ; empty result set
-  (check-true (policy-within-budget? p (list 1 2 3)))     ; exactly max: <= vs <
-  (check-false (policy-within-budget? p (list 1 2 3 4)))  ; one above (polarity)
+  (check-true (policy-within-budget? p '())) ; empty result set
+  (check-true (policy-within-budget? p (list 1 2 3))) ; exactly max: <= vs <
+  (check-false (policy-within-budget? p (list 1 2 3 4))) ; one above (polarity)
   ;; default policy boundary: exactly 20 items.
   (check-true (policy-within-budget? default-memory-policy (build-list 20 values)))
   (check-false (policy-within-budget? default-memory-policy (build-list 21 values))))
@@ -136,8 +148,8 @@
 
 (test-case "policy-allows-store?: content length at threshold (kills <=->< line 180)"
   (define p (make-memory-policy #:max-content-length 5))
-  (check-true (policy-allows-store? p (valid-item "abcde")))   ; exactly max
-  (check-true (policy-allows-store? p (valid-item "abcd")))    ; one below
+  (check-true (policy-allows-store? p (valid-item "abcde"))) ; exactly max
+  (check-true (policy-allows-store? p (valid-item "abcd"))) ; one below
   (check-false (policy-allows-store? p (valid-item "abcdef"))) ; one above (polarity)
   ;; Sanity: the at-threshold item is valid, so a #f there can only come from
   ;; the length comparison — this is what the previous suite never exercised.
@@ -171,8 +183,7 @@
   ;; Longer input, non-default max-len: substring end stays within bounds for
   ;; the original, so the mutant's longer output (or out-of-range error) is
   ;; detected by the exact-length assertion.
-  (check-equal? (redacted-memory-snippet "abcdefghijklmnopqrstuvwxyz" 12)
-                "abcdefghi...")
+  (check-equal? (redacted-memory-snippet "abcdefghijklmnopqrstuvwxyz" 12) "abcdefghi...")
   (check-equal? (string-length (redacted-memory-snippet "abcdefghijklmnopqrstuvwxyz" 12)) 12))
 
 ;; ---------------------------------------------------------------------------
@@ -182,7 +193,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "effective-memory-scope: polarity of requested-scope branches"
-  (check-equal? (effective-memory-scope 'user "/tmp/project") 'user)   ; valid scope
+  (check-equal? (effective-memory-scope 'user "/tmp/project") 'user) ; valid scope
   (check-equal? (effective-memory-scope 'bogus "/tmp/project") 'bogus) ; invalid but present
-  (check-equal? (effective-memory-scope #f "/tmp/project") 'project)   ; absent + root
-  (check-equal? (effective-memory-scope #f #f) 'session))              ; absent, no root
+  (check-equal? (effective-memory-scope #f "/tmp/project") 'project) ; absent + root
+  (check-equal? (effective-memory-scope #f #f) 'session)) ; absent, no root
