@@ -15,9 +15,9 @@
 ## Local feedback loop
 
 The normal developer workflow (rollout stage 2C) is a three-level feedback
-ladder. The L1/L2 command is the same code path the CI `test-impact` shadow
-job runs, so a local run reproduces the CI selection exactly — same base/head
-refs in, same selected-test list and ordering out.
+ladder. The L1/L2 command is the selector from the W4 change-impact work
+(`--changed-base`/`--changed-head`); run it locally whenever you want the
+impact-selected set for your change.
 
 Initial time budgets — **targets pending the Phase 0 baseline measurement**,
 not yet measured SLOs:
@@ -46,8 +46,8 @@ ever changing the selected set):
 racket scripts/run-tests.rkt --changed-base origin/main --changed-head HEAD --prioritize impact
 ```
 
-**Reproduce the CI selection locally** — same merge-base range the
-`test-impact` job uses, selection only, nothing executed:
+**Preview the selection locally** — merge-base range, selection only,
+nothing executed:
 
 ```bash
 base="$(git merge-base origin/main HEAD)" && \
