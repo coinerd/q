@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; @speed fast  ;; @suite core
+;; @speed fast  ;; @suite runtime
 
 ;; tests/test-execution-plane-characterization.rkt
 ;; v0.99.17 W0: Characterization tests for execution plane + gateway IPC.

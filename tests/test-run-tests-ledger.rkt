@@ -24,7 +24,8 @@
 ;;         (3) parse-args is exercised against a COPIED fixture ledger in a
 ;;             per-test temp file — the checked-in tests/test-suite-ledger.json
 ;;             is never read or mutated by this test.
-;; Retained exemption: @isolation subprocess is kept because the CLI test
+;; Retained exemption: @isolation process (canonical; the `subprocess`
+;;   alias is deprecated) is kept because the CLI test
 ;;   spawns `racket scripts/run-tests.rkt`, whose startup performs repo-wide
 ;;   stale-bytecode cleaning (see scripts/run-tests/classify-filters.rkt) —
 ;;   a genuine shared repository-tree surface that cannot be isolated inside
@@ -50,8 +51,24 @@
 
 (define summarize-ledger-results*
   (dynamic-require runner-module
-                   'summarize-ledger-results
-                   (lambda () (lambda _ (error 'summarize-ledger-results "missing export")))))
+                    'summarize-ledger-results
+                    (lambda () (lambda _ (error 'summarize-ledger-results "missing export")))))
+
+;; W8 quarantine expiry surface (ledger schema `expires_on`).
+(define ledger-summary-counts*
+  (dynamic-require runner-module
+                    'ledger-summary-counts
+                    (lambda () (lambda _ (error 'ledger-summary-counts "missing export")))))
+
+(define ledger-entry-expired?*
+  (dynamic-require runner-module
+                    'ledger-entry-expired?
+                    (lambda () (lambda _ (error 'ledger-entry-expired? "missing export")))))
+
+(define valid-expires-on?*
+  (dynamic-require runner-module
+                    'valid-expires-on?
+                    (lambda () (lambda _ (error 'valid-expires-on? "missing export")))))
 
 (define (result #:path path
                 #:exit [exit-code 1]
@@ -107,8 +124,17 @@
                                       _json-out
                                       ledger
                                       _profile
-                                      _lint-metadata?)
-                        (parse-args (list "--ledger" (path->string ledger-copy))))
+                                      _lint-metadata?
+                                      _changed-base
+                                      _changed-head
+                                      _explain?
+                                      _impact-dry-run?
+                                      _prioritize
+                                      _failure-history
+                                      _generate-covers-manifest?
+                                      _shard-plan
+                                      _durations)
+                         (parse-args (list "--ledger" (path->string ledger-copy))))
                       (check-equal? ledger (path->string ledger-copy)))
                     (lambda () (delete-file/safe ledger-copy))))
 
@@ -174,6 +200,132 @@
                                     "#9001"))
                     (lambda () (delete-file/safe ledger-path))))
 
+    (test-case "quarantine expiry boundaries (expires_on is inclusive)"
+      ;; W8: while today < expires_on the entry is a tolerated quarantine;
+      ;; from expires_on onward (inclusive) it escalates. No expires_on
+      ;; (or null) means the entry never expires.
+      (check-false (ledger-entry-expired?* (hasheq 'expires_on #f)
+                                           #:today "2026-08-17"))
+      (check-false (ledger-entry-expired?* (hasheq 'expires_on "2026-08-18")
+                                           #:today "2026-08-17"))
+      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2026-08-17")
+                                          #:today "2026-08-17"))
+      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2020-01-01")
+                                          #:today "2026-08-17"))
+      ;; Schema gate: a present expires_on must be ISO YYYY-MM-DD (zero-padded,
+      ;; real month/day). Absence (#f) is valid and means "never expires",
+      ;; handled by normalize-ledger-entry before the date check.
+      (check-false (valid-expires-on?* #f))
+      (check-true (valid-expires-on?* "2999-12-31"))
+      (check-false (valid-expires-on?* "17/08/2026"))
+      (check-false (valid-expires-on?* "2026-13-01"))
+      (check-false (valid-expires-on?* "2026-8-17"))
+      (check-false (valid-expires-on?* "next tuesday")))
+
+    (test-case "load-known-failure-ledger rejects malformed expires_on"
+      (define ledger-path
+        (write-ledger (list (hasheq 'file
+                                    "tests/bad-quarantine.rkt"
+                                    'category
+                                    "ASSERTION_FAILURE"
+                                    'owner
+                                    "runtime"
+                                    'first_seen
+                                    "1.0.0"
+                                    'release_blocking
+                                    #f
+                                    'issue
+                                    "#9503"
+                                    'notes
+                                    "malformed expiry must fail the ledger load"
+                                    'expires_on
+                                    "17/08/2026"))))
+      (dynamic-wind void
+                    (lambda ()
+                      (check-exn exn:fail?
+                                 (lambda () (load-known-failure-ledger* ledger-path))))
+                     (lambda () (delete-file/safe ledger-path))))
+
+    (test-case "load-known-failure-ledger: missing optional file is an empty ledger"
+      ;; W8: the ledger file is optional (no placeholder is committed); a
+      ;; missing path must behave as "no known failures", not crash the run.
+      (check-equal? (load-known-failure-ledger*
+                     (build-path (find-system-path 'temp-dir)
+                                 "q-known-failures-ledger-absent.json"))
+                    '()))
+
+    (test-case "expired quarantine entries surface as escalating failures"
+      ;; W8: an entry past expires_on is reported as a FAILURE with an
+      ;; escalation flag instead of being skipped/tolerated.
+      (define ledger-path
+        (write-ledger (list (hasheq 'file
+                                    "tests/quarantine-active.rkt"
+                                    'category
+                                    "ASSERTION_FAILURE"
+                                    'owner
+                                    "runtime"
+                                    'first_seen
+                                    "1.0.0"
+                                    'release_blocking
+                                    #f
+                                    'issue
+                                    "#9501"
+                                    'notes
+                                    "active flake quarantine"
+                                    'expires_on
+                                    "2999-12-31")
+                            (hasheq 'file
+                                    "tests/quarantine-expired.rkt"
+                                    'category
+                                    "ASSERTION_FAILURE"
+                                    'owner
+                                    "runtime"
+                                    'first_seen
+                                    "1.0.0"
+                                    'release_blocking
+                                    #f
+                                    'issue
+                                    "#9502"
+                                    'notes
+                                    "stale quarantine"
+                                    'expires_on
+                                    "2020-01-01"))))
+      (dynamic-wind void
+                    (lambda ()
+                      (define ledger (load-known-failure-ledger* ledger-path))
+                      (define results
+                        (list (result #:path "tests/quarantine-active.rkt")
+                              (result #:path "tests/quarantine-expired.rkt")))
+                      (define summary (summarize-ledger-results* ledger results))
+                      ;; Active quarantine is still tolerated ...
+                      (check-equal? (length (hash-ref summary 'known_failures)) 1)
+                      ;; ... but the expired one is an escalating failure.
+                      (define expired (hash-ref summary 'expired_quarantine_failures '()))
+                      (check-equal? (length expired) 1)
+                      (define entry (car expired))
+                      (check-true (hash-ref entry 'escalate))
+                      (check-equal? (hash-ref entry 'file) "tests/quarantine-expired.rkt")
+                      (check-equal? (hash-ref entry 'category) "ASSERTION_FAILURE")
+                      (check-equal? (hash-ref entry 'expires_on) "2020-01-01")
+                      (check-equal? (hash-ref entry 'issue) "#9502")
+                      (define counts (ledger-summary-counts* summary))
+                      (check-equal? (hash-ref counts 'known_failures) 1)
+                      (check-equal? (hash-ref counts 'expired_quarantine_failures) 1)
+                      (check-equal? (hash-ref counts 'new_failures) 0)
+                      (check-equal? (hash-ref counts 'resolved_known_failures) 0)
+                      (check-equal? (hash-ref counts 'release_blocking_known_failures) 0)
+                      ;; Human summary names the escalation explicitly.
+                      (define out (open-output-string))
+                      (parameterize ([current-output-port out])
+                        (print-ledger-summary ledger results))
+                      (check-true (regexp-match? #rx"Expired quarantine failures:[ ]+1"
+                                                 (get-output-string out))
+                                  (get-output-string out))
+                      (check-true (regexp-match? #rx"ESCALATE tests/quarantine-expired"
+                                                 (get-output-string out))
+                                  (get-output-string out)))
+                    (lambda () (delete-file/safe ledger-path))))
+
     (test-case "CLI prints known-failure ledger summary"
       (define missing-file (make-temporary-file "test-missing-cli-known-~a.rkt"))
       (define ledger-path
@@ -207,7 +359,51 @@
          (check-true (regexp-match? #rx"Known failures:[ ]+1" stdout) stdout)
          (check-true (regexp-match? #rx"New failures:[ ]+0" stdout) stdout)
          (check-true (regexp-match? #rx"Unclassified failures:[ ]+0" stdout) stdout)
-         (check-true (regexp-match? #rx"Resolved known failures:[ ]+0" stdout) stdout))
+          (check-true (regexp-match? #rx"Resolved known failures:[ ]+0" stdout) stdout))
+        (lambda ()
+          (delete-file/safe ledger-path)
+          (delete-file/safe missing-file))))
+
+    (test-case "CLI escalates expired quarantine entries as failures"
+      ;; W8: past expires_on the entry no longer tolerates the failure —
+      ;; the run must FAIL (exit 1) and the summary must carry the
+      ;; escalation, so a stale quarantine can never keep a run green.
+      (define missing-file (make-temporary-file "test-missing-cli-expired-~a.rkt"))
+      (define ledger-path
+        (write-ledger (list (hasheq 'file
+                                    (path->string missing-file)
+                                    'category
+                                    "MODULE_LOAD_FAILURE"
+                                    'owner
+                                    "testing"
+                                    'first_seen
+                                    "0.99.30"
+                                    'release_blocking
+                                    #f
+                                    'issue
+                                    "#8314"
+                                    'notes
+                                    "synthetic expired quarantine"
+                                    'expires_on
+                                    "2020-01-01"))))
+      (call-with-output-file missing-file
+                             #:exists 'truncate/replace
+                             (lambda (out)
+                               (displayln "#lang racket/base" out)
+                               (displayln "(require definitely/missing/module)" out)))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define-values (code stdout stderr)
+           (run/capture (format "racket scripts/run-tests.rkt --sequential --ledger ~a ~a"
+                                ledger-path
+                                missing-file)))
+         (check-equal? code 1 stderr)
+         (check-true (regexp-match? #rx"Known failures:[ ]+0" stdout) stdout)
+         (check-true (regexp-match? #rx"New failures:[ ]+0" stdout) stdout)
+         (check-true (regexp-match? #rx"Expired quarantine failures:[ ]+1" stdout) stdout)
+         (check-true (regexp-match? #rx"ESCALATE" stdout) stdout)
+         (check-true (regexp-match? #rx"quarantine expired" stdout) stdout))
        (lambda ()
          (delete-file/safe ledger-path)
          (delete-file/safe missing-file))))))

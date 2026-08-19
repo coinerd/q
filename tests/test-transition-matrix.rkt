@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @covers runtime/session/session-events.rkt
+
 ;; @speed fast
 ;; @suite fast
 ;; @boundary unit

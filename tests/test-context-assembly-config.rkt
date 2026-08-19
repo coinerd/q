@@ -10,6 +10,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (module+ test
   (void))

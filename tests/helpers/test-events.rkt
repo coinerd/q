@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/helpers/test-events.rkt — Shared event builder functions
 ;;

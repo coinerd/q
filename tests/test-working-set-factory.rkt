@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @covers runtime/working-set.rkt
+
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit

@@ -98,8 +98,9 @@
         (define speed #f)
         (define suite #f)
         (define suites '())
-        (define requires '())
-        (define not-test? #f)
+         (define requires '())
+         (define covers '())
+         (define not-test? #f)
         (define mutates #f)
         (define boundary #f)
         (define isolation #f)
@@ -124,6 +125,14 @@
                                       (define requires-match (metadata-line-match line "requires"))
                                       (when requires-match
                                         (set! requires (metadata-tokens (cadr requires-match))))
+                                      ;; @covers (W4): production modules/contracts a test
+                                      ;; directly validates, repo-root-relative paths.
+                                      ;; Multiple @covers lines accumulate in order.
+                                      (define covers-match (metadata-line-match line "covers"))
+                                      (when covers-match
+                                        (set! covers
+                                              (append covers
+                                                      (metadata-tokens (cadr covers-match)))))
                                       (define not-test-match (metadata-line-match line "not-test"))
                                       (when not-test-match
                                         (set! not-test? (metadata-bool (cadr not-test-match) #t)))
@@ -154,9 +163,11 @@
               suite
               'suites
               suites
-              'requires
-              requires
-              'not-test?
+               'requires
+               requires
+               'covers
+               covers
+               'not-test?
               not-test?
               'mutates
               mutates
@@ -186,12 +197,13 @@
 
 (define metadata-schema-version 1)
 
-;; Full tag vocabulary. `covers` is forward-reserved: recognized by the
-;; schema and accepted by the parser, but its value is not yet validated
-;; or consumed anywhere.
+;; Full tag vocabulary. `covers` (W4): repo-root-relative production
+;; modules/contracts the test directly validates; parsed by the metadata
+;; parser, validated by manifest generation (generate-covers-manifest /
+;; write-covers-manifest!), and consumed by impact selection.
 (define schema-known-tags
   '("suite" "speed" "boundary" "mutates" "isolation" "timeout" "requires" "covers"))
-(define schema-reserved-tags '("covers"))
+(define schema-reserved-tags '())
 (define schema-required-tags '("suite" "speed"))
 
 ;; Allowed values per tag (strings exactly as they appear in the header).
@@ -218,6 +230,7 @@
           "integration"
           "tools"
           "provider"
+          "session"
           "gsd"
           "verifier"
           "harness"
@@ -546,7 +559,7 @@
 
 (define (print-lint-report files)
   (define results (validate-files files))
-  (printf ";; METADATA LINT — schema v~a — REPORT-ONLY (enforcement deferred to W3)~n"
+  (printf ";; METADATA LINT — schema v~a — ENFORCED (invalid tags fail; missing tags warn)~n"
           metadata-schema-version)
   (printf ";; ════════════════════════════════════════════════════════════~n")
   (for ([r (in-list results)])

@@ -4,6 +4,8 @@
 ;;
 ;; Print-summary, save-failure-logs, format-duration, summary-exit-code.
 ;; Extracted from run-tests.rkt (v0.96.16, AX1-2).
+;; W8: per-file distinct statuses (pass/fail/timeout/skip), profile+mode on
+;; every file/failure record, timeout listing, quarantine-expiry escalation.
 ;; STABILITY: internal
 
 (require racket/string
@@ -14,7 +16,8 @@
          (only-in "ledger.rkt"
                   summarize-ledger-results
                   ledger-summary-counts
-                  ledger-entry-matches-result?)
+                  ledger-entry-matches-result?
+                  ledger-entry-expired?)
          (only-in "parse.rkt"
                   test-file-result-path
                   test-file-result-exit-code
@@ -39,11 +42,13 @@
          test-result->jsexpr
          write-json-results!
          print-ledger-summary
+         result-status
          format-verdict-line
          metadata-completeness
          run-summary->jsexpr
-         format-run-summary-record
-         print-run-summary-record)
+          format-run-summary-record
+          print-run-summary-record
+          test-result->ledger-jsexpr)
 
 (define (format-duration ms)
   (define total-secs (/ ms 1000.0))
@@ -80,6 +85,16 @@
 
 (define (timeout-result? r)
   (and (not (skipped-by-profile-result? r)) (= (test-file-result-exit-code r) 2)))
+
+;; W8: distinct per-file statuses for JSON evidence. Timeout and profile-skip
+;; must never fold into "pass" — the full-regression workflow aggregates
+;; exactly these four values when it computes run status.
+(define (result-status r)
+  (cond
+    [(skipped-by-profile-result? r) "skip"]
+    [(timeout-result? r) "timeout"]
+    [(failed-result? r) "fail"]
+    [else "pass"]))
 
 ;; Compute a verdict symbol from results: 'pass, 'fail, 'incomplete, 'inconclusive.
 ;; - 'fail:          at least one file exited non-zero (not timeout)
@@ -155,17 +170,36 @@
 (define (test-result->ledger-jsexpr r ledger)
   (define base (test-result->jsexpr r))
   (define entry (ledger-match ledger r))
-  (if entry
-      (hash-set* base
-                 'known_failure
-                 #t
-                 'issue
-                 (hash-ref entry 'issue)
-                 'owner
-                 (hash-ref entry 'owner)
-                 'release_blocking
-                 (hash-ref entry 'release_blocking))
-      (hash-set base 'known_failure #f)))
+  (cond
+    [(not entry) (hash-set base 'known_failure #f)]
+    ;; W8: an expired quarantine is a failure that must escalate — flag it
+    ;; per-file so per-shard JSON evidence cannot read as a tolerated known.
+    [(ledger-entry-expired? entry)
+     (hash-set* base
+                'known_failure
+                #t
+                'issue
+                (hash-ref entry 'issue)
+                'owner
+                (hash-ref entry 'owner)
+                'release_blocking
+                (hash-ref entry 'release_blocking)
+                'expires_on
+                (hash-ref entry 'expires_on #f)
+                'quarantine_expired
+                #t
+                'escalate
+                #t)]
+    [else
+     (hash-set* base
+                'known_failure
+                #t
+                'issue
+                (hash-ref entry 'issue)
+                'owner
+                (hash-ref entry 'owner)
+                'release_blocking
+                (hash-ref entry 'release_blocking))]))
 
 ;; ============================================================
 ;; Run-summary record (W0 baseline measurement)
@@ -211,12 +245,30 @@
       [else (set! missing (add1 missing))]))
   (hasheq 'explicit explicit 'heuristic heuristic 'missing missing))
 
-(define (annotate-file-jsexpr js r)
-  (hash-set* js
-             'duration_seconds
-             (/ (test-file-result-elapsed-ms r) 1000.0)
-             'metadata_completeness
-             (symbol->string (metadata-completeness (test-file-result-path r)))))
+(define (optional-id-string v)
+  (cond
+    [(not v) #f]
+    [(symbol? v) (symbol->string v)]
+    [(string? v) v]
+    [else (format "~a" v)]))
+
+;; W8: every file record (and therefore every failure record) carries a
+;; distinct `status` plus the execution profile and runner mode, so shard JSON
+;; artifacts are interpretable without the workflow context that produced them.
+(define (annotate-file-jsexpr js r #:profile [profile #f] #:mode [mode #f])
+  (define base
+    (hash-set* js
+               'status
+               (result-status r)
+               'duration_seconds
+               (/ (test-file-result-elapsed-ms r) 1000.0)
+               'metadata_completeness
+               (symbol->string (metadata-completeness (test-file-result-path r)))))
+  (define with-profile
+    (let ([s (optional-id-string profile)])
+      (if s (hash-set base 'execution_profile s) base)))
+  (let ([s (optional-id-string mode)])
+    (if s (hash-set with-profile 'runner_mode s) with-profile)))
 
 (define (shard->jsexpr shard)
   (if (pair? shard)
@@ -301,8 +353,9 @@
                              #:elapsed-ms [elapsed-ms 0]
                              #:ledger [ledger #f]
                              #:profile [profile 'local]
-                             #:shard [shard #f]
-                             #:runner-version [runner-version "unknown"])
+                              #:shard [shard #f]
+                              #:runner-version [runner-version "unknown"]
+                              #:extra [extra #f])
   (define passed-files (count passed-result? results))
   (define failed-files (count failed-result? results))
   (define timeout-files (count timeout-result? results))
@@ -349,12 +402,22 @@
                                  #:mode mode
                                  #:elapsed-ms elapsed-ms
                                  #:runner-version runner-version)
-            'files
-            (if ledger
-                (map (lambda (r) (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger) r))
-                     results)
-                (map (lambda (r) (annotate-file-jsexpr (test-result->jsexpr r) r)) results))))
-  (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload out))))
+              'files
+              (if ledger
+                  (map (lambda (r)
+                         (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger)
+                                               r
+                                               #:profile profile
+                                               #:mode mode))
+                       results)
+                  (map (lambda (r)
+                         (annotate-file-jsexpr (test-result->jsexpr r)
+                                               r
+                                               #:profile profile
+                                               #:mode mode))
+                       results))))
+  (define payload* (if extra (hash-set payload 'extra extra) payload))
+  (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload* out))))
 
 (define (print-ledger-summary ledger results)
   (define summary (summarize-ledger-results ledger results))
@@ -367,6 +430,19 @@
   (printf "  Resolved known failures: ~a~n" (hash-ref counts 'resolved_known_failures))
   (printf "  Release-blocking known failures: ~a~n"
           (hash-ref counts 'release_blocking_known_failures))
+  ;; W8 quarantine expiry: an entry past `expires_on` is reported as an
+  ;; escalating failure instead of being tolerated.
+  (when (> (hash-ref counts 'expired_quarantine_failures 0) 0)
+    (printf "  Expired quarantine failures: ~a~n"
+            (hash-ref counts 'expired_quarantine_failures))
+    (for ([e (in-list (hash-ref summary 'expired_quarantine_failures '()))])
+      (printf "    ⏫ ESCALATE ~a [~a] quarantine expired ~a (owner=~a issue=~a)~n"
+              (hash-ref e 'file)
+              (hash-ref e 'category)
+              (hash-ref e 'expires_on)
+              (hash-ref e 'owner)
+              (hash-ref e 'issue)))
+    (displayln "  ⛔ Quarantine expired: failure now blocks; re-triage, fix, or renew with justification."))
   (when (> (hash-ref counts 'unclassified_failures) 0)
     (displayln "  ⛔ Ledger incomplete: unclassified failures remain."))
   (when (> (hash-ref counts 'new_failures) 0)
@@ -409,6 +485,18 @@
   (displayln "═══════════════════════════════════════════════════════════")
   (displayln (format-verdict-line verdict timeout-files))
   (displayln "═══════════════════════════════════════════════════════════")
+  ;; W8: timed-out files are listed explicitly and separately — a timeout is
+  ;; never a pass and must remain visible as its own status.
+  (define timeouts (filter timeout-result? results))
+  (when (pair? timeouts)
+    (newline)
+    (displayln "TIMEOUTS (distinct status — never counted as passes):")
+    (for ([f (in-list timeouts)])
+      (printf "  ⏱ ~a [~a] (exit=~a, ~a)~n"
+              (test-file-result-path f)
+              (classify-test-result f)
+              (test-file-result-exit-code f)
+              (format-duration (test-file-result-elapsed-ms f)))))
   (define failures (filter failed-result? results))
   (when (pair? failures)
     (newline)
@@ -438,18 +526,22 @@
   (define path-hash (number->string (equal-hash-code test-path) 16))
   (string-append "q-test-fail-" (string-replace safe-base ".rkt" "") "-" path-hash ".log"))
 
-(define (save-failure-logs results)
+(define (save-failure-logs results #:profile [profile #f] #:mode [mode #f])
   (define failures (filter failed-result? results))
+  (define profile-label (or (optional-id-string profile) "unknown"))
+  (define mode-label (or (optional-id-string mode) "unknown"))
   (for ([f (in-list failures)])
     (define log-path (build-path "/tmp" (make-unique-log-name (test-file-result-path f))))
     (call-with-output-file log-path
                            #:exists 'truncate/replace
                            (lambda (out)
                              (fprintf out
-                                      "=== ~a (exit=~a, elapsed=~a) ===~n"
+                                      "=== ~a (exit=~a, elapsed=~a, profile=~a, mode=~a) ===~n"
                                       (test-file-result-path f)
                                       (test-file-result-exit-code f)
-                                      (format-duration (test-file-result-elapsed-ms f)))
+                                      (format-duration (test-file-result-elapsed-ms f))
+                                      profile-label
+                                      mode-label)
                              (fprintf out "--- stdout ---~n")
                              (display (bytes->string* (test-file-result-stdout-bytes f)) out)
                              (fprintf out "~n--- stderr ---~n")

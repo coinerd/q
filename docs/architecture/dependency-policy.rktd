@@ -315,6 +315,10 @@
       ("tui/commands.rkt"
        (risk . "TUI command dispatch with slash command routing and mode-specific handling")
        (owner . "tui"))
+      ("gui/main.rkt"
+       (risk
+        . "GUI composition root: window/frame wiring, editor and transcript views, event bridging; broad single-file surface by design")
+       (owner . "gui"))
       ("tui/state-events.rkt"
        (risk . "TUI state event dispatch; large enum of UI event types with high change frequency")
        (owner . "tui"))

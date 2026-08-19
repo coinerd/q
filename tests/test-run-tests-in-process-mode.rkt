@@ -54,7 +54,14 @@
                       json-out
                       ledger
                       _profile
-                      _lint-metadata?)
+                      _lint-metadata?
+                      _changed-base
+                      _changed-head
+                      _explain?
+                      _impact-dry-run?
+                      _prioritize
+                      _failure-history
+                      _generate-covers-manifest?)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -72,7 +79,14 @@
                       _json-out
                       _ledger
                       _default-profile
-                      _lint-metadata2?)
+                      _lint-metadata2?
+                      _changed-base2
+                      _changed-head2
+                      _explain2?
+                      _impact-dry-run2?
+                      _prioritize2
+                      _failure-history2
+                      _generate-covers-manifest2?)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 

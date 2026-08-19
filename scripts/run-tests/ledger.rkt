@@ -4,9 +4,17 @@
 ;;
 ;; Ledger entries make broad-suite debt explicit and distinguish known failures
 ;; from new/unclassified failures and resolved historical failures.
+;;
+;; W8 QUARANTINE EXPIRY: an entry may carry `expires_on` (ISO YYYY-MM-DD).
+;; While unexpired, the entry is quarantined (a tolerated, visible known
+;; failure). From the expiry date onward (today >= expires_on) the quarantine
+;; is over: the failure is reported as an escalating failure
+;; (`expired_quarantine_failures`, escalate=#t) instead of being tolerated —
+;; see docs/operations/test-regression-triage.md.
 ;; STABILITY: internal test-runner infrastructure
 
 (require json
+         racket/date
          racket/list
          racket/match
          racket/path
@@ -17,7 +25,10 @@
          normalize-ledger-entry
          summarize-ledger-results
          ledger-summary-counts
-         ledger-entry-matches-result?)
+         ledger-entry-matches-result?
+         ledger-entry-expired?
+         valid-expires-on?
+         today-iso8601)
 
 (define required-ledger-keys '(file category owner first_seen release_blocking issue notes))
 (define missing-sentinel (gensym 'missing))
@@ -47,6 +58,34 @@
     [(string? v) v]
     [else (format "~a" v)]))
 
+;; Quarantine expiry dates must be unambiguous, zero-padded ISO dates so that
+;; plain string comparison matches calendar order. Shape alone is not enough:
+;; `2026-13-01` passes the regex but would sort permanently after every real
+;; date and thus never expire. Validate calendar ranges too.
+(define (valid-expires-on? v)
+  (and (string? v)
+       (regexp-match? #px"^[0-9]{4}-[0-9]{2}-[0-9]{2}$" v)
+       (let ([month (string->number (substring v 5 7))]
+             [day (string->number (substring v 8 10))])
+         (and month day (<= 1 month 12) (<= 1 day 31)))))
+
+(define (normalize-expires-on v)
+  (cond
+    [(or (not v) (eq? v 'null)) #f]
+    [(valid-expires-on? v) v]
+    [else (raise-arguments-error 'normalize-ledger-entry
+                                 "expires_on must be an ISO YYYY-MM-DD string or null"
+                                 "expires_on"
+                                 v)]))
+
+(define (pad2 n)
+  (if (< n 10) (format "0~a" n) (number->string n)))
+
+;; Local-timezone calendar date as "YYYY-MM-DD" (basis for quarantine expiry).
+(define (today-iso8601)
+  (define d (seconds->date (current-seconds)))
+  (format "~a-~a-~a" (date-year d) (pad2 (date-month d)) (pad2 (date-day d))))
+
 (define (normalize-ledger-entry raw)
   (unless (hash? raw)
     (raise-arguments-error 'normalize-ledger-entry "ledger entry must be a JSON object" "entry" raw))
@@ -71,7 +110,16 @@
           'issue
           (hash-ref* raw 'issue)
           'notes
-          (hash-ref* raw 'notes)))
+          (hash-ref* raw 'notes)
+          'expires_on
+          (normalize-expires-on (hash-ref* raw 'expires_on #f))))
+
+;; #t once `today` has reached the entry's `expires_on` (the quarantine window
+;; is [first_seen, expires_on); on the expiry date itself the entry escalates).
+;; Entries without `expires_on` never expire through this mechanism.
+(define (ledger-entry-expired? entry #:today [today (today-iso8601)])
+  (define expires (hash-ref entry 'expires_on #f))
+  (and expires (string>=? today expires)))
 
 (define (extract-ledger-entries payload)
   (cond
@@ -80,8 +128,13 @@
     [else '()]))
 
 (define (load-known-failure-ledger path)
-  (define payload (call-with-input-file path read-json))
-  (map normalize-ledger-entry (extract-ledger-entries payload)))
+  ;; The ledger file is optional: a missing path is an empty ledger (every
+  ;; failure is "new"), not an error — W8's full-regression workflow always
+  ;; passes --ledger and the file only appears once quarantined failures exist.
+  (cond
+    [(not (or (file-exists? path) (link-exists? path))) '()]
+    [else (map normalize-ledger-entry
+               (extract-ledger-entries (call-with-input-file path read-json)))]))
 
 (define (result-failure? r)
   (and (not (= (test-file-result-exit-code r) 0))
@@ -120,13 +173,36 @@
 (define (result->new-entry r)
   (hasheq 'file (result-path-string r) 'category (result-category-string r)))
 
-(define (summarize-ledger-results ledger results)
+;; An expired quarantine match is surfaced as a failure that must escalate:
+;; it keeps its identifying fields and carries escalate=#t so downstream
+;; consumers (JSON evidence, triage) cannot mistake it for a tolerated known.
+(define (result->escalation-entry entry)
+  (hasheq 'file
+          (hash-ref entry 'file)
+          'category
+          (hash-ref entry 'category)
+          'expires_on
+          (hash-ref entry 'expires_on #f)
+          'owner
+          (hash-ref entry 'owner)
+          'issue
+          (hash-ref entry 'issue)
+          'escalate
+          #t))
+
+(define (summarize-ledger-results ledger results #:today [today (today-iso8601)])
+  (define (expired? entry) (ledger-entry-expired? entry #:today today))
   (define failures (filter result-failure? results))
   (define known
     (for/list ([r (in-list failures)]
                #:do [(define entry (matching-entry ledger r))]
-               #:when entry)
+               #:when (and entry (not (expired? entry))))
       entry))
+  (define expired-quarantine
+    (for/list ([r (in-list failures)]
+               #:do [(define entry (matching-entry ledger r))]
+               #:when (and entry (expired? entry)))
+      (result->escalation-entry entry)))
   (define new
     (for/list ([r (in-list failures)]
                #:when (not (file-entry ledger r)))
@@ -156,6 +232,8 @@
           new
           'unclassified_failures
           unclassified
+          'expired_quarantine_failures
+          expired-quarantine
           'resolved_known_failures
           resolved
           'release_blocking_known_failures
@@ -168,6 +246,8 @@
           (length (hash-ref summary 'new_failures '()))
           'unclassified_failures
           (length (hash-ref summary 'unclassified_failures '()))
+          'expired_quarantine_failures
+          (length (hash-ref summary 'expired_quarantine_failures '()))
           'resolved_known_failures
           (length (hash-ref summary 'resolved_known_failures '()))
           'release_blocking_known_failures

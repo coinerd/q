@@ -12,6 +12,93 @@
 | slow | ~5m | Long-running | `--suite slow` |
 | all | ~5m | Everything | `--suite all` |
 
+## Local feedback loop
+
+The normal developer workflow (rollout stage 2C) is a three-level feedback
+ladder. The L1/L2 command is the same code path the CI `test-impact` shadow
+job runs, so a local run reproduces the CI selection exactly — same base/head
+refs in, same selected-test list and ordering out.
+
+Initial time budgets — **targets pending the Phase 0 baseline measurement**,
+not yet measured SLOs:
+
+| Level | Scope | Time budget (target) |
+|---|---|---|
+| L0 — current behavior | The test file being edited or added | p90 ≤ 5s |
+| L1 — direct unit impact | Direct tests of changed modules + required local contract tests | p90 ≤ 30s |
+| L2 — transitive impact | L1 + tests of dependent modules + boundary contracts | p90 ≤ 120s |
+
+### The three commands
+
+**L0** — during the red-green-refactor loop, explicit-file mode on the test
+being edited:
+
+```bash
+racket scripts/run-tests.rkt tests/test-<module>.rkt
+```
+
+**L1/L2** — impact selection for the change under development (direct
+`@covers` tests of changed modules, their transitive dependents, and changed
+boundary contracts; `--prioritize impact` advances likely failures without
+ever changing the selected set):
+
+```bash
+racket scripts/run-tests.rkt --changed-base origin/main --changed-head HEAD --prioritize impact
+```
+
+**Reproduce the CI selection locally** — same merge-base range the
+`test-impact` job uses, selection only, nothing executed:
+
+```bash
+base="$(git merge-base origin/main HEAD)" && \
+  racket scripts/run-tests.rkt --changed-base "$base" --changed-head HEAD \
+    --prioritize impact --impact-dry-run --json-out impact-plan.json
+```
+
+Swap `--impact-dry-run` for `--explain` to get the human-readable view
+(changed file → category → selected test → reason → dependency path →
+escalation + fallback). In real (executing) mode, add
+`--json-out impact-results.json` to retain the same JSON evidence CI retains.
+
+### Escalation semantics (fail open, never silently narrower)
+
+Selection is conservative by design:
+
+- **Escalations run a declared broad fallback suite** (`fast` plus the area
+  suites of the changed files), never a silently smaller set. Triggers:
+  `dynamic-require`, macro definitions, `#lang reader`/generated code,
+  configuration/workflow/package changes, fixture changes, runner/helper
+  script changes, git failure, unparseable modules inside the change's
+  dependency cone, and **unmapped sources** (no `@covers` mapping reaches the
+  changed module directly or transitively).
+- **Empty selection on a non-doc-only change is an error** (exit 3 with the
+  selection JSON), never a silent green.
+- **Doc-only changes are an explicit zero-test no-op** with JSON evidence,
+  never a silent pass.
+- Every selected test, escalation, and fallback carries a machine-readable
+  reason in the JSON evidence.
+
+### Prioritization (`--prioritize impact`, default off)
+
+- **Ordering only.** It reorders the already-selected set and never adds or
+  drops a test; omitting the flag leaves runner behavior unchanged.
+- **Priority tiers**, run earliest first: (a) explicitly named current-test
+  files, (b) direct `@covers` tests of changed modules, (c) transitive
+  dependents, (d) changed-boundary contract tests, (e) recently-failed tests,
+  (f) all remaining selected tests. Every emitted test carries a
+  `priority-reason`; ties break stably by repository path.
+- **Mutation-sensitive (serial) and parallel partitions are prioritized
+  independently**; the serial-first serialization semantics are unchanged.
+- **`--failure-history PATH`** feeds tier (e) from retained CI JSON artifacts
+  (`--json-out` results, recency-bounded, decay-weighted so a stale failure
+  cannot permanently dominate). Missing or corrupt history yields a logged,
+  deterministic neutral order (plain path sort) — never an error, never a
+  guess. No network access, no database.
+- **First-failure reporting:** when a prioritized run fails, the summary
+  surfaces the first failing selected test with its selection and priority
+  reason. The summary is a pointer, not the source of truth — full results
+  and failure logs remain available unchanged.
+
 ## Known Flaky Tests
 
 The following tests are known to fail in parallel/subprocess mode but pass

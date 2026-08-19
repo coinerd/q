@@ -103,10 +103,22 @@ jobs:
         run: raco make main.rkt
 
       - name: Run test shard ${{ matrix.shard }}/3
+        # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
+        # variable FAST_SHARD_PLAN=active ONLY after the shard-plan-report
+        # job below prints `activate` (predicted max-shard duration improves
+        # over round-robin with test inventory preserved). Default `off`
+        # keeps the round-robin behavior byte-identical.
+        env:
+          FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
         run: |
+          PLAN_ARGS=""
+          if [ "$FAST_SHARD_PLAN" = "active" ]; then
+            PLAN_ARGS="--shard-plan active"
+          fi
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total 3 \
+            $PLAN_ARGS \
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
@@ -161,6 +173,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "All test shards and platform checks passed."
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2b+: Shard-plan report (W7) — report-only, never fails CI
+  # Compares the duration-aware plan (built from this run's retained
+  # per-shard artifacts, W0 schema) against the actual round-robin
+  # shard wall clocks. Activation is a human decision gated on the
+  # printed evidence: set FAST_SHARD_PLAN=active only when this job
+  # reports `activate` (predicted max-shard improves, inventory
+  # preserved). Workflow shards follow later under the same rule.
+  # ────────────────────────────────────────────────────────────
+  shard-plan-report:
+    needs: [test-aggregate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+      - name: Download retained fast-shard artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: test-results-fast-*
+          path: durations-raw
+      - name: Stage per-shard duration JSONs
+        run: |
+          mkdir -p durations
+          i=0
+          for d in durations-raw/test-results-fast-*; do
+            [ -d "$d" ] || continue
+            if [ -f "$d/test-results.json" ]; then
+              cp "$d/test-results.json" "durations/shard-$i.json"
+            fi
+            i=$((i+1))
+          done
+          ls -1 durations/ || true
+      - name: Observed round-robin wall clocks
+        id: observed
+        run: |
+          {
+            echo "observed=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null || echo 0)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build duration-aware plan (report-only)
+        run: |
+          racket scripts/run-tests.rkt \
+            --suite fast --shard-total 3 \
+            --shard-plan report --durations durations \
+            2>&1 | tee shard-plan-report.log
+      - name: Post predicted-vs-observed summary
+        if: always()
+        run: |
+          {
+            echo "## Shard plan report (W7, report-only)"
+            echo '```'
+            grep -E 'shard [0-9]+/3:|^;; ' shard-plan-report.log || true
+            echo '```'
+            if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
+              echo "- Observed round-robin max shard wall clock: ${{ steps.observed.outputs.observed }}s"
+              echo "- Inventory check: planned files must equal the summed per-shard file counts"
+              jq -s '[.[].run_summary.file_count] | add' durations/*.json \
+                | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
+            fi
+            echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload shard-plan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shard-plan-report
+          path: shard-plan-report.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ────────────────────────────────────────────────────────────
   # Gate 2c: Platform-cross verification
@@ -692,3 +777,254 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -20 triple-gate.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 10: test-impact — change-impact selection shadow run
+  # (rollout stage 2B). STRICTLY INFORMATIONAL:
+  #   - NOT a required check. Do not add to branch protection.
+  #   - NOT listed in scripts/required-pr-checks.policy. Do not
+  #     add it there.
+  # Runs the reasoned L1/L2 selection from W4
+  # (scripts/run-tests.rkt --changed-base/--changed-head) in real
+  # (non-dry-run) mode on every PR and retains the JSON evidence
+  # so the 2B exit criterion (>=20 merged PRs or four weeks, zero
+  # confirmed omissions) can be audited from run history while
+  # every required gate above stays unchanged. Selection-logic
+  # errors fail this job visibly so the selector gets fixed; the
+  # PR itself is not blocked because this job is not required.
+  # Unmapped-source escalation is expected fail-open behavior,
+  # not a failure.
+  # ────────────────────────────────────────────────────────────
+  test-impact:
+    # No `needs:` on purpose — shadow evidence must be collected
+    # on every PR even while other gates are red.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # merge-base + base-ref resolution need full history
+          fetch-depth: 0
+
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-impact-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-impact-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Compute impact range (merge-base base, PR head)
+        id: range
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.base_ref }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+            git fetch --force origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}"
+            base_sha="$(git merge-base "refs/remotes/origin/${base_ref}" "${head_sha}")"
+          else
+            # push to main (post-merge shadow evidence) or manual
+            # dispatch: diff before..after; HEAD~1 if unavailable.
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+            if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]] \
+               || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+              echo "::warning::github.event.before unavailable; falling back to HEAD~1"
+              base_sha="$(git rev-parse HEAD~1)"
+            fi
+          fi
+          echo "base_sha=${base_sha}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## test-impact range"
+            echo "- event: ${{ github.event_name }}"
+            echo "- base (merge-base): ${base_sha}"
+            echo "- head (PR SHA): ${head_sha}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run change-impact selection (real mode, JSON evidence)
+        id: selector
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.range.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.range.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > changed-files.txt
+          echo "changed files: $(wc -l < changed-files.txt)"
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --changed-base "${BASE_SHA}" \
+            --changed-head "${HEAD_SHA}" \
+            --jobs 4 \
+            --json-out impact-results.json \
+            2>&1 | tee impact-run.log
+
+      - name: Step summary + shadow evidence record
+        if: always()
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.range.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.range.outputs.head_sha }}
+          SELECTOR_OUTCOME: ${{ steps.selector.outcome }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 'null' }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+
+          changed_count=$(wc -l < changed-files.txt 2>/dev/null)
+          [[ "${changed_count}" =~ ^[0-9]+$ ]] || changed_count=0
+          sel=0
+          esc=0
+          have_json=no
+          if [[ -f impact-results.json ]]; then
+            have_json=yes
+            if command -v jq >/dev/null 2>&1; then
+              sel=$(jq -r '[.. | objects | select(has("reason-code")) | .file] | unique | length' impact-results.json 2>/dev/null || true)
+              [[ "${sel}" =~ ^[0-9]+$ ]] || sel=0
+              esc=$(jq -r '[.. | objects | to_entries[] | select(.key | test("escalat|fallback"; "i"))] | length' impact-results.json 2>/dev/null || true)
+              [[ "${esc}" =~ ^[0-9]+$ ]] || esc=0
+            fi
+          fi
+
+          {
+            echo "## test-impact — shadow selection (rollout stage 2B)"
+            echo
+            echo "- informational shadow job: NOT a required check; selection-logic errors fail here visibly so the selector gets fixed"
+            echo "- event: ${EVENT_NAME}; run ${RUN_ID} attempt ${RUN_ATTEMPT}; PR: ${PR_NUMBER}"
+            echo "- range (merge-base...head): ${BASE_SHA}...${HEAD_SHA}"
+            echo "- selector outcome: ${SELECTOR_OUTCOME}; selection JSON produced: ${have_json}"
+            echo
+            echo "### Changed files (${changed_count})"
+            echo
+            echo '```'
+            cat changed-files.txt 2>/dev/null || true
+            echo '```'
+            if [[ "${have_json}" == "yes" ]] && command -v jq >/dev/null 2>&1; then
+              echo
+              echo "### Selected tests with reason codes (${sel})"
+              echo
+              echo '```'
+              jq -r '[.. | objects | select(has("reason-code"))]
+                     | sort_by(.file)[]
+                     | "\(.file) — \(.["reason-code"]) — changed: \(.["changed-file"] // "-") — source: \(.["mapping-source"] // "-")\(if .["dependency-path"] then " — via " + (.["dependency-path"] | tostring) else "" end)"' \
+                impact-results.json 2>/dev/null | head -200 || true
+              echo '```'
+              echo
+              echo "### Escalations / fallbacks (${esc})"
+              echo
+              echo '```'
+              jq -r '[.. | objects | to_entries[] | select(.key | test("escalat|fallback"; "i"))]
+                     | .[]
+                     | "\(.key): \(.value | tostring | .[0:200])"' \
+                impact-results.json 2>/dev/null | head -100 || true
+              echo '```'
+              echo
+              echo "### Durations (L1/L2 wall clock)"
+              jq -r 'if .run_summary
+                     then "- total wall clock: \(.run_summary.wall_clock_seconds)s (mode=\(.run_summary.execution_mode))"
+                     else "- run_summary not present" end' \
+                impact-results.json 2>/dev/null || true
+              dur_keys=$(jq -r '[.. | objects | to_entries[]
+                     | select((.key | test("l1|l2"; "i")) and (.key | test("dur|sec|ms|time"; "i")))]
+                     | .[]
+                     | "- \(.key): \(.value | tostring)"' \
+                impact-results.json 2>/dev/null || true)
+              if [[ -n "${dur_keys}" ]]; then
+                echo "${dur_keys}"
+              else
+                echo "- (selector reported no explicit L1/L2 duration fields; total wall clock above)"
+              fi
+              echo
+              echo "<details><summary>Full selection JSON (truncated to 20 KB)</summary>"
+              echo
+              echo '```json'
+              head -c 20000 impact-results.json
+              echo
+              echo '```'
+              echo "</details>"
+            else
+              echo
+              echo "### No selection JSON available"
+              echo
+              echo '```'
+              tail -50 impact-run.log 2>/dev/null || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Rolling shadow-evidence counter (2B exit criterion is
+          # audited from the run history of these artifacts):
+          # maintainers confirm omissions per merged PR. Written
+          # BEFORE the guard checks so failing runs keep their
+          # evidence record too.
+          pr_json="${PR_NUMBER}"
+          [[ "${pr_json}" =~ ^[0-9]+$ ]] || pr_json=null
+          cat > shadow-evidence.json <<EOF
+          {
+            "schema": "test-impact-shadow-evidence/1",
+            "stage": "2B",
+            "pr_number": ${pr_json},
+            "run_id": ${RUN_ID},
+            "run_attempt": ${RUN_ATTEMPT},
+            "event": "${EVENT_NAME}",
+            "base_sha": "${BASE_SHA}",
+            "head_sha": "${HEAD_SHA}",
+            "changed_file_count": ${changed_count},
+            "selected_count": ${sel},
+            "escalation_count": ${esc},
+            "selector_outcome": "${SELECTOR_OUTCOME}",
+            "selection_json_produced": $([[ "${have_json}" == "yes" ]] && echo true || echo false),
+            "omissions_confirmed_by_maintainers": 0,
+            "exit_criterion": {
+              "min_merged_prs": 20,
+              "min_days": 28,
+              "max_confirmed_omissions": 0
+            },
+            "audit_note": "Rolling counter: maintainers confirm omissions per merged PR by auditing this artifact series. Stage 2B exits when >=20 merged PRs or 4 weeks pass with zero confirmed omissions, while all required gates (L3) remain unchanged."
+          }
+          EOF
+          echo "shadow-evidence.json written (pr=${pr_json} selected=${sel} escalations=${esc} changed=${changed_count})"
+
+          # Never a silent green, part 1: the selector exited 0 but
+          # wrote no JSON evidence at all.
+          if [[ "${SELECTOR_OUTCOME}" == "success" && "${have_json}" != "yes" ]]; then
+            echo "::error::Selector exited 0 but produced no impact-results.json (silent-green risk). Failing the shadow job so the selector is fixed."
+            exit 1
+          fi
+
+          # Never a silent green, part 2: non-test source files
+          # changed, yet zero selected tests AND zero documented
+          # escalations/fallbacks. An empty selection on a source
+          # change must be an explicit selector error.
+          if [[ "${have_json}" == "yes" ]] && command -v jq >/dev/null 2>&1; then
+            non_test=$(grep -vcE '^(docs/|tests/|\.github/)|\.md$' changed-files.txt 2>/dev/null || true)
+            [[ "${non_test}" =~ ^[0-9]+$ ]] || non_test=0
+            if [[ "${sel}" -eq 0 && "${esc}" -eq 0 && "${non_test}" -gt 0 ]]; then
+              echo "::error::Zero selected tests and zero escalations while ${non_test} non-test source file(s) changed. Empty selection on a source change must be an explicit selector error, never a silent green."
+              exit 1
+            fi
+          fi
+
+
+      - name: Upload selection + execution evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-impact-${{ github.run_id }}
+          path: |
+            impact-results.json
+            impact-run.log
+            changed-files.txt
+            shadow-evidence.json
+          if-no-files-found: warn
+          # four-week audit window for the 2B exit criterion
+          retention-days: 28

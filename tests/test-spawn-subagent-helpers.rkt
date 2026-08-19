@@ -1,5 +1,7 @@
 #lang racket
 
+;; @covers tools/builtins/spawn-subagent-helpers.rkt
+
 ;; @speed fast
 ;; @suite fast
 
