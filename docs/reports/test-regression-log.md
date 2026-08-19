@@ -126,6 +126,89 @@ Net classification for this run: **1 genuine test failure (DEEP-9, shard 3/6) +
 1 platform timeout (macOS setup) + 1 systemic evidence-infra defect (missing
 `shard-results` dir; summarize glob)**. All recorded in #9384. Definitive
 overall status for main @ `c445f436`: **`fail`**.
+## Duration-aware shard plan — guarded activation decision (2026-08-19)
+
+Review of the report-only shard-plan artifact from the latest completed
+`ci.yml` run on `main`, per the assessment's guarded-activation rule
+(plan the same total inventory, improve predicted max-shard duration, keep
+the path reversible via the repository variable).
+
+### Evidence source
+
+| Field | Value |
+|---|---|
+| Source run | **32297737631** — `ci.yml` on `main` @ `1764ed84` (PR #9386 merge), completed (success), created 2026-08-19T20:17:36Z |
+| Artifact | `shard-plan-report` (single file `shard-plan-report.log`), retrieved via `gh run download 32297737631 -n shard-plan-report` |
+| Report mode | report-only (`shard-plan=report durations=durations status=ok known=1106`, `substituted=0`, default 3.50 s) — planner executed alongside the unchanged round-robin suite |
+| Report recommendation | **`activation: activate — predicted max-shard duration improves (inventory preserved: #t)`** |
+
+### Predicted durations (sequential per-file sums, from retained durations)
+
+| Shard | Duration-aware plan (files, predicted) |
+|---|---|
+| 0/3 | 367 files, 592.4 s |
+| 1/3 | 369 files, 592.4 s |
+| 2/3 | 370 files, 592.4 s |
+
+- Artifact's comparison line (verbatim):
+  `predicted max shard: 592.4s (duration-aware) vs 695.1s (round-robin) → -102.7s (14.8%)`
+- The artifact reports only the round-robin **max** (695.1 s), not per-shard
+  static predictions; the LPT plan is balanced at 592.4 s on every shard.
+- Predicted max-shard duration: **592.4 s vs 695.1 s → −102.7 s (−14.8%)**.
+
+### Inventory preservation (gate condition)
+
+- Duration-aware plan selects **367 + 369 + 370 = 1,106 files** = exactly the
+  planner's `known` inventory (`known=1106`, `files=1106`, `substituted=0`);
+  zero files omitted, zero default-duration substitutions.
+- Cross-shard duplicate check over the three plan shards (artifact file lists,
+  `sort | uniq -d`): **1,106 entries, 1,106 unique, none duplicated**.
+- The static suite in the same run executed **369 + 369 + 368 = 1,106 files**
+  (`test-results-fast-0/1/2` artifacts) — same total inventory. **Preserved.**
+
+### Decision
+
+All three gate conditions hold (recommendation `activate`; inventory
+preserved 1,106/1,106; predicted max-shard 592.4 s < 695.1 s) → **ACTIVATE**.
+
+| Field | Value |
+|---|---|
+| Activation state | **`FAST_SHARD_PLAN=active`** (repo variable), set 2026-08-19T21:09:38Z via `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=active` (API quirk: create returned 404/409 relays; verified by GET — `{"name":"FAST_SHARD_PLAN","value":"active"}`) |
+| Revert command | `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off` (default `off` = byte-identical round-robin planning) |
+| Measurement caveat | Predicted durations are sequential per-file sums; observed shard wall clocks run with `--jobs 4` parallelism (static run 32297737631 observed 349.6/190.1/267.4 s, jobs=4). Gate comparison is therefore predicted-vs-predicted (592.4 vs 695.1 s), with the observed check used as a no-regression sanity bound, not a direct equality. |
+
+### Observed-vs-predicted check (activation gate evidence)
+
+Next `ci.yml` run after activation (the W4 decision PR's own CI run) executes
+the duration-aware plan for the first time. Gate for keeping `active`:
+the observed max-shard wall clock must not regress materially against the
+round-robin baseline (349.6 s observed max, jobs=4), and the executed file
+inventory must remain 1,106 files across three shards. Results recorded in
+the addendum below; on breach, revert with the command above and log the
+numbers.
+
+### Addendum — observed-vs-predicted evidence (run 32302776738, activation gate PASSED)
+
+First `ci.yml` run after activation: PR #9388 branch `v1.00.04-w4-shard-plan-decision`,
+run **32302776738** (2026-08-19, completed `success`, all jobs green). Logs confirm
+active planning executed: `PLAN_ARGS="--shard-plan active"`,
+`;; run-tests: duration-aware plan (duration-aware) replaces round-robin`.
+
+| Shard | Plan (predicted, sequential) | Observed wall clock (jobs=4) | Files |
+|---|---|---|---|
+| test (0) | 581.9 s (367 files) | 351 s (21:15:04Z → 21:22:55Z) | 369 |
+| test (1) | 581.4 s (369 files) | 351 s (21:15:04Z → 21:20:55Z) | 369 |
+| test (2) | 582.1 s (368 files) | 299 s (21:15:03Z → 21:20:02Z) | 368 |
+
+- **Observed max shard: 351 s vs round-robin baseline 349.6 s** (jobs=4) — no material
+  regression (+1.4 s, ~0.4%, within run-to-run variance); gate holds.
+- **Executed inventory: 369 + 369 + 368 = 1,106 files** — matches the planned total
+  inventory exactly (1,106 = 1,106; per-shard sizes differ by ±2 files only because
+  this log's own growth shifted file counts in an already-balanced plan).
+- **Decision: keep `FAST_SHARD_PLAN=active`.** Revert remains available:
+  `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off`.
+- Next step: refresh `docs/reports/test-durations.rktd` from this run's
+  `test-results-fast-*` artifacts so future predictions track the active-plan layout.
 
 ## Run 32297908687 — re-dispatch on current main (`1764ed84`)
 
