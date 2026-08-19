@@ -912,8 +912,21 @@
 ;; artifact. The results file stays the source of truth for outcomes — this
 ;; only ADDS provenance. Silent no-op when the results file is absent or
 ;; unreadable (evidence embedding must never turn a run into a crash).
+;; changed entries may be path strings (run-impact-selection! return
+;; value) or hashes with a 'file key (older callers); both embed as
+;; plain strings so the CI contract (changed_files: [string]) holds.
+(define (changed->path c)
+  (if (string? c) c (hash-ref c 'file)))
+
 (define (embed-impact-in-results! results-path selection prioritize-payload changed)
-  (with-handlers ([exn:fail? (lambda (_) (void))])
+  ;; Evidence embedding MUST NOT be a silent green (W5 contract): a
+  ;; failure here leaves impact-results.json without its selection
+  ;; section, which the CI shadow guard then fails as an unexplained
+  ;; empty selection. Surface the reason on stderr instead of (void).
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (eprintf ";; embed-impact-in-results!: FAILED, results JSON left unaugmented: ~a~n"
+                              (exn-message e)))])
     (when (file-exists? results-path)
       (define j (call-with-input-file results-path read-json))
       (when (hash? j)
@@ -924,7 +937,7 @@
                      'prioritization
                      (or prioritize-payload (hasheq 'prioritized #f))
                      'changed_files
-                     (map (lambda (c) (hash-ref c 'file)) changed)))
+                     (map changed->path changed)))
         (call-with-output-file results-path
                                #:exists 'truncate/replace
                                (lambda (out)
