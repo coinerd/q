@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/delivery-verifier.rkt
 ;; @speed fast  ;; @suite extensions
 ;; @boundary integration
 ;; tests/test-gsd-delivery-verifier.rkt — structured delivery verification for /go

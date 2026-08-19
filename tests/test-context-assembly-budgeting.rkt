@@ -1,4 +1,5 @@
 #lang racket
+;; @covers runtime/context-assembly/budgeting.rkt
 
 ;; @speed fast
 ;; @suite default

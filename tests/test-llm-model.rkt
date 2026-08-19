@@ -1,4 +1,5 @@
 #lang racket
+;; @covers llm/model.rkt
 
 ;; @speed fast
 ;; @suite default

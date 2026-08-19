@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/render/message-layout.rkt
 
 ;; @speed fast  ;; @suite tui
 ;; @boundary unit

@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/plan-types.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

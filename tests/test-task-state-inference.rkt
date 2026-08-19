@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/context-assembly/state-inference.rkt
 
 ;; @speed fast
 ;; @suite default

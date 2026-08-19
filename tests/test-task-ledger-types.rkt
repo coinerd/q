@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/task-memory/types.rkt
 
 ;; @speed fast  ;; @suite default
 ;; @boundary unit

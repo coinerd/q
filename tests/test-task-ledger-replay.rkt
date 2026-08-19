@@ -1,4 +1,5 @@
 #lang racket
+;; @covers runtime/task-memory/replay.rkt
 
 ;; @speed fast  ;; @suite default
 ;; @boundary integration
