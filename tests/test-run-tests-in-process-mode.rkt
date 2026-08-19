@@ -61,7 +61,9 @@
                       _impact-dry-run?
                       _prioritize
                       _failure-history
-                      _generate-covers-manifest?)
+                      _generate-covers-manifest?
+                      _shard-plan
+                      _durations)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -86,7 +88,9 @@
                       _impact-dry-run2?
                       _prioritize2
                       _failure-history2
-                      _generate-covers-manifest2?)
+                      _generate-covers-manifest2?
+                      _shard-plan2
+                      _durations2)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 
