@@ -186,3 +186,26 @@ round-robin baseline (349.6 s observed max, jobs=4), and the executed file
 inventory must remain 1,106 files across three shards. Results recorded in
 the addendum below; on breach, revert with the command above and log the
 numbers.
+
+### Addendum — observed-vs-predicted evidence (run 32302776738, activation gate PASSED)
+
+First `ci.yml` run after activation: PR #9388 branch `v1.00.04-w4-shard-plan-decision`,
+run **32302776738** (2026-08-19, completed `success`, all jobs green). Logs confirm
+active planning executed: `PLAN_ARGS="--shard-plan active"`,
+`;; run-tests: duration-aware plan (duration-aware) replaces round-robin`.
+
+| Shard | Plan (predicted, sequential) | Observed wall clock (jobs=4) | Files |
+|---|---|---|---|
+| test (0) | 581.9 s (367 files) | 351 s (21:15:04Z → 21:22:55Z) | 369 |
+| test (1) | 581.4 s (369 files) | 351 s (21:15:04Z → 21:20:55Z) | 369 |
+| test (2) | 582.1 s (368 files) | 299 s (21:15:03Z → 21:20:02Z) | 368 |
+
+- **Observed max shard: 351 s vs round-robin baseline 349.6 s** (jobs=4) — no material
+  regression (+1.4 s, ~0.4%, within run-to-run variance); gate holds.
+- **Executed inventory: 369 + 369 + 368 = 1,106 files** — matches the planned total
+  inventory exactly (1,106 = 1,106; per-shard sizes differ by ±2 files only because
+  this log's own growth shifted file counts in an already-balanced plan).
+- **Decision: keep `FAST_SHARD_PLAN=active`.** Revert remains available:
+  `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off`.
+- Next step: refresh `docs/reports/test-durations.rktd` from this run's
+  `test-results-fast-*` artifacts so future predictions track the active-plan layout.
