@@ -30,15 +30,10 @@ runs:
       with:
         version: ${{ inputs.racket-version }}
 
-    - name: Start Xvfb for TUI tests (Linux only)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -qq -y xvfb
-        Xvfb :99 -screen 0 1024x768x24 &
-        export DISPLAY=:99
-        echo "DISPLAY=:99" >> $GITHUB_ENV
+    # NOTE: No Xvfb / DISPLAY setup here. Starting a background Xvfb on
+    # GitHub-hosted runners breaks jobs (the step hangs and TUI tests stall
+    # when the background server is reaped between steps). TUI tests use the
+    # native Racket terminal implementation and do not need an X display.
 
     # ------------------------------------------------------------------
     # Package setup: install/update the q package, which triggers raco
