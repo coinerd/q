@@ -13,6 +13,7 @@
 ;; redeliver but dedupe suppresses duplicate effects (D6).
 
 (require racket/file
+         racket/list
          racket/path
          racket/format
          racket/match
@@ -77,6 +78,7 @@
                             rec
                             wave-idx
                             #:verifier-approve? approve?
+                            #:verifier-message [verifier-message ""]
                             #:expected-attempt-id expected-attempt-id
                             #:expected-fence-token expected-fence-token)
   ;; Completion is a durable compare-and-set boundary. Never trust only the
@@ -115,6 +117,10 @@
                                      wave-idx
                                      STATUS-FAILED
                                      (lambda (idx) (wave-slug base-dir idx)))
+     ;; Retry-with-adaptation: persist the verifier's failure reason into the
+     ;; wave doc so the follow-up wave run sees why the previous attempt
+     ;; failed and can adapt instead of repeating the same mistake.
+     (record-wave-failure! base-dir wave-idx (lambda (idx) (wave-slug base-dir idx)) verifier-message)
      (completion-result 'failed #f)]
     [else
      (set-campaign-wave-status! wave 'done)
@@ -139,6 +145,59 @@
                                      STATUS-DONE
                                      (lambda (idx) (wave-slug base-dir idx)))
      (completion-result 'done event-id)]))
+;; ============================================================
+
+;; Retry-with-adaptation: persist the failure reason into the wave document so
+;; a follow-up run of a FAILED wave sees why the previous attempt failed. The
+;; retry prompt (build-single-wave-prompt) reads the wave doc, so appending a
+;; "## Last Failure" section makes the reason part of the next run's context.
+;;
+;; Idempotent: replaces any existing "## Last Failure" section rather than
+;; stacking repeated failures. When the reason is empty/non-informative, the
+;; wave doc is left untouched (the FAILED status projection already ran).
+(define (record-wave-failure! base-dir wave-idx slug-of reason)
+  (define slug (and slug-of (slug-of wave-idx)))
+  (define doc-path
+    (and slug (build-path base-dir ".planning" "waves" (format "W~a-~a.md" wave-idx slug))))
+  (cond
+    [(or (not doc-path) (not (file-exists? doc-path))) (void)]
+    [(or (not (string? reason)) (string=? (string-trim reason) "")) (void)]
+    [else
+     (define text (call-with-input-file doc-path port->string))
+     ;; Replace an existing "## Last Failure" section (everything from its
+     ;; heading to the next top-level heading or end-of-file); otherwise
+     ;; append a new section at the end of the document. Line-based to avoid
+     ;; Racket regexp flag-group quirks with (?ms) and \z.
+     (define section (string-append "## Last Failure\n" (string-trim reason) "\n"))
+     (define lines (string-split text "\n"))
+     (define heading-idx
+       (for/first ([i (in-naturals)]
+                   [l (in-list lines)]
+                   #:when (string=? (string-trim l) "## Last Failure"))
+         i))
+     (define new-text
+       (if (not heading-idx)
+           (string-append (string-trim text #:right? #t) "\n\n" section)
+           ;; drop the old section: keep lines before the heading, then find
+           ;; the next top-level heading and keep from there onward.
+           (let-values ([(before _drop after) (split-lines-at-section lines heading-idx)])
+             (string-join (append before (list "" section) after) "\n"))))
+     (atomic-write-file! doc-path new-text)]))
+
+;; Split lines at a "## Last Failure" section: returns (values before
+;; heading body after-next-heading). heading body is discarded.
+(define (split-lines-at-section lines heading-idx)
+  (define n (length lines))
+  (define next-heading
+    (for/first ([i (in-range (add1 heading-idx) n)]
+                #:when (and (>= (string-length (string-trim (list-ref lines i))) 2)
+                            (string-prefix? (string-trim (list-ref lines i)) "##")))
+      i))
+  (values (take lines heading-idx)
+          '()
+          (if next-heading
+              (drop lines next-heading)
+              '())))
 ;; ============================================================
 
 (define (skip-wave! base-dir rec wave-idx)
@@ -221,6 +280,7 @@
 ;; ============================================================
 
 (provide try-complete-wave!
+         record-wave-failure!
          skip-wave!
          update-state-table!
          completion-result

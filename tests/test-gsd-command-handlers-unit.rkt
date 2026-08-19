@@ -173,6 +173,26 @@
       (define aliases (aliases-for "/go"))
       (check-not-false (member "/go" aliases))
       (check-not-false (member "/i" aliases))
-      (check-not-false (member "/implement" aliases)))))
+      (check-not-false (member "/implement" aliases)))
+
+    ;; === retry-with-adaptation: extract-last-failure ===
+
+    (test-case "extract-last-failure returns reason from wave doc"
+      (define doc
+        "# Wave 3\nStatus: FAILED\n\n## Last Failure\ndelivery verification failed: no wave target files changed\n## Action\nstep")
+      (check-equal? (extract-last-failure doc)
+                    "delivery verification failed: no wave target files changed"))
+
+    (test-case "extract-last-failure handles failure section at end of doc"
+      (define doc "# Wave 3\nStatus: FAILED\n\n## Last Failure\nreason at end")
+      (check-equal? (extract-last-failure doc) "reason at end"))
+
+    (test-case "extract-last-failure returns empty when no failure section"
+      (define doc "# Wave 1\nStatus: Inbox\n## Action\nstep")
+      (check-equal? (extract-last-failure doc) ""))
+
+    (test-case "extract-last-failure multi-line reason"
+      (define doc "## Last Failure\nline one\nline two\n## Next")
+      (check-equal? (extract-last-failure doc) "line one\nline two"))))
 
 (run-tests suite)

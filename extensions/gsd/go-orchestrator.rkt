@@ -408,6 +408,7 @@
                                              after-verifier
                                              wave-idx
                                              #:verifier-approve? approved?
+                                             #:verifier-message verifier-message
                                              #:expected-attempt-id expected-id
                                              #:expected-fence-token fence))
                        (define completion-status (completion-result-status result))
