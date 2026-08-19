@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/clipboard.rkt
 
 ;; @speed fast  ;; @suite tui
 ;; @boundary unit

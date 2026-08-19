@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/command-parser.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

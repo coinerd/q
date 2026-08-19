@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/render/status-line.rkt
 
 ;; @speed fast  ;; @suite tui
 ;; @boundary unit

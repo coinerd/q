@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd-planning/command-normalization.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

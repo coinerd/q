@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/github/handlers/milestone-ops.rkt
 
 ;; @speed fast
 ;; @suite default

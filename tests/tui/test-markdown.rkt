@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/markdown.rkt
 
 ;; @speed fast  ;; @suite tui
 ;; @boundary unit

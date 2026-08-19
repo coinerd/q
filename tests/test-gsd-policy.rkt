@@ -1,4 +1,5 @@
 #lang racket
+;; @covers extensions/gsd/policy.rkt
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit

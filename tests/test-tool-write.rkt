@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tools/builtins/write.rkt
 
 ;; @speed fast
 ;; @suite default

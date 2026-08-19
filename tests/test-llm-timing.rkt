@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers llm/timing.rkt
 
 ;; @speed fast
 ;; @suite default

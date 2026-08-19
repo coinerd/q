@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers runtime/context-selection/authority.rkt
 
 ;; @speed fast  ;; @suite default
 ;; @boundary unit

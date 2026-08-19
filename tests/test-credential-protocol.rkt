@@ -1,4 +1,5 @@
 #lang racket
+;; @covers runtime/credentials/protocol.rkt
 
 ;; @speed fast
 ;; @suite default

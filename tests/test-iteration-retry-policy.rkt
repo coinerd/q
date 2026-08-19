@@ -1,4 +1,5 @@
 #lang racket
+;; @covers runtime/iteration/retry-policy.rkt
 
 ;; @speed fast  ;; @suite runtime
 ;; @boundary unit

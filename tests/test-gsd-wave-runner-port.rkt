@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/wave-runner-port.rkt
 
 ;; @speed fast  ;; @suite extensions
 

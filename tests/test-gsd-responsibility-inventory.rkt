@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/responsibility-inventory.rkt
 
 ;; tests/test-gsd-responsibility-inventory.rkt — GSD Responsibility & Effect Inventory fitness
 ;; @speed fast

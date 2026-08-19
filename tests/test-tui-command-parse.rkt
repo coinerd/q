@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/command-parse.rkt
 
 ;; @speed fast
 ;; @suite default
