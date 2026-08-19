@@ -110,7 +110,10 @@
          (define txt (error-text result))
          (check-true (string-contains? txt "Nearest match at line 4"))
          (check-true (string-contains? txt "First differing offset: 16 (U+78 vs U+7a)"))
-         (check-true (string-contains? txt "Context around mismatch in file:  [U+70 U+20 U+28 U+5b U+79 U+20 U+78 U+5d U+29"))
+         (check-true
+          (string-contains?
+           txt
+           "Context around mismatch in file:  [U+70 U+20 U+28 U+5b U+79 U+20 U+78 U+5d U+29"))
          (check-true (string-contains? txt "file line has 2 leading spaces, old-text has 2"))
          (check-false (string-contains? txt "Context around mismatch in file:  [U+23")))
        (lambda () (cleanup-path p))))
