@@ -38,42 +38,41 @@
          racket/system
          json)
 
-(provide
- ;; git adapter
- git-changed-files
- ;; changed-file categorization
- categorize-changed-file
-  ;; coverage manifest
-  load-coverage-manifest
-  generate-covers-manifest-entries
-  write-covers-manifest!
-  covers-of-file
- ;; dependency graph
- extract-requires
- build-dependency-graph
- graph-parse-failures
- ;; selection core
- compute-impact-selection
- selection-selected
- selection-escalations
- selection-escalated?
- selection-doc-only?
- selection-fallback-suites
- selection->jsexpr
- ;; runner-level orchestration
- run-impact-selection!
- print-impact-explain
- impact-suites-for-changed-files
- ;; prioritization (W6)
- load-failure-history
- make-prioritize-ctx
-  prioritize-partition
- partition-entries->jsexpr
- render-order-json
- prioritize-tiers
-  embed-impact-in-results!
-  ;; helper
-  path-sort)
+;; git adapter
+(provide git-changed-files
+         ;; changed-file categorization
+         categorize-changed-file
+         ;; coverage manifest
+         load-coverage-manifest
+         generate-covers-manifest-entries
+         write-covers-manifest!
+         covers-of-file
+         ;; dependency graph
+         extract-requires
+         build-dependency-graph
+         graph-parse-failures
+         ;; selection core
+         compute-impact-selection
+         selection-selected
+         selection-escalations
+         selection-escalated?
+         selection-doc-only?
+         selection-fallback-suites
+         selection->jsexpr
+         ;; runner-level orchestration
+         run-impact-selection!
+         print-impact-explain
+         impact-suites-for-changed-files
+         ;; prioritization (W6)
+         load-failure-history
+         make-prioritize-ctx
+         prioritize-partition
+         partition-entries->jsexpr
+         render-order-json
+         prioritize-tiers
+         embed-impact-in-results!
+         ;; helper
+         path-sort)
 
 ;; ============================================================
 ;; Root resolution
@@ -81,8 +80,7 @@
 
 ;; Repo root for runner-level orchestration (three levels up from this file:
 ;; scripts/run-tests/impact.rkt → repo root).
-(define repo-root
-  (simplify-path (build-path (syntax-source #'here) 'up 'up 'up)))
+(define repo-root (simplify-path (build-path (syntax-source #'here) 'up 'up 'up)))
 
 (define (root-relative root p)
   (path->string (find-relative-path (simple-form-path root) (simple-form-path p))))
@@ -105,9 +103,9 @@
       (define ok?
         (parameterize ([current-output-port out]
                        [current-error-port (open-output-string)])
-          (system* (find-executable-path "git")
-                   "diff" "--name-only" (format "~a...~a" base head))))
-      (unless ok? (raise 'git-failed))
+          (system* (find-executable-path "git") "diff" "--name-only" (format "~a...~a" base head))))
+      (unless ok?
+        (raise 'git-failed))
       (values (filter non-empty-string? (string-split (get-output-string out) "\n")) #t))))
 
 ;; ============================================================
@@ -154,23 +152,23 @@
 ;; escalate (fail open), never silently under-select.
 (define (load-coverage-manifest root)
   (define path (build-path root "tests" ".coverage-manifest.json"))
-  (define (empty) (values (hash) (hash) 'missing))
+  (define (empty)
+    (values (hash) (hash) 'missing))
   (with-handlers ([exn:fail? (lambda (_) (values (hash) (hash) 'corrupt))])
     (cond
       [(not (file-exists? path)) (empty)]
       [else
        (define j (with-input-from-file path read-json))
        (define entries (hash-ref j 'entries #f))
-       (unless (list? entries) (raise 'bad-manifest))
+       (unless (list? entries)
+         (raise 'bad-manifest))
        (define covers (hash))
        (define sources (hash))
        (for ([e (in-list entries)]
              #:when (and (hash? e) (string? (hash-ref e 'test #f))))
-         (set! covers (hash-set covers
-                                (hash-ref e 'test)
-                                (filter string? (hash-ref e 'covers '()))))
-         (set! sources (hash-set sources (hash-ref e 'test)
-                                 (format "~a" (hash-ref e 'source "metadata")))))
+         (set! covers (hash-set covers (hash-ref e 'test) (filter string? (hash-ref e 'covers '()))))
+         (set! sources
+               (hash-set sources (hash-ref e 'test) (format "~a" (hash-ref e 'source "metadata")))))
        (values covers sources 'loaded)])))
 
 ;; generate-covers-manifest-entries : path-string? -> (listof hash?)
@@ -187,8 +185,7 @@
         [else
          (define j (with-input-from-file existing-path read-json))
          (for/hash ([e (in-list (hash-ref j 'entries '()))]
-                    #:when (and (hash? e)
-                                (equal? (hash-ref e 'source #f) "manual-review")))
+                    #:when (and (hash? e) (equal? (hash-ref e 'source #f) "manual-review")))
            (values (hash-ref e 'test) e))])))
   (define test-dir (build-path root "tests"))
   (define from-metadata
@@ -201,7 +198,9 @@
       (hasheq 'test rel 'covers (covers-of-file root rel) 'source "metadata")))
   (define metadata-tests (map (lambda (h) (hash-ref h 'test)) from-metadata))
   (define manual-entries
-    (for/list ([(t e) (in-hash manual)] #:unless (member t metadata-tests)) e))
+    (for/list ([(t e) (in-hash manual)]
+               #:unless (member t metadata-tests))
+      e))
   (sort (append from-metadata manual-entries) string<? #:key (lambda (h) (hash-ref h 'test))))
 
 ;; covers-of-file : path-string? string? -> (listof string?)
@@ -212,20 +211,20 @@
   (define p (build-path root rel))
   (define covers '())
   (with-handlers ([exn:fail? (lambda (_) (void))])
-    (call-with-input-file p
-      (lambda (port)
-        (for ([_ (in-range 50)]
-              #:break (eof-object? (peek-byte port)))
-          (define line (read-line port))
-          (when (string? line)
-            (define m (regexp-match #rx";+[ \t]*@covers[ \t]+(.*)$" line))
-            (when m
-              (set! covers
-                (append covers
-                        (filter non-empty-string?
-                                (map string-trim
-                                     (string-split (cadr m) #rx"[ \t,]+"))))))))))
-  covers))
+    (call-with-input-file
+     p
+     (lambda (port)
+       (for ([_ (in-range 50)]
+             #:break (eof-object? (peek-byte port)))
+         (define line (read-line port))
+         (when (string? line)
+           (define m (regexp-match #rx";+[ \t]*@covers[ \t]+(.*)$" line))
+           (when m
+             (set! covers
+                   (append covers
+                           (filter non-empty-string?
+                                   (map string-trim (string-split (cadr m) #rx"[ \t,]+"))))))))))
+    covers))
 
 ;; write-covers-manifest! : path-string? [string?] -> hash?
 ;; Regenerates tests/.coverage-manifest.json from @covers metadata (via
@@ -240,17 +239,23 @@
       (unless (file-exists? (build-path root c))
         (raise-user-error 'generate-covers-manifest
                           "~a: @covers target does not exist: ~a"
-                          (hash-ref e 'test) c))))
+                          (hash-ref e 'test)
+                          c))))
   (define payload
-    (hasheq 'schema_version 1
-            'generated_by "racket scripts/run-tests.rkt --generate-covers-manifest"
-            'runner_version runner-version
-            'entries entries))
+    (hasheq 'schema_version
+            1
+            'generated_by
+            "racket scripts/run-tests.rkt --generate-covers-manifest"
+            'runner_version
+            runner-version
+            'entries
+            entries))
   (define path (build-path root "tests" ".coverage-manifest.json"))
-  (call-with-output-file path #:exists 'truncate/replace
-    (lambda (out)
-      (write-json payload out)
-      (newline out)))
+  (call-with-output-file path
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (write-json payload out)
+                           (newline out)))
   payload)
 
 ;; ============================================================
@@ -272,8 +277,11 @@
     (define text (file->string source))
     (define body
       (let loop ([t text])
-        (define m (regexp-match-positions #rx"^[ \t]*(?:#lang[^\n]*\n|#reader[^\n]*\n|#![^\n]*)\n?" t))
-        (if m (loop (substring t (cdar m))) t)))
+        (define m
+          (regexp-match-positions #rx"^[ \t]*(?:#lang[^\n]*\n|#reader[^\n]*\n|#![^\n]*)\n?" t))
+        (if m
+            (loop (substring t (cdar m)))
+            t)))
     (define forms
       (let ([port (open-input-string body)])
         (let loop ([out '()])
@@ -281,57 +289,65 @@
           (if (eof-object? d)
               (reverse out)
               (loop (cons d out))))))
-    (unless (list? forms) (raise-user-error 'extract-requires "not a module body"))
+    (unless (list? forms)
+      (raise-user-error 'extract-requires "not a module body"))
     (define specs '())
-    (let walk ([d forms] [depth 0])
-      (when (> depth 400) (raise-user-error 'extract-requires "form nesting too deep"))
+    (let walk ([d forms]
+               [depth 0])
+      (when (> depth 400)
+        (raise-user-error 'extract-requires "form nesting too deep"))
       (cond
         ;; Only proper `(require spec ...)` forms contribute specs; dotted
         ;; `(require . x)` junk and quoted data are ignored.
-        [(and (pair? d) (list? (cdr d)) (eq? (car d) 'require))
-         (set! specs (append specs (cdr d)))]
+        [(and (pair? d) (list? (cdr d)) (eq? (car d) 'require)) (set! specs (append specs (cdr d)))]
         [(pair? d)
          (cond
            ;; Proper lists iterate FLAT: list length must not consume the
            ;; nesting budget (a `(provide id ...)` with >400 identifiers
            ;; caused spurious parse-error → fail-open escalation on every
            ;; diff; fixed by iterating elements at constant depth).
-           [(list? d) (for ([x (in-list d)]) (walk x (add1 depth)))]
+           [(list? d)
+            (for ([x (in-list d)])
+              (walk x (add1 depth)))]
            ;; Dotted pairs still descend on both halves (e.g. alists like
            ;; (code . "message") that in-list would reject).
-           [else (walk (car d) (add1 depth))
-                 (walk (cdr d) (add1 depth))])]
-        [(vector? d) (for ([x (in-vector d)]) (walk x (add1 depth)))]
+           [else
+            (walk (car d) (add1 depth))
+            (walk (cdr d) (add1 depth))])]
+        [(vector? d)
+         (for ([x (in-vector d)])
+           (walk x (add1 depth)))]
         [else (void)]))
     (define targets
-      (remove-duplicates
-       (filter values
-               (for/list ([spec (in-list specs)])
-                 (require-spec->path root source spec)))))
+      (remove-duplicates (filter values
+                                 (for/list ([spec (in-list specs)])
+                                   (require-spec->path root source spec)))))
     (cons (path-sort targets) 'ok)))
 
 ;; require-spec->path : root src spec -> (or/c string? #f)
 (define (require-spec->path root source spec)
   (define (resolve s)
-    (and (string? s)
-         (with-handlers ([exn:fail? (lambda (_) #f)])
-           (define candidate
-             (if (absolute-path? s)
-                 s
-                 (simplify-path (build-path (path-only source) s))))
-           (and (file-exists? candidate)
-                (member (path-get-extension candidate) '(#".rkt" #".ss" #".rktl"))
-                (let ([rel (root-relative root candidate)])
-                  (and (not (string-prefix? rel ".."))
-                       (not (string-contains? rel "/compiled/"))
-                       rel))))))
+    (and
+     (string? s)
+     (with-handlers ([exn:fail? (lambda (_) #f)])
+       (define candidate
+         (if (absolute-path? s)
+             s
+             (simplify-path (build-path (path-only source) s))))
+       (and (file-exists? candidate)
+            (member (path-get-extension candidate) '(#".rkt" #".ss" #".rktl"))
+            (let ([rel (root-relative root candidate)])
+              (and (not (string-prefix? rel "..")) (not (string-contains? rel "/compiled/")) rel))))))
   (let loop ([spec spec])
     (match spec
       [(? string?) (resolve spec)]
       [`(file ,s) (and (string? s) (resolve s))]
-      [`(submod ,rest ...) (for/or ([x (in-list rest)]) (loop x))]
+      [`(submod ,rest ...)
+       (for/or ([x (in-list rest)])
+         (loop x))]
       [(cons (or 'only-in 'except-in 'prefix-in 'rename-in) rest)
-       (for/or ([x (in-list rest)]) (loop x))]
+       (for/or ([x (in-list rest)])
+         (loop x))]
       [`(lib ,_) #f]
       [`(planet ,_) #f]
       [(? symbol?) #f]
@@ -342,7 +358,8 @@
 ;; extract-requires returns (cons targets status); the status lives in the
 ;; cdr of that PAIR. Accessing it via (cdr (file . result)) was the W4 bug
 ;; that silently dropped every parse failure (fail-closed under-selection).
-(define (extraction-result->status result) (cdr result))
+(define (extraction-result->status result)
+  (cdr result))
 
 ;; build-dependency-graph : path-string? (listof string?) (listof string?)
 ;;   -> (values hash? hash? hash?)
@@ -365,13 +382,16 @@
                   '()
                   (filter (lambda (t) (set-member? file-set t)) (cadr pr))))))
   (define reverse
-    (for*/fold ([acc (for/hash ([f (in-list files)]) (values f '()))])
-               ([(f targets) (in-hash graph)] [t (in-list targets)])
+    (for*/fold ([acc (for/hash ([f (in-list files)])
+                       (values f '()))])
+               ([(f targets) (in-hash graph)]
+                [t (in-list targets)])
       (hash-update acc t (lambda (deps) (sort (remove-duplicates (cons f deps)) string<?)))))
   (values graph reverse parse-failures))
 
 ;; graph-parse-failures : hash? -> (listof string?)
-(define (graph-parse-failures failures) (path-sort (hash-keys failures)))
+(define (graph-parse-failures failures)
+  (path-sort (hash-keys failures)))
 
 ;; ============================================================
 ;; Selection core (pure, root-parameterized — fixture-testable)
@@ -383,12 +403,10 @@
   (with-handlers ([exn:fail? (lambda (_) '(missing-file . "changed file absent at HEAD (deleted?)"))])
     (define text (file->string (build-path root rel)))
     (cond
-      [(regexp-match? #rx"#lang[ \t]+reader" text)
-       '(generated-code . "#lang reader plugin")]
+      [(regexp-match? #rx"#lang[ \t]+reader" text) '(generated-code . "#lang reader plugin")]
       [(regexp-match? #rx"[[(]dynamic-require" text)
        '(dynamic-require . "uses dynamic-require (graph edge unknowable)")]
-      [(regexp-match? #rx"define-syntax" text)
-       '(macro-change . "defines macros (define-syntax)")]
+      [(regexp-match? #rx"define-syntax" text) '(macro-change . "defines macros (define-syntax)")]
       [else #f])))
 
 ;; compute-impact-selection : root changed covers sources test-universe -> hash?
@@ -402,7 +420,12 @@
 ;;   doc-only?   — no code-bearing change at all
 ;;   changed     — categorized change report
 ;;   manifest-status — 'loaded | 'missing | 'corrupt (for reporting)
-(define (compute-impact-selection root changed covers sources test-universe #:manifest-status [manifest-status 'loaded])
+(define (compute-impact-selection root
+                                  changed
+                                  covers
+                                  sources
+                                  test-universe
+                                  #:manifest-status [manifest-status 'loaded])
   (define universe (list->set test-universe))
   (define module->tests
     (for*/fold ([acc (hash)])
@@ -412,51 +435,53 @@
       (hash-update acc m (lambda (ts) (sort (remove-duplicates (cons t ts)) string<?)) '())))
   (define fallback-suites
     (map symbol->string
-         (sort (remove-duplicates (cons 'fast (impact-suites-for-changed-files changed)))
-               symbol<?)))
+         (sort (remove-duplicates (cons 'fast (impact-suites-for-changed-files changed))) symbol<?)))
   (define escalations '())
   (define (escalate! code changed-file detail)
-    (set! escalations
-      (cons (hasheq 'code code
-                    'changed-file changed-file
-                    'detail detail
-                    'fallback-suites fallback-suites)
-            escalations)))
+    (set!
+     escalations
+     (cons
+      (hasheq 'code code 'changed-file changed-file 'detail detail 'fallback-suites fallback-suites)
+      escalations)))
   (define changed-sorted (path-sort changed))
   (define categorized
-    (for/list ([f (in-list changed-sorted)]) (cons f (categorize-changed-file f))))
+    (for/list ([f (in-list changed-sorted)])
+      (cons f (categorize-changed-file f))))
   ;; Runner/helper, config, fixture, generated changes escalate outright.
   (for ([pair (in-list categorized)])
     (define f (car pair))
     (case (cdr pair)
-      [(runner-helper)
-       (escalate! 'runner-helper-change f "runner/helper scripts affect every test")]
+      [(runner-helper) (escalate! 'runner-helper-change f "runner/helper scripts affect every test")]
       [(config) (escalate! 'config-change f "configuration/workflow/package change")]
       [(fixture) (escalate! 'fixture-change f "fixture data change; consumer set is not mapped")]
       [(generated) (escalate! 'generated-code f "generated code change")]
       [(production)
        (define scan (source-escalation-scan root f))
-       (when scan (escalate! (car scan) f (cdr scan)))]
+       (when scan
+         (escalate! (car scan) f (cdr scan)))]
       [else (void)]))
   (define production-changed
-    (for/list ([pair (in-list categorized)] #:when (eq? (cdr pair) 'production)) (car pair)))
+    (for/list ([pair (in-list categorized)]
+               #:when (eq? (cdr pair) 'production))
+      (car pair)))
   (define test-changed
-    (for/list ([pair (in-list categorized)] #:when (eq? (cdr pair) 'test)) (car pair)))
+    (for/list ([pair (in-list categorized)]
+               #:when (eq? (cdr pair) 'test))
+      (car pair)))
   ;; Dependency graph over the production tree (deterministic).
   (define production-files
-    (path-sort
-     (for/list ([f (in-directory root)]
-                #:when (and (file-exists? f)
-                            (let ([rel (root-relative root f)])
-                              (and (member (path-get-extension f) '(#".rkt" #".ss" #".rktl"))
-                                   (not (string-prefix? rel "tests/"))
-                                   (not (string-prefix? rel "scripts/"))
-                                   (not (string-prefix? rel ".github/"))
-                                   (not (string-prefix? rel "docs/"))
-                                   (not (string-contains? rel "/compiled/"))))))
-       (root-relative root f))))
-  (define-values (graph rgraph parse-failures)
-    (build-dependency-graph root production-files))
+    (path-sort (for/list ([f (in-directory root)]
+                          #:when
+                          (and (file-exists? f)
+                               (let ([rel (root-relative root f)])
+                                 (and (member (path-get-extension f) '(#".rkt" #".ss" #".rktl"))
+                                      (not (string-prefix? rel "tests/"))
+                                      (not (string-prefix? rel "scripts/"))
+                                      (not (string-prefix? rel ".github/"))
+                                      (not (string-prefix? rel "docs/"))
+                                      (not (string-contains? rel "/compiled/"))))))
+                 (root-relative root f))))
+  (define-values (graph rgraph parse-failures) (build-dependency-graph root production-files))
   ;; Fail open when an unparseable module sits INSIDE the change's
   ;; dependency cone: the changed module itself, or any module it
   ;; transitively requires (the graph edge set is then unknown, so no
@@ -469,7 +494,8 @@
   (define (requires-closure-of m)
     (define seen (mutable-set))
     (let loop ([frontier (hash-ref graph m '())])
-      (for ([d (in-list frontier)] #:unless (set-member? seen d))
+      (for ([d (in-list frontier)]
+            #:unless (set-member? seen d))
         (set-add! seen d)
         (loop (hash-ref graph d '()))))
     (set->list seen))
@@ -484,7 +510,8 @@
       d))
   (for ([f (in-list (append (set->list parse-failed-changed)
                             (remove-duplicates parse-failed-in-cone)))])
-    (escalate! 'graph-parse-failure f
+    (escalate! 'graph-parse-failure
+               f
                (if (set-member? parse-failed-changed f)
                    "changed module cannot be parsed; dependency graph incomplete"
                    "a module the changed code requires cannot be parsed; graph incomplete")))
@@ -497,11 +524,10 @@
     (let loop ([frontier (list m)]
                [paths (hash m (list m))])
       (define next
-        (sort (remove-duplicates
-               (for*/list ([f (in-list frontier)]
-                           [d (in-list (hash-ref rgraph f '()))]
-                           #:unless (hash-ref paths d #f))
-                 d))
+        (sort (remove-duplicates (for*/list ([f (in-list frontier)]
+                                             [d (in-list (hash-ref rgraph f '()))]
+                                             #:unless (hash-ref paths d #f))
+                                   d))
               string<?))
       (if (null? next)
           paths
@@ -521,100 +547,137 @@
       [(transitive-dependent) 2]
       [else 3]))
   (define (select-entry file reason-code changed-file mapping-source [dependency-path #f])
-    (hasheq 'file file
-            'reason-code reason-code
-            'changed-file changed-file
-            'mapping-source mapping-source
-            'dependency-path dependency-path))
+    (hasheq 'file
+            file
+            'reason-code
+            reason-code
+            'changed-file
+            changed-file
+            'mapping-source
+            mapping-source
+            'dependency-path
+            dependency-path))
   (define (add-selected! entry)
     (define file (hash-ref entry 'file))
     (define existing (findf (lambda (e) (equal? (hash-ref e 'file) file)) selected))
     (cond
       [(not existing) (set! selected (cons entry selected))]
-      [(< (reason-rank (hash-ref entry 'reason-code))
-          (reason-rank (hash-ref existing 'reason-code)))
-       (set! selected (cons entry (filter (lambda (e) (not (equal? (hash-ref e 'file) file))) selected)))]
+      [(< (reason-rank (hash-ref entry 'reason-code)) (reason-rank (hash-ref existing 'reason-code)))
+       (set! selected
+             (cons entry (filter (lambda (e) (not (equal? (hash-ref e 'file) file))) selected)))]
       [else (void)]))
   ;; Changed test files select themselves (the L0 loop is the degenerate L1).
-  (for ([f (in-list test-changed)] #:when (set-member? universe f))
+  (for ([f (in-list test-changed)]
+        #:when (set-member? universe f))
     (add-selected! (select-entry f 'changed-test-file f "self")))
   ;; Production modules: direct covers, then transitive dependents' covers.
   (for ([m (in-list production-changed)])
     (define direct (hash-ref module->tests m '()))
     (for ([t (in-list direct)])
-      (add-selected! (select-entry t 'direct-cover m
-                                   (hash-ref sources t "@covers manifest"))))
+      (add-selected! (select-entry t 'direct-cover m (hash-ref sources t "@covers manifest"))))
     (define dep-paths (dependents-of m))
     (for ([(d path) (in-hash dep-paths)]
           #:unless (equal? d m))
       (for ([t (in-list (hash-ref module->tests d '()))])
-        (add-selected! (select-entry t 'transitive-dependent m
+        (add-selected! (select-entry t
+                                     'transitive-dependent
+                                     m
                                      (hash-ref sources t "@covers manifest")
                                      (string-join path " → ")))))
     (define any-covered-dependent?
       (for/or ([(d _) (in-hash dep-paths)])
         (pair? (hash-ref module->tests d '()))))
     (when (and (null? direct) (not any-covered-dependent?))
-      (escalate! 'unmapped-source m
+      (escalate! 'unmapped-source
+                 m
                  "no @covers mapping reaches this changed module (direct or transitive)")))
   (define doc-only?
     (and (pair? categorized)
-         (andmap (lambda (cat) (and (memq cat '(doc other)) #t))
-                 (map cdr categorized))))
-  (hasheq 'selected (sort selected string<? #:key (lambda (e) (hash-ref e 'file)))
-          'escalations (sort escalations
-                             string<?
-                             #:key (lambda (e)
-                                     (format "~a ~a"
-                                             (hash-ref e 'code)
-                                             (or (hash-ref e 'changed-file) ""))))
-          'escalated? (pair? escalations)
-          'fallback-suites fallback-suites
-          'doc-only? doc-only?
-          'manifest-status manifest-status
-          'changed (for/list ([pair (in-list categorized)])
-                     (hasheq 'file (car pair) 'category (cdr pair)))))
+         (andmap (lambda (cat) (and (memq cat '(doc other)) #t)) (map cdr categorized))))
+  (hasheq 'selected
+          (sort selected string<? #:key (lambda (e) (hash-ref e 'file)))
+          'escalations
+          (sort escalations
+                string<?
+                #:key (lambda (e)
+                        (format "~a ~a" (hash-ref e 'code) (or (hash-ref e 'changed-file) ""))))
+          'escalated?
+          (pair? escalations)
+          'fallback-suites
+          fallback-suites
+          'doc-only?
+          doc-only?
+          'manifest-status
+          manifest-status
+          'changed
+          (for/list ([pair (in-list categorized)])
+            (hasheq 'file (car pair) 'category (cdr pair)))))
 
 ;; selection-selected : hash? -> (listof string?)
-(define (selection-selected sel) (map (lambda (e) (hash-ref e 'file)) (hash-ref sel 'selected)))
-(define (selection-escalations sel) (hash-ref sel 'escalations))
-(define (selection-escalated? sel) (hash-ref sel 'escalated? #f))
-(define (selection-doc-only? sel) (hash-ref sel 'doc-only? #f))
-(define (selection-fallback-suites sel) (hash-ref sel 'fallback-suites))
+(define (selection-selected sel)
+  (map (lambda (e) (hash-ref e 'file)) (hash-ref sel 'selected)))
+(define (selection-escalations sel)
+  (hash-ref sel 'escalations))
+(define (selection-escalated? sel)
+  (hash-ref sel 'escalated? #f))
+(define (selection-doc-only? sel)
+  (hash-ref sel 'doc-only? #f))
+(define (selection-fallback-suites sel)
+  (hash-ref sel 'fallback-suites))
 
 ;; JSON boundary: internal selection/escalation/category values are symbols
 ;; (used for case/memq reasoning); jsexpr VALUES must be strings — convert
 ;; here, never upstream (write-json raises on symbols).
 (define (esc->jsexpr e)
-  (hasheq 'code (symbol->string (hash-ref e 'code))
-          'changed-file (hash-ref e 'changed-file)
-          'detail (hash-ref e 'detail)
-          'fallback-suites (hash-ref e 'fallback-suites)))
+  (hasheq 'code
+          (symbol->string (hash-ref e 'code))
+          'changed-file
+          (hash-ref e 'changed-file)
+          'detail
+          (hash-ref e 'detail)
+          'fallback-suites
+          (hash-ref e 'fallback-suites)))
 (define (sel->jsexpr e)
-  (hasheq 'file (hash-ref e 'file)
-          'reason-code (symbol->string (hash-ref e 'reason-code))
-          'changed-file (hash-ref e 'changed-file)
-          'mapping-source (hash-ref e 'mapping-source)
-          'dependency-path (hash-ref e 'dependency-path)))
+  (hasheq 'file
+          (hash-ref e 'file)
+          'reason-code
+          (symbol->string (hash-ref e 'reason-code))
+          'changed-file
+          (hash-ref e 'changed-file)
+          'mapping-source
+          (hash-ref e 'mapping-source)
+          'dependency-path
+          (hash-ref e 'dependency-path)))
 
 ;; selection->jsexpr : hash? ... -> jsexpr. CI contract: objects carrying a
 ;; "reason-code" + "file" key are exactly the selected set; escalation /
 ;; fallback keys anywhere in the tree are counted by the shadow-job summary.
 (define (selection->jsexpr sel #:base [base #f] #:head [head #f] #:universe-size [n #f])
-  (hasheq 'mode "impact"
-          'base (or base "")
-          'head (or head "")
-          'selected_count (length (hash-ref sel 'selected))
-          'selected (map sel->jsexpr (hash-ref sel 'selected))
-          'escalations (map esc->jsexpr (hash-ref sel 'escalations))
-          'escalated_broad (hash-ref sel 'escalated? #f)
-          'fallback_suites (hash-ref sel 'fallback-suites)
-          'doc_only (hash-ref sel 'doc-only? #f)
-          'manifest_status (symbol->string (hash-ref sel 'manifest-status 'loaded))
-          'changed (for/list ([pair (in-list (hash-ref sel 'changed))])
-                     (hasheq 'file (hash-ref pair 'file)
-                             'category (symbol->string (hash-ref pair 'category))))
-          'universe_size (or n 0)))
+  (hasheq 'mode
+          "impact"
+          'base
+          (or base "")
+          'head
+          (or head "")
+          'selected_count
+          (length (hash-ref sel 'selected))
+          'selected
+          (map sel->jsexpr (hash-ref sel 'selected))
+          'escalations
+          (map esc->jsexpr (hash-ref sel 'escalations))
+          'escalated_broad
+          (hash-ref sel 'escalated? #f)
+          'fallback_suites
+          (hash-ref sel 'fallback-suites)
+          'doc_only
+          (hash-ref sel 'doc-only? #f)
+          'manifest_status
+          (symbol->string (hash-ref sel 'manifest-status 'loaded))
+          'changed
+          (for/list ([pair (in-list (hash-ref sel 'changed))])
+            (hasheq 'file (hash-ref pair 'file) 'category (symbol->string (hash-ref pair 'category))))
+          'universe_size
+          (or n 0)))
 
 ;; ============================================================
 ;; Fallback suite computation (declared broad suite)
@@ -656,8 +719,7 @@
          [(directory-exists? path)
           (map path->string
                (sort (filter (lambda (p)
-                               (and (file-exists? p)
-                                    (member (path-get-extension p) '(#".json"))))
+                               (and (file-exists? p) (member (path-get-extension p) '(#".json"))))
                              (directory-list path #:build? #t))
                      >
                      #:key file-or-directory-modify-seconds))]
@@ -668,28 +730,39 @@
        [else
         (define corrupt? (box #f))
         (define weights
-          (for/fold ([acc (hash)]) ([p (in-list files)] [k (in-naturals)]
-                                    #:break (or (unbox corrupt?) (>= k recency-limit)))
+          (for/fold ([acc (hash)])
+                    ([p (in-list files)]
+                     [k (in-naturals)]
+                     #:break (or (unbox corrupt?) (>= k recency-limit)))
             (define w (expt decay k))
             (define parsed
-              (with-handlers ([exn:fail? (lambda (_) (set-box! corrupt? #t) #f)])
+              (with-handlers ([exn:fail? (lambda (_)
+                                           (set-box! corrupt? #t)
+                                           #f)])
                 (call-with-input-file p read-json)))
             (cond
-              [(not (hash? parsed)) (begin (set-box! corrupt? #t) acc)]
+              [(not (hash? parsed))
+               (begin
+                 (set-box! corrupt? #t)
+                 acc)]
               [else
                (define file-entries (hash-ref parsed 'files #f))
                (cond
-                 [(not (list? file-entries)) (begin (set-box! corrupt? #t) acc)]
+                 [(not (list? file-entries))
+                  (begin
+                    (set-box! corrupt? #t)
+                    acc)]
                  [else
-                  (for/fold ([acc acc]) ([fe (in-list file-entries)]
-                                         #:when (and (hash? fe) (string? (hash-ref fe 'path #f))))
+                  (for/fold ([acc acc])
+                            ([fe (in-list file-entries)]
+                             #:when (and (hash? fe) (string? (hash-ref fe 'path #f))))
                     (define cat (hash-ref fe 'category #f))
-                    (if (and cat
-                             (member (string-downcase (format "~a" cat))
-                                     '("fail" "timeout")))
+                    (if (and cat (member (string-downcase (format "~a" cat)) '("fail" "timeout")))
                         (hash-update acc (hash-ref fe 'path) (lambda (x) (+ x w)) 0)
                         acc))])])))
-        (values (if (unbox corrupt?) (hash) weights)
+        (values (if (unbox corrupt?)
+                    (hash)
+                    weights)
                 (if (unbox corrupt?) 'corrupt 'loaded))])]))
 
 ;; ============================================================
@@ -712,11 +785,15 @@
 ;;   history-weights     — {file → weight}
 ;;   boundary-by-file    — {file → @boundary metadata value}
 (define (make-prioritize-ctx explicit-files selection-entries history-weights boundary-by-file)
-  (hasheq 'explicit (list->set explicit-files)
-          'entries (for/hash ([e (in-list selection-entries)])
-                     (values (hash-ref e 'file) e))
-          'history history-weights
-          'boundaries boundary-by-file))
+  (hasheq 'explicit
+          (list->set explicit-files)
+          'entries
+          (for/hash ([e (in-list selection-entries)])
+            (values (hash-ref e 'file) e))
+          'history
+          history-weights
+          'boundaries
+          boundary-by-file))
 
 ;; prioritize-partition : (listof string?) hash?
 ;;   -> (values (listof string?) (listof hash?))
@@ -737,23 +814,27 @@
             (cond
               [(< ra rb) #t]
               [(> ra rb) #f]
-              [(= ra 4) (cond
-                          [(> wa wb) #t]
-                          [(< wa wb) #f]
-                          [else (string<? (car a) (car b))])]
+              [(= ra 4)
+               (cond
+                 [(> wa wb) #t]
+                 [(< wa wb) #f]
+                 [else (string<? (car a) (car b))])]
               [else (string<? (car a) (car b))]))))
-  (values
-   (map car ordered)
-   (for/list ([pair (in-list ordered)])
-     (define e (cdr pair))
-     (hasheq 'file (car pair)
-             'tier (symbol->string (hash-ref e 'tier))
-             'tier-rank (hash-ref e 'tier-rank)
-             'priority-reason (hash-ref e 'priority-reason)
-             'selection-reason-code (let ([c (hash-ref e 'selection-reason #f)])
-                                      (and c (symbol->string c)))
-             'weight (let ([w (hash-ref e 'weight #f)])
-                       (and w (exact->inexact w)))))))
+  (values (map car ordered)
+          (for/list ([pair (in-list ordered)])
+            (define e (cdr pair))
+            (hasheq 'file
+                    (car pair)
+                    'tier
+                    (symbol->string (hash-ref e 'tier))
+                    'tier-rank
+                    (hash-ref e 'tier-rank)
+                    'priority-reason
+                    (hash-ref e 'priority-reason)
+                    'selection-reason-code
+                    (let ([c (hash-ref e 'selection-reason #f)]) (and c (symbol->string c)))
+                    'weight
+                    (let ([w (hash-ref e 'weight #f)]) (and w (exact->inexact w)))))))
 
 ;; tier-of : string? hash? -> hash? (private)
 ;; Cond order mirrors tier ranks: explicit → direct → transitive → boundary
@@ -766,11 +847,16 @@
   (define boundary (hash-ref (hash-ref ctx 'boundaries) f #f))
   (define boundary-contract? (and sel (member boundary '("integration" "e2e" "contract"))))
   (define (mk tier reason)
-    (hasheq 'tier tier
-            'tier-rank (hash-ref prioritize-tiers tier)
-            'priority-reason reason
-            'selection-reason sel-code
-            'weight weight))
+    (hasheq 'tier
+            tier
+            'tier-rank
+            (hash-ref prioritize-tiers tier)
+            'priority-reason
+            reason
+            'selection-reason
+            sel-code
+            'weight
+            weight))
   (cond
     [explicit? (mk 'explicit "explicitly named current-test file")]
     [(eq? sel-code 'direct-cover)
@@ -787,18 +873,26 @@
     [weight (mk 'recent-failure (format "recent failure (weight ~a)" (format-weight weight)))]
     [else (mk 'remaining "selected; no higher-priority signal")]))
 
-(define (format-weight w) (~a (exact->inexact w)))
+(define (format-weight w)
+  (~a (exact->inexact w)))
 
 ;; partition-entries->jsexpr : (listof hash?) (listof hash?) hash? -> jsexpr
 ;; Order payload for JSON evidence. Deterministic: every list is explicitly
 ;; sorted / emitted in run order; entries appear with the serial partition
 ;; first, then the parallel partition (matching execution).
 (define (partition-entries->jsexpr serial-entries parallel-entries history-info)
-  (hasheq 'prioritized #t
-          'policy "impact-tiers/1"
-          'history (if (symbol? history-info) (symbol->string history-info) history-info)
-          'serial serial-entries
-          'parallel parallel-entries))
+  (hasheq 'prioritized
+          #t
+          'policy
+          "impact-tiers/1"
+          'history
+          (if (symbol? history-info)
+              (symbol->string history-info)
+              history-info)
+          'serial
+          serial-entries
+          'parallel
+          parallel-entries))
 
 ;; render-order-json : (listof string?) (listof hash?) -> string?
 ;; Byte-deterministic serialization of an emitted order (W6 verify: two
@@ -806,14 +900,10 @@
 ;; order is fixed by construction (jsexpr hasheq written with write-json);
 ;; no timestamps, no absolute paths, no unordered iteration.
 (define (render-order-json ordered-files entries)
-  (define payload
-    (hasheq 'policy "impact-tiers/1"
-            'order ordered-files
-            'entries entries))
-  (with-output-to-string
-    (lambda ()
-      (write-json payload)
-      (newline))))
+  (define payload (hasheq 'policy "impact-tiers/1" 'order ordered-files 'entries entries))
+  (with-output-to-string (lambda ()
+                           (write-json payload)
+                           (newline))))
 
 ;; embed-impact-in-results! : path-string? hash? (or/c hash? #f) (listof hash?) -> void?
 ;; Post-run JSON evidence step (W5 shadow / W6): augments the runner's
@@ -829,13 +919,17 @@
       (when (hash? j)
         (define augmented
           (hash-set* j
-                     'selection (selection->jsexpr selection)
-                     'prioritization (or prioritize-payload (hasheq 'prioritized #f))
-                     'changed_files (map (lambda (c) (hash-ref c 'file)) changed)))
-        (call-with-output-file results-path #:exists 'truncate/replace
-          (lambda (out)
-            (write-json augmented out)
-            (newline out)))))))
+                     'selection
+                     (selection->jsexpr selection)
+                     'prioritization
+                     (or prioritize-payload (hasheq 'prioritized #f))
+                     'changed_files
+                     (map (lambda (c) (hash-ref c 'file)) changed)))
+        (call-with-output-file results-path
+                               #:exists 'truncate/replace
+                               (lambda (out)
+                                 (write-json augmented out)
+                                 (newline out)))))))
 
 ;; ============================================================
 ;; Runner-level orchestration
@@ -847,29 +941,43 @@
 ;; Doc-only changes return an empty file list (explicit no-op, never a
 ;; silent pass — the caller prints and exits 0 with JSON evidence).
 ;; collect : symbol? -> (listof string?) (suite → files, e.g. collect-test-files)
-(define (run-impact-selection! base head
-                              #:root [root repo-root]
-                              #:collect [collect (lambda (s) '())])
+(define (run-impact-selection! base head #:root [root repo-root] #:collect [collect (lambda (s) '())])
   (define-values (changed git-ok?) (git-changed-files root base head))
   (define universe (collect 'all))
   (cond
     [(not git-ok?)
      (define sel
-       (hasheq 'selected '()
-               'escalations (list (hasheq 'code 'git-failure
-                                          'changed-file #f
-                                          'detail "git diff failed (missing ref / not a repo)"
-                                          'fallback-suites '("fast")))
-               'escalated? #t
-               'fallback-suites '("fast")
-               'doc-only? #f
-               'manifest-status 'git
-               'changed '()))
+       (hasheq 'selected
+               '()
+               'escalations
+               (list (hasheq 'code
+                             'git-failure
+                             'changed-file
+                             #f
+                             'detail
+                             "git diff failed (missing ref / not a repo)"
+                             'fallback-suites
+                             '("fast")))
+               'escalated?
+               #t
+               'fallback-suites
+               '("fast")
+               'doc-only?
+               #f
+               'manifest-status
+               'git
+               'changed
+               '()))
      (values (collect 'fast) sel '())]
     [else
      (define-values (covers sources manifest-status) (load-coverage-manifest root))
-     (define sel (compute-impact-selection root changed covers sources universe
-                                           #:manifest-status manifest-status))
+     (define sel
+       (compute-impact-selection root
+                                 changed
+                                 covers
+                                 sources
+                                 universe
+                                 #:manifest-status manifest-status))
      (cond
        [(hash-ref sel 'doc-only?) (values '() sel changed)]
        [(hash-ref sel 'escalated?)
@@ -877,19 +985,22 @@
           (path-sort (append* (for/list ([s (in-list (hash-ref sel 'fallback-suites))])
                                 (collect (string->symbol s))))))
         (values fallback-files sel changed)]
-       [else
-        ;; Empty-selection-is-an-error (plan invariant) is enforced by the
-        ;; runner: it exits 3 with the selection JSON rather than running
-        ;; zero tests. Here we just return the (possibly empty) selection.
-        (values (selection-selected sel) sel changed)])]))
+       ;; Empty-selection-is-an-error (plan invariant) is enforced by the
+       ;; runner: it exits 3 with the selection JSON rather than running
+       ;; zero tests. Here we just return the (possibly empty) selection.
+       [else (values (selection-selected sel) sel changed)])]))
 
 ;; print-impact-explain : hash? ... -> void (human-readable --explain view)
 ;; changed file → category → selected test (reason, mapping, dependency
 ;; path) → escalation + fallback reasons.
 (define (print-impact-explain sel #:base [base #f] #:head [head #f])
   (printf ";; ── impact selection~a~a ──~n"
-          (if base (format " base=~a" base) "")
-          (if head (format " head=~a" head) ""))
+          (if base
+              (format " base=~a" base)
+              "")
+          (if head
+              (format " head=~a" head)
+              ""))
   (printf ";; changed files:~n")
   (for ([c (in-list (hash-ref sel 'changed '()))])
     (printf ";;   ~a  [~a]~n" (hash-ref c 'file) (hash-ref c 'category)))

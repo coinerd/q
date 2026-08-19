@@ -54,8 +54,8 @@
 
 ;; make-test-tool-start-event : produces a tool.execution.started event
 (define (make-test-tool-start-event #:tool-name [tool-name "bash"]
-                                   #:session-id [sid "test-session"]
-                                   #:turn-id [tid "turn-1"])
+                                    #:session-id [sid "test-session"]
+                                    #:turn-id [tid "turn-1"])
   (make-event "tool.execution.started" 1000 sid tid (hasheq 'tool-name tool-name)))
 
 ;; make-test-message-start-event : produces a message.started event
@@ -71,6 +71,5 @@
   (make-event "provider.request" 1000 sid tid (hasheq 'model model)))
 
 ;; make-test-iteration-start-event : produces an iteration.started event
-(define (make-test-iteration-start-event #:session-id [sid "test-session"]
-                                         #:turn-id [tid "turn-1"])
+(define (make-test-iteration-start-event #:session-id [sid "test-session"] #:turn-id [tid "turn-1"])
   (make-event "iteration.started" 1000 sid tid (hasheq)))

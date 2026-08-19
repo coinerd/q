@@ -98,7 +98,7 @@
                       _generate-covers-manifest?
                       _shard-plan
                       _durations)
-         (parse-args '("--json-out" "/tmp/q-results.json")))
+        (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 
     (test-case "classify-test-result distinguishes core categories"

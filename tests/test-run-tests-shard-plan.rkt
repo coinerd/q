@@ -35,23 +35,20 @@
                   shard-plan-predicted
                   shard-plan-shards))
 
-(define-runtime-path fixture-path
-  (build-path "fixtures" "shard-plan-durations.json"))
+(define-runtime-path fixture-path (build-path "fixtures" "shard-plan-durations.json"))
 
 (define fixture-files
-  '("tests/test-aa-slow.rkt"
-    "tests/test-bb-slow.rkt"
-    "tests/test-cc-slow.rkt"
-    "tests/test-dd-medium.rkt"
-    "tests/test-ee-medium.rkt"
-    "tests/test-ff-medium.rkt"
-    "tests/test-gg-fast.rkt"
-    "tests/test-hh-fast.rkt"
-    "tests/test-ii-fast.rkt"))
+  '("tests/test-aa-slow.rkt" "tests/test-bb-slow.rkt"
+                             "tests/test-cc-slow.rkt"
+                             "tests/test-dd-medium.rkt"
+                             "tests/test-ee-medium.rkt"
+                             "tests/test-ff-medium.rkt"
+                             "tests/test-gg-fast.rkt"
+                             "tests/test-hh-fast.rkt"
+                             "tests/test-ii-fast.rkt"))
 
 ;; One file deliberately absent from the snapshot → substitution must be recorded.
-(define inventory-with-substitution
-  (append fixture-files '("tests/test-jj-unmeasured.rkt")))
+(define inventory-with-substitution (append fixture-files '("tests/test-jj-unmeasured.rkt")))
 
 (define shard-plan-suite
   (test-suite "Duration-aware shard plan tests"
@@ -123,7 +120,8 @@
     (test-case "co-location group stays in one shard"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
       (define plan
-        (build-shard-plan fixture-files 3
+        (build-shard-plan fixture-files
+                          3
                           #:durations dur
                           #:co-locate '(("tests/test-gg-fast.rkt" "tests/test-aa-slow.rkt"))))
       (check-true (inventory-preserved? plan))
@@ -135,7 +133,8 @@
     (test-case "anti-co-location: separated files land in different shards"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
       (define plan
-        (build-shard-plan fixture-files 3
+        (build-shard-plan fixture-files
+                          3
                           #:durations dur
                           #:separate '(("tests/test-aa-slow.rkt" "tests/test-bb-slow.rkt"))))
       (define aa-shard
@@ -183,15 +182,16 @@
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
       (define plan (build-shard-plan fixture-files 3 #:durations dur))
       (define tmp (make-temporary-file "shard-plan-~a.json"))
-      (dynamic-wind
-        (lambda () (void))
-        (lambda ()
-          (write-plan-json! plan tmp)
-          (define re-read (with-input-from-file tmp read-json))
-          (check-equal? (hash-ref re-read 'schema) "shard-plan/1")
-          (check-equal? (hash-ref re-read 'shard_total) 3)
-          (check-equal? (hash-ref re-read 'file_count) 9))
-        (lambda () (with-handlers ([exn:fail? (lambda (_) (void))]) (delete-file tmp)))))))
+      (dynamic-wind (lambda () (void))
+                    (lambda ()
+                      (write-plan-json! plan tmp)
+                      (define re-read (with-input-from-file tmp read-json))
+                      (check-equal? (hash-ref re-read 'schema) "shard-plan/1")
+                      (check-equal? (hash-ref re-read 'shard_total) 3)
+                      (check-equal? (hash-ref re-read 'file_count) 9))
+                    (lambda ()
+                      (with-handlers ([exn:fail? (lambda (_) (void))])
+                        (delete-file tmp)))))))
 
 (module+ test
   (exit (run-tests shard-plan-suite)))

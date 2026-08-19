@@ -51,24 +51,24 @@
 
 (define summarize-ledger-results*
   (dynamic-require runner-module
-                    'summarize-ledger-results
-                    (lambda () (lambda _ (error 'summarize-ledger-results "missing export")))))
+                   'summarize-ledger-results
+                   (lambda () (lambda _ (error 'summarize-ledger-results "missing export")))))
 
 ;; W8 quarantine expiry surface (ledger schema `expires_on`).
 (define ledger-summary-counts*
   (dynamic-require runner-module
-                    'ledger-summary-counts
-                    (lambda () (lambda _ (error 'ledger-summary-counts "missing export")))))
+                   'ledger-summary-counts
+                   (lambda () (lambda _ (error 'ledger-summary-counts "missing export")))))
 
 (define ledger-entry-expired?*
   (dynamic-require runner-module
-                    'ledger-entry-expired?
-                    (lambda () (lambda _ (error 'ledger-entry-expired? "missing export")))))
+                   'ledger-entry-expired?
+                   (lambda () (lambda _ (error 'ledger-entry-expired? "missing export")))))
 
 (define valid-expires-on?*
   (dynamic-require runner-module
-                    'valid-expires-on?
-                    (lambda () (lambda _ (error 'valid-expires-on? "missing export")))))
+                   'valid-expires-on?
+                   (lambda () (lambda _ (error 'valid-expires-on? "missing export")))))
 
 (define (result #:path path
                 #:exit [exit-code 1]
@@ -134,7 +134,7 @@
                                       _generate-covers-manifest?
                                       _shard-plan
                                       _durations)
-                         (parse-args (list "--ledger" (path->string ledger-copy))))
+                        (parse-args (list "--ledger" (path->string ledger-copy))))
                       (check-equal? ledger (path->string ledger-copy)))
                     (lambda () (delete-file/safe ledger-copy))))
 
@@ -204,14 +204,10 @@
       ;; W8: while today < expires_on the entry is a tolerated quarantine;
       ;; from expires_on onward (inclusive) it escalates. No expires_on
       ;; (or null) means the entry never expires.
-      (check-false (ledger-entry-expired?* (hasheq 'expires_on #f)
-                                           #:today "2026-08-17"))
-      (check-false (ledger-entry-expired?* (hasheq 'expires_on "2026-08-18")
-                                           #:today "2026-08-17"))
-      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2026-08-17")
-                                          #:today "2026-08-17"))
-      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2020-01-01")
-                                          #:today "2026-08-17"))
+      (check-false (ledger-entry-expired?* (hasheq 'expires_on #f) #:today "2026-08-17"))
+      (check-false (ledger-entry-expired?* (hasheq 'expires_on "2026-08-18") #:today "2026-08-17"))
+      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2026-08-17") #:today "2026-08-17"))
+      (check-true (ledger-entry-expired?* (hasheq 'expires_on "2020-01-01") #:today "2026-08-17"))
       ;; Schema gate: a present expires_on must be ISO YYYY-MM-DD (zero-padded,
       ;; real month/day). Absence (#f) is valid and means "never expires",
       ;; handled by normalize-ledger-entry before the date check.
@@ -242,16 +238,14 @@
                                     "17/08/2026"))))
       (dynamic-wind void
                     (lambda ()
-                      (check-exn exn:fail?
-                                 (lambda () (load-known-failure-ledger* ledger-path))))
-                     (lambda () (delete-file/safe ledger-path))))
+                      (check-exn exn:fail? (lambda () (load-known-failure-ledger* ledger-path))))
+                    (lambda () (delete-file/safe ledger-path))))
 
     (test-case "load-known-failure-ledger: missing optional file is an empty ledger"
       ;; W8: the ledger file is optional (no placeholder is committed); a
       ;; missing path must behave as "no known failures", not crash the run.
-      (check-equal? (load-known-failure-ledger*
-                     (build-path (find-system-path 'temp-dir)
-                                 "q-known-failures-ledger-absent.json"))
+      (check-equal? (load-known-failure-ledger* (build-path (find-system-path 'temp-dir)
+                                                            "q-known-failures-ledger-absent.json"))
                     '()))
 
     (test-case "expired quarantine entries surface as escalating failures"
@@ -290,41 +284,40 @@
                                     "stale quarantine"
                                     'expires_on
                                     "2020-01-01"))))
-      (dynamic-wind void
-                    (lambda ()
-                      (define ledger (load-known-failure-ledger* ledger-path))
-                      (define results
-                        (list (result #:path "tests/quarantine-active.rkt")
-                              (result #:path "tests/quarantine-expired.rkt")))
-                      (define summary (summarize-ledger-results* ledger results))
-                      ;; Active quarantine is still tolerated ...
-                      (check-equal? (length (hash-ref summary 'known_failures)) 1)
-                      ;; ... but the expired one is an escalating failure.
-                      (define expired (hash-ref summary 'expired_quarantine_failures '()))
-                      (check-equal? (length expired) 1)
-                      (define entry (car expired))
-                      (check-true (hash-ref entry 'escalate))
-                      (check-equal? (hash-ref entry 'file) "tests/quarantine-expired.rkt")
-                      (check-equal? (hash-ref entry 'category) "ASSERTION_FAILURE")
-                      (check-equal? (hash-ref entry 'expires_on) "2020-01-01")
-                      (check-equal? (hash-ref entry 'issue) "#9502")
-                      (define counts (ledger-summary-counts* summary))
-                      (check-equal? (hash-ref counts 'known_failures) 1)
-                      (check-equal? (hash-ref counts 'expired_quarantine_failures) 1)
-                      (check-equal? (hash-ref counts 'new_failures) 0)
-                      (check-equal? (hash-ref counts 'resolved_known_failures) 0)
-                      (check-equal? (hash-ref counts 'release_blocking_known_failures) 0)
-                      ;; Human summary names the escalation explicitly.
-                      (define out (open-output-string))
-                      (parameterize ([current-output-port out])
-                        (print-ledger-summary ledger results))
-                      (check-true (regexp-match? #rx"Expired quarantine failures:[ ]+1"
-                                                 (get-output-string out))
-                                  (get-output-string out))
-                      (check-true (regexp-match? #rx"ESCALATE tests/quarantine-expired"
-                                                 (get-output-string out))
-                                  (get-output-string out)))
-                    (lambda () (delete-file/safe ledger-path))))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define ledger (load-known-failure-ledger* ledger-path))
+         (define results
+           (list (result #:path "tests/quarantine-active.rkt")
+                 (result #:path "tests/quarantine-expired.rkt")))
+         (define summary (summarize-ledger-results* ledger results))
+         ;; Active quarantine is still tolerated ...
+         (check-equal? (length (hash-ref summary 'known_failures)) 1)
+         ;; ... but the expired one is an escalating failure.
+         (define expired (hash-ref summary 'expired_quarantine_failures '()))
+         (check-equal? (length expired) 1)
+         (define entry (car expired))
+         (check-true (hash-ref entry 'escalate))
+         (check-equal? (hash-ref entry 'file) "tests/quarantine-expired.rkt")
+         (check-equal? (hash-ref entry 'category) "ASSERTION_FAILURE")
+         (check-equal? (hash-ref entry 'expires_on) "2020-01-01")
+         (check-equal? (hash-ref entry 'issue) "#9502")
+         (define counts (ledger-summary-counts* summary))
+         (check-equal? (hash-ref counts 'known_failures) 1)
+         (check-equal? (hash-ref counts 'expired_quarantine_failures) 1)
+         (check-equal? (hash-ref counts 'new_failures) 0)
+         (check-equal? (hash-ref counts 'resolved_known_failures) 0)
+         (check-equal? (hash-ref counts 'release_blocking_known_failures) 0)
+         ;; Human summary names the escalation explicitly.
+         (define out (open-output-string))
+         (parameterize ([current-output-port out])
+           (print-ledger-summary ledger results))
+         (check-true (regexp-match? #rx"Expired quarantine failures:[ ]+1" (get-output-string out))
+                     (get-output-string out))
+         (check-true (regexp-match? #rx"ESCALATE tests/quarantine-expired" (get-output-string out))
+                     (get-output-string out)))
+       (lambda () (delete-file/safe ledger-path))))
 
     (test-case "CLI prints known-failure ledger summary"
       (define missing-file (make-temporary-file "test-missing-cli-known-~a.rkt"))
@@ -359,10 +352,10 @@
          (check-true (regexp-match? #rx"Known failures:[ ]+1" stdout) stdout)
          (check-true (regexp-match? #rx"New failures:[ ]+0" stdout) stdout)
          (check-true (regexp-match? #rx"Unclassified failures:[ ]+0" stdout) stdout)
-          (check-true (regexp-match? #rx"Resolved known failures:[ ]+0" stdout) stdout))
-        (lambda ()
-          (delete-file/safe ledger-path)
-          (delete-file/safe missing-file))))
+         (check-true (regexp-match? #rx"Resolved known failures:[ ]+0" stdout) stdout))
+       (lambda ()
+         (delete-file/safe ledger-path)
+         (delete-file/safe missing-file))))
 
     (test-case "CLI escalates expired quarantine entries as failures"
       ;; W8: past expires_on the entry no longer tolerates the failure —

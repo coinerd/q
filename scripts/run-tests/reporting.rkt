@@ -46,9 +46,9 @@
          format-verdict-line
          metadata-completeness
          run-summary->jsexpr
-          format-run-summary-record
-          print-run-summary-record
-          test-result->ledger-jsexpr)
+         format-run-summary-record
+         print-run-summary-record
+         test-result->ledger-jsexpr)
 
 (define (format-duration ms)
   (define total-secs (/ ms 1000.0))
@@ -266,9 +266,13 @@
                (symbol->string (metadata-completeness (test-file-result-path r)))))
   (define with-profile
     (let ([s (optional-id-string profile)])
-      (if s (hash-set base 'execution_profile s) base)))
+      (if s
+          (hash-set base 'execution_profile s)
+          base)))
   (let ([s (optional-id-string mode)])
-    (if s (hash-set with-profile 'runner_mode s) with-profile)))
+    (if s
+        (hash-set with-profile 'runner_mode s)
+        with-profile)))
 
 (define (shard->jsexpr shard)
   (if (pair? shard)
@@ -353,9 +357,9 @@
                              #:elapsed-ms [elapsed-ms 0]
                              #:ledger [ledger #f]
                              #:profile [profile 'local]
-                              #:shard [shard #f]
-                              #:runner-version [runner-version "unknown"]
-                              #:extra [extra #f])
+                             #:shard [shard #f]
+                             #:runner-version [runner-version "unknown"]
+                             #:extra [extra #f])
   (define passed-files (count passed-result? results))
   (define failed-files (count failed-result? results))
   (define timeout-files (count timeout-result? results))
@@ -402,21 +406,21 @@
                                  #:mode mode
                                  #:elapsed-ms elapsed-ms
                                  #:runner-version runner-version)
-              'files
-              (if ledger
-                  (map (lambda (r)
-                         (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger)
-                                               r
-                                               #:profile profile
-                                               #:mode mode))
-                       results)
-                  (map (lambda (r)
-                         (annotate-file-jsexpr (test-result->jsexpr r)
-                                               r
-                                               #:profile profile
-                                               #:mode mode))
-                       results))))
-  (define payload* (if extra (hash-set payload 'extra extra) payload))
+            'files
+            (if ledger
+                (map (lambda (r)
+                       (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger)
+                                             r
+                                             #:profile profile
+                                             #:mode mode))
+                     results)
+                (map (lambda (r)
+                       (annotate-file-jsexpr (test-result->jsexpr r) r #:profile profile #:mode mode))
+                     results))))
+  (define payload*
+    (if extra
+        (hash-set payload 'extra extra)
+        payload))
   (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload* out))))
 
 (define (print-ledger-summary ledger results)
@@ -433,8 +437,7 @@
   ;; W8 quarantine expiry: an entry past `expires_on` is reported as an
   ;; escalating failure instead of being tolerated.
   (when (> (hash-ref counts 'expired_quarantine_failures 0) 0)
-    (printf "  Expired quarantine failures: ~a~n"
-            (hash-ref counts 'expired_quarantine_failures))
+    (printf "  Expired quarantine failures: ~a~n" (hash-ref counts 'expired_quarantine_failures))
     (for ([e (in-list (hash-ref summary 'expired_quarantine_failures '()))])
       (printf "    ⏫ ESCALATE ~a [~a] quarantine expired ~a (owner=~a issue=~a)~n"
               (hash-ref e 'file)
@@ -442,7 +445,8 @@
               (hash-ref e 'expires_on)
               (hash-ref e 'owner)
               (hash-ref e 'issue)))
-    (displayln "  ⛔ Quarantine expired: failure now blocks; re-triage, fix, or renew with justification."))
+    (displayln
+     "  ⛔ Quarantine expired: failure now blocks; re-triage, fix, or renew with justification."))
   (when (> (hash-ref counts 'unclassified_failures) 0)
     (displayln "  ⛔ Ledger incomplete: unclassified failures remain."))
   (when (> (hash-ref counts 'new_failures) 0)

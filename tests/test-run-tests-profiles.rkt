@@ -72,7 +72,7 @@
                       _generate-covers-manifest?
                       _shard-plan
                       _durations)
-         (parse-args '("--profile" "vps")))
+        (parse-args '("--profile" "vps")))
       (check-equal? profile 'vps))
 
     (test-case "profile rules skip required unavailable capabilities"

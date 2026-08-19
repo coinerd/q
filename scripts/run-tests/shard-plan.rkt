@@ -62,25 +62,27 @@
 ;; ---------------------------------------------------------------------------
 
 (struct shard-plan
-  (shards           ; (listof (listof path-string)), index 0 .. total-1
-   predicted        ; (listof seconds), one per shard
-   mode             ; 'duration-aware | 'round-robin-fallback
-   reason           ; #f | string (fallback / constraint-violation note)
-   duration-source  ; #f | string (as passed via --durations)
-   known-count      ; files with a measured duration
-   substituted      ; sorted list of files that used the default duration
-   default-seconds  ; conservative default (p95 of known durations)
-   total-files      ; inventory size (inventory preservation check)
-   inventory        ; sorted full inventory (round-robin comparison)
-   weights))        ; hash file -> effective seconds (measured or default)
+        (shards ; (listof (listof path-string)), index 0 .. total-1
+         predicted ; (listof seconds), one per shard
+         mode ; 'duration-aware | 'round-robin-fallback
+         reason ; #f | string (fallback / constraint-violation note)
+         duration-source ; #f | string (as passed via --durations)
+         known-count ; files with a measured duration
+         substituted ; sorted list of files that used the default duration
+         default-seconds ; conservative default (p95 of known durations)
+         total-files ; inventory size (inventory preservation check)
+         inventory ; sorted full inventory (round-robin comparison)
+         weights)) ; hash file -> effective seconds (measured or default)
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal set helpers (avoid racket/set dependency surface)
 ;; ---------------------------------------------------------------------------
 
 (define (list->set lst)
-  (for/hash ([x (in-list lst)]) (values x #t)))
-(define (set-member? st k) (hash-ref st k #f))
+  (for/hash ([x (in-list lst)])
+    (values x #t)))
+(define (set-member? st k)
+  (hash-ref st k #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Duration snapshots (W0 schema artifacts)
@@ -96,11 +98,10 @@
     [(not path-string) '()]
     [(directory-exists? path-string)
      (map path->string
-          (sort (filter (lambda (p)
-                          (and (file-exists? p)
-                               (equal? (path-get-extension p) #".json")))
+          (sort (filter (lambda (p) (and (file-exists? p) (equal? (path-get-extension p) #".json")))
                         (directory-list (string->path path-string) #:build? #t))
-                string<? #:key path->string))]
+                string<?
+                #:key path->string))]
     [(file-exists? path-string) (list (simple-form-path (string->path path-string)))]
     [else '()]))
 
@@ -115,28 +116,34 @@
   ;;         'corrupt (some artifact unreadable/bad shape) | 'ok
   (define files (artifact-json-files source))
   (cond
-    [(null? files)
-     (values (hash) (if source 'missing 'disabled))]
+    [(null? files) (values (hash) (if source 'missing 'disabled))]
     [else
      (define corrupt? (box #f))
      (define acc
        (for/fold ([acc (hash)]) ([p (in-list files)])
          (define parsed
-           (with-handlers ([exn:fail? (lambda (_) (set-box! corrupt? #t) #f)])
+           (with-handlers ([exn:fail? (lambda (_)
+                                        (set-box! corrupt? #t)
+                                        #f)])
              (call-with-input-file p read-json)))
          (cond
-           [(not (hash? parsed)) (set-box! corrupt? #t) acc]
+           [(not (hash? parsed))
+            (set-box! corrupt? #t)
+            acc]
            [else
             (define entries (hash-ref parsed 'files #f))
             (if (list? entries)
-                (for/fold ([acc* acc]) ([e (in-list entries)]
-                                        #:when (hash? e))
+                (for/fold ([acc* acc])
+                          ([e (in-list entries)]
+                           #:when (hash? e))
                   (define f (or (hash-ref e 'path #f) (hash-ref e 'file #f)))
                   (define d (entry-duration e))
                   (if (and (string? f) d)
                       (hash-set acc* f (max d (hash-ref acc* f 0.0)))
                       acc*))
-                (begin (set-box! corrupt? #t) acc))])))
+                (begin
+                  (set-box! corrupt? #t)
+                  acc))])))
      (values acc
              (cond
                [(unbox corrupt?) 'corrupt]
@@ -157,7 +164,6 @@
      (define n (length known))
      (define idx (min (sub1 n) (exact-floor (* 0.95 (sub1 n)))))
      (exact->inexact (list-ref known idx))]))
-
 
 ;; ---------------------------------------------------------------------------
 ;; Packing units (files stay atomic; co-location groups fuse)
@@ -185,7 +191,8 @@
   (unless (and (integer? shard-total) (> shard-total 0))
     (raise-argument-error who "positive integer" shard-total)))
 
-(define (round-robin-plan files shard-total
+(define (round-robin-plan files
+                          shard-total
                           #:durations [durations #f]
                           #:profile-skips? [profile-skips? (lambda (f) #f)]
                           #:duration-source [duration-source #f]
@@ -193,11 +200,16 @@
   (validate-shard-total! 'build-shard-plan shard-total)
   (define sorted-files (sort (remove-duplicates files) string<?))
   (define-values (dur known-count)
-    (if (hash? durations) (values durations (hash-count durations)) (values (hash) 0)))
+    (if (hash? durations)
+        (values durations (hash-count durations))
+        (values (hash) 0)))
   (define default-seconds (snapshot-default-seconds dur))
   (define weights
     (for/hash ([f (in-list sorted-files)])
-      (values f (if (profile-skips? f) 0.0 (hash-ref dur f default-seconds)))))
+      (values f
+              (if (profile-skips? f)
+                  0.0
+                  (hash-ref dur f default-seconds)))))
   (define shards
     (for/list ([i (in-range shard-total)])
       (shard-files sorted-files i shard-total)))
@@ -210,7 +222,9 @@
               reason
               duration-source
               known-count
-              (for/list ([f (in-list sorted-files)] #:unless (hash-ref dur f #f)) f)
+              (for/list ([f (in-list sorted-files)]
+                         #:unless (hash-ref dur f #f))
+                f)
               default-seconds
               (length sorted-files)
               sorted-files
@@ -228,30 +242,36 @@
   (validate-shard-total! 'build-shard-plan shard-total)
   (define sorted-files (sort (remove-duplicates files) string<?))
   (define-values (dur known-count)
-    (if (hash? durations) (values durations (hash-count durations)) (values (hash) 0)))
+    (if (hash? durations)
+        (values durations (hash-count durations))
+        (values (hash) 0)))
   (define default-seconds (snapshot-default-seconds dur))
   (define substituted
-    (for/list ([f (in-list sorted-files)] #:unless (hash-ref dur f #f)) f))
+    (for/list ([f (in-list sorted-files)]
+               #:unless (hash-ref dur f #f))
+      f))
   (define (effective-weight f)
-    (if (profile-skips? f) 0.0 (hash-ref dur f default-seconds)))
+    (if (profile-skips? f)
+        0.0
+        (hash-ref dur f default-seconds)))
   (define weights
-    (for/hash ([f (in-list sorted-files)]) (values f (effective-weight f))))
+    (for/hash ([f (in-list sorted-files)])
+      (values f (effective-weight f))))
   ;; Co-location groups: fuse present members into one unit.
   (define present (list->set sorted-files))
-  (define (in-inventory? group) (filter (lambda (f) (set-member? present f)) group))
-  (define grouped-set
-    (list->set (apply append (map in-inventory? co-locate))))
+  (define (in-inventory? group)
+    (filter (lambda (f) (set-member? present f)) group))
+  (define grouped-set (list->set (apply append (map in-inventory? co-locate))))
   (define (mk-unit fs)
-    (unit (sort (remove-duplicates fs) string<?)
-          (for/sum ([f (in-list fs)]) (effective-weight f))))
+    (unit (sort (remove-duplicates fs) string<?) (for/sum ([f (in-list fs)]) (effective-weight f))))
   (define units
-    (sort
-     (append
-      (for/list ([g (in-list co-locate)] #:when (pair? (in-inventory? g)))
-        (mk-unit (in-inventory? g)))
-      (for/list ([f (in-list sorted-files)] #:unless (set-member? grouped-set f))
-        (mk-unit (list f))))
-     unit<?))
+    (sort (append (for/list ([g (in-list co-locate)]
+                             #:when (pair? (in-inventory? g)))
+                    (mk-unit (in-inventory? g)))
+                  (for/list ([f (in-list sorted-files)]
+                             #:unless (set-member? grouped-set f))
+                    (mk-unit (list f))))
+          unit<?))
   ;; Anti-co-location: file -> set of files that must not share its shard.
   (define forbidden
     (for/fold ([acc (hash)]) ([pair (in-list separate)])
@@ -273,27 +293,27 @@
     ;; spread evenly instead of stacking on shard 0; index is the final
     ;; stable tie-break, keeping plans reproducible.
     (define candidate-order
-      (sort (for/list ([i (in-range shard-total)]) i)
+      (sort (for/list ([i (in-range shard-total)])
+              i)
             (lambda (i j)
               (or (< (vector-ref loads i) (vector-ref loads j))
                   (and (= (vector-ref loads i) (vector-ref loads j))
                        (or (< (vector-ref counts i) (vector-ref counts j))
-                           (and (= (vector-ref counts i) (vector-ref counts j))
-                                (< i j))))))))
+                           (and (= (vector-ref counts i) (vector-ref counts j)) (< i j))))))))
     (define (permitted? i)
       (for/and ([f (in-list ufiles)])
         (for/and ([g (in-list (hash-keys (hash-ref forbidden f (hash))))])
           (not (member g (vector-ref contents i))))))
     (define choice
-      (or (for/first ([i (in-list candidate-order)] #:when (permitted? i)) i)
+      (or (for/first ([i (in-list candidate-order)]
+                      #:when (permitted? i))
+            i)
           ;; unsatisfiable: force the least-loaded shard (lowest index on
           ;; ties) and record the violation — constraints never fail the run.
-          (let ([forced
-                 (for/fold ([best 0]) ([i (in-range 1 shard-total)])
-                   (if (< (vector-ref loads i) (vector-ref loads best)) i best))])
+          (let ([forced (for/fold ([best 0]) ([i (in-range 1 shard-total)])
+                          (if (< (vector-ref loads i) (vector-ref loads best)) i best))])
             (set! violations
-                  (cons (format "separate-constraint unsatisfiable for ~a"
-                                (string-join ufiles ", "))
+                  (cons (format "separate-constraint unsatisfiable for ~a" (string-join ufiles ", "))
                         violations))
             forced)))
     (vector-set! contents choice (append ufiles (vector-ref contents choice)))
@@ -320,7 +340,8 @@
 ;; The planner can always fall back: any error during duration-aware planning
 ;; degrades to a round-robin plan with the reason logged (stderr) and recorded
 ;; in the plan metadata.
-(define (build-shard-plan/safe files shard-total
+(define (build-shard-plan/safe files
+                               shard-total
                                #:durations [durations #f]
                                #:profile-skips? [profile-skips? (lambda (f) #f)]
                                #:co-locate [co-locate '()]
@@ -329,14 +350,13 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (eprintf ";; run-tests: shard-plan fallback → round-robin: ~a~n"
                                         (exn-message e))
-                               (round-robin-plan files
-                                                 (if (and (integer? shard-total) (> shard-total 0))
-                                                     shard-total
-                                                     1)
-                                                 #:durations durations
-                                                 #:profile-skips? profile-skips?
-                                                 #:duration-source duration-source
-                                                 #:reason (exn-message e)))])
+                               (round-robin-plan
+                                files
+                                (if (and (integer? shard-total) (> shard-total 0)) shard-total 1)
+                                #:durations durations
+                                #:profile-skips? profile-skips?
+                                #:duration-source duration-source
+                                #:reason (exn-message e)))])
     (build-shard-plan files
                       shard-total
                       #:durations durations
@@ -365,15 +385,12 @@
   (apply max
          (cons 0.0
                (for/list ([i (in-range total)])
-                 (for/sum ([f (in-list (shard-files inv i total))])
-                   (hash-ref w f))))))
+                 (for/sum ([f (in-list (shard-files inv i total))]) (hash-ref w f))))))
 
 (define (inventory-preserved? plan)
-  (and (= (shard-plan-total-files plan)
-          (apply + (map length (shard-plan-shards plan))))
+  (and (= (shard-plan-total-files plan) (apply + (map length (shard-plan-shards plan))))
        ;; every inventory file appears exactly once across shards
-       (equal? (shard-plan-inventory plan)
-               (sort (apply append (shard-plan-shards plan)) string<?))))
+       (equal? (shard-plan-inventory plan) (sort (apply append (shard-plan-shards plan)) string<?))))
 
 (define (activation-recommendation plan)
   (cond
@@ -385,35 +402,62 @@
     [else (cons "activate" "predicted max-shard duration improves")]))
 
 (define (plan->jsexpr plan)
-  (hasheq 'schema "shard-plan/1"
-          'mode (symbol->string (shard-plan-mode plan))
-          'reason (or (shard-plan-reason plan) 'null)
-          'shard_total (length (shard-plan-shards plan))
-          'file_count (shard-plan-total-files plan)
-          'durations (hasheq 'source (or (shard-plan-duration-source plan) 'null)
-                             'known (shard-plan-known-count plan)
-                             'substituted_count (length (shard-plan-substituted plan))
-                             'substituted (shard-plan-substituted plan)
-                             'default_seconds (shard-plan-default-seconds plan))
-          'predicted (hasheq 'per_shard_seconds (shard-plan-predicted plan)
-                             'max_seconds (plan-predicted-max plan)
-                             'round_robin_max_seconds (round-robin-predicted-max plan)
-                             'inventory_preserved (inventory-preserved? plan))
-          'activation (let ([rec (activation-recommendation plan)])
-                         (hasheq 'recommendation (if (symbol? (car rec))
-                                                     (symbol->string (car rec))
-                                                     (car rec))
-                                'why (cdr rec)))
-          'shards (for/list ([shard (in-list (shard-plan-shards plan))]
-                             [i (in-naturals)])
-                    (hasheq 'index i
-                            'file_count (length shard)
-                            'predicted_seconds (list-ref (shard-plan-predicted plan) i)
-                            'files shard))))
+  (hasheq 'schema
+          "shard-plan/1"
+          'mode
+          (symbol->string (shard-plan-mode plan))
+          'reason
+          (or (shard-plan-reason plan) 'null)
+          'shard_total
+          (length (shard-plan-shards plan))
+          'file_count
+          (shard-plan-total-files plan)
+          'durations
+          (hasheq 'source
+                  (or (shard-plan-duration-source plan) 'null)
+                  'known
+                  (shard-plan-known-count plan)
+                  'substituted_count
+                  (length (shard-plan-substituted plan))
+                  'substituted
+                  (shard-plan-substituted plan)
+                  'default_seconds
+                  (shard-plan-default-seconds plan))
+          'predicted
+          (hasheq 'per_shard_seconds
+                  (shard-plan-predicted plan)
+                  'max_seconds
+                  (plan-predicted-max plan)
+                  'round_robin_max_seconds
+                  (round-robin-predicted-max plan)
+                  'inventory_preserved
+                  (inventory-preserved? plan))
+          'activation
+          (let ([rec (activation-recommendation plan)])
+            (hasheq 'recommendation
+                    (if (symbol? (car rec))
+                        (symbol->string (car rec))
+                        (car rec))
+                    'why
+                    (cdr rec)))
+          'shards
+          (for/list ([shard (in-list (shard-plan-shards plan))]
+                     [i (in-naturals)])
+            (hasheq 'index
+                    i
+                    'file_count
+                    (length shard)
+                    'predicted_seconds
+                    (list-ref (shard-plan-predicted plan) i)
+                    'files
+                    shard))))
 
 (define (write-plan-json! plan path)
-  (call-with-output-file path #:exists 'truncate/replace
-    (lambda (out) (write-json (plan->jsexpr plan) out) (newline out))))
+  (call-with-output-file path
+                         #:exists 'truncate/replace
+                         (lambda (out)
+                           (write-json (plan->jsexpr plan) out)
+                           (newline out))))
 
 ;; ---------------------------------------------------------------------------
 ;; Report (report-only mode changes nothing)
@@ -421,9 +465,13 @@
 
 (define (print-shard-plan-report plan [port (current-output-port)])
   (define total (length (shard-plan-shards plan)))
-  (fprintf port ";; run-tests: shard plan (~a) shards=~a files=~a~n"
-           (shard-plan-mode plan) total (shard-plan-total-files plan))
-  (fprintf port ";; durations: source=~a known=~a substituted=~a default=~as~n"
+  (fprintf port
+           ";; run-tests: shard plan (~a) shards=~a files=~a~n"
+           (shard-plan-mode plan)
+           total
+           (shard-plan-total-files plan))
+  (fprintf port
+           ";; durations: source=~a known=~a substituted=~a default=~as~n"
            (or (shard-plan-duration-source plan) "<none>")
            (shard-plan-known-count plan)
            (length (shard-plan-substituted plan))
@@ -432,8 +480,10 @@
     (fprintf port ";; reason: ~a~n" (shard-plan-reason plan)))
   (for ([shard (in-list (shard-plan-shards plan))]
         [i (in-naturals)])
-    (fprintf port "shard ~a/~a: ~a file~a, predicted ~as~n"
-             i total
+    (fprintf port
+             "shard ~a/~a: ~a file~a, predicted ~as~n"
+             i
+             total
              (length shard)
              (if (= (length shard) 1) "" "s")
              (~r (list-ref (shard-plan-predicted plan) i) #:precision '(= 1)))
@@ -442,7 +492,8 @@
   (define pmax (plan-predicted-max plan))
   (define rmax (round-robin-predicted-max plan))
   (define delta (- rmax pmax))
-  (fprintf port ";; predicted max shard: ~as (~a) vs ~as (round-robin) → ~a~as (~a%)~n"
+  (fprintf port
+           ";; predicted max shard: ~as (~a) vs ~as (round-robin) → ~a~as (~a%)~n"
            (~r pmax #:precision '(= 1))
            (shard-plan-mode plan)
            (~r rmax #:precision '(= 1))
@@ -452,7 +503,8 @@
                (~r (* 100 (/ delta rmax)) #:precision '(= 1))
                "0.0"))
   (define rec (activation-recommendation plan))
-  (fprintf port ";; activation: ~a — ~a (inventory preserved: ~a)~n"
+  (fprintf port
+           ";; activation: ~a — ~a (inventory preserved: ~a)~n"
            (car rec)
            (cdr rec)
            (inventory-preserved? plan)))

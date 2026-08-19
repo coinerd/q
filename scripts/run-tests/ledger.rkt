@@ -73,13 +73,16 @@
   (cond
     [(or (not v) (eq? v 'null)) #f]
     [(valid-expires-on? v) v]
-    [else (raise-arguments-error 'normalize-ledger-entry
-                                 "expires_on must be an ISO YYYY-MM-DD string or null"
-                                 "expires_on"
-                                 v)]))
+    [else
+     (raise-arguments-error 'normalize-ledger-entry
+                            "expires_on must be an ISO YYYY-MM-DD string or null"
+                            "expires_on"
+                            v)]))
 
 (define (pad2 n)
-  (if (< n 10) (format "0~a" n) (number->string n)))
+  (if (< n 10)
+      (format "0~a" n)
+      (number->string n)))
 
 ;; Local-timezone calendar date as "YYYY-MM-DD" (basis for quarantine expiry).
 (define (today-iso8601)
@@ -133,8 +136,8 @@
   ;; passes --ledger and the file only appears once quarantined failures exist.
   (cond
     [(not (or (file-exists? path) (link-exists? path))) '()]
-    [else (map normalize-ledger-entry
-               (extract-ledger-entries (call-with-input-file path read-json)))]))
+    [else
+     (map normalize-ledger-entry (extract-ledger-entries (call-with-input-file path read-json)))]))
 
 (define (result-failure? r)
   (and (not (= (test-file-result-exit-code r) 0))
@@ -191,7 +194,8 @@
           #t))
 
 (define (summarize-ledger-results ledger results #:today [today (today-iso8601)])
-  (define (expired? entry) (ledger-entry-expired? entry #:today today))
+  (define (expired? entry)
+    (ledger-entry-expired? entry #:today today))
   (define failures (filter result-failure? results))
   (define known
     (for/list ([r (in-list failures)]

@@ -33,17 +33,22 @@
   (displayln "  --record-gate-evidence  Write .gate-evidence/<suite>.passed on success")
   (displayln "  --inventory             Print inventory report (selected/excluded files) and exit")
   (displayln "  --diagnose-overhead     Measure Racket/raco per-file startup overhead and exit")
-  (displayln "  --lint-metadata         Lint test metadata against schema v1 (enforced: invalid tags fail; missing tags warn) and exit")
+  (displayln
+   "  --lint-metadata         Lint test metadata against schema v1 (enforced: invalid tags fail; missing tags warn) and exit")
   (displayln "  --json-out PATH         Write structured per-file JSON results")
   (displayln
    "  --ledger PATH           Read known-failure ledger JSON and report known/new/resolved failures")
   (displayln "  --changed-base REF     Change-impact selection base ref (git merge-base style)")
   (displayln "  --changed-head REF     Change-impact head ref (default: HEAD)")
-  (displayln "  --explain              Print the reasoned impact selection (requires --changed-base) and exit")
+  (displayln
+   "  --explain              Print the reasoned impact selection (requires --changed-base) and exit")
   (displayln "  --impact-dry-run       Print impact selection JSON, execute no tests, exit 0")
-  (displayln "  --prioritize impact    Deterministic prioritization of the selected set (never changes selection)")
-  (displayln "  --failure-history PATH Retained CI JSON artifact(s) used by --prioritize impact (decay-weighted)")
-  (displayln "  --generate-covers-manifest  Regenerate tests/.coverage-manifest.json from @covers metadata and exit")
+  (displayln
+   "  --prioritize impact    Deterministic prioritization of the selected set (never changes selection)")
+  (displayln
+   "  --failure-history PATH Retained CI JSON artifact(s) used by --prioritize impact (decay-weighted)")
+  (displayln
+   "  --generate-covers-manifest  Regenerate tests/.coverage-manifest.json from @covers metadata and exit")
   (displayln "  --profile NAME          Environment profile: local, vps, ci, headless, full")
   (displayln "  --shard-index N         Select shard N of M (for parallel CI sharding)")
   (displayln "  --shard-total M         Total number of shards (default: 1, no sharding)")
@@ -102,17 +107,17 @@
              [mode 'auto]
              [json-out #f]
              [ledger #f]
-              [profile 'local]
-              [lint-metadata? #f]
-              [changed-base #f]
-              [changed-head "HEAD"]
-              [explain? #f]
-              [impact-dry-run? #f]
-              [prioritize #f]
-              [failure-history #f]
-              [generate-covers-manifest? #f]
-              [shard-plan #f]
-              [durations #f])
+             [profile 'local]
+             [lint-metadata? #f]
+             [changed-base #f]
+             [changed-head "HEAD"]
+             [explain? #f]
+             [impact-dry-run? #f]
+             [prioritize #f]
+             [failure-history #f]
+             [generate-covers-manifest? #f]
+             [shard-plan #f]
+             [durations #f])
     (define (continue rest
                       #:jobs [jobs* jobs]
                       #:sequential? [sequential?* sequential?]
@@ -178,18 +183,18 @@
                diagnose-overhead?
                mode
                json-out
-                ledger
-                profile
-                lint-metadata?
-                changed-base
-                changed-head
-                explain?
-                impact-dry-run?
-                prioritize
-                failure-history
-                generate-covers-manifest?
-                shard-plan
-                durations)]
+               ledger
+               profile
+               lint-metadata?
+               changed-base
+               changed-head
+               explain?
+               impact-dry-run?
+               prioritize
+               failure-history
+               generate-covers-manifest?
+               shard-plan
+               durations)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -212,14 +217,10 @@
       [(list "--explain" rest ...) (continue rest #:explain? #t)]
       [(list "--impact-dry-run" rest ...) (continue rest #:impact-dry-run? #t)]
       [(list "--prioritize" name rest ...) (continue rest #:prioritize name)]
-      [(list "--failure-history" path rest ...)
-       (continue rest #:failure-history path)]
-      [(list "--generate-covers-manifest" rest ...)
-       (continue rest #:generate-covers-manifest? #t)]
-      [(list "--shard-plan" mode* rest ...)
-       (continue rest #:shard-plan mode*)]
-      [(list "--durations" path rest ...)
-       (continue rest #:durations path)]
+      [(list "--failure-history" path rest ...) (continue rest #:failure-history path)]
+      [(list "--generate-covers-manifest" rest ...) (continue rest #:generate-covers-manifest? #t)]
+      [(list "--shard-plan" mode* rest ...) (continue rest #:shard-plan mode*)]
+      [(list "--durations" path rest ...) (continue rest #:durations path)]
       [(list "--shard-plan" rest ...)
        (eprintf "run-tests: --shard-plan requires a mode (report|active)~n")
        (usage)
@@ -285,25 +286,19 @@
   (when (and ledger (not (string? ledger)))
     (raise-user-error 'run-tests "--ledger must be a path string, got: ~a" ledger))
   (when (and (or explain? impact-dry-run?) (not changed-base))
-    (raise-user-error 'run-tests
-                      "--explain/--impact-dry-run require --changed-base <ref>"))
+    (raise-user-error 'run-tests "--explain/--impact-dry-run require --changed-base <ref>"))
   (when (and prioritize (not (equal? prioritize "impact")))
-    (raise-user-error 'run-tests
-                      "unknown --prioritize mode: ~a (valid: impact)"
-                      prioritize))
+    (raise-user-error 'run-tests "unknown --prioritize mode: ~a (valid: impact)" prioritize))
   (when (and prioritize (not changed-base))
     (raise-user-error 'run-tests "--prioritize requires --changed-base"))
   (when (and failure-history (not prioritize))
-    (raise-user-error 'run-tests
-                      "--failure-history requires --prioritize impact"))
+    (raise-user-error 'run-tests "--failure-history requires --prioritize impact"))
   (when (and changed-base (string? changed-base) (equal? changed-base ""))
     (raise-user-error 'run-tests "--changed-base must be non-empty"))
   (when (and changed-head (string? changed-head) (equal? changed-head ""))
     (raise-user-error 'run-tests "--changed-head must be non-empty"))
   (when (and shard-plan (not (member shard-plan '("report" "active"))))
-    (raise-user-error 'run-tests
-                      "unknown --shard-plan mode: ~a (valid: report, active)"
-                      shard-plan))
+    (raise-user-error 'run-tests "unknown --shard-plan mode: ~a (valid: report, active)" shard-plan))
   (when (and durations (not (string? durations)))
     (raise-user-error 'run-tests "--durations must be a path string, got: ~a" durations))
   (values jobs
