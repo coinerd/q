@@ -85,7 +85,8 @@
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
            (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))])
-         extract-task-summary)
+         extract-task-summary
+         extract-last-failure)
 
 ;; ============================================================
 ;; Command registration
@@ -410,6 +411,7 @@
                            ""
                            (format "Required verification: ~a\n" (gsd-wave-verify wave))))))
   (define state-content (state-for-wave (or (read-planning-artifact base-dir "STATE") "") wave-idx))
+  (define last-failure (extract-last-failure wave-details))
   (string-append
    planning-implement-prompt
    "# Runtime-Enforced Single-Wave Execution\n\n"
@@ -425,10 +427,41 @@
            (current-gsd-wave-timeout-seconds)
            (current-gsd-wave-max-iterations)
            (current-gsd-max-consecutive-tool-calls))
+   (if last-failure
+       (string-append
+        "## Previous Attempt Failed — Adapt\n\n"
+        "A previous run of this wave FAILED delivery verification. The recorded reason is:\n\n"
+        last-failure
+        "\nYou MUST address this specific failure before completing the wave. Do not repeat the\n"
+        "same approach that produced it; verify your delivery addresses the failure reason\n"
+        "before signalling completion.\n\n")
+       "")
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
    (if (string=? state-content "")
        ""
        (format "\n## Current State\n~a\n" state-content))))
+
+;; Extract the "## Last Failure" section (recorded by record-wave-failure! when
+;; a previous attempt failed delivery verification) so a retry can adapt. The
+;; wave doc content is embedded in the prompt, so the agent sees the reason.
+;; Returns the section body (without the heading) or "".
+(define (extract-last-failure wave-details)
+  ;; Line-based extraction (robust across Racket regexp quirks): find the
+  ;; "## Last Failure" heading and collect the following lines up to the
+  ;; next top-level heading (##) or end of the document.
+  (define lines (string-split wave-details "\n"))
+  (define heading-idx
+    (for/first ([i (in-naturals)]
+                [l (in-list lines)]
+                #:when (string=? (string-trim l) "## Last Failure"))
+      i))
+  (if (not heading-idx)
+      ""
+      (string-join (for/list ([l (in-list (list-tail lines (add1 heading-idx)))]
+                              #:break (and (>= (string-length (string-trim l)) 2)
+                                           (string-prefix? (string-trim l) "##")))
+                     l)
+                   "\n")))
 
 ;; v1.00.03: resolve the per-campaign wave budget at /go time.
 ;; Precedence: /go --wave-timeout=SECONDS flag > ~/.q/config.json

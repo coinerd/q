@@ -341,6 +341,33 @@
   (define result (parse-wave-content content))
   (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))
 
+(test-case "clean-file-path strips parenthetical annotation"
+  ;; Wave docs annotate file paths with explanatory prose in parens, e.g.
+  ;;   - File: q/docs/reports/test-regression-log.md (new: full-regression evidence log)
+  ;; The annotation is not part of the path; parsing it into the path would
+  ;; make delivery verification compare against a path that never exists.
+  (check-equal?
+   (clean-file-path "q/docs/reports/test-regression-log.md (new: full-regression evidence log)")
+   "q/docs/reports/test-regression-log.md"))
+
+(test-case "clean-file-path strips annotation from directory paths"
+  (check-equal? (clean-file-path "q/tests/runtime/ (test files gaining @covers tags)")
+                "q/tests/runtime/")
+  (check-equal?
+   (clean-file-path
+    "q/tests/providers/ (test files gaining @covers tags; adjust to actual llm-provider test directory)")
+   "q/tests/providers/"))
+
+(test-case "clean-file-path preserves parens inside a real path"
+  ;; Parentheses WITHOUT a leading space are part of the path, not an
+  ;; annotation; they must be preserved.
+  (check-equal? (clean-file-path "q/foo (bar)/x.rkt") "q/foo (bar)/x.rkt"))
+
+(test-case "parse-wave-content strips parenthetical annotation from - File:"
+  (define content "- File: q/docs/reports/test-regression-log.md (new: full-regression evidence log)")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/docs/reports/test-regression-log.md")))
+
 (test-case "parse-wave-content strips backticks in ## Files bare bullets"
   (define content "## Files\n- `q/foo.rkt`\n- ```q/bar.rkt```\n## Action\nDo stuff")
   (define result (parse-wave-content content))
