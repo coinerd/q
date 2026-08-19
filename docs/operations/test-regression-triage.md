@@ -5,6 +5,11 @@ scheduled/manual workflow (`.github/workflows/full-regression.yml`). This doc
 covers the four regression events that require an explicit, bounded response.
 This is operational documentation, not a test-reporting contract.
 
+Governance: the canonical test-strategy governance document is
+[`docs/TDD-TEST-STRATEGY-PLAN.md`](../TDD-TEST-STRATEGY-PLAN.md) (adopted in v1.00.04;
+supersedes PR #9348) — see its "Adoption status" section for how
+the full-regression workflow is wired into the L4 contract.
+
 **Release linkage (binding rule):** release readiness depends on the
 `full-regression` workflow's evidence — a scheduled run's summary or a fresh
 manual `workflow_dispatch` run — **never** on a successful `fast` gate run

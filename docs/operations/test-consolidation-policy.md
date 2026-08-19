@@ -4,6 +4,10 @@ Status: **Active** (introduced by W9 — Adequacy Pilot & Consolidation Policy)
 Owner: q maintainers
 Related tooling: `scripts/run-tests/mutation-pilot.rkt` (bounded adequacy pilot)
 Related workflow: `.github/workflows/full-regression.yml` (`mutation-pilot` opt-in scheduled job)
+Governance: canonical test strategy is documented in
+[`docs/TDD-TEST-STRATEGY-PLAN.md`](../TDD-TEST-STRATEGY-PLAN.md) (adopted in v1.00.04;
+supersedes PR #9348) — Phase 5 defines the adequacy evidence this
+policy requires before any consolidation.
 
 ## Purpose
 
