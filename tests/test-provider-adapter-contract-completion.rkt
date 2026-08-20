@@ -95,7 +95,7 @@
 
 (test-case "W1-B1: every unsupported W0 cell has one typed capability record"
   (check-equal? (check-typed-unsupported-complete!) '())
-  (check-equal? (length typed-unsupported-capabilities) 2)
+  (check-equal? (length typed-unsupported-capabilities) 1)
   (for ([record (in-list typed-unsupported-capabilities)])
     (check-true (symbol? (unsupported-capability-provider record)))
     (check-true (symbol? (unsupported-capability-scenario record)))
@@ -105,10 +105,11 @@
     (check-true (positive? (string-length (unsupported-capability-rationale record))))))
 
 (test-case "W1-B2: typed records remain source-grounded, not artificially equal"
-  (define anthropic (typed-unsupported-capability-for 'reasoning-delta 'anthropic))
   (define gemini (typed-unsupported-capability-for 'reasoning-delta 'gemini))
-  (check-equal? (unsupported-capability-kind anthropic) 'unmapped-event)
-  (check-equal? (unsupported-capability-observable anthropic) 'no-chunks)
+  ;; v1.00.05 W0: anthropic gained delta-thinking normalization → its typed
+  ;; unsupported record was removed. Gemini remains the only unsupported one.
+  (check-false (typed-unsupported-capability-for 'reasoning-delta 'anthropic)
+               "anthropic reasoning-delta now supported (no typed record)")
   (check-equal? (unsupported-capability-kind gemini) 'mapped-to-text-not-thinking)
   (check-false (unsupported-capability-observable gemini)))
 

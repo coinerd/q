@@ -386,4 +386,8 @@
       ("runtime/auto-retry.rkt"
        (risk
         . "Retry engine: exponential backoff, per-type budgets, cumulative ceiling, circuit breakers, partial-recovery unwrap, and cancellation-aware sleep (v0.99.93 #9280)")
-       (owner . "runtime"))))))
+       (owner . "runtime"))
+      ("extensions/gsd/command-handlers.rkt"
+       (risk
+        . "GSD command dispatch + wave prompt builder; grew via delivery-verifier fixes #9382/#9386/#9390; high change frequency")
+       (owner . "extensions"))))))

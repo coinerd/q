@@ -42,6 +42,10 @@
              [idx (in-naturals)])
     (cond
       [(hash-ref part 'text #f) (make-stream-chunk (hash-ref part 'text) #f #f #f)]
+      ;; v1.00.05 W0: thinking part → emit delta-thinking chunk so the agent
+      ;; loop surfaces kimi/Anthropic reasoning tokens.
+      [(equal? (hash-ref part 'type #f) "thinking")
+       (make-stream-chunk #f #f #f #f #:delta-thinking (hash-ref part 'thinking ""))]
       [(equal? (hash-ref part 'type #f) "tool-call")
        (define raw-id (hash-ref part 'id #f))
        (define tcid
