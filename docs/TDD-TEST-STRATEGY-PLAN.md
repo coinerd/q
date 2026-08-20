@@ -55,13 +55,15 @@ via `racket scripts/run-tests.rkt --generate-covers-manifest` (landed via the
 W0–W2 campaign merges, #9376/#9381/#9383). No repository-wide mapping quota was
 introduced; unmapped sources keep the fail-open fallback.
 
-### Metadata lint — report-only in CI, enforcement in v1.00.05 (W2)
+### Metadata lint — blocking in CI since v1.00.06 (W2 report-only → W3 enforced)
 
-`.github/workflows/ci.yml` runs a `metadata-lint` step in report-only mode
-(`continue-on-error: true`); missing mandatory tags are visible in the run
-log/summary without gating merges (PR #9383). Current coverage: `@speed`
-1,298/1,298 files, `@boundary` 1,280/1,298, `@area` ownership map complete.
-Enforcement flips to blocking in v1.00.05 per the schedule recorded in
+`.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
+(`continue-on-error: true` removed); missing mandatory tags now fail the build.
+The step shipped report-only in PR #9383 with enforcement scheduled for
+v1.00.05. That milestone slipped one release: at v1.00.06 the report-only
+inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
+`missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
+so enforcement flipped then — evidence-gated, per the schedule recorded in
 `docs/TEST_CONVENTIONS.md`.
 
 ### Full regression — nightly + manual dispatch, first-run evidence recorded (W3)
@@ -113,7 +115,8 @@ remains blocked without the full evidence set required by
 ### Delivered vs. deferred
 
 **Operational:** the local impact loop with a fail-open selector; the expanded
-`@covers` manifest; report-only metadata lint with a dated enforcement flip;
+`@covers` manifest; the metadata lint, which ran report-only until the
+inventory reached zero missing tags and turned blocking in v1.00.06;
 nightly/manual full regression with retained evidence and a triage protocol;
 the active duration-aware shard plan; and the bounded mutation pilot with
 survivor-driven test strengthening.

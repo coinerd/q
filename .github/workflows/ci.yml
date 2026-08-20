@@ -72,13 +72,15 @@ jobs:
       - name: Verify lint alignment
         run: racket scripts/check-lint-alignment.rkt
 
-      # Metadata lint (report-only): surfaces missing mandatory tag warnings
-      # (@speed/@boundary on every test file) in the run log without gating.
-      # Invalid tags remain hard-failing inside the lint itself; this step
-      # must not weaken any existing check. Flips blocking at v1.00.05 —
-      # see docs/TEST_CONVENTIONS.md "Test metadata schema: required vs conditional".
-      - name: metadata-lint (report-only)
-        continue-on-error: true
+      # Metadata lint (blocking): missing mandatory tags (@speed/@boundary
+      # on every test file) now fail the build. Invalid tags were always
+      # hard-failing inside the lint itself; this step must not weaken any
+      # existing check. Enforcement actually flipped at v1.00.06 — the
+      # documented v1.00.05 milestone slipped by one release because the
+      # report-only inventory had to reach zero missing tags first
+      # (evidence: exit 0, missing-required=0 across 1,299 files) — see
+      # docs/TEST_CONVENTIONS.md "Test metadata schema: required vs conditional".
+      - name: metadata-lint (blocking)
         run: racket scripts/run-tests.rkt --lint-metadata
 
   # ────────────────────────────────────────────────────────────
