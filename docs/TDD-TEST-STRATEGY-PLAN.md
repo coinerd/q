@@ -47,9 +47,11 @@ gates, because the shadow job could not fit the job runtime budget.
 
 ### `@covers` manifest — pilot-area expansion complete (W1)
 
-`tests/.coverage-manifest.json` now maps **94 test files** covering **92
+`tests/.coverage-manifest.json` now maps **95 test files** covering **92
 production modules** in the reviewed pilot areas (runtime, tools, providers,
-extensions, TUI), up from the 10-file / 20-module baseline. Every entry is
+extensions, TUI), up from the 10-file / 20-module baseline. The generated
+manifest is the source of truth for this figure; earlier governance records
+cited 94 reviewed pilot tests before the final regeneration. Every entry is
 `source: metadata` — reviewed `@covers` tags, not name inference — regenerated
 via `racket scripts/run-tests.rkt --generate-covers-manifest` (landed via the
 W0–W2 campaign merges, #9376/#9381/#9383). No repository-wide mapping quota was
@@ -59,9 +61,9 @@ introduced; unmapped sources keep the fail-open fallback.
 
 `.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
 (`continue-on-error: true` removed); missing mandatory tags now fail the build.
-The step shipped report-only in PR #9383 with enforcement scheduled for
-v1.00.05. That milestone slipped one release: at v1.00.06 the report-only
-inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
+The step shipped report-only in PR #9383 with enforcement originally
+scheduled for v1.00.06; that milestone slipped one release, and at v1.00.06
+the report-only inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
 `missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
 so enforcement flipped then — evidence-gated, per the schedule recorded in
 `docs/TEST_CONVENTIONS.md`.

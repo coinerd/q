@@ -374,7 +374,7 @@
       (cleanup-tmp base))
 
     (test-case "approves git-root-relative wave files (no q/ prefix)"
-      ;; v1.00.06 regression: wave docs may declare CI/workflow paths
+      ;; regression (W-campaign): wave docs may declare CI/workflow paths
       ;; git-root-relative (".github/workflows/ci.yml", "scripts/run-tests/...")
       ;; instead of repo-root-relative ("q/.github/..."). This mirrors the real
       ;; two-tier checkout: base-dir (/home/user/src/q-agent) is NOT a git repo;
