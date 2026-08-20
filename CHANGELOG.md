@@ -5,6 +5,8 @@
 > enforcement decision (W0–W3); first clean full-regression run + governance
 > closure (W4). Merged via PR #9400.
 
+Released 2026-08-20.
+
 ### Bug Fixes
 
 - **Full-regression evidence path repaired (#9384).** The `full-regression.yml`
