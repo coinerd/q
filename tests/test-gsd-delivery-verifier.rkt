@@ -438,6 +438,78 @@
       (check-true (delivery-verification-approved? result) (delivery-verification-message result))
       (cleanup-tmp base))
 
+    (test-case "approves merged-to-main delivery via campaign created-at"
+      ;; Regression (v1.00.06): the wave agent committed + merged its work to
+      ;; main, so HEAD == origin/main and the base-relative diff is empty. The
+      ;; verifier must recognize delivery when the wave target files changed in
+      ;; commits since the campaign's creation time (the campaign base). Without
+      ;; created-at the wave is rejected; with it the wave is approved.
+      (define base (make-temporary-file "dv-merged-~a" 'directory))
+      (make-directory* (build-path base ".planning" "waves"))
+      (make-directory* (build-path base "q" ".github" "workflows"))
+      (make-directory* (build-path base "q" "scripts" "run-tests"))
+      (define (sh . args)
+        (define exit
+          (parameterize ([current-directory (build-path base "q")])
+            (apply system*/exit-code GIT args)))
+        (unless (zero? exit)
+          (error 'merged "command failed: ~a" (cons 'sh args))))
+      (sh "init" "-q" ".")
+      (sh "config" "user.email" "test@example.com")
+      (sh "config" "user.name" "Test")
+      (sh "checkout" "-q" "-b" "main")
+      ;; baseline commit BEFORE the campaign
+      (call-with-output-file (build-path base "q" ".github" "workflows" "full-regression.yml")
+                             (lambda (out) (display "name: full-regression\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file
+       (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+       (lambda (out)
+         (display
+          "#lang racket/base\n(provide write-json-results!)\n(define (write-json-results! p) p)\n"
+          out))
+       #:exists 'truncate)
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "baseline")
+      ;; campaign created-at = now (before the wave work)
+      (define created-at (current-seconds))
+      (sleep 2)
+      ;; wave work committed + merged to main (HEAD == origin/main after merge)
+      (call-with-output-file (build-path base "q" ".github" "workflows" "full-regression.yml")
+                             (lambda (out) (display "name: full-regression-v2\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file
+       (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+       (lambda (out)
+         (display (string-append
+                   "#lang racket/base\n"
+                   "(require racket/path racket/file)\n"
+                   "(provide write-json-results!)\n"
+                   "(define (write-json-results! p) (when p (make-directory* (path-only p))))\n")
+                  out))
+       #:exists 'truncate)
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "W0: repair full-regression evidence path")
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       (list ".github/workflows/full-regression.yml"
+                             "scripts/run-tests/reporting.rkt")
+                       "raco make q/scripts/run-tests/reporting.rkt")
+      ;; no write-state!: issue-less campaign (like v1.00.06), work on main
+      (define plan
+        (load-plan** base
+                     (list ".github/workflows/full-regression.yml"
+                           "scripts/run-tests/reporting.rkt")))
+      (define without (run-delivery-verification base plan 0))
+      (check-false (delivery-verification-approved? without)
+                   "without created-at, merged-to-main work is not visible (HEAD == base)")
+      (define with-created (run-delivery-verification base plan 0 created-at))
+      (check-true (delivery-verification-approved? with-created)
+                  (delivery-verification-message with-created))
+      (cleanup-tmp base))
+
     (test-case "compile gate skips non-Racket files (ci.yml, docs)"
       ;; Waves that touch .yml/.md alongside .rkt must compile only the
       ;; Racket targets; raco make fails on non-module files.
