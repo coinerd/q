@@ -213,26 +213,30 @@ The runner reads these tags for classification. Files without tags use heuristic
 
 Not every field applies to every file. The schema distinguishes fields that are
 mandatory on **every** test file from fields that are **conditional** (required
-only when the stated condition holds). CI surfaces missing mandatory tags via
-the report-only `metadata-lint` step in `.github/workflows/ci.yml`
-(`continue-on-error: true`); invalid tags are always hard failures and are not
-weakened by the report-only mode.
+only when the stated condition holds). CI enforces missing mandatory tags via
+the blocking `metadata-lint` step in `.github/workflows/ci.yml`; invalid tags
+are hard failures inside the lint itself and always were.
 
 | Field | Status | Condition |
 |-------|--------|-----------|
-| `@speed` | **Mandatory on every test file** | — (near-100% coverage: 1,298 of 1,298 files) |
-| `@boundary` | **Mandatory on every test file** | — (near-100% coverage: 1,280 of 1,298 files) |
+| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.06 inventory) |
+| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.06 inventory) |
 | `@area` | **Mandatory on every test file** | — (ownership map complete) |
 | `@suite` | Conditional | Required when the test belongs to a named suite (`runtime`, `tui`, `cli`, `llm`, `tools`, `extensions`) |
 | `@mutates` | Conditional | Required when the test mutates persistent state (values other than `none`) |
 | `@isolation` | Conditional | Required when the test needs non-default isolation (`mutating` or `process`) |
 | `@timeout` | Conditional | Required when the test needs a non-default timeout |
 
-**Enforcement date:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
-stay report-only until the next minor milestone, where enforcement flips in
-**v1.00.05** and the `metadata-lint` CI step changes from `continue-on-error:
-true` to blocking. Until that date the report-only mode stays in place so
-existing gaps are visible in the run log/summary without gating merges.
+**Enforcement status:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
+were report-only (`continue-on-error: true`) until the inventory reached zero
+gaps. Enforcement was scheduled for v1.00.06 but flipped to blocking one
+release later, in **v1.00.06**: the report-only inventory run at that point
+returned exit 0 with `missing-required=0` across all 1,299 test files
+(invalid=0, deprecated-alias=0), so the `metadata-lint` CI step dropped
+`continue-on-error: true` and became `metadata-lint (blocking)`. CI
+configuration and this document now describe the same enforced state; the
+v1.00.06 milestone slipping was deliberate, not silent — it waited on the
+evidence (a clean inventory) rather than on a date.
 
 ## Test Sandbox
 

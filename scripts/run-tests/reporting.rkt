@@ -9,6 +9,7 @@
 ;; STABILITY: internal
 
 (require racket/string
+         racket/file
          racket/path
          racket/list
          json
@@ -421,6 +422,7 @@
     (if extra
         (hash-set payload 'extra extra)
         payload))
+  (make-parent-directory* path)
   (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload* out))))
 
 (define (print-ledger-summary ledger results)

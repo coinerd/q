@@ -100,6 +100,7 @@ jobs:
       - name: Run shard ${{ matrix.shard }}/6
         run: |
           set -euo pipefail
+          mkdir -p shard-results
           LEDGER_ARGS=()
           if [ -f .github/known-failures.json ]; then
             LEDGER_ARGS=(--ledger .github/known-failures.json)
@@ -174,6 +175,7 @@ jobs:
       - name: Run workflows suite
         run: |
           set -euo pipefail
+          mkdir -p shard-results
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite workflows --jobs 4 \
             --json-out shard-results/workflows.json \
@@ -197,17 +199,18 @@ jobs:
   test-platform:
     if: github.event.schedule != '30 3 * * 0'
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 90 # Racket setup alone consumed 42.3 min on cold macOS
+                        # caches (runs 32288930966 / 32297908687). Explicit
+                        # budget revision per issue #9384 follow-up: setup must
+                        # fit inside the job budget; suite itself is ~15 min.
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
-
+      # No outer ~/.local/share/racket package cache in this job (unlike the
+      # Linux shard jobs): the ./.github/actions/setup-racket composite action
+      # already caches ~/.racket + ./compiled, and the duplicate outer
+      # save/restore amplified cold-cache setup time on macOS (runs
+      # 32288930966 / 32297908687). Single cache owner: the composite action.
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -221,6 +224,7 @@ jobs:
       - name: Run platform-cross suite (macos-arm64)
         run: |
           set -euo pipefail
+          mkdir -p shard-results
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite platform --jobs 4 \
             --json-out shard-results/platform.json \
@@ -263,7 +267,16 @@ jobs:
         run: |
           set -euo pipefail
           EXPECTED_SHARDS=6
-          SHARD_FILES=(shards/shard-results/shard-*.json)
+          # download-artifact with merge-multiple: true flattens artifact contents
+          # directly into shards/ (observed in run 32297908687). Collect from the
+          # flattened layout first, then fall back to the nested shard-results/
+          # layout in case artifact structure ever preserves the prefix. nullglob
+          # makes a missing dir an empty list, never an unexpanded literal pattern.
+          shopt -s nullglob
+          SHARD_FILES=(shards/shard-*.json)
+          if [ ${#SHARD_FILES[@]} -eq 0 ]; then
+            SHARD_FILES=(shards/shard-results/shard-*.json)
+          fi
 
           # Merge every shard's W0-schema record into matrix-summary.json:
           # pass/fail/timeout/skip, wall clock, profile, runner mode per shard.

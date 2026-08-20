@@ -1,3 +1,43 @@
+## [1.00.06] - 2026-08-20
+
+> TDD plan reassessment closure: full-regression evidence-path repair (#9384),
+> DEEP-9 semver assertion fix, macOS platform budget revision, metadata-lint
+> enforcement decision (W0–W3); first clean full-regression run + governance
+> closure (W4). Merged via PR #9400.
+
+### Bug Fixes
+
+- **Full-regression evidence path repaired (#9384).** The `full-regression.yml`
+  workflow dropped the six per-shard Linux records (`results-shard-0..5.json`)
+  from run-summary inputs and `summarize` never published `run-summary.json`,
+  so evidence for the L4 contract could not be recorded. `full-regression.yml`
+  now globs and uploads `results-shard-*.json` as named workflow inputs; the
+  `summarize` job always publishes `run-summary.json`; the macOS platform job
+  runs the suite and uploads usable evidence within a revised timeout budget
+  (setup-timeout raised so the platform job no longer dies during setup).
+- **DEEP-9 stale semantic-version assertion fixed.** `tests/test-self-hosting-deep.rkt`
+  asserted the literal version `1.00.05`, breaking on any bump; it now asserts
+  a semver floor (`>= 1.0.0`) so the self-hosting gate stays green across
+  releases. Confirmed green at 1.00.06.
+
+### Testing
+
+- **Metadata-lint enforcement decision enacted (W3).** `scripts/lint-all.rkt`
+  metadata checks are now blocking in CI (removed from the non-blocking tier);
+  a metadata-lint failure fails the `lint` job instead of warn-only.
+- **First clean full-regression run (definitive `pass`).** All six Linux shard
+  records present in run-summary inputs, `run-summary.json` published with
+  `status: pass`, green `workflows-suite`, and a macOS platform job that
+  executed the suite and uploaded usable evidence. Recorded in
+  `docs/reports/test-regression-log.md`.
+
+### Governance
+
+- **Governance reconciliation.** #9384 closed citing remediation PRs and the
+  clean run; #9348 closed as superseded by the canonical
+  `docs/TDD-TEST-STRATEGY-PLAN.md` on main (v1.00.06). Plan governance figures
+  now match the generated manifest (95 entries / 92 modules).
+
 ## [Unreleased]
 
 > v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE — merged via PR #9370 (main `76ae7946`).
