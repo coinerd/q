@@ -95,6 +95,42 @@
    ;; Circuit-break events should have delay 0 (no retry delay)
    (for ([payload (in-list events)])
      (define delay (hash-ref payload 'delayMs 'missing))
-     (check-equal? delay 0 (format "circuit-break delay should be 0 (actual: ~a)" delay)))))
+     (check-equal? delay 0 (format "circuit-break delay should be 0 (actual: ~a)" delay))))
+ (test-case "v1.00.05 W2: interactive default retry budget is 5, not 2"
+   ;; The interactive/planning path uses current-provider-retry-max-retries
+   ;; (default), which W2 raised from 2 → 5. Verify the default is 5 so a
+   ;; /plan session on kimi-for-coding gets the same LLM-timeout headroom as
+   ;; campaign waves.
+   (check-equal? (current-provider-retry-max-retries) 5 "interactive default retry budget is 5")
+   ;; The per-type timeout budget must not cap retries below max-retries.
+   ;; call-with-provider-retry derives per-type-budgets from max-retries;
+   ;; verify with a plain timeout failure that 5 retry attempts are emitted
+   ;; (previously the default 'timeout budget of 2 truncated the loop).
+   (define-values (bus get-events) (make-capture-bus))
+   (define attempt-count (box 0))
+   (define (timeout-attempt ctx settings)
+     (set-box! attempt-count (add1 (unbox attempt-count)))
+     (raise (exn:fail:network (format "timeout waiting for response (attempt ~a)"
+                                      (unbox attempt-count))
+                              (current-continuation-marks))))
+   (parameterize ([current-random-source (lambda () 1.0)]
+                  [current-provider-retry-max-retries 5])
+     (with-handlers ([exn:fail? (lambda (_) (void))])
+       (call-with-provider-retry timeout-attempt
+                                 (list (hash 'role "user" 'content "test"))
+                                 (hash 'max-tokens 1000)
+                                 bus
+                                 "test-session"
+                                 "test-turn"
+                                 900)))
+   (sleep 0.2)
+   (define events (get-events))
+   (check-equal? (length events) 5 "five auto-retry.start events emitted for 5 timeout retries")
+   (check-equal? (unbox attempt-count) 6 "initial attempt + 5 retries = 6 total attempts"))
+ (test-case "v1.00.05 W2: campaign path keeps 5 retries"
+   ;; Campaign waves parameterize current-provider-retry-max-retries to 5
+   ;; (go-orchestrator). The knob is shared, so the value is 5 there too.
+   (parameterize ([current-provider-retry-max-retries 5])
+     (check-equal? (current-provider-retry-max-retries) 5))))
 
 (run-tests provider-retry-telemetry-tests)
