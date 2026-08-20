@@ -335,6 +335,42 @@ metadata-lint enforcement). This is the release-evidence run for v1.00.06.
 |---|---|---|---|---|---|---|
 | test-platform | ❌ suite fail (2 platform-specific assertions) | 38 | 36 | 2 | 180.7 s | **suite executed to completion + evidence uploaded** — W2 budget revision worked (no setup-timeout death, unlike runs 32288930966 / 32297908687 which were cancelled inside `setup-racket`); `results-platform` artifact retained. Failures are genuine macOS-specific assertions, not infra/timeout: `tests/test-subprocess-edge-cases.rkt` (1 fail → **#9406**), `tests/test-worker-security.rkt` (1 fail → **#9407**). Per the W4 required outcome the macOS job must execute the suite and upload usable evidence — both satisfied. **Correction:** this platform-suite `fail` means the run-level definitive status cannot be `pass`; both failures are now owner-tracked (#9406, #9407) with artifact evidence and expiry policy. |
 
+#### Failure evidence excerpts (#9406 / #9407 — captured for W2)
+
+Verbatim from the retained `results-platform` artifact of run 32369346059
+(`shard-results/platform.json` + `test-output.log`; suite verdict `❌ FAIL`,
+685 tests total, 683 passed, 2 failed, wall 180.7 s, runner `1.00.06`,
+execution-mode `subprocess`, profile `local`):
+
+**#9406 — `tests/test-subprocess-edge-cases.rkt`** — file record `fail`,
+`ASSERTION_FAILURE`, 12 passed / 1 failed / 13 total, exit 1:
+
+```text
+subprocess edge case tests > sp12: sh still errors on pipestatus but with exit-2 (baseline for d3)
+failure
+name:       check-equal?
+location:   test-subprocess-edge-cases.rkt:266:6
+message:    "dash exits 2 on bad substitution"
+actual:     0
+expected:   2
+```
+
+**#9407 — `tests/test-worker-security.rkt`** — file record `fail`,
+`ASSERTION_FAILURE`, 31 passed / 1 failed / 32 total, exit 1:
+
+```text
+worker security (v0.99.3 w1: h3, m4, m5) > lf3: resolve-longest-prefix resolves symlink in middle of path
+failure
+name:       check-true
+location:   tests/test-worker-security.rkt:241:12
+params:     '(#f)
+message:
+  "lf3: symlink to allowed dir + non-existent path should be accepted"
+```
+
+These excerpts are reproduced in the owner-tracked issues (#9406, #9407) and
+serve as the baseline evidence for the W2 macOS platform-test fixes.
+
 ### Totals (Linux, six shards)
 
 | Metric | Value |
@@ -386,6 +422,9 @@ reported `fail`.
   assertion text, artifact/run links, isolated reproduction, and a
   fix-or-quarantine-with-expiry policy per
   `docs/operations/test-regression-triage.md`.
+- Provenance: the pass→fail correction was applied in #9408; the verbatim
+  assertion evidence backing it is captured above ("Failure evidence excerpts")
+  and reproduced in #9406 / #9407.
 - Consequence for v1.00.06: the release evidence for v1.00.06 relied on this
   run's `pass`; that reliance is invalid. Release-blocking status resumes until
   #9406 and #9407 resolve (fix or time-bounded quarantine) and a clean
