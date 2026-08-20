@@ -1038,7 +1038,7 @@
      (make-anthropic-provider (hash 'api-key "test-key" 'base-url base-url 'model "timeout-model")))))
 
 ;; ============================================================
-;; v1.00.05 W0 — eager-stream surfaces thinking parts as delta-thinking
+;; [kimi milestone W0] — eager-stream surfaces thinking parts as delta-thinking
 ;; ============================================================
 
 (test-case "eager-stream converts thinking content part into delta-thinking chunk"
@@ -1081,7 +1081,7 @@
                 "text block still surfaced after thinking block"))
 
 ;; ============================================================
-;; v1.00.05 W1 — sse-read timeout wiring for the kimi non-streaming path
+;; [kimi milestone W1] — sse-read timeout wiring for the kimi non-streaming path
 ;; ============================================================
 
 (test-case "effective-sse-read-timeout-for feeds the kimi non-streaming read path"
