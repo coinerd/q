@@ -28,7 +28,10 @@
                   current-secret-scrub-denylist
                   current-secret-scrub-allowlist
                   current-secret-scrub-patterns)
-         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
+         (only-in "../llm/stream.rkt"
+                  current-http-request-timeout
+                  current-model-timeouts
+                  current-model-sse-read-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
@@ -103,7 +106,19 @@
                     (hash-ref v 'request))
           acc)))
   (current-model-timeouts model-timeouts)
-  (current-http-request-timeout (http-request-timeout settings)))
+  (current-http-request-timeout (http-request-timeout settings))
+  ;; v1.00.05 W1 (#9393): wire per-model sse-read timeouts
+  ;; (timeouts.models.<model>.sse-read) into current-model-sse-read-timeouts.
+  (define model-sse-read-timeouts
+    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+      (if (and (hash? v) (hash-has-key? v 'sse-read))
+          (hash-set acc
+                    (if (symbol? k)
+                        (symbol->string k)
+                        k)
+                    (hash-ref v 'sse-read))
+          acc)))
+  (current-model-sse-read-timeouts model-sse-read-timeouts))
 
 ;; Apply memory settings from config to current parameters.
 ;; Sets injection budget from settings.

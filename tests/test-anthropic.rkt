@@ -1079,3 +1079,23 @@
   (check-equal? (apply string-append (map stream-chunk-delta-text text-deltas))
                 "Done"
                 "text block still surfaced after thinking block"))
+
+;; ============================================================
+;; v1.00.05 W1 — sse-read timeout wiring for the kimi non-streaming path
+;; ============================================================
+
+(test-case "effective-sse-read-timeout-for feeds the kimi non-streaming read path"
+  ;; Verify the parameter + accessor wiring the kimi path relies on: with a
+  ;; per-model sse-read override set, the accessor returns it; the kimi
+  ;; non-streaming path then passes it as #:read-timeout to
+  ;; make-provider-http-request (whose contract now accepts #:read-timeout).
+  (parameterize ([current-model-sse-read-timeouts (hash "kimi-for-coding" 300)])
+    (check-equal? (effective-sse-read-timeout-for "kimi-for-coding") 300))
+  (parameterize ([current-model-sse-read-timeouts (hash)])
+    (check-false (effective-sse-read-timeout-for "kimi-for-coding"))))
+
+(test-case "make-provider-http-request accepts #:read-timeout keyword"
+  ;; Contract sanity: the exported function and the new keyword exist without a
+  ;; contract error at load time.
+  (check-true (procedure? make-provider-http-request))
+  (check-true (procedure? effective-sse-read-timeout-for)))

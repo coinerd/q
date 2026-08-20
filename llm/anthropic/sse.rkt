@@ -22,11 +22,15 @@
                   close-port-after-stream
                   stream-sse-events
                   call-with-request-timeout
+                  effective-sse-read-timeout-for
                   read-response-body/timeout)
          (only-in "../http-helpers.rkt"
                   make-provider-http-request
                   check-provider-status!
                   parse-provider-url)
+         (only-in "../model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
+         (only-in "../model.rkt" model-request-settings)
+         (only-in "../provider.rkt" make-provider validate-api-key! ensure-model-setting)
          (only-in "format.rkt"
                   anthropic-provider-name
                   ANTHROPIC-VERSION
@@ -45,7 +49,12 @@
 ;; HTTP request execution (non-streaming)
 ;; ============================================================
 
-(define (anthropic-do-http-request base-url api-key path body [provider-name "anthropic"])
+(define (anthropic-do-http-request base-url
+                                   api-key
+                                   path
+                                   body
+                                   [provider-name "anthropic"]
+                                   #:model-name [model-name #f])
   (define url-str (string-append (string-trim base-url "/") path))
   (define headers
     (list* (format "x-api-key: ~a" api-key)
@@ -54,9 +63,15 @@
            (if (equal? provider-name "kimi-coding")
                (list "User-Agent: KimiCLI/1.5")
                '())))
+  ;; v1.00.05 W1 (#9393): honor the per-model sse-read timeout for the body
+  ;; read instead of the hardcoded 120s fallback. effective-sse-read-timeout-for
+  ;; returns #f when the model has no override — make-provider-http-request then
+  ;; falls back to http-read-timeout-default.
+  (define read-timeout (and model-name (effective-sse-read-timeout-for model-name)))
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
+                              #:read-timeout read-timeout
                               #:status-checker
                               (lambda (sl rb) (check-provider-status! "Anthropic" sl rb))))
 
@@ -70,8 +85,14 @@
 (define (kimi-eager-stream-chunks req base-url api-key provider-name default-model)
   (define merged-req (ensure-model-setting req default-model))
   (define body (anthropic-build-request-body merged-req #:stream? #f))
+  (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
   (define (kimi-completion-fn _req)
-    (anthropic-do-http-request base-url api-key "/v1/messages" body provider-name))
+    (anthropic-do-http-request base-url
+                               api-key
+                               "/v1/messages"
+                               body
+                               provider-name
+                               #:model-name model-name))
   (eager-stream kimi-completion-fn merged-req #:parse-response anthropic-parse-response))
 
 ;; ============================================================
@@ -86,7 +107,14 @@
   (define (send req)
     (define merged-req (ensure-model-setting req default-model))
     (define body (anthropic-build-request-body merged-req))
-    (define raw (anthropic-do-http-request base-url api-key "/v1/messages" body provider-name))
+    (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
+    (define raw
+      (anthropic-do-http-request base-url
+                                 api-key
+                                 "/v1/messages"
+                                 body
+                                 provider-name
+                                 #:model-name model-name))
     (anthropic-parse-response raw))
 
   ;; W10.1 (Q-19): dynamic-wind ensures response port cleanup on timeout/exception
