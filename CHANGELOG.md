@@ -1,4 +1,4 @@
-## [1.00.06] - 2026-08-20
+## 1.00.06
 
 > TDD plan reassessment closure: full-regression evidence-path repair (#9384),
 > DEEP-9 semver assertion fix, macOS platform budget revision, metadata-lint
@@ -37,6 +37,20 @@
   clean run; #9348 closed as superseded by the canonical
   `docs/TDD-TEST-STRATEGY-PLAN.md` on main (v1.00.06). Plan governance figures
   now match the generated manifest (95 entries / 92 modules).
+
+### Breaking / Behavior Changes
+
+- None. The metadata-lint enforcement (W3) makes previously warn-only CI
+  metadata checks blocking, which is a deliberate tightening of the release
+  gate rather than a runtime behavior change.
+
+### Migration Notes
+
+- None required.
+
+### Operational / Release
+
+- Version stamped `1.00.06`; wave PR #9400 merged to main.
 
 ## [Unreleased]
 
