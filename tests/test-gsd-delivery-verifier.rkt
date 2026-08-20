@@ -439,7 +439,7 @@
       (cleanup-tmp base))
 
     (test-case "approves merged-to-main delivery via campaign created-at"
-      ;; Regression (v1.00.06): the wave agent committed + merged its work to
+      ;; Regression: the wave agent committed + merged its work to
       ;; main, so HEAD == origin/main and the base-relative diff is empty. The
       ;; verifier must recognize delivery when the wave target files changed in
       ;; commits since the campaign's creation time (the campaign base). Without
@@ -497,7 +497,7 @@
                        (list ".github/workflows/full-regression.yml"
                              "scripts/run-tests/reporting.rkt")
                        "raco make q/scripts/run-tests/reporting.rkt")
-      ;; no write-state!: issue-less campaign (like v1.00.06), work on main
+      ;; no write-state!: issue-less campaign, work on main
       (define plan
         (load-plan** base
                      (list ".github/workflows/full-regression.yml"
