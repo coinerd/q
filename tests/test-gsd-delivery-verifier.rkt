@@ -415,9 +415,12 @@
       (call-with-output-file
        (build-path base "q" "scripts" "run-tests" "reporting.rkt")
        (lambda (out)
-         (display
-          "#lang racket/base\n(require racket/path racket/file)\n(provide write-json-results!)\n(define (write-json-results! p) (when p (make-directory* (path-only p))))\n"
-          out))
+         (display (string-append
+                   "#lang racket/base\n"
+                   "(require racket/path racket/file)\n"
+                   "(provide write-json-results!)\n"
+                   "(define (write-json-results! p) (when p (make-directory* (path-only p))))\n")
+                  out))
        #:exists 'truncate)
       (write-plan! base 0 "Wave Zero" "zero")
       (write-wave-doc! base
