@@ -90,19 +90,21 @@
          (matrix-cell #t '(1 "text") "same wire format as openai-compatible"))
    ;; 2. Streaming reasoning delta -> delta-thinking
    ;;    OpenAI/DeepSeek-style reasoning_content is normalized to
-   ;;    stream-chunk delta-thinking. Anthropic thinking blocks and Gemini
-   ;;    thought parts have NO delta-thinking normalization -> unsupported.
+   ;;    stream-chunk delta-thinking. v1.00.05 W0: Anthropic thinking_delta is
+   ;;    now normalized too (kimi/Anthropic extended thinking). Gemini thought
+   ;;    parts still have NO delta-thinking mapping -> unsupported.
    'reasoning-delta
-   (hash 'anthropic
-         (matrix-cell #f
-                      'no-chunks
-                      "thinking_delta has no delta-thinking normalization; event yields no chunk")
-         'gemini
-         (matrix-cell #f #f "thought part has no delta-thinking mapping; parsed as plain text chunk")
-         'openai-compatible
-         (matrix-cell #t "reasoning..." "delta.reasoning_content -> delta-thinking")
-         'azure-openai
-         (matrix-cell #t "reasoning..." "reuses normalize-openai-chunk -> delta-thinking"))
+   (hash
+    'anthropic
+    (matrix-cell #t
+                 "Let me think..."
+                 "thinking_delta -> delta-thinking (v1.00.05 W0: kimi/Anthropic extended thinking)")
+    'gemini
+    (matrix-cell #f #f "thought part has no delta-thinking mapping; parsed as plain text chunk")
+    'openai-compatible
+    (matrix-cell #t "reasoning..." "delta.reasoning_content -> delta-thinking")
+    'azure-openai
+    (matrix-cell #t "reasoning..." "reuses normalize-openai-chunk -> delta-thinking"))
    ;; 3. Non-streaming usage -> canonical keys (prompt/completion/total)
    'usage-nonstream
    (hash
@@ -236,16 +238,14 @@
 (struct unsupported-capability (provider scenario kind observable rationale) #:transparent)
 
 (define typed-unsupported-capabilities
-  (list (unsupported-capability 'anthropic
-                                'reasoning-delta
-                                'unmapped-event
-                                'no-chunks
-                                "thinking_delta is not handled by anthropic-parse-single-event")
-        (unsupported-capability 'gemini
+  (list (unsupported-capability 'gemini
                                 'reasoning-delta
                                 'mapped-to-text-not-thinking
                                 #f
                                 "thought parts emit delta-text but no delta-thinking")))
+
+;; v1.00.05 W0 removed the anthropic reasoning-delta record: kimi/Anthropic
+;; thinking_delta is now normalized to delta-thinking (supported).
 
 (define (typed-unsupported-capability-for scenario provider)
   (for/first ([record (in-list typed-unsupported-capabilities)]

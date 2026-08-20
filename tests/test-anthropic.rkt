@@ -11,6 +11,7 @@
          "../llm/stream.rkt"
          "../llm/anthropic.rkt"
          "../llm/http-helpers.rkt"
+         (only-in "../llm/adapters/eager-stream.rkt" eager-stream)
          "helpers/provider-stream-lifecycle.rkt")
 
 ;; ============================================================
@@ -144,6 +145,64 @@
               "tool input → arguments")
 
 ;; ============================================================
+;; 5b. anthropic-parse-response — thinking content blocks (kimi)
+;; ============================================================
+
+(define fake-thinking-response
+  (hash 'id
+        "msg_thk789"
+        'type
+        "message"
+        'role
+        "assistant"
+        'content
+        (list (hash 'type "thinking" 'thinking "We need respond to the user." 'signature "sig_abc")
+              (hash 'type "text" 'text "Hi"))
+        'model
+        "kimi-for-coding"
+        'stop_reason
+        "end_turn"
+        'usage
+        (hash 'input_tokens 13 'output_tokens 40)))
+
+(define parsed-thinking (anthropic-parse-response fake-thinking-response))
+(check-pred model-response? parsed-thinking "parsed thinking response is model-response?")
+(check-equal? (length (model-response-content parsed-thinking))
+              2
+              "thinking + text = 2 content blocks")
+
+(define thinking-content (car (model-response-content parsed-thinking)))
+(check-equal? (hash-ref thinking-content 'type) "thinking" "thinking block type preserved")
+(check-equal? (hash-ref thinking-content 'thinking)
+              "We need respond to the user."
+              "thinking text preserved")
+(check-equal? (hash-ref thinking-content 'signature) "sig_abc" "thinking signature preserved")
+
+;; ============================================================
+;; 5c. anthropic-parse-response — unknown block type kept raw (no crash)
+;; ============================================================
+
+(define fake-unknown-response
+  (hash 'id
+        "msg_unk"
+        'type
+        "message"
+        'role
+        "assistant"
+        'content
+        (list (hash 'type "redacted_thinking" 'data "x"))
+        'model
+        "kimi-for-coding"
+        'stop_reason
+        "end_turn"
+        'usage
+        (hash 'input_tokens 3 'output_tokens 1)))
+
+(define parsed-unknown (anthropic-parse-response fake-unknown-response))
+(check-pred model-response? parsed-unknown "unknown block type does not crash parse")
+(check-equal? (length (model-response-content parsed-unknown)) 1 "one unknown content block kept")
+
+;; ============================================================
 ;; 6. anthropic-parse-response — usage translation
 ;; ============================================================
 
@@ -252,6 +311,38 @@
 (check-equal? (length text-deltas) 2 "two text deltas")
 (check-equal? (stream-chunk-delta-text (car text-deltas)) "Hello")
 (check-equal? (stream-chunk-delta-text (cadr text-deltas)) " world")
+
+;; ============================================================
+;; 10b. anthropic-parse-stream-chunks — thinking_delta → delta-thinking
+;; ============================================================
+
+(define stream-thinking-events
+  (list
+   (hash 'type "content_block_start" 'index 0 'content_block (hash 'type "thinking" 'thinking ""))
+   (hash 'type
+         "content_block_delta"
+         'index
+         0
+         'delta
+         (hash 'type "thinking_delta" 'thinking "Let me reason about"))
+   (hash 'type
+         "content_block_delta"
+         'index
+         0
+         'delta
+         (hash 'type "thinking_delta" 'thinking " this problem."))
+   (hash 'type "content_block_stop" 'index 0)))
+
+(define stream-thinking-chunks (anthropic-parse-stream-chunks stream-thinking-events))
+(define thinking-deltas (filter (lambda (c) (stream-chunk-delta-thinking c)) stream-thinking-chunks))
+(check-equal? (length thinking-deltas) 2 "two thinking deltas emitted")
+(check-equal? (stream-chunk-delta-thinking (car thinking-deltas))
+              "Let me reason about"
+              "first thinking delta preserved")
+(check-equal? (stream-chunk-delta-thinking (cadr thinking-deltas))
+              " this problem."
+              "second thinking delta preserved")
+(check-false (stream-chunk-delta-text (car thinking-deltas)) "thinking chunk has no text delta")
 
 ;; ============================================================
 ;; 11. anthropic-parse-stream-chunks — message_delta → usage + done
@@ -945,3 +1036,46 @@
   (check-stream-setup-timeout-closes-peer
    (lambda (base-url)
      (make-anthropic-provider (hash 'api-key "test-key" 'base-url base-url 'model "timeout-model")))))
+
+;; ============================================================
+;; v1.00.05 W0 — eager-stream surfaces thinking parts as delta-thinking
+;; ============================================================
+
+(test-case "eager-stream converts thinking content part into delta-thinking chunk"
+  (define fake-response
+    (hash
+     'id
+     "msg_eager_thk"
+     'type
+     "message"
+     'role
+     "assistant"
+     'content
+     (list (hash 'type "thinking" 'thinking "I will solve this step by step." 'signature "sig_xyz")
+           (hash 'type "text" 'text "Done"))
+     'model
+     "kimi-for-coding"
+     'stop_reason
+     "end_turn"
+     'usage
+     (hash 'input_tokens 5 'output_tokens 12)))
+  (define gen
+    (eager-stream
+     (lambda (_req) fake-response)
+     (make-model-request (list (hash 'role "user" 'content "Go")) #f (hash 'model "kimi-for-coding"))
+     #:parse-response anthropic-parse-response))
+  (define chunks '())
+  (let loop ([c (gen)])
+    (when c
+      (set! chunks (cons c chunks))
+      (loop (gen))))
+  (define all-chunks (reverse chunks))
+  (define thinking-deltas (filter (lambda (c) (stream-chunk-delta-thinking c)) all-chunks))
+  (check-equal? (length thinking-deltas) 1 "one delta-thinking chunk from eager-stream")
+  (check-equal? (stream-chunk-delta-thinking (car thinking-deltas))
+                "I will solve this step by step."
+                "thinking text surfaced as delta-thinking")
+  (define text-deltas (filter (lambda (c) (stream-chunk-delta-text c)) all-chunks))
+  (check-equal? (apply string-append (map stream-chunk-delta-text text-deltas))
+                "Done"
+                "text block still surfaced after thinking block"))
