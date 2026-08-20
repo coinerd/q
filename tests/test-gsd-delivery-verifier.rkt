@@ -373,6 +373,71 @@
                   "stale issue row referencing a different wave doc must be ignored")
       (cleanup-tmp base))
 
+    (test-case "approves git-root-relative wave files (no q/ prefix)"
+      ;; v1.00.06 regression: wave docs may declare CI/workflow paths
+      ;; git-root-relative (".github/workflows/ci.yml", "scripts/run-tests/...")
+      ;; instead of repo-root-relative ("q/.github/..."). This mirrors the real
+      ;; two-tier checkout: base-dir (/home/user/src/q-agent) is NOT a git repo;
+      ;; the git root is base/q. The verifier must accept BOTH conventions — the
+      ;; repo-root mapping of a git-root-relative declaration escapes the git
+      ;; root ("../...") and must fall back to the declared path verbatim.
+      (define base (make-temporary-file "dv-gitrel-~a" 'directory))
+      (make-directory* (build-path base ".planning" "waves"))
+      (make-directory* (build-path base "q" ".github" "workflows"))
+      (make-directory* (build-path base "q" "scripts" "run-tests"))
+      (define (sh . args)
+        (define exit
+          (parameterize ([current-directory (build-path base "q")])
+            (apply system*/exit-code GIT args)))
+        (unless (zero? exit)
+          (error 'gitrel "command failed: ~a" (cons 'sh args))))
+      (sh "init" "-q" ".")
+      (sh "config" "user.email" "test@example.com")
+      (sh "config" "user.name" "Test")
+      (sh "checkout" "-q" "-b" "main")
+      (call-with-output-file (build-path base "q" ".github" "workflows" "full-regression.yml")
+                             (lambda (out) (display "name: full-regression\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file
+       (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+       (lambda (out)
+         (display
+          "#lang racket/base\n(provide write-json-results!)\n(define (write-json-results! p) p)\n"
+          out))
+       #:exists 'truncate)
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "add wave targets")
+      (sh "checkout" "-q" "-b" "feature/issue-42-wave")
+      ;; modify both targets (git-root-relative paths under q/)
+      (call-with-output-file (build-path base "q" ".github" "workflows" "full-regression.yml")
+                             (lambda (out) (display "name: full-regression-v2\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file
+       (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+       (lambda (out)
+         (display (string-append
+                   "#lang racket/base\n"
+                   "(require racket/path racket/file)\n"
+                   "(provide write-json-results!)\n"
+                   "(define (write-json-results! p) (when p (make-directory* (path-only p))))\n")
+                  out))
+       #:exists 'truncate)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       (list ".github/workflows/full-regression.yml"
+                             "scripts/run-tests/reporting.rkt")
+                       "raco make q/scripts/run-tests/reporting.rkt")
+      (write-state! base 0 "42")
+      (define plan
+        (load-plan** base
+                     (list ".github/workflows/full-regression.yml"
+                           "scripts/run-tests/reporting.rkt")))
+      (define result (run-delivery-verification base plan 0))
+      (check-true (delivery-verification-approved? result) (delivery-verification-message result))
+      (cleanup-tmp base))
+
     (test-case "compile gate skips non-Racket files (ci.yml, docs)"
       ;; Waves that touch .yml/.md alongside .rkt must compile only the
       ;; Racket targets; raco make fails on non-module files.

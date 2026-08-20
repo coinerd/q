@@ -176,12 +176,23 @@
      [else (cons #f detail)])))
 
 (define (wave-file->git-relative base-dir git-root wave-file)
-  ;; Wave files are repo-root-relative (e.g. "q/ui-core/preferences.rkt").
-  ;; Map to the path relative to git root (e.g. "ui-core/preferences.rkt"
-  ;; when git root is <base>/q).
+  ;; Wave files may be declared either repo-root-relative (e.g.
+  ;; "q/ui-core/preferences.rkt" when git root is <base>/q) or
+  ;; git-root-relative (e.g. ".github/workflows/ci.yml" when git root is
+  ;; <base>/q). Prefer the repo-root mapping; when it escapes the git root
+  ;; ("../..."), the wave file was declared git-root-relative, so use it
+  ;; verbatim. This makes the verifier tolerant of BOTH conventions: the
+  ;; canonical repo-root-relative form and the git-root-relative form that
+  ;; wave authors commonly use for CI/workflow paths.
   (define abs (path->complete-path (build-path base-dir wave-file)))
   (define rel (find-relative-path git-root abs))
-  (path->string rel))
+  (define rel-str (path->string rel))
+  ;; The repo-root mapping escapes the git root ("../...") when the wave
+  ;; file was declared git-root-relative. Detect the escape by prefix —
+  ;; string-prefix? is clearer than a char-class regexp here.
+  (if (or (string-prefix? rel-str "../") (string-prefix? rel-str "..\\"))
+      (string-trim wave-file)
+      rel-str))
 
 (define (base-branch-ref git-root)
   ;; The branch the current branch diverged from, used to attribute committed
