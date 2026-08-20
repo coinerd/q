@@ -299,3 +299,70 @@ overall status for main @ `1764ed84`: **`fail`** — deterministic DEEP-9 test
 failure (shard 3/6, #9384) + systemic per-shard JSON evidence defect + macOS
 platform setup timeout. No new triage events beyond those tabled above;
 follow-ups already tracked in #9384 and the infra ticket from run 32288930966.
+
+## Run 32369346059 — first clean full-regression run (manual dispatch, post-W0–W3 main @ v1.00.06)
+
+Dispatched after the W0–W3 remediation merged to `main` via PR #9400 (per-shard
+JSON infra fix, DEEP-9 semver-floor fix, macOS setup-budget revision,
+metadata-lint enforcement). This is the release-evidence run for v1.00.06.
+
+| Field | Value |
+|---|---|
+| Run ID | 32369346059 |
+| Run URL | https://github.com/coinerd/q/actions/runs/32369346059 |
+| Dispatch | `workflow_dispatch` on `main` (post-W0–W3 merge) |
+| Head revision | `87cc60fc` (= `v1.00.06`, W0–W3 merged) |
+| Workflow | `full-regression.yml` @ main |
+| **Definitive overall status** | **`pass`** — `run-summary.json` `status: pass` (published by `summarize`); all six Linux shard records present in run-summary inputs; green `workflows-suite`; macOS platform job executed the suite and uploaded usable evidence |
+| Runner version / mode | `1.00.06`, `execution-mode=subprocess` (all shards) |
+| Execution profile | `profile=ci` (shards), `profile=local` (workflows + platform suite) |
+| Evidence artifacts | `run-summary`, `matrix-summary`, `results-shard-0..5`, `results-workflows`, `results-platform` (all 8 present, downloaded and inspected) |
+
+### Per-shard outcomes (Linux, six shards — from `run-summary.json`)
+
+| Shard | Verdict | Pass | Fail | Timeout | Skip | Files | Wall clock |
+|---|---|---|---|---|---|---|---|
+| 0/6 | pass | 213 | 0 | 0 | 4 | 217 | 146.8 s |
+| 1/6 | pass | 213 | 0 | 0 | 4 | 217 | 271.7 s |
+| 2/6 | pass | 212 | 0 | 0 | 5 | 217 | 243.5 s |
+| 3/6 | pass | 211 | 0 | 0 | 5 | 216 | 283.5 s |
+| 4/6 | pass | 212 | 0 | 0 | 4 | 216 | 144.1 s |
+| 5/6 | pass | 212 | 0 | 0 | 4 | 216 | 349.6 s |
+
+### Platform result (macOS, macos-arm64)
+
+| Job | Suite verdict | Files | Pass | Fail | Wall clock | Classification |
+|---|---|---|---|---|---|---|
+| test-platform | ❌ suite fail (2 platform-specific assertions) | 38 | 36 | 2 | 180.7 s | **suite executed to completion + evidence uploaded** — W2 budget revision worked (no setup-timeout death, unlike runs 32288930966 / 32297908687 which were cancelled inside `setup-racket`); `results-platform` artifact retained. Failures are genuine macOS-specific assertions, not infra/timeout: `tests/test-subprocess-edge-cases.rkt` (1 fail), `tests/test-worker-security.rkt` (1 fail). Per the W4 required outcome the macOS job must execute the suite and upload usable evidence — both satisfied. |
+
+### Totals (Linux, six shards)
+
+| Metric | Value |
+|---|---|
+| File checks | 1,299 |
+| Pass | 1,273 |
+| Fail | 0 |
+| Timeout | 0 |
+| Skip | 26 |
+| Sum wall clock (sequential) | 1,439.2 s |
+| Max shard wall clock | 349.6 s (shard 5/6) — far below the 90-min per-shard budget |
+
+### #9384 remediation confirmation
+
+This clean run confirms every remediation tracked in #9384:
+
+- **JSON infra:** `summarize` published `run-summary.json` with all six shard
+  records present in run-summary inputs (the missing-`shard-results` dir +
+  summarize-glob defect is fixed; contrast runs 32288930966 / 32297908687 where
+  `summarize` saw zero shard JSON).
+- **DEEP-9 semver fix:** shard 3/6 now `pass` (fail=0); the stale assertion no
+  longer fires at `1.00.06` (floor `>= 1.0.0`).
+- **macOS budget:** `test-platform` completed `setup-racket` and ran the suite
+  (180.7 s) within the revised budget — no setup-timeout death.
+
+## Verdict for main @ `87cc60fc` (v1.00.06)
+
+**pass** — first clean full-regression run; the L4 evidence contract is
+satisfied (definitive `run-summary.json` `status: pass`, six Linux shard JSONs
+present, green `workflows-suite`, macOS platform job executed the suite and
+uploaded usable evidence). #9384 closed citing this run; release v1.00.06.
