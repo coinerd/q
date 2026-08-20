@@ -120,14 +120,23 @@
              (if (string-suffix? root-str "/")
                  root-str
                  (string-append root-str "/")))
-           (or (string=? resolved-str root-str)
-               (string=? resolved-str root-dir)
-               (string-prefix? resolved-str root-dir))))))
-
-;; ── SEC-7 (v0.99.76 W2): Worker file-op safety parity ───────────
-;; Mirrors main tool-write/tool-edit guards: per-write size limit,
-;; cumulative write budget, inode (identity) TOCTOU check, backups.
-
+           ;; macOS (APFS) is case-insensitive: normalize both paths to lowercase
+           ;; for prefix comparison to handle symlink resolution casing differences
+           (define resolved-cmp
+             (if (eq? (system-type) 'macosx)
+                 (string-downcase resolved-str)
+                 resolved-str))
+           (define root-str-cmp
+             (if (eq? (system-type) 'macosx)
+                 (string-downcase root-str)
+                 root-str))
+           (define root-dir-cmp
+             (if (eq? (system-type) 'macosx)
+                 (string-downcase root-dir)
+                 root-dir))
+           (or (string=? resolved-cmp root-str-cmp)
+               (string=? resolved-cmp root-dir-cmp)
+               (string-prefix? resolved-cmp root-dir-cmp))))))
 (define current-worker-write-limit
   ;; Per-write byte limit (default 1 MB, matches main tool-write)
   (make-parameter (* 1024 1024)))
