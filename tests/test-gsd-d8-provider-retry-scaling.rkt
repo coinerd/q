@@ -85,7 +85,10 @@
 ;; ============================================================
 
 (test-case "D8(A): retry parameters default to interactive values"
-  (check-equal? (current-provider-retry-max-retries) 2)
+  ;; v1.00.05 W2 (#9394): interactive default raised 2 → 5 so /plan sessions on
+  ;; slow reasoning models (kimi-for-coding) get the same LLM-timeout headroom
+  ;; as campaign waves.
+  (check-equal? (current-provider-retry-max-retries) 5)
   (check-equal? (current-provider-retry-stall-max-consecutive) 2)
   (check-false (current-provider-retry-ceiling-secs)))
 
@@ -97,7 +100,7 @@
     (check-equal? (current-provider-retry-stall-max-consecutive) 4)
     (check-equal? (current-provider-retry-ceiling-secs) 600))
   ;; Restored after parameterize exits
-  (check-equal? (current-provider-retry-max-retries) 2))
+  (check-equal? (current-provider-retry-max-retries) 5))
 
 ;; ============================================================
 ;; (B) infra classification → 'infra-failed outcome

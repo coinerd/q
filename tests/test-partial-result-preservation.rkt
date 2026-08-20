@@ -214,4 +214,7 @@
   (define inner (find-retry-exhausted caught-exn))
   (check-not-false inner "retry metadata must survive partial recovery wrapping")
   (check-pred retry-exhausted? inner)
-  (check-equal? (retry-exhausted-attempts inner) 2))
+  ;; v1.00.05 W2 (#9394): interactive default raised 2 → 5, so the loop now
+  ;; exhausts after 5 attempts (the ceiling never triggers on synchronous
+  ;; failures — this test asserts the metadata survives, not a specific count).
+  (check-equal? (retry-exhausted-attempts inner) 5))

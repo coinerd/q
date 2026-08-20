@@ -118,7 +118,10 @@
 
 ;; v0.99.81 W2 PN-7: Default cumulative ceiling across retries (5 minutes).
 ;; When #f, no cumulative wall-clock bound is enforced (backward compat).
-(define default-cumulative-ceiling-secs 300)
+;; v1.00.05 W2 (#9394): raised 300 → 900 so a 5-retry budget with 120s per-read
+;; timeouts (plus backoff) is actually reachable; the old 300s ceiling truncated
+;; the retry loop after ~2 attempts.
+(define default-cumulative-ceiling-secs 900)
 
 ;; ============================================================
 ;; Injectable random source (W1)

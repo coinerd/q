@@ -23,12 +23,14 @@
          (only-in "../util/cancellation.rkt" cancellation-token?)
          "provider-health.rkt")
 
-;; D8 (#9357): campaign-aware provider retry scaling. Interactive turns keep
-;; the interactive defaults (2 retries, 2-stall breaker, caller ceiling).
-;; The campaign executor parameterizes these to wave-scale values (via
+;; D8 (#9357): campaign-aware provider retry scaling. The campaign executor
+;; parameterizes these to wave-scale values (via
 ;; extensions/gsd/go-orchestrator.rkt execute-campaign-request!) so a single
 ;; transient SSE read timeout does not burn an entire implementation wave.
-(define current-provider-retry-max-retries (make-parameter 2))
+;; v1.00.05 W2 (#9394): interactive/planning turns now default to the same
+;; 5-retry budget the campaign path uses, so a /plan session on a slow
+;; reasoning model (e.g. kimi-for-coding) gets the same LLM-timeout headroom.
+(define current-provider-retry-max-retries (make-parameter 5))
 (define current-provider-retry-stall-max-consecutive (make-parameter default-stall-max-consecutive))
 (define current-provider-retry-ceiling-secs (make-parameter #f))
 
@@ -176,6 +178,12 @@
     (with-auto-retry
      (lambda () (wrapped-attempt (unbox ctx-for-retry) (unbox settings-for-retry)))
      #:max-retries (current-provider-retry-max-retries)
+     ;; v1.00.05 W2 (#9394): scale the per-type budgets with max-retries so the
+     ;; timeout budget does not cap retries below max-retries. Previously the
+     ;; default per-type-budgets pinned 'timeout to 2, silently truncating the
+     ;; campaign and interactive 5-retry budget to 2.
+     #:per-type-budgets (let ([n (current-provider-retry-max-retries)])
+                          (hash 'timeout n 'rate-limit (max 4 n) 'provider-error n))
      #:base-delay-ms 1000
      #:stall-max-consecutive (current-provider-retry-stall-max-consecutive)
      #:cancellation-token cancellation-token
