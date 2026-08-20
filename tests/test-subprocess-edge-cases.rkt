@@ -14,7 +14,8 @@
 (require rackunit
          rackunit/text-ui
          "../sandbox/subprocess.rkt"
-         "../sandbox/limits.rkt")
+         "../sandbox/limits.rkt"
+         (only-in "../util/version.rkt" q-version))
 
 ;; ============================================================
 ;; Helpers
@@ -30,7 +31,7 @@
 ;; group — so survivor assertions are conditional on setsid availability.
 (define setsid-available? (not (false? (find-executable-path "setsid"))))
 
-;; v1.00.07 W2: macOS /bin/sh is bash (PIPESTATUS evaluates; no dash); SP12's
+;; W2: macOS /bin/sh is bash (PIPESTATUS evaluates; no dash); SP12's
 ;; dash-specific assertions are conditional, mirroring setsid-available?.
 (define sh-is-dash?
   (let ([probe (run-subprocess "/bin/sh"

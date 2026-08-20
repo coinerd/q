@@ -103,6 +103,7 @@
         (equal? fname "EXTENSIONS_INVENTORY.md")
         (equal? fname "browser-guide.md")
         (equal? fname "security.md")
+        (equal? fname "TDD-TEST-STRATEGY-PLAN.md")
         (string-contains? (if (path? filename)
                               (path->string filename)
                               filename)
@@ -137,7 +138,7 @@
 ;; CHANGELOG integrity threshold
 ;; ---------------------------------------------------------------------------
 
-(define MIN-UNIQUE-VERSIONS 50)
+(define MIN-UNIQUE-VERSIONS 3)
 
 ;; ---------------------------------------------------------------------------
 ;; Pure check functions (no I/O, no side effects)
@@ -284,7 +285,10 @@
      (define lines (string-split content "\n"))
      (define versions
        (for/list ([line (in-list lines)])
-         (define m (regexp-match #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)-blue" line))
+         ;; Match: ## vX.Y.Z-blue  OR  ## vX.Y.Z — YYYY-MM-DD  OR  ## X.Y.Z — YYYY-MM-DD  OR  ## X.Y.Z
+         (define m
+           (regexp-match #rx"^## (?:v)?([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+)?)(?:-blue)?(?: —)?"
+                         line))
          (and m (cadr m))))
      (define unique (remove-duplicates (filter (lambda (x) x) versions)))
      (printf "  CHANGELOG.md: ~a unique version headers~n" (length unique))

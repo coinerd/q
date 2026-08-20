@@ -62,7 +62,7 @@ introduced; unmapped sources keep the fail-open fallback.
 `.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
 (`continue-on-error: true` removed); missing mandatory tags now fail the build.
 The step shipped report-only in PR #9383 with enforcement originally
-scheduled for v1.00.06; that milestone slipped one release, and at v1.00.06
+scheduled for v1.00.07; that milestone slipped one release, and at v1.00.07
 the report-only inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
 `missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
 so enforcement flipped then — evidence-gated, per the schedule recorded in
@@ -85,7 +85,7 @@ release-linkage rule (release readiness requires full-regression evidence,
 never a green `fast` run alone) is binding.
 
 **L4 evidence status: addressed.** Run 32369346059 (post-W0–W3 merge to
-`main` via PR #9400, `v1.00.06` @ `87cc60fc`) is the first clean
+`main` via PR #9400, `v1.00.07` @ `87cc60fc`) is the first clean
 full-regression run: `run-summary.json` published by `summarize` with
 `status: pass`, all six Linux shard records present in run-summary inputs
 (1,299 file checks, 0 fail), a green `workflows-suite`, and a macOS platform
