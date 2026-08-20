@@ -127,6 +127,7 @@
   (current-gemini-tool-id-counter . TURN_LOCAL))
  ("llm/stream.rkt"
   (current-model-timeouts . CONFIGURATION)
+  (current-model-sse-read-timeouts . CONFIGURATION)
   (current-http-request-timeout . CONFIGURATION))
  ("runtime/auth/oauth.rkt"
   (current-oauth-http-sendrecv . SERVICE_HANDLE))

@@ -21,7 +21,9 @@
          (only-in "../llm/stream.rkt"
                   current-http-request-timeout
                   current-model-timeouts
+                  current-model-sse-read-timeouts
                   effective-request-timeout-for
+                  effective-sse-read-timeout-for
                   http-request-timeout-default)
          (only-in "../runtime/settings.rkt"
                   make-minimal-settings
@@ -59,6 +61,29 @@
                              (parameterize ([current-model-timeouts (hash "test-model" 123)])
                                (check-equal? (hash-ref (current-model-timeouts) "test-model" #f) 123))
                              (check-equal? (current-model-timeouts) saved)))
+
+;; ============================================================
+;; Unit tests: sse-read timeout parameter logic (v1.00.05 W1)
+;; ============================================================
+
+(define/provide-test-suite
+ test-model-sse-read-params
+ (test-case "effective-sse-read-timeout-for uses per-model override"
+   (parameterize ([current-model-sse-read-timeouts (hash "kimi-for-coding" 300)])
+     (check-equal? (effective-sse-read-timeout-for "kimi-for-coding") 300)))
+ (test-case "effective-sse-read-timeout-for returns #f without override"
+   (parameterize ([current-model-sse-read-timeouts (hash)])
+     (check-false (effective-sse-read-timeout-for "any-model")))
+   (parameterize ([current-model-sse-read-timeouts (hash "kimi-for-coding" 300)])
+     (check-false (effective-sse-read-timeout-for "gpt-4o"))))
+ (test-case "effective-sse-read-timeout-for with #f model-name"
+   (parameterize ([current-model-sse-read-timeouts (hash "kimi-for-coding" 300)])
+     (check-false (effective-sse-read-timeout-for #f))))
+ (test-case "current-model-sse-read-timeouts parameter isolation"
+   (define saved (current-model-sse-read-timeouts))
+   (parameterize ([current-model-sse-read-timeouts (hash "kimi-for-coding" 300)])
+     (check-equal? (hash-ref (current-model-sse-read-timeouts) "kimi-for-coding" #f) 300))
+   (check-equal? (current-model-sse-read-timeouts) saved)))
 
 ;; ============================================================
 ;; Unit tests: settings.rkt per-model config
@@ -149,11 +174,59 @@
    (check-equal? extracted (hash))))
 
 ;; ============================================================
+;; Integration: wiring extracts sse-read timeouts from config (v1.00.05 W1)
+;; ============================================================
+
+(define/provide-test-suite
+ test-model-sse-read-wiring
+ (test-case "wiring extracts sse-read timeouts from config hash"
+   (define merged-config
+     (hash 'timeouts
+           (hash 'request
+                 600
+                 'models
+                 (hash 'kimi-for-coding
+                       (hash 'request 900 'sse-read 300)
+                       'glm-5.3
+                       (hash 'request 900 'sse-read 300)
+                       'gpt-4o
+                       (hash 'request 600)))))
+   (define models-config (hash-ref (hash-ref merged-config 'timeouts (hash)) 'models (hash)))
+   ;; Simulate the sse-read extraction added to wire-timeouts!
+   (define extracted
+     (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+       (if (and (hash? v) (hash-has-key? v 'sse-read))
+           (hash-set acc
+                     (if (symbol? k)
+                         (symbol->string k)
+                         k)
+                     (hash-ref v 'sse-read))
+           acc)))
+   (check-equal? (hash-ref extracted "kimi-for-coding" #f) 300)
+   (check-equal? (hash-ref extracted "glm-5.3" #f) 300)
+   (check-false (hash-ref extracted "gpt-4o" #f)))
+ (test-case "wiring sse-read handles empty models config"
+   (define merged-config (hash 'timeouts (hash 'request 600)))
+   (define models-config (hash-ref (hash-ref merged-config 'timeouts (hash)) 'models (hash)))
+   (define extracted
+     (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+       (if (and (hash? v) (hash-has-key? v 'sse-read))
+           (hash-set acc
+                     (if (symbol? k)
+                         (symbol->string k)
+                         k)
+                     (hash-ref v 'sse-read))
+           acc)))
+   (check-equal? extracted (hash))))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (module+ main
   (require rackunit/text-ui)
   (run-tests test-model-timeout-params)
+  (run-tests test-model-sse-read-params)
   (run-tests test-model-timeout-settings)
-  (run-tests test-model-timeout-wiring))
+  (run-tests test-model-timeout-wiring)
+  (run-tests test-model-sse-read-wiring))

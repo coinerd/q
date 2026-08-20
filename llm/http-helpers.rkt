@@ -18,19 +18,21 @@
          "provider-errors.rkt"
          "stream.rkt")
 
-(provide (contract-out
-          [extract-status-code (-> (or/c bytes? string?) exact-nonnegative-integer?)]
-          [http-error? (-> exact-nonnegative-integer? boolean?)]
-          [raise-http-error! (->* (string?) ((or/c exact-nonnegative-integer? #f)) any)]
-          [parse-provider-url
-           (-> string? (values string? string? exact-nonnegative-integer? boolean?))]
-          [make-provider-http-request
-           (->* (string? (listof string?) bytes?)
-                (#:timeout (or/c exact-positive-integer? #f) #:status-checker (or/c procedure? #f))
-                jsexpr?)]
-          [check-provider-status! (-> string? (or/c bytes? string?) (or/c bytes? string?) void?)]
-          [extract-error-message (-> jsexpr? (or/c string? #f))]
-          [translate-stop-reason (-> (or/c symbol? #f) any/c symbol?)]))
+(provide (contract-out [extract-status-code (-> (or/c bytes? string?) exact-nonnegative-integer?)]
+                       [http-error? (-> exact-nonnegative-integer? boolean?)]
+                       [raise-http-error! (->* (string?) ((or/c exact-nonnegative-integer? #f)) any)]
+                       [parse-provider-url
+                        (-> string? (values string? string? exact-nonnegative-integer? boolean?))]
+                       [make-provider-http-request
+                        (->* (string? (listof string?) bytes?)
+                             (#:timeout (or/c exact-positive-integer? #f)
+                                        #:read-timeout (or/c exact-positive-integer? #f)
+                                        #:status-checker (or/c procedure? #f))
+                             jsexpr?)]
+                       [check-provider-status!
+                        (-> string? (or/c bytes? string?) (or/c bytes? string?) void?)]
+                       [extract-error-message (-> jsexpr? (or/c string? #f))]
+                       [translate-stop-reason (-> (or/c symbol? #f) any/c symbol?)]))
 
 ;; ============================================================
 ;; Contracts
@@ -113,6 +115,7 @@
                                     headers
                                     body-bytes
                                     #:timeout [timeout-secs #f]
+                                    #:read-timeout [read-timeout-secs #f]
                                     #:status-checker [status-checker #f])
   (define-values (host path-str port ssl?) (parse-provider-url url-str))
   (define effective-timeout (or timeout-secs (current-http-request-timeout)))
@@ -125,7 +128,15 @@
                                                 #:method #"POST"
                                                 #:headers headers
                                                 #:data body-bytes))
-                               (define response-body (read-response-body/timeout response-port))
+                               ;; v1.00.05 W1 (#9393): honor a per-model read timeout
+                               ;; (sse-read) for the body read instead of always using
+                               ;; the hardcoded 120s http-read-timeout-default. The
+                               ;; outer #:timeout remains the wall-clock request cap.
+                               (define response-body
+                                 (if read-timeout-secs
+                                     (read-response-body/timeout response-port
+                                                                 #:timeout read-timeout-secs)
+                                     (read-response-body/timeout response-port)))
                                (when status-checker
                                  (status-checker status-line response-body))
                                (bytes->jsexpr response-body))
