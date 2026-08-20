@@ -20,8 +20,8 @@
 
 ;; ── Parsing ──
 
-;; Match: ## vX.Y.Z — YYYY-MM-DD
-(define version-line-rx #px"^## v[0-9]+[.][0-9]+[.][0-9]+ — ([0-9]{4}-[0-9]{2}-[0-9]{2})")
+;; Match: ## vX.Y.Z(-blue)? — YYYY-MM-DD
+(define version-line-rx #px"^## v[0-9]+[.][0-9]+[.][0-9]+(?:-blue)? — ([0-9]{4}-[0-9]{2}-[0-9]{2})")
 (define date-only-rx #px"^## v[0-9]+[.][0-9]+[.][0-9]+")
 
 (define (parse-version-line line)
