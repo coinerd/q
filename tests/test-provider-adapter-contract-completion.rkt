@@ -106,7 +106,7 @@
 
 (test-case "W1-B2: typed records remain source-grounded, not artificially equal"
   (define gemini (typed-unsupported-capability-for 'reasoning-delta 'gemini))
-  ;; v1.00.05 W0: anthropic gained delta-thinking normalization → its typed
+  ;; [kimi milestone W0]: anthropic gained delta-thinking normalization → its typed
   ;; unsupported record was removed. Gemini remains the only unsupported one.
   (check-false (typed-unsupported-capability-for 'reasoning-delta 'anthropic)
                "anthropic reasoning-delta now supported (no typed record)")

@@ -85,7 +85,7 @@
 ;; ============================================================
 
 (test-case "D8(A): retry parameters default to interactive values"
-  ;; v1.00.05 W2 (#9394): interactive default raised 2 → 5 so /plan sessions on
+  ;; [kimi milestone W2] (#9394): interactive default raised 2 → 5 so /plan sessions on
   ;; slow reasoning models (kimi-for-coding) get the same LLM-timeout headroom
   ;; as campaign waves.
   (check-equal? (current-provider-retry-max-retries) 5)

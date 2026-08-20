@@ -96,7 +96,7 @@
    (for ([payload (in-list events)])
      (define delay (hash-ref payload 'delayMs 'missing))
      (check-equal? delay 0 (format "circuit-break delay should be 0 (actual: ~a)" delay))))
- (test-case "v1.00.05 W2: interactive default retry budget is 5, not 2"
+ (test-case "kimi-milestone W2: interactive default retry budget is 5, not 2"
    ;; The interactive/planning path uses current-provider-retry-max-retries
    ;; (default), which W2 raised from 2 → 5. Verify the default is 5 so a
    ;; /plan session on kimi-for-coding gets the same LLM-timeout headroom as
@@ -127,7 +127,7 @@
    (define events (get-events))
    (check-equal? (length events) 5 "five auto-retry.start events emitted for 5 timeout retries")
    (check-equal? (unbox attempt-count) 6 "initial attempt + 5 retries = 6 total attempts"))
- (test-case "v1.00.05 W2: campaign path keeps 5 retries"
+ (test-case "kimi-milestone W2: campaign path keeps 5 retries"
    ;; Campaign waves parameterize current-provider-retry-max-retries to 5
    ;; (go-orchestrator). The knob is shared, so the value is 5 there too.
    (parameterize ([current-provider-retry-max-retries 5])

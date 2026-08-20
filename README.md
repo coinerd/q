@@ -407,6 +407,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v1.00.05** — Bug Fixes
+
 **v1.00.03** — Bug Fixes
 
 **v1.00.02** — Bug Fixes

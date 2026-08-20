@@ -63,7 +63,7 @@
                              (check-equal? (current-model-timeouts) saved)))
 
 ;; ============================================================
-;; Unit tests: sse-read timeout parameter logic (v1.00.05 W1)
+;; Unit tests: sse-read timeout parameter logic (kimi milestone W1)
 ;; ============================================================
 
 (define/provide-test-suite
@@ -174,7 +174,7 @@
    (check-equal? extracted (hash))))
 
 ;; ============================================================
-;; Integration: wiring extracts sse-read timeouts from config (v1.00.05 W1)
+;; Integration: wiring extracts sse-read timeouts from config (kimi milestone W1)
 ;; ============================================================
 
 (define/provide-test-suite

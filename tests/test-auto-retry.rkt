@@ -914,17 +914,17 @@
   (check-equal? (provider-error-category result) 'network))
 
 ;; ============================================================
-;; v1.00.05 W2: cumulative ceiling reconciled for 5-retry budget
+;; [kimi milestone W2]: cumulative ceiling reconciled for 5-retry budget
 ;; ============================================================
 
-(test-case "W2-v1.00.05: default cumulative ceiling accommodates 5 retries"
+(test-case "W2-kimi-milestone: default cumulative ceiling accommodates 5 retries"
   ;; The default ceiling was raised 300 → 900 so a 5-retry budget with 120s
   ;; per-read timeouts (plus backoff) is reachable. Verify the default.
   (check-equal? default-cumulative-ceiling-secs
                 900
                 "default cumulative ceiling is 900s (fits 5 × 120s reads + backoff)"))
 
-(test-case "W2-v1.00.05: ceiling is enforced on retry attempts only"
+(test-case "W2-kimi-milestone: ceiling is enforced on retry attempts only"
   ;; Regression guard for the v0.99.83 fix: the first attempt's duration is
   ;; legitimate streaming time and must not be penalized. With ceiling=900s
   ;; (900000ms) and a 200s-per-attempt fake clock, retries 1-4 complete

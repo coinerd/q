@@ -424,7 +424,7 @@
   ;; gaining delta-thinking normalization) must consciously update this list
   ;; and the matrix cells together — the contract gate fails otherwise.
   ;; Currently exactly: reasoning-delta for gemini (anthropic gained
-  ;; delta-thinking normalization in v1.00.05 W0).
+  ;; delta-thinking normalization in the kimi milestone W0).
   (check-equal? (map car unsupported-cells) (list 'reasoning-delta) "expected unsupported set")
   (check-equal? (map cadr unsupported-cells) (list 'gemini) "expected unsupported providers")
   ;; And each unsupported cell carries an explanatory note (no silent gap).

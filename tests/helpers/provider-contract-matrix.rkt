@@ -90,21 +90,20 @@
          (matrix-cell #t '(1 "text") "same wire format as openai-compatible"))
    ;; 2. Streaming reasoning delta -> delta-thinking
    ;;    OpenAI/DeepSeek-style reasoning_content is normalized to
-   ;;    stream-chunk delta-thinking. v1.00.05 W0: Anthropic thinking_delta is
+   ;;    stream-chunk delta-thinking. [kimi milestone W0]: Anthropic thinking_delta is
    ;;    now normalized too (kimi/Anthropic extended thinking). Gemini thought
    ;;    parts still have NO delta-thinking mapping -> unsupported.
    'reasoning-delta
-   (hash
-    'anthropic
-    (matrix-cell #t
-                 "Let me think..."
-                 "thinking_delta -> delta-thinking (v1.00.05 W0: kimi/Anthropic extended thinking)")
-    'gemini
-    (matrix-cell #f #f "thought part has no delta-thinking mapping; parsed as plain text chunk")
-    'openai-compatible
-    (matrix-cell #t "reasoning..." "delta.reasoning_content -> delta-thinking")
-    'azure-openai
-    (matrix-cell #t "reasoning..." "reuses normalize-openai-chunk -> delta-thinking"))
+   (hash 'anthropic
+         (matrix-cell #t
+                      "Let me think..."
+                      "thinking_delta -> delta-thinking (kimi/Anthropic extended thinking)")
+         'gemini
+         (matrix-cell #f #f "thought part has no delta-thinking mapping; parsed as plain text chunk")
+         'openai-compatible
+         (matrix-cell #t "reasoning..." "delta.reasoning_content -> delta-thinking")
+         'azure-openai
+         (matrix-cell #t "reasoning..." "reuses normalize-openai-chunk -> delta-thinking"))
    ;; 3. Non-streaming usage -> canonical keys (prompt/completion/total)
    'usage-nonstream
    (hash
@@ -244,7 +243,7 @@
                                 #f
                                 "thought parts emit delta-text but no delta-thinking")))
 
-;; v1.00.05 W0 removed the anthropic reasoning-delta record: kimi/Anthropic
+;; [kimi milestone W0] removed the anthropic reasoning-delta record: kimi/Anthropic
 ;; thinking_delta is now normalized to delta-thinking (supported).
 
 (define (typed-unsupported-capability-for scenario provider)
