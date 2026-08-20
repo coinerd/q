@@ -497,13 +497,14 @@
           (define gsd-ctx (current-gsd-ctx))
           (define effective-timeout (resolve-wave-timeout-secs input-text))
           (define request
-            (make-campaign-request base-dir
-                                   rec
-                                   (lambda (wave-idx)
-                                     (gsm-ctx-transition-to! gsd-ctx 'executing)
-                                     (build-single-wave-prompt base-dir plan wave-idx))
-                                   (make-delivery-verifier base-dir plan)
-                                   #:timeout-sec effective-timeout))
+            (make-campaign-request
+             base-dir
+             rec
+             (lambda (wave-idx)
+               (gsm-ctx-transition-to! gsd-ctx 'executing)
+               (build-single-wave-prompt base-dir plan wave-idx))
+             (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
+             #:timeout-sec effective-timeout))
           (hook-amend (hasheq 'campaign-token
                               (register-campaign-request! request)
                               'new-session

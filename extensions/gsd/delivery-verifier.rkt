@@ -202,11 +202,15 @@
            #:when (git-exit-ok? (run-git* git-root (list "rev-parse" "--verify" ref))))
     ref))
 
-(define (changed-files-set base-dir git-root)
+(define (changed-files-set base-dir git-root [campaign-created-at #f])
   ;; Returns a set of git-relative paths that constitute delivery evidence:
-  ;; uncommitted working-tree changes vs HEAD, untracked-new files, and
-  ;; commits on the current branch relative to its base (waves that commit
-  ;; + push + open a PR per their wave doc deliver their work as commits).
+  ;; uncommitted working-tree changes vs HEAD, untracked-new files, commits on
+  ;; the current branch relative to its base (waves that commit + push + open a
+  ;; PR per their wave doc deliver their work as commits), and — when the
+  ;; campaign's creation time is known — files changed in commits since the
+  ;; campaign base (merged-to-main delivery: once a wave's PR is merged, HEAD
+  ;; == origin/main so the base-relative diff is empty, but the target files
+  ;; DID change during the campaign).
   (define diff-result (run-git* git-root (list "diff" "--name-only" "HEAD")))
   (define untracked-result (run-git* git-root (list "ls-files" "--others" "--exclude-standard")))
   (define committed-result
@@ -215,10 +219,26 @@
           ;; Three-dot diff: changes introduced on HEAD since diverging from base.
           (run-git* git-root (list "diff" "--name-only" (format "~a...HEAD" base)))
           (list 1 "" ""))))
+  (define campaign-result
+    (if (and campaign-created-at (exact-integer? campaign-created-at))
+        ;; The campaign base = the last commit reachable from HEAD that is
+        ;; strictly older than the campaign's creation time. Files changed in
+        ;; commits between that base and HEAD are delivery evidence for waves
+        ;; whose work was merged to main.
+        (let ([base-commit
+               (run-git*
+                git-root
+                (list "rev-list" "-1" "--before" (number->string campaign-created-at) "HEAD"))])
+          (if (git-exit-ok? base-commit)
+              (run-git* git-root
+                        (list "diff" "--name-only" (string-trim (git-stdout base-commit)) "HEAD"))
+              (list 1 "" "")))
+        (list 1 "" "")))
   (define paths
     (append (string-split (git-stdout diff-result) "\n")
             (string-split (git-stdout untracked-result) "\n")
-            (string-split (git-stdout committed-result) "\n")))
+            (string-split (git-stdout committed-result) "\n")
+            (string-split (git-stdout campaign-result) "\n")))
   (for/set ([p (in-list paths)]
             #:when (not (string=? (string-trim p) "")))
     (string-trim p)))
@@ -245,7 +265,7 @@
        (string-prefix? c dir))]
     [else #f]))
 
-(define (check-wave-files-changed base-dir wave-idx plan)
+(define (check-wave-files-changed base-dir wave-idx plan [campaign-created-at #f])
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
     (if wave
@@ -256,7 +276,7 @@
     [(not root) (cons "files" (cons #f "no git root"))]
     [(null? files) (cons "files" (cons #f "wave declares no target files"))]
     [else
-     (let* ([changed (changed-files-set base-dir root)]
+     (let* ([changed (changed-files-set base-dir root campaign-created-at)]
             [changed-wave-files
              (for/list ([f (in-list files)]
                         #:when
@@ -345,12 +365,12 @@
 ;; Composition
 ;; ============================================================
 
-(define (run-delivery-verification base-dir plan wave-idx)
+(define (run-delivery-verification base-dir plan wave-idx [campaign-created-at #f])
   ;; Run all evidence checks. A wave is approved only when every check passes.
   (define checks
     (list (check-git-available base-dir)
           (check-branch-matches base-dir wave-idx)
-          (check-wave-files-changed base-dir wave-idx plan)
+          (check-wave-files-changed base-dir wave-idx plan campaign-created-at)
           (check-verify-command base-dir wave-idx plan)))
   (define failed
     (for/list ([c (in-list checks)]
@@ -364,5 +384,5 @@
 
 ;; Verifier callback for the campaign coordinator: (lambda (wave-idx) ...)
 ;; returning a `delivery-verification` struct.
-(define (make-delivery-verifier base-dir plan)
-  (lambda (wave-idx) (run-delivery-verification base-dir plan wave-idx)))
+(define (make-delivery-verifier base-dir plan [campaign-created-at #f])
+  (lambda (wave-idx) (run-delivery-verification base-dir plan wave-idx campaign-created-at)))
