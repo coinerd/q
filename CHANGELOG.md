@@ -39,6 +39,65 @@
   `dispatch-keymap-action`; TUI visual Up/Down composer navigation (W4) refinements.
 - TUI suite green: 88 files / 1,362 tests; full CI green on PR #9370.
 
+## 1.00.05
+
+Released 2026-08-20.
+
+> kimi-for-coding provider fixes: thinking tokens surfaced, per-model sse-read
+> timeouts honored on the non-streaming read path, and interactive/planning
+> turn retries raised to 5 with the cumulative ceiling reconciled. Milestone
+> v1.00.05 (3 waves, PRs #9395/#9396/#9397).
+
+### Bug Fixes
+
+- **Kimi/Anthropic thinking tokens were silently dropped.** `anthropic-parse-response`
+  only matched `text`/`tool_use` content blocks, so `thinking` blocks fell through the
+  raw catch-all, and `eager-stream`'s `content->chunks` turned them into empty text
+  chunks. A `/plan` session on `kimi-for-coding` showed only tool calls + results with
+  no agent text and no thinking output. Now `thinking` blocks are preserved (text +
+  signature), `eager-stream` emits `delta-thinking`, and the streaming parser handles
+  `thinking_delta`. Golden matrix + typed-unsupported records updated (anthropic
+  reasoning-delta now supported; gemini remains unsupported).
+- **Kimi non-streaming reads timed out at 120s, ignoring configured `sse-read`.** The
+  kimi eager path read the response body with the hardcoded `http-read-timeout-default`;
+  the config's `timeouts.models.kimi-for-coding.sse-read = 300` was never applied.
+  `make-provider-http-request` now accepts `#:read-timeout`, `wire-timeouts!` extracts
+  `timeouts.models.<model>.sse-read` into `current-model-sse-read-timeouts`, and the
+  kimi + openai paths honor the per-model override (falling back to 120s/60s defaults
+  when absent).
+- **Interactive/planning turn retries were capped at 2, not 5.** `current-provider-retry-max-retries`
+  defaulted to 2 (only campaign waves got 5), and `call-with-provider-retry` did not pass
+  `#:per-type-budgets`, so the default `'timeout` budget of 2 silently truncated the
+  campaign 5-retry budget too. Default raised to 5; per-type budgets now derive from
+  max-retries; `default-cumulative-ceiling-secs` raised 300 → 900 so 5 × 120s reads +
+  backoff fit.
+
+### Testing
+
+- `test-anthropic.rkt`: +5 thinking cases (non-streaming thinking block, unknown-block
+  tolerance, streaming `thinking_delta`, eager-stream thinking→delta-thinking, sse-read
+  accessor feeding the read path).
+- `test-model-timeouts.rkt`: +8 sse-read cases (accessor override/#f, parameter isolation,
+  wiring extraction).
+- `test-provider-retry-telemetry.rkt` / `test-auto-retry.rkt`: +4 retry-budget and
+  ceiling cases; D8 + partial-result tests updated to the 5-retry default.
+- Full fast suite green: 1107 files / 16179 tests.
+
+### Breaking / Behavior Changes
+
+- None. Interactive/planning provider retries change from 2 to 5 (a deliberate
+  widening); the 2-retry behavior is no longer the default.
+
+### Migration Notes
+
+- None required. Per-model `timeouts.models.<model>.sse-read` config entries now take
+  effect on the non-streaming kimi read path and the openai streaming path; models
+  without an override keep the previous defaults.
+
+### Operational / Release
+
+- Version stamped `1.00.05`; milestone v1.00.05 (PRs #9395/#9396/#9397).
+
 ## 1.00.03
 
 Released 2026-08-16.
