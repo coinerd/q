@@ -300,7 +300,7 @@ failure (shard 3/6, #9384) + systemic per-shard JSON evidence defect + macOS
 platform setup timeout. No new triage events beyond those tabled above;
 follow-ups already tracked in #9384 and the infra ticket from run 32288930966.
 
-## Run 32369346059 — first clean full-regression run (manual dispatch, post-W0–W3 main @ v1.00.06)
+## Run 32369346059 — post-W0–W3 full-regression run (manual dispatch, main @ v1.00.06; **status corrected to `fail`**, see correction note)
 
 Dispatched after the W0–W3 remediation merged to `main` via PR #9400 (per-shard
 JSON infra fix, DEEP-9 semver-floor fix, macOS setup-budget revision,
@@ -313,7 +313,7 @@ metadata-lint enforcement). This is the release-evidence run for v1.00.06.
 | Dispatch | `workflow_dispatch` on `main` (post-W0–W3 merge) |
 | Head revision | `87cc60fc` (= `v1.00.06`, W0–W3 merged) |
 | Workflow | `full-regression.yml` @ main |
-| **Definitive overall status** | **`pass`** — `run-summary.json` `status: pass` (published by `summarize`); all six Linux shard records present in run-summary inputs; green `workflows-suite`; macOS platform job executed the suite and uploaded usable evidence |
+| **Definitive overall status** | **`fail`** *(corrected — see correction note below)* — original entry recorded `pass` from `run-summary.json` `status: pass`, but the macOS platform suite had **2 genuine assertion failures** (`tests/test-subprocess-edge-cases.rkt`, `tests/test-worker-security.rkt`), so the L4 contract was **NOT** satisfied by this run; under the v1.00.07 hardened aggregation the run's `run-summary.json` would have reported `fail`. Linux-only evidence remains clean (all six shard records present, green `workflows-suite`). |
 | Runner version / mode | `1.00.06`, `execution-mode=subprocess` (all shards) |
 | Execution profile | `profile=ci` (shards), `profile=local` (workflows + platform suite) |
 | Evidence artifacts | `run-summary`, `matrix-summary`, `results-shard-0..5`, `results-workflows`, `results-platform` (all 8 present, downloaded and inspected) |
@@ -333,7 +333,7 @@ metadata-lint enforcement). This is the release-evidence run for v1.00.06.
 
 | Job | Suite verdict | Files | Pass | Fail | Wall clock | Classification |
 |---|---|---|---|---|---|---|
-| test-platform | ❌ suite fail (2 platform-specific assertions) | 38 | 36 | 2 | 180.7 s | **suite executed to completion + evidence uploaded** — W2 budget revision worked (no setup-timeout death, unlike runs 32288930966 / 32297908687 which were cancelled inside `setup-racket`); `results-platform` artifact retained. Failures are genuine macOS-specific assertions, not infra/timeout: `tests/test-subprocess-edge-cases.rkt` (1 fail), `tests/test-worker-security.rkt` (1 fail). Per the W4 required outcome the macOS job must execute the suite and upload usable evidence — both satisfied. |
+| test-platform | ❌ suite fail (2 platform-specific assertions) | 38 | 36 | 2 | 180.7 s | **suite executed to completion + evidence uploaded** — W2 budget revision worked (no setup-timeout death, unlike runs 32288930966 / 32297908687 which were cancelled inside `setup-racket`); `results-platform` artifact retained. Failures are genuine macOS-specific assertions, not infra/timeout: `tests/test-subprocess-edge-cases.rkt` (1 fail → **#9406**), `tests/test-worker-security.rkt` (1 fail → **#9407**). Per the W4 required outcome the macOS job must execute the suite and upload usable evidence — both satisfied. **Correction:** this platform-suite `fail` means the run-level definitive status cannot be `pass`; both failures are now owner-tracked (#9406, #9407) with artifact evidence and expiry policy. |
 
 ### Totals (Linux, six shards)
 
@@ -362,7 +362,42 @@ This clean run confirms every remediation tracked in #9384:
 
 ## Verdict for main @ `87cc60fc` (v1.00.06)
 
-**pass** — first clean full-regression run; the L4 evidence contract is
-satisfied (definitive `run-summary.json` `status: pass`, six Linux shard JSONs
-present, green `workflows-suite`, macOS platform job executed the suite and
-uploaded usable evidence). #9384 closed citing this run; release v1.00.06.
+**fail** *(corrected 2026-08-20 from a previously recorded `pass`)* — the original
+verdict below was a **false green**: it treated `run-summary.json` `status: pass`
+as definitive while the macOS platform suite had recorded **2 genuine assertion
+failures** (`tests/test-subprocess-edge-cases.rkt`, `tests/test-worker-security.rkt`)
+in the retained `results-platform` artifact. The L4 evidence contract was **NOT**
+satisfied by this run. Under the v1.00.07 hardened aggregation (W0), the platform
+job's suite result feeds the run-level verdict and `run-summary.json` would have
+reported `fail`.
+
+### Correction detail
+
+- What remains valid from the original verdict: all six Linux shard JSONs present,
+  green `workflows-suite`, macOS platform job executed the suite (180.7 s) and
+  uploaded usable evidence — the #9384 remediations (JSON infra, DEEP-9 semver
+  floor, macOS setup budget) are all confirmed by this run.
+- What was wrong: the definitive status. A run with 2 genuine platform assertion
+  failures cannot be `pass`; the pre-hardening aggregation only counted Linux
+  shard JSONs, which masked the platform result.
+- Ownership: both failures are now owner-tracked regression issues —
+  **#9406** (`tests/test-subprocess-edge-cases.rkt`) and
+  **#9407** (`tests/test-worker-security.rkt`) — each carrying the exact
+  assertion text, artifact/run links, isolated reproduction, and a
+  fix-or-quarantine-with-expiry policy per
+  `docs/operations/test-regression-triage.md`.
+- Consequence for v1.00.06: the release evidence for v1.00.06 relied on this
+  run's `pass`; that reliance is invalid. Release-blocking status resumes until
+  #9406 and #9407 resolve (fix or time-bounded quarantine) and a clean
+  full-regression run is recorded here under the hardened aggregation.
+
+### Original verdict (superseded, retained for the record)
+
+> **pass** — first clean full-regression run; the L4 evidence contract is
+> satisfied (definitive `run-summary.json` `status: pass`, six Linux shard JSONs
+> present, green `workflows-suite`, macOS platform job executed the suite and
+> uploaded usable evidence). #9384 closed citing this run; release v1.00.06.
+
+The #9384 closure itself remains justified on its own remediation scope
+(JSON infra, DEEP-9, macOS budget — all confirmed here); the correction above
+concerns this run's definitive status, not #9384's closure.
