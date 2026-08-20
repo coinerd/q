@@ -340,12 +340,21 @@ metadata-lint enforcement). This is the release-evidence run for v1.00.06.
 Verbatim from the retained `results-platform` artifact of run 32369346059
 (`shard-results/platform.json` + `test-output.log`; suite verdict `❌ FAIL`,
 685 tests total, 683 passed, 2 failed, wall 180.7 s, runner `1.00.06`,
-execution-mode `subprocess`, profile `local`):
+execution-mode `subprocess`, profile `local`). Each block below is the
+**complete per-file `output` field** from `shard-results/platform.json` —
+raco preamble, check-failure frame, and raco summary — i.e. the full
+surrounding log context, not just the bare assertion text:
 
 **#9406 — `tests/test-subprocess-edge-cases.rkt`** — file record `fail`,
 `ASSERTION_FAILURE`, 12 passed / 1 failed / 13 total, exit 1:
 
 ```text
+raco test: (submod "/users/runner/work/q/q/tests/test-subprocess-edge-cases.rkt" test)
+raco test: @(test-responsible '("coinerd"))
+1
+1 13 /users/runner/work/q/q/tests/test-subprocess-edge-cases.rkt
+
+--------------------
 subprocess edge case tests > sp12: sh still errors on pipestatus but with exit-2 (baseline for d3)
 failure
 name:       check-equal?
@@ -353,12 +362,18 @@ location:   test-subprocess-edge-cases.rkt:266:6
 message:    "dash exits 2 on bad substitution"
 actual:     0
 expected:   2
+--------------------
+12 success(es) 1 failure(s) 0 error(s) 13 test(s) run
+1/13 test failures
 ```
 
 **#9407 — `tests/test-worker-security.rkt`** — file record `fail`,
 `ASSERTION_FAILURE`, 31 passed / 1 failed / 32 total, exit 1:
 
 ```text
+1
+
+--------------------
 worker security (v0.99.3 w1: h3, m4, m5) > lf3: resolve-longest-prefix resolves symlink in middle of path
 failure
 name:       check-true
@@ -366,10 +381,33 @@ location:   tests/test-worker-security.rkt:241:12
 params:     '(#f)
 message:
   "lf3: symlink to allowed dir + non-existent path should be accepted"
+--------------------
+31 success(es) 1 failure(s) 0 error(s) 32 test(s) run
+```
+
+Suite-level summary from the same artifact's `test-output.log` (the block the
+original false-green verdict relied on, in full):
+
+```text
+  Files:     38 total, 36 passed, 2 failed, 0 timeouts
+  Tests:     685 total, 683 passed, 2 failed
+  Category:  PASS=36, ASSERTION_FAILURE=2
+
+  VERDICT:   ❌ FAIL
+
+FAILURES:
+  ✗ tests/test-subprocess-edge-cases.rkt [ASSERTION_FAILURE] (exit=1, 12 passed, 1 failed, 22.921s)
+  ✗ tests/test-worker-security.rkt [ASSERTION_FAILURE] (exit=1, 31 passed, 1 failed, 5.649s)
+RUN-SUMMARY runner-version=1.00.06 suite=platform profile=local shard=none execution-mode=subprocess file-count=38 pass=36 fail=2 timeout=0 skip=0 wall-clock-seconds=180.742 metadata-completeness=explicit:38/heuristic:0/missing:0
 ```
 
 These excerpts are reproduced in the owner-tracked issues (#9406, #9407) and
-serve as the baseline evidence for the W2 macOS platform-test fixes.
+serve as the baseline evidence for the W2 macOS platform-test fixes. The
+per-file blocks were completed to the full `output` field (preamble +
+assertion frame + summary) and the suite-level `FAILURES`/`RUN-SUMMARY`
+block was added on 2026-08-20, re-extracted verbatim from the re-downloaded
+`results-platform` artifact, so W2 starts from the exact on-runner log
+context rather than the bare check-failure text.
 
 ### Totals (Linux, six shards)
 
