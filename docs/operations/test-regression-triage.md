@@ -89,6 +89,23 @@ for the latest commit).
    summary predates the release candidate's merge commit, the release is
    blocked until a fresh run (scheduled or manual) covers it.
 
+## Event 5 — Evidence-integrity disagreement
+
+The GitHub workflow conclusion and `run-summary.json.status` disagree, or a
+required lane is absent from `run-summary.json.required_lanes`.
+
+1. **Block the release immediately.** A summary is valid only when it is at
+   least as conservative as the workflow that produced it.
+2. **Preserve all lane artifacts.** Retain the six `results-shard-*` artifacts,
+   `results-workflows`, `results-platform`, `matrix-summary.json`, and
+   `run-summary.json` before any re-dispatch.
+3. **Open or update an evidence-integrity issue.** Record the run URL, head
+   SHA, every upstream job result, every lane's evidence classification, and
+   the exact disagreement.
+4. **Repair and re-run.** A code merge is not closure. Run a fresh manual
+   `full-regression` dispatch on the release candidate and require both the
+   GitHub conclusion `success` and summary status `pass`.
+
 ## Quick reference
 
 | Event | First action | Deadline | Prohibited |
@@ -97,3 +114,4 @@ for the latest commit).
 | Timeout | Preserve shard JSON evidence | — | Relabeling as success |
 | Recurring flake | Minimal reproduction | Expiry date on ledger entry | Unexpiring quarantine |
 | Missing scheduled run | Fresh manual dispatch | Before release | Proceeding on stale evidence |
+| Evidence-integrity disagreement | Block release and preserve all lanes | Immediate | Trusting a green summary from a red workflow |

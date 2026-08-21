@@ -84,15 +84,23 @@ triage protocol is `docs/operations/test-regression-triage.md`; its
 release-linkage rule (release readiness requires full-regression evidence,
 never a green `fast` run alone) is binding.
 
-**L4 evidence status: addressed.** Run 32369346059 (post-W0–W3 merge to
-`main` via PR #9400, `v1.00.08` @ `87cc60fc`) is the first clean
-full-regression run: `run-summary.json` published by `summarize` with
-`status: pass`, all six Linux shard records present in run-summary inputs
-(1,299 file checks, 0 fail), a green `workflows-suite`, and a macOS platform
-job that executed the suite and uploaded usable evidence (`results-platform`).
-The #9384 remediation — per-shard JSON infra, the DEEP-9 semver-floor fix, and
-the macOS setup-budget revision — is confirmed by this run. Recorded in
-`docs/reports/test-regression-log.md`.
+**L4 evidence status: implementation hardening in v1.00.09; fresh candidate
+proof required.** The v1.00.09 status contract makes the definitive summary
+conservative across all required lanes: six Linux shard records, the
+`workflows-suite` record, and the macOS `results-platform` record. A missing,
+malformed, cancelled, timed-out, unexpectedly skipped, or failing required
+lane cannot produce `status: pass`. The `run-summary.json.required_lanes`
+section records each upstream job result and artifact classification so the
+workflow conclusion and retained summary can be checked for agreement.
+
+The former `run-summary.json` shape was Linux-shard-only and could therefore
+misrepresent a red platform workflow as `pass`. **L4 must not be marked
+addressed by a code merge or Linux-only evidence.** It is addressed only after
+a fresh manual release-candidate run has six passing Linux records, passing
+workflow and macOS records, GitHub conclusion `success`, and summary status
+`pass`; the regression log must retain that evidence. A disagreement is a
+release-blocking evidence-integrity event under
+`docs/operations/test-regression-triage.md`.
 
 ### Shard plan — guarded `FAST_SHARD_PLAN` activation: ACTIVE (W4)
 

@@ -78,7 +78,14 @@
                                  "shard reports must be uploaded as artifacts"))
                    (test-case "uploads a run summary artifact"
                      (check-true (string-contains? wf "run-summary")
-                                 "a summary artifact must be uploaded")))
+                                 "a summary artifact must be uploaded"))
+                   (test-case "all required lanes feed the repository status helper"
+                     (check-true (and (string-contains? wf "full-regression-status.rkt")
+                                      (string-contains? wf "results-workflows")
+                                      (string-contains? wf "results-platform")
+                                      (string-contains? wf "needs.workflows-suite.result")
+                                      (string-contains? wf "needs.test-platform.result"))
+                                 "Linux, workflows, and macOS evidence must all feed L4 status")))
 
 ;; ---------------------------------------------------------------------------
 ;; Timeout semantics: a timed-out shard fails the run with status `timeout`
