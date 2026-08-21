@@ -454,3 +454,36 @@ concerns this run's definitive status, not #9384's closure.
 | Cache control | The reusable setup action owns a locked explicit `PLTADDONDIR` store and still relinks q plus compiles package-visible collections on every cache hit. |
 
 The successful PR platform job demonstrates that the targeted macOS regression is repaired. It is **not** a release closeout: the v1.00.10 gate remains a fresh manual `full-regression` dispatch after the repair is merged to `main`. The retained all-lane artifacts must show six Linux records, one workflows record, one platform record, GitHub conclusion `success`, and `run-summary.json.status: pass`. The cache rollout additionally requires a clean cold population followed by an unchanged warm cache-hit dispatch before the macOS timeout is reconsidered.
+
+## v1.00.10 closeout — canonical LF3 links and macOS Racket cache (2026-08-21)
+
+This closeout resolves the macOS worker-security regression first exposed by [run 32479520248](https://github.com/coinerd/q/actions/runs/32479520248). The repair sequence merged PRs [#9420](https://github.com/coinerd/q/pull/9420), [#9421](https://github.com/coinerd/q/pull/9421), [#9422](https://github.com/coinerd/q/pull/9422), and [#9423](https://github.com/coinerd/q/pull/9423). The final merged revision is `178e9beb12aad63d081f90a8c902d0d8c3aaa322`.
+
+> **Closeout decision:** v1.00.10 satisfies its security and L4 evidence gate. Both retained all-lane summaries report `status: pass`, and both GitHub workflow conclusions are `success`. The warm-cache run is recorded as performance evidence; it does **not** authorize a platform-timeout reduction because it is the first warm observation and the macOS job remained above the 25-minute policy threshold.
+
+| Evidence run | Cache state | GitHub conclusion | `run-summary.json.status` | L4 required lanes | macOS platform result |
+|---|---|---:|---:|---|---|
+| [32522576690](https://github.com/coinerd/q/actions/runs/32522576690) | Cold exact-store miss; store populated | `success` | `pass` | Linux 6/6 pass; workflows 1/1 pass; platform 1/1 pass | 38 files pass, including `tests/test-worker-security.rkt` |
+| [32526868295](https://github.com/coinerd/q/actions/runs/32526868295) | Unchanged exact-store hit (`racket-addon-v2-macOS-x64-cs-full-8.10-…`) | `success` | `pass` | Linux 6/6 pass; workflows 1/1 pass; platform 1/1 pass | 38 files pass, including `tests/test-worker-security.rkt` |
+
+### Retained all-lane evidence
+
+For both runs, the retained `run-summary` artifact uses schema `1.00.09` and records no aggregation errors. Each summary reports six collected Linux shard records with `status: pass`, one workflows record with `status: pass`, and one platform record with `status: pass`. The all-lane aggregator therefore independently agrees with the corresponding successful GitHub workflow conclusion; no Linux-only masking occurred.
+
+The final platform artifacts report `RUN-SUMMARY` verdict `pass` for the `platform` suite. The canonical-target repair in PR #9423 covers the macOS-specific safe case in a portable fixture: an absolute symlink target that contains a lexical alias ancestor is recursively canonicalized before allowed-root containment is evaluated. External links, traversal, and broken links remain fail-closed.
+
+### Cache observations and operational follow-up
+
+| Measurement | Cold run | Warm run |
+|---|---:|---:|
+| Exact user-store cache | miss | hit and restored successfully |
+| Package-visible setup | 2,230 s (37m10s) | 1,353 s (22m33s) |
+| Entire macOS `test-platform` job | 2,739 s (45m39s) | 1,867 s (31m07s) |
+
+The warm run validates the deterministic cache contract: the locked Racket user store restored, q relinked to the fresh checkout, `q` and `fmt` were compiled, and `raco fmt` was available before platform tests executed. The warm job improved by 872 s (14m32s) relative to the cold job while preserving the mandatory package-visible compilation boundary.
+
+The cache policy requires **two** successful warm observations below 25 minutes before proposing a lower macOS timeout. This first warm run is successful but remains above that threshold. Keep the current timeout unchanged, retain the exact-key/no-restore-key policy, and record a second unchanged warm run before any budget change.
+
+### v1.00.10 verdict
+
+**Complete.** The relative-target rebasing, canonical-target traversal, portable security regression matrix, macOS pull-request validation, and fresh merged-main all-lane L4 evidence are complete. No v1.00.10 security, lane-integrity, or release-evidence blocker remains.
