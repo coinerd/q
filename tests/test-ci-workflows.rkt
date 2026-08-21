@@ -82,7 +82,7 @@
                     (string-contains? setup-action "steps.racket-store.outputs.addon_path"))
                "the addon store must be explicit and cacheable on macOS"))
  (test-case "cache key is exact, versioned, and dependency-lock based"
-   (check-true (and (string-contains? setup-action "racket-addon-v1-")
+   (check-true (and (string-contains? setup-action "racket-addon-v2-")
                     (string-contains? setup-action "x64-cs-full")
                     (string-contains? setup-action "ci/racket-package-lock.rktd"))
                "cache key must identify the exact Racket distribution and lock"))
@@ -91,11 +91,12 @@
                     (string-contains? setup-action "./compiled")
                     (string-contains? setup-action "restore-keys:"))
                 "the cache must not restore legacy paths or partial dependency graphs"))
- (test-case "cache hit relinks q and still compiles all package-visible modules"
+ (test-case "cache hit relinks q and compiles q plus the formatter command"
    (check-true (and (string-contains? setup-action "raco pkg update --name q --link --batch --no-setup")
-                    (string-contains? setup-action "raco setup --no-docs --jobs 4 --pkgs q")
+                    (string-contains? setup-action "raco setup --no-docs --jobs 4 --pkgs q fmt")
+                    (string-contains? setup-action "raco fmt --help >/dev/null")
                     (string-contains? setup-action "verify-racket-package-lock.rkt"))
-               "cache hits must be locked, relinked, and fully compiled"))
+               "cache hits must be locked, relinked, and compile q plus `raco fmt`"))
  (test-case "full regression has no duplicate outer Racket package cache"
    (check-false (string-contains? wf "Cache Racket packages")
                 "the reusable setup action must be the sole package-cache owner")))

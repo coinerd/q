@@ -37,7 +37,7 @@ runs:
       with:
         path: ${{ steps.racket-store.outputs.addon_path }}
         key: >-
-          racket-addon-v1-${{ runner.os }}-x64-cs-full-${{ inputs.racket-version }}-
+          racket-addon-v2-${{ runner.os }}-x64-cs-full-${{ inputs.racket-version }}-
           ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}
 
     - name: Install Racket
@@ -114,11 +114,13 @@ runs:
           echo "::endgroup::"
         fi
 
-        # Compile every q package-visible collection. Documentation is not a
-        # test-platform requirement; disabling it removes a large cold-run cost
-        # without weakening the package compile boundary.
-        echo "::group::Compiling all q package-visible collections"
-        raco setup --no-docs --jobs 4 --pkgs q
+        # Compile every q package-visible collection and the `fmt` command
+        # package used by racket-tooling write validation. `fmt` is a build
+        # dependency, so q setup alone does not reliably install its `raco`
+        # command in a clean CI user store.
+        echo "::group::Compiling q collections and the formatter command"
+        raco setup --no-docs --jobs 4 --pkgs q fmt
+        raco fmt --help >/dev/null
         echo "::endgroup::"
 
         racket -e '(require quickcheck fmt) (displayln "Racket package store health check passed")'
