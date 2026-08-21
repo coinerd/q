@@ -79,8 +79,16 @@
              (car remaining)))
        (cond
          [(or (file-exists? candidate) (directory-exists? candidate))
-          ;; Component exists — resolve links and retain a complete prefix.
-          (loop (cdr remaining) (resolve-existing-component candidate))]
+          ;; Component exists — resolve links and retain a complete prefix. A
+          ;; resolved target can itself contain an existing lexical alias (for
+          ;; example macOS /var → /private/var). Restarting from that target
+          ;; walks every component under the same rule before containment is
+          ;; tested; advancing directly would retain the alias and falsely
+          ;; reject a valid in-root link target.
+          (define resolved-candidate (resolve-existing-component candidate))
+          (if (equal? resolved-candidate (simplify-path candidate #f))
+              (loop (cdr remaining) resolved-candidate)
+              (loop (append (explode-path resolved-candidate) (cdr remaining)) #f))]
          [(link-exists? candidate)
           ;; Broken symlink — reject (resolve-path would raise, caught by outer handler → #f)
           (raise (exn:fail (format "broken symlink: ~a" candidate) (current-continuation-marks)))]

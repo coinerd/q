@@ -270,6 +270,33 @@
           (when (directory-exists? fixture-root)
             (delete-directory/files fixture-root)))))
 
+    ;; macOS temporary paths can make an existing absolute symlink target retain
+    ;; a lexical alias (for example /var) while the allowed root is already
+    ;; physical (/private/var). The resolved target itself must be walked again.
+    (test-case "LF3: absolute symlink target through lexical alias remains in-root"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-absolute-alias~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define lexical-inner (build-path lexical-allowed "inner"))
+          (define alias-link (build-path physical-allowed "absolute-alias-link"))
+          (make-directory* (build-path physical-allowed "inner"))
+          (make-file-or-directory-link (string->path "physical-parent") alias-parent)
+          ;; The link target is deliberately absolute but still has a lexical
+          ;; alias ancestor. This is the shape emitted by the macOS fixture.
+          (make-file-or-directory-link lexical-inner alias-link)
+          (parameterize ([current-allowed-roots (list physical-allowed)])
+            (define target (build-path alias-link "deep" "file.txt"))
+            (check-true (path-allowed? (path->string target))
+                        "LF3: absolute target through an alias must remain in-root")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
     (test-case "LF3: symlinked allowed-root ancestor still rejects escape"
       (define fixture-root (make-temporary-directory "worker-security-lf3-escape~a"))
       (dynamic-wind
