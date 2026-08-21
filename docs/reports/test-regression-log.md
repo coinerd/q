@@ -440,3 +440,17 @@ reported `fail`.
 The #9384 closure itself remains justified on its own remediation scope
 (JSON infra, DEEP-9, macOS budget — all confirmed here); the correction above
 concerns this run's definitive status, not #9384's closure.
+
+
+## v1.00.10 LF3 repair — implementation evidence pending merged-main L4 closeout
+
+| Field | Value |
+|---|---|
+| Failure baseline | [Run 32479520248](https://github.com/coinerd/q/actions/runs/32479520248) on v1.00.09, in which the macOS platform lane failed worker-security rejection assertions and the conservative L4 summary correctly reported `fail`. |
+| Repair implementation | [PR #9420](https://github.com/coinerd/q/pull/9420), `fix(ci): cache macOS Racket store and fail-close LF3 links`. |
+| PR validation run | [Run 32493249423](https://github.com/coinerd/q/actions/runs/32493249423) — lint and the macOS `test-platform` job succeeded. |
+| Security repair | `sandbox/worker-tools.rkt` now rebases a relative `resolve-path` result against the containing directory of the resolved link before retaining it as a prefix. |
+| Regression matrix | The portable relative-ancestor fixture covers valid in-root relative links plus external file links, external directory links with new tails, upward traversal, and broken links. |
+| Cache control | The reusable setup action owns a locked explicit `PLTADDONDIR` store and still relinks q plus compiles package-visible collections on every cache hit. |
+
+The successful PR platform job demonstrates that the targeted macOS regression is repaired. It is **not** a release closeout: the v1.00.10 gate remains a fresh manual `full-regression` dispatch after the repair is merged to `main`. The retained all-lane artifacts must show six Linux records, one workflows record, one platform record, GitHub conclusion `success`, and `run-summary.json.status: pass`. The cache rollout additionally requires a clean cold population followed by an unchanged warm cache-hit dispatch before the macOS timeout is reconsidered.
