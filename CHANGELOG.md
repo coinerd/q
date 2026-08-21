@@ -38,6 +38,8 @@
 
 - Version stamped `1.00.07`; wave PR #9411 merged to main.
 
+Released 2026-08-20.
+
 ## [Unreleased]
 
 > v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE — merged via PR #9370 (main `76ae7946`).
