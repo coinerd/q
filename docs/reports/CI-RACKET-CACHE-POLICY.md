@@ -10,10 +10,10 @@ The full-regression platform lane previously cached `~/.racket` and workspace by
 |---|---|
 | Cache owner | Only `.github/actions/setup-racket/action.yml` restores the Racket package store. Callers must not add a second Racket package cache. |
 | Cache path | The action sets `PLTADDONDIR=$HOME/.cache/q-racket-addon` and caches the versioned addon directory. |
-| Cache key | `racket-addon-v1`, runner OS, Racket x64/CS/full distribution tuple, Racket version, `info.rkt`, and `ci/racket-package-lock.rktd` form the exact key. |
+| Cache key | `racket-addon-v2`, runner OS, Racket x64/CS/full distribution tuple, Racket version, `info.rkt`, and `ci/racket-package-lock.rktd` form the exact key. |
 | Restore policy | No prefix restore keys are permitted. A manifest or lock change produces a clean store. |
 | Workspace bytecode | `compiled/` directories are deleted before setup and are never cached. |
-| Compile boundary | Every run, including an exact cache hit, relinks q and executes `raco setup --no-docs --jobs 4 --pkgs q`. |
+| Compile boundary | Every run, including an exact cache hit, relinks q and executes `raco setup --no-docs --jobs 4 --pkgs q fmt`, then checks `raco fmt --help`. |
 
 > **Binding constraint:** A cache hit accelerates dependency acquisition. It never authorizes skipping compilation of package-visible q modules.
 
@@ -25,7 +25,7 @@ When `info.rkt` changes or an explicit dependency update is required, maintainer
 
 ## Cache recovery
 
-A missing q package on an exact cache hit, a failed lock verifier, or a failed health probe is a cache-integrity incident. The job must remain red. The repair is to correct the lock or intentionally increment the `racket-addon-v1` schema in the setup action, which creates a new immutable GitHub cache after a successful trusted main, scheduled, or manual run. Do not add `restore-keys` as a workaround.
+A missing q package on an exact cache hit, a failed lock verifier, a missing `raco fmt` command, or a failed health probe is a cache-integrity incident. The job must remain red. The repair is to correct the lock or intentionally increment the `racket-addon-v2` schema in the setup action, which creates a new immutable GitHub cache after a successful trusted main, scheduled, or manual run. Do not add `restore-keys` as a workaround.
 
 ## Rollout evidence and timeout policy
 
