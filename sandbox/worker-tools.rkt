@@ -78,51 +78,48 @@
                 (build-path acc part))
               (simplify-path p #f))])])))
 
-;; H3: Resolve symlinks before checking — simplify-path alone does NOT resolve symlinks.
-;; A symlink inside the allowed root pointing to /etc would pass the old check.
-;; resolve-path follows symlinks and raises exn on broken links → we reject those.
-;; For non-existent files (new writes), resolve the parent directory instead.
-;; LF3 (v0.99.4): When neither file nor parent dir exists, walk path components
-;; to resolve symlinks on the longest existing prefix.
+;; H3/LF3: Resolve every request through the longest existing prefix. This is
+;; intentionally used for existing paths as well as new-write paths: resolving
+;; only a final parent can preserve a lexical spelling for a symlinked ancestor
+;; while a deeper request resolves to its physical spelling.
 (define (resolve-path-safely p)
   (define complete (path->complete-path (expand-user-path p) (current-directory)))
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (cond
-      [(file-exists? complete) (simplify-path (resolve-path complete) #f)]
-      ;; File doesn't exist yet (e.g. new write) — resolve parent dir, then append filename
-      [(let-values ([(base name must-be-dir?) (split-path complete)])
-         (and base (directory-exists? base)))
-       (let-values ([(base name must-be-dir?) (split-path complete)])
-         (define parent-resolved (simplify-path (resolve-path base) #f))
-         (if name
-             (build-path parent-resolved name)
-             parent-resolved))]
-      ;; LF3 (v0.99.4): Neither file nor parent dir exists — walk path
-      ;; components to resolve symlinks on the longest existing prefix.
-      [else (resolve-longest-prefix complete)])))
+    (resolve-longest-prefix complete)))
 
-;; H3: Normalize a root directory at comparison time (resolve symlinks)
-(define (normalize-root r)
-  (with-handlers ([exn:fail? (lambda (_) r)])
-    (simplify-path (resolve-path (path->complete-path r (current-directory))) #f)))
+;; v1.00.09 LF3: An allowed root must be canonicalized by the *same* longest
+;; existing-prefix algorithm as a request. `resolve-path` alone only resolves a
+;; final link and can leave a symlinked ancestor lexical, which falsely rejects
+;; an in-root request after its prefix has been resolved physically.
+(define (canonical-existing-root r)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define complete (path->complete-path (expand-user-path r) (current-directory)))
+    ;; Allowed roots are configuration, not paths to be created. An invalid or
+    ;; unresolvable root fails closed rather than broadening authorization.
+    (and (directory-exists? complete)
+         (resolve-longest-prefix complete))))
 
-;; Check if a path is within allowed roots
+(define (path-within-root? resolved root)
+  (define resolved-str (path->string resolved))
+  (define root-str (path->string root))
+  ;; The separator guard preserves component boundaries: /allowed must never
+  ;; authorize /allowed-escape.
+  (define root-dir
+    (if (string-suffix? root-str "/")
+        root-str
+        (string-append root-str "/")))
+  (or (string=? resolved-str root-str)
+      (string=? resolved-str root-dir)
+      (string-prefix? resolved-str root-dir)))
+
+;; Check if a path is within allowed roots. Both operands use the same
+;; canonicalization semantics; broken links and invalid roots are rejected.
 (define (path-allowed? p)
   (define resolved (resolve-path-safely p))
-  ;; If resolve-path failed (broken symlink or missing file), reject
   (and resolved
-       (let ([resolved-str (path->string resolved)])
-         (for/or ([root (in-list (current-allowed-roots))])
-           (define normalized-root (normalize-root root))
-           (define root-str (path->string (path->complete-path normalized-root (current-directory))))
-           ;; Ensure root ends with a single slash for prefix comparison
-           (define root-dir
-             (if (string-suffix? root-str "/")
-                 root-str
-                 (string-append root-str "/")))
-           (or (string=? resolved-str root-str)
-               (string=? resolved-str root-dir)
-               (string-prefix? resolved-str root-dir))))))
+       (for/or ([root (in-list (current-allowed-roots))])
+         (define canonical-root (canonical-existing-root root))
+         (and canonical-root (path-within-root? resolved canonical-root)))))
 
 ;; ── SEC-7 (v0.99.76 W2): Worker file-op safety parity ───────────
 ;; Mirrors main tool-write/tool-edit guards: per-write size limit,

@@ -244,6 +244,53 @@
       (when (directory-exists? sub-dir)
         (delete-directory/files sub-dir)))
 
+    ;; v1.00.09: The configured allowed root can itself be reached through a
+    ;; symlinked ancestor (for example, a platform temporary-directory alias).
+    ;; Requests and roots must therefore use the same canonicalization path.
+    (test-case "LF3: symlinked allowed-root ancestor accepts in-root tail"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-alias~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define mid-link (build-path lexical-allowed "mid-link"))
+          (make-directory* (build-path physical-allowed "sub"))
+          (make-file-or-directory-link physical-parent alias-parent)
+          (make-file-or-directory-link (build-path physical-allowed "sub") mid-link)
+          (parameterize ([current-allowed-roots (list lexical-allowed)])
+            (define target (build-path mid-link "deep" "file.txt"))
+            (check-true (path-allowed? (path->string target))
+                        "LF3: an in-root path through an aliased ancestor must be accepted")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
+    (test-case "LF3: symlinked allowed-root ancestor still rejects escape"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-escape~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define outside-dir (build-path fixture-root "outside"))
+          (define escape-link (build-path lexical-allowed "escape-link"))
+          (make-directory* physical-allowed)
+          (make-directory* outside-dir)
+          (make-file-or-directory-link physical-parent alias-parent)
+          (make-file-or-directory-link outside-dir escape-link)
+          (parameterize ([current-allowed-roots (list lexical-allowed)])
+            (define target (build-path escape-link "deep" "file.txt"))
+            (check-false (path-allowed? (path->string target))
+                         "LF3: an alias-root symlink escape must remain rejected")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
     (test-case "LF3: broken symlink rejected"
       (define symlink-path (build-path allowed-dir "broken-link"))
       (define link-error
