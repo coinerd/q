@@ -84,8 +84,8 @@ triage protocol is `docs/operations/test-regression-triage.md`; its
 release-linkage rule (release readiness requires full-regression evidence,
 never a green `fast` run alone) is binding.
 
-**L4 evidence status: implementation hardening in v1.00.09; fresh candidate
-proof required.** The v1.00.09 status contract makes the definitive summary
+**L4 evidence status: implementation hardening; fresh candidate proof
+required.** The status contract makes the definitive summary
 conservative across all required lanes: six Linux shard records, the
 `workflows-suite` record, and the macOS `results-platform` record. A missing,
 malformed, cancelled, timed-out, unexpectedly skipped, or failing required
