@@ -22,6 +22,8 @@
 
 (define wf-path (build-path project-root ".github" "workflows" "full-regression.yml"))
 (define wf (file->string wf-path))
+(define setup-path (build-path project-root ".github" "actions" "setup-racket" "action.yml"))
+(define setup-action (file->string setup-path))
 
 ;; ---------------------------------------------------------------------------
 ;; Triggers: scheduled (nightly cron) + manual dispatch with suite/profile
@@ -67,6 +69,38 @@
                 "360 (the default) does not count as an explicit timeout")))
 
 ;; ---------------------------------------------------------------------------
+;; Racket package store: a single composite-action owner caches the explicit
+;; user addon directory. Workspace bytecode must not be cached; the mandatory
+;; q package compile boundary remains active on every cache hit.
+;; ---------------------------------------------------------------------------
+
+(define-test-suite
+ racket-cache-contract
+ (test-case "setup action defines an explicit cacheable user addon store"
+   (check-true (and (string-contains? setup-action "PLTADDONDIR=$addon_base")
+                    (string-contains? setup-action "q-racket-addon")
+                    (string-contains? setup-action "steps.racket-store.outputs.addon_path"))
+               "the addon store must be explicit and cacheable on macOS"))
+ (test-case "cache key is exact, versioned, and dependency-lock based"
+   (check-true (and (string-contains? setup-action "racket-addon-v1-")
+                    (string-contains? setup-action "x64-cs-full")
+                    (string-contains? setup-action "ci/racket-package-lock.rktd"))
+               "cache key must identify the exact Racket distribution and lock"))
+ (test-case "cache excludes obsolete and unsafe workspace bytecode paths"
+   (check-false (or (string-contains? setup-action "~/.racket")
+                    (string-contains? setup-action "./compiled")
+                    (string-contains? setup-action "restore-keys:"))
+                "the cache must not restore legacy paths or partial dependency graphs"))
+ (test-case "cache hit relinks q and still compiles all package-visible modules"
+   (check-true (and (string-contains? setup-action "raco pkg update --name q --link --batch --no-setup")
+                    (string-contains? setup-action "raco setup --no-docs --jobs 4 --pkgs q")
+                    (string-contains? setup-action "verify-racket-package-lock.rkt"))
+               "cache hits must be locked, relinked, and fully compiled"))
+ (test-case "full regression has no duplicate outer Racket package cache"
+   (check-false (string-contains? wf "Cache Racket packages")
+                "the reusable setup action must be the sole package-cache owner")))
+
+;; ---------------------------------------------------------------------------
 ;; Evidence: per-shard JSON artifacts (W0 schema) + run summary with
 ;; pass/fail/timeout/skip, wall clock, and profile.
 ;; ---------------------------------------------------------------------------
@@ -105,5 +139,6 @@
   (exit (run-tests (test-suite "tests/test-ci-workflows.rkt"
                      trigger-contract
                      execution-contract
+                     racket-cache-contract
                      evidence-contract
                      timeout-semantics))))

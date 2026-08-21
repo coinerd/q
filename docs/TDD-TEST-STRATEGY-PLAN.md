@@ -102,6 +102,15 @@ workflow and macOS records, GitHub conclusion `success`, and summary status
 release-blocking evidence-integrity event under
 `docs/operations/test-regression-triage.md`.
 
+**v1.00.10 release-candidate condition:** The macOS platform lane must use the
+locked, explicit Racket user-store cache described in
+`docs/reports/CI-RACKET-CACHE-POLICY.md`, while continuing to compile
+all package-visible q modules on every cache hit. Its LF3 relative-symlink
+security fixtures and cache-integrity diagnostics are release evidence, not
+optional performance work. L4 closure therefore requires one clean cold
+population and one unchanged warm cache-hit dispatch, with GitHub conclusion
+`success` and `run-summary.json.status` `pass` in both required all-lane runs.
+
 ### Shard plan — guarded `FAST_SHARD_PLAN` activation: ACTIVE (W4)
 
 Duration-aware LPT shard planning ships with a guarded activation path via the
