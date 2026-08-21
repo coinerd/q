@@ -1,4 +1,4 @@
-# CI Racket Cache Policy v1.00.10
+# CI Racket Cache Policy
 
 **Status:** Active for the reusable `.github/actions/setup-racket` action.
 
@@ -6,7 +6,7 @@
 
 The full-regression platform lane previously cached `~/.racket` and workspace bytecode even though the macOS Racket 8.10 user package state was stored elsewhere. The result was a cache miss followed by a complete external-package install and global setup. This policy assigns cache ownership to the reusable setup action and preserves q's package-visible compilation gate on every run.
 
-| Concern | v1.00.10 rule |
+| Concern | Active rule |
 |---|---|
 | Cache owner | Only `.github/actions/setup-racket/action.yml` restores the Racket package store. Callers must not add a second Racket package cache. |
 | Cache path | The action sets `PLTADDONDIR=$HOME/.cache/q-racket-addon` and caches the versioned addon directory. |

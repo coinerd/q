@@ -104,7 +104,7 @@ release-blocking evidence-integrity event under
 
 **v1.00.10 release-candidate condition:** The macOS platform lane must use the
 locked, explicit Racket user-store cache described in
-`docs/reports/CI-RACKET-CACHE-POLICY-v1.00.10.md`, while continuing to compile
+`docs/reports/CI-RACKET-CACHE-POLICY.md`, while continuing to compile
 all package-visible q modules on every cache hit. Its LF3 relative-symlink
 security fixtures and cache-integrity diagnostics are release evidence, not
 optional performance work. L4 closure therefore requires one clean cold
