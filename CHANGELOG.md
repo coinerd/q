@@ -1,3 +1,47 @@
+## v1.00.08 — 2026-08-21
+
+> Provider networking hardening closeout: per-model cumulative retry ceiling
+> (`providers.<name>.retry-ceiling-secs`) documented and config-override
+> tested through the turn-orchestrator settings path (PN-7).
+
+### Bug Fixes
+
+- **PN-7 cumulative retry ceiling config override.** `runtime/turn-orchestrator.rkt`
+  now exposes `resolve-retry-ceiling-secs`, which reads
+  `providers.<name>.retry-ceiling-secs` from session-config settings and falls
+  back to the module default when absent. A dedicated test
+  (`tests/test-provider-retry-ceiling-config.rkt`) proves the per-model value
+  overrides the default, that another model's override does not leak, and that
+  absent settings/model-name fall back to `default-cumulative-ceiling-secs`.
+- **Documentation drift fix.** `docs/provider-retry.md` previously stated the
+  default cumulative ceiling was 300s; the default was raised to 900s in
+  v1.00.05. The `retry-ceiling-secs` examples and tables now match the actual
+  default (900s / 15 min).
+
+### Testing
+
+- New focused test `tests/test-provider-retry-ceiling-config.rkt` (4 cases)
+  covering the PN-7 settings-override resolution.
+- Existing provider-networking contract tests remain green: stream port
+  closure (PN-1), generator finalization (PN-3), SSE heartbeat metadata
+  (PN-2b), circuit breaker (PN-4), adaptive retry (PN-6), cumulative ceiling
+  (PN-7).
+
+### Breaking / Behavior Changes
+
+- None. `resolve-retry-ceiling-secs` is a pure extraction of the existing
+  inline resolution; no retry behavior changes.
+
+### Migration Notes
+
+- None required. Existing `retry-ceiling-secs` config continues to work.
+
+### Operational / Release
+
+- Version stamped `1.00.08`; provider-networking hardening plan v1.00.08
+  closed out.
+
+Released 2026-08-21.
 ## v1.00.07 — 2026-08-20
 
 > macOS platform test fixes (W2): SP12 dash/bash PIPESTATUS conditional + LF3

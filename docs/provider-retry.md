@@ -107,7 +107,7 @@ bounds the **total wall-clock** across all retry attempts.
 {
   "providers": {
     "deepseek": {
-      "retry-ceiling-secs": 300
+      "retry-ceiling-secs": 900
     }
   }
 }
@@ -115,7 +115,7 @@ bounds the **total wall-clock** across all retry attempts.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `providers.<name>.retry-ceiling-secs` | `300` (5 min) | Maximum cumulative wall-clock across all retries for a single turn. |
+| `providers.<name>.retry-ceiling-secs` | `900` (15 min) | Maximum cumulative wall-clock across all retries for a single turn. |
 
 When the cumulative elapsed time exceeds the ceiling, the turn fails immediately
 with a `retry-exhausted` exception naming the ceiling.
@@ -146,7 +146,7 @@ original/reduced `max-tokens`, and `floorReached`.
 | `base-delay-ms` | 1000 | Base delay for exponential backoff |
 | `rate-limit-base-delay-ms` | 10000 | Base delay for rate-limit (429) errors |
 | `max-delay-ms` | 60000 | Maximum delay cap |
-| `retry-ceiling-secs` | 300 | Cumulative wall-clock ceiling (W2) |
+| `retry-ceiling-secs` | 900 | Cumulative wall-clock ceiling (W2) |
 
 Backoff uses exponential growth (`base * 2^attempt`) with full jitter
 (random value in `[0, exponential-cap]`), capped at `max-delay-ms`.
