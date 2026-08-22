@@ -89,6 +89,13 @@
                                      [rel (path->string (find-relative-path base-dir f))])
                                 (and (string-suffix? s ".rkt")
                                      (not (string-contains? s "/compiled/"))
+                                     ;; v1.00.11 hotfix: the discovery-parity fixture tree
+                                     ;; (tests/metadata-discovery/fixture/) is frozen input
+                                     ;; data for tests/ci/metadata-discovery-test.rkt, which
+                                     ;; copies it into its own temp root before collecting.
+                                     ;; The repo-root walk must never collect or execute it.
+                                     (not (for/or ([prefix (in-list discovery-ignored-path-prefixes)])
+                                            (string-prefix? rel prefix)))
                                      (not (support-test-module? s))
                                      (not (hash-ref (get-file-metadata rel) 'not-test? #f))))))
          (path->string (find-relative-path base-dir f))))
