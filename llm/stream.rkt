@@ -481,6 +481,17 @@
              (define stream-start (current-inexact-milliseconds))
              (define deadline (+ stream-start (* max-total-secs 1000.0)))
              (define max-consecutive-empty 100)
+             ;; v1.00.12 W2 (SS-5): diagnostic suffix on every stream-timeout
+             ;; message. The struct fields remain the machine source of truth;
+             ;; this string form exists for logs/UX and is regression-matched by
+             ;; tests/test-sse-phase-timeout-bounds.rkt against
+             ;; #rx"\\[phase=(initial|thinking|content) data-received=(yes|no) chars=[0-9]+\\]$".
+             (define (timeout-msg base phase received-any-data? content-chars)
+               (string-append base
+                              (format " [phase=~a data-received=~a chars=~a]"
+                                      phase
+                                      (if received-any-data? "yes" "no")
+                                      content-chars)))
              ;; v0.99.84: Line buffer for aggressive socket draining (CLOSE-WAIT fix).
              ;; Ported from read-sse-chunks so all providers using stream-sse-events
              ;; benefit from the same CLOSE-WAIT prevention.
@@ -501,7 +512,11 @@
                         [content-chars 0])
                (when (> (current-inexact-milliseconds) deadline)
                  (raise (exn:fail:network:timeout:stream
-                         (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
+                         (timeout-msg (format "Stream exceeded maximum total duration (~a seconds)"
+                                              max-total-secs)
+                                      (phase-from-state received-any-data? seen-content?)
+                                      received-any-data?
+                                      content-chars)
                          (current-continuation-marks)
                          received-heartbeats?
                          received-any-data?
@@ -509,7 +524,11 @@
                          content-chars)))
                (when (>= consecutive-empty max-consecutive-empty)
                  (raise (exn:fail:network:timeout:stream
-                         (format "Stream exceeded ~a consecutive empty lines" max-consecutive-empty)
+                         (timeout-msg (format "Stream exceeded ~a consecutive empty lines"
+                                              max-consecutive-empty)
+                                      (phase-from-state received-any-data? seen-content?)
+                                      received-any-data?
+                                      content-chars)
                          (current-continuation-marks)
                          received-heartbeats?
                          received-any-data?
@@ -539,7 +558,11 @@
                (cond
                  [(eq? line #f)
                   (raise (exn:fail:network:timeout:stream
-                          (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
+                          (timeout-msg (format "HTTP read timeout (~a seconds) waiting for SSE chunk"
+                                               timeout-secs)
+                                       (phase-from-state received-any-data? seen-content?)
+                                       received-any-data?
+                                       content-chars)
                           (current-continuation-marks)
                           received-heartbeats?
                           received-any-data?
