@@ -3,7 +3,6 @@
 ;; @speed fast
 ;; @suite provider
 ;; @boundary unit
-;; @not-test true ;; v1.00.13 W0 (#9454): committed red — promoted in W2 (#9466)
 
 ;; tests/test-provider-network-policy-conformance.rkt
 ;; v1.00.13 (RL-3/RL-10): cross-adapter policy conformance harness.
@@ -14,14 +13,14 @@
 ;; gemini) and the same body-read budget on all four non-streaming paths.
 ;;
 ;; The boundary is observed through `current-request-mechanism-observer`
-;; (llm/stream.rkt, landed with the W2 wiring): a parameter procedure invoked
-;; by `stream-sse-events` (kind=stream: initial/thinking/content/total) and by
+;; (llm/stream.rkt): a parameter procedure invoked by `stream-sse-events`
+;; (kind=stream: initial/thinking/content/total) and by
 ;; `make-provider-http-request` (kind=body-read: read-timeout budget) with the
 ;; arguments each adapter actually hands to the shared mechanism.
 ;;
-;; W0 red mode: the observer parameter does not exist yet (guarded
-;; dynamic-require); the file compiles cleanly and fails its first check.
-;; W2 (#9466) lands the observer + adapter wiring and removes the marker.
+;; Committed red in W0 (#9454); green since W2 (#9466). W2 also completed the
+;; SS-6 adapter-parity deferral from the prior release: anthropic/azure/gemini previously
+;; called stream-sse-events with raw defaults (thinking 60, total 600).
 
 (require rackunit
          racket/tcp
@@ -56,33 +55,38 @@
   (define-values (_h p _rh _rp) (tcp-addresses listener #t))
   (define url (format "http://127.0.0.1:~a" p))
   (define server
-    (thread (lambda ()
-              (with-handlers ([exn:fail? (lambda (_) (void))])
-                (for ([_ (in-range 32)])
-                  (define-values (in out) (tcp-accept listener))
-                  ;; drain request head + content-length body
-                  (define content-length
-                    (let loop ([len 0])
-                      (define line (read-line in 'any))
-                      (cond
-                        [(or (eof-object? line) (string=? line "")) len]
-                        [else
-                         (define m (regexp-match #px"(?i:^Content-Length: *([0-9]+))" line))
-                         (loop (if m (string->number (cadr m)) len))])))
-                  (when (positive? content-length)
-                    (read-bytes content-length in))
-                  (display
-                   (bytes-append #"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n"
-                                 (or response-bytes #"{\"ok\":true}"))
-                   out)
-                  (flush-output out)
-                  (close-output-port out)
-                  (close-input-port in))))))
+    (thread
+     (lambda ()
+       (with-handlers ([exn:fail? (lambda (_) (void))])
+         (for ([_ (in-range 32)])
+           (define-values (in out) (tcp-accept listener))
+           ;; drain request head + content-length body
+           (define content-length
+             (let loop ([len 0])
+               (define line (read-line in 'any))
+               (cond
+                 [(or (eof-object? line) (string=? line "")) len]
+                 [else
+                  (define m (regexp-match #px"(?i:^Content-Length: *([0-9]+))" line))
+                  (loop (if m
+                            (string->number (cadr m))
+                            len))])))
+           (when (positive? content-length)
+             (read-bytes content-length in))
+           (display (bytes-append
+                     #"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n"
+                     (or response-bytes #"{\"ok\":true}"))
+                    out)
+           (flush-output out)
+           (close-output-port out)
+           (close-input-port in))))))
   (lambda (op)
     (case op
       [(url) url]
-      [(stop) (tcp-close listener)
-              (unless (thread-dead? server) (kill-thread server))])))
+      [(stop)
+       (tcp-close listener)
+       (unless (thread-dead? server)
+         (kill-thread server))])))
 
 ;; ————————————————————————————————————————————————————————————
 ;; Adapter fixtures
@@ -90,19 +94,28 @@
 
 (define (adapter-makers url)
   (list (list "openai-compatible"
-              (lambda () ((dynamic-require '"../llm/openai-compatible.rkt"
-                                           'make-openai-compatible-provider)
-                          (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))
+              (lambda ()
+                ((dynamic-require '"../llm/openai-compatible.rkt" 'make-openai-compatible-provider)
+                 (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))
         (list "anthropic"
-              (lambda () ((dynamic-require '"../llm/anthropic.rkt" 'make-anthropic-provider)
-                          (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))
+              (lambda ()
+                ((dynamic-require '"../llm/anthropic.rkt" 'make-anthropic-provider)
+                 (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))
         (list "azure-openai"
-              (lambda () ((dynamic-require '"../llm/azure-openai.rkt" 'make-azure-openai-provider)
-                          (hash 'api-key "test-key" 'base-url url 'model "conformance-model"
-                                'api-version "2024-02-15-preview"))))
+              (lambda ()
+                ((dynamic-require '"../llm/azure-openai.rkt" 'make-azure-openai-provider)
+                 (hash 'api-key
+                       "test-key"
+                       'base-url
+                       url
+                       'model
+                       "conformance-model"
+                       'api-version
+                       "2024-02-15-preview"))))
         (list "gemini"
-              (lambda () ((dynamic-require '"../llm/gemini.rkt" 'make-gemini-provider)
-                          (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))))
+              (lambda ()
+                ((dynamic-require '"../llm/gemini.rkt" 'make-gemini-provider)
+                 (hash 'api-key "test-key" 'base-url url 'model "conformance-model"))))))
 
 ;; Run one adapter's stream path against the peer, recording what the shared
 ;; mechanism boundary received. Returns the list of observed hashes.
@@ -110,8 +123,8 @@
   (define recorded (box '()))
   (parameterize ([observer (lambda (info) (set-box! recorded (cons info (unbox recorded))))])
     (with-handlers ([exn:fail? (lambda (_) (void))])
-      (define gen (provider-stream provider
-                                   (make-model-request '() '() (hash 'model "conformance-model"))))
+      (define gen
+        (provider-stream provider (make-model-request '() '() (hash 'model "conformance-model"))))
       (gen)) ; pull once: the mechanism boundary fires before the first read
     (unbox recorded)))
 
@@ -121,8 +134,7 @@
   (define recorded (box '()))
   (parameterize ([observer (lambda (info) (set-box! recorded (cons info (unbox recorded))))])
     (with-handlers ([exn:fail? (lambda (_) (void))])
-      (provider-send provider
-                     (make-model-request '() '() (hash 'model "conformance-model"))))
+      (provider-send provider (make-model-request '() '() (hash 'model "conformance-model"))))
     (unbox recorded)))
 
 (define (stream-entries recorded)
@@ -154,63 +166,81 @@
     (thunk)))
 
 (define (mechanism-args entry)
-  (hash 'initial (hash-ref entry 'initial)
-        'thinking (hash-ref entry 'thinking)
-        'content (hash-ref entry 'content)
-        'total (hash-ref entry 'total)))
+  (hash 'initial
+        (hash-ref entry 'initial)
+        'thinking
+        (hash-ref entry 'thinking)
+        'content
+        (hash-ref entry 'content)
+        'total
+        (hash-ref entry 'total)))
 
 (define (check-stream-conformance fixture-name parametrize expected-args expected-body)
-  (unless observer-landed? (observer-missing-error))
+  (unless observer-landed?
+    (observer-missing-error))
   (define peer (make-local-peer))
   (define results
-    (parametrize
-     (lambda ()
-       (for/list ([ (name make) (in-list (adapter-makers (peer 'url)))])
-         (define provider (make))
-         (define stream-obs (stream-entries (observe-stream provider)))
-         (define body-obs (body-read-entries (observe-send provider)))
-         (list name stream-obs body-obs)))))
+    (parametrize (lambda ()
+                   (for/list ([entry (in-list (adapter-makers (peer 'url)))])
+                     (define name (car entry))
+                     (define make (cadr entry))
+                     (define provider (make))
+                     (define stream-obs (stream-entries (observe-stream provider)))
+                     (define body-obs (body-read-entries (observe-send provider)))
+                     (list name stream-obs body-obs)))))
   (define baseline #f)
-  (for ([ (name stream-obs body-obs) (in-list results)])
-    (check-true (pair? stream-obs)
-                (format "~a ~a: the shared stream mechanism must observe one entry" fixture-name name))
+  (for ([entry (in-list results)])
+    (define name (car entry))
+    (define stream-obs (cadr entry))
+    (define body-obs (caddr entry))
+    (check-true
+     (pair? stream-obs)
+     (format "~a ~a: the shared stream mechanism must observe one entry" fixture-name name))
     (when (pair? stream-obs)
       (define args (mechanism-args (car stream-obs)))
       (cond
         [(not baseline) (set! baseline args)]
-        [else (check-equal? args baseline
-                            (format "~a: ~a mechanism args must match the first adapter" fixture-name name))])
-      (check-equal? args expected-args
-                    (format "~a: ~a resolved policy values" fixture-name name)))
-    (check-true (pair? body-obs)
-                (format "~a ~a: the shared body-read mechanism must observe one entry" fixture-name name))
+        [else
+         (check-equal?
+          args
+          baseline
+          (format "~a: ~a mechanism args must match the first adapter" fixture-name name))])
+      (check-equal? args expected-args (format "~a: ~a resolved policy values" fixture-name name)))
+    (check-true
+     (pair? body-obs)
+     (format "~a ~a: the shared body-read mechanism must observe one entry" fixture-name name))
     (when (pair? body-obs)
-      (check-equal? (hash-ref (car body-obs) 'read-timeout #f) expected-body
+      (check-equal? (hash-ref (car body-obs) 'read-timeout #f)
+                    expected-body
                     (format "~a: ~a body-read budget" fixture-name name))))
   (peer 'stop))
 
 (test-case "F1 conformance: legacy request=900 sse-read=600 across all adapters"
-  (check-stream-conformance
-   "F1" parameterize/f1
-   (hash 'initial 120 'thinking 300 'content 60 'total 1800)
-   600))
+  (check-stream-conformance "F1"
+                            parameterize/f1
+                            (hash 'initial 120 'thinking 300 'content 60 'total 1800)
+                            600))
 
 (test-case "F2 conformance: request=90, no legacy override across all adapters"
-  (check-stream-conformance
-   "F2" parameterize/f2
-   (hash 'initial 90 'thinking 90 'content 60 'total 600)
-   120))
+  (check-stream-conformance "F2"
+                            parameterize/f2
+                            (hash 'initial 90 'thinking 90 'content 60 'total 600)
+                            120))
 
 (test-case "legacy sse-read=600 cannot widen initial/content for ANY adapter"
-  (unless observer-landed? (observer-missing-error))
+  (unless observer-landed?
+    (observer-missing-error))
   (define peer (make-local-peer))
   (define results
-    (parameterize/f1
-     (lambda ()
-       (for/list ([ (name make) (in-list (adapter-makers (peer 'url)))])
-         (define stream-obs (stream-entries (observe-stream (make))))
-         (list name (and (pair? stream-obs) (mechanism-args (car stream-obs))))))))
-  (for ([ (name args) (in-list results)])
+    (parameterize/f1 (lambda ()
+                       (for/list ([entry (in-list (adapter-makers (peer 'url)))])
+                         (define name (car entry))
+                         (define make (cadr entry))
+                         (define stream-obs (stream-entries (observe-stream (make))))
+                         (list name (and (pair? stream-obs) (mechanism-args (car stream-obs))))))))
+  (for ([entry (in-list results)])
+    (define name (car entry))
+    (define args (cadr entry))
     (when args
       (check-equal? (hash-ref args 'initial) 120 (format "~a initial bound" name))
       (check-equal? (hash-ref args 'content) 60 (format "~a content bound" name))))

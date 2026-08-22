@@ -217,9 +217,11 @@
       (displayln (format "INFO: parameter inventory distribution: ~a" (hash->list counts)))
       ;; v1.00.13 W1 (#9461): +2 — current-model-thinking-idle-timeouts and
       ;; current-model-body-read-timeouts in llm/request-policy.rkt.
+      ;; v1.00.13 W2 (#9466): +1 — current-request-mechanism-observer in
+      ;; llm/stream.rkt (conformance observation seam).
       (check-equal? (length inventory-entries)
-                    197
-                    "parameter inventory should contain 197 audited parameters"))))
+                    198
+                    "parameter inventory should contain 198 audited parameters"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

@@ -117,6 +117,12 @@
                                     #:timeout [timeout-secs #f]
                                     #:read-timeout [read-timeout-secs #f]
                                     #:status-checker [status-checker #f])
+  ;; v1.00.13 W2 (#9466): body-read budget observation for the cross-adapter
+  ;; conformance harness (RL-10/AC-3). Zero overhead when unset.
+  (define observer (current-request-mechanism-observer))
+  (when observer
+    (observer
+     (hasheq 'kind 'body-read 'read-timeout (or read-timeout-secs http-read-timeout-default))))
   (define-values (host path-str port ssl?) (parse-provider-url url-str))
   (define effective-timeout (or timeout-secs (current-http-request-timeout)))
   (call-with-request-timeout (lambda ()
