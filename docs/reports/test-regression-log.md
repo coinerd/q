@@ -487,3 +487,103 @@ The cache policy requires **two** successful warm observations below 25 minutes 
 ### v1.00.10 verdict
 
 **Complete.** The relative-target rebasing, canonical-target traversal, portable security regression matrix, macOS pull-request validation, and fresh merged-main all-lane L4 evidence are complete. No v1.00.10 security, lane-integrity, or release-evidence blocker remains.
+
+## v1.00.11 closeout — version-indexed locks, restored 8.11 gate, metadata parity, feedback baseline (2026-08-22)
+
+This closeout records the evidence that every v1.00.11 control is live on the
+W1–W4 branch and that no stale governance claim remains. The W1–W4 rollout
+touched `.github/workflows/ci.yml` (restored cross-version gate + metadata
+inventory artifact + comment corrections) but did **not** touch the
+full-regression workflow or its actions, so the retained v1.00.10 all-lane L4
+proof — runs [32522576690](https://github.com/coinerd/q/actions/runs/32522576690)
+(cold) and [32526868295](https://github.com/coinerd/q/actions/runs/32526868295)
+(warm), both `success` + `run-summary.json.status: pass` — remains valid. No L4
+rerun was triggered and none is required.
+
+### W1 — version-indexed package locks (runtime-scoped exact cache keys)
+
+`ci/racket-package-lock.rktd` (schema revision 2) now carries one entry per
+supported Racket runtime instead of a single-runtime pin. Selection is exact —
+no cross-runtime fallback — and each entry's digest scopes the exact cache key.
+
+| Runtime | Selection result | Lock digest | Packages |
+|---|---|---|---:|
+| 8.10 | `lock-ok` | `343e83eed3062696df412fd49218d359dbda2e53b767f1e25d4cb6713e29210b` | 11 |
+| 8.11 | `lock-ok` | `a380c1d6ce52c307eed11c095cd47adae654544586ac063ad1d144e651407a76` | 11 |
+| 8.12 (negative control) | exit 1 — "no lock entry for Racket version 8.12; available entries: 8.10, 8.11 (exact match required — no cross-runtime fallback)" | — | — |
+
+Reproduced locally from the repository root via
+`racket ci/verify-racket-package-lock.rkt --racket-version <v>` (store-check
+identical; the sandbox lacks the package store, CI run
+[27145588560](https://github.com/coinerd/q/actions/runs/27145588560) proved the
+full path including `raco pkg show` green). The restored `test-cross-version`
+job (Racket 8.11, main push) consumes the 8.11 entry and its exact
+runtime-scoped cache key; the W0 known-red recorded in the frozen state
+`docs/reports/metadata-before-state-v1.00.11.json` is thereby resolved.
+
+### W3 — metadata discovery parity (zero violations, canonical digest)
+
+The enforced canonical inventory — `racket scripts/run-tests/classify-metadata.rkt
+--lint-metadata` and `--metadata-inventory-json` from the repository root, the
+identical command CI's blocking `metadata-lint` step runs — was re-executed at
+milestone close: **exit 0, `missing_required_count: 0`, `invalid: 0`,
+`deprecated: 0`, files = 1336, explicit = 1336, heuristic-only = 0, inventory
+schema version 1, file-list digest
+`ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`.**
+
+This digest is the canonical backing for every `missing-required=0` claim in
+`docs/` (see `docs/TDD-TEST-STRATEGY-PLAN.md` and `docs/TEST_CONVENTIONS.md`);
+any same-command invocation against this digest producing a nonzero count
+withdraws the claim. The W0 local-vs-CI discovery divergence is closed: the
+`scripts/run-tests.rkt --lint-metadata` wrapper dispatch is deleted, so no
+CI-only discovery branch exists; parity is pinned by
+`tests/ci/metadata-discovery-test.rkt` + `tests/metadata-discovery/fixture/`.
+
+### W2 — prepared-environment pilot decision: NO-GO (consumers stay on `setup-racket`)
+
+The decision authority is
+[`docs/reports/prepared-environment-pilot-v1.00.11.md`](prepared-environment-pilot-v1.00.11.md)
+(Section 4): **NO-GO** — integrity tooling is complete and locally verified, but
+zero hosted-run samples are transcribed and the go rule requires five. The 26
+`setup-racket` call sites remain the only default path; the pilot workflow
+`.github/workflows/prepared-environment-pilot.yml` is report-only and gates
+nothing. Rollback switch for any future cutover: repository variable
+`RACKET_PREPARED_ARTIFACT=off`.
+
+### W4 — feedback baseline (retained-input deterministic)
+
+[`docs/reports/test-feedback-baseline-v1.00.11.md`](test-feedback-baseline-v1.00.11.md)
+(+ machine-readable `.json`) records the L3/L4 wall-clock baseline produced by
+`scripts/run-tests/baseline-report.rkt` from checked-in retained inputs only —
+p50/p95 by linear interpolation, no p90 computed or implied, no network access,
+byte-identical under `--check`. It is the reference against which future
+feedback-loop changes must show no regression.
+
+### Warm-cache status — timeout NOT lowered
+
+The only warm-cache observation on record remains the v1.00.10 warm run
+(32526868295): the full macOS `test-platform` job took 1,867 s (31m07s), which
+is **above** the 25-minute timeout-reduction threshold. The cache policy
+requires **two** sub-25-minute warm observations before any macOS timeout
+change; one observation exists and it is above threshold. The macOS timeout is
+therefore unchanged, and the exact-key/no-restore-key policy is retained.
+
+### v1.00.11 verdict and release summary
+
+**Complete on the branch; release pending coordinator bookkeeping.** All
+controls are live: restored 8.11 cross-version gate (required, green),
+version-indexed locks with runtime-scoped exact cache keys, single-implementation
+metadata discovery with zero violations against the recorded canonical digest,
+prepared-environment pilot decided NO-GO with rollback switch, retained feedback
+baseline, retained v1.00.10 L4 proof. Release notes for `v1.00.11`:
+
+> v1.00.11 — TDD/CI integrity: restored the Racket 8.11 `test-cross-version`
+> gate; replaced the single-runtime package pin with version-indexed locks
+> (schema 2) selected by exact runtime match and used as runtime-scoped exact
+> cache keys (8.10 / 8.11 digests recorded in
+> `docs/reports/test-regression-log.md`); unified metadata discovery on one
+> repository command (local == CI) with zero violations against the enforced
+> canonical inventory digest; shipped the prepared-environment pilot
+> (report-only) with the recorded NO-GO cutover decision and
+> `RACKET_PREPARED_ARTIFACT=off` rollback switch; and retained the deterministic
+> test-feedback baseline. No required gate was weakened.

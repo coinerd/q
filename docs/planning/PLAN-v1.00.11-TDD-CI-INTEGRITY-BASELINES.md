@@ -18,6 +18,16 @@ Two control-integrity gaps, one measurement gap, and one CI-efficiency gap remai
 |---|---|---|
 | L3 required regression gates | `test-cross-version` fails on `main`: lock verifier rejects Racket 8.11 against an 8.10 lock.[3] | The 8.11 job installs, verifies a version-appropriate reviewed dependency graph, compiles, and runs the fast suite successfully. |
 | Metadata schema and blocking enforcement | CI lint log records `files=1301`, `missing-required=0`; a fresh local invocation records `files=1285`, `invalid=2`, `deprecated-alias=6`, `missing-required=142`.[4] [5] | One documented discovery contract produces the same normalized inventory locally and in CI; any remaining violations are resolved before enforcement is claimed. |
+
+**Resolution (v1.00.11 close, 2026-08-22):** the gap row above is the historical
+W0 record. Local and CI now invoke the *identical* repository command
+(`racket scripts/run-tests/classify-metadata.rkt --lint-metadata` from the
+checkout root; the diverging wrapper dispatch is deleted), and the enforced
+canonical inventory at close is `files=1336`, `missing-required=0`,
+`invalid=0`, `deprecated-alias=0` against file-list digest
+`ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`, recorded in
+`docs/reports/test-regression-log.md` — the canonical backing for every
+`missing-required=0` claim in `docs/`.
 | Phase 0 feedback baseline and L0–L2 targets | The canonical strategy still lists rolling baselines and L0–L2 SLO confirmation as deferred.[6] | A deterministic, retained baseline report establishes measured targets or explicitly justified revised targets. |
 | CI environment setup reuse | `setup-racket` has 26 YAML call sites; each hosted job repeats job-local runtime installation, q relinking, and package-visible setup.[7] | A measured, secure bootstrap-artifact pilot prepares a verified environment once per OS/runtime/commit tuple and lets dependent jobs restore it without silently rebuilding. |
 | L4 reliability | Cold run 32522576690 and unchanged warm run 32526868295 both have GitHub `success` and all-lane `run-summary.status: pass`.[1] [2] | Preserve this control; do not rerun or redesign it unless a v1.00.11 change touches full-regression behavior. |
