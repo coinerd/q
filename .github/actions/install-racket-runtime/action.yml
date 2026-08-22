@@ -45,21 +45,33 @@ runs:
         INSTALLER_SHA256: ${{ inputs.installer-sha256 }}
       run: |
         set -euo pipefail
+        # Mirror layout (download.racket-lang.org -> mirror.racket-lang.org):
+        #   full Linux   racket-<ver>-<plat>-<variant>.sh
+        #   full macOS   racket-<ver>-<plat>-<variant>.dmg
+        #   minimal      racket-minimal-<ver>-<plat>-<variant>.sh (Linux)
+        #               racket-minimal-<ver>-<plat>-<variant>.tgz (macOS)
+        # Variant is lowercase in published filenames (cs/bc).
+        variant_lc=$(printf '%s' "$VARIANT" | tr '[:upper:]' '[:lower:]')
         case "${RUNNER_OS}:${ARCHITECTURE}" in
-          Linux:x64)   plat_min=x86_64-linux;  plat_tar=x86_64-linux ;;
-          Linux:arm64) plat_min=arm64-linux;   plat_tar=aarch64-linux ;;
-          macOS:x64)   plat_min=x86_64-macosx; plat_tar=x86_64-macosx ;;
-          macOS:arm64) plat_min=aarch64-macosx;plat_tar=aarch64-macosx ;;
+          Linux:x64)   plat=x86_64-linux ;;
+          Linux:arm64) plat=aarch64-linux ;;
+          macOS:x64)   plat=x86_64-macosx ;;
+          macOS:arm64) plat=aarch64-macosx ;;
           *) echo "::error::unsupported tuple ${RUNNER_OS}/${ARCHITECTURE}"; exit 1 ;;
         esac
 
         if [ "$DISTRIBUTION" = "minimal" ]; then
-          url="https://download.racket-lang.org/installers/${RACKET_VERSION}/${plat_min}-${VARIANT}.sh"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            file="racket-minimal-${RACKET_VERSION}-${plat}-${variant_lc}.sh"
+          else
+            file="racket-minimal-${RACKET_VERSION}-${plat}-${variant_lc}.tgz"
+          fi
         elif [ "$RUNNER_OS" = "Linux" ]; then
-          url="https://download.racket-lang.org/installers/${RACKET_VERSION}/${plat_tar}-${VARIANT}.sh"
+          file="racket-${RACKET_VERSION}-${plat}-${variant_lc}.sh"
         else
-          url="https://download.racket-lang.org/installers/${RACKET_VERSION}/${plat_tar}-${VARIANT}.tar.xz"
+          file="racket-${RACKET_VERSION}-${plat}-${variant_lc}.dmg"
         fi
+        url="https://download.racket-lang.org/installers/${RACKET_VERSION}/${file}"
 
         # The cache key binds every dimension of the installer identity:
         # OS, architecture, variant, distribution, version, the exact source
@@ -127,8 +139,27 @@ runs:
           *.tar.xz)
             tar -xJf "$INSTALLER_ARCHIVE" -C "$prefix" --strip-components 1
             ;;
+          *.tgz)
+            tar -xzf "$INSTALLER_ARCHIVE" -C "$prefix" --strip-components 1
+            ;;
+          *.dmg)
+            # macOS dmg layout: "Racket v<V>/Racket v<V>/{bin,lib,collects,...}"
+            # (outer folder also carries an Applications symlink and install
+            # backgrounds — only the inner unix tree is wanted).
+            mount="$RUNNER_TEMP/racket-dmg"
+            rm -rf "$mount"
+            mkdir -p "$mount"
+            hdiutil attach -readonly -nobrowse -mountpoint "$mount" \
+              "$INSTALLER_ARCHIVE" >/dev/null
+            cp -R "$mount"/Racket*/Racket*/. "$prefix"/
+            hdiutil detach "$mount" >/dev/null
+            [ -x "$prefix/bin/racket" ] || {
+              echo "::error::racket binary not found inside the dmg image"
+              exit 1
+            }
+            ;;
           *.sh)
-            sh "$INSTALLER_ARCHIVE" --unix-style --dest "$prefix" --no-docs >/dev/null
+            sh "$INSTALLER_ARCHIVE" --unix-style --dest "$prefix" --create-dir >/dev/null
             ;;
           *) echo "::error::unknown installer archive kind: $INSTALLER_ARCHIVE"; exit 1 ;;
         esac

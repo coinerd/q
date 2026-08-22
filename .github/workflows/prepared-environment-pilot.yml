@@ -38,11 +38,12 @@ concurrency:
 # Racket 8.11 and macOS stay separate tuple pilots — no consumer cutover for
 # either in W3, and 8.11 waits for the W1 version-indexed lock entry.
 env:
-  # Published SHA-256 of each official installer archive. Keys and integrity
+  # Published SHA-256 of each official installer archive (mirror.racket-lang.org,
+  # the redirect target of download.racket-lang.org). Keys and integrity
   # checks bind these exact values; bump together with the version pins.
-  INSTALLER_SHA_LINUX_8_10: 'd1a88d1a6048df64e4e79f2ffef2e5228ab7522f2af5e7f56f90a29a03b6ff07'
-  INSTALLER_SHA_LINUX_8_11: '0000000000000000000000000000000000000000000000000000000000000000'
-  INSTALLER_SHA_MACOS_8_10: '0000000000000000000000000000000000000000000000000000000000000000'
+  INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
+  INSTALLER_SHA_LINUX_8_11: '12243f96ae2b19cda684d2c4ed7a8c773bd201d2e598fe23a18ef704e5c0d212'
+  INSTALLER_SHA_MACOS_8_10: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
 
 jobs:
   pilot:
@@ -54,17 +55,17 @@ jobs:
         include:
           - os: ubuntu
             racket-version: '8.10'
-            installer-sha: d1a88d1a6048df64e4e79f2ffef2e5228ab7522f2af5e7f56f90a29a03b6ff07
+            installer-sha: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
             role: full
           - os: ubuntu
             racket-version: '8.11'
             # 8.11 is producer-pilot only until the W1 version-indexed lock
             # entry is green; consumers are not enabled for this tuple.
-            installer-sha: '0000000000000000000000000000000000000000000000000000000000000000'
+            installer-sha: '12243f96ae2b19cda684d2c4ed7a8c773bd201d2e598fe23a18ef704e5c0d212'
             role: producer-only
           - os: macos
             racket-version: '8.10'
-            installer-sha: '0000000000000000000000000000000000000000000000000000000000000000'
+            installer-sha: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
             role: full
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8

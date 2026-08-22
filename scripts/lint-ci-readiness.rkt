@@ -40,10 +40,18 @@
               "util"
               "scripts"
               "tests"))
+  ;; Deliberate symlink exception: the frozen discovery-parity fixture
+  ;; tree pins the symlink-discovery contract
+  ;; (tests/metadata-discovery/fixture/README.md) — tracked test data,
+  ;; not local-vs-CI drift.
+  (define deliberate-symlinks
+    '("tests/metadata-discovery/fixture/tests/symlinked-test.rkt"))
   (for ([dir (in-list tracked-dirs)]
         #:when (directory-exists? dir))
     (for ([f (in-directory dir)])
-      (when (and (file-exists? f) (link-exists? f))
+      (when (and (file-exists? f)
+                 (link-exists? f)
+                 (not (member (path->string f) deliberate-symlinks)))
         (add-error! (format "ERROR: symlink in tracked dir: ~a" f))))))
 
 ;; --- Check 2: Untracked files that look like they should be ignored ---
