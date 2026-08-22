@@ -1,5 +1,14 @@
 name: CI
 
+# W3 prepared-environment note (docs/reports/prepared-environment-pilot-v1.00.11.md):
+# The 26 setup-racket call sites below are the ONLY default path for this
+# workflow and remain unchanged until the recorded go decision. The
+# prepared-environment pilot is report-only (.github/workflows/
+# prepared-environment-pilot.yml) and never gates anything here. Rollback
+# switch for any future cutover: repository variable RACKET_PREPARED_ARTIFACT=off
+# restores exactly this per-job path with no change to test selection or L4
+# semantics.
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -72,16 +81,25 @@ jobs:
       - name: Verify lint alignment
         run: racket scripts/check-lint-alignment.rkt
 
-      # Metadata lint (blocking): missing mandatory tags (@speed/@boundary
-      # on every test file) now fail the build. Invalid tags were always
-      # hard-failing inside the lint itself; this step must not weaken any
-      # existing check. Enforcement actually flipped at v1.00.06 — the
-      # documented v1.00.05 milestone slipped by one release because the
-      # report-only inventory had to reach zero missing tags first
-      # (evidence: exit 0, missing-required=0 across 1,299 files) — see
-      # docs/TEST_CONVENTIONS.md "Test metadata schema: required vs conditional".
+      # Metadata lint (blocking): the repo-owned classifier
+      # scripts/run-tests/classify-metadata.rkt is the SINGLE discovery
+      # implementation for both local and CI. Both modes invoke the exact
+      # same command from the checkout root, so the inventory is identical
+      # by construction (invariants I4/I5). Enforcement flipped at v1.00.06
+      # (the report-only inventory had to reach zero missing tags first).
+      # The W0 known-divergence is RESOLVED: the former wrapper dispatch
+      # (`scripts/run-tests.rkt --lint-metadata`) is deleted so no CI-only
+      # discovery branch remains; the parity contract is pinned by
+      # tests/ci/metadata-discovery-test.rkt + tests/metadata-discovery/fixture/.
+      - name: metadata-inventory (artifact)
+        run: racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > metadata-inventory.json
+      - name: Upload metadata inventory
+        uses: actions/upload-artifact@v7
+        with:
+          name: metadata-inventory-${{ github.sha }}
+          path: metadata-inventory.json
       - name: metadata-lint (blocking)
-        run: racket scripts/run-tests.rkt --lint-metadata
+        run: racket scripts/run-tests/classify-metadata.rkt --lint-metadata
 
   # ────────────────────────────────────────────────────────────
   # Gate 2: Sharded test suite — 3 parallel shards on ubuntu
@@ -349,6 +367,15 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   # Gate 2d: Racket 8.11 cross-version check (main push only)
+  #
+  # W0 KNOWN-RED (frozen state, see docs/reports/metadata-before-state-v1.00.11.json):
+  #   CI run 32532206128 — this job sets racket-version: '8.11' (below), but
+  #   ci/racket-package-lock.rktd pins a single-runtime lock to Racket 8.10 and
+  #   ci/verify-racket-package-lock.rkt therefore REJECTS the 8.11 runtime, so
+  #   this required gate is red on main. The characterization is pinned by
+  #   tests/ci/verify-lock-selection-test.rkt (8.10 accepted / 8.11 known-red
+  #   rejected / 8.12 rejected). W0 makes NO job config, lock, or lint change;
+  #   the fix lands in W1. This comment block is the only ci.yml change in W0.
   # ────────────────────────────────────────────────────────────
   test-cross-version:
     if: github.event_name == 'push'
