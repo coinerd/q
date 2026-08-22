@@ -44,34 +44,21 @@
 
 ;; Provider adapters under the policy ownership rule.
 (define adapter-files
-  '("llm/openai-compatible.rkt"
-    "llm/anthropic.rkt"
-    "llm/anthropic/sse.rkt"
-    "llm/gemini.rkt"
-    "llm/azure-openai.rkt"
-    "llm/openrouter.rkt"))
+  '("llm/openai-compatible.rkt" "llm/anthropic.rkt"
+                                "llm/anthropic/sse.rkt"
+                                "llm/gemini.rkt"
+                                "llm/azure-openai.rkt"
+                                "llm/openrouter.rkt"))
 
-(define mechanism-files
-  '("llm/stream.rkt"
-    "llm/http-helpers.rkt"))
+(define mechanism-files '("llm/stream.rkt" "llm/http-helpers.rkt"))
 
 ;; Temporary allowlist: (file rule-symbol) pairs.
 ;; W0 (#9454): EMPTY — the strict rule was red on the pre-W1 tree by design.
-;; W1 (#9461): populated with the transitional adapter consumers that W2
-;;             rewires; llm/stream.rkt is not listed because it only
-;;             re-exports the compatibility surface (definitions moved to
-;;             llm/request-policy.rkt).
-;; W2 (#9466): adapters lose raw accessors + local formulas + default
-;;             stream-sse-events calls — remove those entries.
-;; W4 (#9478): allowlist must be empty again.
-(define temporary-allowlist
-  '(("llm/openai-compatible.rkt" raw-accessor)
-    ("llm/anthropic/sse.rkt" raw-accessor)
-    ("llm/openai-compatible.rkt" total-formula)
-    ("llm/openai-compatible.rkt" phase-resolver)
-    ("llm/anthropic/sse.rkt" default-timeouts)
-    ("llm/gemini.rkt" default-timeouts)
-    ("llm/azure-openai.rkt" default-timeouts)))
+;; W1 (#9461): populated with the transitional adapter consumers.
+;; W2 (#9466): all four adapters consume the resolved policy; raw accessors,
+;;             local formulas, and default stream-sse-events calls are gone —
+;;             the allowlist is EMPTY again (end state; W4 re-verifies).
+(define temporary-allowlist '())
 
 (define (allowed? file rule)
   (member (list file rule) temporary-allowlist))
@@ -85,27 +72,29 @@
 
 (test-case "R1: adapters do not consume raw legacy timeout accessors"
   (define offenders
-    (append
-     (violating-files adapter-files "effective-sse-read-timeout-for" 'raw-accessor)
-     (violating-files adapter-files "effective-request-timeout-for" 'raw-accessor)))
-  (check-equal? offenders '()
-                (format "raw timeout config must be consumed only by the policy module: ~a" offenders)))
+    (append (violating-files adapter-files "effective-sse-read-timeout-for" 'raw-accessor)
+            (violating-files adapter-files "effective-request-timeout-for" 'raw-accessor)))
+  (check-equal? offenders
+                '()
+                (format "raw timeout config must be consumed only by the policy module: ~a"
+                        offenders)))
 
 (test-case "R2: the generic total-budget formula has one owner"
   (define offenders
-    (violating-files (append adapter-files mechanism-files)
-                     "(max 600"
-                     'total-formula))
-  (check-equal? offenders '()
-                (format "(max 600 ...) total-budget assembly belongs to llm/request-policy.rkt only: ~a"
-                        offenders)))
+    (violating-files (append adapter-files mechanism-files) "(max 600" 'total-formula))
+  (check-equal?
+   offenders
+   '()
+   (format "(max 600 ...) total-budget assembly belongs to llm/request-policy.rkt only: ~a"
+           offenders)))
 
 (test-case "R3: the phase resolver is consumed only by the policy module"
   (define offenders
     (violating-files (append adapter-files (list "llm/http-helpers.rkt"))
                      "sse-phase-timeout-secs"
                      'phase-resolver))
-  (check-equal? offenders '()
+  (check-equal? offenders
+                '()
                 (format "sse-phase-timeout-secs semantics move behind the policy module in W1: ~a"
                         offenders)))
 
@@ -120,7 +109,8 @@
                                 (string-contains? (source f) "#:initial-timeout")
                                 (string-contains? (source f) "#:thinking-timeout"))))
       f))
-  (check-equal? offenders '()
+  (check-equal? offenders
+                '()
                 (format "adapters must pass the resolved policy kwargs explicitly: ~a" offenders)))
 
 (test-case "R5: legacy per-model timeout parameters have a closed reference set"
@@ -130,9 +120,12 @@
     (violating-files (append adapter-files (list "llm/http-helpers.rkt"))
                      "current-model-sse-read-timeouts"
                      'legacy-parameters))
-  (check-equal? offenders '()
-                (format "only the policy module + runtime wiring + compat definition may touch the legacy parameters: ~a"
-                        offenders)))
+  (check-equal?
+   offenders
+   '()
+   (format
+    "only the policy module + runtime wiring + compat definition may touch the legacy parameters: ~a"
+    offenders)))
 
 (test-case "the policy module exists (W1) and owns the legacy translation"
   (check-true (file-exists/relative? "llm/request-policy.rkt")

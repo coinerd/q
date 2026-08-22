@@ -131,6 +131,8 @@
   (current-model-thinking-idle-timeouts . CONFIGURATION)
   (current-model-body-read-timeouts . CONFIGURATION)
   (current-http-request-timeout . CONFIGURATION))
+ ("llm/stream.rkt"
+  (current-request-mechanism-observer . SERVICE_HANDLE))
  ("runtime/auth/oauth.rkt"
   (current-oauth-http-sendrecv . SERVICE_HANDLE))
  ("runtime/auto-retry.rkt"

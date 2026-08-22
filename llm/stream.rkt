@@ -66,6 +66,8 @@
          current-http-request-timeout
          current-model-timeouts
          current-model-sse-read-timeouts
+         ;; Mechanism observation seam (v1.00.13 W2)
+         current-request-mechanism-observer
          ;; Exception struct
          exn:fail:network:timeout
          exn:fail:network:timeout?
@@ -433,6 +435,19 @@
 ;; Takes a port and an event->chunks callback that converts parsed JSON events
 ;; into provider-specific chunks. Handles SSE lifecycle, timeouts, and
 ;; keep-alive protection. Returns a generator yielding chunks or #f when done.
+;; ============================================================
+;; Mechanism observation seam (v1.00.13 W2, RL-10/AC-3)
+;; ============================================================
+
+;; When set, the shared stream/body mechanism invokes it with a hash of the
+;; lifecycle arguments each adapter actually passed: stream-sse-events records
+;; (kind stream initial thinking content total); make-provider-http-request
+;; records (kind body-read read-timeout). This is how the cross-adapter
+;; conformance harness (tests/test-provider-network-policy-conformance.rkt)
+;; proves every adapter consumes the SAME resolved policy. Default #f = no
+;; overhead. Injection seam only — never a data path.
+(define current-request-mechanism-observer (make-parameter #f))
+
 (define (stream-sse-events port
                            event->chunks
                            #:initial-timeout [initial-secs http-read-timeout-default]
@@ -440,6 +455,18 @@
                            #:thinking-timeout [thinking-secs stream-secs]
                            #:max-total-timeout [max-total-secs 600])
   (generator ()
+             (define observer (current-request-mechanism-observer))
+             (when observer
+               (observer (hasheq 'kind
+                                 'stream
+                                 'initial
+                                 initial-secs
+                                 'thinking
+                                 thinking-secs
+                                 'content
+                                 stream-secs
+                                 'total
+                                 max-total-secs)))
              (define stream-start (current-inexact-milliseconds))
              (define deadline (+ stream-start (* max-total-secs 1000.0)))
              (define max-consecutive-empty 100)
