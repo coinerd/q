@@ -99,10 +99,20 @@ runs:
           echo "::endgroup::"
         else
           echo "::group::Installing reviewed q dependencies without global setup"
-          set +e
-          raco pkg install --name q --auto --batch --no-setup --no-docs "$PWD"
-          INSTALL_RC=$?
-          set -e
+          # The pilot rollback runs after a producer that already link-
+          # installed q into the shared user scope; relink instead of
+          # failing on "package is already installed".
+          if raco pkg show --scope user q >/dev/null 2>&1; then
+            set +e
+            raco pkg update --name q --link --batch --no-setup "$PWD"
+            INSTALL_RC=$?
+            set -e
+          else
+            set +e
+            raco pkg install --name q --auto --batch --no-setup --no-docs "$PWD"
+            INSTALL_RC=$?
+            set -e
+          fi
           if [ "$INSTALL_RC" -ne 0 ]; then
             echo "::error::q dependency installation failed (INSTALL_RC=$INSTALL_RC). Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight"
             exit "$INSTALL_RC"

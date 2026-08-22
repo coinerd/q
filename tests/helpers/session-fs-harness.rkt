@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite session
+
 ;; tests/helpers/session-fs-harness.rkt
 ;; Test helpers for the atomic no-follow session filesystem (W2).
 ;; Provides isolated temp roots and external "attacker" symlink swaps that

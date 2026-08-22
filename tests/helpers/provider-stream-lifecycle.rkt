@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite provider
+
 (require rackunit
          racket/tcp
          "../../llm/model.rkt"

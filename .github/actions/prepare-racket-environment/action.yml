@@ -1,0 +1,177 @@
+name: 'Prepare Racket environment artifact'
+description: >-
+  Producer half of the prepared-environment contract (W3). Installs the
+  runtime job-locally via install-racket-runtime, installs the reviewed
+  dependency graph behind the exact lock, compiles q plus fmt, and packs an
+  immutable 24-hour artifact whose contents are restricted to the addon
+  store, the current-commit q compiled output and a manifest.json binding
+  the tuple (repository, git SHA, OS, arch, Racket tuple, lock digest,
+  source digest, allowlisted path set).
+inputs:
+  racket-version:
+    description: 'Racket version to prepare'
+    required: false
+    default: '8.10'
+  installer-sha256:
+    description: 'Published SHA-256 of the official installer archive'
+    required: true
+  variant:
+    description: 'Racket variant (CS or BC)'
+    required: false
+    default: 'CS'
+  distribution:
+    description: 'Racket distribution (full or minimal)'
+    required: false
+    default: 'full'
+  architecture:
+    description: 'Racket architecture'
+    required: false
+    default: 'x64'
+  artifact-name:
+    description: 'Name of the prepared-environment artifact'
+    required: true
+outputs:
+  lock-digest:
+    description: 'SHA-256 of the lock file used for the package store'
+    value: ${{ steps.tuple.outputs.lock-digest }}
+  source-digest:
+    description: 'SHA-256 over the tracked source tree at this commit'
+    value: ${{ steps.tuple.outputs.source-digest }}
+  artifact-name:
+    description: 'Name of the uploaded prepared-environment artifact'
+    value: ${{ inputs.artifact-name }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Install the job-local Racket runtime
+      uses: ./.github/actions/install-racket-runtime
+      with:
+        racket-version: ${{ inputs.racket-version }}
+        architecture: ${{ inputs.architecture }}
+        variant: ${{ inputs.variant }}
+        distribution: ${{ inputs.distribution }}
+        installer-sha256: ${{ inputs.installer-sha256 }}
+
+    - name: Configure explicit user package store and derive tuple digests
+      id: tuple
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+      run: |
+        set -euo pipefail
+        addon_base="$HOME/.cache/q-racket-addon"
+        echo "PLTADDONDIR=$addon_base" >> "$GITHUB_ENV"
+        echo "addon_path=$addon_base/$RACKET_VERSION" >> "$GITHUB_OUTPUT"
+
+        # Lock digest: SHA-256 over the lock file. Under the W1 version
+        # indexed schema this is the same material the verifier selects a
+        # version entry from; under the flat schema it still fully binds the
+        # reviewed package graph. Used as a cache-key and manifest dimension.
+        lock_digest=$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)
+        echo "lock-digest=$lock_digest" >> "$GITHUB_OUTPUT"
+
+        # Source digest: SHA-256 over the sorted (mode, blob, path) listing
+        # of every tracked file — deterministic for a given commit.
+        source_digest=$(git ls-files -s | LC_ALL=C sort | shasum -a 256 | cut -d' ' -f1)
+        echo "source-digest=$source_digest" >> "$GITHUB_OUTPUT"
+
+    # Exact key only: every cache dimension derives from the requested
+    # runtime tuple and the lock digest, so one runtime's package store can
+    # never satisfy another runtime's job.
+    - name: Restore locked Racket user package store
+      id: addon-cache
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: ${{ steps.tuple.outputs.addon_path }}
+        key: >-
+          racket-addon-v3-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.variant }}-
+          ${{ inputs.racket-version }}-${{ steps.tuple.outputs.lock-digest }}
+
+    - name: Install reviewed dependencies and compile q plus fmt
+      shell: bash
+      env:
+        ADDON_PATH: ${{ steps.tuple.outputs.addon_path }}
+        CACHE_HIT: ${{ steps.addon-cache.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        if [ "$CACHE_HIT" = "true" ]; then
+          raco pkg show --scope user q >/dev/null 2>&1 || {
+            echo "::error::exact package-store cache hit lacks the q user package"
+            exit 1
+          }
+          racket ci/verify-racket-package-lock.rkt
+          raco pkg update --name q --link --batch --no-setup "$PWD"
+        else
+          raco pkg install --name q --auto --batch --no-setup --no-docs "$PWD"
+          racket ci/verify-racket-package-lock.rkt
+        fi
+        raco setup --no-docs --jobs 4 --pkgs q fmt
+        raco fmt --help >/dev/null
+        racket -e '(require quickcheck fmt) (displayln "producer package store health check passed")'
+
+    - name: Pack the allowlisted prepared-environment artifact
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        VARIANT: ${{ inputs.variant }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        ARCHITECTURE: ${{ inputs.architecture }}
+        ADDON_PATH: ${{ steps.tuple.outputs.addon_path }}
+        LOCK_DIGEST: ${{ steps.tuple.outputs.lock-digest }}
+        SOURCE_DIGEST: ${{ steps.tuple.outputs.source-digest }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      run: |
+        set -euo pipefail
+        stage="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
+        rm -rf "$stage"
+        mkdir -p "$stage/addon-store" "$stage/q-compiled"
+
+        # Allowlisted contents only (I10): the addon store and the q
+        # checkout's compiled output. No .git, no credentials, no tokens,
+        # no home-directory data ever enters the artifact.
+        cp -a "$ADDON_PATH/." "$stage/addon-store/"
+        while IFS= read -r -d '' dir; do
+          rel="${dir#./}"
+          mkdir -p "$stage/q-compiled/$rel"
+          cp -a "$dir/." "$stage/q-compiled/$rel/"
+        done < <(find . -type d -name compiled -not -path './.git/*' -print0)
+
+        git_sha=$(git rev-parse HEAD)
+        racket ci/prepared-environment/manifest.rkt emit \
+          --out "$stage/manifest.json" \
+          --repository "${GITHUB_REPOSITORY}" \
+          --git-sha "$git_sha" \
+          --os "${RUNNER_OS}" \
+          --arch "$ARCHITECTURE" \
+          --racket-version "$RACKET_VERSION" \
+          --racket-variant "$VARIANT" \
+          --racket-distribution "$DISTRIBUTION" \
+          --lock-digest "$LOCK_DIGEST" \
+          --source-digest "$SOURCE_DIGEST" \
+          --allowlist 'addon-store/' \
+          --allowlist 'q-compiled/' \
+          --allowlist 'manifest.json'
+
+        # Self-check: the staged tree must already satisfy the contract this
+        # producer publishes, so a broken pack fails here and not downstream.
+        racket ci/prepared-environment/manifest.rkt verify \
+          --manifest "$stage/manifest.json" \
+          --expect-repository "${GITHUB_REPOSITORY}" \
+          --expect-git-sha "$git_sha" \
+          --expect-os "${RUNNER_OS}" \
+          --expect-arch "$ARCHITECTURE" \
+          --expect-racket-version "$RACKET_VERSION" \
+          --expect-lock-digest "$LOCK_DIGEST" \
+          --root "$stage"
+
+        du -sh "$stage" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    # Immutable by construction: upload-artifact never overwrites an
+    # existing name and retention is pinned to one day (24h, I9).
+    - name: Upload the prepared-environment artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/prepared-env-${{ inputs.artifact-name }}
+        retention-days: 1
+        if-no-files-found: error

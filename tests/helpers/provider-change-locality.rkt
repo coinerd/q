@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite provider
+
 ;; Test-only architecture checker for v0.99.91 Path-B provider ownership.
 ;; It deliberately does not parse or normalize provider wire events.
 

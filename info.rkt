@@ -15,5 +15,10 @@
 
 (define build-deps '("rackunit-lib" "quickcheck" "fmt"))
 
+;; Frozen discovery-parity fixtures (tests/metadata-discovery/fixture) are
+;; data files for tests/ci/metadata-discovery-test.rkt: deliberately without
+;; #lang (and one git symlink), so raco setup must not compile them.
+(define compile-omit-paths '("tests/metadata-discovery/fixture"))
+
 (define pkg-authors '("coinerd"))
 (define pkg-license "MIT")
