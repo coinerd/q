@@ -9,10 +9,19 @@
 
 (require racket/string
          racket/list
-         racket/file)
+         racket/file
+         racket/path)
+
+;; NOTE (W2): deliberately no `racket/json` require. This script must run on
+;; bare installations (the repo's CI base image ships a minimal Racket whose
+;; collection tree has no racket/json.rkt), so JSON emission is implemented
+;; locally below. Keep it that way unless the CI image is pinned to a full
+;; distribution — a missing collection here is a discovery tool outage.
 
 (provide base-dir
-         q-root-candidate?
+          q-root-candidate?
+          resolve-base-dir
+          resolve-repository-root
          resolve-base-dir
          metadata-cache
          clear-metadata-cache!
@@ -36,8 +45,17 @@
          validate-files
          summarize-findings
          findings->jsexpr
-         lint-summary->jsexpr
-         print-lint-report)
+          lint-summary->jsexpr
+          print-lint-report
+          ;; Canonical test-file discovery + deterministic inventory (W2)
+          sha256-hex
+          discovery-ignored-directory-names
+          discovery-ignored-path-prefixes
+          discovery-support-module-names
+          discover-metadata-files
+          results-with-finding-code
+          build-metadata-inventory
+          emit-metadata-inventory-json)
 
 ;; ============================================================
 ;; Base directory resolution
@@ -511,6 +529,69 @@
 
 ;; ---- jsexpr helpers (for --json-out payloads) ----
 
+;; ---- minimal local JSON emitter (no racket/json dependency) ----
+;; Supports the jsexpr subset this script produces: immutable hasheq with
+;; symbol keys, lists, strings, exact integers, booleans, #f-as-null is NOT
+;; used (we emit explicit 'null), and symbols (rendered as strings).
+
+(define (json-escape-string! s out)
+  (write-char #\" out)
+  (for ([c (in-string s)])
+    (case c
+      [(#\")
+       (write-string "\\\"" out)]
+      [(#\\)
+       (write-string "\\\\" out)]
+      [(#\newline)
+       (write-string "\\n" out)]
+      [(#\return)
+       (write-string "\\r" out)]
+      [(#\tab)
+       (write-string "\\t" out)]
+      [(#\backspace)
+       (write-string "\\b" out)]
+      [(#\u000c)
+       (write-string "\\f" out)]
+      [else
+       ;; escape only control chars and non-ASCII; printables go through raw
+       (if (or (char<? c #\space) (char>? c #\u007f))
+           (fprintf out "\\u~a" (let ([hex (number->string (char->integer c) 16)])
+                                  (string-append (make-string (max 0 (- 4 (string-length hex))) #\0)
+                                               (string-upcase hex))))
+           (write-char c out))]))
+  (write-char #\" out))
+
+(define (json-write v [out (current-output-port)])
+  (cond
+    [(hash? v)
+     (write-char #\{ out)
+     (define pairs (hash->list v))
+     (for ([i (in-naturals)] [kv (in-list pairs)])
+       (unless (zero? i) (write-char #\, out))
+       (json-escape-string!
+        (if (symbol? (car kv)) (symbol->string (car kv)) (car kv)) out)
+       (write-char #\: out)
+       (json-write (cdr kv) out))
+     (write-char #\} out)]
+    [(list? v)
+     (write-char #\[ out)
+     (for ([i (in-naturals)] [e (in-list v)])
+       (unless (zero? i) (write-char #\, out))
+       (json-write e out))
+     (write-char #\] out)]
+    [(string? v) (json-escape-string! v out)]
+    [(symbol? v) (json-escape-string! (symbol->string v) out)]
+    [(boolean? v) (write-string (if v "true" "false") out)]
+    [(eq? v 'null) (write-string "null" out)]
+    [(integer? v) (fprintf out "~a" v)]
+    [(real? v) (fprintf out "~a" v)]
+    [else (json-escape-string! (format "~a" v) out)]))
+
+(define (json->string v)
+  (define o (open-output-string))
+  (json-write v o)
+  (get-output-string o))
+
 (define (finding->jsexpr f)
   (hasheq 'kind
           (symbol->string (hash-ref f 'kind))
@@ -594,3 +675,284 @@
             (hash-ref a 'missing_required)
             (hash-ref a 'files)))
   s)
+
+;; ============================================================
+;; Canonical test-file discovery (W2) — the ONE repository-owned
+;; inventory used by BOTH metadata consumers (local --lint-metadata
+;; and the CI metadata step).
+;; ============================================================
+;;
+;; CONTRACT (any change here is a behavior change for BOTH modes and
+;; must be pinned by q/tests/ci/metadata-discovery-test.rkt):
+;;
+;;   1. INPUT ROOT — explicit repository root (a directory containing
+;;      tests/ and scripts/run-tests.rkt). Only <root>/tests is scanned;
+;;      nothing outside the discovery root can enter the inventory.
+;;
+;;   2. PATH NORMALIZATION — every discovered path is reported
+;;      repo-relative with forward slashes ("tests/foo/bar-test.rkt"),
+;;      so the inventory is independent of the invocation root's
+;;      absolute location.
+;;
+;;   3. IGNORED DIRECTORIES — directory names pruned anywhere under
+;;      tests/: "compiled" (bytecode), ".git", "generated"
+;;      (documented generated trees).
+;;
+;;   4. IGNORED PATH PREFIXES — documented non-canonical subtrees:
+;;      "tests/metadata-discovery/fixture/" is the frozen W0/W2
+;;      discovery-parity fixture tree. Its files are fixture data, not
+;;      repository tests, so they are excluded from the canonical
+;;      inventory (they are still discovered when the fixture tree is
+;;      copied to a temp root and scanned as its own root).
+;;
+;;   5. SUPPORT MODULES — fixed helper-module name list that is not part
+;;      of the test inventory (same list as classify-filters.rkt
+;;      `support-test-module?`).
+;;
+;;   6. SYMLINK POLICY — file symlinks are treated like ordinary files
+;;      (they appear at their link path); directory symlinks are NOT
+;;      descended into (cycle safety + mode independence, since checkout
+;;      copies materialize symlinks as files). Applied identically in
+;;      local and CI invocation modes because there is only this one
+;;      function.
+;;
+;;   7. TEST-FILE PREDICATE (which files REQUIRE metadata) — a file
+;;      enters the inventory iff it is under <root>/tests, has the .rkt
+;;      suffix, is not in an ignored directory/prefix, is not a support
+;;      module, and does not carry `@not-test`. Everything else
+;;      (including non-*-test.rkt names like beta-plain.rkt) requires
+;;      metadata.
+;;
+;; DETERMINISM: the returned list is sorted lexicographically, so the
+;; same tree always yields the same list, digest, and counts regardless
+;; of the invoking process's working directory.
+
+;; Walk up from `from` to the nearest repository root. Falls back to the
+;; legacy resolve-base-dir candidate list when nothing matches (bounded
+;; climb, 12 levels).
+(define (resolve-repository-root [from (find-system-path 'orig-dir)])
+  (let climb ([dir (simplify-path (path->complete-path from))] [fuel 12])
+    (cond
+      [(<= fuel 0) (resolve-base-dir from)]
+      [(q-root-candidate? dir) dir]
+      [(and (directory-exists? (build-path dir "q"))
+            (q-root-candidate? (build-path dir "q")))
+       (simplify-path (build-path dir "q"))]
+      [else (climb (simplify-path (build-path dir 'up)) (sub1 fuel))])))
+
+(define discovery-ignored-directory-names '("compiled" ".git" "generated"))
+(define discovery-ignored-path-prefixes '("tests/metadata-discovery/fixture/"))
+(define discovery-support-module-names
+  '("event-simulator.rkt" "mock-tui-session.rkt" "state-assertions.rkt" "workflow-harness.rkt"))
+
+;; repo-relative, forward-slash path string of p under root
+(define (repo-relative-path-string root p)
+  (define rel (find-relative-path (simplify-path root) (simplify-path p)))
+  (apply string-append
+         (add-between (map (lambda (seg) (if (symbol? seg) (symbol->string seg) (path->string seg)))
+                           (explode-path rel))
+                      "/")))
+
+(define (discovery-ignored-path? rel)
+  (for/or ([prefix (in-list discovery-ignored-path-prefixes)])
+    (string-prefix? rel prefix)))
+
+;; discover-metadata-files : [#:root path?] -> (listof string?)
+;; The single repository-owned discovery function (see contract above).
+(define (discover-metadata-files #:root [root base-dir])
+  (define root* (simplify-path (path->complete-path root)))
+  (define tests-dir (build-path root* "tests"))
+  (define found '())
+  (define (walk! dir)
+    (for ([entry (in-list (directory-list dir #:build? #t))])
+      (define name
+        (let ([n (file-name-from-path entry)])
+          (and n (if (path? n) (path->string n) (symbol->string n)))))
+      (cond
+        [(directory-exists? entry)
+         (when (and (not (link-exists? entry))
+                    name
+                    (not (member name discovery-ignored-directory-names)))
+           (walk! entry))]
+        [else
+         (when (and (file-exists? entry)
+                    name
+                    (string-suffix? name ".rkt")
+                    (not (member name discovery-support-module-names)))
+           (define rel (repo-relative-path-string root* entry))
+           (when (and (not (discovery-ignored-path? rel))
+                       (not (hash-ref (get-file-metadata entry) 'not-test? #f)))
+             (set! found (cons rel found))))])))
+  (when (directory-exists? tests-dir)
+    (walk! tests-dir))
+  (sort found string<?))
+
+;; ============================================================
+;; Pure-Racket SHA-256 (FIPS 180-4)
+;; ============================================================
+;; The openssl collection is not part of this Racket installation, so the
+;; digest is implemented here. Correctness is pinned by known-answer tests
+;; ("abc" and the empty string) in q/tests/ci/metadata-discovery-test.rkt.
+
+(define sha256-k
+  (list->vector
+   (list #x428a2f98 #x71374491 #xb5c0fbcf #xe9b5dba5 #x3956c25b #x59f111f1 #x923f82a4 #xab1c5ed5
+         #xd807aa98 #x12835b01 #x243185be #x550c7dc3 #x72be5d74 #x80deb1fe #x9bdc06a7 #xc19bf174
+         #xe49b69c1 #xefbe4786 #x0fc19dc6 #x240ca1cc #x2de92c6f #x4a7484aa #x5cb0a9dc #x76f988da
+         #x983e5152 #xa831c66d #xb00327c8 #xbf597fc7 #xc6e00bf3 #xd5a79147 #x06ca6351 #x14292967
+         #x27b70a85 #x2e1b2138 #x4d2c6dfc #x53380d13 #x650a7354 #x766a0abb #x81c2c92e #x92722c85
+         #xa2bfe8a1 #xa81a664b #xc24b8b70 #xc76c51a3 #xd192e819 #xd6990624 #xf40e3585 #x106aa070
+         #x19a4c116 #x1e376c08 #x2748774c #x34b0bcb5 #x391c0cb3 #x4ed8aa4a #x5b9cca4f #x682e6ff3
+         #x748f82ee #x78a5636f #x84c87814 #x8cc70208 #x90befffa #xa4506ceb #xbef9a3f7 #xc67178f2)))
+
+(define (sha-rotr x n)
+  (bitwise-and #xffffffff
+               (bitwise-ior (arithmetic-shift x (- n))
+                            (arithmetic-shift x (- 32 n)))))
+
+(define (sha-hex8 x)
+  (define s (number->string x 16))
+  (string-append (make-string (max 0 (- 8 (string-length s))) #\0) s))
+
+;; sha256-hex : string? -> string?
+;; Lowercase hex SHA-256 of the UTF-8 encoding of s.
+(define (sha256-hex s)
+  (define msg (string->bytes/utf-8 s))
+  (define len (bytes-length msg))
+  (define padded
+    (let* ([k0 (- 56 (modulo (+ len 1) 64))]
+           [k (if (< k0 0) (+ k0 64) k0)]
+           [out (make-bytes (+ len 1 k 8))])
+      (bytes-copy! out 0 msg)
+      (bytes-set! out len #x80)
+      (define bitlen (* len 8))
+      (for ([i (in-range 8)])
+        (bytes-set! out (+ len 1 k i)
+                    (bitwise-and (arithmetic-shift bitlen (* -8 (- 7 i))) #xff)))
+      out))
+  (define h0 #x6a09e667)
+  (define h1 #xbb67ae85)
+  (define h2 #x3c6ef372)
+  (define h3 #xa54ff53a)
+  (define h4 #x510e527f)
+  (define h5 #x9b05688c)
+  (define h6 #x1f83d9ab)
+  (define h7 #x5be0cd19)
+  (define-values (final0 final1 final2 final3 final4 final5 final6 final7)
+    (for/fold ([a0 h0] [a1 h1] [a2 h2] [a3 h3] [a4 h4] [a5 h5] [a6 h6] [a7 h7])
+              ([off (in-range 0 (bytes-length padded) 64)])
+      (define w (make-vector 64))
+      (for ([i (in-range 16)])
+        (vector-set!
+         w i
+         (bitwise-ior (arithmetic-shift (bytes-ref padded (+ off (* 4 i))) 24)
+                      (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 1)) 16)
+                      (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 2)) 8)
+                      (bytes-ref padded (+ off (* 4 i) 3)))))
+      (for ([i (in-range 16 64)])
+        (define x15 (vector-ref w (- i 15)))
+        (define x2 (vector-ref w (- i 2)))
+        (define s0 (bitwise-xor (sha-rotr x15 7) (sha-rotr x15 18) (arithmetic-shift x15 -3)))
+        (define s1 (bitwise-xor (sha-rotr x2 17) (sha-rotr x2 19) (arithmetic-shift x2 -10)))
+        (vector-set! w i (bitwise-and #xffffffff (+ (vector-ref w (- i 16)) s0 (vector-ref w (- i 7)) s1))))
+      (let loop ([i 0] [ha a0] [hb a1] [hc a2] [hd a3] [he a4] [hf a5] [hg a6] [hh a7])
+        (if (= i 64)
+            (values (bitwise-and #xffffffff (+ a0 ha))
+                    (bitwise-and #xffffffff (+ a1 hb))
+                    (bitwise-and #xffffffff (+ a2 hc))
+                    (bitwise-and #xffffffff (+ a3 hd))
+                    (bitwise-and #xffffffff (+ a4 he))
+                    (bitwise-and #xffffffff (+ a5 hf))
+                    (bitwise-and #xffffffff (+ a6 hg))
+                    (bitwise-and #xffffffff (+ a7 hh)))
+            (let* ([S1 (bitwise-xor (sha-rotr he 6) (sha-rotr he 11) (sha-rotr he 25))]
+                   [ch (bitwise-and #xffffffff
+                                    (bitwise-xor (bitwise-and he hf)
+                                                 (bitwise-and (bitwise-not he) hg)))]
+                   [temp1 (+ hh S1 ch (vector-ref sha256-k i) (vector-ref w i))]
+                   [S0 (bitwise-xor (sha-rotr ha 2) (sha-rotr ha 13) (sha-rotr ha 22))]
+                   [maj (bitwise-and #xffffffff
+                                     (bitwise-xor (bitwise-and ha hb)
+                                                  (bitwise-and ha hc)
+                                                  (bitwise-and hb hc)))]
+                   [temp2 (+ S0 maj)])
+              (loop (add1 i)
+                    (bitwise-and #xffffffff (+ temp1 temp2))
+                    ha hb hc
+                    (bitwise-and #xffffffff (+ hd temp1))
+                    he hf hg))))))
+  (apply string-append
+         (map sha-hex8 (list final0 final1 final2 final3 final4 final5 final6 final7))))
+
+;; ============================================================
+;; Deterministic metadata inventory (W2)
+;; ============================================================
+;; `--metadata-inventory-json` payload: schema version, invocation root,
+;; normalized file-list digest (SHA-256 over the sorted normalized
+;; repo-relative paths, newline-joined), file count, per-area counts, and
+;; the full invalid / deprecated-alias / missing-required details. The
+;; same tree always yields the same digest — independent of the absolute
+;; location of the checkout, which is exactly the local-vs-CI parity
+;; contract pinned by q/tests/ci/metadata-discovery-test.rkt.
+
+(define (results-with-finding-code results code)
+  (for/list ([r (in-list results)]
+             #:when (for/or ([fnd (in-list (hash-ref r 'findings '()))])
+                       (eq? (hash-ref fnd 'code) code)))
+    (file-result->jsexpr r)))
+
+;; build-metadata-inventory : [#:root path?] -> jsexpr?
+(define (build-metadata-inventory #:root [root base-dir])
+  (define root* (simplify-path (path->complete-path root)))
+  (define files (discover-metadata-files #:root root*))
+  (define results-abs (validate-files (map (lambda (rel) (build-path root* rel)) files)))
+  ;; Re-key every result with its normalized repo-relative path so the
+  ;; payload (and per-area bucketing) is invocation-root independent.
+  (define results
+    (map (lambda (r rel) (hash-set r 'file rel)) results-abs files))
+  (define summary (summarize-findings results))
+  (hasheq 'tool "classify-metadata"
+          'schema_version metadata-schema-version
+          'inventory_schema_version 1
+          'invocation_root (path->string root*)
+          'file_count (length files)
+          'file_list_digest (sha256-hex (string-join files "\n"))
+          'files files
+          'counts (lint-summary->jsexpr summary)
+          'violations
+          (hasheq 'invalid (results-with-finding-code results 'invalid-speed)
+                  'deprecated_alias (results-with-finding-code results 'deprecated-isolation-alias)
+                  'missing_required (results-with-finding-code results 'missing-required))))
+
+;; emit-metadata-inventory-json : [#:root path?] -> void?
+;; Writes the deterministic inventory JSON to the current output port.
+;; Single repository entry point:
+;; scripts/run-tests/classify-metadata.rkt --metadata-inventory-json.
+(define (emit-metadata-inventory-json #:root [root base-dir])
+  (json-write (build-metadata-inventory #:root root) (current-output-port))
+  (newline (current-output-port)))
+
+;; ---- Direct CLI entry (repository command, same code path as the
+;; run-tests.rkt facade): both consumers invoke this one function. ----
+(module+ main
+  (define raw-args (vector->list (current-command-line-arguments)))
+  ;; Optional explicit root override: --root <dir>. Default: repository
+  ;; root resolved by climbing from the process directory.
+  (define root-override
+    (let loop ([rest raw-args])
+      (cond
+        [(and (pair? rest) (pair? (cdr rest)) (string=? (car rest) "--root")) (cadr rest)]
+        [(pair? rest) (loop (cdr rest))]
+        [else #f])))
+  (define (flag? name) (and (member name raw-args) #t))
+  (define inventory? (flag? "--metadata-inventory-json"))
+  (define lint? (flag? "--lint-metadata"))
+  (define root
+    (if root-override (path->complete-path root-override) (resolve-repository-root)))
+  (cond
+    [inventory? (emit-metadata-inventory-json #:root root)]
+    [lint? (print-lint-report (discover-metadata-files #:root root))]
+    [else
+     (eprintf
+      "usage: racket scripts/run-tests/classify-metadata.rkt [--metadata-inventory-json | --lint-metadata] [--root <dir>]\n")
+     (exit 2)]))

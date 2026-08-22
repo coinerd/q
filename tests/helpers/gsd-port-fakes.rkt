@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite gsd
+
 (require racket/list
          racket/match
          "../../extensions/gsd/effect-ports.rkt"
