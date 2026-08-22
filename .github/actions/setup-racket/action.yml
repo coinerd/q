@@ -77,8 +77,15 @@ runs:
         raco pkg show --scope user q || true
         echo ""
 
+        # raco pkg show exits 0 even when the package is absent (it prints
+        # "[none]"), so exit status cannot detect installation. Compare the
+        # trimmed output instead.
+        q_installed() {
+          [ "$(raco pkg show --scope user q 2>/dev/null | tr -d '[:space:]')" != "[none]" ]
+        }
+
         if [ "${{ steps.racket-addon-cache.outputs.cache-hit }}" = "true" ]; then
-          if ! raco pkg show --scope user q >/dev/null 2>&1; then
+          if ! q_installed; then
             echo "::error::Exact Racket cache hit lacks the q user package; bump the cache schema or repair ci/racket-package-lock.rktd. Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight"
             exit 1
           fi
@@ -102,7 +109,7 @@ runs:
           # The pilot rollback runs after a producer that already link-
           # installed q into the shared user scope; relink instead of
           # failing on "package is already installed".
-          if raco pkg show --scope user q >/dev/null 2>&1; then
+          if q_installed; then
             set +e
             raco pkg update --name q --link --batch --no-setup "$PWD"
             INSTALL_RC=$?

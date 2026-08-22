@@ -94,8 +94,13 @@ runs:
         CACHE_HIT: ${{ steps.addon-cache.outputs.cache-hit }}
       run: |
         set -euo pipefail
+        # raco pkg show exits 0 even when the package is absent (it prints
+        # "[none]"), so exit status cannot detect installation.
+        q_installed() {
+          [ "$(raco pkg show --scope user q 2>/dev/null | tr -d '[:space:]')" != "[none]" ]
+        }
         if [ "$CACHE_HIT" = "true" ]; then
-          raco pkg show --scope user q >/dev/null 2>&1 || {
+          q_installed || {
             echo "::error::exact package-store cache hit lacks the q user package"
             exit 1
           }
