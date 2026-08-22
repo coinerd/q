@@ -160,8 +160,13 @@ runs:
               hdiutil detach "$mount" >/dev/null 2>&1 || true
               exit 1
             fi
-            cp -R "$(dirname "$racket_src")"/. "$prefix"/
+            # racket_src is .../<tree>/bin/racket — copy the whole tree root.
+            cp -R "$(dirname "$(dirname "$racket_src")")"/. "$prefix"/
             hdiutil detach "$mount" >/dev/null
+            [ -x "$prefix/bin/racket" ] || {
+              echo "::error::racket not installed from dmg into $prefix"
+              exit 1
+            }
             ;;
           *.sh)
             sh "$INSTALLER_ARCHIVE" --unix-style --dest "$prefix" --create-dir >/dev/null
