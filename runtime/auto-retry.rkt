@@ -104,8 +104,9 @@
          ;; Injectable random source (W1)
          current-random-source
          ;; Retry-after parsing (W1)
-         (contract-out [parse-retry-after
-                        (-> (or/c string? #f) (or/c exact-nonnegative-integer? #f))]))
+         (contract-out [parse-retry-after (-> (or/c string? #f) (or/c exact-nonnegative-integer? #f))]
+                       ;; v1.00.13 W3 (#9473): structured retry-after source (RL-7)
+                       [structured-retry-after-ms (-> any/c (or/c exact-nonnegative-integer? #f))]))
 
 ;; ============================================================
 ;; Configuration
@@ -160,6 +161,15 @@
          (and (> (string-length trimmed) 0)
               (with-handlers ([exn:fail? (lambda (_) #f)])
                 (exact-floor (* (string->number trimmed) 1000)))))))
+
+;; v1.00.13 W3 (#9473, RL-7): the retry-delay source reads STRUCTURED failure
+;; metadata only — provider errors carry 'retry-after-ms in their context
+;; hash (populated from the actual response header by
+;; make-provider-http-request). Human exception text is never parsed: an
+;; error whose message mentions "Retry-After" but carries no structured
+;; context gets no header-derived delay.
+(define (structured-retry-after-ms exn)
+  (and (provider-error? exn) (hash-ref (provider-error-context exn) 'retry-after-ms #f)))
 
 ;; Compute retry delay with full jitter.
 ;;
@@ -540,8 +550,11 @@
                                          delay-history)))
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
-               ;; W1: Compute exponential cap then apply jitter
-               (define retry-after-ms (parse-retry-after (exn-message exn)))
+               ;; v1.00.13 W3 (#9473, RL-7): retry delay comes from the
+               ;; structured failure context (Retry-After read from the
+               ;; actual response header at the request boundary), never
+               ;; from parsing the human exception message.
+               (define retry-after-ms (structured-retry-after-ms exn))
                (define next-delay
                  (compute-retry-delay attempt
                                       rl-base

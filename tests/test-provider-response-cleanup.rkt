@@ -3,7 +3,6 @@
 ;; @speed fast
 ;; @suite provider
 ;; @boundary unit
-;; @not-test true ;; v1.00.13 W0 (#9454): committed red — promoted in W3 (#9473)
 
 ;; tests/test-provider-response-cleanup.rkt
 ;; v1.00.13 (RL-6): deterministic response-port ownership on the
@@ -18,8 +17,7 @@
 ;; on success, status-check failure, read timeout, request timeout, and
 ;; cancellation. GC remains a safety net, not the lifecycle.
 ;;
-;; W0 red mode: the seam does not exist yet (guarded dynamic-require) and the
-;; current implementation closes nothing on the failure paths.
+;; Committed red in W0 (#9454); green since W3 (#9473).
 
 (require rackunit
          racket/tcp
@@ -60,7 +58,8 @@
     (void peer-in)
     (display (if stalling? stall-prefix body) peer-out)
     (flush-output peer-out)
-    (unless stalling? (close-output-port peer-out))
+    (unless stalling?
+      (close-output-port peer-out))
     (set-box! client-ports (cons in (unbox client-ports)))
     (values status '("Content-Type: application/json") in)))
 
@@ -76,66 +75,87 @@
 (define (strict-status-checker sl rb)
   (define code
     (let ([m (regexp-match #rx#"HTTP/[^ ]+ ([0-9]+)" sl)])
-      (if m (string->number (bytes->string/utf-8 (cadr m))) 0)))
+      (if m
+          (string->number (bytes->string/utf-8 (cadr m)))
+          0)))
   (when (>= code 400)
     (raise ((dynamic-require '"../llm/provider-errors.rkt" 'provider-error)
-            "fake 429" (current-continuation-marks) (hash) 'rate-limit 429))))
+            "fake 429"
+            (current-continuation-marks)
+            (hash)
+            'rate-limit
+            429))))
 
 ;; ————————————————————————————————————————————————————————————
 ;; Cleanup contract matrix
 ;; ————————————————————————————————————————————————————————————
 
 (test-case "success: response port closed after a completed body read"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:body #"{\"ok\":true}"))
   (define result
     (parameterize ([sendrecv-seam fake])
-      (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+      (make-provider-http-request "http://fake/x"
+                                  '("h: v")
+                                  #"{}"
                                   #:status-checker (lambda (sl rb) (void)))))
   (check-not-false result)
   (check-true (last-response-port-closed?)))
 
 (test-case "status-check failure: response port closed after the raise"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:status #"HTTP/1.1 429 Too Many Requests"))
   (parameterize ([sendrecv-seam fake])
     (check-exn provider-error?
                (lambda ()
-                 (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+                 (make-provider-http-request "http://fake/x"
+                                             '("h: v")
+                                             #"{}"
                                              #:status-checker strict-status-checker)))
     (check-true (last-response-port-closed?))))
 
 (test-case "read timeout: response port closed after body-read stall"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:stall-after #"{\"partial"))
   (parameterize ([sendrecv-seam fake])
     (check-exn exn:fail?
                (lambda ()
-                 (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+                 (make-provider-http-request "http://fake/x"
+                                             '("h: v")
+                                             #"{}"
                                              #:read-timeout 0.3
                                              #:status-checker (lambda (sl rb) (void)))))
     (check-true (last-response-port-closed?))))
 
 (test-case "request timeout: response port closed when the outer budget fires"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:stall-after #"{\"partial"))
   (parameterize ([sendrecv-seam fake])
     (check-exn exn:fail?
                (lambda ()
-                 (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+                 (make-provider-http-request "http://fake/x"
+                                             '("h: v")
+                                             #"{}"
                                              #:timeout 0.3
                                              #:status-checker (lambda (sl rb) (void)))))
     (check-true (last-response-port-closed?))))
 
 (test-case "cancellation: response port closed when the caller breaks the read"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:stall-after #"{\"partial"))
   (parameterize ([sendrecv-seam fake])
     (define t
       (thread (lambda ()
                 (with-handlers ([exn:break? (lambda (_) (void))]
                                 [exn:fail? (lambda (_) (void))])
-                  (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+                  (make-provider-http-request "http://fake/x"
+                                              '("h: v")
+                                              #"{}"
                                               #:read-timeout 30
                                               #:status-checker (lambda (sl rb) (void)))))))
     (sleep 0.2)
@@ -144,10 +164,13 @@
   (check-true (last-response-port-closed?)))
 
 (test-case "cleanup is single-owner: a completed request survives GC pressure"
-  (unless (procedure? sendrecv-seam) (seam-missing-error))
+  (unless (procedure? sendrecv-seam)
+    (seam-missing-error))
   (define fake (make-fake-sendrecv #:body #"{}"))
   (parameterize ([sendrecv-seam fake])
-    (make-provider-http-request "http://fake/x" '("h: v") #"{}"
+    (make-provider-http-request "http://fake/x"
+                                '("h: v")
+                                #"{}"
                                 #:status-checker (lambda (sl rb) (void))))
   ;; forcing collection after an explicit close must not resurrect or crash
   (collect-garbage)
