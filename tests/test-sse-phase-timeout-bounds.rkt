@@ -3,7 +3,6 @@
 ;; @speed fast
 ;; @suite runtime
 ;; @boundary unit
-;; @not-test true ;; v1.00.12 W0 (#9428): committed red — promoted to the live suite in W1 (#9429)
 
 ;; tests/test-sse-phase-timeout-bounds.rkt
 ;; SS-4 (v1.00.12): regression guards for the SSE phase-timeout bounds.
@@ -17,11 +16,8 @@
 ;;   thinking = (min request-timeout (min (or ov 120) 300))   slow-reasoning window
 ;;   content  = http-stream-timeout-default (60)              per-chunk gap
 ;;
-;; W0 red mode: the W1 resolver (`sse-phase-timeout-secs`,
-;; `max-thinking-gap-secs`) is resolved via a guarded dynamic-require; while it
-;; is missing the file compiles cleanly but FAILS its first check
-;; (assertion-red). W1 (#9429) adds the resolver and removes the not-test
-;; marker above, turning this file green.
+;; W1 (#9429) landed `sse-phase-timeout-secs` / `max-thinking-gap-secs`, so the
+;; guarded dynamic-require below resolves and the full matrix runs green.
 
 (require rackunit
          (only-in "../llm/stream.rkt" http-stream-timeout-default))

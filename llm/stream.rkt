@@ -43,7 +43,12 @@
                        [effective-request-timeout-for (-> (or/c string? #f) positive?)]
                        [effective-sse-read-timeout-for (-> (or/c string? #f) (or/c positive? #f))]
                        [call-with-request-timeout
-                        (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
+                        (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)]
+                       ;; Phase timeout resolver (v1.00.12)
+                       [sse-phase-timeout-secs
+                        (->* (#:request-timeout positive?)
+                             (#:sse-read-override (or/c positive? #f))
+                             (values positive? positive? positive?))])
          ;; Struct and predicates (direct export for match compatibility)
          tool-call-accum
          tool-call-accum?
@@ -55,6 +60,7 @@
          http-read-timeout-default
          http-stream-timeout-default
          http-request-timeout-default
+         max-thinking-gap-secs
          ;; Parameters
          current-http-request-timeout
          current-model-timeouts
@@ -374,6 +380,31 @@
 ;; ============================================================
 
 (define http-stream-timeout-default 60)
+
+;; ============================================================
+;; SSE phase-timeout resolver (v1.00.12, SS-1/SS-2/SS-3)
+;; ============================================================
+;; Hard ceiling on the mid-stream thinking gap, regardless of configuration.
+;; Preserves slow-reasoning models (kimi/glm 300 s) while capping runaway
+;; overrides such as deepseek's configured sse-read of 600 s.
+(define max-thinking-gap-secs 300)
+
+;; Resolve the three SSE stall windows for one streaming request:
+;;   initial  — held-request detection before any byte arrives. Fixed at a
+;;              maximum of 120 s (dead-peer detection); never widened by an
+;;              sse-read override so auto-retry can trip early.
+;;   thinking — silent reasoning window between chunks. Honors the model's
+;;              sse-read override (default 120 s) capped at
+;;              max-thinking-gap-secs and the overall request budget.
+;;   content  — per-chunk gap once content flows. Fixed at
+;;              http-stream-timeout-default; overrides must not widen it.
+;; Returns (values initial thinking content).
+(define (sse-phase-timeout-secs #:request-timeout request-timeout
+                                #:sse-read-override [sse-read-override #f])
+  (define initial-secs (min request-timeout 120))
+  (define thinking-secs (min request-timeout (min (or sse-read-override 120) max-thinking-gap-secs)))
+  (define content-secs http-stream-timeout-default)
+  (values initial-secs thinking-secs content-secs))
 
 ;; ============================================================
 ;; stream-sse-events: Provider-agnostic SSE event generator
