@@ -143,20 +143,25 @@ runs:
             tar -xzf "$INSTALLER_ARCHIVE" -C "$prefix" --strip-components 1
             ;;
           *.dmg)
-            # macOS dmg layout: "Racket v<V>/Racket v<V>/{bin,lib,collects,...}"
-            # (outer folder also carries an Applications symlink and install
-            # backgrounds — only the inner unix tree is wanted).
+            # macOS dmg layout: "Racket v<V>/Racket v<V>/{bin,lib,...}"
+            # (outer folder also carries an Applications symlink and
+            # install backgrounds). Locate the racket binary by search so
+            # nesting variations still resolve, and surface the mount
+            # listing on failure.
             mount="$RUNNER_TEMP/racket-dmg"
             rm -rf "$mount"
             mkdir -p "$mount"
             hdiutil attach -readonly -nobrowse -mountpoint "$mount" \
-              "$INSTALLER_ARCHIVE" >/dev/null
-            cp -R "$mount"/Racket*/Racket*/. "$prefix"/
-            hdiutil detach "$mount" >/dev/null
-            [ -x "$prefix/bin/racket" ] || {
-              echo "::error::racket binary not found inside the dmg image"
+              "$INSTALLER_ARCHIVE"
+            racket_src=$(find "$mount" -maxdepth 4 -type f -name racket | head -1)
+            if [ -z "$racket_src" ]; then
+              echo "::error::no racket binary found in the dmg image; mount contents:"
+              ls -la "$mount"
+              hdiutil detach "$mount" >/dev/null 2>&1 || true
               exit 1
-            }
+            fi
+            cp -R "$(dirname "$racket_src")"/. "$prefix"/
+            hdiutil detach "$mount" >/dev/null
             ;;
           *.sh)
             sh "$INSTALLER_ARCHIVE" --unix-style --dest "$prefix" --create-dir >/dev/null
