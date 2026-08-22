@@ -152,7 +152,7 @@ jobs:
           root="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
           cp "$root/manifest.json" "$RUNNER_TEMP/manifest.tampered.json"
           # Corrupt the recorded git SHA: any mismatch must fail BEFORE tests.
-          racket -e '(require json) (define m (call-with-input-file (vector-ref (current-command-line-arguments) 0) read-json)) (hash-set! m (string->symbol "git_sha") "0000000000000000000000000000000000000000") (call-with-output-file (vector-ref (current-command-line-arguments) 0) (lambda (o) (write-json m o)) #:exists \'replace)' "$RUNNER_TEMP/manifest.tampered.json"
+          racket -e '(require json) (define m (call-with-input-file (vector-ref (current-command-line-arguments) 0) read-json)) (define m2 (hash-set m (string->symbol "git_sha") "0000000000000000000000000000000000000000")) (call-with-output-file (vector-ref (current-command-line-arguments) 0) (lambda (o) (write-json m2 o)) #:exists (string->symbol "replace"))' "$RUNNER_TEMP/manifest.tampered.json"
 
           if racket ci/prepared-environment/manifest.rkt verify \
               --manifest "$RUNNER_TEMP/manifest.tampered.json" \
