@@ -80,13 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -155,13 +148,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -199,18 +185,14 @@ jobs:
   test-platform:
     if: github.event.schedule != '30 3 * * 0'
     runs-on: macos-14
-    timeout-minutes: 90 # Racket setup alone consumed 42.3 min on cold macOS
-                        # caches (runs 32288930966 / 32297908687). Explicit
-                        # budget revision per issue #9384 follow-up: setup must
-                        # fit inside the job budget; suite itself is ~15 min.
+    timeout-minutes: 90 # Retained through cache rollout: a cold locked store
+                        # must complete before the warm-run evidence permits a
+                        # measured budget reduction. The suite itself is ~15 min.
     steps:
       - uses: actions/checkout@v7
 
-      # No outer ~/.local/share/racket package cache in this job (unlike the
-      # Linux shard jobs): the ./.github/actions/setup-racket composite action
-      # already caches ~/.racket + ./compiled, and the duplicate outer
-      # save/restore amplified cold-cache setup time on macOS (runs
-      # 32288930966 / 32297908687). Single cache owner: the composite action.
+      # The reusable setup action is the sole cache owner. It restores the
+      # locked, explicit PLTADDONDIR store and never caches workspace bytecode.
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -255,91 +237,65 @@ jobs:
     outputs:
       status: ${{ steps.status.outputs.status }}
     steps:
-      - name: Download shard evidence
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      # Keep lane artifacts separate. A failed download remains observable to
+      # the status helper as missing evidence, which becomes timeout rather
+      # than preventing run-summary.json from being retained.
+      - name: Download Linux shard evidence
+        continue-on-error: true
         uses: actions/download-artifact@v7
         with:
-          path: shards
-          pattern: results-*
+          path: evidence/linux-shards
+          pattern: results-shard-*
           merge-multiple: true
 
-      - name: Aggregate and compute definitive status
+      - name: Download workflows evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: results-workflows
+          path: evidence/workflows
+
+      - name: Download macOS platform evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: results-platform
+          path: evidence/platform
+
+      - name: Aggregate all required lane evidence
         id: status
         run: |
           set -euo pipefail
-          EXPECTED_SHARDS=6
-          # download-artifact with merge-multiple: true flattens artifact contents
-          # directly into shards/ (observed in run 32297908687). Collect from the
-          # flattened layout first, then fall back to the nested shard-results/
-          # layout in case artifact structure ever preserves the prefix. nullglob
-          # makes a missing dir an empty list, never an unexpanded literal pattern.
-          shopt -s nullglob
-          SHARD_FILES=(shards/shard-*.json)
-          if [ ${#SHARD_FILES[@]} -eq 0 ]; then
-            SHARD_FILES=(shards/shard-results/shard-*.json)
-          fi
+          mkdir -p evidence/linux-shards evidence/workflows evidence/platform
+          racket scripts/run-tests/full-regression-status.rkt \
+            --shards-dir evidence/linux-shards \
+            --workflows-dir evidence/workflows \
+            --platform-dir evidence/platform \
+            --expected-shards 6 \
+            --test-result "${{ needs.test.result }}" \
+            --workflows-result "${{ needs.workflows-suite.result }}" \
+            --platform-result "${{ needs.test-platform.result }}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out run-summary.json \
+            --matrix-out matrix-summary.json
 
-          # Merge every shard's W0-schema record into matrix-summary.json:
-          # pass/fail/timeout/skip, wall clock, profile, runner mode per shard.
-          jq -s '{
-            shards: [ .[] | {
-              shard: .run_summary.shard,
-              suite: .suite,
-              profile: .profile,
-              runner_mode: .run_summary.execution_mode,
-              verdict: .verdict,
-              pass: .run_summary.pass,
-              fail: .run_summary.fail,
-              timeout: .run_summary.timeout,
-              skip: .run_summary.skip,
-              wall_clock_seconds: .run_summary.wall_clock_seconds
-            } ],
-            totals: {
-              files: (map(.run_summary.file_count) | add // 0),
-              pass: (map(.run_summary.pass) | add // 0),
-              fail: (map(.run_summary.fail) | add // 0),
-              timeout: (map(.run_summary.timeout) | add // 0),
-              skip: (map(.run_summary.skip) | add // 0),
-              wall_clock_seconds: (map(.run_summary.wall_clock_seconds) | add // 0)
-            },
-            suite: (map(.suite) | unique | join(",")),
-            profile: (map(.profile) | unique | join(",")),
-            runner_mode: (map(.run_summary.execution_mode) | unique | join(","))
-          }' "${SHARD_FILES[@]}" > matrix-summary.json
-
-          COLLECTED=${#SHARD_FILES[@]}
-          STATUS=pass
-          # A missing shard record means the shard was cancelled or hit the
-          # job timeout before writing JSON — that is a timeout, never success.
-          if [ "$COLLECTED" -lt "$EXPECTED_SHARDS" ]; then
-            echo "::warning::Only $COLLECTED/$EXPECTED_SHARDS shard records collected — treating missing shards as timeout"
-            STATUS=timeout
-          fi
-          if jq -e '.totals.timeout > 0' matrix-summary.json > /dev/null; then
-            STATUS=timeout
-          fi
-          if [ "$STATUS" = "pass" ] && jq -e '.totals.fail > 0 or (.shards | map(.verdict) | any(. != "pass"))' matrix-summary.json > /dev/null; then
-            STATUS=fail
-          fi
-          if [ "$STATUS" = "pass" ] && jq -e '.totals.files == 0' matrix-summary.json > /dev/null; then
-            STATUS=fail
-          fi
-
-          jq --arg status "$STATUS" \
-             --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-             '. + {status: $status, run_url: $run_url, generated_at: (now | todateiso8601)}' \
-             matrix-summary.json > run-summary.json
-
+          STATUS=$(jq -r '.status' run-summary.json)
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           {
             echo "## Full regression — definitive status: **$STATUS**"
-            echo "- Shards collected: $COLLECTED/$EXPECTED_SHARDS"
-            jq -r '"- Totals: files=\(.totals.files) pass=\(.totals.pass) fail=\(.totals.fail) timeout=\(.totals.timeout) skip=\(.totals.skip)",
-                   "- Wall clock (sum of shards): \(.totals.wall_clock_seconds)s  suite=\(.suite)  profile=\(.profile)  runner-mode=\(.runner_mode)",
-                   "",
-                   "| shard | verdict | pass | fail | timeout | skip | wall (s) |",
-                   "|---|---|---|---|---|---|---|",
-                   (.shards[] | "| \(.shard) | \(.verdict) | \(.pass) | \(.fail) | \(.timeout) | \(.skip) | \(.wall_clock_seconds) |")' \
-              run-summary.json
+            echo ""
+            echo "| required lane | job result | evidence | records | status |"
+            echo "|---|---|---|---:|---|"
+            jq -r '.required_lanes | to_entries[] | "| \(.value.name) | \(.value.upstream_job_result) | \(.value.evidence_classification) | \(.value.collected_records)/\(.value.expected_records) | \(.value.status) |"' run-summary.json
+            echo ""
+            jq -r '"- Linux totals: files=\(.totals.files) pass=\(.totals.pass) fail=\(.totals.fail) timeout=\(.totals.timeout) skip=\(.totals.skip)",
+                   "- Wall clock (sum of Linux shards): \(.totals.wall_clock_seconds)s  suite=\(.suite)  profile=\(.profile)  runner-mode=\(.runner_mode)"' run-summary.json
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "Full-regression status: $STATUS"
@@ -395,13 +351,6 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
 
       - uses: ./.github/actions/setup-racket
         with:

@@ -62,7 +62,7 @@ introduced; unmapped sources keep the fail-open fallback.
 `.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
 (`continue-on-error: true` removed); missing mandatory tags now fail the build.
 The step shipped report-only in PR #9383 with enforcement originally
-scheduled for v1.00.07; that milestone slipped one release, and at v1.00.07
+scheduled for v1.00.12; that milestone slipped one release, and at v1.00.12
 the report-only inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
 `missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
 so enforcement flipped then — evidence-gated, per the schedule recorded in
@@ -84,15 +84,32 @@ triage protocol is `docs/operations/test-regression-triage.md`; its
 release-linkage rule (release readiness requires full-regression evidence,
 never a green `fast` run alone) is binding.
 
-**L4 evidence status: addressed.** Run 32369346059 (post-W0–W3 merge to
-`main` via PR #9400, `v1.00.07` @ `87cc60fc`) is the first clean
-full-regression run: `run-summary.json` published by `summarize` with
-`status: pass`, all six Linux shard records present in run-summary inputs
-(1,299 file checks, 0 fail), a green `workflows-suite`, and a macOS platform
-job that executed the suite and uploaded usable evidence (`results-platform`).
-The #9384 remediation — per-shard JSON infra, the DEEP-9 semver-floor fix, and
-the macOS setup-budget revision — is confirmed by this run. Recorded in
-`docs/reports/test-regression-log.md`.
+**L4 evidence status: implementation hardening; fresh candidate proof
+required.** The status contract makes the definitive summary
+conservative across all required lanes: six Linux shard records, the
+`workflows-suite` record, and the macOS `results-platform` record. A missing,
+malformed, cancelled, timed-out, unexpectedly skipped, or failing required
+lane cannot produce `status: pass`. The `run-summary.json.required_lanes`
+section records each upstream job result and artifact classification so the
+workflow conclusion and retained summary can be checked for agreement.
+
+The former `run-summary.json` shape was Linux-shard-only and could therefore
+misrepresent a red platform workflow as `pass`. **L4 must not be marked
+addressed by a code merge or Linux-only evidence.** It is addressed only after
+a fresh manual release-candidate run has six passing Linux records, passing
+workflow and macOS records, GitHub conclusion `success`, and summary status
+`pass`; the regression log must retain that evidence. A disagreement is a
+release-blocking evidence-integrity event under
+`docs/operations/test-regression-triage.md`.
+
+**v1.00.10 release-candidate condition:** The macOS platform lane must use the
+locked, explicit Racket user-store cache described in
+`docs/reports/CI-RACKET-CACHE-POLICY.md`, while continuing to compile
+all package-visible q modules on every cache hit. Its LF3 relative-symlink
+security fixtures and cache-integrity diagnostics are release evidence, not
+optional performance work. L4 closure therefore requires one clean cold
+population and one unchanged warm cache-hit dispatch, with GitHub conclusion
+`success` and `run-summary.json.status` `pass` in both required all-lane runs.
 
 ### Shard plan — guarded `FAST_SHARD_PLAN` activation: ACTIVE (W4)
 

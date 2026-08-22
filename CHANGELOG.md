@@ -1,3 +1,105 @@
+## v1.00.12 — 2026-08-22
+
+> Released 2026-08-22. SSE stall detection bounds: containment of the v1.00.05 regression that let
+> a wide `sse-read` override stretch stream stalls to the full configured
+> window (observed as ~10-minute hangs on deepseek-v4-flash). Phase windows
+> are now bounded by design; timeout messages carry triage diagnostics.
+
+### Bug Fixes
+
+- **SS-1/SS-2/SS-3 bounded phase timeouts (W1, #9429).** New pure resolver
+  `sse-phase-timeout-secs` in `llm/stream.rkt` returns the three stall windows:
+  initial = `min(request-timeout, 120)` (dead-peer bound, never config-widened),
+  thinking = `min(request-timeout, min(or sse-read 120, 300))` (reasoning
+  window capped at new constant `max-thinking-gap-secs` = 300), content =
+  fixed 60 s per-chunk gap. The openai-compatible adapter now wires all three
+  through the resolver; the raw `sse-read` config feeds only the thinking
+  window. kimi/glm 300 s reasoning windows are preserved while deepseek's
+  `sse-read=600` can no longer produce multi-minute mid-content hangs.
+- **SS-5 timeout message suffix (W2, #9430).** Every
+  `exn:fail:network:timeout:stream` raised from `stream-sse-events` now ends
+  with `[phase=<p> data-received=<yes|no> chars=<n>]` for log/UX triage. The
+  struct fields remain the machine source of truth for retry classification.
+
+### Documentation
+
+- New "Streaming Timeout Matrix" section in `docs/provider-retry.md`: phase
+  table, circuit-breaker interaction/TTFB row, and the v1.00.13 Request
+  Lifecycle Policy Unification handoff note (adapter parity deferral, SS-6).
+
+### Testing
+
+- `tests/test-sse-phase-timeout-bounds.rkt` locks the resolver matrix (deepseek
+  clamp, no-override defaults, kimi ceiling preservation, sweep invariants)
+  and — since W2 — the message-suffix checks migrated from the deleted
+  reproducer `tests/reproducers/reproduce-sse-timeout-message-suffix.rkt`.
+
+### Breaking / Behavior Changes
+
+- Models with `sse-read` overrides above 300 s now stall-cap at 300 s in the
+  thinking phase instead of running to their full configured value; initial
+  and content phases ignore `sse-read` entirely (fixed 120 s / 60 s).
+- Timeout exception messages gained the diagnostic suffix (string change only;
+  struct fields unchanged).
+
+### Migration Notes
+
+- None required. Existing `timeouts.models.<model>.sse-read` values continue
+  to work; values above 300 are clamped for the thinking window.
+
+### Operational / Release
+
+- Containment release: no schema, config-format, or storage changes; safe to
+  deploy rolling. Watch for `phase=thinking` stalls now capping at 300 s —
+  models that legitimately need longer silent reasoning gaps require the
+  v1.00.13 Request Lifecycle Policy Unification follow-up.
+
+Released 2026-08-22.
+
+## v1.00.08 — 2026-08-21
+
+> Provider networking hardening closeout: per-model cumulative retry ceiling
+> (`providers.<name>.retry-ceiling-secs`) documented and config-override
+> tested through the turn-orchestrator settings path (PN-7).
+
+### Bug Fixes
+
+- **PN-7 cumulative retry ceiling config override.** `runtime/turn-orchestrator.rkt`
+  now exposes `resolve-retry-ceiling-secs`, which reads
+  `providers.<name>.retry-ceiling-secs` from session-config settings and falls
+  back to the module default when absent. A dedicated test
+  (`tests/test-provider-retry-ceiling-config.rkt`) proves the per-model value
+  overrides the default, that another model's override does not leak, and that
+  absent settings/model-name fall back to `default-cumulative-ceiling-secs`.
+- **Documentation drift fix.** `docs/provider-retry.md` previously stated the
+  default cumulative ceiling was 300s; the default was raised to 900s in
+  v1.00.05. The `retry-ceiling-secs` examples and tables now match the actual
+  default (900s / 15 min).
+
+### Testing
+
+- New focused test `tests/test-provider-retry-ceiling-config.rkt` (4 cases)
+  covering the PN-7 settings-override resolution.
+- Existing provider-networking contract tests remain green: stream port
+  closure (PN-1), generator finalization (PN-3), SSE heartbeat metadata
+  (PN-2b), circuit breaker (PN-4), adaptive retry (PN-6), cumulative ceiling
+  (PN-7).
+
+### Breaking / Behavior Changes
+
+- None. `resolve-retry-ceiling-secs` is a pure extraction of the existing
+  inline resolution; no retry behavior changes.
+
+### Migration Notes
+
+- None required. Existing `retry-ceiling-secs` config continues to work.
+
+### Operational / Release
+
+- Version stamped `1.00.08`; provider-networking hardening plan v1.00.08
+  closed out.
+
+Released 2026-08-21.
 ## v1.00.07 — 2026-08-20
 
 > macOS platform test fixes (W2): SP12 dash/bash PIPESTATUS conditional + LF3

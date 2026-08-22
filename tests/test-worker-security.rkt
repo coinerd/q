@@ -244,6 +244,126 @@
       (when (directory-exists? sub-dir)
         (delete-directory/files sub-dir)))
 
+    ;; v1.00.09: The configured allowed root can itself be reached through a
+    ;; symlinked ancestor (for example, a platform temporary-directory alias).
+    ;; Requests and roots must therefore use the same canonicalization path.
+    (test-case "LF3: symlinked allowed-root ancestor accepts in-root tail"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-alias~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define mid-link (build-path lexical-allowed "mid-link"))
+          (make-directory* (build-path physical-allowed "sub"))
+          ;; Relative target: this is the macOS-triggering condition. `resolve-path`
+          ;; returns "physical-parent" relative to alias-parent's containing directory.
+          (make-file-or-directory-link (string->path "physical-parent") alias-parent)
+          (make-file-or-directory-link (build-path physical-allowed "sub") mid-link)
+          (parameterize ([current-allowed-roots (list lexical-allowed)])
+            (define target (build-path mid-link "deep" "file.txt"))
+            (check-true (path-allowed? (path->string target))
+                        "LF3: an in-root path through an aliased ancestor must be accepted")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
+    ;; macOS temporary paths can make an existing absolute symlink target retain
+    ;; a lexical alias (for example /var) while the allowed root is already
+    ;; physical (/private/var). The resolved target itself must be walked again.
+    (test-case "LF3: absolute symlink target through lexical alias remains in-root"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-absolute-alias~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define lexical-inner (build-path lexical-allowed "inner"))
+          (define alias-link (build-path physical-allowed "absolute-alias-link"))
+          (make-directory* (build-path physical-allowed "inner"))
+          (make-file-or-directory-link (string->path "physical-parent") alias-parent)
+          ;; The link target is deliberately absolute but still has a lexical
+          ;; alias ancestor. This is the shape emitted by the macOS fixture.
+          (make-file-or-directory-link lexical-inner alias-link)
+          (parameterize ([current-allowed-roots (list physical-allowed)])
+            (define target (build-path alias-link "deep" "file.txt"))
+            (check-true (path-allowed? (path->string target))
+                        "LF3: absolute target through an alias must remain in-root")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
+    (test-case "LF3: symlinked allowed-root ancestor still rejects escape"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-escape~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define outside-dir (build-path fixture-root "outside"))
+          (define escape-link (build-path lexical-allowed "escape-link"))
+          (make-directory* physical-allowed)
+          (make-directory* outside-dir)
+          (make-file-or-directory-link (string->path "physical-parent") alias-parent)
+          (make-file-or-directory-link outside-dir escape-link)
+          (parameterize ([current-allowed-roots (list lexical-allowed)])
+            (define target (build-path escape-link "deep" "file.txt"))
+            (check-false (path-allowed? (path->string target))
+                         "LF3: an alias-root symlink escape must remain rejected")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
+    ;; v1.00.10: A relative target in a *root ancestor* must be rebased before
+    ;; the next component is examined. Without rebasing, every negative case
+    ;; below stopped at that ancestor and was incorrectly authorized on macOS.
+    (test-case "LF3: relative ancestor alias fails closed for every escape class"
+      (define fixture-root (make-temporary-directory "worker-security-lf3-relative~a"))
+      (dynamic-wind
+        void
+        (lambda ()
+          (define physical-parent (build-path fixture-root "physical-parent"))
+          (define alias-parent (build-path fixture-root "alias-parent"))
+          (define physical-allowed (build-path physical-parent "allowed"))
+          (define lexical-allowed (build-path alias-parent "allowed"))
+          (define inside-dir (build-path physical-allowed "inside"))
+          (define outside-dir (build-path physical-parent "outside"))
+          (define outside-file (build-path outside-dir "secret.txt"))
+          (define external-file-link (build-path lexical-allowed "external-file"))
+          (define external-dir-link (build-path lexical-allowed "external-dir"))
+          (define good-link (build-path lexical-allowed "good-link"))
+          (define broken-link (build-path lexical-allowed "broken-link"))
+          (make-directory* inside-dir)
+          (make-directory* outside-dir)
+          (call-with-output-file outside-file #:exists 'replace (lambda (out) (display "secret" out)))
+          ;; The relative target must be interpreted relative to alias-parent's
+          ;; parent; relying on a host /var spelling would not test this invariant.
+          (make-file-or-directory-link (string->path "physical-parent") alias-parent)
+          (make-file-or-directory-link outside-file external-file-link)
+          (make-file-or-directory-link outside-dir external-dir-link)
+          (make-file-or-directory-link (string->path "inside") good-link)
+          (make-file-or-directory-link (string->path "missing-target") broken-link)
+          (parameterize ([current-allowed-roots (list lexical-allowed)])
+            (check-false (path-allowed? (path->string external-file-link))
+                         "external existing file link must be rejected")
+            (check-false (path-allowed? (path->string (build-path external-dir-link "new" "file.txt")))
+                         "external directory link plus new tail must be rejected")
+            (check-false (path-allowed? (path->string (build-path lexical-allowed ".." "outside" "file.txt")))
+                         "upward traversal into a sibling outside the root must be rejected")
+            (check-false (path-allowed? (path->string (build-path broken-link "file.txt")))
+                         "broken final link must be rejected")
+            (check-true (path-allowed? (path->string (build-path good-link "new" "file.txt")))
+                        "a valid relative in-root link plus new tail remains allowed")))
+        (lambda ()
+          (when (directory-exists? fixture-root)
+            (delete-directory/files fixture-root)))))
+
     (test-case "LF3: broken symlink rejected"
       (define symlink-path (build-path allowed-dir "broken-link"))
       (define link-error
