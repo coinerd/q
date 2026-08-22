@@ -359,16 +359,16 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
-    ;; HARD DEBUG: dump to file
     (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
 
     (define stream-timeout
       (if stream-model-name
           (effective-request-timeout-for stream-model-name)
           (current-http-request-timeout)))
-    ;; v1.00.05 W1 (#9393): per-model sse-read override controls the thinking/
-    ;; initial-phase cap AND the content-phase per-chunk timeout. #f when the
-    ;; model has no override (callers fall back to the defaults below).
+    ;; v1.00.05 W1 (#9393): per-model sse-read override; #f when the model has
+    ;; none. v1.00.12 W1 (#9429): the override feeds ONLY the thinking window
+    ;; via the shared resolver below — it can no longer widen the initial or
+    ;; content stall windows.
     (define sse-read-timeout
       (and stream-model-name (effective-sse-read-timeout-for stream-model-name)))
     ;; Own every resource created by http-sendrecv (including resources opened
@@ -458,33 +458,34 @@
     ;; For fast models (120s): max-total = 600s (10 min floor).
     (define max-total-timeout (max 600 (* 2 stream-timeout)))
     ;; v0.99.65 W0: Separate thinking-phase timeout from content-phase timeout.
-    ;; #:initial-timeout = stream-timeout (full request timeout, covers reasoning phase)
-    ;; #:stream-timeout = http-stream-timeout-default (60s tight per-chunk for content)
-    ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+ seconds
-    ;; before first content chunk. The initial timeout covers the reasoning phase;
-    ;; once content chunks arrive, they must come within 60s each.
-    ;; v0.99.78 FIX (revised): Cap initial/thinking timeouts at held-request-detect-secs.
-    ;; Live /go evidence: deepseek-v4-flash healthy streams have mean chunk gap 0.015s,
-    ;; max gap 7s, zero gaps >30s (measured over a 5123-delta thinking turn). The
-    ;; earlier "widen to request timeout" (60s->600s) was WRONG: the "60s spurious
-    ;; timeout" it addressed was actually deepseek ACCEPTING a request (HTTP 200) but
-    ;; emitting zero chunks for minutes (server-side hold). Widening converted a 1-minute
-    ;; recovery into a 10-minute recovery. Capping at 120s: a held/stalled request is
-    ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
-    (define held-request-detect-secs 120)
-    ;; v1.00.05 W1 (#9393): models with an sse-read override (e.g. kimi 300s)
-    ;; get a wider thinking/initial window and content-phase per-chunk timeout;
-    ;; models without one keep the 120s held-request cap / 60s per-chunk default.
-    (define thinking-cap-secs (or sse-read-timeout held-request-detect-secs))
-    (define content-chunk-secs (or sse-read-timeout http-stream-timeout-default))
+    ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+
+    ;; seconds before first content chunk, so the thinking window is wider than
+    ;; the content per-chunk gap.
+    ;; v0.99.78 FIX: Live /go evidence showed deepseek-v4-flash healthy streams
+    ;; have mean chunk gap 0.015s / max 7s — a silent request is a server-side
+    ;; hold, not slow generation, so initial must stay short for auto-retry.
+    ;; v1.00.12 W1 (#9429): all three windows now come from the shared resolver
+    ;; `sse-phase-timeout-secs` in stream.rkt (regression matrix:
+    ;; tests/test-sse-phase-timeout-bounds.rkt):
+    ;;   initial  = min(request-timeout, 120)         fixed dead-peer bound (SS-1)
+    ;;   thinking = min(request-timeout,
+    ;;                  min(or sse-read 120, 300))    reasoning window (SS-2/SS-3)
+    ;;   content  = http-stream-timeout-default (60)  fixed per-chunk gap
+    ;; Rationale: v1.00.08 analysis (.planning/ANALYSIS-v1.00.08-deepseek-
+    ;; 10min-sse-stall.md) — wiring raw sse-read into ALL THREE phases let a
+    ;; deepseek sse-read of 600s turn a mid-content stall into a ~10-minute
+    ;; hang. The resolver keeps kimi/glm 300s reasoning windows intact while
+    ;; bounding initial and content regardless of configuration.
+    (define-values (initial-secs thinking-secs content-chunk-secs)
+      (sse-phase-timeout-secs #:request-timeout stream-timeout #:sse-read-override sse-read-timeout))
     (define stream-owns-resources? (box #f))
     (dynamic-wind void
                   (lambda ()
                     (define gen
                       (stream-sse-events response-port
                                          (lambda (parsed) (list (normalize-openai-chunk parsed)))
-                                         #:initial-timeout (min stream-timeout thinking-cap-secs)
-                                         #:thinking-timeout (min stream-timeout thinking-cap-secs)
+                                         #:initial-timeout initial-secs
+                                         #:thinking-timeout thinking-secs
                                          #:stream-timeout content-chunk-secs
                                          #:max-total-timeout max-total-timeout))
                     ;; Own the response port for the complete lifetime of the lazy generator.
