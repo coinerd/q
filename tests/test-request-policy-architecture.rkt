@@ -3,7 +3,6 @@
 ;; @speed fast
 ;; @suite arch
 ;; @boundary architecture
-;; @not-test true ;; v1.00.13 W0 (#9454): committed red — promoted in W1 (#9461)
 
 ;; tests/test-request-policy-architecture.rkt
 ;; v1.00.13 (RL-1..RL-3/RL-10, AC-1/AC-2): architecture gate for request
@@ -12,8 +11,8 @@
 ;; End-state rules (see PLAN-v1.00.13 §7):
 ;;   R1 raw legacy timeout accessors (`effective-sse-read-timeout-for`,
 ;;      `effective-request-timeout-for`) are consumed only by the policy
-;;      module (their definition may remain in llm/stream.rkt as the
-;;      compatibility surface).
+;;      module (their definitions live in llm/request-policy.rkt since W1;
+;;      llm/stream.rkt re-exports them for compatibility).
 ;;   R2 the generic total-budget formula (`(max 600 ...)`) is authored only
 ;;      by the policy module.
 ;;   R3 the phase resolver (`sse-phase-timeout-secs`) is consumed only by the
@@ -22,12 +21,13 @@
 ;;      policy kwargs (#:initial-timeout, #:thinking-timeout,
 ;;      #:stream-timeout, #:max-total-timeout) — no default-reliance.
 ;;   R5 the legacy per-model timeout parameters (`current-model-sse-read-timeouts`)
-;;      are referenced only by the policy module, the runtime wiring
-;;      (wiring/mode-helpers.rkt), and the compatibility definition module.
+;;      are referenced only by the policy module (owner) and the runtime
+;;      wiring (wiring/mode-helpers.rkt, raw config plumbing — permanent
+;;      legitimate consumer, not scanned).
 ;;
-;; W0 ships the strict end state with an EMPTY allowlist, so it is red on the
-;; current tree. W1 (#9461) promotes it with a temporary allowlist; W2/W4
-;; (#9466/#9478) shrink the allowlist until it is empty again.
+;; History: committed red in W0 (#9454) with an empty allowlist; promoted in
+;; W1 (#9461) with the transitional adapter allowlist below; W2 (#9466) and
+;; W4 (#9478) shrink it to empty.
 
 (require rackunit
          racket/runtime-path
@@ -56,10 +56,22 @@
     "llm/http-helpers.rkt"))
 
 ;; Temporary allowlist: (file rule-symbol) pairs.
-;; W0: EMPTY — the strict rule is red on the current code by design.
-;; W1 (#9461): populate with the transitional adapter consumers needed for W2.
-;; W2 (#9466) / W4 (#9478): shrink to empty.
-(define temporary-allowlist '())
+;; W0 (#9454): EMPTY — the strict rule was red on the pre-W1 tree by design.
+;; W1 (#9461): populated with the transitional adapter consumers that W2
+;;             rewires; llm/stream.rkt is not listed because it only
+;;             re-exports the compatibility surface (definitions moved to
+;;             llm/request-policy.rkt).
+;; W2 (#9466): adapters lose raw accessors + local formulas + default
+;;             stream-sse-events calls — remove those entries.
+;; W4 (#9478): allowlist must be empty again.
+(define temporary-allowlist
+  '(("llm/openai-compatible.rkt" raw-accessor)
+    ("llm/anthropic/sse.rkt" raw-accessor)
+    ("llm/openai-compatible.rkt" total-formula)
+    ("llm/openai-compatible.rkt" phase-resolver)
+    ("llm/anthropic/sse.rkt" default-timeouts)
+    ("llm/gemini.rkt" default-timeouts)
+    ("llm/azure-openai.rkt" default-timeouts)))
 
 (define (allowed? file rule)
   (member (list file rule) temporary-allowlist))
@@ -112,8 +124,10 @@
                 (format "adapters must pass the resolved policy kwargs explicitly: ~a" offenders)))
 
 (test-case "R5: legacy per-model timeout parameters have a closed reference set"
+  ;; wiring/mode-helpers.rkt is the permanent raw-config plumbing consumer and
+  ;; is therefore not scanned; llm/stream.rkt re-exports for compatibility.
   (define offenders
-    (violating-files (append adapter-files (list "llm/http-helpers.rkt" "wiring/mode-helpers.rkt"))
+    (violating-files (append adapter-files (list "llm/http-helpers.rkt"))
                      "current-model-sse-read-timeouts"
                      'legacy-parameters))
   (check-equal? offenders '()
