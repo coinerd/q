@@ -1,0 +1,1114 @@
+{
+  "total_count": 11,
+  "jobs": [
+    {
+      "id": 96897767023,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46Wbw",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767023",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767023",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:50Z",
+      "completed_at": "2026-08-21T20:21:53Z",
+      "name": "workflows-suite",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:52Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:19:53Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:19:53Z",
+          "completed_at": "2026-08-21T20:19:54Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:19:54Z",
+          "completed_at": "2026-08-21T20:20:55Z"
+        },
+        {
+          "name": "Run workflows suite",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:20:55Z",
+          "completed_at": "2026-08-21T20:21:49Z"
+        },
+        {
+          "name": "Upload workflows evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:21:49Z",
+          "completed_at": "2026-08-21T20:21:50Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-08-21T20:21:50Z",
+          "completed_at": "2026-08-21T20:21:50Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-08-21T20:21:50Z",
+          "completed_at": "2026-08-21T20:21:50Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:21:50Z",
+          "completed_at": "2026-08-21T20:21:50Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767023",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040124,
+      "runner_name": "GitHub Actions 1000040124",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767310,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46Xjg",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767310",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767310",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:50Z",
+      "completed_at": "2026-08-21T20:24:34Z",
+      "name": "test shard 4/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:52Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:19:43Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:19:43Z",
+          "completed_at": "2026-08-21T20:19:43Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:19:44Z",
+          "completed_at": "2026-08-21T20:20:44Z"
+        },
+        {
+          "name": "Run shard 4/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:20:44Z",
+          "completed_at": "2026-08-21T20:24:29Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:24:29Z",
+          "completed_at": "2026-08-21T20:24:29Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:24:29Z",
+          "completed_at": "2026-08-21T20:24:31Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:24:31Z",
+          "completed_at": "2026-08-21T20:24:31Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:24:31Z",
+          "completed_at": "2026-08-21T20:24:31Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:24:31Z",
+          "completed_at": "2026-08-21T20:24:31Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767310",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040125,
+      "runner_name": "GitHub Actions 1000040125",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767340,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46XrA",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767340",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767340",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:49Z",
+      "completed_at": "2026-08-21T21:00:28Z",
+      "name": "test-platform",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:50Z",
+          "completed_at": "2026-08-21T20:14:51Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:54:54Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:54:54Z",
+          "completed_at": "2026-08-21T20:54:55Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:54:55Z",
+          "completed_at": "2026-08-21T20:56:49Z"
+        },
+        {
+          "name": "Run platform-cross suite (macos-arm64)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:56:49Z",
+          "completed_at": "2026-08-21T21:00:23Z"
+        },
+        {
+          "name": "Upload platform evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T21:00:23Z",
+          "completed_at": "2026-08-21T21:00:24Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-08-21T21:00:24Z",
+          "completed_at": "2026-08-21T21:00:25Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-08-21T21:00:25Z",
+          "completed_at": "2026-08-21T21:00:25Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T21:00:25Z",
+          "completed_at": "2026-08-21T21:00:27Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767340",
+      "labels": [
+        "macos-14"
+      ],
+      "runner_id": 1000040127,
+      "runner_name": "GitHub Actions 1000040127",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767342,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46Xrg",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767342",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767342",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:50Z",
+      "completed_at": "2026-08-21T20:24:56Z",
+      "name": "test shard 1/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:52Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:19:40Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:19:40Z",
+          "completed_at": "2026-08-21T20:19:40Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:19:40Z",
+          "completed_at": "2026-08-21T20:20:38Z"
+        },
+        {
+          "name": "Run shard 1/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:20:38Z",
+          "completed_at": "2026-08-21T20:24:52Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:24:52Z",
+          "completed_at": "2026-08-21T20:24:52Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:24:52Z",
+          "completed_at": "2026-08-21T20:24:53Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:24:53Z",
+          "completed_at": "2026-08-21T20:24:53Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:24:53Z",
+          "completed_at": "2026-08-21T20:24:54Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:24:54Z",
+          "completed_at": "2026-08-21T20:24:54Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767342",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040126,
+      "runner_name": "GitHub Actions 1000040126",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767412,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46X9A",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767412",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767412",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:49Z",
+      "completed_at": "2026-08-21T20:23:41Z",
+      "name": "test shard 5/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:50Z",
+          "completed_at": "2026-08-21T20:14:51Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:53Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:53Z",
+          "completed_at": "2026-08-21T20:19:05Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:19:05Z",
+          "completed_at": "2026-08-21T20:19:05Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:19:05Z",
+          "completed_at": "2026-08-21T20:20:02Z"
+        },
+        {
+          "name": "Run shard 5/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:20:02Z",
+          "completed_at": "2026-08-21T20:23:38Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:23:38Z",
+          "completed_at": "2026-08-21T20:23:38Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:23:38Z",
+          "completed_at": "2026-08-21T20:23:39Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:23:39Z",
+          "completed_at": "2026-08-21T20:23:39Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:23:39Z",
+          "completed_at": "2026-08-21T20:23:40Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:23:40Z",
+          "completed_at": "2026-08-21T20:23:40Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767412",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040130,
+      "runner_name": "GitHub Actions 1000040130",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767473,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46YMQ",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767473",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767473",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:50Z",
+      "completed_at": "2026-08-21T20:22:36Z",
+      "name": "test shard 2/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:51Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:53Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:53Z",
+          "completed_at": "2026-08-21T20:18:07Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:18:07Z",
+          "completed_at": "2026-08-21T20:18:07Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:18:07Z",
+          "completed_at": "2026-08-21T20:18:52Z"
+        },
+        {
+          "name": "Run shard 2/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:18:52Z",
+          "completed_at": "2026-08-21T20:22:33Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:22:33Z",
+          "completed_at": "2026-08-21T20:22:33Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:22:33Z",
+          "completed_at": "2026-08-21T20:22:34Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:22:34Z",
+          "completed_at": "2026-08-21T20:22:34Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:22:34Z",
+          "completed_at": "2026-08-21T20:22:34Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:22:34Z",
+          "completed_at": "2026-08-21T20:22:34Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767473",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040128,
+      "runner_name": "GitHub Actions 1000040128",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767485,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46YPQ",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767485",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767485",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:50Z",
+      "completed_at": "2026-08-21T20:24:46Z",
+      "name": "test shard 3/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:50Z",
+          "completed_at": "2026-08-21T20:14:51Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:51Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:18:44Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:18:44Z",
+          "completed_at": "2026-08-21T20:18:44Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:18:44Z",
+          "completed_at": "2026-08-21T20:19:45Z"
+        },
+        {
+          "name": "Run shard 3/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:19:45Z",
+          "completed_at": "2026-08-21T20:24:43Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:24:43Z",
+          "completed_at": "2026-08-21T20:24:43Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:24:43Z",
+          "completed_at": "2026-08-21T20:24:44Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:24:44Z",
+          "completed_at": "2026-08-21T20:24:44Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:24:44Z",
+          "completed_at": "2026-08-21T20:24:44Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:24:44Z",
+          "completed_at": "2026-08-21T20:24:44Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767485",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040129,
+      "runner_name": "GitHub Actions 1000040129",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897767617,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46YwQ",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897767617",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897767617",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:51Z",
+      "completed_at": "2026-08-21T20:24:44Z",
+      "name": "test shard 0/6",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T20:14:52Z",
+          "completed_at": "2026-08-21T20:14:53Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T20:14:53Z",
+          "completed_at": "2026-08-21T20:14:54Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T20:14:54Z",
+          "completed_at": "2026-08-21T20:19:46Z"
+        },
+        {
+          "name": "Clear stale bytecode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T20:19:46Z",
+          "completed_at": "2026-08-21T20:19:46Z"
+        },
+        {
+          "name": "Compile gate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T20:19:46Z",
+          "completed_at": "2026-08-21T20:20:50Z"
+        },
+        {
+          "name": "Run shard 0/6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T20:20:50Z",
+          "completed_at": "2026-08-21T20:24:40Z"
+        },
+        {
+          "name": "Test results summary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T20:24:40Z",
+          "completed_at": "2026-08-21T20:24:40Z"
+        },
+        {
+          "name": "Upload shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T20:24:40Z",
+          "completed_at": "2026-08-21T20:24:41Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T20:24:41Z",
+          "completed_at": "2026-08-21T20:24:41Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T20:24:41Z",
+          "completed_at": "2026-08-21T20:24:41Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T20:24:41Z",
+          "completed_at": "2026-08-21T20:24:41Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897767617",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040131,
+      "runner_name": "GitHub Actions 1000040131",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96897768477,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWj46cHQ",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96897768477",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96897768477",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-08-21T20:14:48Z",
+      "started_at": "2026-08-21T20:14:48Z",
+      "completed_at": "2026-08-21T20:14:47Z",
+      "name": "mutation-pilot",
+      "steps": [
+
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96897768477",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    },
+    {
+      "id": 96909250404,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWkD3PZA",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96909250404",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96909250404",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T21:00:28Z",
+      "started_at": "2026-08-21T21:00:31Z",
+      "completed_at": "2026-08-21T21:04:45Z",
+      "name": "summarize",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T21:00:32Z",
+          "completed_at": "2026-08-21T21:00:33Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T21:00:33Z",
+          "completed_at": "2026-08-21T21:00:35Z"
+        },
+        {
+          "name": "Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T21:00:35Z",
+          "completed_at": "2026-08-21T21:04:36Z"
+        },
+        {
+          "name": "Download Linux shard evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-21T21:04:36Z",
+          "completed_at": "2026-08-21T21:04:38Z"
+        },
+        {
+          "name": "Download workflows evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-08-21T21:04:38Z",
+          "completed_at": "2026-08-21T21:04:39Z"
+        },
+        {
+          "name": "Download macOS platform evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-08-21T21:04:39Z",
+          "completed_at": "2026-08-21T21:04:40Z"
+        },
+        {
+          "name": "Aggregate all required lane evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-08-21T21:04:40Z",
+          "completed_at": "2026-08-21T21:04:40Z"
+        },
+        {
+          "name": "Upload run summary (release-readiness evidence)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-21T21:04:40Z",
+          "completed_at": "2026-08-21T21:04:42Z"
+        },
+        {
+          "name": "Post Run ./.github/actions/setup-racket",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-08-21T21:04:42Z",
+          "completed_at": "2026-08-21T21:04:42Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-08-21T21:04:42Z",
+          "completed_at": "2026-08-21T21:04:42Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-08-21T21:04:42Z",
+          "completed_at": "2026-08-21T21:04:42Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96909250404",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040147,
+      "runner_name": "GitHub Actions 1000040147",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 96910306983,
+      "run_id": 32522576690,
+      "workflow_name": "full-regression",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/coinerd/q/actions/runs/32522576690",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOR8hf6M8AAAAWkE3upw",
+      "head_sha": "178e9beb12aad63d081f90a8c902d0d8c3aaa322",
+      "url": "https://api.github.com/repos/coinerd/q/actions/jobs/96910306983",
+      "html_url": "https://github.com/coinerd/q/actions/runs/32522576690/job/96910306983",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-21T21:04:45Z",
+      "started_at": "2026-08-21T21:04:47Z",
+      "completed_at": "2026-08-21T21:04:51Z",
+      "name": "report",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-21T21:04:48Z",
+          "completed_at": "2026-08-21T21:04:48Z"
+        },
+        {
+          "name": "Definitive run status",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-21T21:04:48Z",
+          "completed_at": "2026-08-21T21:04:48Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-08-21T21:04:48Z",
+          "completed_at": "2026-08-21T21:04:48Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/coinerd/q/check-runs/96910306983",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000040148,
+      "runner_name": "GitHub Actions 1000040148",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}
