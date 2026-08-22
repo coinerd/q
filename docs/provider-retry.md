@@ -142,7 +142,7 @@ original/reduced `max-tokens`, and `floorReached`.
 
 Streaming requests run under three independent stall windows, resolved per
 request by `sse-phase-timeout-secs` in `llm/stream.rkt` and wired into the
-openai-compatible adapter (v1.00.12, SS-1..SS-3):
+openai-compatible adapter since v1.00.12 (SS-1..SS-3):
 
 | Phase | Window | Formula | Purpose |
 |-------|--------|---------|---------|
@@ -151,9 +151,14 @@ openai-compatible adapter (v1.00.12, SS-1..SS-3):
 | `content` | 60 s | `http-stream-timeout-default` | Per-chunk gap once content flows; fixed — overrides must not widen it |
 
 Key invariant: the raw `sse-read` configuration feeds **only** the thinking
-window. Before v1.00.12 it was wired into all three phases, letting a deepseek
-`sse-read=600` turn a mid-content stall into a ~10-minute hang
-(see `.planning/ANALYSIS-v1.00.08-deepseek-10min-sse-stall.md`).
+window. It was previously wired into all three phases — a bug fixed in v1.00.12
+— letting a deepseek `sse-read=600` turn a mid-content stall into a
+~10-minute hang. Root-cause analysis:
+
+```
+.planning/ANALYSIS-v1.00.08-deepseek-10min-sse-stall.md
+```
+
 Slow-reasoning models keep their windows: kimi/glm with `sse-read=300` still
 get the full 300 s reasoning gap.
 
@@ -180,12 +185,17 @@ semantics and the message suffix.
 
 ### Scope and handoff (v1.00.13)
 
-v1.00.12 is explicitly a **containment** milestone: only the openai-compatible
+**v1.00.12** is explicitly a **containment** milestone: only the openai-compatible
 adapter uses the resolver. The anthropic, azure-openai, and gemini adapters and
 their eager-body read paths still apply timeouts independently. Unifying all
 provider request/stream lifecycle policies behind one shared module is the
-**Request Lifecycle Policy Unification** wave of v1.00.13 (SS-6 deferral;
-handoff contract in `.planning/PLAN-v1.00.12-SSE-STALL-DETECTION-BOUNDS-REVISED.md`
+**Request Lifecycle Policy Unification** wave in v1.00.13 (SS-6 deferral;
+handoff contract:
+
+```
+.planning/PLAN-v1.00.12-SSE-STALL-DETECTION-BOUNDS-REVISED.md
+```
+
 §5.1).
 
 ## Retry Behavior Summary
