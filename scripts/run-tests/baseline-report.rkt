@@ -370,7 +370,10 @@
                 'missing (for/sum ([r (in-list artifact-records)])
                            (hash-ref (hash-ref r 'metadata_completeness) 'missing 0)))
         (hasheq 'explicit 0 'heuristic 0 'missing 0
-                'disposition "not available in this retained sample: per-file runner JSON artifacts are an authenticated download; counts are NOT fabricated")))
+                'disposition (string-append "not available in this retained sample: "
+                                            "per-file runner JSON artifacts are an "
+                                            "authenticated download; counts are NOT "
+                                            "fabricated"))))
 
   (define all-file-pairs
     (append* (for/list ([r (in-list artifact-records)])
@@ -425,12 +428,32 @@
      'report_version report-version
      'method
      (hasheq
-      'percentiles "p50 and p95 only, linear interpolation between closest ranks over the sorted per-(suite,shard) wall-clock sample; no p90 is computed"
-      'wall_clock "duration of the job's declared execution step (first step matching: Run test shard | Workflow integration suite shard | test suite | all lint checks | audit (CI mode) | smoke | full regression | Run tests; fallback: longest step), computed as completed_at - started_at from the retained GitHub REST jobs JSON"
-      'sample_selection "maintainer-named GitHub run IDs: >=10 successful main/PR L3 runs where available, plus the two v1.00.10 L4 runs (32522576690 cold, 32526868295 warm)"
-      'inputs "checked-in retained JSON only: artifacts/ci-baseline/jobs/<run-id>.json (anonymous REST, curl command documented in the script header) and optional per-file runner JSON under artifacts/<run-id>/; no database, no external analytics service, no network access in this script"
+      'percentiles (string-append "p50 and p95 only, linear interpolation between "
+                                  "closest ranks over the sorted per-(suite,shard) "
+                                  "wall-clock sample; no p90 is computed")
+      'wall_clock (string-append "duration of the job's declared execution step "
+                                 "(first step matching: Run test shard | Workflow "
+                                 "integration suite shard | test suite | all lint "
+                                 "checks | audit (CI mode) | smoke | full regression | "
+                                 "Run tests; fallback: longest step), computed as "
+                                 "completed_at - started_at from the retained GitHub "
+                                 "REST jobs JSON")
+      'sample_selection (string-append "maintainer-named GitHub run IDs: >=10 "
+                                       "successful main/PR L3 runs where available, "
+                                       "plus the two v1.00.10 L4 runs "
+                                       "(32522576690 cold, 32526868295 warm)")
+      'inputs (string-append "checked-in retained JSON only: "
+                             "artifacts/ci-baseline/jobs/<run-id>.json (anonymous "
+                             "REST, curl command documented in the script header) "
+                             "and optional per-file runner JSON under "
+                             "artifacts/<run-id>/; no database, no external "
+                             "analytics service, no network access in this script")
       'determinism "identical inputs produce byte-identical outputs; all ordering by explicit keys"
-      'not_fabricated "fields requiring authenticated artifact downloads (per-file metadata counts, slowest files, zero-test events) are reported as 0 with an explicit 'not available in this retained sample' disposition rather than invented"
+      'not_fabricated (string-append "fields requiring authenticated artifact "
+                                     "downloads (per-file metadata counts, slowest "
+                                     "files, zero-test events) are reported as 0 "
+                                     "with an explicit 'not available in this "
+                                     "retained sample' disposition rather than invented")
       'local_l0_l1 "opt-in via --local --local-input <dir>; same JSON shape; never fabricated")
      'runs (for/list ([ri (in-list run-inputs)])
              (hasheq 'run_id (hash-ref ri 'run_id)
@@ -458,11 +481,17 @@
      'metadata_counts metadata-counts
      'slowest_files slowest-files
      'slowest_files_disposition (if (null? slowest-files)
-                                    "not available: no per-file runner JSON artifacts in this retained sample (authenticated download); never fabricated"
+                                    (string-append "not available: no per-file "
+                                                   "runner JSON artifacts in this "
+                                                   "retained sample (authenticated "
+                                                   "download); never fabricated")
                                     "from retained runner JSON artifacts")
      'zero_test_events zero-test-events
      'zero_test_events_disposition (if (null? zero-test-events)
-                                       "not available: no per-file runner JSON artifacts in this retained sample (authenticated download); never fabricated"
+                                       (string-append "not available: no per-file "
+                                                      "runner JSON artifacts in this "
+                                                      "retained sample (authenticated "
+                                                      "download); never fabricated")
                                        "from retained runner JSON artifacts")
      'failures fail-events
      'failure_count (count-outcome "fail")
@@ -566,7 +595,10 @@
                  (hash-ref metadata-counts 'disposition)))
      "\n## Slowest files (top 10, deterministic order)\n\n"
      (if (null? slowest-files)
-         "_not available in this retained sample: per-file runner JSON artifacts are an\nauthenticated download and were not retained; durations are never fabricated._\n"
+         (string-append "_not available in this retained sample: per-file "
+                        "runner JSON artifacts are an\nauthenticated download "
+                        "and were not retained; durations are never "
+                        "fabricated._\n")
          (string-join
           (for/list ([f (in-list slowest-files)])
             (format "- run ~a: `~a` — ~as (~a)"

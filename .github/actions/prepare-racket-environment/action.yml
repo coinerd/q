@@ -169,7 +169,7 @@ runs:
     # Immutable by construction: upload-artifact never overwrites an
     # existing name and retention is pinned to one day (24h, I9).
     - name: Upload the prepared-environment artifact
-      uses: actions/upload-artifact@330a01c390ac6d95005c1fca0c6af03bc7bdbc7f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ runner.temp }}/prepared-env-${{ inputs.artifact-name }}

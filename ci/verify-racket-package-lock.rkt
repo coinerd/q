@@ -144,7 +144,9 @@
 
 (cond
   [(not (equal? schema-revision 2))
-   (fail "unsupported lock schema-revision ~s (expected 2); the single-runtime schema-revision-1 lock was removed in v1.00.11 W1 — migrate to a version-indexed lock"
+   (fail (string-append "unsupported lock schema-revision ~s (expected 2); "
+                       "the single-runtime schema-revision-1 lock was "
+                       "removed in v1.00.11 W1 — migrate to a version-indexed lock")
          schema-revision)]
   [(not (hash? runtimes))
    (fail "~a must define a `runtimes` hash (schema-revision 2)" lock-path)])
