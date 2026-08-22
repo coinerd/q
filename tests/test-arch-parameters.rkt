@@ -215,9 +215,11 @@
       (for ([e (in-list inventory-entries)])
         (hash-set! counts (caddr e) (add1 (hash-ref counts (caddr e) 0))))
       (displayln (format "INFO: parameter inventory distribution: ~a" (hash->list counts)))
+      ;; v1.00.13 W1 (#9461): +2 — current-model-thinking-idle-timeouts and
+      ;; current-model-body-read-timeouts in llm/request-policy.rkt.
       (check-equal? (length inventory-entries)
-                    195
-                    "parameter inventory should contain 195 audited parameters"))))
+                    197
+                    "parameter inventory should contain 197 audited parameters"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

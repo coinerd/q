@@ -3,12 +3,11 @@
 ;; @speed fast
 ;; @suite provider
 ;; @boundary unit
-;; @not-test true ;; v1.00.13 W0 (#9454): committed red — promoted in W1 (#9461)
 
 ;; tests/test-request-network-policy.rkt
 ;; v1.00.13 (RL-1/RL-2/RL-9): the resolved request-network policy contract.
 ;;
-;; Freezes the semantics of `llm/request-policy.rkt` (created in W1):
+;; Freezes the semantics of `llm/request-policy.rkt`:
 ;;
 ;;   request-budget : preserves the per-model `request` meaning
 ;;   connect/ttfb   : (min request-budget 120) — dedicated bound, never the
@@ -26,16 +25,20 @@
 ;;   body-read      : explicit body-read > legacy sse-read > fallback
 ;;
 ;; Legacy `sse-read` must NEVER influence connect/ttfb, initial, or content.
-;;
-;; W0 red mode: the module is resolved via a guarded dynamic-require; while it
-;; is missing the file compiles cleanly but fails its first check. W1 (#9461)
-;; creates the module and removes the not-test marker above.
+;; Committed red in W0 (#9454); green since W1 (#9461).
 
 (require rackunit
          (only-in "../llm/stream.rkt"
                   http-stream-timeout-default
                   http-read-timeout-default
-                  max-thinking-gap-secs))
+                  max-thinking-gap-secs)
+         (only-in "../llm/request-policy.rkt"
+                  current-http-request-timeout
+                  current-model-timeouts
+                  current-model-sse-read-timeouts
+                  current-model-thinking-idle-timeouts
+                  current-model-body-read-timeouts
+                  resolve-request-network-policy-for-model))
 
 ;; ————————————————————————————————————————————————————————————
 ;; W1 module resolution (guarded: red until W1 lands)
@@ -188,6 +191,40 @@
   (check-exn exn:fail? (lambda () (resolve #:request-timeout 600
                                            #:body-read-fallback 0))))
 
+(test-case "resolve-request-network-policy-for-model reads the wired parameters"
+  (unless resolver-landed? (policy-landed-error))
+  ;; deepseek-style legacy config through the parameter path
+  (parameterize ([current-http-request-timeout 600]
+                 [current-model-timeouts (hash "deepseek" 900)]
+                 [current-model-sse-read-timeouts (hash "deepseek" 600)]
+                 [current-model-thinking-idle-timeouts (hash)]
+                 [current-model-body-read-timeouts (hash)])
+    (define p (resolve-request-network-policy-for-model "deepseek"))
+    (check-equal? (p-request-budget p) 900)
+    (check-equal? (p-initial-idle p) 120)
+    (check-equal? (p-thinking-idle p) 300)
+    (check-equal? (p-content-idle p) 60)
+    (check-equal? (p-stream-total p) 1800)
+    (check-equal? (p-body-read p) 600))
+  ;; explicit semantic keys win over the legacy alias
+  (parameterize ([current-http-request-timeout 600]
+                 [current-model-timeouts (hash "m" 600)]
+                 [current-model-sse-read-timeouts (hash "m" 600)]
+                 [current-model-thinking-idle-timeouts (hash "m" 240)]
+                 [current-model-body-read-timeouts (hash "m" 45)])
+    (define p (resolve-request-network-policy-for-model "m"))
+    (check-equal? (p-thinking-idle p) 240)
+    (check-equal? (p-body-read p) 45))
+  ;; unknown model falls back to the global request budget
+  (parameterize ([current-http-request-timeout 300]
+                 [current-model-timeouts (hash)]
+                 [current-model-sse-read-timeouts (hash)]
+                 [current-model-thinking-idle-timeouts (hash)]
+                 [current-model-body-read-timeouts (hash)])
+    (define p (resolve-request-network-policy-for-model #f))
+    (check-equal? (p-request-budget p) 300)
+    (check-equal? (p-stream-total p) 600)))
+
 (test-case "property sweep: invariants hold across the config matrix"
   (unless resolver-landed? (policy-landed-error))
   (for* ([rt (in-list '(1 30 60 90 120 300 600 900 1800))]
@@ -210,6 +247,5 @@
     (check-true (<= (p-thinking-idle p) rt))
     (check-equal? (p-content-idle p) http-stream-timeout-default)
     (check-true (<= (p-connect-ttfb p) 120))
-    (check-true (<= (p-stream-total p) (* 2 rt) )
-                "stream total is exactly (max 600 (* 2 request)) — see frozen formula")
-    (check-true (>= (p-stream-total p) 600))))
+    (check-equal? (p-stream-total p) (max 600 (* 2 rt))
+                  "stream total is exactly (max 600 (* 2 request)) — see frozen formula")))
