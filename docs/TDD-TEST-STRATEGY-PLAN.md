@@ -62,7 +62,7 @@ introduced; unmapped sources keep the fail-open fallback.
 `.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
 (`continue-on-error: true` removed); missing mandatory tags now fail the build.
 The step shipped report-only in PR #9383 with enforcement originally
-scheduled for v1.00.08; that milestone slipped one release, and at v1.00.08
+scheduled for v1.00.12; that milestone slipped one release, and at v1.00.12
 the report-only inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
 `missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
 so enforcement flipped then — evidence-gated, per the schedule recorded in
