@@ -55,6 +55,10 @@ runs:
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.artifact-name }}
+        # Never extract into the checkout: the artifact contains package
+        # sources (addon-store/) that a later raco setup would compile as
+        # part of the q package.
+        path: ${{ runner.temp }}/prepared-env-download
 
     - name: Verify the manifest against this job tuple before anything else
       id: tuple
@@ -65,13 +69,15 @@ runs:
         ARTIFACT_NAME: ${{ inputs.artifact-name }}
       run: |
         set -euo pipefail
-        root="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
-        # download-artifact strips the artifact-name path component into the
-        # working directory; normalize both layouts to one root.
-        if [ ! -d "$root" ]; then
-          mkdir -p "$root"
-          mv "$ARTIFACT_NAME" "$root/"
+        # upload-artifact stores a single directory's bare contents, so the
+        # extractor layout varies; locate the manifest rather than guessing.
+        dl="$RUNNER_TEMP/prepared-env-download"
+        manifest=$(find "$dl" -type f -name manifest.json | head -1)
+        if [ -z "$manifest" ]; then
+          echo "::error::manifest.json missing from downloaded artifact"
+          exit 1
         fi
+        root=$(dirname "$manifest")
 
         git_sha=$(git rev-parse HEAD)
         echo "root=$root" >> "$GITHUB_OUTPUT"
