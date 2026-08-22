@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-sse-phase-timeout-bounds.rkt
-;; SS-4 (v1.00.12): regression guards for the SSE phase-timeout bounds.
+;; SS-4: regression guards for the SSE phase-timeout bounds.
 ;;
 ;; Locks the openai-compatible streaming phase-cap semantics after v1.00.05 W1
 ;; (#9393) widened all three stall windows to the raw `sse-read` config value,
@@ -59,7 +59,7 @@
 ;; W0 red marker: fails (exit 1) until the resolver lands in W1
 ;; ————————————————————————————————————————————————————————————
 
-(test-case "W1 resolver exports exist (red until v1.00.12 W1)"
+(test-case "W1 resolver exports exist (red until the resolver lands)"
   (check-true
    resolver-landed?
    "RED(W0): sse-phase-timeout-secs / max-thinking-gap-secs not exported by llm/stream.rkt yet"))
