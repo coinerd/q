@@ -229,12 +229,13 @@ are hard failures inside the lint itself and always were.
 
 **Enforcement status:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
 were report-only (`continue-on-error: true`) until the inventory reached zero
-gaps. Enforcement flipped to blocking in **v1.00.06**: the report-only
-inventory run at that point returned exit 0 with `missing-required=0`
+gaps. Enforcement was scheduled for v1.00.12 but flipped to blocking one
+release later, in **v1.00.12**: the report-only inventory run at that point
+returned exit 0 with `missing-required=0` across all 1,299 test files
 (invalid=0, deprecated-alias=0), so the `metadata-lint` CI step dropped
 `continue-on-error: true` and became `metadata-lint (blocking)`. CI
 configuration and this document now describe the same enforced state; the
-v1.00.05 milestone slipping was deliberate, not silent — it waited on the
+v1.00.12 milestone slipping was deliberate, not silent — it waited on the
 evidence (a clean inventory) rather than on a date.
 
 **v1.00.11 re-verification:** the enforced canonical inventory was re-run at
