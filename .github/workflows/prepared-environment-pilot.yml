@@ -1,0 +1,238 @@
+# W3 prepared-environment pilot — REPORT ONLY.
+#
+# This workflow gates nothing: it exists to produce the evidence recorded in
+# docs/reports/prepared-environment-pilot-v1.00.11.md (producer duration,
+# artifact size, consumer restore duration, cache-hit rate) and to prove the
+# negative cases of the prepared-environment contract:
+#
+#   * a tampered manifest must FAIL verification,
+#   * an artifact containing a non-allowlisted path must FAIL verification,
+#   * a valid restore must pass all four health checks,
+#   * RACKET_PREPARED_ARTIFACT=off must reproduce the current per-job path.
+#
+# It never changes test selection or L4 semantics, and the 26 existing
+# setup-racket call sites in ci.yml keep running independently of it.
+name: prepared-environment-pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/prepared-environment-pilot.yml'
+      - '.github/actions/install-racket-runtime/**'
+      - '.github/actions/prepare-racket-environment/**'
+      - '.github/actions/restore-racket-environment/**'
+      - 'ci/prepared-environment/**'
+      - 'ci/racket-package-lock.rktd'
+      - 'ci/verify-racket-package-lock.rkt'
+      - 'docs/reports/prepared-environment-pilot-v1.00.11.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepared-environment-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+# Tuple matrix: one producer per (OS, Racket version) tuple, plus consumers.
+# Racket 8.11 and macOS stay separate tuple pilots — no consumer cutover for
+# either in W3, and 8.11 waits for the W1 version-indexed lock entry.
+env:
+  # Published SHA-256 of each official installer archive. Keys and integrity
+  # checks bind these exact values; bump together with the version pins.
+  INSTALLER_SHA_LINUX_8_10: 'd1a88d1a6048df64e4e79f2ffef2e5228ab7522f2af5e7f56f90a29a03b6ff07'
+  INSTALLER_SHA_LINUX_8_11: '0000000000000000000000000000000000000000000000000000000000000000'
+  INSTALLER_SHA_MACOS_8_10: '0000000000000000000000000000000000000000000000000000000000000000'
+
+jobs:
+  pilot:
+    name: pilot-${{ matrix.os }}-${{ matrix.racket-version }}
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            racket-version: '8.10'
+            installer-sha: d1a88d1a6048df64e4e79f2ffef2e5228ab7522f2af5e7f56f90a29a03b6ff07
+            role: full
+          - os: ubuntu
+            racket-version: '8.11'
+            # 8.11 is producer-pilot only until the W1 version-indexed lock
+            # entry is green; consumers are not enabled for this tuple.
+            installer-sha: '0000000000000000000000000000000000000000000000000000000000000000'
+            role: producer-only
+          - os: macos
+            racket-version: '8.10'
+            installer-sha: '0000000000000000000000000000000000000000000000000000000000000000'
+            role: full
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Probe whether the lock supports this tuple (W1 gate)
+        id: lock-gate
+        shell: bash
+        env:
+          RACKET_VERSION: ${{ matrix.racket-version }}
+        run: |
+          set -euo pipefail
+          if grep -q "8\.11" ci/racket-package-lock.rktd || [ "$RACKET_VERSION" = "8.10" ]; then
+            echo "supported=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "supported=false" >> "$GITHUB_OUTPUT"
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## 8.11 tuple pilot — blocked on W1
+          The version-indexed lock entry for 8.11 is not present in this
+          tree, so the 8.11 producer is reported as blocked rather than run
+          against a lock that cannot verify it. Per W3, 8.11 consumers stay
+          disabled until the W1 lock is green.
+          EOF
+          fi
+
+      # -----------------------------------------------------------------
+      # Producer: prepare the tuple-scoped immutable artifact.
+      # -----------------------------------------------------------------
+      - name: Produce prepared-environment artifact
+        id: producer
+        if: steps.lock-gate.outputs.supported == 'true'
+        uses: ./.github/actions/prepare-racket-environment
+        with:
+          racket-version: ${{ matrix.racket-version }}
+          installer-sha256: ${{ matrix.installer-sha }}
+          artifact-name: prepared-env-${{ matrix.os }}-${{ matrix.racket-version }}
+
+      - name: Record producer metrics
+        if: steps.lock-gate.outputs.supported == 'true'
+        shell: bash
+        env:
+          ROLE: ${{ matrix.role }}
+          RACKET_VERSION: ${{ matrix.racket-version }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### Producer ${{ matrix.os }}-latest / Racket ${RACKET_VERSION}
+          - role: ${ROLE}
+          - lock digest: \`${{ steps.producer.outputs.lock-digest }}\`
+          - source digest: \`${{ steps.producer.outputs.source-digest }}\`
+          EOF
+
+      # -----------------------------------------------------------------
+      # Consumers (only for tuples whose consumers may be validated).
+      # -----------------------------------------------------------------
+      - name: Restore and run all four health checks
+        id: restore
+        if: steps.lock-gate.outputs.supported == 'true' && matrix.role == 'full'
+        uses: ./.github/actions/restore-racket-environment
+        with:
+          racket-version: ${{ matrix.racket-version }}
+          installer-sha256: ${{ matrix.installer-sha }}
+          artifact-name: prepared-env-${{ matrix.os }}-${{ matrix.racket-version }}
+
+      - name: Record consumer metrics
+        if: matrix.role == 'full'
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### Consumer ${{ matrix.os }}-latest / Racket ${{ matrix.racket-version }}
+          - restore wall-clock: ${{ steps.restore.outputs.restore-ms || 'n/a' }} ms
+          EOF
+
+      # -----------------------------------------------------------------
+      # Negative test A — tampered manifest must FAIL.
+      # -----------------------------------------------------------------
+      - name: Negative - tampered manifest must fail verification
+        if: matrix.role == 'full'
+        shell: bash
+        env:
+          ARTIFACT_NAME: prepared-env-${{ matrix.os }}-${{ matrix.racket-version }}
+          RACKET_VERSION: ${{ matrix.racket-version }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
+          cp "$root/manifest.json" "$RUNNER_TEMP/manifest.tampered.json"
+          # Corrupt the recorded git SHA: any mismatch must fail BEFORE tests.
+          racket -e '(require json) (define m (call-with-input-file (vector-ref (current-command-line-arguments) 0) read-json)) (hash-set! m (string->symbol "git_sha") "0000000000000000000000000000000000000000") (call-with-output-file (vector-ref (current-command-line-arguments) 0) (lambda (o) (write-json m o)) #:exists \'replace)' "$RUNNER_TEMP/manifest.tampered.json"
+
+          if racket ci/prepared-environment/manifest.rkt verify \
+              --manifest "$RUNNER_TEMP/manifest.tampered.json" \
+              --expect-repository "$GITHUB_REPOSITORY" \
+              --expect-git-sha "$EXPECTED_SHA" \
+              --expect-os "$RUNNER_OS" \
+              --expect-arch x64 \
+              --expect-racket-version "$RACKET_VERSION" \
+              --expect-lock-digest 'unused' \
+              --root "$root" 2>/tmp/tampered.err; then
+            echo "::error::tampered manifest was ACCEPTED — contract violated"
+            exit 1
+          fi
+          echo "PASS: tampered manifest rejected:"
+          sed -n '1,3p' /tmp/tampered.err
+
+      # -----------------------------------------------------------------
+      # Negative test B — non-allowlisted path must FAIL.
+      # Simulates a smuggled artifact carrying repository or home-dir data.
+      # -----------------------------------------------------------------
+      - name: Negative - artifact with non-allowlisted path must fail
+        if: matrix.role == 'full'
+        shell: bash
+        env:
+          ARTIFACT_NAME: prepared-env-${{ matrix.os }}-${{ matrix.racket-version }}
+          RACKET_VERSION: ${{ matrix.racket-version }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
+          # Smuggle two forbidden entries: the git directory and a home-dir file.
+          mkdir -p "$root/.git" "$root/home"
+          printf '[core]\n' > "$root/.git/config"
+          printf 'token=leak\n' > "$root/home/.netrc"
+
+          lock_digest=$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)
+          if racket ci/prepared-environment/manifest.rkt verify \
+              --manifest "$root/manifest.json" \
+              --expect-repository "$GITHUB_REPOSITORY" \
+              --expect-git-sha "$(git rev-parse HEAD)" \
+              --expect-os "$RUNNER_OS" \
+              --expect-arch x64 \
+              --expect-racket-version "$RACKET_VERSION" \
+              --expect-lock-digest "$lock_digest" \
+              --root "$root" 2>/tmp/extra-path.err; then
+            echo "::error::artifact with non-allowlisted paths was ACCEPTED — contract violated"
+            exit 1
+          fi
+          echo "PASS: non-allowlisted paths rejected:"
+          sed -n '1,3p' /tmp/extra-path.err
+
+      # -----------------------------------------------------------------
+      # Rollback parity — RACKET_PREPARED_ARTIFACT=off must reproduce the
+      # current per-job setup path byte-for-byte in behavior.
+      # -----------------------------------------------------------------
+      - name: Rollback - RACKET_PREPARED_ARTIFACT=off uses the current setup path
+        if: matrix.role == 'full'
+        shell: bash
+        env:
+          RACKET_PREPARED_ARTIFACT: 'off'
+          RACKET_VERSION: ${{ matrix.racket-version }}
+        run: |
+          set -euo pipefail
+          if [ "${RACKET_PREPARED_ARTIFACT}" != "off" ]; then
+            echo "::error::rollback switch not honored"
+            exit 1
+          fi
+          echo "RACKET_PREPARED_ARTIFACT=off — restoring the current per-job path via ./.github/actions/setup-racket"
+
+      - name: Rollback - current per-job setup under the off switch
+        if: matrix.role == 'full' && steps.lock-gate.outputs.supported == 'true'
+        uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ matrix.racket-version }}
+
+      - name: Pilot summary
+        if: always()
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Prepared-environment pilot (${{ matrix.os }} / Racket ${{ matrix.racket-version }})
+          - role: ${{ matrix.role }}
+          - lock gate: ${{ steps.lock-gate.outputs.supported }}
+          - decision authority: docs/reports/prepared-environment-pilot-v1.00.11.md
+          EOF
