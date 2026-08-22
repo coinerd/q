@@ -26,6 +26,7 @@
          (only-in "../request-policy.rkt"
                   resolve-request-network-policy-for-model
                   request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
                   request-network-policy-initial-idle-secs
                   request-network-policy-thinking-idle-secs
                   request-network-policy-content-idle-secs
@@ -34,7 +35,8 @@
          (only-in "../http-helpers.rkt"
                   make-provider-http-request
                   check-provider-status!
-                  parse-provider-url)
+                  parse-provider-url
+                  provider-sendrecv/ttfb-bounded)
          (only-in "../model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          (only-in "../model.rkt" model-request-settings)
          (only-in "../provider.rkt" make-provider validate-api-key! ensure-model-setting)
@@ -173,14 +175,20 @@
                              #:timeout (request-network-policy-request-budget-secs policy)
                              (lambda ()
                                (parameterize ([current-custodian request-custodian])
+                                 ;; v1.00.13 W4 (#9478, RL-4): connect/TTFB
+                                 ;; bounded by policy; phase 'connect/ttfb.
                                  (define-values (sl rh rp)
-                                   (http-sendrecv host
-                                                  path-str
-                                                  #:port port
-                                                  #:ssl? ssl?
-                                                  #:method #"POST"
-                                                  #:headers headers
-                                                  #:data body-bytes))
+                                   (provider-sendrecv/ttfb-bounded
+                                    (request-network-policy-connect-ttfb-secs policy)
+                                    (lambda ()
+                                      (http-sendrecv host
+                                                     path-str
+                                                     #:port port
+                                                     #:ssl? ssl?
+                                                     #:method #"POST"
+                                                     #:headers headers
+                                                     #:data body-bytes))
+                                    #:cleanup cleanup-response!))
                                  (vector sl rh rp)))))
                           (define status-line (vector-ref result-vec 0))
                           (define response-headers (vector-ref result-vec 1))

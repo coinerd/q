@@ -529,12 +529,18 @@
                    [first-read? initial-secs]
                    [(not seen-content?) thinking-secs]
                    [else stream-secs]))
+               ;; v1.00.13 W4 (#9478, NP-7): a blocking read may never overshoot
+               ;; the total wall-clock deadline by a full phase window — every
+               ;; wait is capped at the remaining total budget (min of the
+               ;; phase idle window and the remaining budget).
+               (define remaining-total-secs (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+               (define wait-secs (min timeout-secs (max 0.05 remaining-total-secs)))
                ;; v0.99.84: Check buffer first, then drain port aggressively.
                (define line
                  (let ([cached (buf-pop!)])
                    (if cached
                        cached
-                       (let ([l (read-line/timeout port #:timeout timeout-secs)])
+                       (let ([l (read-line/timeout port #:timeout wait-secs)])
                          ;; After reading one line, probe for more data non-blockingly.
                          ;; This prevents CLOSE-WAIT buildup when the consumer is slow.
                          (when (and l (not (eof-object? l)))

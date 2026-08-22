@@ -289,6 +289,7 @@
                               headers
                               (jsexpr->bytes body)
                               #:timeout (request-network-policy-request-budget-secs policy)
+                              #:connect-timeout (request-network-policy-connect-ttfb-secs policy)
                               #:read-timeout (request-network-policy-body-read-budget-secs policy)
                               #:status-checker
                               (lambda (sl rb) (check-provider-status! "OpenAI" sl rb))))
@@ -391,26 +392,33 @@
                                      (hash)
                                      'network
                                      #f))))])
-        (call-with-request-timeout (lambda ()
-                                     (parameterize ([current-custodian request-custodian])
-                                       (define-values (sl rh rp)
-                                         (if req-port
-                                             (http-sendrecv host
-                                                            path-str
-                                                            #:port req-port
-                                                            #:ssl? ssl?
-                                                            #:method "POST"
-                                                            #:headers headers
-                                                            #:data body-bytes)
-                                             (http-sendrecv host
-                                                            path-str
-                                                            #:ssl? ssl?
-                                                            #:method "POST"
-                                                            #:headers headers
-                                                            #:data body-bytes)))
-                                       (vector sl rh rp)))
-                                   #:timeout (request-network-policy-request-budget-secs policy)
-                                   #:cleanup cleanup-response!)))
+        (call-with-request-timeout
+         (lambda ()
+           (parameterize ([current-custodian request-custodian])
+             ;; v1.00.13 W4 (#9478, RL-4): connect+TLS+status+
+             ;; headers bounded by the policy TTFB window; the
+             ;; structured phase is 'connect/ttfb.
+             (define-values (sl rh rp)
+               (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                               (lambda ()
+                                                 (if req-port
+                                                     (http-sendrecv host
+                                                                    path-str
+                                                                    #:port req-port
+                                                                    #:ssl? ssl?
+                                                                    #:method "POST"
+                                                                    #:headers headers
+                                                                    #:data body-bytes)
+                                                     (http-sendrecv host
+                                                                    path-str
+                                                                    #:ssl? ssl?
+                                                                    #:method "POST"
+                                                                    #:headers headers
+                                                                    #:data body-bytes)))
+                                               #:cleanup cleanup-response!))
+             (vector sl rh rp)))
+         #:timeout (request-network-policy-request-budget-secs policy)
+         #:cleanup cleanup-response!)))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))

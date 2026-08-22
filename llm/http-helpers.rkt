@@ -11,6 +11,7 @@
 
 (require racket/contract
          racket/math
+         racket/match
          racket/string
          racket/port
          racket/date
@@ -30,6 +31,8 @@
           [make-provider-http-request
            (->* (string? (listof string?) bytes?)
                 (#:timeout (or/c positive? #f)
+                           ;; v1.00.13 W4 (#9478): dedicated connect/TTFB bound
+                           #:connect-timeout (or/c positive? #f)
                            ;; v1.00.13 W3 (#9473): duration contracts widened
                            ;; from exact-positive-integer? to positive? to
                            ;; match the downstream wrappers (call-with-request-
@@ -53,7 +56,11 @@
                 hash?)])
          ;; v1.00.13 W3 (#9473): injectable HTTP boundary (RL-6) — the
          ;; cleanup-contract tests substitute a local socket pair through it.
-         current-provider-http-sendrecv)
+         current-provider-http-sendrecv
+         ;; v1.00.13 W4 (#9478): connect/TTFB-bounded sendrecv (RL-4)
+         (contract-out
+          [provider-sendrecv/ttfb-bounded
+           (->* (positive? procedure?) (#:cleanup procedure?) (values any/c any/c any/c))]))
 
 ;; ============================================================
 ;; Contracts
@@ -237,6 +244,50 @@
           (and retry-after-raw (parse-retry-after-header retry-after-raw))))
 
 ;; ============================================================
+;; Connect/TTFB-bounded sendrecv (v1.00.13 W4, RL-4)
+;; ============================================================
+
+;; Run the (already injected or real) HTTP send phase under the policy
+;; connect/TTFB bound: connect + TLS + status + headers. An established
+;; connection that produces no response-head progress within the bound fires
+;; a structured exn:fail:network:timeout:stream with phase 'connect/ttfb —
+;; it can never silently consume the full request budget (NP-4/RL-4).
+;; #:cleanup runs BEFORE the worker thread is killed (W4: cleanup before
+;; retry).
+(define (provider-sendrecv/ttfb-bounded ttfb-secs
+                                        send-proc
+                                        #:cleanup [cleanup-thunk (lambda () (void))])
+  (define ch (make-channel))
+  (define th
+    (thread (lambda ()
+              (with-handlers ([exn:break? (lambda (e) (void))]
+                              [exn:fail? (lambda (e) (channel-put ch (cons 'exn e)))])
+                ;; send-proc returns multiple values (http-sendrecv: status,
+                ;; headers, port) — package them for the channel.
+                (channel-put ch (cons 'val (call-with-values send-proc vector)))))))
+  (define result (sync/timeout ttfb-secs ch))
+  (match result
+    [#f
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (log-warning (format "llm/http-helpers: connect cleanup error: ~a"
+                                                       (exn-message e))))])
+       (cleanup-thunk))
+     (kill-thread th)
+     (raise (exn:fail:network:timeout:stream
+             (format "connect/TTFB timeout (~a seconds) awaiting response head" ttfb-secs)
+             (current-continuation-marks)
+             #f ; received heartbeats? — no stream yet
+             #f ; received any data? — no bytes of the response head
+             'connect/ttfb
+             0))]
+    [_
+     (define tag (car result))
+     (define payload (cdr result))
+     (match tag
+       ['exn (raise payload)]
+       [_ (vector->values payload)])]))
+
+;; ============================================================
 ;; Injectable HTTP boundary (v1.00.13 W3, RL-6)
 ;; ============================================================
 
@@ -266,6 +317,7 @@
                                     headers
                                     body-bytes
                                     #:timeout [timeout-secs #f]
+                                    #:connect-timeout [connect-timeout-secs #f]
                                     #:read-timeout [read-timeout-secs #f]
                                     #:status-checker [status-checker #f])
   ;; v1.00.13 W2 (#9466): body-read budget observation for the cross-adapter
@@ -300,13 +352,23 @@
      (call-with-request-timeout
       (lambda ()
         (define-values (status-line response-headers response-port)
-          (sendrecv host
-                    path-str
-                    #:port port
-                    #:ssl? ssl?
-                    #:method #"POST"
-                    #:headers headers
-                    #:data body-bytes))
+          ;; v1.00.13 W4 (#9478, RL-4): connect+TLS+status+headers runs under
+          ;; the dedicated policy bound when the caller provides it — an
+          ;; established-but-silent peer cannot consume the request budget.
+          ((if connect-timeout-secs
+               (lambda (proc)
+                 (provider-sendrecv/ttfb-bounded connect-timeout-secs
+                                                 proc
+                                                 #:cleanup close-response-once!))
+               (lambda (proc) (proc)))
+           (lambda ()
+             (sendrecv host
+                       path-str
+                       #:port port
+                       #:ssl? ssl?
+                       #:method #"POST"
+                       #:headers headers
+                       #:data body-bytes))))
         (set-box! resp-port-box response-port)
         ;; v1.00.05 W1 (#9393): honor a per-model read timeout (policy
         ;; body-read budget since v1.00.13) for the body read; the outer
