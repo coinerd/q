@@ -54,6 +54,8 @@
   models that legitimately need longer silent reasoning gaps require the
   v1.00.13 Request Lifecycle Policy Unification follow-up.
 
+Released 2026-08-22.
+
 ## v1.00.08 — 2026-08-21
 
 > Provider networking hardening closeout: per-model cumulative retry ceiling
