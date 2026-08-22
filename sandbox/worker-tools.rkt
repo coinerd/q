@@ -16,6 +16,7 @@
          racket/file
          racket/match
          racket/port
+         racket/path
          racket/string
          (only-in racket/list take drop last)
          json
@@ -48,6 +49,18 @@
 ;; Allowed root directories for file operations
 (define current-allowed-roots (make-parameter (list (current-directory))))
 
+;; `resolve-path` returns a relative target unchanged when a soft link stores
+;; a relative path. The target is relative to the directory containing that
+;; link, not to the process current directory. Resolver state must therefore
+;; always be rebased to a complete path before the next component is appended.
+(define (resolve-existing-component candidate)
+  (define target (resolve-path candidate))
+  (define complete-target
+    (if (complete-path? target)
+        target
+        (path->complete-path target (or (path-only candidate) (current-directory)))))
+  (simplify-path complete-target #f))
+
 ;; LF3 (v0.99.4): Walk path components to resolve symlinks on the longest
 ;; existing prefix. Prevents symlink-based escapes when non-existent
 ;; directories exist after a symlink in the path chain. For example,
@@ -66,8 +79,16 @@
              (car remaining)))
        (cond
          [(or (file-exists? candidate) (directory-exists? candidate))
-          ;; Component exists — resolve symlinks and continue
-          (loop (cdr remaining) (simplify-path (resolve-path candidate) #f))]
+          ;; Component exists — resolve links and retain a complete prefix. A
+          ;; resolved target can itself contain an existing lexical alias (for
+          ;; example macOS /var → /private/var). Restarting from that target
+          ;; walks every component under the same rule before containment is
+          ;; tested; advancing directly would retain the alias and falsely
+          ;; reject a valid in-root link target.
+          (define resolved-candidate (resolve-existing-component candidate))
+          (if (equal? resolved-candidate (simplify-path candidate #f))
+              (loop (cdr remaining) resolved-candidate)
+              (loop (append (explode-path resolved-candidate) (cdr remaining)) #f))]
          [(link-exists? candidate)
           ;; Broken symlink — reject (resolve-path would raise, caught by outer handler → #f)
           (raise (exn:fail (format "broken symlink: ~a" candidate) (current-continuation-marks)))]

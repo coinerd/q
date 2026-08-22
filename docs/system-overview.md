@@ -1,6 +1,6 @@
 # q Coding Agent — System Overview
 
-> **Version 1.00.08** · Racket · MIT License
+> **Version 1.00.12** · Racket · MIT License
 > The definitive reference for developers who want to understand, extend, or contribute to q.
 
 ---
@@ -485,7 +485,7 @@ bin/q init                          # Guided setup wizard
 
 | Metric | Value |
 |--------|-------|
-| Version | 1.00.08 |
+| Version | 1.00.12 |
 | Language | Racket |
 | License | MIT |
 | Source modules | 495 |

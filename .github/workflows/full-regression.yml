@@ -80,13 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -155,13 +148,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -199,18 +185,14 @@ jobs:
   test-platform:
     if: github.event.schedule != '30 3 * * 0'
     runs-on: macos-14
-    timeout-minutes: 90 # Racket setup alone consumed 42.3 min on cold macOS
-                        # caches (runs 32288930966 / 32297908687). Explicit
-                        # budget revision per issue #9384 follow-up: setup must
-                        # fit inside the job budget; suite itself is ~15 min.
+    timeout-minutes: 90 # Retained through cache rollout: a cold locked store
+                        # must complete before the warm-run evidence permits a
+                        # measured budget reduction. The suite itself is ~15 min.
     steps:
       - uses: actions/checkout@v7
 
-      # No outer ~/.local/share/racket package cache in this job (unlike the
-      # Linux shard jobs): the ./.github/actions/setup-racket composite action
-      # already caches ~/.racket + ./compiled, and the duplicate outer
-      # save/restore amplified cold-cache setup time on macOS (runs
-      # 32288930966 / 32297908687). Single cache owner: the composite action.
+      # The reusable setup action is the sole cache owner. It restores the
+      # locked, explicit PLTADDONDIR store and never caches workspace bytecode.
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: "8.10"
@@ -369,13 +351,6 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: ${{ runner.os }}-racket-packages-${{ hashFiles('**/info.rkt') }}
-          restore-keys: ${{ runner.os }}-racket-packages-
 
       - uses: ./.github/actions/setup-racket
         with:

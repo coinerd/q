@@ -62,7 +62,7 @@ introduced; unmapped sources keep the fail-open fallback.
 `.github/workflows/ci.yml` runs the `metadata-lint (blocking)` step
 (`continue-on-error: true` removed); missing mandatory tags now fail the build.
 The step shipped report-only in PR #9383 with enforcement originally
-scheduled for v1.00.08; that milestone slipped one release, and at v1.00.08
+scheduled for v1.00.12; that milestone slipped one release, and at v1.00.12
 the report-only inventory (`racket scripts/run-tests.rkt --lint-metadata`) returned exit 0 with
 `missing-required=0` across all 1,299 files (invalid=0, deprecated-alias=0),
 so enforcement flipped then — evidence-gated, per the schedule recorded in
@@ -101,6 +101,15 @@ workflow and macOS records, GitHub conclusion `success`, and summary status
 `pass`; the regression log must retain that evidence. A disagreement is a
 release-blocking evidence-integrity event under
 `docs/operations/test-regression-triage.md`.
+
+**v1.00.10 release-candidate condition:** The macOS platform lane must use the
+locked, explicit Racket user-store cache described in
+`docs/reports/CI-RACKET-CACHE-POLICY.md`, while continuing to compile
+all package-visible q modules on every cache hit. Its LF3 relative-symlink
+security fixtures and cache-integrity diagnostics are release evidence, not
+optional performance work. L4 closure therefore requires one clean cold
+population and one unchanged warm cache-hit dispatch, with GitHub conclusion
+`success` and `run-summary.json.status` `pass` in both required all-lane runs.
 
 ### Shard plan — guarded `FAST_SHARD_PLAN` activation: ACTIVE (W4)
 

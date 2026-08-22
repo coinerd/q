@@ -219,8 +219,8 @@ are hard failures inside the lint itself and always were.
 
 | Field | Status | Condition |
 |-------|--------|-----------|
-| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.08 inventory) |
-| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.08 inventory) |
+| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.12 inventory) |
+| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.12 inventory) |
 | `@area` | **Mandatory on every test file** | — (ownership map complete) |
 | `@suite` | Conditional | Required when the test belongs to a named suite (`runtime`, `tui`, `cli`, `llm`, `tools`, `extensions`) |
 | `@mutates` | Conditional | Required when the test mutates persistent state (values other than `none`) |
@@ -229,13 +229,13 @@ are hard failures inside the lint itself and always were.
 
 **Enforcement status:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
 were report-only (`continue-on-error: true`) until the inventory reached zero
-gaps. Enforcement was scheduled for v1.00.08 but flipped to blocking one
-release later, in **v1.00.08**: the report-only inventory run at that point
+gaps. Enforcement was scheduled for v1.00.12 but flipped to blocking one
+release later, in **v1.00.12**: the report-only inventory run at that point
 returned exit 0 with `missing-required=0` across all 1,299 test files
 (invalid=0, deprecated-alias=0), so the `metadata-lint` CI step dropped
 `continue-on-error: true` and became `metadata-lint (blocking)`. CI
 configuration and this document now describe the same enforced state; the
-v1.00.08 milestone slipping was deliberate, not silent — it waited on the
+v1.00.12 milestone slipping was deliberate, not silent — it waited on the
 evidence (a clean inventory) rather than on a date.
 
 ## Test Sandbox

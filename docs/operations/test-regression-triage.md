@@ -106,6 +106,24 @@ required lane is absent from `run-summary.json.required_lanes`.
    `full-regression` dispatch on the release candidate and require both the
    GitHub conclusion `success` and summary status `pass`.
 
+## Event 6 — Racket cache-integrity failure
+
+The reusable setup action reports an exact cache hit but the q link is absent, the
+Racket dependency lock does not verify, or the package health probe fails.
+
+1. **Fail closed and retain diagnostics.** The job remains red; do not add a
+   prefix `restore-keys` fallback, skip lock verification, or install with
+   checksum checks ignored.
+2. **Classify the change.** Record the cache key inputs, `PLTADDONDIR`, Racket
+   distribution tuple, lock verifier output, and whether the run was a cold
+   population or warm hit.
+3. **Repair by review.** Update `ci/racket-package-lock.rktd` for an intended
+   dependency change, or increment the cache schema for a layout/corruption
+   event. A successful trusted run then creates the new immutable cache.
+4. **Re-establish evidence.** Run one cold and one unchanged warm manual
+   dispatch. Both must retain all-lane L4 evidence; the warm run must report an
+   exact cache hit before any timeout reduction is considered.
+
 ## Quick reference
 
 | Event | First action | Deadline | Prohibited |
@@ -115,3 +133,4 @@ required lane is absent from `run-summary.json.required_lanes`.
 | Recurring flake | Minimal reproduction | Expiry date on ledger entry | Unexpiring quarantine |
 | Missing scheduled run | Fresh manual dispatch | Before release | Proceeding on stale evidence |
 | Evidence-integrity disagreement | Block release and preserve all lanes | Immediate | Trusting a green summary from a red workflow |
+| Racket cache-integrity failure | Fail closed and retain setup diagnostics | Immediate | Prefix fallback or bypassing the dependency lock |
