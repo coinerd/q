@@ -1,3 +1,79 @@
+## v1.00.13 — 2026-08-23
+
+> Released 2026-08-23. Request lifecycle policy unification: one mandatory owner
+> for provider-request lifecycle policy. Raw timeout configuration resolves once
+> into semantically named policy fields consumed by every adapter; response
+> headers, resource cleanup, and structured failures survive the request
+> boundary; connect/TTFB is bounded; held-request classification is
+> heartbeat-aware.
+
+### Changed
+
+- **Centralized request-network policy (W1 #9461).** New
+  `llm/request-policy.rkt` is the single owner of provider-request lifecycle
+  semantics: the `request-network-policy` value (request budget, connect/TTFB,
+  initial/thinking/content idle, stream total, body-read budget), the pure
+  resolver with safety caps and early validation, and the legacy `sse-read`
+  compatibility mapping. The v1.00.12 resolver moved out of `llm/stream.rkt`
+  (thin compatibility re-export; stream is mechanism-only again).
+- **Mandatory policy consumption across all adapters (W2 #9466).** openai-
+  compatible, anthropic (+ kimi eager), azure-openai, and gemini consume one
+  resolved policy per request on both streaming and eager paths; adapters no
+  longer read raw timeout config or author generic constants. Completes the
+  v1.00.12 SS-6 adapter-parity deferral: anthropic/azure/gemini thinking
+  window 60 → policy value; stream total 600 → `max(600, 2×request)`; eager
+  body reads honor the legacy `sse-read` budget instead of the flat 120 s
+  fallback. Cross-adapter conformance harness proves identical mechanism
+  arguments for all four adapters; the architecture gate (R1–R5) forbids
+  adapters from regaining timeout-policy ownership.
+- **Structured failures replace string parsing (W3 #9473).** HTTP status and
+  retry-relevant headers survive the request boundary in a machine-readable
+  failure context; auto-retry consumes `retry-after-ms` from that context and
+  no longer parses exception message text. Human messages are rendered
+  alongside, unchanged.
+
+### Added
+
+- **Semantic timeout config keys**: `timeouts.models.<m>.thinking-idle` and
+  `timeouts.models.<m>.body-read` (explicit keys win over the legacy alias;
+  thinking capped at 300 s). Non-fatal deprecation warning for legacy
+  `sse-read` at wiring time.
+- **Cross-adapter policy conformance suite** and **architecture ownership
+  gate** (durable regression prevention, AC-1..AC-5).
+- **Deterministic response-port lifecycle** for non-streaming/eager-body
+  requests: close-once semantics across success, status failure, read
+  timeout, request timeout, and cancellation (injectable HTTP boundary for
+  tests).
+
+### Fixed
+
+- **Retry-After from real headers (RL-5).** `Retry-After` is parsed from the
+  actual response header — delta-seconds and HTTP-date (timezone-free parser,
+  injectable clock) — instead of being reconstructed from exception text
+  (which never worked for real responses).
+- **Connect/TTFB bound (RL-4).** An established-but-silent connection fires
+  the dedicated `min(request, 120)` window with structured phase
+  `'connect/ttfb` — it can no longer consume the full request budget
+  (previously up to 900 s).
+- **Heartbeat-aware held-request classification (RL-8).** Heartbeat-only
+  streams are live-but-no-content, not dead peers; total deadline and
+  empty/comment flood ceiling still bound them.
+- **Hard remaining-budget reads (NP-7).** Every blocking stream read is
+  capped at `min(phase-idle, remaining-total)` — no more overshooting the
+  total deadline by a full phase window.
+
+### Deprecated
+
+- **Legacy `sse-read` config key.** Still honored (feeds only thinking-idle
+  and body-read, with the documented caps and precedence); removal is
+  planned after v1.00.13. Docs: `docs/provider-retry.md`.
+
+### Infrastructure
+
+- CI cold-runner repair (with #9488): `raco pkg show`-based package-presence
+  guard fixed in `setup-racket`/`prepare-racket-environment` actions; the
+  metadata-discovery fixture tree is excluded from repo-root test collection.
+
 ## v1.00.12 — 2026-08-22
 
 > Released 2026-08-22. SSE stall detection bounds: containment of the v1.00.05 regression that let
