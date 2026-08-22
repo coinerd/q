@@ -34,6 +34,7 @@
          (only-in "request-policy.rkt"
                   resolve-request-network-policy-for-model
                   request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
                   request-network-policy-initial-idle-secs
                   request-network-policy-thinking-idle-secs
                   request-network-policy-content-idle-secs
@@ -458,6 +459,7 @@
                               headers
                               (jsexpr->bytes body)
                               #:timeout (request-network-policy-request-budget-secs policy)
+                              #:connect-timeout (request-network-policy-connect-ttfb-secs policy)
                               #:read-timeout (request-network-policy-body-read-budget-secs policy)
                               #:status-checker
                               (lambda (sl rb) (check-provider-status! "Gemini" sl rb))))
@@ -510,19 +512,23 @@
      (lambda ()
        ;; Wrap initial HTTP request in the policy request budget
        (define result-vec
-         (call-with-request-timeout #:cleanup cleanup-response!
-                                    #:timeout (request-network-policy-request-budget-secs policy)
-                                    (lambda ()
-                                      (parameterize ([current-custodian request-custodian])
-                                        (define-values (sl rh rp)
-                                          (http-sendrecv host
-                                                         path-str
-                                                         #:port port
-                                                         #:ssl? ssl?
-                                                         #:method #"POST"
-                                                         #:headers headers
-                                                         #:data body-bytes))
-                                        (vector sl rh rp)))))
+         (call-with-request-timeout
+          #:cleanup cleanup-response!
+          #:timeout (request-network-policy-request-budget-secs policy)
+          (lambda ()
+            (parameterize ([current-custodian request-custodian])
+              (define-values (sl rh rp)
+                (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                                (lambda ()
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:port port
+                                                                 #:ssl? ssl?
+                                                                 #:method #"POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes))
+                                                #:cleanup cleanup-response!))
+              (vector sl rh rp)))))
        (define status-line (vector-ref result-vec 0))
        (define response-headers (vector-ref result-vec 1))
        (define response-port (vector-ref result-vec 2))

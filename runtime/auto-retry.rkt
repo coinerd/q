@@ -405,10 +405,18 @@
 ;; is wasteful — the provider is likely to hold again. The circuit breaker
 ;; classifies this as non-retryable.
 ;;
+;; v1.00.13 W4 (#9478, RL-8): heartbeat metadata participates in the
+;; classification. A stream that received SSE comments (: heartbeats) proved
+;; the peer is ALIVE (live-but-no-content) — not the same signal as a
+;; zero-liveness dead peer — so it no longer trips the held-request breaker.
+;; The total deadline and the empty/comment flood ceiling remain the bounds
+;; for heartbeat-only streams.
+;;
 ;; Mid-stream stalls (data received, or phase='thinking/'content) ARE
 ;; retryable — the provider was alive and producing, just slow.
 (define (held-request? exn)
   (and (exn:fail:network:timeout:stream? exn)
+       (not (exn:fail:network:timeout:stream-received-heartbeats? exn))
        (not (exn:fail:network:timeout:stream-received-any-data? exn))
        (eq? (exn:fail:network:timeout:stream-phase exn) 'initial)))
 

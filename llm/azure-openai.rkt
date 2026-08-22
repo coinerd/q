@@ -31,6 +31,7 @@
          (only-in "request-policy.rkt"
                   resolve-request-network-policy-for-model
                   request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
                   request-network-policy-initial-idle-secs
                   request-network-policy-thinking-idle-secs
                   request-network-policy-content-idle-secs
@@ -155,21 +156,26 @@
       #:timeout (request-network-policy-request-budget-secs policy)
       (lambda ()
         (parameterize ([current-custodian request-custodian])
+          ;; v1.00.13 W4 (#9478, RL-4): connect/TTFB bounded by policy;
+          ;; phase 'connect/ttfb.
           (define-values (status-line response-headers response-port)
-            (if url-port-val
-                (http-sendrecv host
-                               path-str
-                               #:port url-port-val
-                               #:ssl? ssl?
-                               #:method "POST"
-                               #:headers headers
-                               #:data body-bytes)
-                (http-sendrecv host
-                               path-str
-                               #:ssl? ssl?
-                               #:method "POST"
-                               #:headers headers
-                               #:data body-bytes)))
+            (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                            (lambda ()
+                                              (if url-port-val
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:port url-port-val
+                                                                 #:ssl? ssl?
+                                                                 #:method "POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes)
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:ssl? ssl?
+                                                                 #:method "POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes)))
+                                            #:cleanup cleanup-response!))
           (check-azure-status! status-line #"")
           ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
           ;; Bonus: now handles tool_calls deltas (was missing in inline version).
