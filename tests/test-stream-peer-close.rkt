@@ -260,6 +260,7 @@
                                 (lambda (kind _exn)
                                   (when (eq? kind 'silent-thinking-overflow)
                                     (set-box! circuit-breaks (add1 (unbox circuit-breaks))))))))
-  ;; Exactly ONE retry, then break with guidance (v1.00.14 economics).
+  ;; Exactly ONE retry, then break with guidance (BUG-0018 silent-overflow
+  ;; circuit-breaker economics).
   (check-equal? (unbox attempts) 2)
   (check-equal? (unbox circuit-breaks) 1))
