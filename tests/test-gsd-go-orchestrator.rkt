@@ -17,6 +17,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/port
          racket/path
          racket/string
          racket/system
@@ -289,6 +290,48 @@
       (check-true (exact-nonnegative-integer? (hash-ref content 'pid #f)) "pid must be recorded")
       (check-true (real? (hash-ref content 'acquired #f)) "acquired timestamp must be recorded")
       (release-lease! lease)
+      (cleanup-tmp dir))
+
+    (test-case "S2a: lock file is truncated before rewrite (no stale tail)"
+      ;; Regression for #9358: a longer previous lease (e.g. a session-id
+      ;; like 01M0645J64E772Q0ZFNVGGEKK0) left a stale tail after a shorter
+      ;; rewrite because open-output-file 'can-update does not truncate.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lock-path
+        (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
+      (make-directory* (path-only lock-path))
+      ;; Simulate a previous longer lease content (the attempt-4 owner).
+      (call-with-output-file
+       lock-path
+       (lambda (out)
+         (write (hasheq 'owner "01M0645J64E772Q0ZFNVGGEKK0" 'pid 1194981 'acquired 1786912100) out))
+       #:exists 'truncate)
+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id "short"))
+      (check-true (campaign-lease? lease))
+      (release-lease! lease)
+      ;; Rewriting with a shorter owner must NOT leave stale tail bytes.
+      (define content (call-with-input-file lock-path (lambda (in) (port->string in))))
+      (check-true (string-contains? content "short"))
+      (check-false (string-contains? content "01M0645J64E772Q0ZFNVGGEKK0")
+                   "stale tail from previous longer owner must be truncated")
+      (check-false (string-contains? content "VGGEKK0")
+                   "no leftover fragment from the previous lease")
+      (cleanup-tmp dir))
+
+    (test-case "S2a: empty session-id is sanitized to 'unknown' in lock owner"
+      ;; Regression for #9358: the re-dispatch path wrote (owner . ""),
+      ;; defeating D4 diagnostics. Empty owner must fall back to "unknown".
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lock-path
+        (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
+      (make-directory* (path-only lock-path))
+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id ""))
+      (check-true (campaign-lease? lease))
+      (release-lease! lease)
+      (define content (call-with-input-file lock-path (lambda (in) (port->string in))))
+      (check-true (string-contains? content "unknown") "empty owner must fall back to 'unknown'")
       (cleanup-tmp dir))
 
     (test-case "run-campaign! threads lease-owner into the lease (D4, issue #9351)"

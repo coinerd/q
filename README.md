@@ -297,13 +297,13 @@ q/
 | Test files | 1365 |
 | Source modules | 843 |
 <<<<<<< HEAD
-| Source lines | 154870 |
-| Test lines | 242108 |
-| Test assertions | 37207 |
+| Source lines | 154880 |
+| Test lines | 242151 |
+| Test assertions | 37213 |
 =======
-| Source lines | 154870 |
-| Test lines | 242108 |
-| Test assertions | 37207 |
+| Source lines | 154880 |
+| Test lines | 242151 |
+| Test assertions | 37213 |
 >>>>>>> origin/main
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
