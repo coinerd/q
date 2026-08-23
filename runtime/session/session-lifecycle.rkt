@@ -29,6 +29,11 @@
                   config-working-set
                   config-token-budget-threshold
                   config-max-context-tokens
+                  config-model-name
+                  config-model-override
+                  session-config?
+                  session-config->hash
+                  hash->session-config
                   resolve-max-iterations-hard)
          "session-mutation.rkt"
          racket/string
@@ -188,8 +193,13 @@
   (buffer-or-append!-fn sess (context-build-result-canonical-user-message result))
 
   ;; E4: Apply the path-derived model setting.
+  ;; BUG-0018 W2 (R-B1): never clobber an explicit runtime /model override.
+  ;; Previously this unconditionally overwrote the model name on EVERY prompt,
+  ;; silently reverting `/model <name>` switches before the next request.
   (define model-name (context-build-result-model-name result))
-  (when model-name
+  (when (and model-name
+             (not (config-model-override (session-provider-facet-config
+                                          (session->provider-facet sess)))))
     (guarded-set-model-name! sess model-name))
 
   (context-build-result-context-with-system result))
@@ -212,6 +222,36 @@
   (define sid (session-identity-facet-session-id (session->identity-facet sess)))
   (define cfg (session-provider-facet-config (session->provider-facet sess)))
   (define cancellation-tok (dict-ref cfg 'cancellation-token #f))
+
+  ;; BUG-0018 W2: single source of truth — the session's switched provider/model.
+  ;; If the config hash's model-name diverges from the live session (e.g. a
+  ;; /model switch that only reached one of the two slots), reconcile to the
+  ;; session and surface it loudly instead of silently requesting on the old
+  ;; provider/model pair.
+  (let ([sess-model (agent-session-model-name sess)]
+        [cfg-model (config-model-name cfg)])
+    (when (and sess-model cfg-model (not (equal? sess-model cfg-model)))
+      (log-warning "BUG-0018 W2: model divergence — session=~a config=~a; reconciling to session"
+                   sess-model
+                   cfg-model)
+      (define bus-div (session-tool-facet-event-bus (session->tool-facet sess)))
+      (when bus-div
+        (publish! bus-div
+                  (make-event "model.divergence.reconciled"
+                              (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+                              (session-identity-facet-session-id (session->identity-facet sess))
+                              #f
+                              (hasheq 'session-model sess-model 'config-model cfg-model))))
+      ;; Reconcile the config hash to the session's switched model.
+      (define cfg-hash
+        (if (session-config? cfg)
+            (session-config->hash cfg)
+            cfg))
+      (define reconciled (hash-set cfg-hash 'model-name sess-model))
+      (guarded-set-config! sess
+                           (if (session-config? cfg)
+                               (hash->session-config reconciled)
+                               reconciled))))
 
   ;; Dispatch 'model-select hook — extensions can override model
   (define-values (_model-hook-res model-hook-res)

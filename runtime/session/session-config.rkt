@@ -133,6 +133,8 @@
           [config-model-registry (-> session-config? (or/c #f model-registry?))]
           [config-settings (-> session-config? (or/c #f q-settings?))]
           [config-model-name (-> session-config? (or/c #f string?))]
+          [config-model-override (-> session-config? boolean?)]
+          [explicit-model-override? (-> (or/c hash? #f) boolean?)]
           [config-session-dir (-> session-config? (or/c #f path-string?))]
           [config-project-dir (-> session-config? (or/c #f path-string?))]
           [config-repo-root (-> session-config? (or/c #f path-string?))]
@@ -214,6 +216,17 @@
   (hash-ref (session-config-data c) 'settings #f))
 (define (config-model-name c)
   (hash-ref (session-config-data c) 'model-name #f))
+
+;; BUG-0018 W2: an explicit runtime /model override marker. Set by
+;; set-model!/switch-model! so path-derived model resolution
+;; (build-session-context-for-prompt E4) never clobbers a user switch.
+(define (config-model-override c)
+  (explicit-model-override? (session-config-data c)))
+
+;; Pure predicate over a raw config hash: has the user explicitly switched
+;; the model at runtime via /model (set-model!/switch-model!)?
+(define (explicit-model-override? config-hash)
+  (and (hash? config-hash) (eq? (hash-ref config-hash 'model-override #f) #t)))
 (define (config-session-dir c)
   (hash-ref (session-config-data c) 'session-dir #f))
 (define (config-project-dir c)

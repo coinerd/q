@@ -45,10 +45,11 @@
                        [effective-sse-read-timeout-for (-> (or/c string? #f) (or/c positive? #f))]
                        [call-with-request-timeout
                         (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)]
-                       ;; Phase timeout resolver (v1.00.12)
+                       ;; Phase timeout resolver (v1.00.12; BUG-0018 W1 cap)
                        [sse-phase-timeout-secs
                         (->* (#:request-timeout positive?)
-                             (#:sse-read-override (or/c positive? #f))
+                             (#:sse-read-override (or/c positive? #f)
+                                                  #:thinking-gap-cap-override (or/c positive? #f))
                              (values positive? positive? positive?))])
          ;; Struct and predicates (direct export for match compatibility)
          tool-call-accum
@@ -62,10 +63,14 @@
          http-stream-timeout-default
          http-request-timeout-default
          max-thinking-gap-secs
+         ;; SSE line-level helper (BUG-0018 W1 keepalive tests)
+         sse-comment-line?
          ;; Parameters
          current-http-request-timeout
          current-model-timeouts
          current-model-sse-read-timeouts
+         ;; BUG-0018 W1 (re-export from request-policy.rkt)
+         current-max-thinking-gap-secs
          ;; Mechanism observation seam (v1.00.13 W2)
          current-request-mechanism-observer
          ;; Exception struct
@@ -435,6 +440,14 @@
 ;; Takes a port and an event->chunks callback that converts parsed JSON events
 ;; into provider-specific chunks. Handles SSE lifecycle, timeouts, and
 ;; keep-alive protection. Returns a generator yielding chunks or #f when done.
+;;
+;; BUG-0018 W1 liveness semantics: the phase timeouts are per-read windows.
+;; SSE comment/heartbeat lines (`: ...`) and zero-delta data chunks each
+;; complete a successful read, so every such frame resets the idle clock — a
+;; socket that is demonstrably alive (keepalive traffic flowing) is never
+;; killed by the thinking/content idle window. Only true silence (no bytes at
+;; all for the whole phase window) raises, and the total-duration budget
+;; (#:max-total-timeout) still bounds heartbeat-only streams.
 ;; ============================================================
 ;; Mechanism observation seam (v1.00.13 W2, RL-10/AC-3)
 ;; ============================================================

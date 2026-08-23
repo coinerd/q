@@ -1,3 +1,59 @@
+## v1.00.14 — 2026-08-23
+
+> BUG-0018 remediation: GLM-5.3 long-thinking sessions no longer die at the
+> 300 s thinking-idle cap, and `/model <name>` provably reaches the request
+> path on every execution path with a guaranteed `model.switched` trace.
+
+### Added
+
+- **Configurable thinking-gap ceiling (W1).** New per-model config key
+  `timeouts.models.<model>.thinking-gap-cap` widens the SSE thinking-idle
+  window past the legacy 300 s bound (widen-only precedence — a cap can
+  never narrow the resolved window below the legacy bound). Ops-level
+  parameter `current-max-thinking-gap-secs` (default 300) preserves
+  v1.00.12/v1.00.13 semantics exactly when unset.
+- **Keepalive liveness documentation + tests (W1).** The phase timeouts are
+  per-read windows: heartbeat comment frames and zero-delta data chunks each
+  reset the idle clock; only true silence or the total budget raises
+  (`tests/test-midstream-stall.rkt`).
+- **Silent-thinking overflow economics (W3).** A stream timeout in the
+  thinking phase with zero visible chars gets exactly ONE retry; the second
+  consecutive overflow circuit-breaks with actionable guidance ("raise
+  thinking-gap-cap or /model switch") instead of burning blind restarts.
+  Overflow retries back off proportionally to the consumed thinking window.
+- **GSD executor model inheritance (W3, R-B3).** `/go`-spawned executor
+  sessions inherit the coordinator's switched provider/model via
+  `runtime/session/executor-inheritance.rkt`; without an explicit override,
+  startup config semantics are unchanged.
+
+### Fixed
+
+- **BUG-0018 B: /model switch never reached the request path (W2).**
+  Root cause R-B1: `build-session-context-for-prompt` (E4) re-applied the
+  path-derived model name on EVERY prompt, silently reverting any runtime
+  switch before the next request. `set-model!`/`switch-model!` now record an
+  explicit `'model-override` marker and E4 defers to it; `dispatch-iteration`
+  reconciles session/config divergence loudly (log + `model.divergence.reconciled`
+  event).
+- **R-B2 observability gap.** `handle-model-command` now refuses UI-only
+  switches when no live session exists (error entry instead of fake success),
+  publishes `model.switched` on every real switch, and falls back to the q
+  logger when the event bus is nil. Transcript entries appear only after the
+  session mutation actually succeeded.
+
+### Testing
+
+- `test-request-network-policy.rkt`: precedence rows for
+  `thinking-gap-cap-override` (widen-only, request-budget clamped,
+  initial/content unaffected).
+- `test-sse-phase-timeout-bounds.rkt`: glm-style cap-900 rows; default
+  matrix unchanged.
+- `test-model-command.rkt`: live-session switch asserts session model-name,
+  override marker, guaranteed `model.switched` event payload, and
+  request-path config resolution.
+- `test-auto-retry.rkt`, `test-executor-inheritance.rkt`,
+  `test-provider-recovery-model-switch-e2e.rkt`.
+
 ## v1.00.13 — 2026-08-22
 
 > Released 2026-08-22. Request lifecycle policy unification: one mandatory owner

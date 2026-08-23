@@ -25,6 +25,8 @@
          (only-in "../util/message/message.rkt" message)
          "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/executor-inheritance.rkt"
          "../runtime/provider/provider-factory.rkt"
          "../runtime/session-index.rkt"
          "../runtime/session/session-switch.rkt"
@@ -158,9 +160,17 @@
   ;; factory is called by the campaign adapter for each isolated prompt while
   ;; the initiating interactive session remains separate.
   (define (make-campaign-runner)
-    (define campaign-sess (make-agent-session rt-config))
-    (define campaign-sid (session-id campaign-sess))
     (define prior-sess (unbox agent-session-box))
+    ;; BUG-0018 W3 (R-B3): executor sessions inherit the coordinator's
+    ;; switched provider/model so an interactive /model switch reaches /go
+    ;; campaigns too. Without an explicit override the startup config is used.
+    (define exec-config
+      (inherit-coordinator-runtime-config rt-config
+                                          (and prior-sess (agent-session-config prior-sess))
+                                          (and prior-sess (agent-session-model-name prior-sess))
+                                          (and prior-sess (agent-session-provider prior-sess))))
+    (define campaign-sess (make-agent-session exec-config))
+    (define campaign-sid (session-id campaign-sess))
     (define campaign-dir
       (or (agent-session-session-dir campaign-sess)
           (dict-ref rt-config 'session-dir #f)

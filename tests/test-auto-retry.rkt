@@ -950,3 +950,51 @@
   ;; then attempt5 @1000s → elapsed 1000 > 900 → ceiling aborts before retry 5.
   (check-equal? result 'exhausted)
   (check-equal? (unbox retries) 4 "four retries before ceiling cut at 1000s > 900s"))
+
+;; ============================================================
+;; BUG-0018 W3: silent-thinking overflow economics
+;; ============================================================
+
+(require (only-in "../runtime/auto-retry.rkt" silent-thinking-overflow? silent-overflow-guidance)
+         (only-in "../llm/stream.rkt" exn:fail:network:timeout:stream?))
+
+(define (bug1818-stream-exn #:phase [phase 'content] #:output-chars [chars 0] #:any-data? [any? #t])
+  (exn:fail:network:timeout:stream "Stream timeout" (current-continuation-marks) #f any? phase chars))
+
+;; @speed fast  ;; @suite default
+;; @boundary unit
+(test-case "BUG-0018: silent-thinking-overflow? matches the glm deep-think signature"
+  (check-true (silent-thinking-overflow? (bug1818-stream-exn #:phase 'thinking #:output-chars 0)))
+  (check-false (silent-thinking-overflow? (bug1818-stream-exn #:phase 'content #:output-chars 0)))
+  (check-false (silent-thinking-overflow? (bug1818-stream-exn #:any-data? #f #:phase 'initial)))
+  (check-false (silent-thinking-overflow? (bug1818-stream-exn #:phase 'thinking #:output-chars 500))))
+
+(test-case "BUG-0018: first silent overflow retries once, second circuit-breaks"
+  (define attempt (box 0))
+  (define retries (box 0))
+  (define breaks (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (bug1818-stream-exn #:phase 'thinking #:output-chars 0)))
+                                #:max-retries 5
+                                #:base-delay-ms 1
+                                #:stall-max-consecutive 99 ; disable progressive path
+                                #:on-retry (lambda args (set-box! retries (add1 (unbox retries))))
+                                #:on-circuit-break
+                                (lambda (tag _exn)
+                                  (set-box! breaks (append (unbox breaks) (list tag)))))))
+  (check-equal? (unbox attempt) 2)
+  (check-equal? (unbox retries) 1)
+  (check-equal? (unbox breaks) '(silent-thinking-overflow)))
+
+(test-case "BUG-0018: exhausted silent-overflow message carries guidance"
+  (define msg
+    (with-handlers ([exn:fail? exn-message])
+      (with-auto-retry (lambda () (raise (bug1818-stream-exn #:phase 'thinking #:output-chars 0)))
+                       #:max-retries 1
+                       #:base-delay-ms 1
+                       #:stall-max-consecutive 99)))
+  (check-true (string-contains? msg "thinking-gap-cap")
+              (format "guidance missing from exhausted message: ~a" msg)))

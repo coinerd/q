@@ -63,29 +63,45 @@
        [else
         (define selected-model (model-resolution-model-name resolution))
         (define live-session (unbox (cmd-ctx-agent-session-box cctx)))
-        (when live-session
-          (set-model! live-session selected-model reg))
-        ;; Publish model.switched event
-        (when (cmd-ctx-event-bus cctx)
-          (publish!
-           (cmd-ctx-event-bus cctx)
-           (make-event
-            "model.switched"
-            (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-            (or (ui-state-session-id state) "")
-            #f
-            (hasheq 'model selected-model 'provider (model-resolution-provider-name resolution)))))
-        (define entry
-          (make-entry 'system
-                      (format "[switched to model: ~a (provider: ~a)]"
-                              (model-resolution-model-name resolution)
-                              (model-resolution-provider-name resolution))
-                      0
-                      (hasheq 'model
-                              (model-resolution-model-name resolution)
-                              'provider
-                              (model-resolution-provider-name resolution))))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry (struct-copy ui-state state [model-name selected-model])
-                                        entry))
-        'continue])]))
+        ;; BUG-0018 W2 (R-B2): a successful switch must ALWAYS produce a
+        ;; traceable model.switched event. When no live session exists the
+        ;; switch did not happen — surface an error instead of pretending it
+        ;; did. When the event bus is nil, fall back to the q logger so the
+        ;; switch remains traceable in logs.
+        (cond
+          [(not live-session)
+           (define entry
+             (make-entry 'error
+                         (format "[no live session — cannot switch to ~a]" selected-model)
+                         0
+                         (hash)))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           'continue]
+          [else
+           (set-model! live-session selected-model reg)
+           (define switched-event
+             (make-event
+              "model.switched"
+              (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+              (or (ui-state-session-id state) "")
+              #f
+              (hasheq 'model selected-model 'provider (model-resolution-provider-name resolution))))
+           (if (cmd-ctx-event-bus cctx)
+               (publish! (cmd-ctx-event-bus cctx) switched-event)
+               (log-info "model.switched: model=~a provider=~a session=~a (no event bus)"
+                         selected-model
+                         (model-resolution-provider-name resolution)
+                         (ui-state-session-id state)))
+           ;; Transcript entry only after the session mutation succeeded.
+           (define entry
+             (make-entry
+              'system
+              (format "[switched to model: ~a (provider: ~a)]"
+                      selected-model
+                      (model-resolution-provider-name resolution))
+              0
+              (hasheq 'model selected-model 'provider (model-resolution-provider-name resolution))))
+           (set-box! (cmd-ctx-state-box cctx)
+                     (add-transcript-entry (struct-copy ui-state state [model-name selected-model])
+                                           entry))
+           'continue])])]))
