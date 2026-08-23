@@ -31,7 +31,8 @@
                              (#:initial-timeout positive?
                                                 #:stream-timeout positive?
                                                 #:thinking-timeout positive?
-                                                #:max-total-timeout positive?)
+                                                #:max-total-timeout positive?
+                                                #:peer-close-probe-secs positive?)
                              generator?)]
                        [close-port-after-stream
                         (->* (generator? input-port?) (#:cleanup procedure?) generator?)]
@@ -81,7 +82,14 @@
          exn:fail:network:timeout:stream-received-heartbeats?
          exn:fail:network:timeout:stream-received-any-data?
          exn:fail:network:timeout:stream-phase
-         exn:fail:network:timeout:stream-output-chars)
+         exn:fail:network:timeout:stream-output-chars
+         ;; BUG-0019 W1: FIN/CLOSE-WAIT peer-close exception
+         exn:fail:network:peer-closed
+         exn:fail:network:peer-closed?
+         exn:fail:network:peer-closed-phase
+         exn:fail:network:peer-closed-data-received?
+         exn:fail:network:peer-closed-content-chars
+         exn:fail:network:peer-closed-elapsed-ms)
 
 ;; ============================================================
 ;; Timeout configuration
@@ -152,6 +160,22 @@
 (struct exn:fail:network:timeout:stream
         exn:fail:network:timeout
         (received-heartbeats? received-any-data? phase output-chars)
+  #:transparent)
+
+;; BUG-0019 W1: raised when the transport reports the peer is gone while the
+;; SSE reader waits in an idle window — a TCP FIN without TLS close_notify
+;; (GLM gateway signature) surfaces on Racket SSL ports as a network read
+;; error rather than a clean EOF, so detection must not wait out the whole
+;; phase window. Subtype of exn:fail:network:timeout so existing handlers
+;; and the retryable/timeout-tier classification keep matching.
+;; Fields (machine truth; message carries the human-readable suffix):
+;;   phase          'initial | 'thinking | 'content at detection time
+;;   data-received? at least one chunk was yielded before the close
+;;   content-chars  visible content chars produced before the close
+;;   elapsed-ms     wall-clock ms from stream start to detection
+(struct exn:fail:network:peer-closed
+        exn:fail:network:timeout
+        (phase data-received? content-chars elapsed-ms)
   #:transparent)
 
 ;; sse-comment-line? : string? -> boolean?
@@ -466,152 +490,277 @@
                            #:initial-timeout [initial-secs http-read-timeout-default]
                            #:stream-timeout [stream-secs http-stream-timeout-default]
                            #:thinking-timeout [thinking-secs stream-secs]
-                           #:max-total-timeout [max-total-secs 600])
-  (generator ()
-             (define observer (current-request-mechanism-observer))
-             (when observer
-               (observer (hasheq 'kind
-                                 'stream
-                                 'initial
-                                 initial-secs
-                                 'thinking
-                                 thinking-secs
-                                 'content
-                                 stream-secs
-                                 'total
-                                 max-total-secs)))
-             (define stream-start (current-inexact-milliseconds))
-             (define deadline (+ stream-start (* max-total-secs 1000.0)))
-             (define max-consecutive-empty 100)
-             ;; v1.00.12 W2 (SS-5): diagnostic suffix on every stream-timeout
-             ;; message. The struct fields remain the machine source of truth;
-             ;; this string form exists for logs/UX and is regression-matched by
-             ;; tests/test-sse-phase-timeout-bounds.rkt against
-             ;; #rx"\\[phase=(initial|thinking|content) data-received=(yes|no) chars=[0-9]+\\]$".
-             (define (timeout-msg base phase received-any-data? content-chars)
-               (string-append base
-                              (format " [phase=~a data-received=~a chars=~a]"
-                                      phase
-                                      (if received-any-data? "yes" "no")
-                                      content-chars)))
-             ;; v0.99.84: Line buffer for aggressive socket draining (CLOSE-WAIT fix).
-             ;; Ported from read-sse-chunks so all providers using stream-sse-events
-             ;; benefit from the same CLOSE-WAIT prevention.
-             (define line-buffer (box '()))
-             (define (buf-pop!)
-               (match (unbox line-buffer)
-                 ['() #f]
-                 [(cons l r)
-                  (set-box! line-buffer r)
-                  l]))
-             (define (buf-push! lines)
-               (set-box! line-buffer (append (unbox line-buffer) lines)))
-             (let loop ([first-read? #t]
-                        [consecutive-empty 0]
-                        [seen-content? #f]
-                        [received-heartbeats? #f]
-                        [received-any-data? #f]
-                        [content-chars 0])
-               (when (> (current-inexact-milliseconds) deadline)
-                 (raise (exn:fail:network:timeout:stream
-                         (timeout-msg (format "Stream exceeded maximum total duration (~a seconds)"
-                                              max-total-secs)
-                                      (phase-from-state received-any-data? seen-content?)
-                                      received-any-data?
-                                      content-chars)
-                         (current-continuation-marks)
-                         received-heartbeats?
-                         received-any-data?
-                         (phase-from-state received-any-data? seen-content?)
-                         content-chars)))
-               (when (>= consecutive-empty max-consecutive-empty)
-                 (raise (exn:fail:network:timeout:stream
-                         (timeout-msg (format "Stream exceeded ~a consecutive empty lines"
-                                              max-consecutive-empty)
-                                      (phase-from-state received-any-data? seen-content?)
-                                      received-any-data?
-                                      content-chars)
-                         (current-continuation-marks)
-                         received-heartbeats?
-                         received-any-data?
-                         (phase-from-state received-any-data? seen-content?)
-                         content-chars)))
-               ;; v0.99.65 W0: Phase-aware timeout (same as read-sse-chunks)
-               (define timeout-secs
-                 (cond
-                   [first-read? initial-secs]
-                   [(not seen-content?) thinking-secs]
-                   [else stream-secs]))
-               ;; v1.00.13 W4 (#9478, NP-7): a blocking read may never overshoot
-               ;; the total wall-clock deadline by a full phase window — every
-               ;; wait is capped at the remaining total budget (min of the
-               ;; phase idle window and the remaining budget).
-               (define remaining-total-secs (/ (- deadline (current-inexact-milliseconds)) 1000.0))
-               (define wait-secs (min timeout-secs (max 0.05 remaining-total-secs)))
-               ;; v0.99.84: Check buffer first, then drain port aggressively.
-               (define line
-                 (let ([cached (buf-pop!)])
-                   (if cached
-                       cached
-                       (let ([l (read-line/timeout port #:timeout wait-secs)])
-                         ;; After reading one line, probe for more data non-blockingly.
-                         ;; This prevents CLOSE-WAIT buildup when the consumer is slow.
-                         (when (and l (not (eof-object? l)))
-                           (let drain ()
-                             (define extra (read-line/nonblocking port))
-                             (when extra
-                               (buf-push! (list extra))
-                               (drain))))
-                         l))))
-               (cond
-                 [(eq? line #f)
-                  (raise (exn:fail:network:timeout:stream
-                          (timeout-msg (format "HTTP read timeout (~a seconds) waiting for SSE chunk"
-                                               timeout-secs)
-                                       (phase-from-state received-any-data? seen-content?)
-                                       received-any-data?
-                                       content-chars)
-                          (current-continuation-marks)
-                          received-heartbeats?
-                          received-any-data?
-                          (phase-from-state received-any-data? seen-content?)
-                          content-chars))]
-                 [(eof-object? line) (yield #f)]
-                 [else
-                  (define is-heartbeat? (sse-comment-line? line))
-                  (define parsed (parse-sse-line line))
-                  (cond
-                    [(eq? parsed 'done) (yield #f)]
-                    [(hash? parsed)
-                     (define chunks (event->chunks parsed))
-                     ;; v0.99.82 W1 NR-1: Detect content and accumulate char
-                     ;; count for mid-stream stall classification.
-                     (define-values (any-content event-chars)
-                       (for/fold ([ac #f]
-                                  [total 0])
-                                 ([ch (in-list chunks)])
-                         (define txt (and (stream-chunk? ch) (stream-chunk-delta-text ch)))
-                         (define len
-                           (if (and (string? txt) (positive? (string-length txt)))
-                               (string-length txt)
-                               0))
-                         (values (or ac (> len 0)) (+ total len))))
-                     ;; v0.99.81 W1: only set received-any-data? when a chunk is
-                     ;; actually yielded (pair? check), not when event->chunks
-                     ;; returns '() for ping/keepalive events.
-                     (define yielded-any? (pair? chunks))
-                     (for ([ch (in-list chunks)])
-                       (yield ch))
-                     (loop #f
-                           0
-                           (or seen-content? any-content)
-                           received-heartbeats?
-                           (or received-any-data? yielded-any?)
-                           (+ content-chars event-chars))]
-                    [else
-                     (loop #f
-                           (add1 consecutive-empty)
-                           seen-content?
-                           (or received-heartbeats? is-heartbeat?)
+                           #:max-total-timeout [max-total-secs 600]
+                           ;; BUG-0019 W1: probe cadence (policy-driven via
+                           ;; request-policy's current-peer-close-probe-secs).
+                           #:peer-close-probe-secs [probe-secs (current-peer-close-probe-secs)])
+  (generator
+   ()
+   (define observer (current-request-mechanism-observer))
+   (when observer
+     (observer (hasheq 'kind
+                       'stream
+                       'initial
+                       initial-secs
+                       'thinking
+                       thinking-secs
+                       'content
+                       stream-secs
+                       'total
+                       max-total-secs)))
+   (define stream-start (current-inexact-milliseconds))
+   (define deadline (+ stream-start (* max-total-secs 1000.0)))
+   (define max-consecutive-empty 100)
+   ;; v1.00.12 W2 (SS-5): diagnostic suffix on every stream-timeout
+   ;; message. The struct fields remain the machine source of truth;
+   ;; this string form exists for logs/UX and is regression-matched by
+   ;; tests/test-sse-phase-timeout-bounds.rkt against
+   ;; #rx"\\[phase=(initial|thinking|content) data-received=(yes|no) chars=[0-9]+\\]$".
+   (define (timeout-msg base phase received-any-data? content-chars)
+     (string-append base
+                    (format " [phase=~a data-received=~a chars=~a]"
+                            phase
+                            (if received-any-data? "yes" "no")
+                            content-chars)))
+   ;; v0.99.84: Line buffer for aggressive socket draining (CLOSE-WAIT fix).
+   ;; Ported from read-sse-chunks so all providers using stream-sse-events
+   ;; benefit from the same CLOSE-WAIT prevention.
+   (define line-buffer (box '()))
+   (define (buf-pop!)
+     (match (unbox line-buffer)
+       ['() #f]
+       [(cons l r)
+        (set-box! line-buffer r)
+        l]))
+   (define (buf-push! lines)
+     (set-box! line-buffer (append (unbox line-buffer) lines)))
+   ;; ==========================================================
+   ;; BUG-0019 W1: FIN/CLOSE-WAIT liveness watchdog
+   ;; ============================================================
+   ;; All port reads now flow through a byte-level pump that
+   ;; slices each idle window into probe-interval chunks. At every
+   ;; slice boundary (and once more when the window is exhausted)
+   ;; a zero-timeout liveness check runs:
+   ;;
+   ;;   - a raised network read error => the peer is gone without a
+   ;;     clean TLS shutdown => exn:fail:network:peer-closed
+   ;;     immediately (ladder option 1);
+   ;;   - eof => clean shutdown/close_notify => normal end-of-stream;
+   ;;   - bytes => buffered into `pending-bytes` and assembled into
+   ;;     lines (never lost, never re-read by the line layer);
+   ;;   - #f (would block) => inconclusive: keep waiting. The
+   ;;     watchdog NEVER fabricates death, so healthy slow-start or
+   ;;     deep-think streams are untouched (BUG-0018 rule).
+   (define chunk-buf (make-bytes 4096))
+   (define pending-bytes (box #""))
+   (define eof-seen? (box #f))
+   (define (stash-bytes! n)
+     (set-box! pending-bytes (bytes-append (unbox pending-bytes) (subbytes chunk-buf 0 n))))
+   ;; Decode one complete line's bytes (strip optional \r).
+   (define (decode-line! raw)
+     (define len (bytes-length raw))
+     (define stripped
+       (if (and (> len 0) (= (bytes-ref raw (sub1 len)) 13))
+           (subbytes raw 0 (sub1 len))
+           raw))
+     (with-handlers ([exn:fail? (lambda (_e) (bytes->string/latin-1 stripped))])
+       (bytes->string/utf-8 stripped)))
+   ;; Pop the next complete line from pending bytes, or #f.
+   (define (pending-line!)
+     (define b (unbox pending-bytes))
+     (let find-nl ([i 0])
+       (cond
+         [(>= i (bytes-length b)) #f]
+         [(= (bytes-ref b i) 10)
+          (set-box! pending-bytes (subbytes b (add1 i)))
+          (decode-line! (subbytes b 0 i))]
+         [else (find-nl (add1 i))])))
+   ;; Zero-timeout liveness probe (BUG-0019 ladder option 1).
+   ;; Returns 'data | 'dead | 'clean-eof | 'inconclusive.
+   (define (probe-port!)
+     (with-handlers ([exn:fail:network? (lambda (_e) 'dead)])
+       (define r (sync/timeout 0 (read-bytes-avail!-evt chunk-buf port)))
+       (cond
+         [(eof-object? r)
+          (set-box! eof-seen? #t)
+          'clean-eof]
+         [(not r) 'inconclusive]
+         [(and (real? r) (> r 0))
+          (stash-bytes! r)
+          'data]
+         [else 'inconclusive])))
+   (define (raise-peer-closed! phase data-received? content-chars)
+     (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
+     (raise (exn:fail:network:peer-closed
+             (string-append "Peer closed the connection mid-stream"
+                            (format " [phase=~a data-received=~a chars=~a elapsed-ms=~a]"
+                                    phase
+                                    (if data-received? "yes" "no")
+                                    content-chars
+                                    (inexact->exact (floor elapsed-ms))))
+             (current-continuation-marks)
+             phase
+             data-received?
+             content-chars
+             elapsed-ms)))
+   ;; Wait up to wait-secs for the next complete SSE line.
+   ;; Returns: a complete line string, the eof object (clean
+   ;; end-of-stream), or 'timeout (idle window exhausted with the
+   ;; peer silent). Raises exn:fail:network:peer-closed when the
+   ;; transport reports death.
+   (define (pump! wait-secs phase data-received? content-chars)
+     (let loop ([remaining wait-secs])
+       (or (pending-line!)
+           (cond
+             [(unbox eof-seen?) eof]
+             [(<= remaining 0)
+              ;; Window exhausted: one last free liveness check
+              ;; before the caller raises the phase timeout.
+              (case (probe-port!)
+                [(dead) (raise-peer-closed! phase data-received? content-chars)]
+                [else 'timeout])]
+             [else
+              (define slice-start-ms (current-inexact-milliseconds))
+              (define r
+                (with-handlers ([exn:fail:network?
+                                 (lambda (_e)
+                                   (raise-peer-closed! phase data-received? content-chars))])
+                  (sync/timeout (min remaining probe-secs) (read-bytes-avail!-evt chunk-buf port))))
+              (define consumed-secs (/ (- (current-inexact-milliseconds) slice-start-ms) 1000.0))
+              (cond
+                [(eof-object? r)
+                 ;; Clean TLS shutdown (close_notify) or plain-pipe
+                 ;; EOF: normal end-of-stream, NOT an error.
+                 (set-box! eof-seen? #t)
+                 (or (pending-line!) eof)]
+                [(not r)
+                 ;; Slice expired silently: probe for a dead
+                 ;; transport before burning the next slice.
+                 (case (probe-port!)
+                   [(dead) (raise-peer-closed! phase data-received? content-chars)]
+                   [(clean-eof)
+                    (set-box! eof-seen? #t)
+                    (or (pending-line!) eof)]
+                   [else (loop (max 0 (- remaining (min consumed-secs remaining))))])]
+                [else
+                 (stash-bytes! r)
+                 (loop (max 0 (- remaining (min consumed-secs remaining))))])]))))
+   ;; v0.99.84 parity: after a successful line, opportunistically
+   ;; drain already-buffered frames so a slow consumer cannot let
+   ;; the socket drift into CLOSE-WAIT buildup.
+   (define (drain-nonblocking!)
+     (let drain ()
+       (unless (unbox eof-seen?)
+         (when (memq (probe-port!) '(data clean-eof))
+           (let push ()
+             (define l (pending-line!))
+             (when l
+               (buf-push! (list l))
+               (push)))
+           (drain)))))
+   (let loop ([first-read? #t]
+              [consecutive-empty 0]
+              [seen-content? #f]
+              [received-heartbeats? #f]
+              [received-any-data? #f]
+              [content-chars 0])
+     (when (> (current-inexact-milliseconds) deadline)
+       (raise (exn:fail:network:timeout:stream
+               (timeout-msg (format "Stream exceeded maximum total duration (~a seconds)"
+                                    max-total-secs)
+                            (phase-from-state received-any-data? seen-content?)
+                            received-any-data?
+                            content-chars)
+               (current-continuation-marks)
+               received-heartbeats?
+               received-any-data?
+               (phase-from-state received-any-data? seen-content?)
+               content-chars)))
+     (when (>= consecutive-empty max-consecutive-empty)
+       (raise (exn:fail:network:timeout:stream
+               (timeout-msg (format "Stream exceeded ~a consecutive empty lines"
+                                    max-consecutive-empty)
+                            (phase-from-state received-any-data? seen-content?)
+                            received-any-data?
+                            content-chars)
+               (current-continuation-marks)
+               received-heartbeats?
+               received-any-data?
+               (phase-from-state received-any-data? seen-content?)
+               content-chars)))
+     ;; v0.99.65 W0: Phase-aware timeout (same as read-sse-chunks)
+     (define timeout-secs
+       (cond
+         [first-read? initial-secs]
+         [(not seen-content?) thinking-secs]
+         [else stream-secs]))
+     ;; v1.00.13 W4 (#9478, NP-7): a blocking read may never overshoot
+     ;; the total wall-clock deadline by a full phase window — every
+     ;; wait is capped at the remaining total budget (min of the
+     ;; phase idle window and the remaining budget).
+     (define remaining-total-secs (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+     (define wait-secs (min timeout-secs (max 0.05 remaining-total-secs)))
+     ;; v0.99.84 / BUG-0019 W1: Check buffer first, then read
+     ;; through the sliced watchdog pump (probe cadence =
+     ;; #:peer-close-probe-secs).
+     (define line
+       (or (buf-pop!)
+           (let ([l (pump! wait-secs
+                           (phase-from-state received-any-data? seen-content?)
                            received-any-data?
-                           content-chars)])]))))
+                           content-chars)])
+             (when (string? l)
+               (drain-nonblocking!))
+             l)))
+     (cond
+       [(eq? line 'timeout)
+        (raise (exn:fail:network:timeout:stream
+                (timeout-msg (format "HTTP read timeout (~a seconds) waiting for SSE chunk"
+                                     timeout-secs)
+                             (phase-from-state received-any-data? seen-content?)
+                             received-any-data?
+                             content-chars)
+                (current-continuation-marks)
+                received-heartbeats?
+                received-any-data?
+                (phase-from-state received-any-data? seen-content?)
+                content-chars))]
+       [(eof-object? line) (yield #f)]
+       [else
+        (define is-heartbeat? (sse-comment-line? line))
+        (define parsed (parse-sse-line line))
+        (cond
+          [(eq? parsed 'done) (yield #f)]
+          [(hash? parsed)
+           (define chunks (event->chunks parsed))
+           ;; v0.99.82 W1 NR-1: Detect content and accumulate char
+           ;; count for mid-stream stall classification.
+           (define-values (any-content event-chars)
+             (for/fold ([ac #f]
+                        [total 0])
+                       ([ch (in-list chunks)])
+               (define txt (and (stream-chunk? ch) (stream-chunk-delta-text ch)))
+               (define len
+                 (if (and (string? txt) (positive? (string-length txt)))
+                     (string-length txt)
+                     0))
+               (values (or ac (> len 0)) (+ total len))))
+           ;; v0.99.81 W1: only set received-any-data? when a chunk is
+           ;; actually yielded (pair? check), not when event->chunks
+           ;; returns '() for ping/keepalive events.
+           (define yielded-any? (pair? chunks))
+           (for ([ch (in-list chunks)])
+             (yield ch))
+           (loop #f
+                 0
+                 (or seen-content? any-content)
+                 received-heartbeats?
+                 (or received-any-data? yielded-any?)
+                 (+ content-chars event-chars))]
+          [else
+           (loop #f
+                 (add1 consecutive-empty)
+                 seen-content?
+                 (or received-heartbeats? is-heartbeat?)
+                 received-any-data?
+                 content-chars)])]))))

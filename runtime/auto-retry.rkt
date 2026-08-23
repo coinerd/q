@@ -256,36 +256,39 @@
 ;; Check if an error is retryable (transient / rate-limit / server error).
 ;; Permanent tool errors (validation failures) are NEVER retryable.
 (define (retryable-error? exn)
-  (match (permanent-tool-error? exn)
-    [#t #f]
-    [_
-     ;; M-11: Use structured provider-error-category as primary classification.
-     ;; Falls back to string matching only for unknown/non-structured errors.
-     ;; W6 (BUG-0011): structured branch delegates to provider-errors'
-     ;; transient classification — single source of truth, no duplication.
-     (match (provider-error? exn)
-       [#t (provider-error-transient? exn)]
-       [_
-        ;; String fallback for non-structured errors
-        (define msg (exn-message exn))
-        (define retryable-patterns
-          '("429" "rate"
-                  "overloaded"
-                  "quota"
-                  "too many"
-                  "500"
-                  "502"
-                  "503"
-                  "504"
-                  "server error"
-                  "timeout"
-                  "timed out"
-                  "connection"
-                  "network"
-                  "retry"
-                  "backoff"))
-        (for/or ([pattern (in-list retryable-patterns)])
-          (string-contains? (string-downcase msg) pattern))])]))
+  ;; BUG-0019 W1: a FIN/CLOSE-WAIT peer close is a transient transport
+  ;; fault — retryable regardless of message wording.
+  (or (exn:fail:network:peer-closed? exn)
+      (match (permanent-tool-error? exn)
+        [#t #f]
+        [_
+         ;; M-11: Use structured provider-error-category as primary classification.
+         ;; Falls back to string matching only for unknown/non-structured errors.
+         ;; W6 (BUG-0011): structured branch delegates to provider-errors'
+         ;; transient classification — single source of truth, no duplication.
+         (match (provider-error? exn)
+           [#t (provider-error-transient? exn)]
+           [_
+            ;; String fallback for non-structured errors
+            (define msg (exn-message exn))
+            (define retryable-patterns
+              '("429" "rate"
+                      "overloaded"
+                      "quota"
+                      "too many"
+                      "500"
+                      "502"
+                      "503"
+                      "504"
+                      "server error"
+                      "timeout"
+                      "timed out"
+                      "connection"
+                      "network"
+                      "retry"
+                      "backoff"))
+            (for/or ([pattern (in-list retryable-patterns)])
+              (string-contains? (string-downcase msg) pattern))])])))
 
 ;; FEAT-66: Check if an error is a context overflow / token limit error.
 ;; These errors indicate the context was too long for the model.
@@ -336,8 +339,11 @@
 (define TIMEOUT_PATTERNS '("timeout" "timed out" "connection reset" "broken pipe" "read error" "eof"))
 
 (define (timeout-error? exn)
-  ;; Fast path: structured provider-error
-  (or (and (provider-error? exn) (eq? (provider-error-category exn) 'timeout))
+  ;; BUG-0019 W1 fast path: structured peer-closed exceptions are
+  ;; timeout-tier by construction.
+  (or (exn:fail:network:peer-closed? exn)
+      ;; Fast path: structured provider-error
+      (and (provider-error? exn) (eq? (provider-error-category exn) 'timeout))
       ;; Fallback: string matching for non-structured errors
       (let ()
         (define msg (exn-message exn))
@@ -383,19 +389,23 @@
       (and (string-contains? msg-down p) category))))
 
 (define (classify-error exn)
-  ;; Fast path: structured provider-error carries its own category.
-  (match (provider-error? exn)
-    [#t
-     (define cat (provider-error-category exn))
-     (if cat cat 'provider-error)]
-    [_
-     ;; Fallback: table-based classification for non-structured errors
-     (define msg
-       (if (exn:fail? exn)
-           (exn-message exn)
-           (format "~a" exn)))
-     (define msg-down (string-downcase msg))
-     (or (classify-error-from-table msg-down) 'provider-error)]))
+  ;; BUG-0019 W1: structured peer-closed exceptions classify as timeout-tier.
+  (cond
+    [(exn:fail:network:peer-closed? exn) 'timeout]
+    [else
+     ;; Fast path: structured provider-error carries its own category.
+     (match (provider-error? exn)
+       [#t
+        (define cat (provider-error-category exn))
+        (if cat cat 'provider-error)]
+       [_
+        ;; Fallback: table-based classification for non-structured errors
+        (define msg
+          (if (exn:fail? exn)
+              (exn-message exn)
+              (format "~a" exn)))
+        (define msg-down (string-downcase msg))
+        (or (classify-error-from-table msg-down) 'provider-error)])]))
 
 ;; ============================================================
 ;; W2 PN-4: Circuit Breaker — held request classification
@@ -459,10 +469,17 @@
 ;; restarting discards nothing (no output yet) but re-pays the full input
 ;; cost and typically overflows again; retry economics treat it specially.
 (define (silent-thinking-overflow? exn)
-  (and (exn:fail:network:timeout:stream? exn)
-       (exn:fail:network:timeout:stream-received-any-data? exn)
-       (eq? (exn:fail:network:timeout:stream-phase exn) 'thinking)
-       (= (exn:fail:network:timeout:stream-output-chars exn) 0)))
+  (or (and (exn:fail:network:timeout:stream? exn)
+           (exn:fail:network:timeout:stream-received-any-data? exn)
+           (eq? (exn:fail:network:timeout:stream-phase exn) 'thinking)
+           (= (exn:fail:network:timeout:stream-output-chars exn) 0))
+      ;; BUG-0019 W1: a peer close that produced ZERO visible chars in the
+      ;; thinking phase has identical retry economics to a silent-thinking
+      ;; overflow — blind restarts re-pay input cost and typically repeat.
+      (and (exn:fail:network:peer-closed? exn)
+           (exn:fail:network:peer-closed-data-received? exn)
+           (eq? (exn:fail:network:peer-closed-phase exn) 'thinking)
+           (= (exn:fail:network:peer-closed-content-chars exn) 0))))
 
 ;; Guidance surfaced when a silent-thinking overflow exhausts its (single)
 ;; retry budget — tells the operator the two real fixes instead of burning
