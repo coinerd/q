@@ -150,6 +150,8 @@
     [else
      (define n (length (string-split status "\n")))
      (printf "  [FAIL] git has ~a uncommitted change(s)~n" n)
+     (for ([line (in-list (string-split status "\n"))])
+       (printf "    ~a~n" line))
      #f]))
 
 ;; ---------------------------------------------------------------------------
