@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-network-failure-context.rkt
-;; v1.00.13 (RL-5/RL-7/RL-8): structured failure context contract.
+;; Unification (RL-5/RL-7/RL-8): structured failure context contract.
 ;;
 ;; Freezes the W3/W4 contracts:
 ;;   - llm/http-helpers.rkt: build-network-failure-context (status+headers →

@@ -229,7 +229,7 @@
 ;; ============================================================
 
 (test-case "P8: documented parity gaps remain pinned (per-model timeout, stream error wrap, azure checker)"
-  ;; G2 (closed by v1.00.13 W2 #9466): per-model timeout policy is consumed
+  ;; G2 (closed by unification W2 #9466): per-model timeout policy is consumed
   ;; via the resolved request-network policy in ALL provider modules; no
   ;; adapter reads raw timeout config anymore.
   (for ([path (in-list '("../llm/openai-compatible.rkt" "../llm/anthropic/sse.rkt"

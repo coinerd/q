@@ -112,7 +112,7 @@
   (check-true (string-contains? (source "llm/azure-openai.rkt") "(unless (= status-code 200)")))
 
 (test-case "W4-B5: corrected G2 and G3 asymmetries are pinned"
-  ;; v1.00.13 W2 (#9466) closed the G2 asymmetry: ALL adapters now consume the
+  ;; Unification W2 (#9466) closed the G2 asymmetry: ALL adapters now consume the
   ;; resolved request-network policy (RL-3); no adapter reads raw timeout
   ;; config. G3 (stream error wrapping) remains openai-only.
   (define openai (source "llm/openai-compatible.rkt"))

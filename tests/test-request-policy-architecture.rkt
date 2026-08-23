@@ -5,10 +5,10 @@
 ;; @boundary architecture
 
 ;; tests/test-request-policy-architecture.rkt
-;; v1.00.13 (RL-1..RL-3/RL-10, AC-1/AC-2): architecture gate for request
+;; Unification (RL-1..RL-3/RL-10, AC-1/AC-2): architecture gate for request
 ;; lifecycle policy ownership.
 ;;
-;; End-state rules (see PLAN-v1.00.13 §7):
+;; End-state rules (see the request-lifecycle unification plan §7):
 ;;   R1 raw legacy timeout accessors (`effective-sse-read-timeout-for`,
 ;;      `effective-request-timeout-for`) are consumed only by the policy
 ;;      module (their definitions live in llm/request-policy.rkt since W1;
