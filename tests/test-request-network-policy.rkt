@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-request-network-policy.rkt
-;; v1.00.13 (RL-1/RL-2/RL-9): the resolved request-network policy contract.
+;; Unification (RL-1/RL-2/RL-9): the resolved request-network policy contract.
 ;;
 ;; Freezes the semantics of `llm/request-policy.rkt`:
 ;;

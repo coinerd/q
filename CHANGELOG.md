@@ -1,6 +1,6 @@
-## v1.00.13 — 2026-08-23
+## v1.00.13 — 2026-08-22
 
-> Released 2026-08-23. Request lifecycle policy unification: one mandatory owner
+> Released 2026-08-22. Request lifecycle policy unification: one mandatory owner
 > for provider-request lifecycle policy. Raw timeout configuration resolves once
 > into semantically named policy fields consumed by every adapter; response
 > headers, resource cleanup, and structured failures survive the request

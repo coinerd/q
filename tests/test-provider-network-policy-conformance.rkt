@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-provider-network-policy-conformance.rkt
-;; v1.00.13 (RL-3/RL-10): cross-adapter policy conformance harness.
+;; Unification (RL-3/RL-10): cross-adapter policy conformance harness.
 ;;
 ;; One policy fixture (per-model `request` + legacy `sse-read`) must produce
 ;; the SAME mechanism arguments at the common stream/body boundary for all

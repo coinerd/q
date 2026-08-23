@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-request-policy-migration.rkt
-;; v1.00.13 W5 (#9483): legacy-config migration proof (PLAN §6 W5 task 4).
+;; Unification W5 (#9483): legacy-config migration proof (PLAN §6 W5 task 4).
 ;;
 ;; Proves that old configs containing only `request` + `sse-read` resolve to
 ;; the intended compatible values, that new explicit fields win over the

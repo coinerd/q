@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-provider-response-cleanup.rkt
-;; v1.00.13 (RL-6): deterministic response-port ownership on the
+;; Unification (RL-6): deterministic response-port ownership on the
 ;; non-streaming/eager-body path (`make-provider-http-request`).
 ;;
 ;; The HTTP boundary is injectable through `current-provider-http-sendrecv`

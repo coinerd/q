@@ -5,7 +5,7 @@
 ;; @boundary unit
 
 ;; tests/test-stream-liveness-classification.rkt
-;; v1.00.13 (RL-8): heartbeat-aware held-request classification.
+;; Unification W4 (RL-8): heartbeat-aware held-request classification.
 ;;
 ;;   zero data + zero heartbeat + initial timeout = held/dead peer (unchanged)
 ;;   heartbeat-only initial stall = live-but-no-content, NOT a held request

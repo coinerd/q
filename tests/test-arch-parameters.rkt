@@ -215,11 +215,11 @@
       (for ([e (in-list inventory-entries)])
         (hash-set! counts (caddr e) (add1 (hash-ref counts (caddr e) 0))))
       (displayln (format "INFO: parameter inventory distribution: ~a" (hash->list counts)))
-      ;; v1.00.13 W1 (#9461): +2 — current-model-thinking-idle-timeouts and
+      ;; Unification W1 (#9461): +2 — current-model-thinking-idle-timeouts and
       ;; current-model-body-read-timeouts in llm/request-policy.rkt.
-      ;; v1.00.13 W2 (#9466): +1 — current-request-mechanism-observer in
+      ;; Unification W2 (#9466): +1 — current-request-mechanism-observer in
       ;; llm/stream.rkt (conformance observation seam).
-      ;; v1.00.13 W3 (#9473): +1 — current-provider-http-sendrecv in
+      ;; Unification W3 (#9473): +1 — current-provider-http-sendrecv in
       ;; llm/http-helpers.rkt (injectable HTTP boundary).
       (check-equal? (length inventory-entries)
                     199
