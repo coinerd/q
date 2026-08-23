@@ -12,8 +12,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        find . -type f -name '*.zo' -delete
-        find . -depth -type d -name compiled -exec rm -rf {} +
+        # The frozen discovery fixture (tests/metadata-discovery/fixture/)
+        # keeps a TRACKED stray .rkt inside a compiled/ directory as pinned
+        # input for tests/ci/metadata-discovery-test.rkt — never wipe it.
+        find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' -delete
+        find . -depth -type d -name compiled -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +
 
     # Racket’s default macOS user store is ~/Library/Racket/<version>, while
     # Linux uses a different default. Make the cacheable store explicit so the

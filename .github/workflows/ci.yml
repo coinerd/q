@@ -126,7 +126,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate (shared deps)
         run: raco make main.rkt
@@ -310,7 +310,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate
         run: raco make main.rkt
@@ -394,7 +394,7 @@ jobs:
           racket-version: '8.11'
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate
         run: raco make main.rkt
@@ -460,7 +460,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run security test suite (parallel)
         run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
@@ -577,7 +577,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Version smoke check
         run: |
@@ -611,7 +611,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
@@ -749,7 +749,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run abstraction audit (CI mode)
         run: |
