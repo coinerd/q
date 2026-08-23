@@ -90,10 +90,18 @@
 
 ;; Parse a single wave section → raw data hash (not a gsd-wave struct).
 ;; plan-types.rkt wraps this into a gsd-wave.
+;;
+;; Header tolerance (v1.00.14 hotfix): the wave header separator may be a
+;; colon (`## Wave 0: Title`), an em/en-dash (`## Wave 1 — Title`), or a
+;; hyphen run (`## Wave 2 - Title`). Previously ONLY the colon form matched;
+;; any other separator silently fell back to index 0 / empty title, so a
+;; plan written with em-dash headers normalized to indices (0 0 0 ...)
+;; and `/go` rejected it with "Wave indices not sequential".
 (define (parse-wave-section-raw lines)
   (define header (car lines))
   (define body-lines (cdr lines))
-  (define header-match (regexp-match #rx"^## +[Ww]ave +([0-9]+) *: *(.+)$" header))
+  (define header-match
+    (regexp-match #px"^## +[Ww]ave +([0-9]+)(?: *: *| *[—–] *| +-+ *)(.+)$" header))
   (define idx
     (if header-match
         (string->number (cadr header-match))

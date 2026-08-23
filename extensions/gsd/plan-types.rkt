@@ -344,17 +344,37 @@
 
 (: parse-waves-from-markdown : String -> (Listof gsd-wave))
 (define (parse-waves-from-markdown md-text)
-  (for/list :
-    (Listof gsd-wave)
-    ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])
-    (gsd-wave (expect-natural (raw-ref raw 'index 0))
-              (expect-string (raw-ref raw 'title ""))
-              'pending
-              (expect-string (raw-ref raw 'root-cause ""))
-              (expect-string-list (raw-ref raw 'files '()))
-              '()
-              (expect-string (raw-ref raw 'verify ""))
-              (expect-string-list (raw-ref raw 'done '())))))
+  (define waves
+    (for/list :
+      (Listof gsd-wave)
+      ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])
+      (gsd-wave (expect-natural (raw-ref raw 'index 0))
+                (expect-string (raw-ref raw 'title ""))
+                'pending
+                (expect-string (raw-ref raw 'root-cause ""))
+                (expect-string-list (raw-ref raw 'files '()))
+                '()
+                (expect-string (raw-ref raw 'verify ""))
+                (expect-string-list (raw-ref raw 'done '())))))
+  ;; v1.00.14 hotfix: plans written with human 1-based wave headers (Wave 1..N)
+  ;; must normalize to the internal 0-based indexing. Only an EXACT 1..n
+  ;; sequential run is shifted; anything else is left untouched so
+  ;; normalize-plan still rejects genuinely broken numbering.
+  (define n (length waves))
+  (define idxs (map gsd-wave-index waves))
+  (if (and (> n 0) (equal? idxs (build-list n add1)))
+      (for/list :
+        (Listof gsd-wave)
+        ([w : gsd-wave waves])
+        (struct-copy gsd-wave
+                     w
+                     [index
+                      (let ([i
+                             :
+                             Natural
+                             (assert (sub1 (gsd-wave-index w)) exact-nonnegative-integer?)])
+                        i)]))
+      waves))
 
 ;; ============================================================
 ;; Provide
