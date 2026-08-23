@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite runtime
+
 ;; tests/helpers/iteration-loop.rkt — Test convenience wrapper for
 ;; run-iteration-loop that supplies concrete runtime implementations.
 ;;

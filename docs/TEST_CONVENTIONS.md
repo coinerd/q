@@ -219,8 +219,8 @@ are hard failures inside the lint itself and always were.
 
 | Field | Status | Condition |
 |-------|--------|-----------|
-| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.12 inventory) |
-| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 across 1,299 files, v1.00.12 inventory) |
+| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory, re-verified at v1.00.13 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
+| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory, re-verified at v1.00.13 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
 | `@area` | **Mandatory on every test file** | — (ownership map complete) |
 | `@suite` | Conditional | Required when the test belongs to a named suite (`runtime`, `tui`, `cli`, `llm`, `tools`, `extensions`) |
 | `@mutates` | Conditional | Required when the test mutates persistent state (values other than `none`) |
@@ -229,14 +229,37 @@ are hard failures inside the lint itself and always were.
 
 **Enforcement status:** missing mandatory tags (`@speed`, `@boundary`, `@area`)
 were report-only (`continue-on-error: true`) until the inventory reached zero
-gaps. Enforcement was scheduled for v1.00.12 but flipped to blocking one
-release later, in **v1.00.12**: the report-only inventory run at that point
+gaps. Enforcement was scheduled for v1.00.13 but flipped to blocking one
+release later, in **v1.00.13**: the report-only inventory run at that point
 returned exit 0 with `missing-required=0` across all 1,299 test files
 (invalid=0, deprecated-alias=0), so the `metadata-lint` CI step dropped
 `continue-on-error: true` and became `metadata-lint (blocking)`. CI
 configuration and this document now describe the same enforced state; the
-v1.00.12 milestone slipping was deliberate, not silent — it waited on the
+v1.00.13 milestone slipping was deliberate, not silent — it waited on the
 evidence (a clean inventory) rather than on a date.
+
+**v1.00.11 re-verification:** the enforced canonical inventory was re-run at
+milestone close from a clean checkout (`racket scripts/run-tests/classify-metadata.rkt
+--lint-metadata` and `--metadata-inventory-json` from the repository root):
+exit 0 with `files=1336`, `invalid=0`, `deprecated-alias=0`,
+`missing-required=0`, `explicit=1336`, `heuristic-only=0`, inventory schema
+version 1, file-list digest
+`ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`. This
+digest — recorded in `docs/reports/test-regression-log.md` — is the canonical
+backing for every `missing-required=0` claim in this document; the claim is
+withdrawn if a same-command local invocation against this digest produces a
+nonzero count.
+
+**Single discovery implementation (W2):** local `--lint-metadata` and the CI
+`metadata-lint` step invoke the *identical* repository command —
+`racket scripts/run-tests/classify-metadata.rkt --lint-metadata` from the
+checkout root — so no CI-only discovery branch exists. The former
+`scripts/run-tests.rkt --lint-metadata` wrapper dispatch (the source of the
+W0 local-vs-CI inventory divergence) was deleted. CI also uploads a
+`--metadata-inventory-json` artifact (schema version, invocation root,
+SHA-256 digest over the sorted normalized paths, file count, per-area counts,
+and full violation details); a clean local run of the same command must match
+that digest for the same commit.
 
 ## Test Sandbox
 

@@ -12,6 +12,7 @@
          racket/hash
          json
          "model.rkt"
+         "request-policy.rkt"
          racket/port
          racket/match)
 
@@ -65,6 +66,8 @@
          current-http-request-timeout
          current-model-timeouts
          current-model-sse-read-timeouts
+         ;; Mechanism observation seam (v1.00.13 W2)
+         current-request-mechanism-observer
          ;; Exception struct
          exn:fail:network:timeout
          exn:fail:network:timeout?
@@ -79,45 +82,19 @@
 ;; Timeout configuration
 ;; ============================================================
 
-;; Default HTTP read timeout in seconds.
-;; When the network drops mid-stream, reads will timeout after this many seconds.
-(define http-read-timeout-default 120)
-
-;; Default overall HTTP request timeout in seconds.
-;; Covers connection + full response reading.  Settable via settings.
-(define http-request-timeout-default 600)
-
-;; Parameter: overall HTTP request timeout for the current session.
-;; Set by the runtime from settings; read by LLM providers.
-(define current-http-request-timeout (make-parameter http-request-timeout-default))
-
-;; Parameter: per-model timeout overrides for the current session.
-;; Set by the runtime from settings; a hash of model-name → timeout-seconds.
-;; v0.14.2 Wave 3: allows model-specific request timeouts.
-(define current-model-timeouts (make-parameter (hash)))
-
-;; Parameter: per-model SSE-read timeout overrides for the current session.
-;; A hash of model-name → sse-read-seconds. Controls the per-chunk gap allowed
-;; while reading an SSE stream (and the non-streaming body read on the
-;; anthropic/kimi path). Set by the runtime from settings
-;; (`timeouts.models.<model>.sse-read`).
-;; v1.00.05 W1 (#9393): wired so the configured sse-read (e.g. kimi 300s)
-;; replaces the hardcoded http-read-timeout-default 120s.
-(define current-model-sse-read-timeouts (make-parameter (hash)))
-
-;; Get the effective SSE-read timeout for a specific model, or #f when the
-;; model has no per-model sse-read override (callers then fall back to the
-;; module default http-read-timeout-default).
-(define (effective-sse-read-timeout-for model-name)
-  (define overrides (current-model-sse-read-timeouts))
-  (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
-
-;; Get the effective request timeout for a specific model.
-;; Checks per-model overrides first, then falls back to current-http-request-timeout.
-(define (effective-request-timeout-for model-name)
-  (define overrides (current-model-timeouts))
-  (define model-timeout (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
-  (or model-timeout (current-http-request-timeout)))
+;; v1.00.13 W1 (#9461): the timeout-configuration OWNERSHIP moved to
+;; llm/request-policy.rkt — constants, raw-config parameters, accessors, and
+;; the v1.00.12 phase resolver all live there now (single-owner rule,
+;; PLAN-v1.00.13 RL-1/RL-2/AC-1/AC-2). This mechanism module re-exports the
+;; compatibility surface so existing requires keep working; no model/config
+;; semantics remain here.
+;;
+;;   constants : http-read-timeout-default, http-request-timeout-default,
+;;               http-stream-timeout-default, max-thinking-gap-secs
+;;   params    : current-http-request-timeout, current-model-timeouts,
+;;               current-model-sse-read-timeouts
+;;   accessors : effective-request-timeout-for, effective-sse-read-timeout-for
+;;   resolver  : sse-phase-timeout-secs (compatibility re-export only)
 
 ;; call-with-request-timeout : thunk [#:timeout seconds #:cleanup thunk] -> any
 ;; Runs thunk in a separate thread with a channel for results;
@@ -379,32 +356,19 @@
 ;; Default per-chunk stream timeout (used by stream-sse-events callers)
 ;; ============================================================
 
-(define http-stream-timeout-default 60)
+;; v1.00.13 W1 (#9461): the definition moved to llm/request-policy.rkt and is
+;; re-exported above (compatibility). http-stream-timeout-default (60) and
+;; max-thinking-gap-secs (300) are policy constants with one owner.
 
 ;; ============================================================
 ;; SSE phase-timeout resolver (v1.00.12, SS-1/SS-2/SS-3)
 ;; ============================================================
-;; Hard ceiling on the mid-stream thinking gap, regardless of configuration.
-;; Preserves slow-reasoning models (kimi/glm 300 s) while capping runaway
-;; overrides such as deepseek's configured sse-read of 600 s.
-(define max-thinking-gap-secs 300)
 
-;; Resolve the three SSE stall windows for one streaming request:
-;;   initial  — held-request detection before any byte arrives. Fixed at a
-;;              maximum of 120 s (dead-peer detection); never widened by an
-;;              sse-read override so auto-retry can trip early.
-;;   thinking — silent reasoning window between chunks. Honors the model's
-;;              sse-read override (default 120 s) capped at
-;;              max-thinking-gap-secs and the overall request budget.
-;;   content  — per-chunk gap once content flows. Fixed at
-;;              http-stream-timeout-default; overrides must not widen it.
-;; Returns (values initial thinking content).
-(define (sse-phase-timeout-secs #:request-timeout request-timeout
-                                #:sse-read-override [sse-read-override #f])
-  (define initial-secs (min request-timeout 120))
-  (define thinking-secs (min request-timeout (min (or sse-read-override 120) max-thinking-gap-secs)))
-  (define content-secs http-stream-timeout-default)
-  (values initial-secs thinking-secs content-secs))
+;; v1.00.13 W1 (#9461): sse-phase-timeout-secs moved to
+;; llm/request-policy.rkt and is re-exported for compatibility. Prefer
+;; resolve-request-network-policy / resolve-request-network-policy-for-model;
+;; the compat surface exists for one release (see
+;; tests/test-request-policy-architecture.rkt).
 
 ;; ============================================================
 ;; stream-sse-events: Provider-agnostic SSE event generator
@@ -471,6 +435,19 @@
 ;; Takes a port and an event->chunks callback that converts parsed JSON events
 ;; into provider-specific chunks. Handles SSE lifecycle, timeouts, and
 ;; keep-alive protection. Returns a generator yielding chunks or #f when done.
+;; ============================================================
+;; Mechanism observation seam (v1.00.13 W2, RL-10/AC-3)
+;; ============================================================
+
+;; When set, the shared stream/body mechanism invokes it with a hash of the
+;; lifecycle arguments each adapter actually passed: stream-sse-events records
+;; (kind stream initial thinking content total); make-provider-http-request
+;; records (kind body-read read-timeout). This is how the cross-adapter
+;; conformance harness (tests/test-provider-network-policy-conformance.rkt)
+;; proves every adapter consumes the SAME resolved policy. Default #f = no
+;; overhead. Injection seam only — never a data path.
+(define current-request-mechanism-observer (make-parameter #f))
+
 (define (stream-sse-events port
                            event->chunks
                            #:initial-timeout [initial-secs http-read-timeout-default]
@@ -478,6 +455,18 @@
                            #:thinking-timeout [thinking-secs stream-secs]
                            #:max-total-timeout [max-total-secs 600])
   (generator ()
+             (define observer (current-request-mechanism-observer))
+             (when observer
+               (observer (hasheq 'kind
+                                 'stream
+                                 'initial
+                                 initial-secs
+                                 'thinking
+                                 thinking-secs
+                                 'content
+                                 stream-secs
+                                 'total
+                                 max-total-secs)))
              (define stream-start (current-inexact-milliseconds))
              (define deadline (+ stream-start (* max-total-secs 1000.0)))
              (define max-consecutive-empty 100)
@@ -540,12 +529,18 @@
                    [first-read? initial-secs]
                    [(not seen-content?) thinking-secs]
                    [else stream-secs]))
+               ;; v1.00.13 W4 (#9478, NP-7): a blocking read may never overshoot
+               ;; the total wall-clock deadline by a full phase window — every
+               ;; wait is capped at the remaining total budget (min of the
+               ;; phase idle window and the remaining budget).
+               (define remaining-total-secs (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+               (define wait-secs (min timeout-secs (max 0.05 remaining-total-secs)))
                ;; v0.99.84: Check buffer first, then drain port aggressively.
                (define line
                  (let ([cached (buf-pop!)])
                    (if cached
                        cached
-                       (let ([l (read-line/timeout port #:timeout timeout-secs)])
+                       (let ([l (read-line/timeout port #:timeout wait-secs)])
                          ;; After reading one line, probe for more data non-blockingly.
                          ;; This prevents CLOSE-WAIT buildup when the consumer is slow.
                          (when (and l (not (eof-object? l)))

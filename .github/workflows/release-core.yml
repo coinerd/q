@@ -89,6 +89,7 @@ jobs:
             --exclude='.git' \
             --exclude='compiled' \
             --exclude='*.zo' \
+            --exclude='q/tests/metadata-discovery/fixture' \
             -cf - q/ | gzip -n > "${TARBALL_NAME}"
           ls -la "${TARBALL_NAME}"
           echo "TARBALL_NAME=${TARBALL_NAME}" >> $GITHUB_OUTPUT

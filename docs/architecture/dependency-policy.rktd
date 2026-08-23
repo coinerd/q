@@ -291,6 +291,10 @@
        (risk
         . "OpenAI-compatible provider adapter: request building, SSE parsing, phase-aware timeouts, reasoning_content round-trip; grew with provider hardening (v0.99.78)")
        (owner . "llm"))
+      ("llm/http-helpers.rkt"
+       (risk
+        . "Shared provider HTTP request boundary: URL parsing, status checking, structured failure context with redacted header retention, Retry-After parsing (delta-seconds + HTTP-date), connect/TTFB-bounded sendrecv, and close-once response-port lifecycle; grew with request-lifecycle ownership (v1.00.13 W3/W4)")
+       (owner . "llm"))
       ("sandbox/subprocess.rkt"
        (risk
         . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")

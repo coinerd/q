@@ -1,0 +1,113 @@
+{
+  "total_count": 9,
+  "workflows": [
+    {
+      "id": 265604114,
+      "node_id": "W_kwDOR8hf6M4P1MwS",
+      "name": "Benchmark Suite",
+      "path": ".github/workflows/benchmark.yml",
+      "state": "active",
+      "created_at": "2026-04-24T05:18:18.000Z",
+      "updated_at": "2026-04-24T05:18:18.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/265604114",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/benchmark.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Benchmark%20Suite/badge.svg"
+    },
+    {
+      "id": 258814980,
+      "node_id": "W_kwDOR8hf6M4PbTQE",
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "state": "active",
+      "created_at": "2026-04-10T04:33:37.000Z",
+      "updated_at": "2026-04-10T04:33:37.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/258814980",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/ci.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/CI/badge.svg"
+    },
+    {
+      "id": 337839726,
+      "node_id": "W_kwDOR8hf6M4UIwZu",
+      "name": "full-regression",
+      "path": ".github/workflows/full-regression.yml",
+      "state": "active",
+      "created_at": "2026-08-19T13:49:36.000Z",
+      "updated_at": "2026-08-19T13:49:36.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/337839726",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/full-regression.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/full-regression/badge.svg"
+    },
+    {
+      "id": 288812821,
+      "node_id": "W_kwDOR8hf6M4RNu8V",
+      "name": "Nightly",
+      "path": ".github/workflows/nightly.yml",
+      "state": "active",
+      "created_at": "2026-06-03T19:41:50.000Z",
+      "updated_at": "2026-06-03T19:41:50.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/288812821",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/nightly.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Nightly/badge.svg"
+    },
+    {
+      "id": 259542599,
+      "node_id": "W_kwDOR8hf6M4PeE5H",
+      "name": "Project automation",
+      "path": ".github/workflows/project-automation.yml",
+      "state": "active",
+      "created_at": "2026-04-11T23:14:58.000Z",
+      "updated_at": "2026-04-11T23:14:58.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/259542599",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/project-automation.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Project%20automation/badge.svg"
+    },
+    {
+      "id": 317144815,
+      "node_id": "W_kwDOR8hf6M4S5z7v",
+      "name": "Release Core",
+      "path": ".github/workflows/release-core.yml",
+      "state": "active",
+      "created_at": "2026-07-21T04:09:59.000Z",
+      "updated_at": "2026-07-21T04:09:59.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/317144815",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/release-core.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Release%20Core/badge.svg"
+    },
+    {
+      "id": 299865722,
+      "node_id": "W_kwDOR8hf6M4R35Z6",
+      "name": "Release Repair",
+      "path": ".github/workflows/release-repair.yml",
+      "state": "active",
+      "created_at": "2026-06-21T22:46:16.000Z",
+      "updated_at": "2026-06-21T22:46:16.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/299865722",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/release-repair.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Release%20Repair/badge.svg"
+    },
+    {
+      "id": 260109047,
+      "node_id": "W_kwDOR8hf6M4PgPL3",
+      "name": "Release",
+      "path": ".github/workflows/release.yml",
+      "state": "active",
+      "created_at": "2026-04-13T12:41:35.000Z",
+      "updated_at": "2026-04-13T12:41:35.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/260109047",
+      "html_url": "https://github.com/coinerd/q/blob/main/.github/workflows/release.yml",
+      "badge_url": "https://github.com/coinerd/q/workflows/Release/badge.svg"
+    },
+    {
+      "id": 260109122,
+      "node_id": "W_kwDOR8hf6M4PgPNC",
+      "name": "Dependabot Updates",
+      "path": "dynamic/dependabot/dependabot-updates",
+      "state": "active",
+      "created_at": "2026-04-13T12:41:42.000Z",
+      "updated_at": "2026-04-13T12:41:42.000Z",
+      "url": "https://api.github.com/repos/coinerd/q/actions/workflows/260109122",
+      "html_url": "https://github.com/coinerd/q/actions/workflows/dependabot/dependabot-updates",
+      "badge_url": "https://github.com/coinerd/q/actions/workflows/dependabot/dependabot-updates/badge.svg"
+    }
+  ]
+}
