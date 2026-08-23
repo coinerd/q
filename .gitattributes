@@ -2,3 +2,8 @@
 .github/            export-ignore
 benchmarks/         export-ignore
 dist/               export-ignore
+
+# Frozen discovery fixture: repo-only pinned input (contains a deliberate
+# symlink + compiled/ stray); excluded so release tarballs stay
+# symlink-free per verify-release-bundle policy.
+tests/metadata-discovery/fixture/ export-ignore
