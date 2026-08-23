@@ -130,7 +130,10 @@
   (current-model-sse-read-timeouts . CONFIGURATION)
   (current-model-thinking-idle-timeouts . CONFIGURATION)
   (current-model-body-read-timeouts . CONFIGURATION)
-  (current-http-request-timeout . CONFIGURATION))
+  (current-http-request-timeout . CONFIGURATION)
+  (current-peer-close-probe-secs . CONFIGURATION)
+  (current-max-thinking-gap-secs . CONFIGURATION)
+  (current-model-thinking-gap-caps . CONFIGURATION))
  ("llm/http-helpers.rkt"
   (current-provider-http-sendrecv . SERVICE_HANDLE))
  ("llm/stream.rkt"

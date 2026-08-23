@@ -30,6 +30,9 @@
 ;;                            (v0.45.12 L1); see .planning W0 ownership map
 ;;   body-read-budget-secs    eager/non-streaming full-body read:
 ;;                            explicit body-read > legacy sse-read > fallback
+;;   peer-close-probe-secs    BUG-0019 W1: idle-window slicing cadence for the
+;;                            FIN/CLOSE-WAIT liveness probe in llm/stream.rkt
+;;                            (default 5; policy-driven, never hard-coded)
 ;;
 ;; Legacy `sse-read` compatibility (deprecated in v1.00.13): it feeds ONLY
 ;; thinking-idle and body-read — it can never influence connect/ttfb, initial,
@@ -86,6 +89,12 @@
 ;; Total wall-clock stream budget floor (v0.45.12 L1 semantics).
 (define stream-total-floor-secs 600)
 
+;; BUG-0019 W1: default cadence, in seconds, for the FIN/CLOSE-WAIT liveness
+;; probe that slices idle read windows inside stream-sse-events. A peer close
+;; must fail the stream within ~one probe interval regardless of how wide the
+;; configured phase windows are.
+(define peer-close-probe-secs-default 5)
+
 ;; ============================================================
 ;; Raw config parameters (moved here from llm/stream.rkt in v1.00.13 W1;
 ;; stream.rkt re-provides them for compatibility)
@@ -111,6 +120,11 @@
 ;; `timeouts.models.<model>.body-read`. Explicit semantic key; wins over
 ;; legacy `sse-read`.
 (define current-model-body-read-timeouts (make-parameter (hash)))
+
+;; BUG-0019 W1: ops-level override for the peer-close probe cadence. The
+;; resolver reads this parameter when no explicit #:peer-close-probe-secs is
+;; supplied, mirroring current-max-thinking-gap-secs.
+(define current-peer-close-probe-secs (make-parameter peer-close-probe-secs-default))
 
 ;; ============================================================
 ;; Raw config accessors (the only code allowed to read these parameters
@@ -157,7 +171,8 @@
                              thinking-idle-secs
                              content-idle-secs
                              stream-total-secs
-                             body-read-budget-secs)
+                             body-read-budget-secs
+                             peer-close-probe-secs)
   #:transparent)
 
 (define (positive-duration? v)
@@ -184,13 +199,14 @@
 ;;                  the request budget
 ;;   body-read:     explicit > legacy sse-read > fallback
 ;; Legacy sse-read never influences connect/ttfb, initial, or content.
-(define (resolve-request-network-policy #:request-timeout request-timeout
-                                        #:sse-read-override [sse-read-override #f]
-                                        #:thinking-idle-override [thinking-idle-override #f]
-                                        #:body-read-override [body-read-override #f]
-                                        #:body-read-fallback
-                                        [body-read-fallback http-read-timeout-default]
-                                        #:thinking-gap-cap-override [thinking-gap-cap-override #f])
+(define (resolve-request-network-policy
+         #:request-timeout request-timeout
+         #:sse-read-override [sse-read-override #f]
+         #:thinking-idle-override [thinking-idle-override #f]
+         #:body-read-override [body-read-override #f]
+         #:body-read-fallback [body-read-fallback http-read-timeout-default]
+         #:thinking-gap-cap-override [thinking-gap-cap-override #f]
+         #:peer-close-probe-secs [peer-close-probe-secs (current-peer-close-probe-secs)])
   (check-duration! 'request-timeout request-timeout)
   (when sse-read-override
     (check-duration! 'sse-read-override sse-read-override))
@@ -201,6 +217,7 @@
   (check-duration! 'body-read-fallback body-read-fallback)
   (when thinking-gap-cap-override
     (check-duration! 'thinking-gap-cap-override thinking-gap-cap-override))
+  (check-duration! 'peer-close-probe-secs peer-close-probe-secs)
   (define connect-ttfb (min request-timeout connect-ttfb-cap-secs))
   (define initial-idle (min request-timeout initial-idle-cap-secs))
   ;; BUG-0018 W1: an explicit thinking-gap-cap widens the window past the
@@ -230,7 +247,9 @@
                                   'stream-total-secs
                                   stream-total
                                   'body-read-budget-secs
-                                  body-read))])
+                                  body-read
+                                  'peer-close-probe-secs
+                                  peer-close-probe-secs))])
     (check-duration! label v))
   (request-network-policy request-timeout
                           connect-ttfb
@@ -238,7 +257,8 @@
                           thinking-idle
                           content-idle
                           stream-total
-                          body-read))
+                          body-read
+                          peer-close-probe-secs))
 
 ;; Resolve the policy for a model from the wired configuration parameters.
 ;; This is the entry point provider request construction must use (W2):
@@ -278,7 +298,8 @@
                                                   #:thinking-idle-override (or/c positive? #f)
                                                   #:body-read-override (or/c positive? #f)
                                                   #:body-read-fallback positive?
-                                                  #:thinking-gap-cap-override (or/c positive? #f))
+                                                  #:thinking-gap-cap-override (or/c positive? #f)
+                                                  #:peer-close-probe-secs positive?)
                              request-network-policy?)]
                        [resolve-request-network-policy-for-model
                         (-> (or/c string? #f) request-network-policy?)]
@@ -296,6 +317,7 @@
          request-network-policy-content-idle-secs
          request-network-policy-stream-total-secs
          request-network-policy-body-read-budget-secs
+         request-network-policy-peer-close-probe-secs
          ;; Policy constants (single owner)
          http-read-timeout-default
          http-request-timeout-default
@@ -305,6 +327,9 @@
          initial-idle-cap-secs
          thinking-idle-default-secs
          stream-total-floor-secs
+         ;; BUG-0019 W1 probe cadence
+         peer-close-probe-secs-default
+         current-peer-close-probe-secs
          ;; Raw config parameters (moved here from llm/stream.rkt)
          current-http-request-timeout
          current-model-timeouts
