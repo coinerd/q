@@ -130,22 +130,42 @@
 
 ;; --- Run format + compile only on staged files ---
 
+;; `raco fmt <file>` prints the canonical form; there is no `raco fmt --check`.
+;; Compare WITHOUT rewriting: an in-place `raco fmt -i` here would run after the
+;; commit snapshot was taken, committing the unformatted version while silently
+;; dirtying the tree with the rewrite.
+(define (check-fmt-canonical f)
+  (define fmt-ok? #f)
+  (define formatted
+    (with-output-to-string (lambda () (set! fmt-ok? (system (format "raco fmt ~a 2>/dev/null" f))))))
+  (cond
+    [(not fmt-ok?) 'fmt-error]
+    [(and (file-exists? f) (equal? formatted (file->string f))) 'canonical]
+    [else 'not-canonical]))
+
+(provide check-fmt-canonical)
+
 (define (run-staged-lint staged-files)
   (printf "~n--- Staged Lint (format + compile ~a files) ---~n" (length staged-files))
   (define all-ok #t)
   (for ([f (in-list staged-files)])
     (printf "  Checking: ~a ... " f)
     (flush-output)
-    (define fmt-code (system/exit-code (format "raco fmt -i ~a 2>&1" f)))
+    (define fmt-status (check-fmt-canonical f))
     (define make-code (system/exit-code (format "raco make ~a 2>&1" f)))
     (cond
-      [(and (= fmt-code 0) (= make-code 0)) (printf "OK~n")]
-      [(not (= fmt-code 0))
-       (printf "FORMAT FAIL~n")
+      [(and (eq? fmt-status 'canonical) (= make-code 0)) (printf "OK~n")]
+      [(eq? fmt-status 'not-canonical)
+       (printf "FORMAT FAIL (not raco-fmt canonical)~n")
+       (set! all-ok #f)]
+      [(eq? fmt-status 'fmt-error)
+       (printf "FORMAT FAIL (raco fmt errored)~n")
        (set! all-ok #f)]
       [else
        (printf "COMPILE FAIL~n")
        (set! all-ok #f)]))
+  (when (not all-ok)
+    (printf "  hint: run `raco fmt -i <file>` and RE-STAGE — the hook never rewrites files.~n"))
   (if all-ok
       (begin
         (printf "Staged lint: PASS~n")

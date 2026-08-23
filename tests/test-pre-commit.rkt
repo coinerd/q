@@ -102,3 +102,36 @@
   (check-regexp-match #rx"lint-all\\.rkt" src)
   ;; Should have fast-lint-checks list
   (check-regexp-match #rx"fast-lint-checks" src))
+
+;; --- Staged lint must check canonicality WITHOUT rewriting files ---
+
+(test-case "staged-lint-never-runs-raco-fmt-i"
+  ;; The old behavior ran `raco fmt -i` during the hook: the index snapshot
+  ;; kept the unformatted content while the working tree was silently
+  ;; rewritten, dirtying the tree after the commit landed.
+  (define src (file->string (build-path q-dir "scripts" "pre-commit.rkt")))
+  ;; No EXECUTION of raco fmt -i remains (prose in the remediation hint is fine).
+  (check-false (regexp-match #rx"raco fmt -i ~a" src))
+  (check-regexp-match #rx"RE-STAGE" src))
+
+(test-case "check-fmt-canonical-detects-and-never-rewrites"
+  (define check-fmt-canonical
+    (dynamic-require (build-path q-dir "scripts" "pre-commit.rkt") 'check-fmt-canonical))
+  (define tmp-path (make-temporary-file "pc-fmt-~a.rkt" #f q-dir))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     ;; Non-canonical: raco-fmt would wrap the body onto its own line.
+     (define bad "#lang racket\n(define (f x)x)\n")
+     (call-with-output-file tmp-path (lambda (out) (display bad out)) #:exists 'truncate)
+     (check-eq? (check-fmt-canonical tmp-path) 'not-canonical)
+     ;; The file must be byte-identical after the check.
+     (check-equal? (file->string tmp-path) bad)
+     ;; Canonical content passes.
+     (define good "#lang racket\n(define (f x)\n  x)\n")
+     (call-with-output-file tmp-path (lambda (out) (display good out)) #:exists 'truncate)
+     (check-eq? (check-fmt-canonical tmp-path) 'canonical)
+     (check-equal? (file->string tmp-path) good))
+   (lambda ()
+     (when (file-exists? tmp-path)
+       (delete-file tmp-path)))))
