@@ -1,0 +1,96 @@
+{
+  "$schema-note": "W0 before-state artifact. Machine-readable freeze of both control-integrity discrepancies on main at v1.00.11. Nothing here is suppressed, skipped, or reclassified; this file only records the state that W1+ will fix.",
+  "artifact": {
+    "name": "metadata-before-state",
+    "version": "v1.00.11",
+    "wave": "W0",
+    "purpose": "Freeze the red state and establish parity fixtures before any verifier/lock/lint change.",
+    "captured-by": "W0 (see plan: 'Freeze the red state and establish parity fixtures')"
+  },
+  "discrepancy-1": {
+    "title": "test-cross-version job uses Racket 8.11 while the package lock pins a single runtime 8.10",
+    "ci-run-reference": "32532206128",
+    "ci-run-url": "https://github.com/OWNER/q/actions/runs/32532206128",
+    "symptom": "Required gate test-cross-version is red on main: ci/verify-racket-package-lock.rkt rejects the 8.11 runtime because ci/racket-package-lock.rktd encodes a single-runtime lock pinned to Racket 8.10.",
+    "workflow": ".github/workflows/ci.yml",
+    "workflow-job": "test-cross-version",
+    "workflow-lines": {
+      "job-definition": "351-406",
+      "setup-racket-version-input": 367,
+      "racket-version-value": "8.11",
+      "note": "ci.yml is annotated with comments only in W0; no job config, lock, or lint change in this wave."
+    },
+    "lock": {
+      "file": "ci/racket-package-lock.rktd",
+      "pinned-runtime": "8.10",
+      "kind": "single-runtime lock"
+    },
+    "verifier": {
+      "file": "ci/verify-racket-package-lock.rkt",
+      "behavior-frozen-by": "tests/ci/verify-lock-selection-test.rkt",
+      "characterization": [
+        { "runtime": "8.10", "verdict": "accepted", "status": "must-pass (current behavior)" },
+        { "runtime": "8.11", "verdict": "rejected", "status": "KNOWN-RED: the documented main failure; fixed in W1, not in W0" },
+        { "runtime": "8.12", "verdict": "rejected", "status": "must-pass (unlisted runtime)" }
+      ]
+    }
+  },
+  "discrepancy-2": {
+    "title": "Metadata discovery diverges between local and CI invocation modes",
+    "invariants-affected": ["I4", "I5"],
+    "claim": "Metadata enforcement is claimed to be blocking, but the two modes disagree on the same tree, so the claim is unverifiable.",
+    "inventories": {
+      "local-clean": {
+        "files": 1285,
+        "invalid": 2,
+        "deprecated-alias": 6,
+        "missing-required": 142,
+        "command": "racket scripts/run-tests.rkt --lint-metadata",
+        "cwd": "q repository root (clean local checkout)",
+        "mode": "direct CLI from repo root"
+      },
+      "ci-lint-step": {
+        "files": 1301,
+        "invalid": null,
+        "deprecated-alias": null,
+        "missing-required": 0,
+        "command": "raco test / scripts/run-tests.rkt --lint-metadata as executed by the CI lint step (see .github/workflows/ci.yml lint job)",
+        "cwd": "CI checkout root",
+        "mode": "clean-copy checkout root (CI)"
+      },
+      "delta": {
+        "files": 16,
+        "note": "1301 - 1285 = 16 files seen only by the CI mode; local additionally reports invalid=2, deprecated-alias=6, missing-required=142 which CI reports as 0."
+      }
+    },
+    "parity-fixture": {
+      "root": "tests/metadata-discovery/fixture/",
+      "test": "tests/ci/metadata-discovery-test.rkt",
+      "contents": [
+        "ordinary test files (alpha-test.rkt, beta-plain.rkt)",
+        "nested test directory (nested/nested-test.rkt, nested/deep/deep-test.rkt)",
+        "generated/ignored files (generated/generated-test.rkt, compiled/stray-test.rkt)",
+        "symlink where the platform supports it (symlinked-test.rkt -> link-target.rkt)",
+        "one path outside the fixture root (outside/outside-test.rkt)",
+        "not-a-test-helper.rkt carrying @not-test"
+      ],
+      "modes-asserted": [
+        "relative-cwd-root: racket scripts/run-tests.rkt with cwd = root (local CLI mode)",
+        "absolute-cwd-root: racket /abs/root/scripts/run-tests.rkt with cwd = root (clean-copy CI checkout mode)"
+      ],
+      "contract": "Both invocation modes must produce the identical normalized relative path list; the driver sorts and dedupes, and the fixture asserts the merged normalized list as well as forbidden exclusions (compiled/, generated/, @not-test, outside-root).",
+      "observed-fixture-divergence": "None within the fixture: both modes yield the identical normalized list on this platform (symlinks preserved). The production local-vs-CI divergence (16 files) remains recorded above as the defect; the fixture pins the mechanism (invocation-mode parity) so any mode-dependent branch added later breaks the test."
+    }
+  },
+  "verify-commands": [
+    "raco test q/tests/ci/verify-lock-selection-test.rkt",
+    "raco test q/tests/ci/metadata-discovery-test.rkt",
+    "test -f q/docs/reports/metadata-before-state-v1.00.11.json"
+  ],
+  "out-of-scope-in-w0": [
+    "any verifier behavior change",
+    "any lock change",
+    "any lint or CI job configuration change (ci.yml comments only)",
+    "any suppression, skip, or reclassification of failures"
+  ]
+}

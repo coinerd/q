@@ -22,12 +22,21 @@
                   close-port-after-stream
                   stream-sse-events
                   call-with-request-timeout
-                  effective-sse-read-timeout-for
                   read-response-body/timeout)
+         (only-in "../request-policy.rkt"
+                  resolve-request-network-policy-for-model
+                  request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
+                  request-network-policy-initial-idle-secs
+                  request-network-policy-thinking-idle-secs
+                  request-network-policy-content-idle-secs
+                  request-network-policy-stream-total-secs
+                  request-network-policy-body-read-budget-secs)
          (only-in "../http-helpers.rkt"
                   make-provider-http-request
                   check-provider-status!
-                  parse-provider-url)
+                  parse-provider-url
+                  provider-sendrecv/ttfb-bounded)
          (only-in "../model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          (only-in "../model.rkt" model-request-settings)
          (only-in "../provider.rkt" make-provider validate-api-key! ensure-model-setting)
@@ -63,11 +72,13 @@
            (if (equal? provider-name "kimi-coding")
                (list "User-Agent: KimiCLI/1.5")
                '())))
-  ;; v1.00.05 W1 (#9393): honor the per-model sse-read timeout for the body
-  ;; read instead of the hardcoded 120s fallback. effective-sse-read-timeout-for
-  ;; returns #f when the model has no override — make-provider-http-request then
-  ;; falls back to http-read-timeout-default.
-  (define read-timeout (and model-name (effective-sse-read-timeout-for model-name)))
+  ;; v1.00.13 W2 (#9466): the resolved request-network policy is the ONLY
+  ;; timeout input (RL-3). The eager-body budget comes from the policy
+  ;; (explicit body-read > legacy sse-read > 120 fallback), replacing the
+  ;; direct legacy-sse-read read of v1.00.05 W1.
+  (define read-timeout
+    (request-network-policy-body-read-budget-secs
+     (resolve-request-network-policy-for-model model-name)))
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
@@ -142,62 +153,83 @@
                        (list "User-Agent: KimiCLI/1.5")
                        '())))
           (define body-bytes (jsexpr->bytes body))
+          ;; v1.00.13 W2 (#9466): ONE resolved policy per request (RL-3);
+          ;; completes the v1.00.12 SS-6 adapter-parity deferral. All
+          ;; lifecycle windows come from llm/request-policy.rkt — parity
+          ;; change vs the old defaults: thinking window 60 → policy value
+          ;; (min request (min (or override 120) 300)); total 600 →
+          ;; the policy total budget: 2x request with a 600 s floor, when request > 300.
+          (define policy
+            (resolve-request-network-policy-for-model
+             (hash-ref (model-request-settings merged-req) 'model default-model)))
           (define request-custodian (make-custodian))
           (define (cleanup-response!)
             (custodian-shutdown-all request-custodian))
           (define stream-owns-port? (box #f))
-          (dynamic-wind
-           (lambda () (void))
-           (lambda ()
-             ;; Wrap initial HTTP request in overall timeout (SEC-11)
-             (define result-vec
-               (call-with-request-timeout #:cleanup cleanup-response!
-                                          (lambda ()
-                                            (parameterize ([current-custodian request-custodian])
-                                              (define-values (sl rh rp)
-                                                (http-sendrecv host
-                                                               path-str
-                                                               #:port port
-                                                               #:ssl? ssl?
-                                                               #:method #"POST"
-                                                               #:headers headers
-                                                               #:data body-bytes))
-                                              (vector sl rh rp)))))
-             (define status-line (vector-ref result-vec 0))
-             (define response-headers (vector-ref result-vec 1))
-             (define response-port (vector-ref result-vec 2))
-             ;; Check HTTP status before streaming
-             (define status-code
-               (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)"
-                                          (bytes->string/utf-8 status-line))])
-                 (if parts
-                     (string->number (cadr parts))
-                     0)))
-             (when (>= status-code 400)
-               (define resp-body (read-response-body/timeout response-port))
-               (check-provider-status! "Anthropic" status-line resp-body))
-             ;; Incremental SSE parsing — generator yields chunks one at a time
-             (define raw-port response-port)
-             (define current-tool-id (box #f))
-             (define current-tool-name (box #f))
-             (define current-tool-index (box 0))
-             (log-stream-setup-timing "anthropic" _stream-t0)
-             (define owned-stream
-               (close-port-after-stream
-                (stream-sse-events raw-port
-                                   (lambda (parsed)
-                                     (anthropic-parse-single-event parsed
-                                                                   current-tool-id
-                                                                   current-tool-name
-                                                                   current-tool-index)))
-                raw-port
-                #:cleanup cleanup-response!))
-             ;; Transfer only after finalizer registration succeeds.
-             (set-box! stream-owns-port? #t)
-             owned-stream)
-           (lambda ()
-             (unless (unbox stream-owns-port?)
-               (with-logged-error "request cleanup" (cleanup-response!))))))))
+          (dynamic-wind (lambda () (void))
+                        (lambda ()
+                          ;; Wrap initial HTTP request in the policy request budget
+                          (define result-vec
+                            (call-with-request-timeout
+                             #:cleanup cleanup-response!
+                             #:timeout (request-network-policy-request-budget-secs policy)
+                             (lambda ()
+                               (parameterize ([current-custodian request-custodian])
+                                 ;; v1.00.13 W4 (#9478, RL-4): connect/TTFB
+                                 ;; bounded by policy; phase 'connect/ttfb.
+                                 (define-values (sl rh rp)
+                                   (provider-sendrecv/ttfb-bounded
+                                    (request-network-policy-connect-ttfb-secs policy)
+                                    (lambda ()
+                                      (http-sendrecv host
+                                                     path-str
+                                                     #:port port
+                                                     #:ssl? ssl?
+                                                     #:method #"POST"
+                                                     #:headers headers
+                                                     #:data body-bytes))
+                                    #:cleanup cleanup-response!))
+                                 (vector sl rh rp)))))
+                          (define status-line (vector-ref result-vec 0))
+                          (define response-headers (vector-ref result-vec 1))
+                          (define response-port (vector-ref result-vec 2))
+                          ;; Check HTTP status before streaming
+                          (define status-code
+                            (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)"
+                                                       (bytes->string/utf-8 status-line))])
+                              (if parts
+                                  (string->number (cadr parts))
+                                  0)))
+                          (when (>= status-code 400)
+                            (define resp-body (read-response-body/timeout response-port))
+                            (check-provider-status! "Anthropic" status-line resp-body))
+                          ;; Incremental SSE parsing — generator yields chunks one at a time
+                          (define raw-port response-port)
+                          (define current-tool-id (box #f))
+                          (define current-tool-name (box #f))
+                          (define current-tool-index (box 0))
+                          (log-stream-setup-timing "anthropic" _stream-t0)
+                          (define owned-stream
+                            (close-port-after-stream
+                             (stream-sse-events
+                              raw-port
+                              #:initial-timeout (request-network-policy-initial-idle-secs policy)
+                              #:thinking-timeout (request-network-policy-thinking-idle-secs policy)
+                              #:stream-timeout (request-network-policy-content-idle-secs policy)
+                              #:max-total-timeout (request-network-policy-stream-total-secs policy)
+                              (lambda (parsed)
+                                (anthropic-parse-single-event parsed
+                                                              current-tool-id
+                                                              current-tool-name
+                                                              current-tool-index)))
+                             raw-port
+                             #:cleanup cleanup-response!))
+                          ;; Transfer only after finalizer registration succeeds.
+                          (set-box! stream-owns-port? #t)
+                          owned-stream)
+                        (lambda ()
+                          (unless (unbox stream-owns-port?)
+                            (with-logged-error "request cleanup" (cleanup-response!))))))))
 
   (make-provider (lambda () (anthropic-provider-name config))
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

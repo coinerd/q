@@ -28,10 +28,12 @@
                   current-secret-scrub-denylist
                   current-secret-scrub-allowlist
                   current-secret-scrub-patterns)
-         (only-in "../llm/stream.rkt"
+         (only-in "../llm/request-policy.rkt"
                   current-http-request-timeout
                   current-model-timeouts
-                  current-model-sse-read-timeouts)
+                  current-model-sse-read-timeouts
+                  current-model-thinking-idle-timeouts
+                  current-model-body-read-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
@@ -118,7 +120,28 @@
                         k)
                     (hash-ref v 'sse-read))
           acc)))
-  (current-model-sse-read-timeouts model-sse-read-timeouts))
+  (current-model-sse-read-timeouts model-sse-read-timeouts)
+  ;; v1.00.13 W1 (#9461): wire the explicit semantic timeout keys
+  ;; `timeouts.models.<model>.thinking-idle` and `.body-read`. The resolver
+  ;; (llm/request-policy.rkt) gives them precedence over legacy `sse-read`.
+  (define (wire-model-key key)
+    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+      (if (and (hash? v) (hash-has-key? v key))
+          (hash-set acc
+                    (if (symbol? k)
+                        (symbol->string k)
+                        k)
+                    (hash-ref v key))
+          acc)))
+  (current-model-thinking-idle-timeouts (wire-model-key 'thinking-idle))
+  (current-model-body-read-timeouts (wire-model-key 'body-read))
+  ;; Non-fatal deprecation signal for the legacy `sse-read` key: it now maps
+  ;; only to thinking-idle/body-read (llm/request-policy.rkt) and will be
+  ;; removed after v1.00.13. Docs: docs/provider-retry.md (W5).
+  (for ([(k v) (in-hash models-config)])
+    (when (and (hash? v) (hash-has-key? v 'sse-read))
+      (log-warning (format "wiring: timeouts.models.~a.sse-read is deprecated in v1.00.13; \
+use thinking-idle and/or body-read instead" k)))))
 
 ;; Apply memory settings from config to current parameters.
 ;; Sets injection budget from settings.

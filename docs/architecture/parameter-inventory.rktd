@@ -125,10 +125,16 @@
   (current-sessions-fs-ops . SERVICE_HANDLE))
  ("llm/gemini.rkt"
   (current-gemini-tool-id-counter . TURN_LOCAL))
- ("llm/stream.rkt"
+ ("llm/request-policy.rkt"
   (current-model-timeouts . CONFIGURATION)
   (current-model-sse-read-timeouts . CONFIGURATION)
+  (current-model-thinking-idle-timeouts . CONFIGURATION)
+  (current-model-body-read-timeouts . CONFIGURATION)
   (current-http-request-timeout . CONFIGURATION))
+ ("llm/http-helpers.rkt"
+  (current-provider-http-sendrecv . SERVICE_HANDLE))
+ ("llm/stream.rkt"
+  (current-request-mechanism-observer . SERVICE_HANDLE))
  ("runtime/auth/oauth.rkt"
   (current-oauth-http-sendrecv . SERVICE_HANDLE))
  ("runtime/auto-retry.rkt"
