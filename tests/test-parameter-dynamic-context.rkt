@@ -24,6 +24,7 @@
 
 ;; ============================================================
 ;; Suite 1: parameterize isolation (doesn't leak to parent scope)
+;; @boundary unit
 ;; ============================================================
 
 (define-test-suite parameterize-isolation-tests

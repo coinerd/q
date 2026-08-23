@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite arch
+;; @boundary unit
 
 (require rackunit
          racket/file
@@ -111,12 +112,17 @@
   (check-true (string-contains? (source "llm/azure-openai.rkt") "(unless (= status-code 200)")))
 
 (test-case "W4-B5: corrected G2 and G3 asymmetries are pinned"
+  ;; Unification W2 (#9466) closed the G2 asymmetry: ALL adapters now consume the
+  ;; resolved request-network policy (RL-3); no adapter reads raw timeout
+  ;; config. G3 (stream error wrapping) remains openai-only.
   (define openai (source "llm/openai-compatible.rkt"))
-  (check-equal? (length (regexp-match* #rx"[(]effective-request-timeout-for[ ]+[a-z-]+[)]" openai))
-                2
-                "OpenAI must retain exactly the non-stream and stream per-model timeout calls")
-  (for ([path (in-list '("llm/anthropic/sse.rkt" "llm/gemini.rkt" "llm/azure-openai.rkt"))])
-    (check-false (string-contains? (source path) "effective-request-timeout-for")))
+  (for ([path (in-list '("llm/openai-compatible.rkt" "llm/anthropic/sse.rkt"
+                                                     "llm/gemini.rkt"
+                                                     "llm/azure-openai.rkt"))])
+    (check-true (string-contains? (source path) "resolve-request-network-policy-for-model")
+                (format "~a must consume the resolved request-network policy" path))
+    (check-false (string-contains? (source path) "effective-request-timeout-for")
+                 (format "~a must not read raw timeout config" path)))
   (check-true (string-contains? openai "openai-wrap-stream-error"))
   (for ([path (in-list '("llm/anthropic/sse.rkt" "llm/gemini.rkt" "llm/azure-openai.rkt"))])
     (check-false (string-contains? (source path) "wrap-stream-error"))))

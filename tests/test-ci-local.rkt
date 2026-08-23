@@ -34,6 +34,7 @@
     (test-case "ci-local.rkt --quick exits 0 on clean tree"
       ;; Use --quick to avoid running the full CI suite in tests.
       ;; The full CI suite is tested separately in CI.
+      ;; @boundary unit  ;; @mutates repo
       (define exit-code
         (system/exit-code (format "cd ~a && racket ~a --quick" project-root script-path)))
       (check-equal? exit-code 0))

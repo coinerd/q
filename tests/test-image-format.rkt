@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; tests/test-image-format.rkt — Provider image format tests (#5272)
 

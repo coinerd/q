@@ -1,7 +1,9 @@
 #lang racket
+;; @covers tools/builtins/write.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 
@@ -11,7 +13,9 @@
          racket/file
          (only-in "../extensions/gsd/session-state.rkt" [set-pinned-dir! set-pinned-planning-dir!])
          (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
-         (only-in "../util/safe-mode/safe-mode-state.rkt" current-safe-mode-config make-safe-mode-config))
+         (only-in "../util/safe-mode/safe-mode-state.rkt"
+                  current-safe-mode-config
+                  make-safe-mode-config))
 
 ;; ============================================================
 ;; tool-write — basic write

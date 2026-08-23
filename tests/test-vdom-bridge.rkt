@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-vdom-bridge.rkt — Integration test for vdom pipeline
 

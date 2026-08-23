@@ -16,20 +16,32 @@
 ;; Clean file path: strip surrounding backticks and whitespace.
 (define (clean-file-path s)
   (define trimmed (string-trim s))
-  (cond
-    [(>= (string-length trimmed) 6)
-     (define triple-back (string-prefix? trimmed "```"))
-     (define triple-end (string-suffix? trimmed "```"))
-     (if (and triple-back triple-end)
-         (string-trim (substring trimmed 3 (- (string-length trimmed) 3)))
-         (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-             (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-             trimmed))]
-    [(>= (string-length trimmed) 2)
-     (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-         (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-         trimmed)]
-    [else trimmed]))
+  (define stripped
+    (cond
+      [(>= (string-length trimmed) 6)
+       (define triple-back (string-prefix? trimmed "```"))
+       (define triple-end (string-suffix? trimmed "```"))
+       (if (and triple-back triple-end)
+           (string-trim (substring trimmed 3 (- (string-length trimmed) 3)))
+           (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
+               (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
+               trimmed))]
+      [(>= (string-length trimmed) 2)
+       (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
+           (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
+           trimmed)]
+      [else trimmed]))
+  ;; Strip trailing parenthetical annotations used in wave docs, e.g.
+  ;;   - File: q/docs/reports/test-regression-log.md (new: full-regression evidence log)
+  ;; The annotation is explanatory prose, not part of the path. A path like
+  ;; `q/foo (bar)/x.rkt` (parentheses INSIDE the path, no space before them)
+  ;; is preserved because the annotation form always has " (" (space + paren).
+  (define paren-pos (regexp-match-positions #rx" \\(" stripped))
+  (if (and paren-pos
+           ;; only strip when the paren segment runs to end-of-line (annotation)
+           (string-suffix? (string-trim stripped) ")"))
+      (string-trim (substring stripped 0 (car (car paren-pos))))
+      stripped))
 
 ;; Parse structured fields from wave document content.
 (define (parse-wave-content content)

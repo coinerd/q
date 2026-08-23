@@ -5,7 +5,14 @@
     "known_non_release_blocking_failures_allowed_but_visible": true,
     "ledger_entries_must_match_file_and_category": true,
     "new_unknown_failures_release_blocking": true,
-    "zero_parsed_strict_failures_remain_blocking": true
+    "zero_parsed_strict_failures_remain_blocking": true,
+    "quarantine_expiry": {
+      "field": "expires_on",
+      "format": "ISO YYYY-MM-DD (zero-padded) or null",
+      "required": false,
+      "semantics": "while today < expires_on the matched failure is a quarantined (tolerated, visible) known failure; from expires_on onward (inclusive) it is reported as an escalating failure (expired_quarantine_failures, escalate=true) instead of being tolerated",
+      "triage": "see docs/operations/test-regression-triage.md — renew only with an explicit justification note, re-triage, or fix"
+    }
   },
   "source_category_counts": {
     "ASSERTION_FAILURE": 79,

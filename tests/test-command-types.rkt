@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; tests/test-command-types.rkt — Shared command AST type tests (F14)

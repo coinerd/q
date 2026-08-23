@@ -1,0 +1,186 @@
+name: 'Install Racket runtime'
+description: >-
+  Job-local Racket installation from the official installer with an
+  exact-key installer-archive cache. The cache stores ONLY the published
+  installer archive (never a full Racket installation tree), keyed by OS,
+  architecture, variant, distribution, version, source URL and published
+  SHA-256. A checksum mismatch fails the job before anything is installed.
+inputs:
+  racket-version:
+    description: 'Racket version to install'
+    required: false
+    default: '8.10'
+  architecture:
+    description: 'Racket architecture'
+    required: false
+    default: 'x64'
+  variant:
+    description: 'Racket variant (CS or BC)'
+    required: false
+    default: 'CS'
+  distribution:
+    description: 'Racket distribution (full or minimal)'
+    required: false
+    default: 'full'
+  installer-sha256:
+    description: >-
+      Published SHA-256 of the official installer archive for this exact
+      tuple. Required: the archive is never executed or cached unverified.
+    required: true
+outputs:
+  racket-bin:
+    description: 'Directory containing racket/raco executables'
+    value: ${{ steps.install.outputs.racket-bin }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Derive official installer URL and cache key
+      id: installer
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        ARCHITECTURE: ${{ inputs.architecture }}
+        VARIANT: ${{ inputs.variant }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        INSTALLER_SHA256: ${{ inputs.installer-sha256 }}
+      run: |
+        set -euo pipefail
+        # Mirror layout (download.racket-lang.org -> mirror.racket-lang.org):
+        #   full Linux   racket-<ver>-<plat>-<variant>.sh
+        #   full macOS   racket-<ver>-<plat>-<variant>.dmg
+        #   minimal      racket-minimal-<ver>-<plat>-<variant>.sh (Linux)
+        #               racket-minimal-<ver>-<plat>-<variant>.tgz (macOS)
+        # Variant is lowercase in published filenames (cs/bc).
+        variant_lc=$(printf '%s' "$VARIANT" | tr '[:upper:]' '[:lower:]')
+        case "${RUNNER_OS}:${ARCHITECTURE}" in
+          Linux:x64)   plat=x86_64-linux ;;
+          Linux:arm64) plat=aarch64-linux ;;
+          macOS:x64)   plat=x86_64-macosx ;;
+          macOS:arm64) plat=aarch64-macosx ;;
+          *) echo "::error::unsupported tuple ${RUNNER_OS}/${ARCHITECTURE}"; exit 1 ;;
+        esac
+
+        if [ "$DISTRIBUTION" = "minimal" ]; then
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            file="racket-minimal-${RACKET_VERSION}-${plat}-${variant_lc}.sh"
+          else
+            file="racket-minimal-${RACKET_VERSION}-${plat}-${variant_lc}.tgz"
+          fi
+        elif [ "$RUNNER_OS" = "Linux" ]; then
+          file="racket-${RACKET_VERSION}-${plat}-${variant_lc}.sh"
+        else
+          file="racket-${RACKET_VERSION}-${plat}-${variant_lc}.dmg"
+        fi
+        url="https://download.racket-lang.org/installers/${RACKET_VERSION}/${file}"
+
+        # The cache key binds every dimension of the installer identity:
+        # OS, architecture, variant, distribution, version, the exact source
+        # URL and the published SHA-256. Exact key only — no prefix restore
+        # keys, so a different tuple can never satisfy this cache.
+        url_digest=$(printf '%s' "$url" | shasum -a 256 | cut -c1-16)
+        echo "url=$url"                    >> "$GITHUB_OUTPUT"
+        echo "archive=$(basename "$url")"  >> "$GITHUB_OUTPUT"
+        echo "cache-key=racket-installer-v1-${RUNNER_OS}-${ARCHITECTURE}-${VARIANT}-${DISTRIBUTION}-${RACKET_VERSION}-${url_digest}-${INSTALLER_SHA256}" >> "$GITHUB_OUTPUT"
+
+    # Exact key only. On a hit the cached archive is still verified against
+    # the published SHA-256 before use; on a miss the download is verified
+    # before installation. Either way an unverified archive never executes.
+    - name: Restore verified installer archive
+      id: installer-cache
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: ${{ runner.temp }}/${{ steps.installer.outputs.archive }}
+        key: ${{ steps.installer.outputs.cache-key }}
+
+    - name: Download and verify installer archive
+      if: steps.installer-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        INSTALLER_URL: ${{ steps.installer.outputs.url }}
+        INSTALLER_ARCHIVE: ${{ runner.temp }}/${{ steps.installer.outputs.archive }}
+        INSTALLER_SHA256: ${{ inputs.installer-sha256 }}
+      run: |
+        set -euo pipefail
+        curl -fsSL --retry 3 -o "$INSTALLER_ARCHIVE" "$INSTALLER_URL"
+        actual=$(shasum -a 256 "$INSTALLER_ARCHIVE" | cut -d' ' -f1)
+        if [ "$actual" != "$INSTALLER_SHA256" ]; then
+          echo "::error::installer archive checksum mismatch for $INSTALLER_URL"
+          echo "::error::expected $INSTALLER_SHA256"
+          echo "::error::actual   $actual"
+          exit 1
+        fi
+
+    - name: Re-verify cached installer archive
+      if: steps.installer-cache.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        INSTALLER_ARCHIVE: ${{ runner.temp }}/${{ steps.installer.outputs.archive }}
+        INSTALLER_SHA256: ${{ inputs.installer-sha256 }}
+      run: |
+        set -euo pipefail
+        actual=$(shasum -a 256 "$INSTALLER_ARCHIVE" | cut -d' ' -f1)
+        if [ "$actual" != "$INSTALLER_SHA256" ]; then
+          echo "::error::cached installer archive no longer matches its published SHA-256; refusing to install"
+          exit 1
+        fi
+
+    - name: Install Racket into a job-local prefix
+      id: install
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        INSTALLER_ARCHIVE: ${{ runner.temp }}/${{ steps.installer.outputs.archive }}
+      run: |
+        set -euo pipefail
+        prefix="$RUNNER_TEMP/racket-${RACKET_VERSION}"
+        rm -rf "$prefix"
+        mkdir -p "$prefix"
+        case "$INSTALLER_ARCHIVE" in
+          *.tar.xz)
+            tar -xJf "$INSTALLER_ARCHIVE" -C "$prefix" --strip-components 1
+            ;;
+          *.tgz)
+            tar -xzf "$INSTALLER_ARCHIVE" -C "$prefix" --strip-components 1
+            ;;
+          *.dmg)
+            # macOS dmg layout: "Racket v<V>/Racket v<V>/{bin,lib,...}"
+            # (outer folder also carries an Applications symlink and
+            # install backgrounds). Locate the racket binary by search so
+            # nesting variations still resolve, and surface the mount
+            # listing on failure.
+            mount="$RUNNER_TEMP/racket-dmg"
+            rm -rf "$mount"
+            mkdir -p "$mount"
+            hdiutil attach -readonly -nobrowse -mountpoint "$mount" \
+              "$INSTALLER_ARCHIVE"
+            racket_src=$(find "$mount" -maxdepth 4 -type f -name racket | head -1)
+            if [ -z "$racket_src" ]; then
+              echo "::error::no racket binary found in the dmg image; mount contents:"
+              ls -la "$mount"
+              hdiutil detach "$mount" >/dev/null 2>&1 || true
+              exit 1
+            fi
+            # racket_src is .../<tree>/bin/racket — copy the whole tree root.
+            cp -R "$(dirname "$(dirname "$racket_src")")"/. "$prefix"/
+            hdiutil detach "$mount" >/dev/null
+            [ -x "$prefix/bin/racket" ] || {
+              echo "::error::racket not installed from dmg into $prefix"
+              exit 1
+            }
+            ;;
+          *.sh)
+            sh "$INSTALLER_ARCHIVE" --unix-style --dest "$prefix" --create-dir >/dev/null
+            ;;
+          *) echo "::error::unknown installer archive kind: $INSTALLER_ARCHIVE"; exit 1 ;;
+        esac
+        echo "$prefix/bin" >> "$GITHUB_PATH"
+        echo "racket-bin=$prefix/bin" >> "$GITHUB_OUTPUT"
+
+    - name: Confirm the installed runtime matches the requested tuple
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+      run: |
+        set -euo pipefail
+        racket --version
+        racket -e "(unless (string-prefix? (version) \"$RACKET_VERSION\") (exit 1))"

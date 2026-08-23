@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-mas-integration.rkt — End-to-end MAS integration tests
 ;; STABILITY: evolving

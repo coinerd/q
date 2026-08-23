@@ -1,5 +1,8 @@
 #lang racket/base
+;; @covers runtime/context-selection/authority.rkt
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-context-selection-authority.rkt — W7 (#8944): Context selection authority tests
 ;;
 ;; Tests pure decision helpers: decide-retention, select-memory, include-checkpoint,

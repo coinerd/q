@@ -1,4 +1,7 @@
 #lang racket/base
+
+;; @speed fast  ;; @suite default
+;; @boundary unit
 (require rackunit
          "../ui-core/composer-model.rkt"
          "../ui-core/composer-layout.rkt")

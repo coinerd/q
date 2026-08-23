@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 
 ;; tests/test-orchestration-reduction.rkt
 ;; v0.99.92 W3 — Orchestration Surface Reduction evidence ledger.

@@ -9,6 +9,7 @@
 ;; Tests boundary conditions:
 ;; - ensure-hash-args edge cases
 ;; - check-mid-turn-budget! boundary behavior
+;; @boundary unit
 ;; - update-seen-paths steering counter reset
 ;; - v0.19.10: spiral breaker event structure
 

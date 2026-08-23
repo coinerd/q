@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-vdom-components.rkt — Tests for tui/vdom-components.rkt
 

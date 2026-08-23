@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; tests/test-runtime-packages.rkt — T2-5: runtime/ sub-packages scaffolding
 ;; STABILITY: evolving

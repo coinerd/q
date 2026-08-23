@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite tui
+;; @boundary unit
 
 ;; test-tui-tool-prefix-doubling.rkt — Regression test for doubled tool name prefixes
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite runtime
+;; @boundary integration
 
 ;; v0.99.95 W2: prompt lifecycle error and terminal identity correlation.
 

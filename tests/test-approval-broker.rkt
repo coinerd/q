@@ -1,7 +1,9 @@
 #lang racket/base
+;; @covers runtime/approval/broker.rkt
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -115,4 +117,5 @@
       (clear-approval-channel!)
       (check-false (consume-grant grant digest-a)))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite arch
+;; @boundary unit
 ;; BOUNDARY: architecture
 
 (require rackunit
@@ -38,9 +39,14 @@
                                          accumulate-tool-call-deltas
                                          call-with-request-timeout
                                          read-line/timeout
-                                         read-response-body/timeout
-                                         current-http-request-timeout)
+                                         read-response-body/timeout)
                       (C2 C3 C7 C8))
+    ;; Unification W1 (#9461): timeout-config parameter + resolver moved from
+    ;; llm/stream.rkt to the policy module (single-owner rule, RL-1/AC-1).
+    ("llm/request-policy.rkt" (current-http-request-timeout resolve-request-network-policy
+                                                            resolve-request-network-policy-for-model
+                                                            sse-phase-timeout-secs)
+                              (C2 C3))
     ("llm/provider-errors.rkt" (provider-error classify-http-status raise-provider-error) (C4))))
 
 (define (marker-policy-datum marker)

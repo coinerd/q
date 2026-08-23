@@ -9,6 +9,7 @@
 ;; v0.99.29 W0 hardening: Made setup idempotent (#:exists 'truncate/replace),
 ;; added diagnostics for skill discovery failures, and per-test temp dir
 ;; isolation to prevent race conditions under raco test.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

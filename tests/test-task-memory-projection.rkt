@@ -1,5 +1,8 @@
 #lang racket/base
+;; @covers runtime/task-memory/projection.rkt
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-task-memory-projection.rkt
 ;; W4 (#8941): Projection — derives a coherent active-task-checkpoint from
 ;; task-ledger-events. This is the "always-on" memory that gets injected

@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-release-repair.rkt
 ;; W9 (#8773): Tests for release-repair.rkt — diagnostic-only release check.
 ;;

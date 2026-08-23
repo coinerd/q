@@ -29,6 +29,7 @@
          loop-counters-iteration
          loop-counters-consecutive-tool-count
          loop-counters-seen-paths
+         loop-counters-edited-paths
          loop-counters-intent-retry-count
          loop-counters-consecutive-error-count
          loop-counters-recent-tool-names
@@ -88,6 +89,9 @@
         ([iteration : Nonnegative-Integer]
          [consecutive-tool-count : Nonnegative-Integer]
          [seen-paths : (Listof String)] ; plain list — avoids TR boundary issues with racket/set
+         [edited-paths
+          :
+          (Listof String)] ; BUG-0016: files edited in the current consecutive-tool streak
          [intent-retry-count : Nonnegative-Integer]
          [consecutive-error-count : Nonnegative-Integer]
          [recent-tool-names : (Listof Any)]
@@ -103,7 +107,7 @@
 (define (make-initial-counters)
   :
   loop-counters
-  (loop-counters 0 0 '() 0 0 '() 0 0 0 '() #f))
+  (loop-counters 0 0 '() '() 0 0 '() 0 0 0 '() #f))
 
 ;; v0.37.4 (FA-04): Bundle loop-evolving parameters into a single struct
 ;; to avoid threading 6+ positional parameters through interpret-step.

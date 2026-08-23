@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; W1 regression tests for v0.99.79 structural-split safety and
 ;; per-call max-old-text-len override.
@@ -59,16 +60,16 @@
                   (when (file-exists? path)
                     (delete-file path)))))
 
-(test-case "default max-old-text-len is still 500"
-  (define original (format "#lang racket/base\n(define long-thing ~a)\n" (make-string 501 #\x)))
+(test-case "default max-old-text-len is still 2000"
+  (define original (format "#lang racket/base\n(define long-thing ~a)\n" (make-string 2001 #\x)))
   (with-temp-rkt
    original
    (lambda (path)
-     (define old-text (make-string 501 #\x))
+     (define old-text (make-string 2001 #\x))
      (define result (tool-edit (hasheq 'path path 'old-text old-text 'new-text "\"short\"")))
      (check-true (tool-result-is-error? result))
      (define msg (result-message result))
-     (check-true (string-contains? msg "500") "default limit should be reported")
+     (check-true (string-contains? msg "2000") "default limit should be reported")
      (check-true (string-contains? msg "max-old-text-len") "error should route to override")
      (check-true (string-contains? msg "do not split") "error should warn against partial splits")
      (check-equal? (file->string path) original))))

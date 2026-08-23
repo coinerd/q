@@ -4,6 +4,8 @@
 ;; GAP-V1: Cross-provider vision image serialization
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../llm/anthropic.rkt"
          "../llm/gemini.rkt"

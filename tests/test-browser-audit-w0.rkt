@@ -7,6 +7,8 @@
 ;; H8: interactive-elements string→symbol key normalization
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          "../browser/types.rkt"
@@ -18,15 +20,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "C5: screenshot observation has 13 fields including interactive-elements and metadata"
-  (define obs (browser-observation ""
-                                   ""
-                                   ""
-                                   ""
-                                   #f #f
-                                   "image/png"
-                                   #"fake"
-                                   '() '()
-                                   #f '() #f))
+  (define obs (browser-observation "" "" "" "" #f #f "image/png" #"fake" '() '() #f '() #f))
   (check-equal? (browser-observation-interactive-elements obs) '())
   (check-false (browser-observation-metadata obs)))
 
@@ -36,30 +30,14 @@
 
 (test-case "H4: oversized screenshot returns #f bytes and mime, not corrupt truncation"
   (define big-bytes (make-bytes 1000 65)) ; 1000 bytes of 'A'
-  (define obs (browser-observation ""
-                                   ""
-                                   ""
-                                   ""
-                                   #f #f
-                                   "image/png"
-                                   big-bytes
-                                   '() '()
-                                   #f '() #f))
+  (define obs (browser-observation "" "" "" "" #f #f "image/png" big-bytes '() '() #f '() #f))
   (define result (enforce-screenshot-max-bytes obs 100))
   (check-false (browser-observation-screenshot-bytes result))
   (check-false (browser-observation-screenshot-mime result)))
 
 (test-case "H4: undersized screenshot preserved unchanged"
   (define small-bytes #"hello")
-  (define obs (browser-observation ""
-                                   ""
-                                   ""
-                                   ""
-                                   #f #f
-                                   "image/png"
-                                   small-bytes
-                                   '() '()
-                                   #f '() #f))
+  (define obs (browser-observation "" "" "" "" #f #f "image/png" small-bytes '() '() #f '() #f))
   (define result (enforce-screenshot-max-bytes obs 10000))
   (check-equal? (browser-observation-screenshot-bytes result) small-bytes)
   (check-equal? (browser-observation-screenshot-mime result) "image/png"))
@@ -72,11 +50,17 @@
   ;; load-browser-settings expects a q-settings? object, so test via default
   ;; and verify the string->symbol logic directly
   (let ([pk "persistent"])
-    (check-equal? (if (string? pk) (string->symbol pk) pk) 'persistent)))
+    (check-equal? (if (string? pk)
+                      (string->symbol pk)
+                      pk)
+                  'persistent)))
 
 (test-case "H5: profile-kind symbol value preserved"
   (let ([pk 'ephemeral])
-    (check-equal? (if (string? pk) (string->symbol pk) pk) 'ephemeral)))
+    (check-equal? (if (string? pk)
+                      (string->symbol pk)
+                      pk)
+                  'ephemeral)))
 
 ;; ---------------------------------------------------------------------------
 ;; H8: interactive-elements key normalization (string→symbol)
@@ -86,13 +70,7 @@
   ;; This tests the normalize-interactive-elements logic indirectly
   ;; by verifying browser-observation can hold properly keyed hashes
   (define elems (list (hasheq 'qId "1" 'tag "button" 'text "Click")))
-  (define obs (browser-observation ""
-                                   ""
-                                   ""
-                                   ""
-                                   #f #f #f #f
-                                   '() '()
-                                   #f elems #f))
+  (define obs (browser-observation "" "" "" "" #f #f #f #f '() '() #f elems #f))
   (define result-elems (browser-observation-interactive-elements obs))
   (check-equal? (length result-elems) 1)
   (define elem (car result-elems))

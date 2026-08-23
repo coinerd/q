@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

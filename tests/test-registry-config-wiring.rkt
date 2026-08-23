@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-registry-config-wiring.rkt — W3 (v0.99.8) Registry Population + Config Tests
 ;;

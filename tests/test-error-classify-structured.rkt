@@ -40,6 +40,7 @@
       (check-true (retryable-error? err)))
 
     ;; Test 5: timeout-error? uses structured category fast path
+    ;; @boundary unit
     (test-case "timeout-error? recognizes structured provider-error"
       (define err (provider-error "test" (current-continuation-marks) (hash) 'timeout #f))
       (check-true (timeout-error? err)))

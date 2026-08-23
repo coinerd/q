@@ -2,6 +2,7 @@
 
 ;; @suite release-smoke
 ;; @speed fast
+;; @boundary integration
 ;; W2 (#9072): fail-closed schema and malicious archive regressions.
 
 (require rackunit

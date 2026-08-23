@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-verifier-complexity-heuristic.rkt
 ;; v0.99.22 §6.1: Tests for complexity-based verifier skip heuristic.

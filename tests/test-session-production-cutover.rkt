@@ -3,6 +3,7 @@
 ;; tests/test-session-production-cutover.rkt
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 ;;
 ;; W3 (#8767): atomic session production cutover — red-first swap tests.
 ;;

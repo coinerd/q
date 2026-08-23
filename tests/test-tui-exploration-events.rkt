@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: io
 
@@ -139,6 +140,6 @@
       (check-false (ui-state-streaming-text s1))
       (check-false (ui-state-streaming-thinking s1)))))
 
-(module+ main
+(module+ test
   (require rackunit/text-ui)
-  (exit (run-tests test-tui-exploration-events)))
+  (run-tests test-tui-exploration-events))

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-sse-shared.rkt — SSE Shared Streaming Tests (T1-2)
 ;; STABILITY: evolving

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-hot-swap-deployment-gate.rkt
 ;; v0.99.18 W2: Hot-Swap Deployment Gate Tests (F-HS-02)

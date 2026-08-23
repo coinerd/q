@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-capability.rkt — Capability taxonomy unit tests
 ;; STABILITY: evolving

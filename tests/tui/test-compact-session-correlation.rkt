@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; W4 A-08 (F-06): TUI compact lifecycle reducer must correlate by SESSION
 ;; identity, not only by request-id. Foreign-session compact events must not

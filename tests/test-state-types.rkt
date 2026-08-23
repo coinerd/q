@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-state-types.rkt — Regression tests for state-types module (AXIS1-F05)
 ;; STABILITY: evolving
@@ -12,6 +13,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/string
          (only-in "../tui/state-types.rkt"
                   ;; Constructor
                   initial-ui-state
@@ -196,7 +198,22 @@
       (check-true (string? (extract-arg-summary (hash)))))
 
     (test-case "extract-arg-summary: string input"
-      (check-true (string? (extract-arg-summary "plain text"))))))
+      (check-true (string? (extract-arg-summary "plain text"))))
+
+    ;; Tool arg summary must show the file path for read/edit instead of the
+    ;; first hash value (e.g. the line limit 156 or old-text snippet). This
+    ;; regression made [TOOL] read:/[TOOL] edit: lines show no filename.
+    (test-case "extract-arg-summary: read tool shows path not limit"
+      (define s (extract-arg-summary (hash 'path "/tmp/foo.rkt" 'limit 156)))
+      (check-true (string-contains? s "foo.rkt")
+                  (format "read summary should contain path, got: ~a" s)))
+
+    (test-case "extract-arg-summary: edit tool shows path not old-text"
+      (define s
+        (extract-arg-summary
+         (hash 'path "q/tui/state.rkt" 'old-text "old content here" 'new-text "new content")))
+      (check-true (string-contains? s "state.rkt")
+                  (format "edit summary should contain path, got: ~a" s)))))
 
 ;; ── Need transcript-entry accessors ──
 (require (only-in "../tui/state-types.rkt"

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-tools.rkt — Memory tools (store/search/delete) tests
 ;;
 ;; Tests the three memory tools with policy gating, error cases,

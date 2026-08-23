@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-gsd-contract-precision.rkt — Contract precision tests for session-state
 ;;

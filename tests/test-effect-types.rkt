@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; tests/test-effect-types.rkt — Effect descriptor type tests (F1)

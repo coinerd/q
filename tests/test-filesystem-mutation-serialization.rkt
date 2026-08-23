@@ -25,6 +25,7 @@
 
 ;; ============================================================
 ;; Tool mutates-filesystem? tests
+;; @boundary integration
 ;; ============================================================
 
 (test-case "make-tool with mutates-filesystem? keyword"

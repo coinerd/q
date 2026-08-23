@@ -46,9 +46,10 @@
    "6. After completing the assigned wave, run its verify command.
 "
    "7. Do NOT call /wave-done; the runtime coordinator owns status transitions only.
-
 "
-   "   Delivery finalization remains external; without trusted delivery evidence the campaign stops before DONE.
+   "   After you return, the coordinator verifies real delivery evidence (expected branch,
+"
+   "   changed wave files, passing verify command). Only that evidence marks the wave DONE.
 "
    "
 "
@@ -109,6 +110,11 @@
    "```\n\n"
    "IMPORTANT: Use `- File: <path>` (singular, one per line) for file references.\n"
    "NOT 'Files:', not prose, not a heading without the dash prefix.\n\n"
+   "FINALIZATION: Do NOT write `gh-wave-start` / `gh-wave-finish` / `gh-board` Action\n"
+   "steps into wave docs. `gh-wave-finish` is QUARANTINED by security policy and always\n"
+   "fails closed (the external authenticated PR workflow is the sole finalization\n"
+   "authority). Waves deliver file-level changes + a scoped Verify command; the\n"
+   "coordinator handles branch/PR/merge/board bookkeeping externally.\n\n"
    "## STEP 3: Write PLAN.md Index\n"
    "Write PLAN.md with:\n"
    "```\n"
@@ -157,7 +163,7 @@
    "Edit rules (non-negotiable):\n"
    "- For removing 3+ consecutive lines, prefer delete-lines (specify start/end line numbers)\n"
    "- Keep each edit ≤20 lines — split large changes into sequential edits\n"
-   "- Keep oldText ≤500 characters — include just enough surrounding context for uniqueness\n"
+   "- Keep oldText ≤2000 characters — include just enough surrounding context for uniqueness\n"
    "- Verify oldText is unique in the file before editing\n"
    "- For Racket files, prefer racket_edit over raw edit for structural changes\n"
    "- After each edit, run format + syntax check before proceeding\n\n"

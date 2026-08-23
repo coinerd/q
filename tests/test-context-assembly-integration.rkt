@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-context-assembly-integration.rkt — Full pipeline integration test
 ;; v0.77.10 M5: Exercises the complete context assembly pipeline with all flags ON.

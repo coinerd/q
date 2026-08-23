@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite arch
+;; @boundary unit
 
 ;; tests/test-projection-truth-v09992.rkt
 ;; v0.99.92 W5 — MA-07 projection hygiene.

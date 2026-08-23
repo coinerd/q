@@ -1,7 +1,9 @@
 #lang racket
+;; @covers extensions/racket-tooling/analysis.rkt
 
 ;; @speed slow
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

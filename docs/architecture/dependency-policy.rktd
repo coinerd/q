@@ -291,6 +291,10 @@
        (risk
         . "OpenAI-compatible provider adapter: request building, SSE parsing, phase-aware timeouts, reasoning_content round-trip; grew with provider hardening (v0.99.78)")
        (owner . "llm"))
+      ("llm/http-helpers.rkt"
+       (risk
+        . "Shared provider HTTP request boundary: URL parsing, status checking, structured failure context with redacted header retention, Retry-After parsing (delta-seconds + HTTP-date), connect/TTFB-bounded sendrecv, and close-once response-port lifecycle; grew with request-lifecycle ownership (v1.00.13 W3/W4)")
+       (owner . "llm"))
       ("sandbox/subprocess.rkt"
        (risk
         . "Shell subprocess execution with resource limits, timeout handling, and output capture; security-sensitive boundary")
@@ -315,6 +319,10 @@
       ("tui/commands.rkt"
        (risk . "TUI command dispatch with slash command routing and mode-specific handling")
        (owner . "tui"))
+      ("gui/main.rkt"
+       (risk
+        . "GUI composition root: window/frame wiring, editor and transcript views, event bridging; broad single-file surface by design")
+       (owner . "gui"))
       ("tui/state-events.rkt"
        (risk . "TUI state event dispatch; large enum of UI event types with high change frequency")
        (owner . "tui"))
@@ -382,4 +390,8 @@
       ("runtime/auto-retry.rkt"
        (risk
         . "Retry engine: exponential backoff, per-type budgets, cumulative ceiling, circuit breakers, partial-recovery unwrap, and cancellation-aware sleep (v0.99.93 #9280)")
-       (owner . "runtime"))))))
+       (owner . "runtime"))
+      ("extensions/gsd/command-handlers.rkt"
+       (risk
+        . "GSD command dispatch + wave prompt builder; grew via delivery-verifier fixes #9382/#9386/#9390; high change frequency")
+       (owner . "extensions"))))))

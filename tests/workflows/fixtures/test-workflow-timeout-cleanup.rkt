@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite workflows
+;; @boundary integration
 
 ;; tests/workflows/fixtures/test-workflow-timeout-cleanup.rkt — Timeout/cleanup tests (#5470)
 ;;

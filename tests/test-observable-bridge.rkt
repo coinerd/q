@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-observable-bridge.rkt — Tests for ui-core/observable-bridge
 

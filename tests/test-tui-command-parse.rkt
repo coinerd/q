@@ -1,7 +1,9 @@
 #lang racket
+;; @covers tui/command-parse.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
          "../tui/command-parse.rkt")

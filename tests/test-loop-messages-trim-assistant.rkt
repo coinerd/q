@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-loop-messages-trim-assistant.rkt — Test trailing assistant message trimming
 ;; in build-raw-messages (safety guard for qwen3/enable_thinking providers)
@@ -26,18 +27,13 @@
   (check-equal? (length result) 4))
 
 (test-case "build-raw-messages: trailing assistant trimmed"
-  (define ctx
-    (list (make-msg 'system "sys")
-          (make-msg 'user "hello")
-          (make-msg 'assistant "hi")))
+  (define ctx (list (make-msg 'system "sys") (make-msg 'user "hello") (make-msg 'assistant "hi")))
   (define result (build-raw-messages ctx))
   (check-equal? (hash-ref (last result) 'role) "user")
   (check-equal? (length result) 2))
 
 (test-case "build-raw-messages: only system + assistant trimmed"
-  (define ctx
-    (list (make-msg 'system "sys")
-          (make-msg 'assistant "hello")))
+  (define ctx (list (make-msg 'system "sys") (make-msg 'assistant "hello")))
   (define result (build-raw-messages ctx))
   ;; After trimming assistant, only system remains
   (check-equal? (hash-ref (last result) 'role) "system"))
@@ -50,8 +46,6 @@
 (test-case "build-raw-messages: multiple trailing assistant messages trimmed once"
   ;; After merge-consecutive-roles, consecutive assistants are merged into one
   (define ctx
-    (list (make-msg 'user "hello")
-          (make-msg 'assistant "hi")
-          (make-msg 'assistant "there")))
+    (list (make-msg 'user "hello") (make-msg 'assistant "hi") (make-msg 'assistant "there")))
   (define result (build-raw-messages ctx))
   (check-equal? (hash-ref (last result) 'role) "user"))

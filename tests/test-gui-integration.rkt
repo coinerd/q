@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; q/tests/test-gui-integration.rkt — Smoke tests for GUI bridge integration
 

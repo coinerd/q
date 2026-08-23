@@ -4,6 +4,7 @@
 ;; @speed slow
 ;; @suite gsd
 ;; @requires provider-key network
+;; @boundary integration
 ;; tests/reproducers/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
 ;;
 ;; Exercises the q:plan → q:go workflow against the real LLM provider

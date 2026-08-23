@@ -35,8 +35,17 @@
          (only-in "plan-context-builder.rkt" current-git-root)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
+                  current-gsd-wave-timeout-retries
                   current-gsd-max-consecutive-tool-calls)
+         (only-in "delivery-verifier.rkt"
+                  delivery-verification?
+                  delivery-verification-approved?
+                  delivery-verification-message)
          (only-in "../../util/iteration/decision.rkt" current-max-consecutive-tool-calls)
+         (only-in "../../runtime/provider-retry.rkt"
+                  current-provider-retry-max-retries
+                  current-provider-retry-stall-max-consecutive
+                  current-provider-retry-ceiling-secs)
          racket/os)
 
 ;; ============================================================
@@ -115,9 +124,43 @@
 ;; A campaign request is the interface-safe execution boundary for /go.  It
 ;; carries durable campaign identity plus callbacks that build one wave prompt
 ;; and verify one completed attempt; interfaces supply only the prompt runner.
-(struct campaign-request (base-dir record prompt-for-wave verifier)
+;; timeout-sec: per-campaign override for the wave budget (current-gsd-wave-
+;; timeout-seconds), resolved at /go time from the --wave-timeout=SECONDS flag,
+;; then ~/.q/config.json wave-timeout-seconds, then the parameter default.
+;; #f → use the current parameter value at execution time. Carried on the
+;; request (not the parameter) because the campaign runs in a separate thread.
+(struct campaign-request (base-dir record prompt-for-wave verifier timeout-sec)
   #:transparent
-  #:constructor-name make-campaign-request)
+  #:constructor-name make-campaign-request/5)
+
+(define (make-campaign-request base-dir
+                               record
+                               prompt-for-wave
+                               verifier
+                               #:timeout-sec [timeout-sec #f])
+  (make-campaign-request/5 base-dir record prompt-for-wave verifier timeout-sec))
+
+;; D8 (#9357): classify a loop-result as an infrastructure failure (provider/
+;; network/SSE timeout) rather than a genuine agent/code failure. Positive
+;; signals: classify-error domain network/provider, a retry-exhausted marker
+;; (the provider retry machinery only retries transient LLM failures), or
+;; stream/SSE/read-timeout messages. A single transient provider stall must
+;; NOT consume a campaign attempt (attempt-4: 30 tools done, then one
+;; 120 s SSE read timeout → wave-failed).
+(define (infra-failure? result)
+  (and (loop-result? result)
+       (eq? (loop-result-termination-reason result) 'error)
+       (let ([meta (loop-result-metadata result)])
+         (and (hash? meta)
+              (let* ([err-type (hash-ref meta 'errorType #f)]
+                     [domain (and (pair? err-type) (car err-type))]
+                     [retries (hash-ref meta 'retries-attempted #f)]
+                     [msg (let ([e (hash-ref meta 'error #f)]) (if (string? e) e ""))])
+                (or (memq domain '(network provider))
+                    (and retries (positive? retries))
+                    (regexp-match?
+                     #rx"read timeout|SSE|stream|circuit|temporarily unavailable|network|connection"
+                     msg)))))))
 
 (define (prompt-run-result->outcome result)
   (cond
@@ -138,6 +181,11 @@
         (wave-execution-outcome 'failed "tool calls remain pending")]
        [(eq? termination 'empty-response)
         (wave-execution-outcome 'failed "model returned an empty response")]
+       [(infra-failure? result)
+        ;; D8 (#9357): transient provider/network/SSE failure — distinct
+        ;; outcome so run-campaign-wave can preserve the attempt.
+        (wave-execution-outcome 'infra-failed
+                                "provider/network failure — wave preserved (attempt not consumed)")]
        [else (wave-execution-outcome 'failed (format "termination reason: ~a" termination))])]
     [(eq? result 'completed) (wave-execution-outcome 'done "")]
     [(eq? result 'ok) (wave-execution-outcome 'done "")]
@@ -148,13 +196,28 @@
   (define base-dir (campaign-request-base-dir request))
   (define record (campaign-request-record request))
   (define plan-id (campaign-plan-id record))
+  ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
+  ;; > parameter) and carried on the request because the campaign runs in a
+  ;; separate thread where a parameterize at /go time would not apply.
+  (define effective-wave-timeout-secs
+    (or (campaign-request-timeout-sec request) (current-gsd-wave-timeout-seconds)))
   ;; Pending-tool cancellation surface: the executor port's cancel-requested?
   ;; reflects the durable campaign cancellation flag so a long-running tool
   ;; loop can abort mid-wave instead of completing after /cancel.
   (define (durable-cancellation-requested?)
     (define observed (load-campaign-record base-dir plan-id))
     (and observed (campaign-record-cancellation observed)))
-  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)])
+  ;; D8 (#9357): campaign-aware provider retry. A single transient SSE read
+  ;; timeout (120 s) must not burn an implementation wave that may have made
+  ;; 30+ tool-call minutes of progress. Scale the interactive retry knobs to
+  ;; wave budget: more retries, more consecutive-stall tolerance, and a
+  ;; cumulative ceiling proportional to the wave timeout (capped at 900 s).
+  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)]
+                 [current-provider-retry-max-retries 5]
+                 [current-provider-retry-stall-max-consecutive 4]
+                 [current-provider-retry-ceiling-secs
+                  (let ([budget effective-wave-timeout-secs])
+                    (min 900 (max 60 (quotient (inexact->exact (floor budget)) 2))))])
     (run-campaign!
      base-dir
      record
@@ -178,7 +241,7 @@
                #:cancel! (current-gsd-wave-cancel!)
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
-     #:timeout-sec (current-gsd-wave-timeout-seconds))))
+     #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
 ;; higher-order values. Keep callbacks process-local and send only an opaque
@@ -249,7 +312,8 @@
                            #:verifier [verifier default-verifier]
                            #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
                            #:fence-token [requested-fence #f]
-                           #:timeout-sec [timeout-sec #f])
+                           #:timeout-sec [timeout-sec #f]
+                           #:timeout-retries [timeout-retries (current-gsd-wave-timeout-retries)])
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
@@ -295,7 +359,20 @@
        (if timeout-sec
            (lambda (idx) (run-wave-with-timeout runner-port timeout-sec idx))
            (gsd-wave-runner-port-run runner-port)))
-     (define run-result (coerce-run-result (run-one wave-idx)))
+     ;; BUG-0017 follow-up: retry a wave whose run exceeds the per-wave budget
+     ;; (timed-out) with a FRESH session (each run-one invocation re-enters the
+     ;; runner port, which the TUI/GUI factory maps to a new session). The
+     ;; attempt is NOT consumed by retries — only final exhaustion persists
+     ;; interrupted (at-least-once). Mirrors the LLM provider-retry ceiling
+     ;; (current-provider-retry-max-retries = 5).
+     (define (run-with-timeout-retry retries-left)
+       (define result (coerce-run-result (run-one wave-idx)))
+       (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
+           (begin
+             (log-info "wave ~a timed out; retrying (~a retries left)" wave-idx (sub1 retries-left))
+             (run-with-timeout-retry (sub1 retries-left)))
+           result))
+     (define run-result (run-with-timeout-retry timeout-retries))
      (define outcome (wave-execution-outcome-kind run-result))
      (define after-run (observe))
      (cond
@@ -320,8 +397,15 @@
               (define verifying (persist-current-status! 'verifying))
               (if (not verifying)
                   (campaign-result 'wave-cancelled '() "stale runner result ignored")
-                  (let* ([approved? (with-handlers ([exn:fail? (lambda (_) #f)])
-                                      (and (verifier wave-idx) #t))]
+                  (let* ([verifier-result (with-handlers ([exn:fail? (lambda (_) #f)])
+                                            (verifier wave-idx))]
+                         [approved? (cond
+                                      [(delivery-verification? verifier-result)
+                                       (delivery-verification-approved? verifier-result)]
+                                      [else (and verifier-result #t)])]
+                         [verifier-message (if (delivery-verification? verifier-result)
+                                               (delivery-verification-message verifier-result)
+                                               "")]
                          [after-verifier (observe)])
                     (cond
                       [(and after-verifier (campaign-record-cancellation after-verifier))
@@ -334,6 +418,7 @@
                                              after-verifier
                                              wave-idx
                                              #:verifier-approve? approved?
+                                             #:verifier-message verifier-message
                                              #:expected-attempt-id expected-id
                                              #:expected-fence-token fence))
                        (define completion-status (completion-result-status result))
@@ -341,7 +426,11 @@
                          (mirror-status! completion-status))
                        (case completion-status
                          [(done) (campaign-result 'wave-done (list wave-idx) "wave completed")]
-                         [(failed) (campaign-result 'wave-failed '() "verifier rejected")]
+                         [(failed)
+                          (campaign-result
+                           'wave-failed
+                           '()
+                           (if (string=? verifier-message "") "verifier rejected" verifier-message))]
                          [(stale-attempt invalid-state)
                           (campaign-result 'wave-cancelled '() "stale completion ignored")]
                          [else
@@ -355,12 +444,42 @@
                                                  (lambda (idx) (wave-slug base-dir idx)))
                  (campaign-result 'wave-failed '() "runner error"))
                (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
+          ;; D8 (#9357): transient provider/network/SSE failure — do NOT
+          ;; consume the attempt. Roll back the begin-attempt! increment,
+          ;; reset the wave to pending, and stop the campaign so the user
+          ;; re-runs /go when the provider is healthy. Avoids both attempt
+          ;; churn (attempt-4: 30 tools done, one 120 s SSE read timeout
+          ;; → wave-failed) and hot-looping on a sick provider.
+          [(infra-failed)
+           (define infra-wave (current-wave-for-attempt after-run wave-idx fence expected-id))
+           (when infra-wave
+             (set-campaign-wave-status! infra-wave 'pending)
+             (set-campaign-wave-attempt-count! infra-wave
+                                               (max 0
+                                                    (sub1 (campaign-wave-attempt-count infra-wave))))
+             (set-campaign-wave-current-attempt! infra-wave #f)
+             (persist-campaign! base-dir after-run)
+             (mirror-status! 'pending))
+           (campaign-result
+            'wave-cancelled
+            '()
+            (format "provider/network failure: ~a — wave preserved (attempt not consumed); re-run /go"
+                    (wave-execution-outcome-message run-result)))]
           [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
           ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
           ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
           ;; completion — the durable record says interrupted, so a restart
           ;; re-attempts the wave (at-least-once, exactly-once event).
-          [(timed-out) (interrupt-current! (wave-execution-outcome-message run-result))]
+          [(timed-out)
+           ;; All retries exhausted. Persist INTERRUPTED per D1 (cancelled/
+           ;; error/timeout stop the campaign) and never emit a completion —
+           ;; the durable record says interrupted, so a restart re-attempts
+           ;; the wave (at-least-once, exactly-once event).
+           (interrupt-current! (if (> timeout-retries 0)
+                                   (format "~a after ~a retries"
+                                           (wave-execution-outcome-message run-result)
+                                           timeout-retries)
+                                   (wave-execution-outcome-message run-result)))]
           [else
            (if (persist-current-status! 'failed)
                (begin
@@ -432,7 +551,8 @@
                                    #:verifier verifier
                                    #:meta-fix-predicate meta-fix-predicate
                                    #:fence-token (add1 (campaign-fence-token current))
-                                   #:timeout-sec timeout-sec))
+                                   #:timeout-sec timeout-sec
+                                   #:timeout-retries (current-gsd-wave-timeout-retries)))
               (define observed (load-campaign-record base-dir plan-id))
               (mirror-durable-statuses! rec observed)
               (case (campaign-result-status result)
@@ -534,6 +654,8 @@
          campaign-result-message
          run-campaign-wave
          run-campaign!
+         prompt-run-result->outcome
+         infra-failure?
          assert-go-n
          campaign-request
          campaign-request?
@@ -542,6 +664,7 @@
          campaign-request-record
          campaign-request-prompt-for-wave
          campaign-request-verifier
+         campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!
          register-campaign-request!

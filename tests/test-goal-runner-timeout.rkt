@@ -30,6 +30,8 @@
 
 ;; ------------------------------------------------------------
 ;; Mock provider — never actually reached on the timeout path.
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; ------------------------------------------------------------
 
 (define (make-mock-provider)

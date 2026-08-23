@@ -1,7 +1,9 @@
 #lang racket/base
+;; @covers runtime/memory/auto-extraction.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-auto-extraction.rkt — Auto-extraction alpha tests
 ;;
 ;; v0.95.10: Tests for automatic memory extraction:

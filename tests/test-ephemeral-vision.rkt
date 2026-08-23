@@ -3,6 +3,8 @@
 ;; test-ephemeral-vision.rkt — Ephemeral vision context management tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../runtime/context-assembly/session-walk.rkt"
          "../util/message/message.rkt"

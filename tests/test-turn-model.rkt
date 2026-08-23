@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; BOUNDARY: unit

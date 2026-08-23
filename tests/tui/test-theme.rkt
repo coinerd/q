@@ -1,6 +1,8 @@
 #lang racket
+;; @covers tui/theme.rkt
 
 ;; @speed fast  ;; @suite tui
+;; @boundary integration
 
 ;; BOUNDARY: io
 

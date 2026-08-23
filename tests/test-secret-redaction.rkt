@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-secret-redaction.rkt
 ;; v0.99.50 W3 (TMUX-07): Centralized credential redaction and leak detection.

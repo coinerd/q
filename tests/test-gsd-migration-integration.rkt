@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite extensions
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

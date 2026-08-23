@@ -10,6 +10,7 @@
 
 ;; ============================================================
 ;; Test suite: util/content-helpers.rkt — content helpers
+;; @boundary unit
 ;; ============================================================
 
 ;; --- result-content->string ---

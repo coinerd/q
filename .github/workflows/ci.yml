@@ -1,5 +1,14 @@
 name: CI
 
+# W3 prepared-environment note (docs/reports/prepared-environment-pilot-v1.00.11.md):
+# The 26 setup-racket call sites below are the ONLY default path for this
+# workflow and remain unchanged until the recorded go decision. The
+# prepared-environment pilot is report-only (.github/workflows/
+# prepared-environment-pilot.yml) and never gates anything here. Rollback
+# switch for any future cutover: repository variable RACKET_PREPARED_ARTIFACT=off
+# restores exactly this per-job path with no change to test selection or L4
+# semantics.
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -72,6 +81,26 @@ jobs:
       - name: Verify lint alignment
         run: racket scripts/check-lint-alignment.rkt
 
+      # Metadata lint (blocking): the repo-owned classifier
+      # scripts/run-tests/classify-metadata.rkt is the SINGLE discovery
+      # implementation for both local and CI. Both modes invoke the exact
+      # same command from the checkout root, so the inventory is identical
+      # by construction (invariants I4/I5). Enforcement flipped at v1.00.06
+      # (the report-only inventory had to reach zero missing tags first).
+      # The W0 known-divergence is RESOLVED: the former wrapper dispatch
+      # (`scripts/run-tests.rkt --lint-metadata`) is deleted so no CI-only
+      # discovery branch remains; the parity contract is pinned by
+      # tests/ci/metadata-discovery-test.rkt + tests/metadata-discovery/fixture/.
+      - name: metadata-inventory (artifact)
+        run: racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > metadata-inventory.json
+      - name: Upload metadata inventory
+        uses: actions/upload-artifact@v7
+        with:
+          name: metadata-inventory-${{ github.sha }}
+          path: metadata-inventory.json
+      - name: metadata-lint (blocking)
+        run: racket scripts/run-tests/classify-metadata.rkt --lint-metadata
+
   # ────────────────────────────────────────────────────────────
   # Gate 2: Sharded test suite — 3 parallel shards on ubuntu
   # Replaces the old single-job full-suite + redundant inter-wave-gate.
@@ -97,17 +126,48 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate (shared deps)
         run: raco make main.rkt
 
       - name: Run test shard ${{ matrix.shard }}/3
+        # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
+        # variable FAST_SHARD_PLAN=active ONLY after the shard-plan-report
+        # job below prints `activate` (predicted max-shard duration improves
+        # over round-robin with test inventory preserved). Default `off`
+        # keeps the round-robin behavior byte-identical.
+        env:
+          FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
         run: |
+          PLAN_ARGS=""
+          if [ "$FAST_SHARD_PLAN" = "active" ]; then
+            PLAN_ARGS="--shard-plan active"
+          fi
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total 3 \
+            $PLAN_ARGS \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — fast shard ${{ matrix.shard }}/3"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Test failure summary
         if: failure()
@@ -125,6 +185,15 @@ jobs:
           path: test-output.log
           retention-days: 7
 
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-fast-${{ matrix.shard }}
+          path: test-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ────────────────────────────────────────────────────────────
   # Gate 2b: Test aggregate — required gate that all shards passed
   # ────────────────────────────────────────────────────────────
@@ -133,6 +202,90 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "All test shards and platform checks passed."
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2b+: Shard-plan report (W7) — report-only, never fails CI
+  # Compares the duration-aware plan (built from this run's retained
+  # per-shard artifacts, W0 schema) against the actual round-robin
+  # shard wall clocks. Activation is a human decision gated on the
+  # printed evidence: set FAST_SHARD_PLAN=active only when this job
+  # reports `activate` (predicted max-shard improves, inventory
+  # preserved). Workflow shards follow later under the same rule.
+  # ────────────────────────────────────────────────────────────
+  shard-plan-report:
+    needs: [test-aggregate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+      - name: Download retained fast-shard artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: test-results-fast-*
+          path: durations-raw
+      - name: Stage per-shard duration JSONs
+        run: |
+          mkdir -p durations
+          i=0
+          for d in durations-raw/test-results-fast-*; do
+            [ -d "$d" ] || continue
+            if [ -f "$d/test-results.json" ]; then
+              cp "$d/test-results.json" "durations/shard-$i.json"
+            fi
+            i=$((i+1))
+          done
+          ls -1 durations/ || true
+      - name: Observed round-robin wall clocks
+        id: observed
+        run: |
+          obs=null
+          if compgen -G "durations/*.json" > /dev/null; then
+            obs=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null) || obs=null
+          fi
+          printf 'observed=%s\n' "$obs" >> "$GITHUB_OUTPUT"
+      - name: Build duration-aware plan (report-only)
+        if: always()
+        run: |
+          if ! compgen -G "durations/*.json" > /dev/null; then
+            echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
+            exit 0
+          fi
+          racket scripts/run-tests.rkt \
+            --suite fast --shard-total 3 \
+            --shard-plan report --durations durations \
+            2>&1 | tee shard-plan-report.log
+      - name: Post predicted-vs-observed summary
+        if: always()
+        run: |
+          {
+            echo "## Shard plan report (W7, report-only)"
+            echo '```'
+            grep -E 'shard [0-9]+/3:|^;; ' shard-plan-report.log || true
+            echo '```'
+            if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
+              echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
+              echo "- Inventory check: planned files must equal the summed per-shard file counts"
+              jq -s '[.[].run_summary.file_count] | add' durations/*.json \
+                | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
+            else
+              echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
+            fi
+            echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          OBSERVED: ${{ steps.observed.outputs.observed }}
+      - name: Upload shard-plan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shard-plan-report
+          path: shard-plan-report.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ────────────────────────────────────────────────────────────
   # Gate 2c: Platform-cross verification
@@ -157,7 +310,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate
         run: raco make main.rkt
@@ -166,7 +319,26 @@ jobs:
         run: |
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite platform --jobs 4 \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — platform subset"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Platform failure summary
         if: failure()
@@ -184,8 +356,26 @@ jobs:
           path: test-output.log
           retention-days: 7
 
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-platform
+          path: test-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ────────────────────────────────────────────────────────────
   # Gate 2d: Racket 8.11 cross-version check (main push only)
+  #
+  # W0 KNOWN-RED (frozen state, see docs/reports/metadata-before-state-v1.00.11.json):
+  #   CI run 32532206128 — this job sets racket-version: '8.11' (below), but
+  #   ci/racket-package-lock.rktd pins a single-runtime lock to Racket 8.10 and
+  #   ci/verify-racket-package-lock.rkt therefore REJECTS the 8.11 runtime, so
+  #   this required gate is red on main. The characterization is pinned by
+  #   tests/ci/verify-lock-selection-test.rkt (8.10 accepted / 8.11 known-red
+  #   rejected / 8.12 rejected). W0 makes NO job config, lock, or lint change;
+  #   the fix lands in W1. This comment block is the only ci.yml change in W0.
   # ────────────────────────────────────────────────────────────
   test-cross-version:
     if: github.event_name == 'push'
@@ -204,7 +394,7 @@ jobs:
           racket-version: '8.11'
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Compile gate
         run: raco make main.rkt
@@ -213,7 +403,26 @@ jobs:
         run: |
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
+            --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — cross-version (Racket 8.11)"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload cross-version test log
         if: always()
@@ -221,6 +430,15 @@ jobs:
         with:
           name: test-cross-version-811
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-cross-version-811
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -242,10 +460,28 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run security test suite (parallel)
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 2>&1 | tee test-output.log
+        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — security"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload security test log
         if: always()
@@ -253,6 +489,15 @@ jobs:
         with:
           name: security-test-output
           path: test-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-security
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -332,7 +577,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Version smoke check
         run: |
@@ -366,14 +611,33 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite workflows --jobs 2 --timeout 90 \
             --shard-index ${{ matrix.shard }} --shard-total 2 \
+            --json-out test-results.json \
             2>&1 | tee workflow-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Test results — workflows shard ${{ matrix.shard }}/2"
+            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                test-results.json || true
+            else
+              grep -m1 'RUN-SUMMARY' workflow-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Workflow failure summary
         if: failure()
@@ -389,6 +653,15 @@ jobs:
         with:
           name: workflow-test-output-${{ matrix.shard }}
           path: workflow-output.log
+          retention-days: 7
+
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-workflows-${{ matrix.shard }}
+          path: test-results.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
@@ -476,7 +749,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Clear stale bytecode
-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run abstraction audit (CI mode)
         run: |
@@ -503,16 +776,42 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run fast suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
 
       - name: Run TUI suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
 
       - name: Run arch suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
 
       - name: Run workflows suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence
+        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
+
+      - name: Gate evidence summary
+        if: always()
+        run: |
+          {
+            for suite in fast tui arch workflows; do
+              echo "## Gate evidence — $suite"
+              f="test-results-$suite.json"
+              if [ -f "$f" ] && command -v jq >/dev/null 2>&1; then
+                jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                       "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)",
+                       "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)"' "$f" || true
+              else
+                grep -m1 'RUN-SUMMARY' "gate-$suite.log" | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gate-evidence JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-gate-evidence
+          path: test-results-*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Strict release readiness check
         run: racket scripts/lint-release-readiness.rkt --strict
@@ -527,3 +826,4 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -20 triple-gate.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+

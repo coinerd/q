@@ -2,6 +2,7 @@
 
 ;; @suite all
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-milestone-close-gate.rkt — Unit tests for milestone-close-gate.rkt
 ;;
 ;; W0: authoritative milestone truth integrated into the closure gate.

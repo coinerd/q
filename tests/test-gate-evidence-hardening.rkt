@@ -5,6 +5,8 @@
 ;; failed/timed-out, zero test count, stale time.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/file
          racket/port

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-hash-backend.rkt — In-memory hash backend tests
 
 (require rackunit

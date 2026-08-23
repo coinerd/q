@@ -10,6 +10,7 @@
 ;; Covers:
 ;;   eval-result struct (transparent, fields)
 ;;   eval-in-sandbox: arithmetic, strings, stdout, errors, timeout defaults
+;; @boundary unit
 
 (require rackunit
          "../sandbox/evaluator.rkt")

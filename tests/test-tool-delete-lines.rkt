@@ -1,7 +1,9 @@
 #lang racket
+;; @covers tools/builtins/delete-lines.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

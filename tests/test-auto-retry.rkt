@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -911,3 +912,41 @@
       (openai-wrap-stream-error (exn:fail "SSL read error" (current-continuation-marks)))))
   (check-pred provider-error? result)
   (check-equal? (provider-error-category result) 'network))
+
+;; ============================================================
+;; [kimi milestone W2]: cumulative ceiling reconciled for 5-retry budget
+;; ============================================================
+
+(test-case "W2-kimi-milestone: default cumulative ceiling accommodates 5 retries"
+  ;; The default ceiling was raised 300 → 900 so a 5-retry budget with 120s
+  ;; per-read timeouts (plus backoff) is reachable. Verify the default.
+  (check-equal? default-cumulative-ceiling-secs
+                900
+                "default cumulative ceiling is 900s (fits 5 × 120s reads + backoff)"))
+
+(test-case "W2-kimi-milestone: ceiling is enforced on retry attempts only"
+  ;; Regression guard for the v0.99.83 fix: the first attempt's duration is
+  ;; legitimate streaming time and must not be penalized. With ceiling=900s
+  ;; (900000ms) and a 200s-per-attempt fake clock, retries 1-4 complete
+  ;; (elapsed 200/400/600/800 < 900) and the ceiling aborts before the 5th
+  ;; retry (1000 > 900).
+  (define fake-clock (box 0))
+  (define (fake-now)
+    (unbox fake-clock))
+  (define retries (box 0))
+  (define result
+    (with-handlers ([retry-exhausted? (lambda (e) 'exhausted)])
+      (with-auto-retry (lambda ()
+                         (set-box! fake-clock (+ (unbox fake-clock) 200000))
+                         (raise (exn:fail:network "timeout" (current-continuation-marks))))
+                       #:max-retries 5
+                       #:per-type-budgets (hash 'timeout 5 'rate-limit 5 'provider-error 5)
+                       #:cumulative-ceiling-secs 900
+                       #:now-proc fake-now
+                       #:on-retry (lambda (a m d e t) (set-box! retries (add1 (unbox retries))))
+                       #:base-delay-ms 0
+                       #:max-delay-ms 0)))
+  ;; attempt1 @200s ok, attempt2 @400s ok, attempt3 @600s ok, attempt4 @800s ok,
+  ;; then attempt5 @1000s → elapsed 1000 > 900 → ceiling aborts before retry 5.
+  (check-equal? result 'exhausted)
+  (check-equal? (unbox retries) 4 "four retries before ceiling cut at 1000s > 900s"))

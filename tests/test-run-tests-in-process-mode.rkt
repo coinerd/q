@@ -2,7 +2,8 @@
 
 ;; @speed fast
 ;; @suite testing
-;; @isolation subprocess
+;; @isolation process
+;; @boundary integration  ;; @mutates fs
 
 (require rackunit
          rackunit/text-ui
@@ -52,7 +53,17 @@
                       mode
                       json-out
                       ledger
-                      _profile)
+                      _profile
+                      _lint-metadata?
+                      _changed-base
+                      _changed-head
+                      _explain?
+                      _impact-dry-run?
+                      _prioritize
+                      _failure-history
+                      _generate-covers-manifest?
+                      _shard-plan
+                      _durations)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -69,7 +80,17 @@
                       default-mode
                       _json-out
                       _ledger
-                      _default-profile)
+                      _default-profile
+                      _lint-metadata2?
+                      _changed-base2
+                      _changed-head2
+                      _explain2?
+                      _impact-dry-run2?
+                      _prioritize2
+                      _failure-history2
+                      _generate-covers-manifest2?
+                      _shard-plan2
+                      _durations2)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 

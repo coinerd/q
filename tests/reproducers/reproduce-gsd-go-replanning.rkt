@@ -3,6 +3,7 @@
 
 ;; @speed slow
 ;; @suite gsd
+;; @boundary integration
 ;; tests/reproducers/test-gsd-go-replanning.rkt
 ;;
 ;; Reproduce the bug where /go execution falls back into planning mode.
@@ -12,6 +13,7 @@
          racket/file
          racket/string
          racket/list
+         racket/system
          racket/runtime-path
          "../../llm/provider.rkt"
          "../../util/event/event-bus.rkt"
@@ -190,10 +192,20 @@
               "ALLOWED — BUG: agent can rewrite PLAN.md via write tool!")))
 
 ;; Run all tests in an isolated project directory.
+;; NOTE: /go hard-requires a reachable git repository (F-7 #9175 + fail-closed
+;; #9347): the delivery verifier checks branch + changed files against the repo.
+;; The fixture must therefore `git init` the temp dir (same as test-gsd-planning.rkt's
+;; with-temp-dir helper) so Test 1 exercises the real execution prompt instead of
+;; the "no Git repository" block message.
 (define test-project-dir (make-temporary-file "q-gsd-replanning-~a" 'directory))
 (dynamic-wind void
               (lambda ()
                 (parameterize ([current-directory test-project-dir])
+                  (define git-bin (find-executable-path "git"))
+                  (when git-bin
+                    (parameterize ([current-output-port (open-output-string)]
+                                   [current-error-port (open-output-string)])
+                      (system*/exit-code git-bin "init" "--quiet")))
                   (test-case "go prompt is execution-oriented"
                     (test-go-prompt))
                   (test-case "gsd mode transitions reach executing"

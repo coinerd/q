@@ -3,6 +3,8 @@
 ;; tests/test-worker-main.rkt — Worker process and worker-tools tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          json

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-state-aware-builder.rkt — tests for state-aware context assembly
 ;; v0.76.0 W2: Extracted module tests

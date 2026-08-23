@@ -1,8 +1,10 @@
 #lang racket/base
+;; @covers extensions/gsd/responsibility-inventory.rkt
 
 ;; tests/test-gsd-responsibility-inventory.rkt — GSD Responsibility & Effect Inventory fitness
 ;; @speed fast
 ;; @suite arch
+;; @boundary integration
 ;;
 ;; v0.99.87 W2 (#9214): enforces that every GSD module under extensions/gsd/ is
 ;; classified in the machine-readable inventory (no unclassified module), that
@@ -102,7 +104,7 @@
       (check-equal? (length on-disk)
                     (length inventory)
                     "inventory must cover every GSD module exactly once")
-      (check-equal? (length inventory) 35 "GSD module count is stable at 35"))
+      (check-equal? (length inventory) 36 "GSD module count is stable at 36"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

@@ -1,6 +1,8 @@
 #lang racket/base
+;; @covers extensions/gsd/wave-completion.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-gsd-wave-completion.rkt — W1: Verifier-First Completion and Lifecycle Truth
 ;;

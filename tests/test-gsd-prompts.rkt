@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/prompts.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -50,6 +52,13 @@
   (check-true (string-contains? p "STEP 2") "has step 2")
   (check-true (string-contains? p "STEP 3") "has step 3")
   (check-true (string-contains? p "STEP 4") "has step 4"))
+
+(test-case "W0: planning-prompt warns against quarantined gh-wave-finish"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "gh-wave-finish") "mentions gh-wave-finish")
+  (check-true (string-contains? p "QUARANTINED") "warns that gh-wave-finish is quarantined")
+  (check-true (string-contains? p "external authenticated PR workflow")
+              "points to the external finalization authority"))
 
 (test-case "planning-prompt mentions planning-read tool"
   (define p (planning-prompt "test"))
@@ -104,7 +113,7 @@
   (define p (executing-prompt plan exec))
   (check-true (string-contains? p "Edit rules") "mentions edit rules")
   (check-true (string-contains? p "\u226420") "mentions 20-line limit")
-  (check-true (string-contains? p "\u2264500") "mentions 500-char limit"))
+  (check-true (string-contains? p "\u22642000") "mentions 2000-char limit"))
 
 ;; ============================================================
 ;; Wave failure prompt

@@ -23,6 +23,7 @@
 ;; Helper: run stream-sse-events against a pipe pre-loaded with lines.
 ;; The pipe output port stays open so the final read blocks → timeout.
 ;; Returns either the timeout exception or the list of yielded chunks.
+;; @boundary unit
 (define (run-stream lines
                     #:initial-timeout [initial 0.4]
                     #:stream-timeout [stream 0.4]

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 ;; tests/test-audit-v09945-w7-creds.rkt — Credentials subsystem real-world audit
 ;;
 ;; Audit of the Credentials subsystem covering:

@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-verifier-wiring.rkt — W0+W1+W3 (v0.99.6) Verifier Wiring Tests
 ;;

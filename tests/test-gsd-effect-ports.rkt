@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/effect-ports.rkt
 ;; @speed fast
 ;; @suite extensions
+;; @boundary unit
 
 (require rackunit
          racket/list

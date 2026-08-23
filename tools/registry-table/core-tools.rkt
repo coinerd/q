@@ -85,12 +85,12 @@
        'type
        "integer"
        'description
-       "Optional per-call override for max old-text length (default 500, ceiling 2000). Use for whole-form replacements only.")))
+       "Optional per-call override for max old-text length (default 2000, ceiling 2000). Use for whole-form replacements only.")))
     tool-edit
     (string-append
      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
      "read tool result. If edit fails, re-read the file first. "
-     "Keep old-text short — ideally under 500 chars (~20 lines). "
+     "Keep old-text short — ideally under 2000 chars (~80 lines). "
      "If you need to replace a whole nested form, pass max-old-text-len explicitly (up to 2000) "
      "and replace the entire form in one edit; do not split a nested form into partial edits. "
      "Set fuzzy? to boolean true only for whitespace drift; ambiguous fuzzy matches are rejected.")

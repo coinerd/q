@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-util-reclassification.rkt — T2-4: util/ reclassification scaffolding
 ;; STABILITY: evolving

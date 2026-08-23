@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -105,4 +106,5 @@
                       (check-false (unbox executed)))
                     clear-approval-channel!))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

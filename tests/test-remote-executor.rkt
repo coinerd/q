@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-remote-executor.rkt — W1 (v0.99.12) Remote Executor Tests
 ;;

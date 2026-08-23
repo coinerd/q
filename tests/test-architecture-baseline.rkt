@@ -1,5 +1,7 @@
 #lang racket
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 (require racket/file
          racket/port
          racket/runtime-path

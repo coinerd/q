@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite extensions
+;; @boundary integration
 
 ;; Regression coverage for campaign-owned TUI session switches. The normal
 ;; session-shutdown hook must remain active, but its GSD reset is suppressed

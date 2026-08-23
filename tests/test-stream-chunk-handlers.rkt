@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-stream-chunk-handlers.rkt — AXIS3-F01: Real chunk classification tests
 ;; STABILITY: evolving

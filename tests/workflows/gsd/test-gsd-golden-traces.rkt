@@ -12,6 +12,7 @@
 ;; injection for a crash between commit and projection.
 ;;
 ;; Every trace covers: commands, FSM transitions, campaign record, PLAN/
+;; @boundary integration
 ;; STATE/wave projections, completion outbox, campaign result and event
 ;; order. Nondeterministic fields are excluded by construction (see
 ;; helpers/gsd-golden-trace.rkt), so each scenario yields one golden trace.

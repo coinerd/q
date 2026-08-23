@@ -1,7 +1,9 @@
 #lang racket
+;; @covers extensions/dynamic-tools.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-browser-playwright-adapter.rkt — Playwright sidecar adapter tests
 
@@ -54,8 +55,7 @@
 
 (define node-available?
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (define-values (sp out in)
-      (subprocess #f #f #f "node" "--version"))
+    (define-values (sp out in) (subprocess #f #f #f "node" "--version"))
     (define status (subprocess-status sp))
     (close-input-port out)
     (close-output-port in)
@@ -66,22 +66,17 @@
 
 (when (and node-available? sidecar-js)
   (test-case "sidecar launches and responds to ping"
-    (define state (launch-sidecar! (path->string sidecar-js)
-                                   #:timeout-ms 5000))
+    (define state (launch-sidecar! (path->string sidecar-js) #:timeout-ms 5000))
     (check-true (playwright-sidecar-state? state))
     (define result (send-command! state "ping" (hasheq)))
     (check-equal? (hash-ref result 'status) "ok")
     (shutdown-sidecar! state #:timeout-ms 3000))
 
   (test-case "sidecar handles unknown command"
-    (define state (launch-sidecar! (path->string sidecar-js)
-                                   #:timeout-ms 5000))
-    (check-exn exn:fail?
-               (lambda ()
-                 (send-command! state "fly" (hasheq) #:timeout-ms 3000)))
+    (define state (launch-sidecar! (path->string sidecar-js) #:timeout-ms 5000))
+    (check-exn exn:fail? (lambda () (send-command! state "fly" (hasheq) #:timeout-ms 3000)))
     (shutdown-sidecar! state #:timeout-ms 3000))
 
   (test-case "make-playwright-adapter creates valid adapter"
-    (define adapter (make-playwright-adapter (path->string sidecar-js)
-                                             #:timeout-ms 5000))
+    (define adapter (make-playwright-adapter (path->string sidecar-js) #:timeout-ms 5000))
     (check-true (browser-adapter? adapter))))

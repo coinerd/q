@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-spawn-subagent-helpers-terminal.rkt
 ;; W1 (TMUX-04): Pure unit tests for typed terminal outcome helpers.

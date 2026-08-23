@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-audit-v09945-w4-mas.rkt — MAS subsystem real-world audit
 ;;
 ;; Audit of the MAS (Multi-Agent System) subsystem covering:

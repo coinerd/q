@@ -32,6 +32,7 @@
                            #:timeout 1))
    (check-true timed-out?))
  ;; --- run-subprocess with #:timeout ---
+ ;; @boundary integration
  (test-case "subprocess: run-subprocess: simple echo"
    (define result (run-subprocess "echo" #:args '("hello world")))
    (check-equal? (subprocess-result-exit-code result) 0)

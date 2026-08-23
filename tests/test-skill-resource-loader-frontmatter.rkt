@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite skills
+;; @boundary unit
 
 ;; tests/test-skill-resource-loader-frontmatter.rkt
 ;; v0.99.28 W1: Frontmatter-aware skill descriptions (V27-B2)

@@ -41,6 +41,8 @@
       (check-equal? (length (remove-duplicates (unbox ids))) 1000))
 
     ;; C2: Drain thread survives timeout
+    ;; @suite default
+    ;; @boundary unit
     (test-case "C2: timeout doesn't block drain thread"
       (define gw #f)
       (dynamic-wind (lambda () (set! gw (start-mock "delay:2")))

@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-release-audit-truth.rkt
 ;; W4 (#8544): Tests for release workflow verdict / audit-truth tooling.
 ;;

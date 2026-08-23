@@ -24,7 +24,22 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
-         "stream.rkt"
+         ;; v1.00.13 W2 (#9466): timeout semantics come ONLY from the policy
+         ;; module (RL-3); stream.rkt is required for the pure mechanism.
+         (only-in "stream.rkt"
+                  stream-sse-events
+                  close-port-after-stream
+                  call-with-request-timeout
+                  read-response-body/timeout)
+         (only-in "request-policy.rkt"
+                  resolve-request-network-policy-for-model
+                  request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
+                  request-network-policy-initial-idle-secs
+                  request-network-policy-thinking-idle-secs
+                  request-network-policy-content-idle-secs
+                  request-network-policy-stream-total-secs
+                  request-network-policy-body-read-budget-secs)
          "http-helpers.rkt"
          "provider-telemetry.rkt"
          (only-in "vision-helpers.rkt" parse-data-url))
@@ -437,9 +452,15 @@
   (define url-str
     (string-append (string-trim base-url "/") "/v1beta/models/" model ":generateContent"))
   (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
+  ;; v1.00.13 W2 (#9466): the resolved request-network policy is the ONLY
+  ;; timeout input (RL-3); the eager-body budget comes from policy.
+  (define policy (resolve-request-network-policy-for-model model))
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
+                              #:timeout (request-network-policy-request-budget-secs policy)
+                              #:connect-timeout (request-network-policy-connect-ttfb-secs policy)
+                              #:read-timeout (request-network-policy-body-read-budget-secs policy)
                               #:status-checker
                               (lambda (sl rb) (check-provider-status! "Gemini" sl rb))))
 
@@ -477,6 +498,11 @@
     (define-values (host path-str port ssl?) (parse-provider-url url-str))
     (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
+    ;; v1.00.13 W2 (#9466): ONE resolved policy per request (RL-3); completes
+    ;; the v1.00.12 SS-6 adapter-parity deferral. Parity change vs the old
+    ;; defaults: thinking window 60 → policy value; total 600 →
+    ;; the policy total budget: 2x request with a 600 s floor, when request > 300.
+    (define policy (resolve-request-network-policy-for-model model-name))
     (define request-custodian (make-custodian))
     (define (cleanup-response!)
       (custodian-shutdown-all request-custodian))
@@ -484,20 +510,25 @@
     (dynamic-wind
      (lambda () (void))
      (lambda ()
-       ;; Wrap initial HTTP request in overall timeout (SEC-11)
+       ;; Wrap initial HTTP request in the policy request budget
        (define result-vec
-         (call-with-request-timeout #:cleanup cleanup-response!
-                                    (lambda ()
-                                      (parameterize ([current-custodian request-custodian])
-                                        (define-values (sl rh rp)
-                                          (http-sendrecv host
-                                                         path-str
-                                                         #:port port
-                                                         #:ssl? ssl?
-                                                         #:method #"POST"
-                                                         #:headers headers
-                                                         #:data body-bytes))
-                                        (vector sl rh rp)))))
+         (call-with-request-timeout
+          #:cleanup cleanup-response!
+          #:timeout (request-network-policy-request-budget-secs policy)
+          (lambda ()
+            (parameterize ([current-custodian request-custodian])
+              (define-values (sl rh rp)
+                (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                                (lambda ()
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:port port
+                                                                 #:ssl? ssl?
+                                                                 #:method #"POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes))
+                                                #:cleanup cleanup-response!))
+              (vector sl rh rp)))))
        (define status-line (vector-ref result-vec 0))
        (define response-headers (vector-ref result-vec 1))
        (define response-port (vector-ref result-vec 2))
@@ -521,7 +552,12 @@
          (log-stream-setup-timing "gemini" _stream-t0)
          (define owned-stream
            (close-port-after-stream
-            (stream-sse-events raw-port (lambda (parsed) (gemini-parse-single-event parsed)))
+            (stream-sse-events raw-port
+                               #:initial-timeout (request-network-policy-initial-idle-secs policy)
+                               #:thinking-timeout (request-network-policy-thinking-idle-secs policy)
+                               #:stream-timeout (request-network-policy-content-idle-secs policy)
+                               #:max-total-timeout (request-network-policy-stream-total-secs policy)
+                               (lambda (parsed) (gemini-parse-single-event parsed)))
             raw-port
             #:cleanup cleanup-response!))
          ;; Transfer only after finalizer registration succeeds.

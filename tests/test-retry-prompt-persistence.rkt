@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite provider
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

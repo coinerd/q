@@ -3,6 +3,7 @@
 ;; @speed fast  ;; @suite arch
 
 ;; q/tests/test-gui-error-boundary.rkt — Tests for gui/views/error-boundary.rkt
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

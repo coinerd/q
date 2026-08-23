@@ -1,7 +1,9 @@
 #lang racket
+;; @covers runtime/credentials/protocol.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; test-credential-protocol.rkt — Verify credential backend protocol contracts (F4)
 ;;

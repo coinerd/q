@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W6 (#8509): Final CI remediation audit evidence tests.
 ;; Verifies the complete CI remediation deliverables are present and

@@ -25,7 +25,18 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
-         "stream.rkt"
+         ;; v1.00.13 W2 (#9466): timeout semantics come ONLY from the policy
+         ;; module (RL-3); stream.rkt is required for the pure mechanism.
+         (only-in "stream.rkt" stream-sse-events close-port-after-stream call-with-request-timeout)
+         (only-in "request-policy.rkt"
+                  resolve-request-network-policy-for-model
+                  request-network-policy-request-budget-secs
+                  request-network-policy-connect-ttfb-secs
+                  request-network-policy-initial-idle-secs
+                  request-network-policy-thinking-idle-secs
+                  request-network-policy-content-idle-secs
+                  request-network-policy-stream-total-secs
+                  request-network-policy-body-read-budget-secs)
          "http-helpers.rkt"
          (only-in "openai-compatible.rkt"
                   openai-build-request-body
@@ -48,9 +59,15 @@
                    "api-version="
                    api-version))
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
+  ;; v1.00.13 W2 (#9466): the resolved request-network policy is the ONLY
+  ;; timeout input (RL-3); the eager-body budget comes from policy.
+  (define model-name (and (hash? body) (hash-ref body 'model #f)))
+  (define policy (resolve-request-network-policy-for-model model-name))
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
+                              #:timeout (request-network-policy-request-budget-secs policy)
+                              #:read-timeout (request-network-policy-body-read-budget-secs policy)
                               #:status-checker check-azure-status!))
 
 (define (check-azure-status! status-line body-bytes)
@@ -119,44 +136,62 @@
     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
+  ;; v1.00.13 W2 (#9466): ONE resolved policy per request (RL-3); completes
+  ;; the v1.00.12 SS-6 adapter-parity deferral. Parity change vs the old
+  ;; defaults: thinking window 60 → policy value; total 600 →
+  ;; the policy total budget: 2x request with a 600 s floor, when request > 300.
+  (define policy
+    (resolve-request-network-policy-for-model
+     (hash-ref (model-request-settings req) 'model model-name)))
   (define request-custodian (make-custodian))
   (define (cleanup-response!)
     (custodian-shutdown-all request-custodian))
   (define stream-owns-port? (box #f))
   (log-stream-setup-timing "azure" _stream-t0)
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (call-with-request-timeout
-                   #:cleanup cleanup-response!
-                   (lambda ()
-                     (parameterize ([current-custodian request-custodian])
-                       (define-values (status-line response-headers response-port)
-                         (if url-port-val
-                             (http-sendrecv host
-                                            path-str
-                                            #:port url-port-val
-                                            #:ssl? ssl?
-                                            #:method "POST"
-                                            #:headers headers
-                                            #:data body-bytes)
-                             (http-sendrecv host
-                                            path-str
-                                            #:ssl? ssl?
-                                            #:method "POST"
-                                            #:headers headers
-                                            #:data body-bytes)))
-                       (check-azure-status! status-line #"")
-                       ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
-                       ;; Bonus: now handles tool_calls deltas (was missing in inline version).
-                       (define owned-stream
-                         (close-port-after-stream
-                          (stream-sse-events response-port
-                                             (lambda (parsed) (list (normalize-openai-chunk parsed))))
-                          response-port
-                          #:cleanup cleanup-response!))
-                       ;; Transfer only after finalizer registration succeeds.
-                       (set-box! stream-owns-port? #t)
-                       owned-stream))))
-                (lambda ()
-                  (unless (unbox stream-owns-port?)
-                    (with-logged-error "request cleanup" (cleanup-response!))))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (call-with-request-timeout
+      #:cleanup cleanup-response!
+      #:timeout (request-network-policy-request-budget-secs policy)
+      (lambda ()
+        (parameterize ([current-custodian request-custodian])
+          ;; v1.00.13 W4 (#9478, RL-4): connect/TTFB bounded by policy;
+          ;; phase 'connect/ttfb.
+          (define-values (status-line response-headers response-port)
+            (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                            (lambda ()
+                                              (if url-port-val
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:port url-port-val
+                                                                 #:ssl? ssl?
+                                                                 #:method "POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes)
+                                                  (http-sendrecv host
+                                                                 path-str
+                                                                 #:ssl? ssl?
+                                                                 #:method "POST"
+                                                                 #:headers headers
+                                                                 #:data body-bytes)))
+                                            #:cleanup cleanup-response!))
+          (check-azure-status! status-line #"")
+          ;; v0.81.0 W1: Replaced inline SSE loop with shared stream-sse-events.
+          ;; Bonus: now handles tool_calls deltas (was missing in inline version).
+          (define owned-stream
+            (close-port-after-stream
+             (stream-sse-events response-port
+                                #:initial-timeout (request-network-policy-initial-idle-secs policy)
+                                #:thinking-timeout (request-network-policy-thinking-idle-secs policy)
+                                #:stream-timeout (request-network-policy-content-idle-secs policy)
+                                #:max-total-timeout (request-network-policy-stream-total-secs policy)
+                                (lambda (parsed) (list (normalize-openai-chunk parsed))))
+             response-port
+             #:cleanup cleanup-response!))
+          ;; Transfer only after finalizer registration succeeds.
+          (set-box! stream-owns-port? #t)
+          owned-stream))))
+   (lambda ()
+     (unless (unbox stream-owns-port?)
+       (with-logged-error "request cleanup" (cleanup-response!))))))

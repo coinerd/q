@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; BOUNDARY: pure
 
@@ -48,13 +49,14 @@
 (define (make-test-counters #:iteration [iter 0]
                             #:consecutive-tool-count [tc 0]
                             #:seen-paths [sp '()]
+                            #:edited-paths [ep '()]
                             #:intent-retry-count [irc 0]
                             #:consecutive-error-count [cec 0]
                             #:recent-tool-names [rtn '()]
                             #:explore-count [ec 0]
                             #:implement-count [ic 0]
                             #:stall-retry-count [src 0])
-  (loop-counters iter tc sp irc cec rtn ec ic src '() #f))
+  (loop-counters iter tc sp ep irc cec rtn ec ic src '() #f))
 
 ;; ============================================================
 ;; compute-step-result tests

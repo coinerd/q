@@ -10,6 +10,7 @@
 ;; Tests mode-for-config, load-extensions-from-dir!, and module exports.
 ;; build-runtime-from-cli is tested implicitly via integration tests
 ;; since it requires full provider setup.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

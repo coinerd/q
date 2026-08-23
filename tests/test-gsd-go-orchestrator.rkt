@@ -1,4 +1,5 @@
 #lang racket/base
+;; @covers extensions/gsd/go-orchestrator.rkt
 
 ;; @speed fast  ;; @suite extensions
 
@@ -6,6 +7,7 @@
 ;;
 ;; TDD tests for:
 ;;   1. One runner call per wave, prompt isolation.
+;; @boundary integration
 ;;   2. No advancement on failure/cancellation.
 ;;   3. Verifier rejection prevents DONE.
 ;;   4. /go N assertion rejects non-earliest wave.
@@ -43,17 +45,22 @@
                   run-campaign!
                   assert-go-n
                   campaign-result-status
+                  campaign-result-message
                   campaign-result-completed-waves
                   acquire-lease
                   release-lease!
                   campaign-lease?
                   make-campaign-request
+                  campaign-request-timeout-sec
                   execute-campaign-request!
                   current-gsd-wave-cancel!
                   find-git-root
                   git-available?)
+         (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
          (only-in "../util/loop-result.rkt" make-loop-result)
-         (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-timeout-seconds))
+         (only-in "../extensions/gsd/policy.rkt"
+                  current-gsd-wave-timeout-seconds
+                  current-gsd-wave-timeout-retries))
 
 ;; ============================================================
 ;; Helpers
@@ -120,6 +127,75 @@
       (define rec (load-or-migrate dir))
       (define result
         (run-campaign-wave dir rec 0 #:runner (lambda (_) 'cancelled) #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "wave-timeout retries up to the configured ceiling (BUG-0017)"
+      ;; A run that keeps exceeding the per-wave budget must be retried with a
+      ;; fresh session up to current-gsd-wave-timeout-retries times before the
+      ;; wave is persisted interrupted (at-least-once, exactly-once).
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define runs (box 0))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 3])
+          (run-campaign-wave dir
+                             rec
+                             0
+                             #:runner (lambda (_)
+                                        (set-box! runs (add1 (unbox runs)))
+                                        (wave-execution-outcome 'timed-out
+                                                                "runner exceeded 1 second(s)"))
+                             #:verifier (lambda (_) #t))))
+      ;; 1 initial + 3 retries = 4 runs, all timed out → interrupted stop.
+      (check-equal? (unbox runs) 4)
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (check-true (string-contains? (campaign-result-message result) "after 3 retries"))
+      (cleanup-tmp dir))
+
+    (test-case "wave-timeout retry succeeds when a later run completes (BUG-0017)"
+      ;; The coordinator must retry with a fresh session and accept a run that
+      ;; completes on a later attempt — a transient budget overrun should not
+      ;; burn the wave.
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define runs (box 0))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 5])
+          (run-campaign-wave dir
+                             rec
+                             0
+                             #:runner
+                             (lambda (_)
+                               (set-box! runs (add1 (unbox runs)))
+                               (if (< (unbox runs) 3)
+                                   (wave-execution-outcome 'timed-out "runner exceeded 1 second(s)")
+                                   'ok))
+                             #:verifier (lambda (_) #t))))
+      (check-equal? (unbox runs) 3)
+      (check-eq? (campaign-result-status result) 'wave-done)
+      (check-eq? (wave-status* rec 0) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "wave-timeout retries=0 preserves single-run fail-closed"
+      ;; Explicitly disabling retries keeps the D8 fail-closed behavior: one
+      ;; run, one timeout, interrupted stop.
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define runs (box 0))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 0])
+          (run-campaign-wave dir
+                             rec
+                             0
+                             #:runner (lambda (_)
+                                        (set-box! runs (add1 (unbox runs)))
+                                        (wave-execution-outcome 'timed-out
+                                                                "runner exceeded 1 second(s)"))
+                             #:verifier (lambda (_) #t))))
+      (check-equal? (unbox runs) 1)
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (cleanup-tmp dir))))
@@ -370,13 +446,44 @@
       (define rec (load-or-migrate dir))
       (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define result
-        (parameterize ([current-gsd-wave-timeout-seconds 0.01])
+        (parameterize ([current-gsd-wave-timeout-seconds 0.01]
+                       [current-gsd-wave-timeout-retries 0])
           (execute-campaign-request! request
                                      (lambda (_)
                                        (sleep 0.1)
                                        (make-loop-result '() 'completed (hasheq))))))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "request #:timeout-sec overrides the wave-budget parameter"
+      ;; /go --wave-timeout=SECONDS and config wave-timeout-seconds
+      ;; resolve to a per-campaign timeout carried on the request. It must
+      ;; override the (default 7200 s) parameter even when the campaign runs
+      ;; in a separate thread — hence the request-carried value, not a
+      ;; parameterize at /go time.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request
+        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:timeout-sec 0.01))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 0])
+          (execute-campaign-request! request
+                                     (lambda (_)
+                                       (sleep 0.1)
+                                       (make-loop-result '() 'completed (hasheq))))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (cleanup-tmp dir))
+
+    (test-case "request timeout-sec carries onto the request struct"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request
+        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:timeout-sec 4321))
+      (check-equal? (campaign-request-timeout-sec request) 4321)
+      (define default-request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (check-false (campaign-request-timeout-sec default-request))
       (cleanup-tmp dir))
 
     (test-case "tool-loop termination fails current wave and stops advancement"

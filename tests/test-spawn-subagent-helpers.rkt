@@ -1,5 +1,7 @@
 #lang racket
 
+;; @covers tools/builtins/spawn-subagent-helpers.rkt
+
 ;; @speed fast
 ;; @suite fast
 
@@ -7,6 +9,7 @@
 ;; Verifies pure functions extracted from spawn-subagent.rkt:
 ;; - normalize-capabilities (deduplicated capability parsing)
 ;; - requires-hitl-approval? (pure capability check)
+;; @boundary unit
 ;; - extract-assistant-text (pure message-to-text extraction)
 ;; - extract-text-summary (pure text truncation)
 

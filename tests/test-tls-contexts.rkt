@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-tls-contexts.rkt — W0 (v0.99.12) mTLS Context Tests
 ;;

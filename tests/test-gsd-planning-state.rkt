@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -86,14 +87,14 @@
 ;; current-max-old-text-len tests
 ;; ============================================================
 
-(test-case "gsd-planning-state: current-max-old-text-len defaults to 500"
+(test-case "gsd-planning-state: current-max-old-text-len defaults to 2000"
   (reset-all-gsd-state!)
-  (check-equal? (current-edit-limit) 500))
+  (check-equal? (current-edit-limit) 2000))
 
 (test-case "set-current-max-old-text-len! sets and reads back"
   (reset-all-gsd-state!)
-  (set-edit-limit! 1200)
-  (check-equal? (current-edit-limit) 1200))
+  (set-edit-limit! 2000)
+  (check-equal? (current-edit-limit) 2000))
 
 (test-case "current-max-old-text-len visible across threads"
   (reset-all-gsd-state!)

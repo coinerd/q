@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/policy.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -11,7 +13,9 @@
 
 (require rackunit
          "../extensions/gsd/policy.rkt"
-         "../extensions/gsd/state-machine.rkt")
+         "../extensions/gsd/state-machine.rkt"
+         (only-in "../runtime/session/session-config.rkt" resolve-max-iterations-hard)
+         (only-in "../runtime/session/session-config.rkt" hash->session-config))
 
 ;; ============================================================
 ;; Explicit campaign budgets
@@ -22,19 +26,56 @@
   (check-true (exact-positive-integer? (current-gsd-wave-max-iterations)))
   (check-true (exact-positive-integer? (current-gsd-max-consecutive-tool-calls))))
 
+(test-case "wave timeout default is 7200 s (per-wave budget)"
+  ;; 2026-08-18 (BUG-0017 follow-up): raised 3600 → 7200 s. A live W3 wave
+  ;; performing area-by-area metadata migration + a grouped-runner audit
+  ;; consumed the full 3600 s budget while making steady, verifiable progress
+  ;; and was killed mid-fix on a real runner defect (ZERO_PARSED/exit-guard).
+  ;; The parameter remains overridable per-campaign (flag / config / parameterize).
+  (check-equal? (current-gsd-wave-timeout-seconds) 7200)
+  ;; BUG-0017 follow-up: the coordinator retries a timed-out wave run with a
+  ;; fresh session up to this many times, mirroring the LLM provider-retry
+  ;; ceiling (current-provider-retry-max-retries = 5).
+  (check-equal? (current-gsd-wave-timeout-retries) 5))
+
 (test-case "executor tool-loop limit clears implementation workloads (D3, issue #9351)"
   ;; Incident 81f9be4b W2: the executor died at the old default of 30
   ;; consecutive tool-only turns (attempt-3, tool-loop.limit-reached) while
   ;; the identical wave completed in the main session with 24-consecutive
-  ;; bursts. Implementation waves must not be policy-killed; 60 is the
-  ;; minimum credible floor.
-  (check-true (>= (current-gsd-max-consecutive-tool-calls) 60)
-              "current-gsd-max-consecutive-tool-calls default is too small for implementation waves"))
+  ;; bursts. Live finding (#9366): a W3 executor was killed at 100 after a
+  ;; productive edit-retry loop (read -> grep -> re-edit). BUG-0016 (2026-08-
+  ;; 18): the breaker is now progress-aware (resets on distinct-file edits)
+  ;; and the campaign ceiling is 600 so a bulk metadata migration touching
+  ;; hundreds of distinct files is never mistaken for a runaway loop.
+  (check-true (>= (current-gsd-max-consecutive-tool-calls) 400)
+              "current-gsd-max-consecutive-tool-calls default is too small for implementation waves")
+  (check-true
+   (<= (current-gsd-max-consecutive-tool-calls) 800)
+   "current-gsd-max-consecutive-tool-calls default is unreasonably high (runaway guard lost)"))
 
 (test-case "GSD session iteration budget caps a larger configured budget"
   (parameterize ([current-gsd-wave-max-iterations 12])
     (check-equal? (gsd-session-iteration-budget 100) 12)
     (check-equal? (gsd-session-iteration-budget 8) 8)))
+
+(test-case "wave iteration budget is high enough for implementation waves"
+  ;; The user observed a live /go wave policy-cancelled at iteration 80
+  ;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]").
+  ;; That hard stop is derived from the wave session's max-iterations budget;
+  ;; with the old default of 50 the hard ceiling was only 80
+  ;; (resolve-max-iterations-hard = max(iter*8/5, 80)). Implementation waves
+  ;; legitimately run many tool turns; the timeout + consecutive-tool breaker
+  ;; are the real bounds, not a tiny iteration ceiling.
+  (check-true (>= (current-gsd-wave-max-iterations) 1000)
+              "current-gsd-wave-max-iterations default is too small; wave is iteration-killed")
+  (define cfg (hash->session-config (hasheq 'max-iterations (current-gsd-wave-max-iterations))))
+  (define derived-hard (resolve-max-iterations-hard cfg (current-gsd-wave-max-iterations)))
+  ;; resolve-max-iterations-hard = max(iter*8/5, 80). With the raised budget the
+  ;; hard ceiling is comfortably in the thousands (e.g. 3200 at 2000), so a wave
+  ;; is bounded by the 7200s timeout and the consecutive-tool breaker, not by
+  ;; an iteration kill at 80.
+  (check-true (>= derived-hard (quotient (* 8 (current-gsd-wave-max-iterations)) 5))
+              "derived hard limit should scale with the soft budget"))
 
 ;; ============================================================
 ;; blocked-tools-for

@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; q/tests/test-gui-ext-integration.rkt — Integration test for extension slots
 

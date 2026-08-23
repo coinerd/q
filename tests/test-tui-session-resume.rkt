@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: io
 
@@ -103,7 +104,34 @@
       ;; Post-resume entry should have ID >= 2
       (define last-entry (first (ui-state-transcript state2)))
       (check-true (>= (transcript-entry-id last-entry) 2)
-                  (format "post-resume ID should be >= 2, got ~a"
-                          (transcript-entry-id last-entry))))))
+                  (format "post-resume ID should be >= 2, got ~a" (transcript-entry-id last-entry))))
+
+    ;; SE4: session.started with the REAL payload shape (session-id hyphen key,
+    ;; as produced by event-struct->hasheq) must NOT reset ui-state-session-id
+    ;; to "" — that regression dropped all later model.stream.thinking events
+    ;; (wave executors showed tools but never thinking). The envelope carries
+    ;; the sid; the handler must fall back to it when the payload lacks
+    ;; sessionId / session-id.
+    (test-case "SE4: session.started real payload keeps session-id; thinking flows"
+      (define state0 (initial-ui-state #:session-id "campaign-sid-1"))
+      ;; Real emit path: payload has 'model sub-hash + 'session-id (hyphen)
+      (define evt
+        (make-test-event "session.started"
+                         (hash 'model (hash 'reason "resume") 'session-id "campaign-sid-1")
+                         #:session-id "campaign-sid-1"))
+      (define state1 (apply-event-to-state state0 evt))
+      (check-equal? (ui-state-session-id state1)
+                    "campaign-sid-1"
+                    "session.started must preserve the campaign session id")
+      ;; Now a thinking delta for the same session must accumulate
+      (define th-evt
+        (make-test-event "model.stream.thinking"
+                         (hash 'delta "hello")
+                         #:session-id "campaign-sid-1"
+                         #:turn-id "turn-9"))
+      (define state2 (apply-event-to-state state1 th-evt))
+      (check-equal? (ui-state-streaming-thinking state2)
+                    "hello"
+                    "thinking delta must accumulate after session.started"))))
 
 (run-tests session-resume-tests)

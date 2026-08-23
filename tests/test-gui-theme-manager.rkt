@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-theme-manager.rkt — Tests for gui/theme-manager.rkt
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W6 v0.99.35: Tests for state-aware-helpers.rkt
 ;; Pure functions extracted from state-aware-builder.rkt.

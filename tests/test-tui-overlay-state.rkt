@@ -1,4 +1,5 @@
 #lang racket
+;; @covers tui/state.rkt
 
 ;; @speed fast  ;; @suite tui
 
@@ -21,6 +22,7 @@
 
     ;; T11: Events arriving while overlay is active
     ;; Risk: Overlay persists, transcript mutates underneath
+    ;; @boundary unit
     (test-case "events during active overlay: transcript mutates underneath"
       (define s0 (initial-ui-state))
       ;; Start a turn to have some context

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-gsd-relaxed-index.rkt — v0.75.7 W2 tests
 ;; Relaxed wave index parser: handles plans without [Status] brackets

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-event-subscriber-characterization.rkt — Characterization tests
 ;; for gui/state-sync.rkt event subscriber behavior.

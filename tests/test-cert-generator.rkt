@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-cert-generator.rkt — W0 (v0.99.12) Certificate Generation Tests
 ;;

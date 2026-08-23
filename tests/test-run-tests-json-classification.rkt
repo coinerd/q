@@ -2,7 +2,8 @@
 
 ;; @speed fast
 ;; @suite testing
-;; @isolation subprocess
+;; @isolation process
+;; @boundary integration  ;; @mutates fs
 
 (require rackunit
          rackunit/text-ui
@@ -86,7 +87,17 @@
                       _mode
                       json-out
                       _ledger
-                      _profile)
+                      _profile
+                      _lint-metadata?
+                      _changed-base
+                      _changed-head
+                      _explain?
+                      _impact-dry-run?
+                      _prioritize
+                      _failure-history
+                      _generate-covers-manifest?
+                      _shard-plan
+                      _durations)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 

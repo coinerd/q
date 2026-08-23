@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-provider-parity-matrix.rkt — Provider parity matrix (v0.99.87 W3)
 ;;
@@ -228,12 +229,16 @@
 ;; ============================================================
 
 (test-case "P8: documented parity gaps remain pinned (per-model timeout, stream error wrap, azure checker)"
-  ;; G2: per-model timeout only in openai-compatible.rkt among provider modules
-  (check-true (string-contains? (file-text "../llm/openai-compatible.rkt")
-                                "effective-request-timeout-for"))
-  (for ([path (in-list '("../llm/anthropic/sse.rkt" "../llm/gemini.rkt" "../llm/azure-openai.rkt"))])
+  ;; G2 (closed by unification W2 #9466): per-model timeout policy is consumed
+  ;; via the resolved request-network policy in ALL provider modules; no
+  ;; adapter reads raw timeout config anymore.
+  (for ([path (in-list '("../llm/openai-compatible.rkt" "../llm/anthropic/sse.rkt"
+                                                        "../llm/gemini.rkt"
+                                                        "../llm/azure-openai.rkt"))])
+    (check-true (string-contains? (file-text path) "resolve-request-network-policy-for-model")
+                (format "~a must consume the resolved policy (G2 unification)" path))
     (check-false (string-contains? (file-text path) "effective-request-timeout-for")
-                 (format "~a unexpectedly uses per-model timeout (G2 changed)" path)))
+                 (format "~a unexpectedly uses raw per-model timeout (G2 changed)" path)))
   ;; G3: stream-phase error wrapping only in openai-compatible.rkt
   (check-true (string-contains? (file-text "../llm/openai-compatible.rkt")
                                 "openai-wrap-stream-error"))

@@ -28,6 +28,8 @@
 
 ;; ---------------------------------------------------------------------------
 ;; SEC-08: send-command! requires pending-sema
+;; @suite default
+;; @boundary unit
 ;; ---------------------------------------------------------------------------
 
 (test-case "SEC-08: send-command! raises when pending-sema is missing"

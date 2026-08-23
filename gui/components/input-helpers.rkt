@@ -91,7 +91,7 @@
                          #:at-start? [at-start? #f]
                          #:at-end? [at-end? #f]
                          #:target [target #f]
-                         #:prefs [prefs (default-preferences)])
+                         #:prefs [prefs (current-preferences)])
   (define kind
     (resolve-key->intent key-code
                          #:shift? shift?

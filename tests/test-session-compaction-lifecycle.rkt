@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary integration
 ;; v0.99.50 W4: durable /compact lifecycle truth.
 
 (require rackunit

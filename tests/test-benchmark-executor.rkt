@@ -8,6 +8,7 @@
 ;; tests/test-benchmark-executor.rkt — Tests for benchmark executor pipeline
 ;;
 ;; Tests the fixed executor: tool registration, timeout handling,
+;; @boundary integration
 ;; channel-based concurrency, and session-info API usage.
 
 (require rackunit

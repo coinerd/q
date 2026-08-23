@@ -40,6 +40,7 @@
 (define text (make-text-part "hello"))
 
 ;; ── Test suite ──
+;; @boundary integration
 
 (define-test-suite
  test-inspect

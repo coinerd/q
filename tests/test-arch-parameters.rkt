@@ -11,6 +11,7 @@
 ;;   1. Agent → Runtime boundary: agent/iteration/ must not acquire NEW
 ;;      runtime/ dependencies beyond the documented exceptions in
 ;;      dependency-policy.rktd's agent-iteration-boundary section.
+;; @boundary unit
 ;;   2. session-config: agent/iteration/ must never import the concrete
 ;;      runtime/session/session-config.rkt implementation. Only the neutral
 ;;      opaque type predicate (util/types/session-config.rkt) is allowed.
@@ -214,9 +215,15 @@
       (for ([e (in-list inventory-entries)])
         (hash-set! counts (caddr e) (add1 (hash-ref counts (caddr e) 0))))
       (displayln (format "INFO: parameter inventory distribution: ~a" (hash->list counts)))
+      ;; Unification W1 (#9461): +2 — current-model-thinking-idle-timeouts and
+      ;; current-model-body-read-timeouts in llm/request-policy.rkt.
+      ;; Unification W2 (#9466): +1 — current-request-mechanism-observer in
+      ;; llm/stream.rkt (conformance observation seam).
+      ;; Unification W3 (#9473): +1 — current-provider-http-sendrecv in
+      ;; llm/http-helpers.rkt (injectable HTTP boundary).
       (check-equal? (length inventory-entries)
-                    187
-                    "parameter inventory should contain 187 audited parameters"))))
+                    199
+                    "parameter inventory should contain 199 audited parameters"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

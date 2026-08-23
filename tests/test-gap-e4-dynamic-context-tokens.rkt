@@ -4,6 +4,8 @@
 ;; v0.97.6 W1: F4+F5 — Dynamic context tokens from model registry + startup log
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/provider/model-registry.rkt"

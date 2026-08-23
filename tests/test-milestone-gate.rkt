@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-milestone-gate.rkt
 ;; W5 (#8522): Tests for milestone-gate.rkt release truth verification.
 ;;

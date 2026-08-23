@@ -99,6 +99,18 @@
 ;; Keyed by session-id; persists across turns within the same session.
 (define session-health-trackers (make-hash))
 
+;; v1.00.08 W2 PN-7: Resolve the per-model cumulative retry ceiling.
+;; providers.<name>.retry-ceiling-secs in session-config settings overrides the
+;; module default (default-cumulative-ceiling-secs). Returns the effective ceiling
+;; in seconds.
+(define (resolve-retry-ceiling-secs config)
+  (let* ([settings (config-settings config)]
+         [model-name (config-model-name config)])
+    (or (and settings
+             model-name
+             (setting-ref* settings `(providers ,(string->symbol model-name) retry-ceiling-secs) #f))
+        default-cumulative-ceiling-secs)))
+
 (provide (contract-out
           [run-provider-turn
            (->* (list? (or/c provider? #f)
@@ -126,7 +138,9 @@
                 (#:hook-dispatcher (or/c procedure? #f)
                                    #:state-aware? (or/c boolean? #f)
                                    #:recent-tool-calls list?)
-                (values list? (or/c hook-result? #f) tiered-context?))]))
+                (values list? (or/c hook-result? #f) tiered-context?))]
+          ;; v1.00.08 W2 PN-7: per-model cumulative retry ceiling resolution.
+          [resolve-retry-ceiling-secs (-> session-config? real?)]))
 
 ;; ============================================================
 ;; ============================================================
@@ -344,15 +358,8 @@
           provider-settings-with-model)))
 
   ;; v0.99.81 W2 PN-7: Resolve cumulative retry ceiling from settings.
-  ;; providers.<name>.retry-ceiling-secs overrides the default (300s).
-  (define retry-ceiling-secs
-    (let* ([settings (config-settings config)]
-           [model-name (config-model-name config)])
-      (or
-       (and settings
-            model-name
-            (setting-ref* settings `(providers ,(string->symbol model-name) retry-ceiling-secs) #f))
-       default-cumulative-ceiling-secs)))
+  ;; providers.<name>.retry-ceiling-secs overrides the default.
+  (define retry-ceiling-secs (resolve-retry-ceiling-secs config))
 
   ;; v0.99.82 W2 NR-3: Resolve provider health gate configuration and tracker.
   ;; providers.<name>.health-window-secs and health-failure-threshold override defaults.

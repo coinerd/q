@@ -1,7 +1,9 @@
 #lang racket/base
+;; @covers runtime/memory/search.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-memory-search.rkt — Search ranking + dedup + supersedes tests
 ;;
 ;; v0.95.13 W2: Tests for runtime/memory/search.rkt

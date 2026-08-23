@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary e2e  ;; @requires terminal
 
 ;; v0.99.50 W3 (TMUX-09): semantic verifier fixtures for every exact
 ;; registered explorer tag. Positive fixtures carry correlated structured

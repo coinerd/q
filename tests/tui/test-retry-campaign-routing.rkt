@@ -11,6 +11,7 @@
 ;; campaign wiring, so durable campaign state never advanced (record stayed
 ;; at "failed attempt-3", lease never rewritten, outbox stale, W3 never
 ;; dispatched) — the campaign wedged at the completion boundary.
+;; @boundary unit
 ;;
 ;; Fix: handle-retry-command detects `[gsd-planning] EXECUTE` prompts and
 ;; routes them through the extension /go pipeline via the cmd-ctx

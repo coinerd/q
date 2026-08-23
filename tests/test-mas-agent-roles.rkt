@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-agent-roles.rkt — Tests for agent-role generics and role stubs
 ;; STABILITY: evolving

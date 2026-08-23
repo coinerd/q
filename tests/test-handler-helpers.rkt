@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W7 v0.99.35: Tests for handler-helpers.rkt
 ;; Pure functions extracted from core-handlers.rkt.

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 ;; Correlated, digest-bound, exactly-once HITL approval delivery.
 
@@ -205,4 +206,5 @@
                       (check-true (approval-request-pending? id digest-a))
                       (check-true (cancel-approval-request! id)))))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

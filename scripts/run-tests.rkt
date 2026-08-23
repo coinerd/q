@@ -57,6 +57,13 @@
          summarize-ledger-results
          ledger-summary-counts
          ledger-entry-matches-result?
+         ;; W8 quarantine expiry (ledger schema `expires_on`):
+         ledger-entry-expired?
+         today-iso8601
+         valid-expires-on?
+         ;; W8 definitive status reporting (pass/fail/timeout/skip kept
+         ;; distinct in JSON + summary records):
+         result-status
          known-profiles
          profile-unavailable-requirements
          profile-skips-test?

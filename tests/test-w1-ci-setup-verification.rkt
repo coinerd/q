@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite ci
+;; @boundary unit
 ;; tests/test-w1-ci-setup-verification.rkt
 ;; v0.99.40 W1: Verify CI setup-racket dependency from v0.99.39
 

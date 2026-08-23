@@ -5,6 +5,8 @@
 ;; Session ID entropy (crypto UUID) and workflow try/finally cleanup.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/match
          "../browser/service.rkt"

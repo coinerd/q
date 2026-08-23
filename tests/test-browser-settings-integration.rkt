@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-browser-settings-integration.rkt — F5: load-browser-settings
 
@@ -50,7 +51,8 @@
   (check-equal? (browser-settings-enabled? loaded) (browser-settings-enabled? default))
   (check-equal? (browser-settings-allowed-schemes loaded) (browser-settings-allowed-schemes default))
   (check-equal? (browser-settings-allowed-domains loaded) (browser-settings-allowed-domains default))
-  (check-equal? (browser-settings-blocked-private-networks? loaded) (browser-settings-blocked-private-networks? default))
+  (check-equal? (browser-settings-blocked-private-networks? loaded)
+                (browser-settings-blocked-private-networks? default))
   (check-equal? (browser-settings-max-sessions loaded) (browser-settings-max-sessions default))
   (check-equal? (browser-settings-profile-kind loaded) (browser-settings-profile-kind default)))
 

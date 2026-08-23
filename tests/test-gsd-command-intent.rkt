@@ -6,6 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/test-gsd-command-intent.rkt — Command intent boundary + corpus tests
+;; @boundary unit
 ;;
 ;; v0.99.89 W3 "Command Parsing & Intent Boundary": the parser stays I/O-free
 ;; and command INTENT is classified purely (command-parser.rkt
@@ -131,6 +132,25 @@
   (check-equal? (command-wave-intent "3.5") #f)
   (check-equal? (command-wave-intent "-1") #f)
   (check-false (command-wave-intent "  ")))
+
+(test-case "command-wave-timeout-arg: --wave-timeout=SECONDS flag"
+  (check-equal? (command-wave-timeout-arg "--wave-timeout=3600") 3600)
+  (check-equal? (command-wave-timeout-arg "3 --wave-timeout=7200") 7200)
+  (check-equal? (command-wave-timeout-arg "--wave-timeout=1800 3") 1800)
+  (check-equal? (command-wave-timeout-arg "") #f)
+  (check-equal? (command-wave-timeout-arg "3") #f)
+  (check-equal? (command-wave-timeout-arg "--wave-timeout") #f)
+  (check-equal? (command-wave-timeout-arg "--wave-timeout=") #f)
+  (check-equal? (command-wave-timeout-arg "--wave-timeout=abc") #f)
+  (check-false (command-wave-timeout-arg "  ")))
+
+(test-case "command-wave-timeout-arg: never collides with wave-intent"
+  ;; The flag is keyword=value, so /go N keeps its trailing-numeric intent
+  ;; while /go --wave-timeout=SECONDS classifies as go-all (no wave number).
+  (check-equal? (command-wave-intent "3 --wave-timeout=7200") #f)
+  (check-equal? (command-wave-timeout-arg "3 --wave-timeout=7200") 7200)
+  (check-equal? (command-wave-intent "--wave-timeout=3600") #f)
+  (check-equal? (command-wave-timeout-arg "--wave-timeout=3600") 3600))
 
 ;; ============================================================
 ;; /go N assertion semantics (pure mirror of assert-go-n)

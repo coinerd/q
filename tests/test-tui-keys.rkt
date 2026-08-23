@@ -8,6 +8,7 @@
 ;;
 ;; BUG-36: Arrow keys, Home, End were not reliably recognized on short keypresses.
 ;; The issue was that tui-read-key used a 0.05s timeout, which was too short
+;; @boundary unit
 ;; for escape sequences (e.g., ESC[A for up arrow) to arrive completely.
 ;;
 ;; These tests verify that handle-key correctly processes arrow keys and

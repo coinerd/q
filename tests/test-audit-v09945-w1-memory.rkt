@@ -8,6 +8,7 @@
 ;;   1. Store/retrieve lifecycle with real-world content shapes
 ;;   2. file-jsonl persistence across "restarts" (new backend from same dir)
 ;;   3. Scope isolation (session vs project vs user)
+;; @boundary integration
 ;;   4. Sensitivity gating (credential-like content blocked)
 ;;   5. Backend switching (hash → file-jsonl)
 ;;   6. Management operations (list, delete)

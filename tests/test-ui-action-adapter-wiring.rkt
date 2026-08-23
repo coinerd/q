@@ -46,6 +46,7 @@
  gui-theme-adapter-tests
  ;; M-2 FIX: Test actual tm-switch-theme! call with mock theme-manager
  ;; F-8: Uses parameterize for proper isolation (no manual save/restore)
+;; @boundary unit
  (test-case "G-TM1: GUI set-theme calls tm-switch-theme! when manager is available"
    (define tm (make-theme-manager))
    (parameterize ([current-gui-theme-manager tm])

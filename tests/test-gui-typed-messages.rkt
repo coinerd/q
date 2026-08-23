@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-typed-messages.rkt — W1: typed gui-message kind field
 ;;

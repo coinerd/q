@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-tui-history-command.rkt
 ;; W0 (#8715): Tests for /history command improvements (V9949-TMUX-05).

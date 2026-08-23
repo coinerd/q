@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; test-memory-nonstreaming-extraction-g1.rkt — W0→W2: Verify extraction works
 ;;; through the full main-loop → agent-turn → streaming-phase chain.

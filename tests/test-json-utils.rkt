@@ -5,6 +5,8 @@
 ;; module boundaries directly.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../util/json/strict-json.rkt"
          "../util/json/canonical-json.rkt")

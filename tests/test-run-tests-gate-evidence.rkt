@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: unit
 ;; Tests for gate evidence v2 in run-tests.rkt (v0.83.1 W1)

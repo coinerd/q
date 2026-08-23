@@ -1,7 +1,9 @@
 #lang racket
+;; @covers llm/model.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

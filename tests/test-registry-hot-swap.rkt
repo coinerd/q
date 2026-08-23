@@ -13,6 +13,8 @@
 ;; v0.99.18 W1 (F-HS-03): Identity verification tests
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../agent/registry.rkt"

@@ -97,7 +97,8 @@
          (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
-                  campaign-result-status)
+                  campaign-result-status
+                  campaign-result-message)
          (only-in "../extensions/gsd/core.rkt"
                   call-with-gsd-campaign-ownership
                   call-with-gsd-owned-session-switch)
@@ -245,9 +246,18 @@
                              ;; orchestrating TUI session.
                              #:lease-owner (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
                           (unless (eq? (campaign-result-status result) 'campaign-complete)
-                            (append-campaign-message! cctx
-                                                      (format "[ERROR] /go campaign stopped: ~a"
-                                                              (campaign-result-status result))))))
+                            ;; BUG-0017: include the campaign-result-message so a
+                            ;; wave-budget timeout is distinguishable from a
+                            ;; cancellation/stale stop at a glance.
+                            (let ([stop-msg (campaign-result-message result)])
+                              (append-campaign-message!
+                               cctx
+                               (if (and stop-msg (not (string=? stop-msg "")))
+                                   (format "[ERROR] /go campaign stopped: ~a (~a)"
+                                           (campaign-result-status result)
+                                           stop-msg)
+                                   (format "[ERROR] /go campaign stopped: ~a"
+                                           (campaign-result-status result))))))))
                       restore-pre-campaign-session!))))))
       (begin
         (append-campaign-message! cctx "[ERROR] No fresh session factory available for /go campaign.")

@@ -49,6 +49,7 @@
          aliases-for
          ;; v0.99.89 W3: pure intent boundary
          command-wave-intent
+         command-wave-timeout-arg
          gsd-command-intent
          go-wave-valid?)
 
@@ -129,6 +130,18 @@
   (define parts (string-split trimmed))
   (define last-part (and (pair? parts) (list-ref parts (sub1 (length parts)))))
   (and last-part (regexp-match? #rx"^[0-9]+$" last-part) (string->number last-part)))
+
+;; Extract an explicit per-wave timeout flag from /go args.
+;; "/go --wave-timeout=3600" → 3600; "/go 3 --wave-timeout=7200" → 7200;
+;; "/go" → #f; "/go 3" → #f. The flag is a keyword=value token (NOT a
+;; trailing bare number), so it never collides with command-wave-intent's
+;; trailing-numeric-token semantics: the last token of a /go N command stays
+;; numeric, and the last token of a /go --wave-timeout=3600 command is
+;; non-numeric (go-all).
+(define (command-wave-timeout-arg arg-text)
+  (define trimmed (string-trim (or arg-text "")))
+  (define m (regexp-match #rx"--wave-timeout=([0-9]+)" trimmed))
+  (and m (string->number (cadr m))))
 
 ;; Classify a parsed command into a neutral intent spec:
 ;;   (go-wave n) | (go-all) | (skip-wave n) | (skip-all)

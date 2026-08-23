@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; BOUNDARY: integration
 
@@ -15,6 +16,7 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   make-campaign-request
                   register-campaign-request!)
+         (only-in "../extensions/gsd/delivery-verifier.rkt" delivery-verification)
          (only-in "../util/loop-result.rkt" make-loop-result)
          racket/file
          racket/string)
@@ -116,6 +118,53 @@
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W0")
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W1")
      (check-equal? factory-count 2))
+   (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+(test-case "BUG-0017: /go stop line includes the campaign-result-message"
+  ;; A wave that fails with a structured message must surface that message in
+  ;; the TUI transcript instead of an opaque status-only stop line.
+  (define dir (make-temporary-file "tui-campaign-msg-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (make-directory* (build-path dir ".planning" "waves"))
+     (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                            (lambda (out) (display "# Plan: TUI\n- [Inbox] W0: One\n" out))
+                            #:exists 'truncate)
+     (define rec (migrate-campaign! dir))
+     (define request
+       (make-campaign-request dir
+                              rec
+                              (lambda (idx) (format "msg-W~a" idx))
+                              (lambda (_)
+                                (delivery-verification #f '() "verifier rejected: bad metadata"))))
+     (define token (register-campaign-request! request))
+     (define cctx
+       (make-test-cctx "/go"
+                       #:factory (lambda ()
+                                   (lambda (_)
+                                     (values 'updated-session
+                                             (make-loop-result '() 'completed (hasheq)))))))
+     (execute-extension-command
+      cctx
+      (unbox (cmd-ctx-state-box cctx))
+      (hasheq 'campaign-token token 'new-session "msg-all" 'text "starting"))
+     ;; Let the campaign thread finish and append its stop line.
+     (let loop ([n 0])
+       (unless (or (> n 50)
+                   (for/or ([e (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))])
+                     (and (eq? (transcript-entry-kind e) 'error)
+                          (string-contains? (transcript-entry-text e) "campaign stopped"))))
+         (sleep 0.02)
+         (loop (add1 n))))
+     (define texts (map transcript-entry-text (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))))
+     (check-true
+      (ormap (lambda (text)
+               (string-contains?
+                text
+                "[ERROR] /go campaign stopped: wave-failed (verifier rejected: bad metadata)"))
+             texts)
+      (format "expected message-bearing stop line, got: ~s" texts)))
    (lambda () (delete-directory/files dir #:must-exist? #f))))
 
 ;; v0.99.97 regression: after a /go campaign fails, /retry must be able to

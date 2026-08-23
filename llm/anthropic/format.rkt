@@ -313,6 +313,15 @@
       (define type (hash-ref block 'type "text"))
       (match type
         ["text" (hasheq 'type "text" 'text (hash-ref block 'text ""))]
+        ;; v1.00.05 W0: Kimi/Anthropic thinking blocks. Preserve the thinking text
+        ;; and signature so the eager-stream adapter can surface delta-thinking.
+        ["thinking"
+         (hasheq 'type
+                 "thinking"
+                 'thinking
+                 (hash-ref block 'thinking "")
+                 'signature
+                 (hash-ref block 'signature #f))]
         ["tool_use"
          (define tc-hash
            (hasheq 'type
@@ -398,6 +407,12 @@
                      #f
                      #f)
                     results))]
+       ;; v1.00.05 W0: thinking delta — Anthropic-compatible providers (kimi)
+       ;; stream extended thinking as thinking_delta chunks.
+       ["thinking_delta"
+        (define thinking (hash-ref delta 'thinking ""))
+        (when (and (string? thinking) (> (string-length thinking) 0))
+          (set! results (cons (make-stream-chunk #f #f #f #f #:delta-thinking thinking) results)))]
        [_ (void)])]
 
     ;; Tool use block starts

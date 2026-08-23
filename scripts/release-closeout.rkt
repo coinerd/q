@@ -195,18 +195,14 @@
 (define (find-milestone-number)
   (let loop ([page 1])
     (define ms
-      (gh-json "api"
-               (format "repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a"
-                       page)))
+      (gh-json "api" (format "repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a" page)))
     (cond
       [(not (list? ms)) #f]
       [(null? ms) #f]
       [else
        (define hits
-         (filter (lambda (m) (equal? (hash-ref m 'title "") (string-append "v" version)))
-                 ms))
-       (or (and (pair? hits) (hash-ref (car hits) 'number #f))
-           (loop (add1 page)))])))
+         (filter (lambda (m) (equal? (hash-ref m 'title "") (string-append "v" version))) ms))
+       (or (and (pair? hits) (hash-ref (car hits) 'number #f)) (loop (add1 page)))])))
 
 ;; Closed issues in the milestone: the note sources from the tracker.
 (define (milestone-issues mn)
@@ -269,7 +265,9 @@
             (hash-ref r 'fixed-in)))
   ;; CHANGELOG.md stays the reviewed source of notes; gen/lint check it.
   (run-racket-script "gen-release-notes" (find-script "gen-release-notes.rkt") version)
-  (run-racket-script "lint-release-notes" (find-script "lint-release-notes.rkt") version))
+  ;; lint-release-notes.rkt's CLI takes --version (F-15 auto-detect fallback);
+  ;; pass it explicitly so the close-out works regardless of invocation cwd.
+  (run-racket-script "lint-release-notes" (find-script "lint-release-notes.rkt") "--version" version))
 
 ;; ---------------------------------------------- stage 2: readiness gate
 

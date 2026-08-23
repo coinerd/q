@@ -17,6 +17,7 @@
          racket/system)
 
 ;; Path segments used by smoke-suite filtering in run-tests.rkt
+;; @boundary integration
 ;; Constructed without literal absolute-path patterns to satisfy lint-tests.rkt
 (define workflows-path-segment (string-append "/" "workflows" "/"))
 (define interfaces-path-segment (string-append "/" "interfaces" "/"))
@@ -439,7 +440,17 @@
                   mode
                   json-out
                   ledger
-                  profile)
+                  profile
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  _shard-plan
+                  _durations)
     (parse '("--repeat" "3")))
   (check-equal? repeat 3)
   (check-false record-gate?))
@@ -459,7 +470,17 @@
                   mode
                   json-out
                   ledger
-                  profile)
+                  profile
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  _shard-plan
+                  _durations)
     (parse '()))
   (check-equal? repeat 1)
   (check-false record-gate?))
@@ -479,7 +500,17 @@
                   mode
                   json-out
                   ledger
-                  profile)
+                  profile
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  _shard-plan
+                  _durations)
     (parse '("--suite" "smoke" "--repeat" "2")))
   (check-equal? suite 'smoke)
   (check-equal? repeat 2)
@@ -504,7 +535,17 @@
                   mode
                   json-out
                   ledger
-                  profile)
+                  profile
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  _shard-plan
+                  _durations)
     (parse '("--record-gate-evidence")))
   (check-true record-gate?))
 
@@ -523,7 +564,17 @@
                   mode
                   json-out
                   ledger
-                  profile)
+                  profile
+                  lint-metadata?
+                  changed-base
+                  changed-head
+                  explain?
+                  impact-dry-run?
+                  prioritize
+                  failure-history
+                  generate-covers-manifest?
+                  _shard-plan
+                  _durations)
     (parse '()))
   (check-false record-gate?))
 

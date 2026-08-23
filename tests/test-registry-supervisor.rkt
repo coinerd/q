@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-registry-supervisor.rkt — W2 (v0.99.8) Registry-Enhanced Supervisor Tests
 ;;

@@ -31,6 +31,7 @@
   (make-message id parent-id role kind (list (make-text-part "hello")) (current-seconds) (hasheq)))
 
 ;; ── Test suite ──
+;; @boundary integration
 
 (define-test-suite
  test-session-index

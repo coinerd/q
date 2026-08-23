@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-gui-goal-commands.rkt — GUI /goal handler tests
 

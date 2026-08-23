@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 ;; tests/test-spawn-approval.rkt
 ;; Tests for fail-closed, digest-bound HITL approval of subagent spawns.

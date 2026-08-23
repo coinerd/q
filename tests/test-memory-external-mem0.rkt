@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-external-mem0.rkt — W0/W5 characterization tests
 ;;;
 ;;; W0: Characterize external backend / Mem0 adapter gaps.
@@ -37,5 +38,4 @@
 (test-case "W0: redact-content removes sensitive data"
   (define result (redact-content "My key is sk-1234567890abcdef and password=secret"))
   (check-true (string? result))
-  (check-false (string-contains? result "sk-1234567890")
-               "redaction should remove secrets"))
+  (check-false (string-contains? result "sk-1234567890") "redaction should remove secrets"))

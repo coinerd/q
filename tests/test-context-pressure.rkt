@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; tests/test-context-pressure.rkt — context pressure event tests
 

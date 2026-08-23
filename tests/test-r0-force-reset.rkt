@@ -12,6 +12,7 @@
 ;;   - Default memory-injection-budget is 500
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary e2e
 
 ;; BOUNDARY: integration
 

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed slow  ;; @suite security
+;; @boundary integration
 
 ;; tests/helpers/test-sandbox.rkt — Canonical test sandbox for environment isolation.
 ;;

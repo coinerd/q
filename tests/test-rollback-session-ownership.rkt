@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; tests/test-rollback-session-ownership.rkt
 ;; Phase 2 + Phase 10: Session lifecycle characterization tests for rollback state.
 ;;

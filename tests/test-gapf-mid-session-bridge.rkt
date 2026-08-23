@@ -4,6 +4,8 @@
 ;; v0.97.5 W1: GAP-F mid-session bridge on state transitions
 
 ;; @speed fast
+;; @suite runtime
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/string

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-streaming-cursor.rkt — Tests for streaming-cursor.rkt
 

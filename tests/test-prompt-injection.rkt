@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-prompt-injection.rkt — Prompt injection effectiveness tests
 ;; v0.76.1 W0: Verify state-aware system prompt instructions are injected correctly.

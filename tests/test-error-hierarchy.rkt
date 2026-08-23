@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-error-hierarchy.rkt — Error hierarchy tests for v0.47.0
 ;; Tests the 4-branch exception hierarchy and category-based predicates.

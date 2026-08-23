@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -110,4 +111,5 @@
       (check-false (string-contains? preview "top-secret"))
       (check-false (string-contains? preview (string #\u001b))))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))
