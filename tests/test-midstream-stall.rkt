@@ -108,3 +108,72 @@
   ;; Attempt 3: minimal stall → progressive break (stall counter = 2)
   (check-equal? (unbox attempt) 3)
   (check-equal? (unbox retries) 2))
+
+;; ============================================================
+;; BUG-0018 W1: keepalive liveness
+;; ============================================================
+;; The phase timeouts are per-read windows: every received line — including
+;; SSE comment heartbeats (`: ...`) and zero-delta data chunks — completes a
+;; read and resets the idle clock. A socket that is demonstrably alive is
+;; therefore never killed by the thinking/content idle window, even when the
+;; window is far shorter than the elapsed wall time; only true silence (no
+;; bytes at all for a whole window) or the total-duration budget raises.
+
+(require (only-in "../llm/stream.rkt" sse-comment-line? exn:fail:network:timeout:stream-phase)
+         racket/port)
+
+;; @speed fast  ;; @suite default
+;; @boundary unit
+(test-case "BUG-0018: heartbeat comment lines are classified as SSE comments"
+  (check-true (sse-comment-line? ": keepalive"))
+  (check-true (sse-comment-line? ":"))
+  (check-false (sse-comment-line? "data: {}")))
+
+;; A writer thread emitting one heartbeat per 20 ms — each individual gap is
+;; under the 50 ms thinking window even though aggregate wall time far exceeds
+;; it, so no idle raise may occur.
+(test-case "BUG-0018: heartbeat-only stream survives past the idle window"
+  (define-values (in out) (make-pipe))
+  (define writer
+    (thread (lambda ()
+              (let loop ([i 0])
+                (when (< i 40) ; ~800 ms total, 16x the 50 ms window
+                  (fprintf out ": hb-~a\n\n" i)
+                  (flush-output out)
+                  (sleep 0.02)
+                  (loop (add1 i))))
+              (fprintf out "data: [DONE]\n\n")
+              (close-output-port out))))
+  (define gen
+    (stream-sse-events in
+                       (lambda (_parsed) '())
+                       #:initial-timeout 0.05
+                       #:stream-timeout 0.05
+                       #:thinking-timeout 0.05
+                       #:max-total-timeout 10))
+  ;; Draining to completion without an idle-timeout raise is the assertion.
+  (define saw-end?
+    (with-handlers ([exn:fail:network:timeout:stream? (lambda (_e) #f)])
+      (let loop ()
+        (define v (gen))
+        (if v
+            (loop)
+            #t))))
+  (check-true saw-end? "heartbeat-only stream was killed by the idle window"))
+
+(test-case "BUG-0018: true silence still raises within the thinking window"
+  (define-values (in _out) (make-pipe))
+  (define raised? #f)
+  (define gen
+    (stream-sse-events in
+                       (lambda (_parsed) '())
+                       #:initial-timeout 0.05
+                       #:stream-timeout 0.05
+                       #:thinking-timeout 0.05
+                       #:max-total-timeout 10))
+  (with-handlers ([exn:fail:network:timeout:stream?
+                   (lambda (e)
+                     (set! raised? #t)
+                     (check-equal? (exn:fail:network:timeout:stream-phase e) 'initial))])
+    (gen))
+  (check-true raised? "silent stream did not raise the idle timeout"))

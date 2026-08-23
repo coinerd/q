@@ -58,7 +58,20 @@
 ;; Hard ceiling on the mid-stream thinking gap regardless of configuration.
 ;; Preserves slow-reasoning models (kimi/glm 300 s) while capping runaway
 ;; overrides such as deepseek's legacy sse-read of 600 s (v1.00.12 SS-2/SS-3).
+;; BUG-0018 W1: retained as the legacy bound; the effective ceiling is the
+;; configurable current-max-thinking-gap-secs parameter below, and explicit
+;; per-model thinking-gap-cap overrides can widen past it.
 (define max-thinking-gap-secs 300)
+
+;; BUG-0018 W1: ops-level ceiling for the thinking-idle window. Default 300
+;; preserves v1.00.12/v1.00.13 semantics exactly. Only consulted when NO
+;; explicit per-model thinking-gap-cap override applies.
+(define current-max-thinking-gap-secs (make-parameter max-thinking-gap-secs))
+
+;; BUG-0018 W1: per-model `thinking-gap-cap` overrides (model-name → seconds),
+;; from `timeouts.models.<model>.thinking-gap-cap`. A cap never narrows the
+;; resolved window below the legacy bound — it can only widen it.
+(define current-model-thinking-gap-caps (make-parameter (hash)))
 
 ;; v1.00.13 (RL-4): dedicated connect+TLS+status+headers bound. An
 ;; established-but-silent peer must not consume the broad request budget.
@@ -128,22 +141,27 @@
   (define overrides (current-model-body-read-timeouts))
   (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
 
+;; BUG-0018 W1: get the per-model thinking-gap-cap override for a model, or #f.
+(define (effective-thinking-gap-cap-for model-name)
+  (define caps (current-model-thinking-gap-caps))
+  (and (hash? caps) model-name (hash-ref caps model-name #f)))
+
 ;; ============================================================
 ;; Resolved policy value
 ;; ============================================================
 
 ;; One resolved request-network policy. Field semantics: see module header.
 (struct request-network-policy
-  (request-budget-secs
-   connect-ttfb-secs
-   initial-idle-secs
-   thinking-idle-secs
-   content-idle-secs
-   stream-total-secs
-   body-read-budget-secs)
+        (request-budget-secs connect-ttfb-secs
+                             initial-idle-secs
+                             thinking-idle-secs
+                             content-idle-secs
+                             stream-total-secs
+                             body-read-budget-secs)
   #:transparent)
 
-(define (positive-duration? v) (and (real? v) (positive? v)))
+(define (positive-duration? v)
+  (and (real? v) (positive? v)))
 
 ;; Fail configuration early: zero/negative durations must never reach
 ;; transport code (PLAN-v1.00.13 §3.2).
@@ -166,32 +184,53 @@
 ;;                  the request budget
 ;;   body-read:     explicit > legacy sse-read > fallback
 ;; Legacy sse-read never influences connect/ttfb, initial, or content.
-(define (resolve-request-network-policy
-         #:request-timeout request-timeout
-         #:sse-read-override [sse-read-override #f]
-         #:thinking-idle-override [thinking-idle-override #f]
-         #:body-read-override [body-read-override #f]
-         #:body-read-fallback [body-read-fallback http-read-timeout-default])
+(define (resolve-request-network-policy #:request-timeout request-timeout
+                                        #:sse-read-override [sse-read-override #f]
+                                        #:thinking-idle-override [thinking-idle-override #f]
+                                        #:body-read-override [body-read-override #f]
+                                        #:body-read-fallback
+                                        [body-read-fallback http-read-timeout-default]
+                                        #:thinking-gap-cap-override [thinking-gap-cap-override #f])
   (check-duration! 'request-timeout request-timeout)
-  (when sse-read-override (check-duration! 'sse-read-override sse-read-override))
-  (when thinking-idle-override (check-duration! 'thinking-idle-override thinking-idle-override))
-  (when body-read-override (check-duration! 'body-read-override body-read-override))
+  (when sse-read-override
+    (check-duration! 'sse-read-override sse-read-override))
+  (when thinking-idle-override
+    (check-duration! 'thinking-idle-override thinking-idle-override))
+  (when body-read-override
+    (check-duration! 'body-read-override body-read-override))
   (check-duration! 'body-read-fallback body-read-fallback)
+  (when thinking-gap-cap-override
+    (check-duration! 'thinking-gap-cap-override thinking-gap-cap-override))
   (define connect-ttfb (min request-timeout connect-ttfb-cap-secs))
   (define initial-idle (min request-timeout initial-idle-cap-secs))
+  ;; BUG-0018 W1: an explicit thinking-gap-cap widens the window past the
+  ;; legacy bound (widen-only precedence); otherwise the configurable ceiling
+  ;; applies exactly as in v1.00.13.
+  (define legacy-thinking (or thinking-idle-override sse-read-override thinking-idle-default-secs))
+  ;; v1.00.13 SS-2/SS-3 bound first: the base window never exceeds 300.
+  (define clamped-thinking (min legacy-thinking max-thinking-gap-secs))
   (define thinking-idle
     (min request-timeout
-         (min (or thinking-idle-override sse-read-override thinking-idle-default-secs)
-              max-thinking-gap-secs)))
+         (if thinking-gap-cap-override
+             ;; Widen-only: an explicit cap can raise, never lower, the
+             ;; clamped legacy bound.
+             (max clamped-thinking thinking-gap-cap-override)
+             (min legacy-thinking (current-max-thinking-gap-secs)))))
   (define content-idle http-stream-timeout-default)
   (define stream-total (max stream-total-floor-secs (* 2 request-timeout)))
   (define body-read (or body-read-override sse-read-override body-read-fallback))
-  (for ([(label v) (in-hash (hash 'connect-ttfb-secs connect-ttfb
-                                  'initial-idle-secs initial-idle
-                                  'thinking-idle-secs thinking-idle
-                                  'content-idle-secs content-idle
-                                  'stream-total-secs stream-total
-                                  'body-read-budget-secs body-read))])
+  (for ([(label v) (in-hash (hash 'connect-ttfb-secs
+                                  connect-ttfb
+                                  'initial-idle-secs
+                                  initial-idle
+                                  'thinking-idle-secs
+                                  thinking-idle
+                                  'content-idle-secs
+                                  content-idle
+                                  'stream-total-secs
+                                  stream-total
+                                  'body-read-budget-secs
+                                  body-read))])
     (check-duration! label v))
   (request-network-policy request-timeout
                           connect-ttfb
@@ -209,7 +248,8 @@
    #:request-timeout (effective-request-timeout-for model-name)
    #:sse-read-override (effective-sse-read-timeout-for model-name)
    #:thinking-idle-override (effective-thinking-idle-timeout-for model-name)
-   #:body-read-override (effective-body-read-timeout-for model-name)))
+   #:body-read-override (effective-body-read-timeout-for model-name)
+   #:thinking-gap-cap-override (effective-thinking-gap-cap-for model-name)))
 
 ;; ============================================================
 ;; v1.00.12 compatibility surface
@@ -222,28 +262,31 @@
 ;;
 ;; Returns (values initial thinking content).
 (define (sse-phase-timeout-secs #:request-timeout request-timeout
-                                #:sse-read-override [sse-read-override #f])
-  (define policy (resolve-request-network-policy
-                  #:request-timeout request-timeout
-                  #:sse-read-override sse-read-override))
+                                #:sse-read-override [sse-read-override #f]
+                                #:thinking-gap-cap-override [thinking-gap-cap-override #f])
+  (define policy
+    (resolve-request-network-policy #:request-timeout request-timeout
+                                    #:sse-read-override sse-read-override
+                                    #:thinking-gap-cap-override thinking-gap-cap-override))
   (values (request-network-policy-initial-idle-secs policy)
           (request-network-policy-thinking-idle-secs policy)
           (request-network-policy-content-idle-secs policy)))
 
-(provide (contract-out
-          [resolve-request-network-policy
-           (->* (#:request-timeout positive?)
-                (#:sse-read-override (or/c positive? #f)
-                 #:thinking-idle-override (or/c positive? #f)
-                 #:body-read-override (or/c positive? #f)
-                 #:body-read-fallback positive?)
-                request-network-policy?)]
-          [resolve-request-network-policy-for-model
-           (-> (or/c string? #f) request-network-policy?)]
-          [sse-phase-timeout-secs
-           (->* (#:request-timeout positive?)
-                (#:sse-read-override (or/c positive? #f))
-                (values positive? positive? positive?))])
+(provide (contract-out [resolve-request-network-policy
+                        (->* (#:request-timeout positive?)
+                             (#:sse-read-override (or/c positive? #f)
+                                                  #:thinking-idle-override (or/c positive? #f)
+                                                  #:body-read-override (or/c positive? #f)
+                                                  #:body-read-fallback positive?
+                                                  #:thinking-gap-cap-override (or/c positive? #f))
+                             request-network-policy?)]
+                       [resolve-request-network-policy-for-model
+                        (-> (or/c string? #f) request-network-policy?)]
+                       [sse-phase-timeout-secs
+                        (->* (#:request-timeout positive?)
+                             (#:sse-read-override (or/c positive? #f)
+                                                  #:thinking-gap-cap-override (or/c positive? #f))
+                             (values positive? positive? positive?))])
          request-network-policy
          request-network-policy?
          request-network-policy-request-budget-secs
@@ -268,6 +311,10 @@
          current-model-sse-read-timeouts
          current-model-thinking-idle-timeouts
          current-model-body-read-timeouts
+         ;; BUG-0018 W1 parameters/accessors
+         current-max-thinking-gap-secs
+         current-model-thinking-gap-caps
+         effective-thinking-gap-cap-for
          ;; Raw config accessors (compatibility home)
          effective-request-timeout-for
          effective-sse-read-timeout-for

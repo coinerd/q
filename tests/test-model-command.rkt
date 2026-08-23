@@ -14,23 +14,33 @@
 ;;   - Model registry integration
 
 (require rackunit
+         racket/file
          "../tui/commands.rkt"
          "../tui/command-parse.rkt"
+         "../tui/commands/context.rkt"
          "../tui/state.rkt"
+         "../tools/tool.rkt"
+         "../runtime/agent-session.rkt"
+         "../runtime/session/session-types.rkt"
+         "../runtime/session/session-config.rkt"
          "../runtime/provider/model-registry.rkt"
-         "../interfaces/cli.rkt")
+         "../interfaces/cli.rkt"
+         "../util/event/event-bus.rkt"
+         "../util/event/event.rkt")
 
 ;; ============================================================
 ;; Test helpers
 ;; ============================================================
 
 (define (make-test-config)
+  ;; 'api-key inline so switch-model! can create providers without env creds
+  ;; (BUG-0018 W2 tests exercise the live-session switch path).
   (hasheq 'providers
           (hasheq 'openai
                   (hasheq 'base-url
                           "https://api.openai.com/v1"
-                          'api-key-env
-                          "OPENAI_API_KEY"
+                          'api-key
+                          "test-key-openai"
                           'default-model
                           "gpt-4o"
                           'models
@@ -38,8 +48,8 @@
                   'anthropic
                   (hasheq 'base-url
                           "https://api.anthropic.com/v1"
-                          'api-key-env
-                          "ANTHROPIC_API_KEY"
+                          'api-key
+                          "test-key-anthropic"
                           'default-model
                           "claude-3-sonnet"
                           'models
@@ -49,10 +59,23 @@
           'default-model
           "gpt-4o"))
 
-(define (make-test-cctx #:model-registry [reg #f])
+(define (make-test-cctx #:model-registry [reg #f] #:event-bus [bus #f])
+  ;; BUG-0018 W2: switch tests need a live agent session — the handler now
+  ;; refuses UI-only switches when no live session exists.
+  (define sess
+    (and reg
+         (make-agent-session (hasheq 'model-name
+                                     "gpt-4o"
+                                     'event-bus
+                                     (make-event-bus)
+                                     'tool-registry
+                                     (make-tool-registry)
+                                     'session-dir
+                                     (path->string (make-temporary-file "q-model-cmd-~a"
+                                                                        'directory))))))
   (cmd-ctx (box (initial-ui-state)) ; state-box
            (box #t) ; running-box
-           #f ; event-bus
+           bus ; event-bus
            #f ; session-dir
            (box #f) ; needs-redraw-box
            (and reg (box reg)) ; model-registry-box
@@ -61,7 +84,7 @@
            (box "") ; input-text-box
            (box #f)
            #f ; session-factory-runner
-           (box #f) ; agent-session-box
+           (box sess) ; agent-session-box
            (box #f))) ; goal-cancel-box
 
 ;; Extract transcript text from a cmd-ctx
@@ -199,3 +222,44 @@
                   "resolve-model returns correct provider name")
     (check-equal? (model-resolution-model-name r) "gpt-4" "resolve-model returns correct model name"))
   (check-equal? (default-model reg) "gpt-4o" "default-model returns gpt-4o"))
+
+;; ============================================================
+;; BUG-0018 W2: /model switch reaches the request path
+;; ============================================================
+(let* ([reg (make-model-registry-from-config (make-test-config))]
+       [bus (make-event-bus)]
+       [events (box '())]
+       [_ (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list evt)))))]
+       [cctx (make-test-cctx #:model-registry reg #:event-bus bus)])
+  (check-equal? (process-slash-command cctx '(model "gpt-3.5-turbo")) 'continue)
+  (define sess (unbox (cmd-ctx-agent-session-box cctx)))
+  ;; The live session actually switched.
+  (check-equal? (agent-session-model-name sess)
+                "gpt-3.5-turbo"
+                "session model-name updated by /model switch")
+  ;; The explicit override marker is set, so path-derived resolution cannot
+  ;; clobber the switch on the next prompt (BUG-0018 R-B1).
+  (check-true (config-model-override (agent-session-config sess))
+              "explicit model override marker recorded")
+  ;; A guaranteed model.switched event was published (BUG-0018 R-B2).
+  (define switched
+    (for/first ([e (in-list (unbox events))]
+                #:when (equal? (event-ev e) "model.switched"))
+      e))
+  (check-not-false switched "model.switched event published")
+  (when switched
+    (check-equal? (hash-ref (event-payload switched) 'model) "gpt-3.5-turbo")
+    (check-equal? (hash-ref (event-payload switched) 'provider) "openai")))
+
+(test-case "BUG-0018: next constructed provider-settings carries the switched model"
+  ;; Mirrors turn-orchestrator's request-path resolution: the config hash is
+  ;; the single source of truth for the settings 'model value, and it must
+  ;; reflect the switched model after handle-model-command.
+  (define reg (make-model-registry-from-config (make-test-config)))
+  (define cctx (make-test-cctx #:model-registry reg))
+  (process-slash-command cctx '(model "gpt-3.5-turbo"))
+  (define sess (unbox (cmd-ctx-agent-session-box cctx)))
+  (define cfg (agent-session-config sess))
+  (check-equal? (config-model-name cfg)
+                "gpt-3.5-turbo"
+                "config model-name (request-path source) reflects the switch"))

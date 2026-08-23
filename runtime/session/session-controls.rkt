@@ -65,7 +65,10 @@
          (if (session-config? config)
              (session-config->hash config)
              config))
-       (define updated (hash-set config-hash 'model-name model-name))
+       (define updated
+         ;; BUG-0018 W2: mark the explicit runtime override so path-derived
+         ;; model resolution cannot clobber this switch on later prompts.
+         (hash-set (hash-set config-hash 'model-name model-name) 'model-override #t))
        (guarded-set-config! sess
                             (if (session-config? config)
                                 (hash->session-config updated)
@@ -102,7 +105,11 @@
       (if (session-config? config)
           (session-config->hash config)
           config))
-    (define updated (hash-set config-hash 'model-name resolved-model))
+    (define updated
+      ;; BUG-0018 W2: also record the explicit override marker so the request
+      ;; path (turn-orchestrator / context build) honors this switch on every
+      ;; subsequent prompt.
+      (hash-set (hash-set config-hash 'model-name resolved-model) 'model-override #t))
     (guarded-set-config! sess
                          (if (session-config? config)
                              (hash->session-config updated)

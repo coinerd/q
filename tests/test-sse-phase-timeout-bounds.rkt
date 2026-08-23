@@ -28,6 +28,7 @@
          (only-in "../llm/stream.rkt"
                   http-stream-timeout-default
                   stream-sse-events
+                  current-max-thinking-gap-secs
                   exn:fail:network:timeout:stream?
                   exn:fail:network:timeout:stream-phase
                   exn:fail:network:timeout:stream-received-any-data?)
@@ -103,7 +104,7 @@
       (check-true (<= (first (phase 900 ov)) 120)
                   (format "initial exceeded 120 for override ~a" ov))))
 
-  (test-case "SS-3 invariant: thinking never exceeds min(request, 300)"
+  (test-case "SS-3 invariant: thinking never exceeds min(request, 300) without a cap override"
     (for* ([req (in-list requests-sweep)]
            [ov (in-list overrides-sweep)])
       (define result (phase req ov))
@@ -112,6 +113,46 @@
       (check-true
        (<= (second result) (min req 300))
        (format "thinking ~a exceeds min(req,300) for req=~a ov=~a" (second result) req ov))))
+
+  ;; ————————————————————————————————————————————————————
+  ;; BUG-0018 W1: thinking-gap-cap override rows
+  ;; ————————————————————————————————————————————————————
+  (define (phase-capped req ov cap)
+    (call-with-values (lambda ()
+                        (sse-phase-timeout-secs #:request-timeout req
+                                                #:sse-read-override ov
+                                                #:thinking-gap-cap-override cap))
+                      list))
+
+  (test-case "BUG-0018: glm-style cap 900 widens the thinking window to 900"
+    (check-equal? (phase-capped 900 #f 900) (list 120 900 60))
+    (check-equal? (phase-capped 900 600 900) (list 120 900 60)))
+
+  (test-case "BUG-0018: cap is widen-only — never below the legacy bound"
+    (check-equal? (phase-capped 900 600 100) (list 120 300 60))
+    (check-equal? (phase-capped 900 #f 50) (list 120 120 60)))
+
+  (test-case "BUG-0018: request budget still clamps a widened cap"
+    (check-equal? (phase-capped 300 #f 900) (list 120 300 60)))
+
+  (test-case "BUG-0018: initial/content bounds unaffected by cap overrides"
+    (for ([cap (in-list (list 1 120 300 301 600 900 100000))])
+      (define r (phase-capped 900 600 cap))
+      (check-true (<= (first r) 120) "initial widened by cap")
+      (check-equal? (third r) 60 "content widened by cap")))
+
+  (test-case "BUG-0018: default ceiling parameter preserves v1.00.12 semantics"
+    (check-equal? (parameterize ([current-max-thinking-gap-secs 300])
+                    (phase 900 600))
+                  (list 120 300 60))
+    ;; Raising the ops-level ceiling widens an sse-read override past 300.
+    (check-equal? (parameterize ([current-max-thinking-gap-secs 600])
+                    (phase 900 600))
+                  (list 120 600 60))
+    ;; ...but never without an explicit override source.
+    (check-equal? (parameterize ([current-max-thinking-gap-secs 600])
+                    (phase 900 #f))
+                  (list 120 120 60)))
 
   (test-case "all phase results positive across the full sweep"
     (for* ([req (in-list requests-sweep)]

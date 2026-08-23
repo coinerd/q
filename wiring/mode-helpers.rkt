@@ -33,7 +33,8 @@
                   current-model-timeouts
                   current-model-sse-read-timeouts
                   current-model-thinking-idle-timeouts
-                  current-model-body-read-timeouts)
+                  current-model-body-read-timeouts
+                  current-model-thinking-gap-caps)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
@@ -135,13 +136,21 @@
           acc)))
   (current-model-thinking-idle-timeouts (wire-model-key 'thinking-idle))
   (current-model-body-read-timeouts (wire-model-key 'body-read))
+  ;; BUG-0018 W1: wire per-model thinking-gap-cap overrides
+  ;; (timeouts.models.<model>.thinking-gap-cap). Widens the SSE thinking-idle
+  ;; window past the legacy 300 s bound for silent-reasoning models
+  ;; (e.g. glm-5.3 deep-think gaps >300 s).
+  (current-model-thinking-gap-caps (wire-model-key 'thinking-gap-cap))
   ;; Non-fatal deprecation signal for the legacy `sse-read` key: it now maps
   ;; only to thinking-idle/body-read (llm/request-policy.rkt) and will be
   ;; removed after v1.00.13. Docs: docs/provider-retry.md (W5).
   (for ([(k v) (in-hash models-config)])
     (when (and (hash? v) (hash-has-key? v 'sse-read))
-      (log-warning (format "wiring: timeouts.models.~a.sse-read is deprecated in v1.00.13; \
-use thinking-idle and/or body-read instead" k)))))
+      (log-warning
+       (format
+        "wiring: timeouts.models.~a.sse-read is deprecated in v1.00.13; \
+use thinking-idle and/or body-read instead"
+        k)))))
 
 ;; Apply memory settings from config to current parameters.
 ;; Sets injection budget from settings.

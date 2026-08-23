@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.00.13-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-1.00.14-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -208,7 +208,7 @@ bin/q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-bin/q --version            # q version 1.00.13
+bin/q --version            # q version 1.00.14
 raco test tests/           # run the full test suite
 ```
 
@@ -281,7 +281,7 @@ q/
 ├── runtime/        Agent session, compaction, resource loading, auth
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
-├── tests/          Full test suite (1365 files)
+├── tests/          Full test suite (1366 files)
 ├── tools/          Tool registry, scheduler, 27 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
@@ -294,16 +294,16 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 1365 |
-| Source modules | 843 |
+| Test files | 1366 |
+| Source modules | 844 |
 <<<<<<< HEAD
-| Source lines | 154880 |
-| Test lines | 242151 |
-| Test assertions | 37213 |
+| Source lines | 155125 |
+| Test lines | 242418 |
+| Test assertions | 37251 |
 =======
-| Source lines | 154880 |
-| Test lines | 242151 |
-| Test assertions | 37213 |
+| Source lines | 155125 |
+| Test lines | 242418 |
+| Test assertions | 37251 |
 >>>>>>> origin/main
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -418,6 +418,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v1.00.14** — Added
 
 **v1.00.13** — Features
 

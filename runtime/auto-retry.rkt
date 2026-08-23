@@ -28,6 +28,8 @@
          held-request?
          minimal-output-stall?
          stall-severity
+         silent-thinking-overflow?
+         silent-overflow-guidance
          default-stall-min-output-chars
          default-stall-max-consecutive
          default-cumulative-ceiling-secs
@@ -447,6 +449,30 @@
     [else 'partial-output]))
 
 ;; ============================================================
+;; BUG-0018 W3: silent-thinking overflow economics
+;; ============================================================
+
+;; A silent-thinking overflow: the stream was alive (data received) and sat
+;; in the thinking phase the whole window but produced ZERO visible chars
+;; before the idle timeout. This is the glm-5.3 deep-think signature from
+;; BUG-0018 — the model reasons silently longer than the window. Blindly
+;; restarting discards nothing (no output yet) but re-pays the full input
+;; cost and typically overflows again; retry economics treat it specially.
+(define (silent-thinking-overflow? exn)
+  (and (exn:fail:network:timeout:stream? exn)
+       (exn:fail:network:timeout:stream-received-any-data? exn)
+       (eq? (exn:fail:network:timeout:stream-phase exn) 'thinking)
+       (= (exn:fail:network:timeout:stream-output-chars exn) 0)))
+
+;; Guidance surfaced when a silent-thinking overflow exhausts its (single)
+;; retry budget — tells the operator the two real fixes instead of burning
+;; more blind restarts.
+(define silent-overflow-guidance
+  (string-append "silent-thinking overflow: the model produced no visible output within the "
+                 "thinking window. Raise timeouts.models.<model>.thinking-gap-cap in config, "
+                 "or switch models with /model <name>."))
+
+;; ============================================================
 ;; Retry logic
 ;; ============================================================
 
@@ -523,6 +549,14 @@
               (and is-minimal-stall? (>= new-consecutive stall-max-consecutive)))
             (when (and on-circuit-break progressive-break?)
               (on-circuit-break 'progressive-stall exn))
+            ;; BUG-0018 W3: silent-thinking overflows get exactly ONE retry.
+            ;; A second consecutive overflow is systematic (the model reasons
+            ;; silently longer than the window); further blind restarts just
+            ;; re-pay input tokens, so break and surface guidance instead.
+            (define is-silent-overflow? (silent-thinking-overflow? exn))
+            (define silent-overflow-break? (and is-silent-overflow? (>= current-type-count 1)))
+            (when (and on-circuit-break silent-overflow-break?)
+              (on-circuit-break 'silent-thinking-overflow exn))
             ;; v0.99.82 W2 NR-3: Health gate. If provided, health-check-proc is
             ;; called before the retry decision. If it returns #f, the provider
             ;; is unhealthy and retry is denied.
@@ -533,6 +567,7 @@
                                   (cancellation-token-cancelled? cancellation-token)))
                         (not (held-request? exn))
                         (not progressive-break?)
+                        (not silent-overflow-break?)
                         (or (not health-check-proc) (health-check-proc exn attempt))
                         (< attempt max-retries)
                         (< current-type-count type-budget))
@@ -558,6 +593,14 @@
                                          delay-history)))
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
+               ;; BUG-0018 W3: exponential backoff keyed to elapsed thinking
+               ;; time — a silent overflow already consumed a full thinking
+               ;; window; back off proportionally so the provider has room to
+               ;; breathe before the next attempt.
+               (define overflow-base
+                 (if is-silent-overflow?
+                     (max rl-base (* 4 rl-base))
+                     rl-base))
                ;; v1.00.13 W3 (#9473, RL-7): retry delay comes from the
                ;; structured failure context (Retry-After read from the
                ;; actual response header at the request boundary), never
@@ -565,7 +608,7 @@
                (define retry-after-ms (structured-retry-after-ms exn))
                (define next-delay
                  (compute-retry-delay attempt
-                                      rl-base
+                                      overflow-base
                                       max-delay-ms
                                       (or retry-after-ms 0)
                                       (current-random-source)))
@@ -594,7 +637,12 @@
                   (raise (retry-cancelled "retry aborted by cancellation"
                                           (current-continuation-marks)))]
                  [(> attempt 0)
-                  (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
+                  (raise (retry-exhausted (format "~a (after ~a retries)~a"
+                                                  (exn-message exn)
+                                                  attempt
+                                                  (if is-silent-overflow?
+                                                      (string-append " — " silent-overflow-guidance)
+                                                      ""))
                                           (current-continuation-marks)
                                           exn
                                           attempt
