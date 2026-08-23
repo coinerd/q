@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-goal-tui.rkt — TUI goal event reducer + display tests
 

@@ -11,7 +11,8 @@
                          collapse-blank-lines?
                          tabs-to-spaces?
                          tab-width
-                         trim-boundary-blank-lines?)
+                         trim-boundary-blank-lines?
+                         strip-leading?)
   #:transparent)
 
 (struct nline (pairs newline-idx) #:transparent)
@@ -22,16 +23,24 @@
                                               [collapse-blank-lines? boolean?]
                                               [tabs-to-spaces? boolean?]
                                               [tab-width exact-positive-integer?]
-                                              [trim-boundary-blank-lines? boolean?]))
+                                              [trim-boundary-blank-lines? boolean?]
+                                              [strip-leading? boolean?]))
           [default-normalization-options normalize-options?]
+          [leading-whitespace-normalization-options normalize-options?]
           [normalize-text (->* (string?) (normalize-options?) string?)]
           [similarity-score (-> string? string? real?)]
           [fuzzy-find-matches
            (->* (string? string?) (#:threshold real? #:options normalize-options?) (listof pair?))]
           [fuzzy-find-match
-           (->* (string? string?) (#:threshold real? #:options normalize-options?) (or/c pair? #f))]))
+           (->* (string? string?) (#:threshold real? #:options normalize-options?) (or/c pair? #f))]
+          [leading-ws-find-matches (-> string? string? (listof pair?))]))
 
-(define default-normalization-options (normalize-options #t #t #t #t 2 #t))
+(define default-normalization-options (normalize-options #t #t #t #t 2 #t #f))
+
+;; Conservative normalization used by the edit-tool auto-fallback: only
+;; leading whitespace per line may differ (indentation drift). Everything
+;; else must match exactly, so a match here is unambiguous about content.
+(define leading-whitespace-normalization-options (normalize-options #f #t #f #f 2 #f #t))
 
 (define (emit-pair ch idx pairs)
   (cons (cons ch idx) pairs))
@@ -90,6 +99,15 @@
          [(trailing-strip-char? (caar remaining) opts) (loop (cdr remaining))]
          [else (reverse remaining)]))]))
 
+(define (strip-leading-pairs pairs)
+  ;; Drop leading whitespace chars (spaces/tabs) so indentation drift is
+  ;; tolerated while all content chars stay byte-exact.
+  (let loop ([remaining pairs])
+    (cond
+      [(null? remaining) '()]
+      [(char-whitespace? (caar remaining)) (loop (cdr remaining))]
+      [else remaining])))
+
 (define (pairs->string pairs)
   (list->string (map car pairs)))
 
@@ -101,10 +119,14 @@
     (if (normalize-options-tabs-to-spaces? opts)
         (expand-tabs (nline-pairs line) (normalize-options-tab-width opts))
         (nline-pairs line)))
+  (define lead-stripped
+    (if (normalize-options-strip-leading? opts)
+        (strip-leading-pairs tabbed)
+        tabbed))
   (define stripped
     (if (normalize-options-strip-trailing? opts)
-        (strip-trailing-pairs tabbed opts)
-        tabbed))
+        (strip-trailing-pairs lead-stripped opts)
+        lead-stripped))
   (nline stripped (nline-newline-idx line)))
 
 (define (trim-boundary-blank-lines lines opts)
@@ -275,3 +297,27 @@
   ;; Return a match only when normalization identifies one unique span.
   (define matches (fuzzy-find-matches content old-text #:threshold threshold #:options opts))
   (and (= (length matches) 1) (car matches)))
+
+(define (leading-ws-find-matches content old-text)
+  ;; Auto-fallback matcher: tolerate leading-whitespace (indentation) drift
+  ;; only. Threshold 1.0 forces the match to be byte-exact after stripping
+  ;; leading whitespace per line — no fuzzy similarity, no ambiguity.
+  (define raw-spans
+    (fuzzy-find-matches content
+                        old-text
+                        #:threshold 1.0
+                        #:options leading-whitespace-normalization-options))
+  ;; The normalized coordinate mapping points at the first non-whitespace char
+  ;; of the first matched line (leading whitespace was stripped). Expand the
+  ;; span back only over whitespace so the replacement covers the file's
+  ;; original indentation exactly as an exact match would. If the match begins
+  ;; mid-line (preceded by non-whitespace), keep the raw span unchanged.
+  (for/list ([span (in-list raw-spans)])
+    (define original-start (car span))
+    (define expanded-start
+      (let loop ([i original-start])
+        (cond
+          [(or (zero? i) (char=? (string-ref content (sub1 i)) #\newline)) i]
+          [(char-whitespace? (string-ref content (sub1 i))) (loop (sub1 i))]
+          [else original-start])))
+    (cons expanded-start (cdr span))))

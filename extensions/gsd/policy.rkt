@@ -19,6 +19,7 @@
          gsd-decide-action
          blocked-tools-for
          current-gsd-wave-timeout-seconds
+         current-gsd-wave-timeout-retries
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
          gsd-session-iteration-budget)
@@ -57,21 +58,63 @@
         value
         (raise-argument-error who "exact-positive-integer?" value))))
 
+(define (nonnegative-integer-guard who)
+  (lambda (value)
+    (if (exact-nonnegative-integer? value)
+        value
+        (raise-argument-error who "exact-nonnegative-integer?" value))))
+
 ;; One wave owns one fresh runtime session and cannot run indefinitely. These
 ;; parameters make the production policy explicit while keeping focused tests
 ;; deterministic. Tool calls are bounded by the runtime's existing
 ;; consecutive-tool circuit breaker; no command or shell parsing is involved.
+;; v1.00.03: default raised 1800 → 3600 s (per-wave budget). A live W5 wave
+;; with a scoped verify command legitimately needs up to ~40 min of tool-turn
+;; work; the old 30-minute cap policy-cancelled real implementation waves
+;; that were mid-edit on a large TUI file. The budget is now also overridable
+;; per-campaign via ~/.q/config.json (wave-timeout-seconds) and via
+;; /go --wave-timeout=SECONDS.
+;; 2026-08-18 (BUG-0017 follow-up): default raised 3600 → 7200 s. A live W3
+;; wave performing area-by-area metadata migration + a grouped-runner audit
+;; consumed the full 3600 s budget while making steady, verifiable progress
+;; and was killed mid-fix on a real runner defect (ZERO_PARSED/exit-guard).
 (define current-gsd-wave-timeout-seconds
-  (make-parameter 1800 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+  (make-parameter 7200 (positive-real-guard 'current-gsd-wave-timeout-seconds)))
+
+;; BUG-0017 follow-up (2026-08-18): a wave whose run exceeds the per-wave
+;; budget (timed-out) is retried with a fresh session up to this many times,
+;; mirroring the campaign's LLM provider-retry ceiling
+;; (current-provider-retry-max-retries = 5 in go-orchestrator). The attempt is
+;; NOT consumed by retries — only final exhaustion persists interrupted.
+(define current-gsd-wave-timeout-retries
+  (make-parameter 5 (nonnegative-integer-guard 'current-gsd-wave-timeout-retries)))
+;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
+;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
+;; real implementation wave was policy-cancelled at iteration 80 mid-work
+;; ("[SYS] [executing... iteration 79, 1 remaining before hard stop]" then
+;; wave-cancelled). A wave is a fresh session doing a bounded chunk of work
+;; within the 3600s timeout; the iteration ceiling is a runaway guard, not a
+;; completion cap. Raise it so implementation waves are never iteration-killed
+;; while the timeout and the 100-consecutive-tool breaker still bound runaway
+;; loops. The derived hard limit scales with the budget.
 (define current-gsd-wave-max-iterations
-  (make-parameter 50 (positive-integer-guard 'current-gsd-wave-max-iterations)))
+  (make-parameter 2000 (positive-integer-guard 'current-gsd-wave-max-iterations)))
 ;; D3 (#9351): raised from 30 — incident 81f9be4b W2 died at exactly 30
 ;; consecutive tool-only turns (attempt-3) while the identical wave completed
 ;; in the main session with 24-consecutive bursts. Implementation waves
-;; legitimately exceed the old default; 100 keeps the runaway-loop guard
-;; without policy-killing real work.
+;; legitimately exceed the old default; 100 kept the runaway-loop guard
+;; without policy-killing real work. v1.00.03 live finding (2026-08-17): a W3
+;; executor spent 100 consecutive tool-only turns on a productive edit-retry
+;; loop (read -> grep -> re-edit after a leading-whitespace mismatch) and was
+;; policy-killed at the ceiling. The edit-tool whitespace auto-fallback
+;; (#9366) removes the root-cause trigger, but recovery loops that re-read and
+;; re-grep before retrying should not be killed either.
+;; BUG-0016 (2026-08-18): the breaker is now progress-aware (compute-next-
+;; counters resets on distinct-file edits), and the campaign ceiling is 600
+;; so a bulk metadata migration that touches hundreds of distinct files is
+;; never mistaken for a runaway loop.
 (define current-gsd-max-consecutive-tool-calls
-  (make-parameter 100 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
+  (make-parameter 600 (positive-integer-guard 'current-gsd-max-consecutive-tool-calls)))
 
 (define (gsd-session-iteration-budget configured-max)
   (unless (exact-positive-integer? configured-max)

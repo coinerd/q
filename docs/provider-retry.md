@@ -107,7 +107,7 @@ bounds the **total wall-clock** across all retry attempts.
 {
   "providers": {
     "deepseek": {
-      "retry-ceiling-secs": 300
+      "retry-ceiling-secs": 900
     }
   }
 }
@@ -115,7 +115,7 @@ bounds the **total wall-clock** across all retry attempts.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `providers.<name>.retry-ceiling-secs` | `300` (5 min) | Maximum cumulative wall-clock across all retries for a single turn. |
+| `providers.<name>.retry-ceiling-secs` | `900` (15 min) | Maximum cumulative wall-clock across all retries for a single turn. |
 
 When the cumulative elapsed time exceeds the ceiling, the turn fails immediately
 with a `retry-exhausted` exception naming the ceiling.
@@ -138,6 +138,120 @@ Each adaptive decision emits `provider.adaptive-retry` with the retry attempt,
 error class, original/reduced message counts and token estimates,
 original/reduced `max-tokens`, and `floorReached`.
 
+## Resolved Request-Network Policy (v1.00.13)
+
+Every provider request — streaming or non-streaming, on every adapter —
+consumes ONE resolved `request-network-policy` produced by
+`llm/request-policy.rkt` (`resolve-request-network-policy-for-model`).
+Adapters translate wire formats only; they never interpret raw timeout
+configuration and never author generic lifecycle constants
+(`tests/test-request-policy-architecture.rkt` enforces this; the
+cross-adapter harness `tests/test-provider-network-policy-conformance.rkt`
+proves all four adapters pass identical values into the shared mechanism).
+
+| Field | Value | Kind | Purpose |
+|-------|-------|------|---------|
+| `request-budget-secs` | per-model `request` | budget | Whole-request wall clock (unchanged meaning) |
+| `connect-ttfb-secs` | `min(request, 120)` | bound | connect+TLS+status+headers; an established-but-silent peer can never consume the request budget (phase `'connect/ttfb` on timeout) |
+| `initial-idle-secs` | `min(request, 120)` | bound | Dead-peer detection before the first byte; never widened by config |
+| `thinking-idle-secs` | `min(request, min(or override 120, 300))` | bound | Silent reasoning window |
+| `content-idle-secs` | 60 | bound | Per-chunk gap once content flows; never widened by config |
+| `stream-total-secs` | `max(600, 2×request)` | budget | Total stream wall clock — a **deadline**, not an inactivity detector |
+| `body-read-budget-secs` | explicit `body-read` > legacy `sse-read` > 120 | budget | Eager/non-streaming full-body read |
+
+**Deadline vs inactivity.** `stream-total-secs` and `request-budget-secs`
+bound how long a *healthy* stream may run; the idle bounds
+(initial/thinking/content/connect) detect *liveness*. Widening a budget can
+never hide a stall: every blocking read is additionally capped at the
+remaining total budget (`min(phase-idle, remaining-total)`), so a read can
+never overshoot the deadline by a full phase window.
+
+### Semantic config keys (new) and `sse-read` deprecation
+
+```
+timeouts.models.<model>.request        # unchanged
+timeouts.models.<model>.thinking-idle  # NEW: silent-reasoning window (cap 300)
+timeouts.models.<model>.body-read      # NEW: eager full-body read budget
+timeouts.models.<model>.sse-read       # DEPRECATED (still honored, see below)
+```
+
+Legacy `sse-read` compatibility (one resolver owns this mapping, nothing
+else reads it):
+
+- `thinking-idle`: explicit `thinking-idle` > legacy `sse-read` > 120, capped at 300 and by the request budget.
+- `body-read`: explicit `body-read` > legacy `sse-read` > 120 fallback.
+- Legacy `sse-read` **never** influences connect/TTFB, initial, or content.
+
+Migration examples: a DeepSeek config with only `request: 900,
+sse-read: 600` resolves to thinking 300 (capped), initial 120, content 60,
+total 1800, body-read 600 — the slow-body allowance is preserved without
+letting the safety detectors widen. A Kimi config with `sse-read: 300`
+keeps its 300 s thinking window and 300 s body-read. Explicit
+`thinking-idle`/`body-read` keys always win over the legacy alias.
+`wiring/mode-helpers.rkt` logs a deprecation warning when it sees
+`sse-read`; removal is planned after v1.00.13.
+
+### Structured failure context and Retry-After
+
+HTTP status and retry-relevant response headers survive the request boundary
+in a structured failure context (`kind`, `http-status`, redacted
+`response-headers`, parsed `retry-after-ms`). Sensitive headers
+(Authorization, Set-Cookie, provider tokens) are dropped — only
+`Retry-After` and `x-ratelimit-*` are retained.
+
+`Retry-After` is read from the actual response header (delta-seconds and
+HTTP-date forms; the clock is injectable for deterministic tests) and
+consumed by auto-retry as structured metadata. No retry decision parses
+human exception text (the pre-v1.00.13 path fed the whole message to a
+string parser).
+
+### Heartbeat-aware held-request classification
+
+The circuit breaker now consults heartbeat metadata: a stream that received
+SSE comments (`: ...` keep-alives) proved the peer is alive
+(live-but-no-content) and is **not** classified as a held request, while a
+zero-liveness silent 200 still trips the breaker immediately. Heartbeat-only
+streams remain bounded by the total deadline and the empty/comment flood
+ceiling (100 consecutive empty lines).
+
+| Condition | Classification | Retries? |
+|-----------|---------------|----------|
+| zero data, zero heartbeats, `phase=initial` | `'held-request` | **No** — circuit breaker fires |
+| heartbeat-only, `phase=initial` | live-but-no-content | **Yes** — bounded by total deadline + flood ceiling |
+| `phase='connect/ttfb` | silent connection head | **Yes** — bounded at ≤ 120 s, far below the request budget |
+| data received, `<100 chars`, consecutive | `'minimal-output` | **No** — progressive breaker after 2 stalls |
+| `phase='thinking` or `'content` | mid-stream stall | **Yes** — full retry budget |
+
+Every stream timeout raises `exn:fail:network:timeout:stream` whose message
+carries the stable diagnostic suffix:
+
+```
+... waiting for SSE chunk [phase=<initial|thinking|content> data-received=<yes|no> chars=<n>]
+```
+
+The struct fields remain the machine source of truth; the suffix is rendered
+for logs and human triage.
+
+### Architecture (ownership direction)
+
+```
+raw config → llm/request-policy.rkt (resolver + invariants)
+           → provider adapter (wire format/auth only)
+           → request lifecycle (HTTP ownership/headers/deadlines)
+           → stream/body mechanism (enforces resolved bounds)
+           → structured outcome/failure
+           → retry policy / TUI presentation
+```
+
+Regression locks: `tests/test-request-network-policy.rkt` (resolver matrix),
+`tests/test-provider-network-policy-conformance.rkt` (cross-adapter parity),
+`tests/test-request-policy-architecture.rkt` (ownership rules R1–R5),
+`tests/test-network-failure-context.rkt` (structured failures),
+`tests/test-provider-response-cleanup.rkt` (close-once lifecycle),
+`tests/test-stream-liveness-classification.rkt` (liveness matrix),
+`tests/test-sse-phase-timeout-bounds.rkt` (phase-bound semantics).
+
+
 ## Retry Behavior Summary
 
 | Parameter | Default | Description |
@@ -146,7 +260,7 @@ original/reduced `max-tokens`, and `floorReached`.
 | `base-delay-ms` | 1000 | Base delay for exponential backoff |
 | `rate-limit-base-delay-ms` | 10000 | Base delay for rate-limit (429) errors |
 | `max-delay-ms` | 60000 | Maximum delay cap |
-| `retry-ceiling-secs` | 300 | Cumulative wall-clock ceiling (W2) |
+| `retry-ceiling-secs` | 900 | Cumulative wall-clock ceiling (W2) |
 
 Backoff uses exponential growth (`base * 2^attempt`) with full jitter
 (random value in `[0, exponential-cap]`), capped at `max-delay-ms`.

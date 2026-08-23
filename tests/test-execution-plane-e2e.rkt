@@ -9,6 +9,8 @@
 ;; These tests spawn real worker subprocesses.
 
 ;; @speed slow
+;; @suite default
+;; @boundary e2e
 (require rackunit
          rackunit/text-ui
          racket/runtime-path

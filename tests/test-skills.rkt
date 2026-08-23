@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -53,7 +54,7 @@
 (test-case "skills/types.rkt exports helper functions"
   (dynamic-require "../skills/types.rkt" 'merge-resources)
   (dynamic-require "../skills/types.rkt" 'load-global-resources)
-    (dynamic-require "../skills/types.rkt" 'load-project-resources))
+  (dynamic-require "../skills/types.rkt" 'load-project-resources))
 
 ;; ============================================================
 ;; Test 2: skills/prompt-template.rkt exports (keine runtime Abhängigkeit)
@@ -62,7 +63,7 @@
 (test-case "prompt-template.rkt exports render-template"
   (define render-template (dynamic-require "../skills/prompt-template.rkt" 'render-template))
   (check-pred procedure? render-template)
-    (check-equal? (render-template "Hello {{name}}!" (hash "name" "World")) "Hello World!"))
+  (check-equal? (render-template "Hello {{name}}!" (hash "name" "World")) "Hello World!"))
 
 ;; ============================================================
 ;; Test 3: skills/skill-loader.rkt exports (keine runtime Abhängigkeit)
@@ -84,7 +85,7 @@
   (define empty-rs (dynamic-require "../skills/skill-loader.rkt" 'empty-resource-set))
   (define merge-resources (dynamic-require "../skills/skill-loader.rkt" 'merge-resources))
   (check-pred procedure? empty-rs)
-    (check-true (procedure? merge-resources)))
+  (check-true (procedure? merge-resources)))
 
 ;; ============================================================
 ;; Test 4: Keine Aufwärtsabhängigkeit zu runtime/*
@@ -104,7 +105,7 @@
 (test-case "skill-loader.rkt does not import from runtime/*"
   (define loader-content (file->string "../skills/skill-loader.rkt"))
   (check-false (regexp-match? #rx"runtime/" loader-content)
-                 "skill-loader.rkt sollte nicht aus runtime/* importieren"))
+               "skill-loader.rkt sollte nicht aus runtime/* importieren"))
 
 ;; ============================================================
 ;; Test 5: Funktionalitätserhalt (Integration)
@@ -142,4 +143,4 @@
   (define merged (merge-resources global-rs project-rs))
 
   (check-pred resource-set? merged)
-    (check-equal? (length (resource-set-instructions merged)) 0))
+  (check-equal? (length (resource-set-instructions merged)) 0))

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-surface-actions.rkt — Tests for event-publishing dual-path
 ;; in extensions/ui-surface.rkt

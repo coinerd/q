@@ -5,6 +5,7 @@
 
 ;; W4 v0.99.35: Tests for event-json-helpers.rkt
 ;; Pure serialization boundary functions extracted from event-json.rkt:
+;; @boundary unit
 ;; - event-name->tool-name: pure event type to tool name mapping
 ;; - all-known-event-types: pure registry list
 ;; - serialize-*-tool-call: pure evt -> hasheq extraction

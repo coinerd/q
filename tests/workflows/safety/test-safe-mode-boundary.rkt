@@ -5,6 +5,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/workflows/safety/test-safe-mode-boundary.rkt — Safe-mode boundary workflow test (#176)
+;; @boundary integration
 ;;
 ;; Verifies that out-of-bounds file operations are blocked by mock tools
 ;; simulating safe-mode enforcement. Tests outcome (tool errors),

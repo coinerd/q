@@ -11,6 +11,7 @@
 ;;
 ;; T0.1: execute-command hook timeout should NOT produce generic "Unknown command"
 ;; T0.2: execute-command hook is now critical (returns 'block on timeout/error)
+;; @boundary unit
 ;;
 ;; POST-FIX behavior (W1 applied):
 ;; - T0.2/T0.2b/T0.2c expect 'block (critical hook)

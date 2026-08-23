@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; tests/test-tui-verification-display.rkt
 ;; W6 (v0.99.5): TUI display tests for HITL verification escalation events.

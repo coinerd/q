@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; tests/test-tui-smoke.rkt — Smoke tests for TUI vdom render pipeline
 ;;

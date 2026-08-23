@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite integration
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

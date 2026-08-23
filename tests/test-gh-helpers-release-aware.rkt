@@ -16,6 +16,7 @@
 ;; API contract: functions must exist with correct signatures
 ;; ============================================================
 ;; These contracts are enforced by the Python test suite at:
+;; @boundary unit
 ;;   scripts/test_gh_helpers_release.py (23 tests)
 ;; covering: version extraction, asset checking, release verification,
 ;; close enforcement, and publish guidance.

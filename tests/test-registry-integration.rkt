@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-registry-integration.rkt — W6 (v0.99.8) End-to-End Integration Tests
 ;;

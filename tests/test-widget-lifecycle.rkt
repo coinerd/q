@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; tests/test-widget-lifecycle.rkt — Lifecycle widget protocol tests (#5256)
 

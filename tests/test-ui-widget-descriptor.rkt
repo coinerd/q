@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-widget-descriptor.rkt — Widget descriptor schema tests
 ;;

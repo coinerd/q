@@ -1,5 +1,9 @@
 #lang racket
 
+;; @covers tools/builtins/read.rkt
+;; @covers tools/builtins/write.rkt
+;; @covers tools/builtins/edit.rkt
+
 ;; @speed fast
 ;; @suite default
 
@@ -7,6 +11,7 @@
 
 ;; test-file-tools.rkt — tests for read.rkt, write.rkt, edit.rkt
 ;; Uses temporary files for isolation. No external dependencies.
+;; @boundary integration
 
 (require rackunit
          rackunit/text-ui

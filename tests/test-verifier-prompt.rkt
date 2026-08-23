@@ -5,6 +5,8 @@
 ;; Tests build-verifier-system-prompt and build-verifier-user-message.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/string

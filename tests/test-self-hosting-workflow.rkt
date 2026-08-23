@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary unit  ;; @isolation process  ;; @mutates repo
 
 ;; BOUNDARY: integration
 

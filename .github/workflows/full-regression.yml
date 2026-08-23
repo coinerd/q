@@ -1,0 +1,404 @@
+name: full-regression
+
+# W8: Scheduled/manual full regression. The PR gate is deliberately fast and
+# statically sharded (impact selection is opt-in local-only — never a CI gate,
+# see docs/TEST_CONVENTIONS.md); this workflow is the definitive execution and
+# evidence source for the slow/full/profile-aware suites.
+# Status semantics (W0 schema): pass | fail | timeout | skip. A timed-out
+# shard fails the whole run with status "timeout" — never success.
+# Release linkage: release readiness depends on this workflow's evidence (a
+# scheduled run's run-summary.json or a fresh manual dispatch), never on a
+# green fast gate alone. See docs/operations/test-regression-triage.md.
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # nightly, 02:30 UTC — full regression (heavy jobs)
+    - cron: "30 3 * * 0" # weekly, Sundays 03:30 UTC — mutation-pilot ONLY (W9; heavy jobs are gated off this trigger)
+  workflow_dispatch:
+    inputs:
+      run-mutation-pilot:
+        description: "Run the W9 mutation pilot instead of/alongside the suites (low priority, informational)"
+        type: boolean
+        required: false
+        default: false
+      pilot-modules:
+        description: "Comma-separated modules for the mutation pilot (explicit scope, never repo-wide)"
+        required: false
+        default: "runtime/memory/policy.rkt"
+      pilot-budget:
+        description: "Wall-clock budget in seconds for the mutation pilot"
+        required: false
+        default: "900"
+      suite:
+        description: "Suite to run (all | broad | slow | tui | ...)"
+        required: false
+        default: "all"
+      profile:
+        description: "Execution profile (local | vps | ci | headless | full)"
+        required: false
+        default: "ci"
+      jobs-per-shard:
+        description: "Parallel jobs inside each shard"
+        required: false
+        default: "4"
+      extra-args:
+        description: "Extra args for scripts/run-tests.rkt"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-regression
+  cancel-in-progress: false
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # Main matrix: the full/broad suite, sharded across runners.
+  # Static 6-shard matrix works identically for schedule and dispatch.
+  # ────────────────────────────────────────────────────────────
+  test:
+    # Weekly Sunday trigger runs ONLY the mutation-pilot job; the heavy
+    # suites stay on the nightly schedule and manual dispatch.
+    if: github.event.schedule != '30 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90 # explicit per-shard budget; a timed-out shard fails the run (never success)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    name: test shard ${{ matrix.shard }}/6
+    env:
+      SUITE: ${{ github.event.inputs.suite || 'all' }}
+      PROFILE: ${{ github.event.inputs.profile || 'ci' }}
+      JOBS: ${{ github.event.inputs.jobs-per-shard || '4' }}
+      EXTRA_ARGS: ${{ github.event.inputs.extra-args }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run shard ${{ matrix.shard }}/6
+        run: |
+          set -euo pipefail
+          mkdir -p shard-results
+          LEDGER_ARGS=()
+          if [ -f .github/known-failures.json ]; then
+            LEDGER_ARGS=(--ledger .github/known-failures.json)
+          fi
+          # shellcheck disable=SC2086
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite "$SUITE" \
+            --jobs "$JOBS" \
+            --shard-index ${{ matrix.shard }} --shard-total 6 \
+            --profile "$PROFILE" \
+            "${LEDGER_ARGS[@]}" \
+            --json-out shard-results/shard-${{ matrix.shard }}.json \
+            $EXTRA_ARGS \
+            2>&1 | tee test-output.log
+
+      - name: Test results summary
+        if: always()
+        run: |
+          {
+            echo "## Full regression — shard ${{ matrix.shard }}/6 (suite=$SUITE profile=$PROFILE)"
+            if [ -f "shard-results/shard-${{ matrix.shard }}.json" ] && command -v jq >/dev/null 2>&1; then
+              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
+                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
+                     "",
+                     "### Slowest 10 files",
+                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
+                "shard-results/shard-${{ matrix.shard }}.json" 2>/dev/null
+            else
+              echo "- (no JSON summary record — shard timed out or failed before reporting; see test-output.log)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload shard evidence
+        if: always() # evidence retention: preserve partial progress even on timeout/failure
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-shard-${{ matrix.shard }}
+          path: |
+            shard-results/shard-${{ matrix.shard }}.json
+            test-output.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────
+  # Workflows suite: validates the GitHub workflow files themselves
+  # (including this one). Independent of the main suite/profile.
+  # ────────────────────────────────────────────────────────────
+  workflows-suite:
+    if: github.event.schedule != '30 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run workflows suite
+        run: |
+          set -euo pipefail
+          mkdir -p shard-results
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite workflows --jobs 4 \
+            --json-out shard-results/workflows.json \
+            2>&1 | tee test-output.log
+
+      - name: Upload workflows evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-workflows
+          path: |
+            shard-results/workflows.json
+            test-output.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────
+  # Platform variant: the curated platform-cross suite on macOS
+  # (arm64) — the complementary platform to the linux shards above.
+  # ────────────────────────────────────────────────────────────
+  test-platform:
+    if: github.event.schedule != '30 3 * * 0'
+    runs-on: macos-14
+    timeout-minutes: 90 # Retained through cache rollout: a cold locked store
+                        # must complete before the warm-run evidence permits a
+                        # measured budget reduction. The suite itself is ~15 min.
+    steps:
+      - uses: actions/checkout@v7
+
+      # The reusable setup action is the sole cache owner. It restores the
+      # locked, explicit PLTADDONDIR store and never caches workspace bytecode.
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run platform-cross suite (macos-arm64)
+        run: |
+          set -euo pipefail
+          mkdir -p shard-results
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+            --suite platform --jobs 4 \
+            --json-out shard-results/platform.json \
+            2>&1 | tee test-output.log
+
+      - name: Upload platform evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-platform
+          path: |
+            shard-results/platform.json
+            test-output.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────
+  # Aggregate: merge per-shard JSON (W0 schema) into the definitive
+  # run summary. Always runs so a timed-out shard surfaces as
+  # status "timeout" — it can never vanish into a green run.
+  # ────────────────────────────────────────────────────────────
+  summarize:
+    needs: [test, workflows-suite, test-platform]
+    # Skipped on the weekly mutation-pilot-only trigger (its upstream suites are skipped too)
+    if: always() && github.event.schedule != '30 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      status: ${{ steps.status.outputs.status }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      # Keep lane artifacts separate. A failed download remains observable to
+      # the status helper as missing evidence, which becomes timeout rather
+      # than preventing run-summary.json from being retained.
+      - name: Download Linux shard evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          path: evidence/linux-shards
+          pattern: results-shard-*
+          merge-multiple: true
+
+      - name: Download workflows evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: results-workflows
+          path: evidence/workflows
+
+      - name: Download macOS platform evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: results-platform
+          path: evidence/platform
+
+      - name: Aggregate all required lane evidence
+        id: status
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/linux-shards evidence/workflows evidence/platform
+          racket scripts/run-tests/full-regression-status.rkt \
+            --shards-dir evidence/linux-shards \
+            --workflows-dir evidence/workflows \
+            --platform-dir evidence/platform \
+            --expected-shards 6 \
+            --test-result "${{ needs.test.result }}" \
+            --workflows-result "${{ needs.workflows-suite.result }}" \
+            --platform-result "${{ needs.test-platform.result }}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out run-summary.json \
+            --matrix-out matrix-summary.json
+
+          STATUS=$(jq -r '.status' run-summary.json)
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Full regression — definitive status: **$STATUS**"
+            echo ""
+            echo "| required lane | job result | evidence | records | status |"
+            echo "|---|---|---|---:|---|"
+            jq -r '.required_lanes | to_entries[] | "| \(.value.name) | \(.value.upstream_job_result) | \(.value.evidence_classification) | \(.value.collected_records)/\(.value.expected_records) | \(.value.status) |"' run-summary.json
+            echo ""
+            jq -r '"- Linux totals: files=\(.totals.files) pass=\(.totals.pass) fail=\(.totals.fail) timeout=\(.totals.timeout) skip=\(.totals.skip)",
+                   "- Wall clock (sum of Linux shards): \(.totals.wall_clock_seconds)s  suite=\(.suite)  profile=\(.profile)  runner-mode=\(.runner_mode)"' run-summary.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Full-regression status: $STATUS"
+          if [ "$STATUS" != "pass" ]; then
+            exit 1
+          fi
+
+      - name: Upload run summary (release-readiness evidence)
+        if: always() # retained even when red — this is the triage/release evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: run-summary
+          path: |
+            run-summary.json
+            matrix-summary.json
+          if-no-files-found: error
+          retention-days: 90
+
+  report:
+    needs: [summarize]
+    if: always() && github.event.schedule != '30 3 * * 0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Definitive run status
+        run: |
+          echo "Full regression finished with definitive status: ${{ needs.summarize.outputs.status || 'unknown' }}"
+          echo "Evidence artifacts: run-summary (90d), per-shard JSON + logs (30d)."
+          echo "Triage protocol: docs/operations/test-regression-triage.md"
+
+  # ────────────────────────────────────────────────────────────
+  # W9: bounded mutation-analysis adequacy pilot (informational).
+  # Opt-in: weekly Sunday schedule, or manual dispatch with
+  # run-mutation-pilot=true. Low priority and never blocking:
+  #   - this workflow has NO pull_request/push trigger, so the
+  #     pilot can never gate a PR;
+  #   - release readiness reads the `run-summary` artifact from the
+  #     summarize job, which is skipped on the pilot-only trigger;
+  #   - continue-on-error stays false so infrastructure failures
+  #     surface honestly; budget exhaustion inside the pilot is a
+  #     clean partial report (script exits 0), not a failure.
+  # Scope is always explicit (--modules / --from-diff) — the pilot
+  # has no repo-wide default path. See
+  # docs/operations/test-consolidation-policy.md.
+  # ────────────────────────────────────────────────────────────
+  mutation-pilot:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '30 3 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && inputs.run-mutation-pilot == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: mutation-pilot
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.10"
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run bounded mutation pilot
+        run: |
+          set -euo pipefail
+          MODULES="${{ github.event.inputs.pilot-modules || 'runtime/memory/policy.rkt' }}"
+          BUDGET="${{ github.event.inputs.pilot-budget || '900' }}"
+          echo "Pilot scope: $MODULES (budget ${BUDGET}s)"
+          racket scripts/run-tests/mutation-pilot.rkt \
+            --modules "$MODULES" \
+            --budget "$BUDGET" \
+            --out artifacts/mutation-pilot \
+            2>&1 | tee mutation-pilot.log
+
+      - name: Pilot summary
+        if: always()
+        run: |
+          {
+            echo "## Mutation pilot (W9, informational — never a gate)"
+            # Exit-masking is prohibited (tests/test-ci-workflows.rkt):
+            # nullglob makes a missing run dir an empty list, not an error.
+            shopt -s nullglob
+            runs=(artifacts/mutation-pilot/run-*)
+            LATEST="${runs[@]: -1}"
+            if [ -n "$LATEST" ] && [ -f "$LATEST/findings.md" ]; then
+              echo "### $LATEST"
+              cat "$LATEST/findings.md"
+            else
+              echo "- (no findings artifact — pilot failed before reporting; see mutation-pilot.log)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pilot evidence
+        if: always() # retain partial results even on infra failure
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-pilot
+          path: |
+            artifacts/mutation-pilot/
+            mutation-pilot.log
+          if-no-files-found: warn
+          retention-days: 90

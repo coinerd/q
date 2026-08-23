@@ -17,6 +17,7 @@
 
 ;; ============================================================
 ;; SDK boundary smoke tests
+;; @boundary unit
 ;; ============================================================
 
 (test-case "sdk-public: make-runtime requires #:provider"

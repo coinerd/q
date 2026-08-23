@@ -4,6 +4,7 @@
 ;; @suite default
 
 ;; tests/test-event-macro-isolation.rkt — A3: Event macro registry isolation
+;; @boundary unit
 ;; STABILITY: evolving
 
 (require rackunit

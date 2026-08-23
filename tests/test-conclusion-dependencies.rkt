@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-conclusion-dependencies.rkt — M6: Conclusion dependency tracking
 ;; v0.76.5: Conclusions store file paths they depend on.
@@ -16,58 +17,70 @@
   (check-equal? (task-conclusion-dependencies c) '()))
 
 (test-case "conclusion stores dependency paths"
-  (define c (task-conclusion "c1"
-                             "Module X depends on Y"
-                             'fact
-                             'exploration
-                             '()
-                             1000
-                             '(module)
-                             '("src/module-x.rkt" "src/module-y.rkt")))
-  (check-equal? (task-conclusion-dependencies c)
-                '("src/module-x.rkt" "src/module-y.rkt")))
+  (define c
+    (task-conclusion "c1"
+                     "Module X depends on Y"
+                     'fact
+                     'exploration
+                     '()
+                     1000
+                     '(module)
+                     '("src/module-x.rkt" "src/module-y.rkt")))
+  (check-equal? (task-conclusion-dependencies c) '("src/module-x.rkt" "src/module-y.rkt")))
 
 ;; ── Serialization round-trip with dependencies ──
 
 (test-case "conclusion->hash includes dependencies"
-  (define c (task-conclusion "c1"
-                             "text"
-                             'fact
-                             'exploration
-                             '()
-                             1000
-                             '()
-                             '("file.rkt")))
+  (define c (task-conclusion "c1" "text" 'fact 'exploration '() 1000 '() '("file.rkt")))
   (define h (conclusion->hash c))
   (check-equal? (hash-ref h 'dependencies) '("file.rkt")))
 
 (test-case "hash->conclusion reads dependencies"
-  (define h (hash 'id "c1"
-                  'text "text"
-                  'category 'fact
-                  'fsm-state-origin 'exploration
-                  'origin-message-ids '()
-                  'timestamp 1000
-                  'relevance-tags '()
-                  'dependencies '("a.rkt" "b.rkt")))
+  (define h
+    (hash 'id
+          "c1"
+          'text
+          "text"
+          'category
+          'fact
+          'fsm-state-origin
+          'exploration
+          'origin-message-ids
+          '()
+          'timestamp
+          1000
+          'relevance-tags
+          '()
+          'dependencies
+          '("a.rkt" "b.rkt")))
   (define c (hash->conclusion h))
   (check-equal? (task-conclusion-dependencies c) '("a.rkt" "b.rkt")))
 
 (test-case "hash->conclusion defaults dependencies to empty when missing"
-  (define h (hash 'id "c1"
-                  'text "text"
-                  'category 'fact
-                  'fsm-state-origin 'exploration
-                  'origin-message-ids '()
-                  'timestamp 1000
-                  'relevance-tags '()))
+  (define h
+    (hash 'id
+          "c1"
+          'text
+          "text"
+          'category
+          'fact
+          'fsm-state-origin
+          'exploration
+          'origin-message-ids
+          '()
+          'timestamp
+          1000
+          'relevance-tags
+          '()))
   (define c (hash->conclusion h))
   (check-equal? (task-conclusion-dependencies c) '()))
 
 ;; ── Multiple dependencies ──
 
 (test-case "conclusion with many dependencies"
-  (define deps (for/list ([i 10]) (format "src/file~a.rkt" i)))
+  (define deps
+    (for/list ([i 10])
+      (format "src/file~a.rkt" i)))
   (define c (task-conclusion "c1" "overview" 'fact 'exploration '() 1000 '() deps))
   (check-equal? (task-conclusion-dependencies c) deps)
   (check-equal? (length (task-conclusion-dependencies c)) 10))

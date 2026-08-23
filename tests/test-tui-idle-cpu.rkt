@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; tests/test-tui-idle-cpu.rkt — Regression tests for TUI idle CPU hot paths
 

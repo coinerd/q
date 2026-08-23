@@ -6,6 +6,7 @@
 ;; BOUNDARY: contract
 
 ;; tests/test-tool-registry-contracts.rkt -- R3: registry contract boundary tests
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -17,8 +18,7 @@
 
     (test-case "tool-registry-contracts: register-tool! rejects non-tool"
       (define reg (make-tool-registry))
-      (check-exn exn:fail:contract?
-                 (lambda () (register-tool! reg "not-a-tool"))))
+      (check-exn exn:fail:contract? (lambda () (register-tool! reg "not-a-tool"))))
 
     (test-case "lookup-tool with #f returns #f"
       (define reg (make-tool-registry))
@@ -26,18 +26,15 @@
 
     (test-case "set-active-tools! rejects non-strings"
       (define reg (make-tool-registry))
-      (check-exn exn:fail:contract?
-                 (lambda () (set-active-tools! reg '(1 2 3)))))
+      (check-exn exn:fail:contract? (lambda () (set-active-tools! reg '(1 2 3)))))
 
     (test-case "tool-active? requires string name"
       (define reg (make-tool-registry))
-      (check-exn exn:fail:contract?
-                 (lambda () (tool-active? reg 123))))
+      (check-exn exn:fail:contract? (lambda () (tool-active? reg 123))))
 
     (test-case "unregister-tool! requires string name"
       (define reg (make-tool-registry))
-      (check-exn exn:fail:contract?
-                 (lambda () (unregister-tool! reg 42))))
+      (check-exn exn:fail:contract? (lambda () (unregister-tool! reg 42))))
 
     (test-case "make-tool-registry returns registry"
       (check-pred tool-registry? (make-tool-registry)))

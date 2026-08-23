@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-gsm-ctx-parity.rkt — T1-5: Verify gsm-* and gsm-ctx-* produce same results
 ;; STABILITY: evolving

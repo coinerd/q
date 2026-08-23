@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-lint-version-io.rkt — Tests for I/O abstraction (W6 pilot)
 ;;

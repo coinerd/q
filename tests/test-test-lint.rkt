@@ -52,10 +52,9 @@
 ;; ---------------------------------------------------------------------------
 
 (define approved-helpers
-  '("tests/helpers/temp-fs.rkt"
-    "tests/helpers/fixtures.rkt"
-    "tests/helpers/test-sandbox.rkt"
-    "tests/workflows/fixtures/temp-project.rkt"))
+  '("tests/helpers/temp-fs.rkt" "tests/helpers/fixtures.rkt"
+                                "tests/helpers/test-sandbox.rkt"
+                                "tests/workflows/fixtures/temp-project.rkt"))
 
 (define (is-approved-helper? filepath)
   (for/or ([m (in-list approved-helpers)])
@@ -75,8 +74,7 @@
   (for/or ([line (in-list lines)]
            [i (in-naturals 1)]
            #:break (> i 30))
-    (or (regexp-match? #rx";+[ \t]*@mutates" line)
-        (regexp-match? #rx";+[ \t]*@isolation" line))))
+    (or (regexp-match? #rx";+[ \t]*@mutates" line) (regexp-match? #rx";+[ \t]*@isolation" line))))
 
 (define (has-putenv? lines)
   (for/or ([line (in-list lines)])
@@ -95,17 +93,16 @@
 
 (test-case "lint-tests.rkt runs"
   (define orig-dir (current-directory))
-  (dynamic-wind
-    (lambda () (current-directory (build-path orig-dir "..")))
-    (lambda ()
-      (define-values (sp stdout-in stdin-out stderr-in)
-        (subprocess #f #f #f (find-executable-path "racket") "scripts/lint-tests.rkt"))
-      (define output (port->string stdout-in))
-      (close-input-port stdout-in)
-      (close-input-port stderr-in)
-      (close-output-port stdin-out)
-      (define exit-code (subprocess-status sp))
-      ;; Lint may have errors (exit 1) but should not crash (exit 2)
-      (check-true (<= exit-code 1))
-      (check-true (string-contains? output "---")))
-    (lambda () (current-directory orig-dir))))
+  (dynamic-wind (lambda () (current-directory (build-path orig-dir "..")))
+                (lambda ()
+                  (define-values (sp stdout-in stdin-out stderr-in)
+                    (subprocess #f #f #f (find-executable-path "racket") "scripts/lint-tests.rkt"))
+                  (define output (port->string stdout-in))
+                  (close-input-port stdout-in)
+                  (close-input-port stderr-in)
+                  (close-output-port stdin-out)
+                  (define exit-code (subprocess-status sp))
+                  ;; Lint may have errors (exit 1) but should not crash (exit 2)
+                  (check-true (<= exit-code 1))
+                  (check-true (string-contains? output "---")))
+                (lambda () (current-directory orig-dir))))

@@ -1,0 +1,17 @@
+{
+  "schema": "ci-durations/1",
+  "suite": "fast",
+  "generated_at": "2026-08-17T00:00:00Z",
+  "retention": "last-retained-artifact",
+  "files": [
+    {"path": "tests/test-aa-slow.rkt", "duration_seconds": 320.0},
+    {"path": "tests/test-bb-slow.rkt", "duration_seconds": 300.0},
+    {"path": "tests/test-cc-slow.rkt", "duration_seconds": 280.0},
+    {"path": "tests/test-dd-medium.rkt", "duration_seconds": 120.5},
+    {"path": "tests/test-ee-medium.rkt", "duration_seconds": 110.25},
+    {"path": "tests/test-ff-medium.rkt", "duration_seconds": 100.75},
+    {"path": "tests/test-gg-fast.rkt", "duration_seconds": 12.5},
+    {"path": "tests/test-hh-fast.rkt", "duration_seconds": 9.0},
+    {"path": "tests/test-ii-fast.rkt", "duration_seconds": 7.25}
+  ]
+}

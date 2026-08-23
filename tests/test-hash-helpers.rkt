@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; test-hash-helpers.rkt — Tests for util/hash-helpers.rkt (T3-6)
 
 (require rackunit

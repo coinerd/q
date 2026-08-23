@@ -9,6 +9,7 @@
 ;;
 ;; W1 sub-issue #3325: 7 positive patterns + 2 negative cases
 ;; W2 sub-issue #3357: Now requires from shared version-guard.rkt
+;; @boundary integration  ;; @isolation process  ;; @mutates fs
 ;; v0.99.49: Protect governance provenance and historical failure examples.
 
 (require rackunit

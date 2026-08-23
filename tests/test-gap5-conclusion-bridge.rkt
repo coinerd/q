@@ -1,5 +1,7 @@
 #lang racket/base
+;; @covers runtime/memory/conclusion-bridge.rkt
 ;; @speed fast @suite default
+;; @boundary unit
 ;; tests/test-gap5-conclusion-bridge.rkt — GAP-5 TDD tests
 ;; Validates conclusion bridge activation in profiles
 
@@ -14,26 +16,22 @@
                   high-value-categories))
 
 (define-test-suite gap-5-tests
-  (test-case "GAP-5: self-healing profile enables conclusion bridge"
-    (apply-context-assembly-profile! 'self-healing)
-    (check-true (current-conclusion-to-memory-bridge-enabled)))
-
-  (test-case "GAP-5: full profile enables conclusion bridge"
-    (apply-context-assembly-profile! 'full)
-    (check-true (current-conclusion-to-memory-bridge-enabled)))
-
-  (test-case "GAP-5: observe profile does NOT enable bridge"
-    (current-conclusion-to-memory-bridge-enabled #f)
-    (apply-context-assembly-profile! 'observe)
-    (check-false (current-conclusion-to-memory-bridge-enabled)))
-
-  (test-case "GAP-5: bounded profile does NOT enable bridge"
-    (current-conclusion-to-memory-bridge-enabled #f)
-    (apply-context-assembly-profile! 'bounded)
-    (check-false (current-conclusion-to-memory-bridge-enabled)))
-
-  (test-case "GAP-5: high-value-categories includes fact"
-    (check-not-false (memq 'fact high-value-categories)
-                     "fact category must be in high-value-categories")))
+                   (test-case "GAP-5: self-healing profile enables conclusion bridge"
+                     (apply-context-assembly-profile! 'self-healing)
+                     (check-true (current-conclusion-to-memory-bridge-enabled)))
+                   (test-case "GAP-5: full profile enables conclusion bridge"
+                     (apply-context-assembly-profile! 'full)
+                     (check-true (current-conclusion-to-memory-bridge-enabled)))
+                   (test-case "GAP-5: observe profile does NOT enable bridge"
+                     (current-conclusion-to-memory-bridge-enabled #f)
+                     (apply-context-assembly-profile! 'observe)
+                     (check-false (current-conclusion-to-memory-bridge-enabled)))
+                   (test-case "GAP-5: bounded profile does NOT enable bridge"
+                     (current-conclusion-to-memory-bridge-enabled #f)
+                     (apply-context-assembly-profile! 'bounded)
+                     (check-false (current-conclusion-to-memory-bridge-enabled)))
+                   (test-case "GAP-5: high-value-categories includes fact"
+                     (check-not-false (memq 'fact high-value-categories)
+                                      "fact category must be in high-value-categories")))
 
 (run-tests gap-5-tests)

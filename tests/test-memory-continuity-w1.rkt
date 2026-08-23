@@ -4,6 +4,8 @@
 ;; Plan: .planning/PLAN-v0.96.13-MEMORY-CONTINUITY-LOOPING-PREVENTION.md
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          (only-in "../util/message/message.rkt"

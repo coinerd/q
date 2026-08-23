@@ -2,23 +2,21 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require racket/string
          rackunit
-         (only-in "../tui/commands/goal-bridge.rkt"
-                  make-goal-event-bridge
-                  make-goal-run-prompt!)
-         (only-in "../util/event/event-bus.rkt"
-                  make-event-bus subscribe! publish!)
+         (only-in "../tui/commands/goal-bridge.rkt" make-goal-event-bridge make-goal-run-prompt!)
+         (only-in "../util/event/event-bus.rkt" make-event-bus subscribe! publish!)
          (only-in "../util/event/event.rkt" event-ev event?))
 
 (test-case "make-goal-event-bridge maps symbols to event names"
   (define bus (make-event-bus))
   (define received '())
-  (subscribe! bus (lambda (evt)
-                    (when (and (event? evt)
-                               (string-prefix? (or (event-ev evt) "") "goal."))
-                      (set! received (cons evt received)))))
+  (subscribe! bus
+              (lambda (evt)
+                (when (and (event? evt) (string-prefix? (or (event-ev evt) "") "goal."))
+                  (set! received (cons evt received)))))
   (define bridge (make-goal-event-bridge bus "test-session"))
   (bridge 'goal-started (hasheq 'goal-text "test"))
   (bridge 'goal-achieved (hasheq 'goal-text "test"))
@@ -27,8 +25,7 @@
 (test-case "make-goal-event-bridge ignores unknown symbols"
   (define bus (make-event-bus))
   (define received '())
-  (subscribe! bus (lambda (evt)
-                    (set! received (cons evt received))))
+  (subscribe! bus (lambda (evt) (set! received (cons evt received))))
   (define bridge (make-goal-event-bridge bus "test-session"))
   (bridge 'unknown-event (hasheq))
   (check-equal? received '()))

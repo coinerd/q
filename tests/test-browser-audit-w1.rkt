@@ -8,6 +8,8 @@
 ;; M7: summarize-tool-result handles image-part
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          "../tools/tool.rkt"
@@ -54,15 +56,15 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "M6: merge-consecutive-roles merges string content"
-  (define msgs (list (hasheq 'role "user" 'content "hello")
-                     (hasheq 'role "user" 'content "world")))
+  (define msgs (list (hasheq 'role "user" 'content "hello") (hasheq 'role "user" 'content "world")))
   (define merged (merge-consecutive-roles msgs))
   (check-equal? (length merged) 1)
   (check-equal? (hash-ref (car merged) 'content) "hello\n\nworld"))
 
 (test-case "M6: merge-consecutive-roles preserves list content (image blocks)"
-  (define msgs (list (hasheq 'role "user" 'content (list (hasheq 'type "image")))
-                     (hasheq 'role "user" 'content (list (hasheq 'type "text" 'text "hi")))))
+  (define msgs
+    (list (hasheq 'role "user" 'content (list (hasheq 'type "image")))
+          (hasheq 'role "user" 'content (list (hasheq 'type "text" 'text "hi")))))
   (define merged (merge-consecutive-roles msgs))
   (check-equal? (length merged) 1)
   (define content (hash-ref (car merged) 'content))
@@ -74,9 +76,8 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "M7: summarize-tool-result handles short image-part (returns entry)"
-  (define msg (message "id" #f 'user 'tool-result
-                       (list (make-image-part "image/png" "abcd" "auto"))
-                       0 (hash)))
+  (define msg
+    (message "id" #f 'user 'tool-result (list (make-image-part "image/png" "abcd" "auto")) 0 (hash)))
   (define result (summarize-tool-result msg))
   ;; Short content returned unchanged
   (check-true (message? result))
@@ -84,11 +85,18 @@
 
 (test-case "M7: summarize-tool-result counts image-part in long mixed content"
   ;; Mix image-part with many long lines to trigger truncation (>40 lines AND >8000 chars)
-  (define many-lines (string-join (for/list ([i 100]) (format "line ~a ~a" i (make-string 100 #\x))) "\n"))
-  (define msg (message "id" #f 'user 'tool-result
-                       (list (make-image-part "image/png" "data" "auto")
-                             (make-text-part many-lines))
-                       0 (hash)))
+  (define many-lines
+    (string-join (for/list ([i 100])
+                   (format "line ~a ~a" i (make-string 100 #\x)))
+                 "\n"))
+  (define msg
+    (message "id"
+             #f
+             'user
+             'tool-result
+             (list (make-image-part "image/png" "data" "auto") (make-text-part many-lines))
+             0
+             (hash)))
   (define result (summarize-tool-result msg))
   (check-true (message? result))
   (define parts (message-content result))

@@ -70,6 +70,8 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "go-orchestrator.rkt"
+         "delivery-verifier.rkt"
+         (only-in "../../runtime/settings-core.rkt" load-global-settings)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-max-iterations
@@ -84,7 +86,8 @@
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
            (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))])
-         extract-task-summary)
+         extract-task-summary
+         extract-last-failure)
 
 ;; ============================================================
 ;; Command registration
@@ -308,7 +311,7 @@
                           (lambda ()
                             (set-gsd-mode! 'executing)
                             (emit-mode-change! 'executing)
-                            (set-edit-limit! 1200)
+                            (set-edit-limit! 2000)
                             (define wis
                               (for/list ([w (gsd-plan-waves plan)])
                                 (gsd-wave-index w)))
@@ -438,6 +441,7 @@
                          (format "  * ~a [~a]\n" t (if (target-exists? t) "exists" "MISSING")))
                        "")
           "\n"))))
+  (define last-failure (extract-last-failure wave-details))
   (string-append
    planning-implement-prompt
    file-contract
@@ -445,17 +449,62 @@
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"
    "Do not call /wave-done: the coordinator is the only component allowed to commit wave status.\n"
-   "Delivery finalization remains external. Until trusted delivery evidence is available, this run stops before DONE.\n"
-   "A normal response never marks the wave DONE.\n"
+   "After you return, the coordinator verifies real delivery evidence: the expected branch is\n"
+   "checked out, the wave's target files were changed, and the wave's verify command exits 0.\n"
+   "A wave is marked DONE only when that evidence is present and verification passes; otherwise\n"
+   "it is marked FAILED and the campaign stops for review.\n"
    (format (string-append "This wave has a bounded runtime budget: ~a seconds, ~a iterations, "
                           "and ~a consecutive tool-only turns. Budget exhaustion fails closed.\n\n")
            (current-gsd-wave-timeout-seconds)
            (current-gsd-wave-max-iterations)
            (current-gsd-max-consecutive-tool-calls))
+   (if last-failure
+       (string-append
+        "## Previous Attempt Failed — Adapt\n\n"
+        "A previous run of this wave FAILED delivery verification. The recorded reason is:\n\n"
+        last-failure
+        "\nYou MUST address this specific failure before completing the wave. Do not repeat the\n"
+        "same approach that produced it; verify your delivery addresses the failure reason\n"
+        "before signalling completion.\n\n")
+       "")
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
    (if (string=? state-content "")
        ""
        (format "\n## Current State\n~a\n" state-content))))
+
+;; Extract the "## Last Failure" section (recorded by record-wave-failure! when
+;; a previous attempt failed delivery verification) so a retry can adapt. The
+;; wave doc content is embedded in the prompt, so the agent sees the reason.
+;; Returns the section body (without the heading) or "".
+(define (extract-last-failure wave-details)
+  ;; Line-based extraction (robust across Racket regexp quirks): find the
+  ;; "## Last Failure" heading and collect the following lines up to the
+  ;; next top-level heading (##) or end of the document.
+  (define lines (string-split wave-details "\n"))
+  (define heading-idx
+    (for/first ([i (in-naturals)]
+                [l (in-list lines)]
+                #:when (string=? (string-trim l) "## Last Failure"))
+      i))
+  (if (not heading-idx)
+      ""
+      (string-join (for/list ([l (in-list (list-tail lines (add1 heading-idx)))]
+                              #:break (and (>= (string-length (string-trim l)) 2)
+                                           (string-prefix? (string-trim l) "##")))
+                     l)
+                   "\n")))
+
+;; v1.00.03: resolve the per-campaign wave budget at /go time.
+;; Precedence: /go --wave-timeout=SECONDS flag > ~/.q/config.json
+;; wave-timeout-seconds > current-gsd-wave-timeout-seconds (default 3600).
+;; The resolved value travels on the campaign request because the campaign
+;; runs in a separate thread where a parameterize here would not apply.
+(define (resolve-wave-timeout-secs input-text)
+  (or (command-wave-timeout-arg input-text)
+      (let* ([cfg (load-global-settings)]
+             [raw (hash-ref cfg 'wave-timeout-seconds #f)])
+        (and (number? raw) (positive? raw) raw))
+      (current-gsd-wave-timeout-seconds)))
 
 (define (prepare-go-campaign base-dir input-text plan validation)
   (with-handlers ([exn:fail:campaign-migration?
@@ -477,19 +526,16 @@
          [(list 'error msg) (hook-amend (hasheq 'text msg))]
          [(list 'ok _ _)
           (define gsd-ctx (current-gsd-ctx))
+          (define effective-timeout (resolve-wave-timeout-secs input-text))
           (define request
-            (make-campaign-request base-dir
-                                   rec
-                                   (lambda (wave-idx)
-                                     (gsm-ctx-transition-to! gsd-ctx 'executing)
-                                     (build-single-wave-prompt base-dir plan wave-idx))
-                                   (lambda (_wave-idx)
-                                     ;; Delivery verification is not implemented yet, so production
-                                     ;; fails closed. Do not invoke execute-verification-gate here:
-                                     ;; that gate owns FSM done/rework transitions and authoritative
-                                     ;; verification events, which would contradict the coordinator's
-                                     ;; durable FAILED result. Advisory checks must be observational.
-                                     #f)))
+            (make-campaign-request
+             base-dir
+             rec
+             (lambda (wave-idx)
+               (gsm-ctx-transition-to! gsd-ctx 'executing)
+               (build-single-wave-prompt base-dir plan wave-idx))
+             (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
+             #:timeout-sec effective-timeout))
           (hook-amend (hasheq 'campaign-token
                               (register-campaign-request! request)
                               'new-session
@@ -544,7 +590,7 @@
     (set-pinned-dir! saved-dir))
   (set-gsd-mode! 'planning)
   (emit-mode-change! 'planning)
-  (set-edit-limit! 500)
+  (set-edit-limit! 2000)
   ;; Auto-create STATE.md if missing (#2164)
   (ensure-state-md! base-dir)
   (define existing-plan (read-planning-artifact base-dir "PLAN"))

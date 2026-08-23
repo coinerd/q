@@ -243,7 +243,12 @@
   (define composer-history '())
   (define composer-history-idx 0)
   (define keymap% (dynamic-require 'racket/gui 'keymap%))
-  (define gui-prefs (default-preferences))
+  ;; W3 (v1.00.02): the GUI starts from the SAME loaded preference snapshot
+  ;; as the TUI (user config file -> merge over defaults).  Installing it as
+  ;; the ambient parameter means disclosure preview length (W2 rendering,
+  ;; collapsed-preview-lines) and every leaf consumer read live config.
+  (define gui-prefs (load-preferences))
+  (current-preferences gui-prefs)
   ;; Multiline is on by default; off-ramp for rollout is the env var below.
   (define composer-multiline? (not (equal? (getenv "Q_GUI_MULTILINE") "0")))
 

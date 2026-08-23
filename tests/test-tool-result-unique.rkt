@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -25,8 +26,7 @@
   ;; Accessors from tools/tool.rkt work
   (check-equal? (tool-result-content tr) "hello")
   (check-false (tool-result-details tr))
-  (check-false (tool-result-is-error? tr))
-)
+  (check-false (tool-result-is-error? tr)))
 
 ;; Cross-module identity: the tool-result? from agent/types (re-exported)
 ;; must accept values created by the constructor from tools/tool.

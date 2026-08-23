@@ -6,6 +6,8 @@
 ;; session manager thread safety.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/match
          "../browser/settings.rkt"

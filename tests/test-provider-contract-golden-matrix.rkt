@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -422,13 +423,10 @@
   ;; support (e.g. W1-B typed unsupported capabilities, or a future provider
   ;; gaining delta-thinking normalization) must consciously update this list
   ;; and the matrix cells together — the contract gate fails otherwise.
-  ;; Currently exactly: reasoning-delta for anthropic + gemini.
-  (check-equal? (map car unsupported-cells)
-                (list 'reasoning-delta 'reasoning-delta)
-                "expected unsupported set")
-  (check-equal? (map cadr unsupported-cells)
-                (list 'anthropic 'gemini)
-                "expected unsupported providers")
+  ;; Currently exactly: reasoning-delta for gemini (anthropic gained
+  ;; delta-thinking normalization in the kimi milestone W0).
+  (check-equal? (map car unsupported-cells) (list 'reasoning-delta) "expected unsupported set")
+  (check-equal? (map cadr unsupported-cells) (list 'gemini) "expected unsupported providers")
   ;; And each unsupported cell carries an explanatory note (no silent gap).
   (for ([pair (in-list unsupported-cells)])
     (define cell (matrix-cell-for (car pair) (cadr pair)))

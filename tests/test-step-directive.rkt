@@ -1,7 +1,9 @@
 #lang racket/base
+;; @covers runtime/iteration/directive.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

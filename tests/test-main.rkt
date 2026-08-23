@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @requires network
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

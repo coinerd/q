@@ -1,6 +1,8 @@
 #lang racket
+;; @covers tui/layout.rkt
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;;; tests/test-tui-layout.rkt — Layout region computation tests (#5260)
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-activation.rkt — v0.95.15 W5: End-to-end memory activation integration test
 ;;;
 ;;; Exercises the full pipeline:
@@ -25,16 +26,23 @@
 (define now-iso "2026-06-06T12:00:00Z")
 
 (define (make-test-item id content [type 'semantic] [scope 'session])
-  (memory-item id type scope content
-               (hash 'project-root "/tmp/test"
-                     'session-id "test-session"
-                     'tags '()
-                     'source 'test
-                     'origin-message-id "msg-1")
-               (hash 'sensitivity 'internal
-                     'confidence 0.8
-                     'supersedes '())
-               now-iso now-iso))
+  (memory-item id
+               type
+               scope
+               content
+               (hash 'project-root
+                     "/tmp/test"
+                     'session-id
+                     "test-session"
+                     'tags
+                     '()
+                     'source
+                     'test
+                     'origin-message-id
+                     "msg-1")
+               (hash 'sensitivity 'internal 'confidence 0.8 'supersedes '())
+               now-iso
+               now-iso))
 
 ;; ============================================================
 ;; W5 Integration: Full activation pipeline
@@ -112,7 +120,8 @@
     (current-memory-backend backend)
     ;; Store items
     (for ([c '("The project uses Racket" "Session memory is scoped" "Context injection helps")])
-      ((memory-backend-store! backend) (make-test-item (string-append "ctx-" c) c 'semantic 'session)))
+      ((memory-backend-store! backend)
+       (make-test-item (string-append "ctx-" c) c 'semantic 'session)))
     ;; Create session config with memory enabled
     (define sc (hash->session-config (hash 'memory-backend 'hash)))
     ;; Observe (telemetry)

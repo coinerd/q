@@ -2,15 +2,14 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-contract-metrics.rkt
 ;; TDD tests for contract-metrics exact counting (only any/c inside contract forms)
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../scripts/contract-metrics.rkt"
-                  count-anyc-in-file
-                  anyc-in-contract-form?))
+         (only-in "../scripts/contract-metrics.rkt" count-anyc-in-file anyc-in-contract-form?))
 
 (define contract-metrics-suite
   (test-suite "contract-metrics-exact"
@@ -30,27 +29,33 @@
       (check-equal? (count-anyc-in-file content) 1))
 
     (test-case "any/c in comment is NOT counted"
-      (define content "#lang racket\n;; any/c should not be counted\n(provide (contract-out [foo -> string?]))\n")
+      (define content
+        "#lang racket\n;; any/c should not be counted\n(provide (contract-out [foo -> string?]))\n")
       (check-equal? (count-anyc-in-file content) 0))
 
     (test-case "any/c in string is NOT counted"
-      (define content "#lang racket\n(define doc \"any/c is a contract\")\n(provide (contract-out [foo -> string?]))\n")
+      (define content
+        "#lang racket\n(define doc \"any/c is a contract\")\n(provide (contract-out [foo -> string?]))\n")
       (check-equal? (count-anyc-in-file content) 0))
 
     (test-case "multiple any/c in contract-out all counted"
-      (define content "#lang racket\n(provide (contract-out\n  [foo (-> any/c any/c string?)]\n  [bar (-> any/c)]))\n")
+      (define content
+        "#lang racket\n(provide (contract-out\n  [foo (-> any/c any/c string?)]\n  [bar (-> any/c)]))\n")
       (check-equal? (count-anyc-in-file content) 3))
 
     (test-case "any/c outside contract-out NOT counted"
-      (define content "#lang racket\n(define (f x) x) ;; x is any/c\n(provide (contract-out [foo -> string?]))\n")
+      (define content
+        "#lang racket\n(define (f x) x) ;; x is any/c\n(provide (contract-out [foo -> string?]))\n")
       (check-equal? (count-anyc-in-file content) 0))
 
     (test-case "any/c in define/contract IS counted"
-      (define content "#lang racket\n(define/contract (foo x)\n  (-> any/c string?)\n  (format \"~a\" x))\n")
+      (define content
+        "#lang racket\n(define/contract (foo x)\n  (-> any/c string?)\n  (format \"~a\" x))\n")
       (check-equal? (count-anyc-in-file content) 1))
 
     (test-case "any/c in ->* contract counted"
-      (define content "#lang racket\n(provide (contract-out\n  [foo (->* (any/c) (#:bar any/c) any/c)]))\n")
+      (define content
+        "#lang racket\n(provide (contract-out\n  [foo (->* (any/c) (#:bar any/c) any/c)]))\n")
       (check-equal? (count-anyc-in-file content) 3))
 
     ;; ── anyc-in-contract-form? helper ──
@@ -70,7 +75,8 @@
       (check-equal? (count-anyc-in-file "((broken") 0))
 
     (test-case "file with both contract-out and comments only counts contract"
-      (define content "#lang racket
+      (define content
+        "#lang racket
 ;; any/c in comment
 ;; Another any/c reference
 (provide (contract-out
@@ -81,7 +87,8 @@
       (check-equal? (count-anyc-in-file content) 2))
 
     (test-case "multi-line contract forms counted correctly"
-      (define content "#lang racket
+      (define content
+        "#lang racket
 (provide
  (contract-out
   [make-thing (->* (string?

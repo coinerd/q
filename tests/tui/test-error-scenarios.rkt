@@ -2,6 +2,7 @@
 
 ;; @not-test
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: io
 

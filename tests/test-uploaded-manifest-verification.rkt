@@ -5,6 +5,8 @@
 ;; release-manifest.json and verify all commit/tag/hash fields match.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/string
          racket/runtime-path)

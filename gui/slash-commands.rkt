@@ -32,7 +32,8 @@
          "../runtime/goal/goal-checks.rkt"
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
-                  campaign-result-status)
+                  campaign-result-status
+                  campaign-result-message)
          (only-in "../runtime/session/session-types.rkt" agent-session-config)
          (only-in "../runtime/session/session-config.rkt" config-max-iterations)
          (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget)
@@ -123,10 +124,17 @@
                                        ;; orchestrating GUI session.
                                        #:lease-owner (session-id sess)))
             (unless (eq? (campaign-result-status result) 'campaign-complete)
-              (add-system-msg! (format "[ERROR] /go campaign stopped: ~a"
-                                       (campaign-result-status result))
-                               state-box
-                               gui-state-lock))))))
+              ;; BUG-0017: include the campaign-result-message so a wave-budget
+              ;; timeout is distinguishable from a cancellation/stale stop.
+              (let ([stop-msg (campaign-result-message result)])
+                (add-system-msg! (if (and stop-msg (not (string=? stop-msg "")))
+                                     (format "[ERROR] /go campaign stopped: ~a (~a)"
+                                             (campaign-result-status result)
+                                             stop-msg)
+                                     (format "[ERROR] /go campaign stopped: ~a"
+                                             (campaign-result-status result)))
+                                 state-box
+                                 gui-state-lock)))))))
      ;; Legacy extension compatibility when no runtime campaign token exists.
      (when (and (not campaign-token) (hash-ref payload 'new-session #f))
        (thread (lambda ()

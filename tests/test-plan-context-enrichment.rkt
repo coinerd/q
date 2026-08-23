@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-plan-context-enrichment.rkt
 ;; v0.99.23 B-1/B-2: Tests for plan-context enrichment.

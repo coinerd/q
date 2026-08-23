@@ -1,7 +1,12 @@
 #lang racket/base
 
+;; @covers runtime/memory/policy.rkt
+;; @covers runtime/memory/types.rkt
+;; @covers runtime/memory/service.rkt
+
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 (require rackunit
          racket/file

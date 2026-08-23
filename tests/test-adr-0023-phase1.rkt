@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; ADR-0023 Phase 1 test scaffolding — GAP-1, GAP-3, GAP-6
 ;; TDD red phase: tests verify behaviors that don't exist yet.
 

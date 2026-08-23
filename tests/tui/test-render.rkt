@@ -1,6 +1,8 @@
 #lang racket
+;; @covers tui/render.rkt
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: io
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;;; test-memory-backend-config.rkt — W0/W4 characterization tests
 ;;;
 ;;; W0: Characterize complex backend config gaps.

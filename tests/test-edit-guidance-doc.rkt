@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; W2 regression tests for v0.99.79 agent editing guidance and recovery.
 
@@ -43,9 +44,10 @@
 (test-case "runbook and too-long error give consistent routing guidance"
   (define path (make-temporary-file "q-edit-guidance-~a.txt"))
   (dynamic-wind
-   (lambda () (display-to-file (make-string 600 #\x) path #:exists 'replace))
+   (lambda () (display-to-file (make-string 2100 #\x) path #:exists 'replace))
    (lambda ()
-     (define result (tool-edit (hasheq 'path path 'old-text (make-string 501 #\x) 'new-text "short")))
+     (define result
+       (tool-edit (hasheq 'path path 'old-text (make-string 2001 #\x) 'new-text "short")))
      (check-true (tool-result-is-error? result))
      (define message (result-message result))
      (define runbook (runbook-text))

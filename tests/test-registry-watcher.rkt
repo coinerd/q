@@ -12,6 +12,8 @@
 ;;   6. no memory leak after multiple start/stop cycles
 
 ;; @speed fast
+;; @suite default
+;; @boundary integration
 (require rackunit
          rackunit/text-ui
          racket/file

@@ -9,6 +9,7 @@
 ;; Runtime services behind a host protocol without breaking semantics:
 ;;
 ;;   CH1  session-type boundary: util/extension/extension-types.rkt has no
+;; @boundary unit
 ;;        runtime/ import (MA-03 closure evidence).
 ;;   CH2  extension-ctx struct surface: 16 documented fields, transparent.
 ;;   CH3  ctx-* provider wrappers register/update/list/lookup/unregister.

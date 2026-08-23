@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/composition-root.rkt
 ;; @speed fast
 ;; @suite extensions
+;; @boundary unit
 
 (require rackunit
          racket/runtime-path

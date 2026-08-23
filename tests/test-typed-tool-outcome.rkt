@@ -2,6 +2,8 @@
 
 ;; tests/test-typed-tool-outcome.rkt
 ;; W3A (#8940): Typed outcome contracts at the tool boundary.
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;;
 ;; Tests that a (tool-call, tool-result) pair can be classified into a
 ;; safe typed-tool-outcome with no raw content, no secrets, and correct

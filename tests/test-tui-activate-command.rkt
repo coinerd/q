@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite tui
+;; @boundary integration
 
 ;; BOUNDARY: io
 

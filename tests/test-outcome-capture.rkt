@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-outcome-capture.rkt
 ;; W3B (#8940): Runtime capture — typed-tool-outcome → task-ledger-event.
 ;;

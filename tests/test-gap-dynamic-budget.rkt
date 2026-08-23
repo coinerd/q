@@ -4,6 +4,8 @@
 ;; v0.97.4 W0: GAP-E dynamic conclusion budget
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/context-assembly/config.rkt" compute-conclusion-budget)

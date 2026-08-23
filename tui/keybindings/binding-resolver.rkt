@@ -60,6 +60,11 @@
        [(and (> (string-length s) 6) (string-prefix? s "shift-"))
         (define rest (substring s 6))
         (key-spec (string->symbol rest) #f #t #f)]
+       ;; W4: Alt-prefixed keycodes (e.g. 'alt-up) resolve to an
+       ;; alt-modified key-spec so Alt+Up/Alt+Down match their default
+       ;; keymap entries.
+       [(and (> (string-length s) 4) (string-prefix? s "alt-"))
+        (key-spec (string->symbol (substring s 4)) #f #f #t)]
        [else (key-spec keycode #f #f #f)])]
     [else #f]))
 

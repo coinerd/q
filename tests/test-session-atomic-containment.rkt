@@ -10,6 +10,7 @@
 ;; directory capability and then performs an external "attacker" symlink swap;
 ;; held-capability operations must hit the original inode and never follow the
 ;; swap, or reject (no-follow) rather than read/write outside the boundary.
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

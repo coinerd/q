@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: unit
 ;; Tests for strict argument validation in run-tests.rkt (v0.83.1 W0)
@@ -26,7 +27,7 @@
 ;; New args added after inventory?: diagnose-overhead?, mode, json-out, ledger, profile
 ;; Default test args: #f 'auto #f #f 'local
 ;; Args are: diagnose-overhead? mode json-out ledger profile
-(define default-new-args (list #f 'auto #f #f 'local))
+(define default-new-args (list #f 'auto #f #f 'local #f #f #f #f #f #f #f #f #f #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Unit tests: validate-args!

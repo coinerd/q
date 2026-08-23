@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-version-surface.rkt — Tests for centralized version surface registry
 ;; W2 (#8415): Consolidates version-parsing logic from 4 scripts.

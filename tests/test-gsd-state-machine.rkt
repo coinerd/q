@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/state-machine.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; tests/test-effect-executor.rkt — Step effect executor tests (F2)

@@ -1,7 +1,9 @@
 #lang racket
+;; @covers extensions/context.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

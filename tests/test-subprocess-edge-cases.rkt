@@ -14,7 +14,8 @@
 (require rackunit
          rackunit/text-ui
          "../sandbox/subprocess.rkt"
-         "../sandbox/limits.rkt")
+         "../sandbox/limits.rkt"
+         (only-in "../util/version.rkt" q-version))
 
 ;; ============================================================
 ;; Helpers
@@ -25,9 +26,19 @@
 
 ;; W1 v0.99.77: process-group kill is only possible where `setsid` exists
 ;; (Linux util-linux). On macOS (no setsid) the timeout path still sends
+;; @boundary integration
 ;; SIGTERM then SIGKILL to the direct child, but cannot signal the whole
 ;; group — so survivor assertions are conditional on setsid availability.
 (define setsid-available? (not (false? (find-executable-path "setsid"))))
+
+;; W2: macOS /bin/sh is bash (PIPESTATUS evaluates; no dash); SP12's
+;; dash-specific assertions are conditional, mirroring setsid-available?.
+(define sh-is-dash?
+  (let ([probe (run-subprocess "/bin/sh"
+                               #:args '("-c" "false | true; echo PS=${PIPESTATUS[0]}")
+                               #:limits (fast-limits #:timeout 5))])
+    (and (equal? (subprocess-result-exit-code probe) 2)
+         (regexp-match? #rx"Bad substitution" (subprocess-result-stderr probe)))))
 
 ;; Find PIDs whose cmdline contains `marker` (any state).
 (define (matching-pids marker)
@@ -255,16 +266,25 @@
                                                  (subprocess-result-stderr result)))
                    "no 'Bad substitution' error under bash"))
 
-    (test-case "SP12: sh still errors on PIPESTATUS but with exit-2 (baseline for D3)"
-      ;; Documents the F-20 misattribution: dash gives a silent exit-2 abort.
-      ;; The bash tool no longer uses /bin/sh, so this must not surface.
+    (test-case "SP12: sh PIPESTATUS outcome is recorded per implementation (baseline for D3)"
+      ;; Documents the F-20 misattribution: dash aborts with a silent exit-2
+      ;; "Bad substitution"; bash-as-sh (macOS /bin/sh) instead evaluates
+      ;; PIPESTATUS. The bash tool no longer uses /bin/sh, so neither surface
+      ;; is exercised in production — the contract is that /bin/sh produces a
+      ;; predictable, implementation-recorded outcome on both platforms.
       (define result
         (run-subprocess "/bin/sh"
                         #:args '("-c" "false | true; echo PS=${PIPESTATUS[0]}")
                         #:limits (fast-limits #:timeout 5)))
-      (check-equal? (subprocess-result-exit-code result) 2 "dash exits 2 on Bad substitution")
-      (check-not-false (regexp-match? #rx"Bad substitution" (subprocess-result-stderr result))
-                       "stderr explains the failure"))))
+      (cond
+        [sh-is-dash?
+         (check-equal? (subprocess-result-exit-code result) 2 "dash exits 2 on Bad substitution")
+         (check-not-false (regexp-match? #rx"Bad substitution" (subprocess-result-stderr result))
+                          "stderr explains the failure")]
+        [else
+         (check-equal? (subprocess-result-exit-code result) 0 "bash-as-sh evaluates PIPESTATUS")
+         (check-not-false (regexp-match? #rx"PS=1" (subprocess-result-stdout result))
+                          "PIPESTATUS[0] is 1 under bash-as-sh")]))))
 
 (module+ main
   (run-tests subprocess-edge-tests))

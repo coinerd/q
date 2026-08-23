@@ -1,7 +1,9 @@
 #lang racket/base
+;; @covers runtime/context-assembly/state-inference.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-task-state-inference.rkt — tests for state-inference heuristics
 ;; v0.75.2: Tool-call pattern → task-state inference + event wiring

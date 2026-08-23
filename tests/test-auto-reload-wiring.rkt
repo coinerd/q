@@ -11,6 +11,8 @@
 ;; 5. watcher can be started and stopped cleanly
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/hash

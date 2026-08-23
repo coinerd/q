@@ -1,5 +1,5 @@
 name: 'Setup Racket'
-description: 'Install Racket with caching and dependencies'
+description: 'Install Racket with a deterministic user package store and package-visible compilation gate'
 inputs:
   racket-version:
     description: 'Racket version to install'
@@ -8,93 +8,147 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Clean stale compiled bytecode
+    - name: Clean stale q workspace bytecode
       shell: bash
       run: |
         set -euo pipefail
-        find . -type f -name '*.zo' -delete
-        find . -depth -type d -name compiled -exec rm -rf {} +
+        # The frozen discovery fixture (tests/metadata-discovery/fixture/)
+        # keeps a TRACKED stray .rkt inside a compiled/ directory as pinned
+        # input for tests/ci/metadata-discovery-test.rkt — never wipe it.
+        find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' -delete
+        find . -depth -type d -name compiled -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +
 
-    - name: Cache Racket packages
+    # Racket’s default macOS user store is ~/Library/Racket/<version>, while
+    # Linux uses a different default. Make the cacheable store explicit so the
+    # same composite action owns it on every runner, without caching source
+    # bytecode from the fresh checkout.
+    - name: Configure Racket user package store
+      id: racket-store
+      shell: bash
+      run: |
+        set -euo pipefail
+        addon_base="$HOME/.cache/q-racket-addon"
+        addon_path="$addon_base/${{ inputs.racket-version }}"
+        echo "PLTADDONDIR=$addon_base" >> "$GITHUB_ENV"
+        echo "addon_path=$addon_path" >> "$GITHUB_OUTPUT"
+
+    # Exact only: a dependency-lock mismatch must create a clean store, never
+    # restore a potentially incompatible package graph through a prefix key.
+    - name: Restore locked Racket user package store
+      id: racket-addon-cache
       uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
       with:
-        path: |
-          ~/.racket
-          ./compiled
-        key: racket-${{ runner.os }}-${{ inputs.racket-version }}-${{ hashFiles('info.rkt') }}
-        restore-keys: |
-          racket-${{ runner.os }}-${{ inputs.racket-version }}-
+        path: ${{ steps.racket-store.outputs.addon_path }}
+        key: >-
+          racket-addon-v2-${{ runner.os }}-x64-cs-full-${{ inputs.racket-version }}-
+          ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}
 
     - name: Install Racket
       uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
       with:
+        architecture: 'x64'
+        distribution: 'full'
+        variant: 'CS'
         version: ${{ inputs.racket-version }}
 
-    - name: Start Xvfb for TUI tests (Linux only)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -qq -y xvfb
-        Xvfb :99 -screen 0 1024x768x24 &
-        export DISPLAY=:99
-        echo "DISPLAY=:99" >> $GITHUB_ENV
+    # NOTE: No Xvfb / DISPLAY setup here. Starting a background Xvfb on
+    # GitHub-hosted runners breaks jobs (the step hangs and TUI tests stall
+    # when the background server is reaped between steps). TUI tests use the
+    # native Racket terminal implementation and do not need an X display.
 
     # ------------------------------------------------------------------
-    # Package setup: install/update the q package, which triggers raco
-    # setup to compile ALL package-visible modules. This is the hidden
-    # compile boundary that catches modules outside main.rkt's
-    # dependency graph (scripts, CLI tools, etc.).
+    # Package setup: the package-visible compile boundary is mandatory. We separate link/
+    # dependency acquisition from `raco setup`: an exact cache hit relinks q
+    # to this checkout, verifies the reviewed dependency graph, then compiles
+    # every q collection without rebuilding documentation.
     # ------------------------------------------------------------------
-    - name: Install q package and compile package-visible modules
+    - name: Link q and compile package-visible modules
       shell: bash
       run: |
-        # Diagnostic: toolchain versions
+        set -euo pipefail
+        setup_started=$(date +%s)
+
         echo "=== Package Setup Diagnostics ==="
-        echo ""
-        echo "Racket version:"
-        racket --version
-        echo ""
-        echo "raco version:"
-        raco help > /tmp/raco-help.txt
-        head -n 1 /tmp/raco-help.txt
-        echo ""
+        echo "Racket version: $(racket --version)"
         echo "Working directory: $PWD"
-        echo "PLTUSERHOME: ${PLTUSERHOME:-<not set>}"
+        echo "PLTADDONDIR: ${PLTADDONDIR:?PLTADDONDIR must be configured}"
+        echo "Racket package cache hit: ${{ steps.racket-addon-cache.outputs.cache-hit }}"
+        echo "::group::Racket toolchain diagnostics"
+        raco help >/dev/null
+        echo "::endgroup::"
+        echo "Package state:"
+        raco pkg show --scope user q || true
         echo ""
 
-        # Idempotent local package setup: install if absent, update if present.
-        # Use $PWD instead of '.' to avoid macOS "invalid package source" errors.
-        if raco pkg show q 2>/dev/null | grep -q "q"; then
-          echo "Package state: q already installed"
-          echo ""
-          echo "::group::Updating q package (raco pkg update --auto q)"
-          raco pkg update --auto q
+        # raco pkg show exits 0 even when the package is absent (it prints
+        # "[none]"), so exit status cannot detect installation. Compare the
+        # trimmed output instead.
+        q_installed() {
+          [ "$(raco pkg show --scope user q 2>/dev/null | tr -d '[:space:]')" != "[none]" ]
+        }
+
+        if [ "${{ steps.racket-addon-cache.outputs.cache-hit }}" = "true" ]; then
+          if ! q_installed; then
+            echo "::error::Exact Racket cache hit lacks the q user package; bump the cache schema or repair ci/racket-package-lock.rktd. Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight"
+            exit 1
+          fi
+
+          echo "::group::Verifying exact cached dependency lock"
+          racket ci/verify-racket-package-lock.rkt
+          echo "::endgroup::"
+
+          echo "::group::Relinking q to the checked-out source without global setup"
+          set +e
+          raco pkg update --name q --link --batch --no-setup "$PWD"
           UPDATE_RC=$?
-          echo "::endgroup::"
-          if [ $UPDATE_RC -ne 0 ]; then
-            echo ""
-            echo "::error::raco pkg update failed with exit code $UPDATE_RC"
-            echo "This indicates a compile error in a package-visible module."
-            echo "Run locally: racket scripts/ci-package-setup.rkt --preflight"
-            exit $UPDATE_RC
+          set -e
+          if [ "$UPDATE_RC" -ne 0 ]; then
+            echo "::error::q relink failed (UPDATE_RC=$UPDATE_RC). Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight"
+            exit "$UPDATE_RC"
           fi
+          echo "::endgroup::"
         else
-          echo "Package state: q not installed"
-          echo ""
-          echo "::group::Installing q package (raco pkg install --auto --batch $PWD)"
-          raco pkg install --auto --batch "$PWD"
-          INSTALL_RC=$?
-          echo "::endgroup::"
-          if [ $INSTALL_RC -ne 0 ]; then
-            echo ""
-            echo "::error::raco pkg install failed with exit code $INSTALL_RC"
-            echo "This indicates a compile error in a package-visible module."
-            echo "Run locally: racket scripts/ci-package-setup.rkt --preflight"
-            exit $INSTALL_RC
+          echo "::group::Installing reviewed q dependencies without global setup"
+          # The pilot rollback runs after a producer that already link-
+          # installed q into the shared user scope; relink instead of
+          # failing on "package is already installed".
+          if q_installed; then
+            set +e
+            raco pkg update --name q --link --batch --no-setup "$PWD"
+            INSTALL_RC=$?
+            set -e
+          else
+            set +e
+            raco pkg install --name q --auto --batch --no-setup --no-docs "$PWD"
+            INSTALL_RC=$?
+            set -e
           fi
+          if [ "$INSTALL_RC" -ne 0 ]; then
+            echo "::error::q dependency installation failed (INSTALL_RC=$INSTALL_RC). Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight"
+            exit "$INSTALL_RC"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Verifying freshly resolved dependency lock"
+          racket ci/verify-racket-package-lock.rkt
+          echo "::endgroup::"
         fi
 
-        echo ""
+        # Compile every q package-visible collection and the `fmt` command
+        # package used by racket-tooling write validation. `fmt` is a build
+        # dependency, so q setup alone does not reliably install its `raco`
+        # command in a clean CI user store.
+        echo "::group::Compiling q collections and the formatter command"
+        raco setup --no-docs --jobs 4 --pkgs q fmt
+        raco fmt --help >/dev/null
+        echo "::endgroup::"
+
+        racket -e '(require quickcheck fmt) (displayln "Racket package store health check passed")'
+        duration=$(( $(date +%s) - setup_started ))
+        {
+          echo "## Racket package setup"
+          echo "- Cache hit: \`${{ steps.racket-addon-cache.outputs.cache-hit }}\`"
+          echo "- User store: \`$PLTADDONDIR/${{ inputs.racket-version }}\`"
+          echo "- Package-visible setup: ${duration}s"
+        } >> "$GITHUB_STEP_SUMMARY"
         echo "=== Package setup completed successfully ==="
-        # TUI uses native Racket implementations (no external deps needed)

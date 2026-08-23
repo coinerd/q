@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -245,6 +246,56 @@
     (check-true (vector? result))
     (check-equal? (vector-ref result 0) 'tkeymsg)
     (check-equal? (vector-ref result 1) 'ctrl-left)))
+
+;; ============================================================
+;; W5: Ctrl+O decode parity — every input route must produce the
+;; canonical 'ctrl-o symbol so keymap resolution has exactly one
+;; path to ui.transcript.toggle-detail (no hardcoded fallback).
+;; ============================================================
+
+(test-case "real-stdin-read-msg decodes raw Ctrl+O byte (15) as ctrl-o"
+  (define in (open-input-bytes (bytes 15)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-o)))
+
+(test-case "real-stdin-read-msg decodes kitty CSI-u Ctrl+O control codepoint (ESC[15;5u)"
+  (define in (open-input-bytes (bytes 27 91 49 53 59 53 117)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-o)))
+
+(test-case "real-stdin-read-msg decodes kitty CSI-u Ctrl+O letter codepoint (ESC[111;5u)"
+  (define in (open-input-bytes (bytes 27 91 49 49 49 59 53 117)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-o)))
+
+(test-case "real-stdin-read-msg decodes kitty CSI-u Shift+Ctrl+letter (ESC[15;6u) as ctrl-o"
+  (define in (open-input-bytes (bytes 27 91 49 53 59 54 117)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-o)))
+
+(test-case "kitty CSI-u without ctrl bit (ESC[111;1u) does not decode as ctrl-o"
+  (define in (open-input-bytes (bytes 27 91 49 49 49 59 49 117)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-not-equal? (vector-ref result 1) 'ctrl-o)))
 
 (test-case "real-stdin-read-msg decodes Shift+Up (ESC[1;2A)"
   (define in (open-input-bytes (bytes 27 91 49 59 50 65)))

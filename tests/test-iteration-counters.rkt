@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -29,13 +30,14 @@
 (define (make-test-counters #:iteration [iter 0]
                             #:consecutive-tool-count [tc 0]
                             #:seen-paths [sp '()]
+                            #:edited-paths [ep '()]
                             #:explore-count [ec 0]
                             #:implement-count [ic 0]
                             #:consecutive-error-count [cec 0]
                             #:recent-tool-names [rtn '()]
                             #:intent-retry-count [irc 0]
                             #:stall-retry-count [src 0])
-  (loop-counters iter tc sp irc cec rtn ec ic src '() #f))
+  (loop-counters iter tc sp ep irc cec rtn ec ic src '() #f))
 
 (define (make-assistant-msg text)
   (make-message "test-id"
@@ -129,7 +131,22 @@
       (define result (compute-next-counters c msgs))
       (define recent (loop-counters-recent-tool-names result))
       (check-not-false (member "new-tool" recent))
-      (check-not-false (member "old-tool" recent)))))
+      (check-not-false (member "old-tool" recent)))
+
+    (test-case "BUG-0016: distinct-file edit resets the consecutive-tool streak"
+      ;; A turn editing a file not previously edited in the streak is progress;
+      ;; the streak must reset (bulk migrations must not be policy-killed).
+      (define c (make-test-counters #:consecutive-tool-count 190))
+      (define msgs (list (make-tool-call-msg (list "edit" (hasheq 'path "/tmp/a.rkt")))))
+      (define result (compute-next-counters c msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 0)
+      (check-equal? (loop-counters-edited-paths result) '("/tmp/a.rkt")))
+
+    (test-case "BUG-0016: non-distinct edit (same file) keeps the streak"
+      (define c (make-test-counters #:consecutive-tool-count 190 #:edited-paths '("/tmp/a.rkt")))
+      (define msgs (list (make-tool-call-msg (list "edit" (hasheq 'path "/tmp/a.rkt")))))
+      (define result (compute-next-counters c msgs))
+      (check-equal? (loop-counters-consecutive-tool-count result) 191))))
 
 ;; ============================================================
 ;; Run

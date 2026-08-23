@@ -18,6 +18,7 @@
          (only-in "../util/error/errors.rkt"
                   q-error
                   q-error?
+                  q-error-context
                   q-llm-error
                   q-llm-error?
                   q-llm-error-category))
@@ -25,6 +26,10 @@
 (provide provider-error
          provider-error?
          provider-error-category
+         ;; v1.00.13 W3 (#9473): structured failure-context accessor (RL-7) —
+         ;; alias of the inherited q-error context field, named for the
+         ;; provider boundary so retry code reads intent.
+         provider-error-context
          provider-error-status-code
          q-llm-error?
          transient-provider-error-categories
@@ -43,6 +48,9 @@
 
 ;; Backward-compat: provider-error-category reads from q-llm-error parent field.
 (define provider-error-category q-llm-error-category)
+
+;; v1.00.13 W3 (#9473): structured failure context accessor (RL-5/RL-7).
+(define provider-error-context q-error-context)
 
 ;; ============================================================
 ;; Constructor helper

@@ -2,6 +2,7 @@
 
 ;; tests/test-browser-integration.rkt — Regression tests for browser-integration extraction (AXIS1-F01)
 ;; @speed fast  ;; @suite runtime
+;; @boundary integration
 ;; Verifies that extracted browser adapter functions work independently.
 
 (require rackunit

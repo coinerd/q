@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration
 
 ;; Cross-plane contract tests for local and worker edit execution.
 
@@ -130,15 +131,15 @@
                       (check-equal? (file->string worker-path) "alpha  \nbeta"))
                     (lambda () (delete-directory/files dir))))
 
-    (test-case "old-text over 500 characters is rejected without mutation"
-      (define content (make-string 600 #\x))
+    (test-case "old-text over 2000 characters is rejected without mutation"
+      (define content (make-string 2100 #\x))
       (run-parity-case content
-                       (make-string 501 #\x)
+                       (make-string 2001 #\x)
                        "short"
                        #:expected-status 'error
                        #:expected-content content))
 
-    (test-case "nondefault max length above 500 is honored in both planes"
+    (test-case "nondefault max length above default is honored in both planes"
       (define old-text (make-string 501 #\x))
       (run-parity-case old-text
                        old-text
@@ -211,7 +212,7 @@
     (test-case "worker too-long error routes to a whole-form structural edit"
       (define dir (make-temporary-file "q-edit-worker-too-long-~a" 'directory))
       (define path (build-path dir "worker.txt"))
-      (define content (make-string 600 #\x))
+      (define content (make-string 2100 #\x))
       (dynamic-wind
        void
        (lambda ()
@@ -220,7 +221,7 @@
            (parameterize ([current-allowed-roots (list dir)])
              (dispatch-tool
               "edit"
-              (hasheq 'path (path->string path) 'old-text (make-string 501 #\x) 'new-text "short"))))
+              (hasheq 'path (path->string path) 'old-text (make-string 2001 #\x) 'new-text "short"))))
          (define message (ipc-response-error-message result))
          (check-equal? (ipc-response-status result) 'error)
          (check-true (string-contains? message "max-old-text-len"))
@@ -360,11 +361,23 @@
          (check-false (tool-result-is-error? ok-result) "exact match with em dash should succeed")
          ;; Recreate file
          (display-to-file content p #:exists 'replace)
-         ;; Test 2: one-space indentation mismatch reports detailed diagnostics
-         (define fail-result
+         ;; Test 2: a one-space leading-whitespace mismatch now succeeds via the
+         ;; leading-ws auto-fallback (#9366) and reports the indentation note
+         (define ws-result
            (tool-edit (hasheq 'path p 'old-text old-text-with-different-indent 'new-text "replaced")
                       #f))
-         (check-true (tool-result-is-error? fail-result) "indentation mismatch should fail")
+         (check-false (tool-result-is-error? ws-result)
+                      "leading-whitespace-only mismatch should auto-fallback")
+         (define ws-text (local-result-text ws-result))
+         (check-true (string-contains? ws-text "Note:")
+                     "auto-fallback should surface the indentation note")
+         ;; Recreate file
+         (display-to-file content p #:exists 'replace)
+         ;; Test 3: a genuine content mismatch still reports detailed diagnostics
+         (define old-text-different-body "def foo(em \u2014 dash):\n    fail\n")
+         (define fail-result
+           (tool-edit (hasheq 'path p 'old-text old-text-different-body 'new-text "replaced") #f))
+         (check-true (tool-result-is-error? fail-result) "content mismatch should fail")
          (define err-text (local-result-text fail-result))
          (check-true (string-contains? err-text "offset") "diagnostics should mention offset")
          (check-true (or (string-contains? err-text "U+20") (string-contains? err-text "U+0020"))

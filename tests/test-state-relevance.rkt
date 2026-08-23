@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-state-relevance.rkt — tests for state-relevance matrix
 ;; v0.76.0 W3: Tighten state-relevance matrix

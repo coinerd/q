@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-lint-doc-freshness.rkt — Doc freshness lint tests (v0.54.6 W2)
 

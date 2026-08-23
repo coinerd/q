@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-permission-denial-path.rkt — Denial-path integration tests (v0.54.4 W2)
 

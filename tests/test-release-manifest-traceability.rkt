@@ -2,6 +2,7 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @boundary unit
 ;; tests/test-release-manifest-traceability.rkt
 ;;
 ;; W6 (#8546): Tag/manifest/release traceability evidence tests.

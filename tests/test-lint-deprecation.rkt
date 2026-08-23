@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @isolation process
+;; @boundary unit  ;; @mutates fs
 
 ;; BOUNDARY: integration
 

@@ -3,6 +3,7 @@
 ;; tests/test-maintainability-roadmap-freeze.rkt — v0.99.87 W4 freeze fitness
 ;; @speed fast
 ;; @suite arch
+;; @boundary unit
 ;;
 ;; The roadmap freeze is a machine-readable contract: every MA finding has an
 ;; owner, target, closure proof, and release assignment; every follow-up wave

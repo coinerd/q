@@ -80,11 +80,15 @@
   (current-git-root . CONFIGURATION))
  ("extensions/gsd/composition-root.rkt"
   (current-gsd-effect-ports . SERVICE_HANDLE))
+ ("extensions/gsd/delivery-verifier.rkt"
+  (current-gsd-delivery-verify-command . SERVICE_HANDLE)
+  (current-gsd-delivery-verify-timeout-sec . CONFIGURATION))
  ("extensions/gsd/go-orchestrator.rkt"
   (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ("extensions/gsd/policy.rkt"
-  (current-gsd-wave-timeout-seconds . CONFIGURATION)
   (current-gsd-wave-max-iterations . CONFIGURATION)
+  (current-gsd-wave-timeout-retries . CONFIGURATION)
+  (current-gsd-wave-timeout-seconds . CONFIGURATION)
   (current-gsd-max-consecutive-tool-calls . CONFIGURATION))
  ("extensions/gsd/session-state.rkt"
   (current-gsd-session-id . SERVICE_HANDLE)
@@ -121,9 +125,16 @@
   (current-sessions-fs-ops . SERVICE_HANDLE))
  ("llm/gemini.rkt"
   (current-gemini-tool-id-counter . TURN_LOCAL))
- ("llm/stream.rkt"
+ ("llm/request-policy.rkt"
   (current-model-timeouts . CONFIGURATION)
+  (current-model-sse-read-timeouts . CONFIGURATION)
+  (current-model-thinking-idle-timeouts . CONFIGURATION)
+  (current-model-body-read-timeouts . CONFIGURATION)
   (current-http-request-timeout . CONFIGURATION))
+ ("llm/http-helpers.rkt"
+  (current-provider-http-sendrecv . SERVICE_HANDLE))
+ ("llm/stream.rkt"
+  (current-request-mechanism-observer . SERVICE_HANDLE))
  ("runtime/auth/oauth.rkt"
   (current-oauth-http-sendrecv . SERVICE_HANDLE))
  ("runtime/auto-retry.rkt"
@@ -191,7 +202,11 @@
   (current-auto-reflection-enabled . CONFIGURATION)
   (current-memory-policy . CONFIGURATION)
   (current-memory-backend . SERVICE_HANDLE))
- ("runtime/package.rkt"
+  ("runtime/provider-retry.rkt"
+   (current-provider-retry-ceiling-secs . CONFIGURATION)
+   (current-provider-retry-max-retries . CONFIGURATION)
+   (current-provider-retry-stall-max-consecutive . CONFIGURATION))
+  ("runtime/package.rkt"
   (current-packages-dir . CONFIGURATION))
  ("runtime/safe-mode.rkt"
   (current-safe-mode-locked? . CONFIGURATION))

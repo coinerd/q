@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite integration
+;; @boundary integration
 
 ;; tests/test-capability-token-integration.rkt — W6 (v0.99.9)
 ;;

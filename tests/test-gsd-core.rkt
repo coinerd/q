@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/core.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

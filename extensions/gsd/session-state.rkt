@@ -39,7 +39,7 @@
   (gsd-session-ctx (box (make-initial-gsd-state))
                    (box #f)
                    (box #f)
-                   (box 500)
+                   (box 2000)
                    (box #f)
                    (box '())
                    (box #f)

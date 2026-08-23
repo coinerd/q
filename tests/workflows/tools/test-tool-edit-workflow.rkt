@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite workflows
+;; @boundary integration
 
 ;; tests/workflows/tools/test-tool-edit-workflow.rkt — Edit workflow (#173)
 ;;

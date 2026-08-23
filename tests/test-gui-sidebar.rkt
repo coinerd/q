@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-sidebar.rkt — Tests for gui/views/sidebar.rkt
 

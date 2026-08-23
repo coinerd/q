@@ -38,6 +38,7 @@
          ;; Command parser (pure AST)
          "../extensions/gsd/command-parser.rkt"
          ;; Plan types (typed/racket boundary)
+         ;; @boundary unit
          "../extensions/gsd/plan-types.rkt")
 
 ;; ---------------------------------------------------------------------------

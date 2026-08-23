@@ -4,6 +4,7 @@
 ;; @suite fast
 
 ;; W1 (#8504): Package-visible compile boundary tests.
+;; @boundary unit
 ;; Verifies that the 4 modules that previously failed `raco pkg setup`
 ;; compilation now compile cleanly.
 ;;

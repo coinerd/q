@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; q/tests/test-goal-evaluations-persistence.rkt — W1 v0.99.78 (G-8)
 ;;
 ;; Contract: evaluator decisions are persisted to the session log as

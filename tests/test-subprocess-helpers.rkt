@@ -8,6 +8,7 @@
 ;; - Result struct + constructors (make-error-result, make-timeout-result, make-success-result)
 ;; - Exit code classifiers (exit-success?, exit-timeout?, exit-error?)
 ;; - Message formatters (format-timeout-message, format-truncation-message)
+;; @boundary unit
 ;; - Secret detection (check-secret-var?, secret-patterns, SECRET-IMPLICIT-ALLOWLIST)
 
 (require rackunit

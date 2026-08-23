@@ -9,6 +9,8 @@
 ;; that claimed counts match actual counts.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../scripts/claim-verifier.rkt")
 

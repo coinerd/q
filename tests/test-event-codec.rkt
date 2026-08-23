@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: serialization
 
@@ -102,17 +103,20 @@
 
 ;; v0.42.2: Macro-registered typed event decode via hash->payload
 (test-case "hash->payload decodes macro-registered turn-start-event"
-  (define evt (make-turn-start-event #:session-id "s1" #:turn-id "t1"
-                                      #:timestamp 1000.0 #:model "gpt-4"
-                                      #:provider "openai"))
+  (define evt
+    (make-turn-start-event #:session-id "s1"
+                           #:turn-id "t1"
+                           #:timestamp 1000.0
+                           #:model "gpt-4"
+                           #:provider "openai"))
   (define h (typed-event->jsexpr evt))
   (define decoded (hash->payload h))
   (check-true (turn-start-event? decoded) "should decode to turn-start-event")
   (check-equal? (typed-event-session-id decoded) "s1"))
 
 (test-case "hash->payload decodes macro-registered session-start-event"
-  (define evt (make-session-start-event #:session-id "s1" #:turn-id "t1"
-                                        #:timestamp 1000.0 #:model "gpt-4"))
+  (define evt
+    (make-session-start-event #:session-id "s1" #:turn-id "t1" #:timestamp 1000.0 #:model "gpt-4"))
   (define h (typed-event->jsexpr evt))
   (define decoded (hash->payload h))
   (check-true (session-start-event? decoded) "should decode to session-start-event")

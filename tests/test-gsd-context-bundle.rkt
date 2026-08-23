@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/context-bundle.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

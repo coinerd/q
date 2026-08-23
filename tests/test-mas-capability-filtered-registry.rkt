@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-mas-capability-filtered-registry.rkt — Tests for tool capability filtering
 ;; STABILITY: evolving

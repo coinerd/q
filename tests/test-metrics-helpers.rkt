@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 ;; BOUNDARY: pure
 
 ;; W5 (#8479): Unit tests for scripts/metrics-helpers.rkt

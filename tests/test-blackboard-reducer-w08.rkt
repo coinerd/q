@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-blackboard-reducer-w08.rkt — W0 (v0.99.8) Reducer Audit Fix Tests
 ;;

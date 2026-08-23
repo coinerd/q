@@ -41,10 +41,14 @@
                   wire-ui-event-actions-from-config!)
          (only-in "../runtime/settings-query.rkt" setting-ref*)
          "../util/config-paths.rkt"
-         (only-in "../extensions/gsd/policy.rkt" gsd-session-iteration-budget)
+         (only-in "../extensions/gsd/policy.rkt"
+                  gsd-session-iteration-budget
+                  current-gsd-wave-max-iterations)
          (only-in "../extensions/gsd/core.rkt"
                   current-gsd-campaign-owner
-                  call-with-gsd-owned-session-switch))
+                  call-with-gsd-owned-session-switch)
+         (only-in "../tui/context.rkt" tui-ctx-set-preferences!)
+         (only-in "../ui-core/preferences.rkt" load-preferences current-preferences))
 
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
@@ -193,7 +197,8 @@
       (run-prompt! campaign-sess
                    prompt
                    #:max-iterations
-                   (gsd-session-iteration-budget (dict-ref rt-config 'max-iterations 50)))))
+                   (gsd-session-iteration-budget
+                    (dict-ref rt-config 'max-iterations (current-gsd-wave-max-iterations))))))
 
   ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the
   ;; session-runner closure can read dynamically from it.  After /go
@@ -202,6 +207,13 @@
   ;; session — not the stale original — so that events are not filtered
   ;; out by event-for-current-session?.
   (define agent-session-box (box sess))
+
+  ;; W3 (v1.00.02): load the user preference snapshot ONCE.  One snapshot
+  ;; drives composer layout, key resolution and scrollback persistence
+  ;; policy for this session; it is injected into the TUI context below
+  ;; and installed as the ambient parameter for leaf modules.
+  (define prefs-snapshot (load-preferences))
+  (current-preferences prefs-snapshot)
 
   (define ctx
     (make-tui-ctx #:event-bus bus
@@ -216,6 +228,7 @@
                                              [() (make-campaign-runner)]
                                              [(prompt) ((make-campaign-runner) prompt)])
                   #:agent-session-box agent-session-box))
+  (tui-ctx-set-preferences! ctx prefs-snapshot)
 
   ;; Scrollback path — BUG-0001 fix (v1.00.00): per-session file.
   ;;
@@ -393,16 +406,20 @@
   ;; leaving run-tui-loop's terminal ownership unchanged.
   (call-with-tui-approval-channel
    (lambda ()
-     ;; The channel is shared via a module-level box so session threads see it.
-     ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
-     (define settings (dict-ref rt-config 'settings #f))
-     (wire-ui-event-actions-from-config! settings)
-     ;; F1/EMIT-01: Let extensions/ui-surface.rkt emit to this runtime bus.
-     (current-ui-event-runtime rt-config)
-     (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
-     (load-tui-scrollback ctx sess rt-config scrollback-path)
-     (init-tui-terminal ctx)
-     (run-tui-loop ctx scrollback-path)))
+     ;; W3 (v1.00.02): the loaded preference snapshot is ambient for the
+     ;; whole TUI lifetime so leaf modules (layout, key-dispatch,
+     ;; scrollback) read the SAME snapshot across threads.
+     (parameterize ([current-preferences (load-preferences)])
+       ;; The channel is shared via a module-level box so session threads see it.
+       ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
+       (define settings (dict-ref rt-config 'settings #f))
+       (wire-ui-event-actions-from-config! settings)
+       ;; F1/EMIT-01: Let extensions/ui-surface.rkt emit to this runtime bus.
+       (current-ui-event-runtime rt-config)
+       (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
+       (load-tui-scrollback ctx sess rt-config scrollback-path)
+       (init-tui-terminal ctx)
+       (run-tui-loop ctx scrollback-path))))
   (displayln "Goodbye."))
 
 ;; Simple TUI run (for testing without full runtime)
@@ -410,20 +427,22 @@
   ;; As above, setup and loop both live inside the approval cleanup extent.
   (call-with-tui-approval-channel
    (lambda ()
-     (define ctx (make-tui-ctx #:event-bus bus #:session-runner session-runner))
-     (tui-ctx-init-terminal! ctx)
-     (with-handlers ([exn:break? (lambda (e) (void))]
-                     [exn:fail?
-                      (lambda (e)
-                        (with-handlers ([exn:fail? (lambda (_)
-                                                     (log-q-tui-init-warning "cleanup failed: ~a"
-                                                                             (exn-message _)))])
-                          (disable-mouse-tracking)
-                          (tui-term-close (unbox (tui-ctx-term-box ctx))))
-                        (raise e))])
-       (tui-main-loop ctx))
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
-       (disable-mouse-tracking)
-       (tui-term-close (unbox (tui-ctx-term-box ctx))))))
+     (parameterize ([current-preferences (load-preferences)])
+       (define ctx (make-tui-ctx #:event-bus bus #:session-runner session-runner))
+       (tui-ctx-set-preferences! ctx (current-preferences))
+       (tui-ctx-init-terminal! ctx)
+       (with-handlers ([exn:break? (lambda (e) (void))]
+                       [exn:fail?
+                        (lambda (e)
+                          (with-handlers ([exn:fail? (lambda (_)
+                                                       (log-q-tui-init-warning "cleanup failed: ~a"
+                                                                               (exn-message _)))])
+                            (disable-mouse-tracking)
+                            (tui-term-close (unbox (tui-ctx-term-box ctx))))
+                          (raise e))])
+         (tui-main-loop ctx))
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
+         (disable-mouse-tracking)
+         (tui-term-close (unbox (tui-ctx-term-box ctx)))))))
   (displayln "Goodbye."))

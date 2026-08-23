@@ -1,6 +1,8 @@
 #lang racket
+;; @covers tui/state.rkt
 
 ;; @speed fast  ;; @suite tui
+;; @boundary integration
 
 ;; BOUNDARY: io
 

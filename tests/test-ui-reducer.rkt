@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-reducer.rkt — Tests for ui-core/ui-reducer.rkt
 ;;

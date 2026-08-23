@@ -75,3 +75,8 @@ __pycache__/
 *.py[cod]
 q/build/q
 /build/
+
+# v1.00.11 W0 parity fixture: the stray file inside a compiled/ directory is
+# an intentional discovery test case and must be versioned.
+!tests/metadata-discovery/fixture/tests/compiled/
+!tests/metadata-discovery/fixture/tests/compiled/**

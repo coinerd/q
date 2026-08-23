@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 ;; tests/test-memory-session-config.rkt — Memory config wiring tests
 ;;
 ;; Verifies: memory disabled by default, config accessors work,

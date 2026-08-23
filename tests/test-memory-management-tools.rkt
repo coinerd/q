@@ -7,6 +7,7 @@
 ;; v0.95.9: Tests for memory management UX tools:
 ;; - list_memory shows id/type/scope/timestamp/snippet
 ;; - clear_memory requires scope + confirm flag
+;; @boundary unit
 ;; - Disabled backend returns clear message
 ;; - Scope filtering works
 

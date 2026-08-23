@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite workflows
+;; @boundary integration
 
 ;; tests/workflows/tools/test-tool-bash-workflow.rkt — Bash tool workflow test
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-goal-command.rkt — Tests for /goal command parsing and handling
 

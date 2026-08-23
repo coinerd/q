@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 
 ;; W2 (#8505): Tests for scripts/ci-package-setup.rkt
 ;; Verifies pure functions: command construction, failure classification,

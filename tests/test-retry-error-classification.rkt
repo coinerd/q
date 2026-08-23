@@ -15,6 +15,7 @@
 ;; F2: Context-overflow errors are correctly NOT retryable.
 ;; F3: String-based 5xx patterns ARE retryable via fallback.
 ;; F4: Structured rate-limit and timeout errors ARE correctly retryable.
+;; @boundary unit
 ;; F5: Auth errors are NOT retryable.
 
 (require rackunit

@@ -3,6 +3,7 @@
 ;; @suite all
 ;; @speed fast
 ;; @isolation temp-dir
+;; @boundary integration
 
 (require rackunit
          racket/file

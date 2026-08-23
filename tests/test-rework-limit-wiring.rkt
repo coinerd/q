@@ -5,6 +5,8 @@
 ;; actually controls the gsd-max-rework-iterations parameter.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../extensions/gsd/state-machine.rkt"
@@ -28,30 +30,23 @@
       (check-equal? (settings:verifier-max-rework-iterations s1) 3)
 
       ;; Custom value
-      (define s2 (make-test-settings
-                  (hasheq 'mas
-                          (hasheq 'verifier
-                                  (hasheq 'max-rework-iterations 7)))))
+      (define s2
+        (make-test-settings (hasheq 'mas (hasheq 'verifier (hasheq 'max-rework-iterations 7)))))
       (check-equal? (settings:verifier-max-rework-iterations s2) 7))
 
     (test-case "verifier-max-rework-iterations coerces string values"
-      (define s (make-test-settings
-                 (hasheq 'mas
-                         (hasheq 'verifier
-                                 (hasheq 'max-rework-iterations "5")))))
+      (define s
+        (make-test-settings (hasheq 'mas (hasheq 'verifier (hasheq 'max-rework-iterations "5")))))
       (check-equal? (settings:verifier-max-rework-iterations s) 5))
 
     (test-case "parameter can be set from settings value"
       ;; Simulate the wiring that run-modes.rkt does
-      (define s (make-test-settings
-                 (hasheq 'mas
-                         (hasheq 'verifier
-                                 (hasheq 'max-rework-iterations 10)))))
+      (define s
+        (make-test-settings (hasheq 'mas (hasheq 'verifier (hasheq 'max-rework-iterations 10)))))
       (define old-val (gsd-max-rework-iterations))
       (gsd-max-rework-iterations (settings:verifier-max-rework-iterations s))
       (check-equal? (gsd-max-rework-iterations) 10)
       ;; Restore
       (gsd-max-rework-iterations old-val))))
-
 
 (run-tests suite)

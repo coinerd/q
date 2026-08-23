@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd/wave-executor.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; BOUNDARY: integration
 

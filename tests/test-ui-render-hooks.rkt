@@ -7,6 +7,7 @@
 ;;
 ;; W7.1–W7.4 (v0.94.7): Verify hook construction, validation, safe application,
 ;; error isolation, and timeout behavior.
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

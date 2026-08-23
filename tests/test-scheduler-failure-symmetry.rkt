@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-scheduler-failure-symmetry.rkt
 ;; W0-execution: Serial/Parallel Failure Symmetry tests
 ;;

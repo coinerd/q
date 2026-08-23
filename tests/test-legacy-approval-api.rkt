@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui
@@ -65,4 +66,5 @@
           (path->string path)))
       (check-equal? offenders '()))))
 
-(exit (run-tests suite))
+(module+ test
+  (run-tests suite))

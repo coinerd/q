@@ -36,6 +36,7 @@
   (test-suite "session-persistence"
 
     ;; ── write-crash-log! tests (meaningful assertions, temp dir isolation) ──
+    ;; @boundary integration
 
     (test-case "write-crash-log! creates file in crash dir"
       (with-crash-dir (lambda (dir)

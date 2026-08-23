@@ -3,6 +3,8 @@
 ;; test-browser-audit-w0-v0983.rkt — W0: CRITICAL Sidecar Robustness
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          "../browser/adapters/playwright-sidecar.rkt"

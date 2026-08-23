@@ -2,6 +2,7 @@
 
 ;; @suite all
 ;; @speed fast
+;; @boundary integration
 ;; Restricted integer-only JCS milestone truth, evidence, and CLI integration.
 
 (require rackunit

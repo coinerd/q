@@ -1,6 +1,8 @@
 #lang racket
+;; @covers extensions/gsd-planning/execution-policy.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

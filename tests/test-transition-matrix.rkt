@@ -1,7 +1,10 @@
 #lang racket/base
 
+;; @covers runtime/session/session-events.rkt
+
 ;; @speed fast
 ;; @suite fast
+;; @boundary unit
 ;; BOUNDARY: pure
 ;;
 ;; W4 v0.99.38: Systematic transition matrix tests for GSD state machine.

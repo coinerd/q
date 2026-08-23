@@ -7,6 +7,7 @@
 ;;
 ;; RED-FIRST: imports runtime/session/session-context-boundary.rkt, which must
 ;; not exist on the v0.99.92 W1 baseline. The boundary must make the Context
+;; @boundary unit
 ;; Assembly request/result explicit, stay pure, and keep Context Assembly
 ;; Runtime-owned and state session-owned.
 

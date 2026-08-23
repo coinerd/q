@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-transition-kernel.rkt — Pure GSD transition kernel (W1 v0.99.89)
 ;;

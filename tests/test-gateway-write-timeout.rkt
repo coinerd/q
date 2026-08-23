@@ -2,6 +2,8 @@
 
 ;; tests/test-gateway-write-timeout.rkt — B3: write deadlock detection
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 
 (require rackunit
          rackunit/text-ui

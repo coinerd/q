@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite workflows
+;; @boundary integration
 
 ;; tests/workflows/fixtures/test-mock-provider-fail-loud.rkt — Fail-loud contract (#5469)
 ;;

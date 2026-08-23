@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary integration
 
 ;; BOUNDARY: io
 
@@ -17,6 +18,7 @@
          "../tui/scrollback.rkt"
          "../ui-core/conversation-artifact.rkt"
          "../ui-core/feature-flags.rkt"
+         "../ui-core/preferences.rkt"
          "../util/message/protocol-types.rkt"
          racket/file)
 
@@ -147,28 +149,34 @@
       (check-equal? (hash-ref (hash-ref (transcript-entry-meta restored) 'nested) 'b) 2))
 
     (test-case "SR11: canonical artifact is serialized only at scrollback boundary"
-      (reset-scrollback-id-counter!)
-      (define body (make-string 350 #\R))
-      (define artifact
-        (make-conversation-artifact #:id "session-a:turn-a:thinking"
-                                    #:session-id "session-a"
-                                    #:turn-id "turn-a"
-                                    #:kind 'thinking
-                                    #:body body
-                                    #:lifecycle 'retained
-                                    #:persistence 'scrollback))
-      (define original (transcript-entry 'thinking body 500 (hasheq 'artifact artifact) 10))
-      (check-true (conversation-artifact? (hash-ref (transcript-entry-meta original) 'artifact)))
-      (define encoded (transcript-entry->jsexpr original))
-      (check-true (hash? (hash-ref (hash-ref encoded 'meta) 'artifact)))
-      (define restored (jsexpr->transcript-entry encoded))
-      (define restored-artifact (hash-ref (transcript-entry-meta restored) 'artifact))
-      (check-true (conversation-artifact? restored-artifact))
-      (check-equal? (conversation-artifact-body restored-artifact) body)
-      (check-equal? (transcript-entry-text restored) body))
+      ;; W3: artifact persistence now follows the reasoning-visibility
+      ;; policy; roundtrip tests opt into the 'scrollback policy.
+      (parameterize ([current-preferences
+                      (set-preference (default-preferences) 'reasoning-visibility 'scrollback)])
+        (reset-scrollback-id-counter!)
+        (define body (make-string 350 #\R))
+        (define artifact
+          (make-conversation-artifact #:id "session-a:turn-a:thinking"
+                                      #:session-id "session-a"
+                                      #:turn-id "turn-a"
+                                      #:kind 'thinking
+                                      #:body body
+                                      #:lifecycle 'retained
+                                      #:persistence 'scrollback))
+        (define original (transcript-entry 'thinking body 500 (hasheq 'artifact artifact) 10))
+        (check-true (conversation-artifact? (hash-ref (transcript-entry-meta original) 'artifact)))
+        (define encoded (transcript-entry->jsexpr original))
+        (check-true (hash? (hash-ref (hash-ref encoded 'meta) 'artifact)))
+        (define restored (jsexpr->transcript-entry encoded))
+        (define restored-artifact (hash-ref (transcript-entry-meta restored) 'artifact))
+        (check-true (conversation-artifact? restored-artifact))
+        (check-equal? (conversation-artifact-body restored-artifact) body)
+        (check-equal? (transcript-entry-text restored) body)))
 
     (test-case "SR12: oversized reasoning is byte bounded when persisted"
-      (parameterize ([ui-reasoning-artifacts-max-bytes 17])
+      (parameterize ([ui-reasoning-artifacts-max-bytes 17]
+                     [current-preferences
+                      (set-preference (default-preferences) 'reasoning-visibility 'scrollback)])
         (define body (make-string 20 #\λ))
         (define artifact
           (make-conversation-artifact #:id "large"
@@ -201,24 +209,102 @@
       (delete-directory/files tmp-dir))
 
     (test-case "SR14: legacy thinking without artifact metadata is byte bounded"
-      (parameterize ([ui-reasoning-artifacts-max-bytes 17])
+      (parameterize ([ui-reasoning-artifacts-max-bytes 17]
+                     [current-preferences
+                      (set-preference (default-preferences) 'reasoning-visibility 'scrollback)])
         (define encoded
           (transcript-entry->jsexpr (transcript-entry 'thinking (make-string 20 #\λ) 0 (hasheq) 1)))
         (check-true (<= (bytes-length (string->bytes/utf-8 (hash-ref encoded 'text))) 17))))
 
     (test-case "SR15: malformed artifact schema is rejected at deserialization boundary"
-      (check-exn
-       exn:fail:contract?
-       (lambda ()
-         (jsexpr->transcript-entry
-          (hasheq 'kind
-                  "thinking"
-                  'text
-                  "bad"
-                  'timestamp
-                  0
-                  'meta
-                  (hasheq 'artifact
-                          (hasheq 'schema "conversation-artifact" 'schema-version 999)))))))))
+      (check-exn exn:fail:contract?
+                 (lambda ()
+                   (jsexpr->transcript-entry
+                    (hasheq 'kind
+                            "thinking"
+                            'text
+                            "bad"
+                            'timestamp
+                            0
+                            'meta
+                            (hasheq 'artifact
+                                    (hasheq 'schema "conversation-artifact" 'schema-version 999)))))))
+
+    ;; W3: reasoning-visibility policy gates what crosses the scrollback
+    ;; serialization boundary.
+    (test-case "W3-P1: reasoning-visibility never strips thinking bodies at the boundary"
+      (define artifact
+        (make-conversation-artifact #:id "a"
+                                    #:session-id "s"
+                                    #:turn-id "t"
+                                    #:kind 'thinking
+                                    #:body "secret reasoning"
+                                    #:lifecycle 'retained
+                                    #:persistence 'scrollback))
+      (define entry (transcript-entry 'thinking "secret reasoning" 0 (hasheq 'artifact artifact) 1))
+      (define encoded
+        (parameterize ([current-preferences
+                        (set-preference (default-preferences) 'reasoning-visibility 'never)])
+          (transcript-entry->jsexpr entry)))
+      (check-false (hash-ref (hash-ref encoded 'meta) 'artifact #f)
+                   "never: no artifact hash crosses the boundary")
+      (check-false (string-contains? (hash-ref encoded 'text) "secret")
+                   "never: thinking body is stripped from text"))
+
+    (test-case "W3-P2: reasoning-visibility session keeps artifacts in memory only"
+      (define artifact
+        (make-conversation-artifact #:id "a"
+                                    #:session-id "s"
+                                    #:turn-id "t"
+                                    #:kind 'thinking
+                                    #:body "live reasoning"
+                                    #:lifecycle 'retained
+                                    #:persistence 'scrollback))
+      (define entry (transcript-entry 'thinking "live reasoning" 0 (hasheq 'artifact artifact) 1))
+      (define encoded
+        (parameterize ([current-preferences
+                        (set-preference (default-preferences) 'reasoning-visibility 'session)])
+          (transcript-entry->jsexpr entry)))
+      (check-false (hash-ref (hash-ref encoded 'meta) 'artifact #f)
+                   "session: artifacts never serialize to scrollback")
+      (check-false (string-contains? (hash-ref encoded 'text) "live reasoning")
+                   "session: reasoning body stays in memory only")
+      ;; The live in-memory entry is untouched.
+      (check-true (conversation-artifact? (hash-ref (transcript-entry-meta entry) 'artifact))))
+
+    (test-case "W3-P3: reasoning-visibility scrollback serializes full artifacts"
+      (define artifact
+        (make-conversation-artifact #:id "a"
+                                    #:session-id "s"
+                                    #:turn-id "t"
+                                    #:kind 'thinking
+                                    #:body "full reasoning"
+                                    #:lifecycle 'retained
+                                    #:persistence 'scrollback))
+      (define entry (transcript-entry 'thinking "full reasoning" 0 (hasheq 'artifact artifact) 1))
+      (define encoded
+        (parameterize ([current-preferences
+                        (set-preference (default-preferences) 'reasoning-visibility 'scrollback)])
+          (transcript-entry->jsexpr entry)))
+      (check-true (hash? (hash-ref (hash-ref encoded 'meta) 'artifact #f))
+                  "scrollback: artifact hash crosses the boundary")
+      (check-equal? (hash-ref encoded 'text) "full reasoning"))
+
+    (test-case "W3-P4: policy does not affect non-reasoning artifacts"
+      (define artifact
+        (make-conversation-artifact #:id "a"
+                                    #:session-id "s"
+                                    #:turn-id "t"
+                                    #:kind 'tool
+                                    #:body "{\"op\":\"read\"}"
+                                    #:lifecycle 'retained
+                                    #:persistence 'scrollback))
+      (define entry (transcript-entry 'tool "op read" 0 (hasheq 'artifact artifact) 1))
+      (define encoded
+        (parameterize ([current-preferences
+                        (set-preference (default-preferences) 'reasoning-visibility 'never)])
+          (transcript-entry->jsexpr entry)))
+      (check-true (hash? (hash-ref (hash-ref encoded 'meta) 'artifact #f))
+                  "never policy leaves non-thinking artifacts untouched"))))
 
 (run-tests scrollback-roundtrip-tests)

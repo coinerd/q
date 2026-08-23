@@ -1,7 +1,9 @@
 #lang racket
+;; @covers extensions/github/handlers/issue-ops.rkt
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

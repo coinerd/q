@@ -1,4 +1,7 @@
 #lang racket
+
+;; @speed slow  ;; @suite default
+;; @boundary integration
 ;; W4 v0.99.78 (G-6, G-7): Goal-loop operating guidance contract tests.
 ;;
 ;; Enforces that the goal turn prompt always contains the operating-rules

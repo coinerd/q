@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite default
+;; @boundary unit
 
 ;; tests/test-hot-swap-characterization.rkt
 ;; v0.99.18 W0: Characterization Tests for Hot-Swap Subsystem

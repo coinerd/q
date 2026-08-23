@@ -1,0 +1,155 @@
+name: 'Restore prepared Racket environment'
+description: >-
+  Consumer half of the prepared-environment contract (W3). Downloads the
+  artifact produced by a `needs` producer, verifies manifest.json against
+  this job's tuple (repository, git SHA, OS, architecture, Racket version,
+  lock digest) and enforces the allowlist BEFORE any test runs, then
+  materializes the addon store and q compiled output and runs read-only
+  health checks. This action performs no package mutation and no collection
+  rebuild: a mismatch is always a failure, never a silent repair.
+inputs:
+  racket-version:
+    description: 'Racket version the artifact must have been built with'
+    required: false
+    default: '8.10'
+  installer-sha256:
+    description: 'Published SHA-256 of the official installer archive'
+    required: true
+  variant:
+    description: 'Racket variant (CS or BC)'
+    required: false
+    default: 'CS'
+  distribution:
+    description: 'Racket distribution (full or minimal)'
+    required: false
+    default: 'full'
+  architecture:
+    description: 'Racket architecture'
+    required: false
+    default: 'x64'
+  artifact-name:
+    description: 'Name of the prepared-environment artifact to restore'
+    required: true
+outputs:
+  lock-digest:
+    description: 'Lock digest of the restored environment'
+    value: ${{ steps.tuple.outputs.lock-digest }}
+  restore-ms:
+    description: 'Wall-clock milliseconds spent downloading and restoring'
+    value: ${{ steps.restore.outputs.restore-ms }}
+runs:
+  using: 'composite'
+  steps:
+    # The consumer still installs the runtime job-locally (I8): only
+    # validated artifacts cross the job boundary, never a live filesystem.
+    - name: Install the job-local Racket runtime
+      uses: ./.github/actions/install-racket-runtime
+      with:
+        racket-version: ${{ inputs.racket-version }}
+        architecture: ${{ inputs.architecture }}
+        variant: ${{ inputs.variant }}
+        distribution: ${{ inputs.distribution }}
+        installer-sha256: ${{ inputs.installer-sha256 }}
+
+    - name: Download the prepared-environment artifact
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: ${{ inputs.artifact-name }}
+        # Never extract into the checkout: the artifact contains package
+        # sources (addon-store/) that a later raco setup would compile as
+        # part of the q package.
+        path: ${{ runner.temp }}/prepared-env-download
+
+    - name: Verify the manifest against this job tuple before anything else
+      id: tuple
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        ARCHITECTURE: ${{ inputs.architecture }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      run: |
+        set -euo pipefail
+        # upload-artifact stores a single directory's bare contents, so the
+        # extractor layout varies; locate the manifest rather than guessing.
+        dl="$RUNNER_TEMP/prepared-env-download"
+        manifest=$(find "$dl" -type f -name manifest.json | head -1)
+        if [ -z "$manifest" ]; then
+          echo "::error::manifest.json missing from downloaded artifact"
+          exit 1
+        fi
+        root=$(dirname "$manifest")
+
+        git_sha=$(git rev-parse HEAD)
+        echo "root=$root" >> "$GITHUB_OUTPUT"
+
+        # Lock digest of THIS checkout, derived the same way the producer
+        # derived it, so a lock change between producer and consumer is a
+        # hard mismatch rather than a stale restore.
+        lock_digest=$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)
+        echo "lock-digest=$lock_digest" >> "$GITHUB_OUTPUT"
+
+        racket ci/prepared-environment/manifest.rkt verify \
+          --manifest "$root/manifest.json" \
+          --expect-repository "${GITHUB_REPOSITORY}" \
+          --expect-git-sha "$git_sha" \
+          --expect-os "${RUNNER_OS}" \
+          --expect-arch "$ARCHITECTURE" \
+          --expect-racket-version "$RACKET_VERSION" \
+          --expect-lock-digest "$lock_digest" \
+          --root "$root"
+
+        echo "::notice::prepared-environment manifest verified for ${RUNNER_OS}/${ARCHITECTURE} Racket ${RACKET_VERSION}"
+
+    - name: Materialize the addon store and q compiled output
+      id: restore
+      shell: bash
+      env:
+        ROOT: ${{ steps.tuple.outputs.root }}
+        RACKET_VERSION: ${{ inputs.racket-version }}
+      run: |
+        set -euo pipefail
+        start=$(python3 -c 'import time; print(int(time.time()*1000))')
+
+        addon_base="$HOME/.cache/q-racket-addon"
+        rm -rf "$addon_base/$RACKET_VERSION"
+        mkdir -p "$addon_base/$RACKET_VERSION"
+        cp -a "$ROOT/addon-store/." "$addon_base/$RACKET_VERSION/"
+        echo "PLTADDONDIR=$addon_base" >> "$GITHUB_ENV"
+
+        # q compiled output is placed back at its original checkout-relative
+        # paths. This is a copy, never a rebuild: if a compiled tree is
+        # missing from the artifact the health checks below fail.
+        while IFS= read -r -d '' dir; do
+          rel="${dir#$ROOT/q-compiled/}"
+          mkdir -p "$rel"
+          cp -a "$dir/." "$rel/"
+        done < <(find "$ROOT/q-compiled" -mindepth 1 -maxdepth 5 -type d -name compiled -print0)
+
+        end=$(python3 -c 'import time; print(int(time.time()*1000))')
+        echo "restore-ms=$((end - start))" >> "$GITHUB_OUTPUT"
+
+    - name: Health check 1/4 - runtime version
+      shell: bash
+      run: |
+        set -euo pipefail
+        racket --version
+        racket -e "(displayln (version))"
+
+    - name: Health check 2/4 - dependency lock
+      shell: bash
+      run: |
+        set -euo pipefail
+        racket ci/verify-racket-package-lock.rkt
+
+    - name: Health check 3/4 - require quickcheck and fmt
+      shell: bash
+      run: |
+        set -euo pipefail
+        racket -e '(require quickcheck fmt) (displayln "restored store satisfies quickcheck + fmt")'
+
+    - name: Health check 4/4 - formatter command
+      shell: bash
+      run: |
+        set -euo pipefail
+        raco fmt --help >/dev/null
+        echo "raco fmt command available from the restored store"

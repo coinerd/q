@@ -50,9 +50,16 @@
                   accumulate-tool-call-deltas
                   call-with-request-timeout
                   read-line/timeout
-                  read-response-body/timeout
-                  current-http-request-timeout))
+                  read-response-body/timeout))
    (evidence . (C2 C3 C7 C8)))
+  ;; v1.00.13 W1 (#9461): the timeout-configuration parameter moved from
+  ;; llm/stream.rkt to the policy module (single-owner rule, RL-1/AC-1).
+  ("llm/request-policy.rkt"
+   (primitives . (current-http-request-timeout
+                  resolve-request-network-policy
+                  resolve-request-network-policy-for-model
+                  sse-phase-timeout-secs))
+   (evidence . (C2 C3)))
   ("llm/provider-errors.rkt"
    (primitives . (provider-error classify-http-status raise-provider-error))
    (evidence . (C4)))))

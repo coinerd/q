@@ -21,6 +21,8 @@
          (all-from-out "classify-filters.rkt")
          ;; Shard support
          shard-files
+         ;; Metadata classification provenance (W1)
+         file-metadata-classification
          ;; Path utilities
          normalize-test-path
          ;; File collection
@@ -44,6 +46,18 @@
              [i (in-naturals)]
              #:when (= (modulo i shard-total) shard-index))
     f))
+
+;; ============================================================
+;; Metadata classification provenance (W1)
+;; ============================================================
+
+;; All metadata parsing routes through the schema-aware parser in
+;; classify-metadata.rkt (see `validate-file` there for schema v1 and the
+;; report-only lint). Heuristic (filename/path-based) classification results
+;; are labeled 'heuristic rather than 'explicit so downstream reports can
+;; distinguish declarative metadata from heuristic fallbacks.
+(define (file-metadata-classification f)
+  (hash-ref (get-file-metadata f) 'classification 'heuristic))
 
 ;; ============================================================
 ;; Path utilities
@@ -75,6 +89,13 @@
                                      [rel (path->string (find-relative-path base-dir f))])
                                 (and (string-suffix? s ".rkt")
                                      (not (string-contains? s "/compiled/"))
+                                     ;; v1.00.11 hotfix: the discovery-parity fixture tree
+                                     ;; (tests/metadata-discovery/fixture/) is frozen input
+                                     ;; data for tests/ci/metadata-discovery-test.rkt, which
+                                     ;; copies it into its own temp root before collecting.
+                                     ;; The repo-root walk must never collect or execute it.
+                                     (not (for/or ([prefix (in-list discovery-ignored-path-prefixes)])
+                                            (string-prefix? rel prefix)))
                                      (not (support-test-module? s))
                                      (not (hash-ref (get-file-metadata rel) 'not-test? #f))))))
          (path->string (find-relative-path base-dir f))))

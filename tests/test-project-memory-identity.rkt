@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary integration
 ;; tests/test-project-memory-identity.rkt
 ;; W5A (#8942): Canonical project identity — pure derivation logic.
 ;; Covers: origin URL canonicalization, gitdir parsing/classification,

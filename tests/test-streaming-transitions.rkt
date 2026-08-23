@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -201,6 +202,8 @@
       (check-equal? (transcript-length final) 1 "one transcript entry for empty message"))
 
     ;; Edge 2: Concurrent tool calls — both started before either completes
+    ;; BUG-0015: dedup is keyed on tool-call id, NOT name — the two reads carry
+    ;; distinct ids (tc-1, tc-2) so BOTH render (2 tool-start + 2 tool-end).
     (test-case "concurrent tool calls: both started before either completes"
       (define s0 (initial-ui-state))
       (define events
@@ -214,10 +217,10 @@
          (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "data-a"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 6))
-      ;; Same-name tools are deduplicated by recent-tool-start?
+      ;; Distinct ids are NOT deduplicated: both reads render.
       (check-equal? (transcript-length final)
-                    3
-                    "3 entries: 1 assistant + 1 tool-start (deduped) + 1 tool-end")
+                    5
+                    "5 entries: 1 assistant + 2 tool-start + 2 tool-end (per-id)")
       ;; No turn.completed event, so busy remains true
       (check-true (ui-state-busy? final) "still busy without turn.completed"))
 

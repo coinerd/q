@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @boundary integration
 
 ;; W10 (#8484): Tests for pre-release check pure logic.
 ;; Since pre-release-check.rkt has (main) at module level, we replicate

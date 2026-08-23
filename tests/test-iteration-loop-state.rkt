@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; BOUNDARY: integration
 
@@ -34,6 +35,7 @@
         (loop-counters 5
                        3
                        '("a" "b")
+                       '("x.rkt")
                        2
                        1
                        '("read" "write")
@@ -45,6 +47,7 @@
       (check-equal? (loop-counters-iteration c) 5)
       (check-equal? (loop-counters-consecutive-tool-count c) 3)
       (check-equal? (loop-counters-seen-paths c) '("a" "b"))
+      (check-equal? (loop-counters-edited-paths c) '("x.rkt"))
       (check-equal? (loop-counters-intent-retry-count c) 2)
       (check-equal? (loop-counters-consecutive-error-count c) 1)
       (check-equal? (loop-counters-recent-tool-names c) '("read" "write"))
@@ -65,7 +68,7 @@
       (check-false (loop-infra-token infra)))
 
     (test-case "loop-counters is transparent"
-      (define c (loop-counters 1 2 '() 0 0 '() 0 0 0 '() #f))
+      (define c (loop-counters 1 2 '() '() 0 0 '() 0 0 0 '() #f))
       (check-true (loop-counters? c))
       (check-false (loop-counters? 42)))
 

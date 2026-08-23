@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

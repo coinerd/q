@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-remote-ipc-resilience.rkt — W4 (v0.99.12) Connection Resilience Tests
 ;;

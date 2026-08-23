@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary e2e
 
 ;; tests/test-distributed-execution-e2e.rkt — E2E Distributed Execution Tests (W0, v0.99.13)
 ;;

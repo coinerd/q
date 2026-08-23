@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary integration
 ;; BOUNDARY: integration
 
 (require rackunit

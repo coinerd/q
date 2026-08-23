@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-context-overflow-browser.rkt — Regression tests for NF-11
 ;; context-overflow fixes in browser observations and session-walk truncation.

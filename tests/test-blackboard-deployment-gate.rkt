@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite default
+;; @boundary unit
 
 ;; tests/test-blackboard-deployment-gate.rkt
 ;; v0.99.14 W0: Characterization & Pre-Implementation Safety Net

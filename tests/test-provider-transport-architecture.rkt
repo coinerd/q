@@ -34,6 +34,7 @@
 
 ;; v0.99.81 W1 PN-2: Transport boundary — no unsupported socket/FD extraction.
 ;; The net/http-client response-port boundary exposes no supported public
+;; @boundary unit
 ;; socket/FD extraction seam after HTTP/TLS wrapping. Production code must
 ;; not guess at FFI signatures, platform constants, or SO_KEEPALIVE options.
 (test-case "PN-2: provider code has no unsupported FD/socket extraction"

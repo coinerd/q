@@ -23,7 +23,15 @@
          "model.rkt"
          "provider.rkt"
          "provider-telemetry.rkt"
-         "stream.rkt"
+         ;; v1.00.13 W2 (#9466): timeout semantics come ONLY from the policy
+         ;; module (RL-3); stream.rkt is required for the pure mechanism.
+         (only-in "stream.rkt"
+                  stream-sse-events
+                  close-port-after-stream
+                  call-with-request-timeout
+                  read-response-body/timeout
+                  exn:fail:network:timeout:stream?)
+         "request-policy.rkt"
          "http-helpers.rkt"
          "provider-errors.rkt")
 
@@ -273,16 +281,16 @@
 (define (do-http-request base-url api-key path body)
   (define url-str (string-append (string-trim base-url "/") path))
   (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
-  ;; v0.14.2 Wave 3: per-model timeout via effective-request-timeout-for
+  ;; v1.00.13 W2 (#9466): the resolved request-network policy is the ONLY
+  ;; timeout input (RL-3); adapters never interpret raw config.
   (define model-name (and (hash? body) (hash-ref body 'model #f)))
-  (define timeout-secs
-    (if model-name
-        (effective-request-timeout-for model-name)
-        (current-http-request-timeout)))
+  (define policy (resolve-request-network-policy-for-model model-name))
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
-                              #:timeout timeout-secs
+                              #:timeout (request-network-policy-request-budget-secs policy)
+                              #:connect-timeout (request-network-policy-connect-ttfb-secs policy)
+                              #:read-timeout (request-network-policy-body-read-budget-secs policy)
                               #:status-checker
                               (lambda (sl rb) (check-provider-status! "OpenAI" sl rb))))
 
@@ -344,7 +352,8 @@
     (define raw (do-http-request base-url api-key "/chat/completions" body))
     (openai-parse-response raw))
 
-  ;; W-06: Extracted stream request — returns (values response-port stream-timeout cleanup-thunk)
+  ;; W-06: Extracted stream request — returns
+  ;;   (values response-port request-network-policy cleanup-thunk)
   (define (openai-stream-request req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))
@@ -358,13 +367,12 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
-    ;; HARD DEBUG: dump to file
     (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
 
-    (define stream-timeout
-      (if stream-model-name
-          (effective-request-timeout-for stream-model-name)
-          (current-http-request-timeout)))
+    ;; v1.00.13 W2 (#9466): ONE resolved policy per request (RL-3). The
+    ;; adapter never computes timeout values from raw config; it consumes
+    ;; the resolved fields below.
+    (define policy (resolve-request-network-policy-for-model stream-model-name))
     ;; Own every resource created by http-sendrecv (including resources opened
     ;; before a response port is returned) under a request-scoped custodian.
     ;; Timeout cleanup shuts down that custodian before interrupting the worker;
@@ -384,26 +392,33 @@
                                      (hash)
                                      'network
                                      #f))))])
-        (call-with-request-timeout (lambda ()
-                                     (parameterize ([current-custodian request-custodian])
-                                       (define-values (sl rh rp)
-                                         (if req-port
-                                             (http-sendrecv host
-                                                            path-str
-                                                            #:port req-port
-                                                            #:ssl? ssl?
-                                                            #:method "POST"
-                                                            #:headers headers
-                                                            #:data body-bytes)
-                                             (http-sendrecv host
-                                                            path-str
-                                                            #:ssl? ssl?
-                                                            #:method "POST"
-                                                            #:headers headers
-                                                            #:data body-bytes)))
-                                       (vector sl rh rp)))
-                                   #:timeout stream-timeout
-                                   #:cleanup cleanup-response!)))
+        (call-with-request-timeout
+         (lambda ()
+           (parameterize ([current-custodian request-custodian])
+             ;; v1.00.13 W4 (#9478, RL-4): connect+TLS+status+
+             ;; headers bounded by the policy TTFB window; the
+             ;; structured phase is 'connect/ttfb.
+             (define-values (sl rh rp)
+               (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
+                                               (lambda ()
+                                                 (if req-port
+                                                     (http-sendrecv host
+                                                                    path-str
+                                                                    #:port req-port
+                                                                    #:ssl? ssl?
+                                                                    #:method "POST"
+                                                                    #:headers headers
+                                                                    #:data body-bytes)
+                                                     (http-sendrecv host
+                                                                    path-str
+                                                                    #:ssl? ssl?
+                                                                    #:method "POST"
+                                                                    #:headers headers
+                                                                    #:data body-bytes)))
+                                               #:cleanup cleanup-response!))
+             (vector sl rh rp)))
+         #:timeout (request-network-policy-request-budget-secs policy)
+         #:cleanup cleanup-response!)))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
@@ -424,11 +439,11 @@
       (when (>= status-code 300)
         (define err-body (read-response-body/timeout response-port))
         (check-provider-status! "OpenAI" status-line err-body))
-      (values response-port stream-timeout cleanup-response!)))
+      (values response-port policy cleanup-response!)))
 
   (define (stream req)
     (define _stream-t0 (current-inexact-milliseconds))
-    (define-values (response-port stream-timeout cleanup-thunk)
+    (define-values (response-port policy cleanup-thunk)
       (with-handlers ([exn:fail? (lambda (e)
                                    (if (provider-error? e)
                                        (raise e)
@@ -439,33 +454,21 @@
                                                               'network
                                                               #f))))])
         (openai-stream-request req)))
-    ;; Response port and timeout from openai-stream-request (W-06)
-    ;; Status OK — return an incremental generator that reads SSE lines
-    ;; from the response port, yielding stream-chunk values as they arrive.
-    ;; v0.15.1 Wave 2: Increased stream timeout scaling from /4 to /2.
-    ;; Previous formula (max 120 timeout/4) gave 225s for glm-5.1 (request=900s)
-    ;; which caused premature SSE timeouts during slow generation.
-    ;; New formula gives 450s — enough for models that stall mid-generation.
-    ;; v0.45.12 L1: Derive max-total-timeout from model's effective request timeout.
-    ;; Use 2x the request timeout as the wall-clock cap (covers slow models).
-    ;; For GLM-5.1 (900s): max-total = 1800s (30 min).
-    ;; For fast models (120s): max-total = 600s (10 min floor).
-    (define max-total-timeout (max 600 (* 2 stream-timeout)))
-    ;; v0.99.65 W0: Separate thinking-phase timeout from content-phase timeout.
-    ;; #:initial-timeout = stream-timeout (full request timeout, covers reasoning phase)
-    ;; #:stream-timeout = http-stream-timeout-default (60s tight per-chunk for content)
-    ;; Reasoning models like GLM-5.2 emit reasoning_content chunks for 450+ seconds
-    ;; before first content chunk. The initial timeout covers the reasoning phase;
-    ;; once content chunks arrive, they must come within 60s each.
-    ;; v0.99.78 FIX (revised): Cap initial/thinking timeouts at held-request-detect-secs.
-    ;; Live /go evidence: deepseek-v4-flash healthy streams have mean chunk gap 0.015s,
-    ;; max gap 7s, zero gaps >30s (measured over a 5123-delta thinking turn). The
-    ;; earlier "widen to request timeout" (60s->600s) was WRONG: the "60s spurious
-    ;; timeout" it addressed was actually deepseek ACCEPTING a request (HTTP 200) but
-    ;; emitting zero chunks for minutes (server-side hold). Widening converted a 1-minute
-    ;; recovery into a 10-minute recovery. Capping at 120s: a held/stalled request is
-    ;; retried within 2 minutes, and the retry (fresh turn) streams instantly (observed).
-    (define held-request-detect-secs 120)
+    ;; Response port, resolved policy, and cleanup from openai-stream-request
+    ;; (W-06). Status OK — return an incremental generator that reads SSE
+    ;; lines from the response port, yielding stream-chunk values as they
+    ;; arrive.
+    ;;
+    ;; v1.00.13 W2 (#9466): all lifecycle windows come from the ONE resolved
+    ;; request-network-policy (RL-3/RL-9). History: v0.15.1 widened the stream
+    ;; timeout scaling; v0.45.12 L1 set the total cap to 2× the request budget
+    ;; with a 600 s floor; v0.99.65 W0 separated thinking/content windows;
+    ;; v0.99.78 kept initial short for dead-peer detection; v1.00.12 W1 (#9429)
+    ;; moved the values behind the shared phase resolver. v1.00.13 freezes all
+    ;; of these formulas in llm/request-policy.rkt — the adapter only consumes
+    ;; the resolved fields below (regression matrices:
+    ;; tests/test-sse-phase-timeout-bounds.rkt,
+    ;; tests/test-provider-network-policy-conformance.rkt).
     (define stream-owns-resources? (box #f))
     (dynamic-wind
      void
@@ -473,10 +476,10 @@
        (define gen
          (stream-sse-events response-port
                             (lambda (parsed) (list (normalize-openai-chunk parsed)))
-                            #:initial-timeout (min stream-timeout held-request-detect-secs)
-                            #:thinking-timeout (min stream-timeout held-request-detect-secs)
-                            #:stream-timeout http-stream-timeout-default
-                            #:max-total-timeout max-total-timeout))
+                            #:initial-timeout (request-network-policy-initial-idle-secs policy)
+                            #:thinking-timeout (request-network-policy-thinking-idle-secs policy)
+                            #:stream-timeout (request-network-policy-content-idle-secs policy)
+                            #:max-total-timeout (request-network-policy-stream-total-secs policy)))
        ;; Own the response port for the complete lifetime of the lazy generator.
        ;; close-port-after-stream preserves the port across yields and also closes
        ;; it when a consumer abandons and collects the returned generator.

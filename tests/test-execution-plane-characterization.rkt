@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; @speed fast  ;; @suite core
+;; @speed fast  ;; @suite runtime
 
 ;; tests/test-execution-plane-characterization.rkt
 ;; v0.99.17 W0: Characterization tests for execution plane + gateway IPC.
@@ -12,6 +12,7 @@
 ;; IMPORTANT CONTEXT (raco test vs racket discrepancy):
 ;; All execution plane tests pass under `racket tests/<file>.rkt` but many
 ;; FAIL under `raco test tests/<file>.rkt`. This characterization suite
+;; @boundary unit
 ;; uses `racket`-compatible patterns to establish the baseline.
 
 (require rackunit

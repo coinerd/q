@@ -34,6 +34,7 @@
   (message-id msg))
 
 ;; ── Test suite ──
+;; @boundary integration
 
 (define-test-suite
  test-session-store

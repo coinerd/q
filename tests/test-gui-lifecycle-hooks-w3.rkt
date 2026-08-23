@@ -27,6 +27,7 @@
 (define-test-suite
  test-gui-lifecycle-hooks-error-isolation
  ;; ── H-3: error isolation in dispatch-gui-hook! ───
+ ;; @boundary unit
  (test-case "error in first handler doesn't prevent second handler"
    (define called? (box #f))
    (parameterize ([current-gui-lifecycle-hooks (hasheq 'agent.idle

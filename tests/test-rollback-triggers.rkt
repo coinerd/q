@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-rollback-triggers.rkt — Tests for M4 W2 rollback triggers
 ;; v0.76.3 W2: Observational triggers that emit warnings when context is too aggressive.

@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-agent-registry.rkt — W1 (v0.99.8) Agent Registry Tests
 ;;

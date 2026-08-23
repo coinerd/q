@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-gui-toolbar.rkt — Tests for gui/views/toolbar.rkt
 

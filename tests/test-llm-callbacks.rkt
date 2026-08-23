@@ -4,6 +4,8 @@
 ;; H3b (v0.97.13): Unit tests for LLM callback factories.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          racket/port
          (only-in "../runtime/context-assembly/llm-callbacks.rkt"

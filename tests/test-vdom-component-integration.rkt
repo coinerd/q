@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; tests/test-vdom-component-integration.rkt — Component input dispatch + focus tests
 ;;

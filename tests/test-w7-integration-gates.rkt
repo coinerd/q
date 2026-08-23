@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @boundary integration
 
 ;; q/tests/test-w7-integration-gates.rkt — W7 integration gate verification
 ;;

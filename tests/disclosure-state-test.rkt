@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; Tests for q/ui-core/disclosure-state.rkt
 

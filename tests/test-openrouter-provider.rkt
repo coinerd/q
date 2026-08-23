@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;;; tests/test-openrouter-provider.rkt — OpenRouter provider wrapper tests
 

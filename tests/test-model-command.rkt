@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 ;; BOUNDARY: integration
 
 ;; test-model-command.rkt — tests for /model command in TUI and CLI

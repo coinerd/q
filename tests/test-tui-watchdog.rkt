@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite tui
+;; @boundary unit
 
 ;; BOUNDARY: integration
 ;; v0.45.11 W1: Tests for busy-state watchdog logic

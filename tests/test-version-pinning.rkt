@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-version-pinning.rkt — W4 (v0.99.8) Version Pinning + Session Tests
 ;;

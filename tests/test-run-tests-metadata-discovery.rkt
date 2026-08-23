@@ -1,5 +1,10 @@
 #lang racket
 
+;; @suite default
+;; @speed fast
+;; @boundary integration
+;; @isolation process
+
 (require rackunit
          rackunit/text-ui
          racket/file

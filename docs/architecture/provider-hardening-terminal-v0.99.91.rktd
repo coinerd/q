@@ -32,5 +32,5 @@
    #hasheq((id . C22) (disposition . intentional-duplication) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B6" "llm/adapters/eager-stream.rkt")))
    #hasheq((id . C23) (disposition . intentional-duplication) (evidence . ("tests/test-sse-shared-azure.rkt:reasoning_content null" "tests/test-provider-parity-matrix.rkt:P7")))
    #hasheq((id . G1) (disposition . documented-asymmetry) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B4")))
-   #hasheq((id . G2) (disposition . documented-asymmetry) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B5" "llm/openai-compatible.rkt:effective-request-timeout-for")))
+   #hasheq((id . G2) (disposition . documented-asymmetry) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B5" "llm/openai-compatible.rkt:resolve-request-network-policy-for-model")))
    #hasheq((id . G3) (disposition . documented-asymmetry) (evidence . ("tests/test-provider-hardening-terminal-decision.rkt:W4-B5" "llm/openai-compatible.rkt:openai-wrap-stream-error"))))))

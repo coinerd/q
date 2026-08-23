@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration  ;; @requires network
 
 ;;; tests/test-oauth-callback-nonblocking.rkt — v0.59.12 W0 (#5531)
 ;;; Tests proving OAuth callback completion is nonblocking without a consumer.
@@ -45,12 +46,12 @@
           (close-input-port in)
           (close-output-port out)
           'connected))
-      (check-eq? probe 'connection-failed
+      (check-eq? probe
+                 'connection-failed
                  "listener must be closed even without consumer calling get-code")
       ;; Now call get-code to clean up the channel and verify result was stored
       (define code (get-code))
-      (check-equal? code "no-consumer-code"
-                    "delayed consumer must still receive stored code"))
+      (check-equal? code "no-consumer-code" "delayed consumer must still receive stored code"))
 
     (test-case "timeout completion is nonblocking without consumer (#5532)"
       ;; Server times out; no consumer calls get-code.
@@ -65,8 +66,7 @@
           (close-input-port in)
           (close-output-port out)
           'connected))
-      (check-eq? probe 'connection-failed
-                 "timeout must close listener even without consumer")
+      (check-eq? probe 'connection-failed "timeout must close listener even without consumer")
       ;; Delayed get-code should still return #f
       (define code (get-code))
       (check-false code "timeout must deliver #f to delayed consumer"))
@@ -102,17 +102,17 @@
       ;; Verify each server's listener is cleaned up.
       (for ([i (in-range 3)])
         (define-values (port state verifier get-code) (start-callback-server #:timeout 5))
-        (thread
-         (lambda ()
-           (sync (alarm-evt (+ (current-inexact-milliseconds) 100)))
-           (with-handlers ([exn:fail? (lambda (e) (void))])
-             (define-values (in out) (tcp-connect "127.0.0.1" port))
-             (fprintf out
-                      "GET /callback?code=iter-~a&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                      i state)
-             (flush-output out)
-             (close-output-port out)
-             (close-input-port in))))
+        (thread (lambda ()
+                  (sync (alarm-evt (+ (current-inexact-milliseconds) 100)))
+                  (with-handlers ([exn:fail? (lambda (e) (void))])
+                    (define-values (in out) (tcp-connect "127.0.0.1" port))
+                    (fprintf out
+                             "GET /callback?code=iter-~a&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                             i
+                             state)
+                    (flush-output out)
+                    (close-output-port out)
+                    (close-input-port in))))
         ;; Don't call get-code; wait for cleanup
         (sync (alarm-evt (+ (current-inexact-milliseconds) 1000)))
         ;; Verify port is closed
@@ -122,7 +122,8 @@
             (close-input-port in)
             (close-output-port out)
             'connected))
-        (check-eq? probe 'connection-failed
+        (check-eq? probe
+                   'connection-failed
                    (format "iteration ~a: listener must be closed without consumer" i))))))
 
 (module+ main

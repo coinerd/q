@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed slow  ;; @suite security
+;; @boundary unit
 
 ;; tests/test-gateway-bridge-remote.rkt — W3 (v0.99.12) Gateway Bridge Remote Tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; test-lint-version-pure.rkt — Tests for pure check functions extracted from
 ;; lint-version.rkt via the I/O abstraction (W6 #8419).
@@ -74,7 +75,7 @@
    (check-equal? (check content) '()))
  (test-case "check-changelog-content: too few versions → error"
    (define check (lv-ref 'check-changelog-content))
-   (define content "## v1.0.0\n## v1.0.1\n## v1.0.2")
+   (define content "## v1.0.0\n## v1.0.1")
    (define errors (check content))
    (check-equal? (length errors) 1)
    (check-equal? (first (first errors)) 'CHANGELOG.md))

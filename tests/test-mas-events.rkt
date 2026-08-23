@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-mas-events.rkt — W3 (v0.99.7) MAS Typed Event Tests
 ;;

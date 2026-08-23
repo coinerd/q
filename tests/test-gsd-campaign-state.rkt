@@ -1,6 +1,8 @@
 #lang racket/base
+;; @covers extensions/gsd/campaign-state.rkt
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary integration
 
 ;; tests/test-gsd-campaign-state.rkt — W0: Durable campaign state,
 ;; identity, and reconstruction.

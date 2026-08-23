@@ -1,6 +1,8 @@
 #lang racket
+;; @covers runtime/session-index/query.rkt
 
 ;; @speed fast  ;; @suite runtime
+;; @boundary unit
 
 ;; BOUNDARY: integration
 

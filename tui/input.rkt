@@ -68,6 +68,24 @@
           [input-history-push (-> input-state? string? input-state?)]
           [input-history-up (-> input-state? input-state?)]
           [input-history-down (-> input-state? input-state?)]
+          ;; W4: visual (soft-wrap aware) vertical movement via the shared
+          ;; composer layout; boundary queries drive history hand-off.
+          [input-visual-up
+           (->* (input-state? exact-positive-integer?)
+                ((-> string? exact-nonnegative-integer?))
+                input-state?)]
+          [input-visual-down
+           (->* (input-state? exact-positive-integer?)
+                ((-> string? exact-nonnegative-integer?))
+                input-state?)]
+          [input-visual-first-row?
+           (->* (input-state? exact-positive-integer?)
+                ((-> string? exact-nonnegative-integer?))
+                boolean?)]
+          [input-visual-last-row?
+           (->* (input-state? exact-positive-integer?)
+                ((-> string? exact-nonnegative-integer?))
+                boolean?)]
           ;; Submission
           [input-submit (-> input-state? (values (or/c string? #f) input-state?))]
           [input-current-text (-> input-state? string?)]

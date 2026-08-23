@@ -4,6 +4,8 @@
 ;; Verify that previously silent error handlers now log appropriately.
 
 ;; @speed fast
+;; @suite default
+;; @boundary integration
 (require rackunit
          racket/string
          racket/file

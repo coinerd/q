@@ -4,6 +4,7 @@
 ;; @suite default
 ;; tests/test-rollback-isolation.rkt -- Characterization tests for rollback timing
 ;; and isolation from state-aware context construction.
+;; @boundary unit
 ;;
 ;; Phase 2: Characterization tests proving that rollback mutations do NOT affect
 ;; the current context build (all context values computed before rollback block).

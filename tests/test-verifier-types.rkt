@@ -6,6 +6,8 @@
 ;; constructors.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          json

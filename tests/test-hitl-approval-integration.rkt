@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite security
+;; @boundary integration
 
 ;; End-to-end broker lifecycle tests using digest-bound, one-use grants.
 

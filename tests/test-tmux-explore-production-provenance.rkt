@@ -5,6 +5,8 @@
 ;; F-03: evidence manifest with SHA and artifact digests.
 
 ;; @speed slow
+;; @suite default
+;; @boundary e2e  ;; @requires terminal
 (require rackunit
          racket/list
          racket/string

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;;; tests/test-tool-classification.rkt
 ;;;
 ;;; Tests for tools/tool-classification.rkt — the single authoritative

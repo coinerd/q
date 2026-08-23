@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-loop-fsm.rkt — T-1b tests for agent/loop-fsm.rkt
 

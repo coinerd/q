@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; q/tests/test-ui-actions.rkt — Tests for ui-core/ui-actions.rkt and ui-core/ui-delta.rkt
 ;;

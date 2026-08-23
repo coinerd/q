@@ -4,6 +4,8 @@
 ;; Verify event bus works from canonical location util/event/event-bus.rkt.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          "../util/event/event-bus.rkt"
          "../util/event/event.rkt"

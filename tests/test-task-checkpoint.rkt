@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-task-checkpoint.rkt
 ;; W4 (#8941): Bounded active-task checkpoint — renders an
 ;; active-task-checkpoint into a fixed-budget protocol-safe text record

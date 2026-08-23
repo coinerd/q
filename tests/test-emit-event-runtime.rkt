@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; Regression test for F1/EMIT-01: Verify 'emit-event exists in runtime hash
 ;; and that the emission pipeline works end-to-end.

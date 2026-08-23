@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-cell-width-alignment.rkt — Width-aware cell buffer alignment tests
 ;;

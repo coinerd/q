@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast  ;; @suite security
+;; @boundary unit
 
 ;; BOUNDARY: io
 
@@ -10,9 +11,7 @@
 ;; safe-mode-aware block-destructive default.
 
 (require rackunit
-         (only-in "../runtime/settings.rkt"
-                  make-minimal-settings
-                  shell-risk-classifier)
+         (only-in "../runtime/settings.rkt" make-minimal-settings shell-risk-classifier)
          (only-in "../tools/builtins/bash.rkt"
                   tool-bash
                   destructive-command?
@@ -267,9 +266,11 @@
   (check-equal? (shell-risk-classifier settings) 'regex))
 
 (test-case "shell-risk-classifier: reads from overrides"
-  (define settings (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'both))))
+  (define settings
+    (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'both))))
   (check-equal? (shell-risk-classifier settings) 'both))
 
 (test-case "shell-risk-classifier: structured mode"
-  (define settings (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'structured))))
+  (define settings
+    (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'structured))))
   (check-equal? (shell-risk-classifier settings) 'structured))

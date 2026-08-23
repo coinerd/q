@@ -4,6 +4,8 @@
 ;; Tests for the executor agent role.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          (only-in racket/string string-contains?)

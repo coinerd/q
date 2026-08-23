@@ -3,6 +3,7 @@
 ;; @speed fast  ;; @suite extensions
 
 ;; tests/test-gsd-command-ctx-isolation.rkt
+;; @boundary unit
 ;; TDD for W7: command handlers isolate per ctx via current-gsd-ctx parameter
 
 (require rackunit

@@ -51,6 +51,19 @@
 (define (tui-ctx-set-layout-breakpoints! ctx breakpoints)
   (hash-set! layout-breakpoints-table ctx breakpoints))
 
+;; W3 (v1.00.02): loaded preference snapshot per tui-ctx.
+;; Same additive pattern as layout-breakpoints-table: the loaded
+;; immutable snapshot (ui-core/preferences.rkt) is injected once by
+;; tui-init so TUI leaf modules (layout, key-dispatch, scrollback)
+;; read ONE snapshot; #f means "use (current-preferences)".
+(define preferences-table (make-weak-hasheq))
+
+(define (tui-ctx-preferences ctx)
+  (hash-ref preferences-table ctx #f))
+
+(define (tui-ctx-set-preferences! ctx prefs)
+  (hash-set! preferences-table ctx prefs))
+
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
                       #:session-dir [sess-dir #f]
@@ -110,6 +123,8 @@
 
 (provide tui-ctx
          tui-ctx?
+         tui-ctx-preferences
+         tui-ctx-set-preferences!
          tui-ctx-ui-state-box
          tui-ctx-input-state-box
          tui-ctx-event-bus

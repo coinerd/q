@@ -16,6 +16,7 @@
 ;;   P5  Contract enforcement: neutral operation contracts blame the caller
 ;;       for domain violations (e.g. non-string provider name).
 ;;   P6  dynamic-require boundary: the neutral protocol loads in a fresh
+;; @boundary integration
 ;;       namespace without instantiating Runtime modules; the adapter is
 ;;       the module that legitimately imports the concrete registry.
 ;;   P7  Compatibility shim preserved: ctx-* facade signatures/behavior

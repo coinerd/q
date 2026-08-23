@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @boundary unit
 
 ;; tests/test-verifier-gate.rkt — W5 v0.99.5 Verification Gate Tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-layer-adapters.rkt — Tests for runtime/layer-adapters.rkt (v0.54.3 W0)
 ;;

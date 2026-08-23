@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite runtime
+;; @boundary e2e
 ;; BOUNDARY: integration
 
 ;; v0.99.95 W3: failed provider turn recovers the TUI, then the production

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @speed fast  ;; @suite default
+;; @boundary unit
 ;; tests/test-context-provenance-pipeline.rkt — Context provenance pipeline tests
 ;; Verifies that the entire persisted-history-to-provider transformation
 ;; is observable via trace entries with stage membership, IDs, and digests.

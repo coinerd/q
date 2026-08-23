@@ -16,6 +16,7 @@
 (require rackunit)
 
 ;; --- Provider factory adapter boundary ---
+;; @boundary unit
 (require (only-in "../runtime/provider/provider-factory.rkt"
                   local-provider?
                   provider-is-mock?

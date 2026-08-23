@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary integration  ;; @requires network
 
 ;;; tests/test-oauth-callback.rkt — OAuth2 callback server tests
 

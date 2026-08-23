@@ -3,6 +3,7 @@
 ;; Validates that all v0.99.45 audit test files exist and are discoverable.
 ;; @suite default
 ;; @speed fast
+;; @boundary unit
 
 (require rackunit
          racket/file)

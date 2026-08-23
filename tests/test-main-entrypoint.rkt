@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @boundary unit
 
 ;; tests/test-main-entrypoint.rkt — Subprocess-level tests for main.rkt entry point
 ;; BOUNDARY: integration (process-level)
