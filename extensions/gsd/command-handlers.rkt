@@ -81,6 +81,7 @@
           [register-gsd-commands (-> extension-ctx? hook-result?)]
           [handle-execute-command (-> hash? hook-result?)]
           [handle-go-command (-> (or/c path-string? #f) string? hook-result?)]
+          [build-single-wave-prompt (-> path-string? gsd-plan? exact-nonnegative-integer? string?)]
           [handle-gsd-status (-> hook-result?)]
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
@@ -411,9 +412,39 @@
                            ""
                            (format "Required verification: ~a\n" (gsd-wave-verify wave))))))
   (define state-content (state-for-wave (or (read-planning-artifact base-dir "STATE") "") wave-idx))
+  ;; S2b/D5 (#9359): pin the executor's working-directory contract so the
+  ;; agent never confuses the repo root with the q/ source subdir (attempt-3
+  ;; and attempt-5 burned tool budget on "Wrong working dir" / dropped
+  ;; path segments like q/tui/key-dispatch.rkt vs
+  ;; q/tui/keybindings/key-dispatch.rkt). Also validate each File: target
+  ;; against base-dir up front and report existence so the executor can
+  ;; distinguish a genuinely missing file from a path-resolution mistake.
+  (define repo-root (or (current-pinned-dir) (current-directory)))
+  (define (target-exists? t)
+    (define p
+      (if (absolute-path? t)
+          t
+          (build-path base-dir t)))
+    (file-exists? p))
+  (define file-contract
+    (string-append
+     (format "## Working Directory Contract\n")
+     (format "- Project root (base-dir): ~a\n" base-dir)
+     (format "- Process working directory: ~a\n" repo-root)
+     (format
+      "- Source subdir is 'q' under the project root. Resolve 'File:' paths relative to the project root unless they are absolute.\n")
+     (if (null? (gsd-wave-files wave))
+         "- No file targets declared.\n"
+         (string-append
+          "- Declared file targets (existence checked against project root):\n"
+          (string-join (for/list ([t (gsd-wave-files wave)])
+                         (format "  * ~a [~a]\n" t (if (target-exists? t) "exists" "MISSING")))
+                       "")
+          "\n"))))
   (define last-failure (extract-last-failure wave-details))
   (string-append
    planning-implement-prompt
+   file-contract
    "# Runtime-Enforced Single-Wave Execution\n\n"
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"
