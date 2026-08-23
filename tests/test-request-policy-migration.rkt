@@ -34,10 +34,18 @@
                        #:thinking-idle [think #f]
                        #:body-read [body #f])
   (parameterize ([current-http-request-timeout 600]
-                 [current-model-timeouts (if req (hash model req) (hash))]
-                 [current-model-sse-read-timeouts (if sse (hash model sse) (hash))]
-                 [current-model-thinking-idle-timeouts (if think (hash model think) (hash))]
-                 [current-model-body-read-timeouts (if body (hash model body) (hash))])
+                 [current-model-timeouts (if req
+                                             (hash model req)
+                                             (hash))]
+                 [current-model-sse-read-timeouts (if sse
+                                                      (hash model sse)
+                                                      (hash))]
+                 [current-model-thinking-idle-timeouts (if think
+                                                           (hash model think)
+                                                           (hash))]
+                 [current-model-body-read-timeouts (if body
+                                                       (hash model body)
+                                                       (hash))])
     (resolve-request-network-policy-for-model model)))
 
 (test-case "DeepSeek legacy shape: request=900, sse-read=600"
@@ -67,8 +75,7 @@
   (check-equal? (request-network-policy-stream-total-secs p) 1800))
 
 (test-case "explicit semantic keys win over the legacy alias"
-  (define p (resolve/model "m" #:request 600 #:sse-read 600
-                           #:thinking-idle 240 #:body-read 45))
+  (define p (resolve/model "m" #:request 600 #:sse-read 600 #:thinking-idle 240 #:body-read 45))
   (check-equal? (request-network-policy-thinking-idle-secs p) 240)
   (check-equal? (request-network-policy-body-read-budget-secs p) 45)
   ;; explicit keys still cannot widen the safety detectors

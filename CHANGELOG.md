@@ -74,6 +74,8 @@
   guard fixed in `setup-racket`/`prepare-racket-environment` actions; the
   metadata-discovery fixture tree is excluded from repo-root test collection.
 
+Released 2026-08-22.
+
 ## v1.00.12 — 2026-08-22
 
 > Released 2026-08-22. SSE stall detection bounds: containment of the v1.00.05 regression that let
