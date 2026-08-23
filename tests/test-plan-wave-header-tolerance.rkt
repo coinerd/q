@@ -4,7 +4,7 @@
 ;; @suite extensions
 ;; @boundary unit
 
-;; tests/test-plan-wave-header-tolerance.rkt — v1.00.14 hotfix regression
+;; tests/test-plan-wave-header-tolerance.rkt — wave-header tolerance regression
 ;;
 ;; BUG (session MN5MQHQP, 2026-08-23): a plan written with em-dash headers
 ;; (`## Wave 1 — Title`) and 1-based numbering failed /go normalization with
