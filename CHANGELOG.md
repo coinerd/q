@@ -7,7 +7,7 @@
 > boundary; connect/TTFB is bounded; held-request classification is
 > heartbeat-aware.
 
-### Changed
+### Features
 
 - **Centralized request-network policy (W1 #9461).** New
   `llm/request-policy.rkt` is the single owner of provider-request lifecycle
@@ -62,17 +62,63 @@
   capped at `min(phase-idle, remaining-total)` — no more overshooting the
   total deadline by a full phase window.
 
+### Breaking / Behavior Changes
+
+All deltas are intentional outcomes of the unification (pinned by the
+cross-adapter conformance suite):
+
+1. anthropic/azure/gemini streaming: thinking window 60 s →
+   `min(request, min(or thinking-idle 120, 300))`; stream total 600 s →
+   `max(600, 2×request)` when request > 300 s.
+2. All adapters (incl. openai eager): non-streaming body reads honor the
+   legacy `sse-read` (or explicit `body-read`) budget instead of the flat
+   120 s fallback.
+3. Connect+TTFB on every path bounded at `min(request, 120)` with
+   structured phase `'connect/ttfb`.
+4. Heartbeat-only initial stalls are live-but-no-content: they no longer
+   trip the held-request circuit breaker; total deadline still bounds them.
+5. Blocking stream reads capped at `min(phase-idle, remaining-total)`.
+6. Retry delays derive from the structured `Retry-After` context
+   (HTTP-date + delta-seconds), never from message text.
+
+### Migration Notes
+
+- Existing configs need no change: `request` + legacy `sse-read` resolve to
+  the same effective windows as documented (DeepSeek `request=900`,
+  `sse-read=600` → thinking 300 s; Kimi `sse-read=300` → honored).
+- To widen a specific window, prefer the semantic keys
+  `timeouts.models.<m>.thinking-idle` / `body-read`; explicit keys win over
+  the legacy alias. `docs/provider-retry.md` carries the resolved-policy
+  matrix and migration table.
+
+### Testing
+
+- New suites: `test-request-network-policy` (resolver contract + property
+  sweep), `test-provider-network-policy-conformance` (identical mechanism
+  arguments across all four adapters), `test-network-failure-context`
+  (structured failure context + Retry-After parsing), 
+  `test-provider-response-cleanup` (close-once lifecycle matrix),
+  `test-request-policy-architecture` (R1–R5 ownership gate, empty
+  allowlist), `test-stream-liveness-classification` (heartbeat matrix +
+  W4 deadline matrix), `test-request-policy-migration` (DeepSeek/Kimi
+  legacy-config proofs).
+- All suites green in CI (fast/arch/workflows/tui + sharded regression);
+  gate evidence recorded per release run.
+
 ### Deprecated
 
 - **Legacy `sse-read` config key.** Still honored (feeds only thinking-idle
   and body-read, with the documented caps and precedence); removal is
   planned after v1.00.13. Docs: `docs/provider-retry.md`.
 
-### Infrastructure
+### Operational / Release
 
 - CI cold-runner repair (with #9488): `raco pkg show`-based package-presence
   guard fixed in `setup-racket`/`prepare-racket-environment` actions; the
   metadata-discovery fixture tree is excluded from repo-root test collection.
+- Workspace bytecode wipes spare the frozen discovery fixture
+  (tracked stray `.rkt` under `compiled/`); the release readiness gate now
+  names dirty files when it fails.
 
 Released 2026-08-22.
 
