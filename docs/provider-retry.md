@@ -189,7 +189,7 @@ letting the safety detectors widen. A Kimi config with `sse-read: 300`
 keeps its 300 s thinking window and 300 s body-read. Explicit
 `thinking-idle`/`body-read` keys always win over the legacy alias.
 `wiring/mode-helpers.rkt` logs a deprecation warning when it sees
-`sse-read`; removal is planned after v1.00.14.
+`sse-read`; removal is planned after v1.00.15.
 
 ### Structured failure context and Retry-After
 
@@ -202,7 +202,7 @@ in a structured failure context (`kind`, `http-status`, redacted
 `Retry-After` is read from the actual response header (delta-seconds and
 HTTP-date forms; the clock is injectable for deterministic tests) and
 consumed by auto-retry as structured metadata. No retry decision parses
-human exception text (the pre-v1.00.14 path fed the whole message to a
+human exception text (the pre-v1.00.15 path fed the whole message to a
 string parser).
 
 ### Heartbeat-aware held-request classification
