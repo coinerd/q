@@ -38,7 +38,14 @@
          json)
 
 (define repo-slug "coinerd/q")
-(define report-version "v1.00.11")
+(define report-version "v1.00.16")
+;; W0 fast-gate baseline of record (v1.00.16 objective): the fast-gate p50
+;; measured by the W0 campaign was 488.0 s (see fast-gate-budget-v1.00.11.md
+;; and the v1.00.16 regression-log entry). The v1.00.16 halving target is
+;; 50% of THIS of-record value, 244.0 s — never re-derived from the current
+;; sample (no target massaging). Achieved ratio = sample fast-gate p50 / 488.0.
+(define w0-fast-gate-baseline-p50-seconds 488.0)
+(define v1.00.16-halving-target-seconds (/ w0-fast-gate-baseline-p50-seconds 2))
 (define l4-run-ids '("32522576690" "32526868295"))
 
 ;; W0 fast-gate baseline of record: the canonical run set is maintained
@@ -375,13 +382,13 @@
   (define run-ids '())
   (define jobs-dir (build-path repo-root "artifacts/ci-baseline/jobs"))
   (define artifacts-dir (build-path repo-root "artifacts"))
-  (define out-md (build-path repo-root "docs/reports/test-feedback-baseline-v1.00.11.md"))
-  (define out-json (build-path repo-root "docs/reports/test-feedback-baseline-v1.00.11.json"))
+  (define out-md (build-path repo-root "docs/reports/test-feedback-baseline-v1.00.16.md"))
+  (define out-json (build-path repo-root "docs/reports/test-feedback-baseline-v1.00.16.json"))
   (define mode-check? #f)
   (define local-input-dir #f)
   (define mode-fast-budget? #f)
-  (define out-fast-md (build-path repo-root "docs/reports/fast-gate-budget-v1.00.11.md"))
-  (define out-fast-json (build-path repo-root "docs/reports/fast-gate-budget-v1.00.11.json"))
+  (define out-fast-md (build-path repo-root "docs/reports/fast-gate-budget-v1.00.16.md"))
+  (define out-fast-json (build-path repo-root "docs/reports/fast-gate-budget-v1.00.16.json"))
 
   (command-line
    #:program "baseline-report"
@@ -413,7 +420,24 @@
    [("--out-fast-json") p "Fast-budget JSON path" (set! out-fast-json p)])
 
   (when (and (null? run-ids) (not local-input-dir))
-    (set! run-ids (canonical-run-ids))
+    ;; --check without --runs must reproduce the exact retained inputs the
+    ;; committed report declares (its JSON 'runs list), so byte-identical
+    ;; regeneration is verified against the sample the report actually used.
+    ;; Reports whose JSON predates a declared run list (or a missing target
+    ;; file) fall back to the canonical baseline set.
+    (define declared-run-ids
+      (cond
+        [(and mode-check? (file-exists? out-json))
+         (define parsed (bytes->jsexpr (file->bytes out-json) #:null 'null))
+         (define runs (and (hash? parsed) (hash-ref parsed 'runs #f)))
+         (if (list? runs)
+             (sort (filter-map (lambda (r) (and (hash? r) (hash-ref r 'run_id #f))) runs) string<?)
+             '())]
+        [else '()]))
+    (set! run-ids
+          (if (pair? declared-run-ids)
+              declared-run-ids
+              (canonical-run-ids)))
     (when (null? run-ids)
       (eprintf "usage: baseline-report.rkt --runs <run-ids> [--jobs-dir dir] [--check]~n")
       (eprintf "       baseline-report.rkt --local --local-input <dir> [--out-json path]~n")
@@ -637,6 +661,16 @@
         #f
         (quantile fast-gate-totals 0.95)))
   (define fast-halving-target (and fast-p50 (/ fast-p50 2)))
+  ;; v1.00.16: comparison against the W0 baseline of record (488.0 s), NOT
+  ;; re-derived from this sample. ratio < 1 means the gate got faster than
+  ;; W0; verdict MET only when p50 <= 244.0 s (<= 50% of 488.0).
+  (define v1.00.16-achieved-ratio
+    (and fast-p50 (exact->inexact (/ fast-p50 w0-fast-gate-baseline-p50-seconds))))
+  (define v1.00.16-verdict
+    (cond
+      [(not fast-p50) "not measured"]
+      [(<= fast-p50 v1.00.16-halving-target-seconds) "MET"]
+      [else "MISSED"]))
   (define (fmt-num v)
     (if (number? v)
         (format "~a" v)
@@ -785,13 +819,19 @@
              'baseline_p95_seconds
              (if fast-p95 fast-p95 'null)
              'halving_target_p50_seconds
-             (if fast-halving-target fast-halving-target 'null)
+             v1.00.16-halving-target-seconds
              'halving_target_text
-             (if fast-halving-target
-                 (format "fast-gate p50 (setup + max shard) <= ~a s, i.e. <= 50% of baseline p50 ~a s"
-                         (fmt-num fast-halving-target)
-                         (fmt-num fast-p50))
-                 "n/a")
+             (format "fast-gate p50 (setup + max shard) <= ~a s, i.e. <= 50% of baseline p50 ~a s"
+                     (fmt-num v1.00.16-halving-target-seconds)
+                     (fmt-num w0-fast-gate-baseline-p50-seconds))
+             'w0_baseline_p50_seconds
+             w0-fast-gate-baseline-p50-seconds
+             'v1.00.16_halving_target_p50_seconds
+             v1.00.16-halving-target-seconds
+             'achieved_ratio_of_w0_baseline
+             (if v1.00.16-achieved-ratio v1.00.16-achieved-ratio 'null)
+             'v1.00.16_halving_verdict
+             v1.00.16-verdict
              'per_run
              (filter (lambda (x) x) per-run-fast-gate))
      'metadata_counts
@@ -897,14 +937,16 @@
      "Deterministic baseline produced by `scripts/run-tests/baseline-report.rkt`\n"
      "from retained inputs only. Same inputs → byte-identical outputs (verify with\n"
      "`--check`).\n\n"
-     "**W0 fast-gate halving target (v1.00.16 objective):** fast-gate p50 (setup +\n"
-     "max shard) ≤ "
-     (fmt-num fast-halving-target)
-     " s, i.e. ≤ 50% of the baseline\n"
-     "p50 "
-     (fmt-num fast-p50)
-     " s recorded below. Falsifiable: re-run\n"
-     "`baseline-report.rkt --fast-budget --check` against the next retained sample\n"
+     "**v1.00.16 halving objective (vs the W0 baseline of record):** fast-gate p50\n"
+     "(setup + max shard) ≤ "
+     (fmt-num v1.00.16-halving-target-seconds)
+     " s, i.e. ≤ 50% of the W0 baseline p50 "
+     (fmt-num w0-fast-gate-baseline-p50-seconds)
+     " s\n"
+     "of record (see `fast-gate-budget-v1.00.11.md` and the v1.00.16\n"
+     "regression-log entry). The target is fixed at 50% of the W0 value and is\n"
+     "never re-derived from this sample (no target massaging). Falsifiable: re-run\n"
+     "`baseline-report.rkt --check` against the next retained sample\n"
      "and compare the same per-run totals. No test semantics, inventory, or CI gate\n"
      "changed by this target.\n\n"
      "## Method (declared)\n\n"
@@ -956,8 +998,19 @@
           (format "- sample: ~a fast-gate runs\n" (length fast-gate-totals))
           (format "- p50: ~a s; p95: ~a s\n" (n fast-p50) (n fast-p95))
           (format "- **halving target:** fast-gate p50 ≤ ~a s (≤ 50% of baseline p50 ~a s)\n"
-                  (n fast-halving-target)
-                  (n fast-p50))
+                  (n v1.00.16-halving-target-seconds)
+                  (n w0-fast-gate-baseline-p50-seconds))
+          (string-append "- **v1.00.16 vs W0 baseline:** achieved ratio "
+                         (if v1.00.16-achieved-ratio
+                             (format "~a" v1.00.16-achieved-ratio)
+                             "n/a")
+                         "× of the W0 baseline p50 (488.0 s); halving verdict: **"
+                         v1.00.16-verdict
+                         "** ("
+                         (if fast-p50
+                             (n fast-p50)
+                             "n/a")
+                         " s ≤ 244.0 s)\n")
           "\nTop-15 slowest files by p50 with category attribution:\n\n"
           (if (null? top15-files)
               (string-append
@@ -1033,7 +1086,9 @@
      "| L0 | not yet measured | no developer-local data collected | scoped unknown |\n"
      "| L1 | not yet measured | no developer-local data collected | scoped unknown |\n"
      "| L2 | measured from this report's per-suite/per-shard p50/p95 | retained CI jobs JSON above | measured |\n"
-     "| L3 | retain the successful main/PR sample recorded here | input run set above (10 L3 runs) | measured |\n"
+     (format
+      "| L3 | retain the successful main/PR sample recorded here | input run set above (~a L3 runs) | measured |\n"
+      (length (remove* l4-run-ids run-ids)))
      "| L4 | preserve the 2-run cold/warm control (32522576690, 32526868295) | retained regression log | measured (control preserved) |\n\n"
      "## Parallel-only instability (measured rate)\n\n"
      (format
@@ -1060,28 +1115,28 @@
      "retained inputs only (same inputs → byte-identical outputs; verify with\n"
      "`--fast-budget --check`).\n\n"
      "**Halving target (v1.00.16 objective):** fast-gate p50 (setup + max shard) ≤ "
-     (fmt-num fast-halving-target)
+     (fmt-num v1.00.16-halving-target-seconds)
      " s — ≤ 50% of baseline p50 "
-     (fmt-num fast-p50)
+     (fmt-num w0-fast-gate-baseline-p50-seconds)
      " s. Falsifiable against the next retained sample.\n\n"
      "## Per-run setup vs execution split (worst fast-gate shard)\n\n"
      (if (null? per-run-fast-gate)
          "_not measured: no fast-gate job records in the retained sample._\n"
-         (string-append "| run | shard | setup (s) | execution (s) | total (s) |\n"
-                        "|---|---|---|---|---|\n"
-                        (string-join (for/list ([x (in-list (filter (lambda (x) x)
-                                                                    per-run-fast-gate))])
-                                       (format "| ~a | ~a | ~a | ~a | ~a |"
-                                               (hash-ref x 'run_id)
-                                               (hash-ref x 'shard)
-                                               (n (hash-ref x 'setup_seconds))
-                                               (n (hash-ref x 'execution_seconds))
-                                               (n (hash-ref x 'total_seconds))))
-                                     "\n")
-                        "\n\n"
-                        (format "- sample: ~a fast-gate runs\n" (length fast-gate-totals))
-                        (format "- p50: ~a s; p95: ~a s\n" (n fast-p50) (n fast-p95))
-                        (format "- halving target: p50 ≤ ~a s\n\n" (n fast-halving-target))))
+         (string-append
+          "| run | shard | setup (s) | execution (s) | total (s) |\n"
+          "|---|---|---|---|---|\n"
+          (string-join (for/list ([x (in-list (filter (lambda (x) x) per-run-fast-gate))])
+                         (format "| ~a | ~a | ~a | ~a | ~a |"
+                                 (hash-ref x 'run_id)
+                                 (hash-ref x 'shard)
+                                 (n (hash-ref x 'setup_seconds))
+                                 (n (hash-ref x 'execution_seconds))
+                                 (n (hash-ref x 'total_seconds))))
+                       "\n")
+          "\n\n"
+          (format "- sample: ~a fast-gate runs\n" (length fast-gate-totals))
+          (format "- p50: ~a s; p95: ~a s\n" (n fast-p50) (n fast-p95))
+          (format "- halving target: p50 ≤ ~a s\n\n" (n v1.00.16-halving-target-seconds))))
      "## Top-15 slowest fast-gate files by p50\n\n"
      (if (null? top15-files)
          (string-append
@@ -1133,7 +1188,7 @@
               'p95_seconds
               (if fast-p95 fast-p95 'null)
               'halving_target_p50_seconds
-              (if fast-halving-target fast-halving-target 'null))
+              v1.00.16-halving-target-seconds)
       'per_run
       (filter (lambda (x) x) per-run-fast-gate)
       'top15_slowest_files
