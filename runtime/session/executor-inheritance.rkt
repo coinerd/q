@@ -14,7 +14,14 @@
          (only-in "session-config.rkt" session-config? session-config->hash explicit-model-override?))
 
 (provide (contract-out [inherit-coordinator-runtime-config
-                        (-> dict? (or/c hash? #f) (or/c string? #f) any/c dict?)]))
+                        (-> dict?
+                            ;; BUG-0020: live sessions carry a session-config
+                            ;; struct here (agent-session-config), not a raw
+                            ;; hash; both shapes are accepted and normalized.
+                            (or/c hash? session-config? #f)
+                            (or/c string? #f)
+                            any/c
+                            dict?)]))
 
 ;; inherit-coordinator-runtime-config :
 ;;   rt-config prior-config prior-model-name prior-provider -> rt-config'
