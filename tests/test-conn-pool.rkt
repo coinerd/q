@@ -2,7 +2,7 @@
 
 ;; tests/test-conn-pool.rkt — BUG-0019 W2 acceptance tests.
 ;;
-;; Coverage (PLAN v1.00.15 W2):
+;; Coverage (BUG-0019 wave W2; see .planning plan):
 ;;   1. acquire/release roundtrip: fresh connect is a miss; a connection
 ;;      whose response had Content-Length framing checks in and the next
 ;;      acquire is a HIT on the same socket

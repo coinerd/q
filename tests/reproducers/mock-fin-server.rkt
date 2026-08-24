@@ -131,7 +131,7 @@
      (with-handlers ([exn:fail? void])
        (close-input-port in))]
     ['clean-close
-     ;; Platform reality (recorded in STATE-v1.00.15): on this OpenSSL 3
+     ;; Platform reality (recorded in the BUG-0019 wave STATE doc): on this OpenSSL 3
      ;; stack a peer close NEVER reaches the client as a plain TLS EOF —
      ;; even a graceful server close surfaces as "unexpected eof while
      ;; reading". Clean end-of-stream is therefore signalled at the SSE

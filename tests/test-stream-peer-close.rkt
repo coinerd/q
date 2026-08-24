@@ -2,7 +2,7 @@
 
 ;; tests/test-stream-peer-close.rkt — BUG-0019 W1 acceptance rows.
 ;;
-;; Rows (PLAN v1.00.15 W1):
+;; Rows (BUG-0019 wave W1; see .planning plan):
 ;;   0. exports: exn:fail:network:peer-closed + policy probe cadence
 ;;   1. unclean close -> peer-closed raised fast even with a 900 s thinking
 ;;      window (mock server FIN without TLS close_notify)
