@@ -587,3 +587,67 @@ baseline, retained v1.00.10 L4 proof. Release notes for `v1.00.11`:
 > (report-only) with the recorded NO-GO cutover decision and
 > `RACKET_PREPARED_ARTIFACT=off` rollback switch; and retained the deterministic
 > test-feedback baseline. No required gate was weakened.
+
+## v1.00.16 W3 — prepared-environment fast-gate cutover (ubuntu) + FAST_SHARD_COUNT study (2026-08-24)
+
+W3 cuts fixed fast-gate overhead on two axes: (a) the v1.00.11
+prepared-environment pilot's validated artifact flow is now wired into the
+PR fast gate's ubuntu lanes (go/no-go re-evaluation WITH cutover authority,
+scoped to ubuntu only), and (b) a guarded shard-count study runs report-only
+behind the new repository variable `FAST_SHARD_COUNT` (default `3` = today),
+following the `FAST_SHARD_PLAN` precedent exactly (default off, guarded
+activation with an observed post-activation check run, revert command here).
+
+### Prepared-environment cutover (ubuntu fast lanes) — GO, hosted observation pending
+
+What changed in `.github/workflows/ci.yml` + `.github/actions/setup-racket`:
+
+| Element | Change |
+|---|---|
+| New producer job `fast-env` | ubuntu-only, first fast-gate job: installs Racket + exact-key addon store, then `prepare-racket-environment` builds the 24h immutable artifact (`addon-store/`, `q-compiled/`, `manifest.json`) via `actions/cache/save`. Never blocks verdicts: consumers fall back to full `setup-racket` when no verified artifact restores. |
+| `setup-racket` input `prepared-environment` | `off` (default) = legacy path byte-identical (every existing call site unchanged); `auto` = guarded prepared-env flow. Only the three ubuntu fast-gate `test` shards opt in; the macOS `test-platform` lane, cross-version lane, and workflows lane do NOT (they keep install + relink + compile on every run). |
+| Restored-path compile skip | On verified restore, `setup-racket` skips `raco setup --no-docs` compile (and the addon-store restore + install that precede it), and runs the four read-only health checks (`racket --version`, lock verify, `(require quickcheck fmt)`, `raco fmt --help`). Output `prepared-environment=restored` is written to `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` (W0 setup/execution split evidence). |
+| Guarded fallback (never silent rebuild) | Any mismatch (no producer output, addon cache miss, manifest verify failure) runs the FULL legacy path — restore + install + relink + `raco setup --pkgs q fmt` — and marks `prepared-environment=rebuild-fallback` in outputs + step summary. Mismatch inside `restore-racket-environment` remains a hard failure; only the "no artifact present" case falls back. |
+| Rollback switch | Repository variable `RACKET_PREPARED_ARTIFACT=off` disables the producer and forces `auto` → `off` at all call sites (single switch, per the pilot report's contract). Command: `gh api -X PUT repos/coinerd/q/actions/variables/RACKET_PREPARED_ARTIFACT -f value=off`. |
+
+Decision basis: the pilot's integrity tooling is complete and locally verified
+(manifest `emit`/`verify`/`digest`, SHA-256-verified installer archive,
+read-only restore contract with zero package-mutation commands — invariants
+I9/I10 respected); the only NO-GO reason at v1.00.11 was zero hosted-run
+samples. W3 therefore cuts over the ubuntu fast lanes behind the guarded
+fallback and records the hosted evidence requirement:
+
+| Observation gate (required to keep GO) | Requirement |
+|---|---|
+| Two consecutive fast-gate CI runs on one PR | Run 1 = cold (producer builds artifact, shards fall back to full setup — expected `rebuild-fallback` or producer-parallel full path); run 2 = warm: verified prepared-env restore on all three shards with `prepared-environment=restored` and a materially reduced setup phase, visible in the retained artifacts' W0 setup/execution split. |
+| Failure handling | Any warm-run restore mismatch is a hard failure (never silent); timeout is never reported as a pass. |
+| Breach action | Revert with `RACKET_PREPARED_ARTIFACT=off`; record numbers here. |
+
+The macOS platform lane's v1.00.10 release condition (compile on every cache
+hit) is unchanged and now recorded as an explicit lane split in
+`docs/reports/CI-RACKET-CACHE-POLICY.md`.
+
+### FAST_SHARD_COUNT study — KEEP 3 (report-only phase live; activation pending first study artifact)
+
+`FAST_SHARD_COUNT` is a new repository variable, default `3` = today's
+behavior (matrix literal in `ci.yml` unchanged until an activation decision
+is recorded here). The `shard-plan-report` job now ALSO runs the
+duration-aware planner over this run's post-W1/W2 staged durations at
+`N=4/6/8` (`--shard-total 4|6|8`, report-only) and appends the predicted
+max-shard table to the retained `shard-plan-report` artifact — the same
+retained-artifact mechanism the `FAST_SHARD_PLAN` decision used (run
+32297737631 → ledger entry 2026-08-19).
+
+| Field | Value |
+|---|---|
+| Study variable | `FAST_SHARD_COUNT` (repo variable; `3` = default/keep, activation value = the chosen N, which must equal the `ci.yml` matrix literal after the activation edit) |
+| Study mechanism | `shard-plan-report` job: `racket scripts/run-tests.rkt --suite fast --shard-total <N> --shard-plan report --durations durations` per N in {4,6,8}, report-only, retained in the `shard-plan-report` artifact |
+| Activation rule (all must hold) | (1) predicted max shard improves vs N=3 over the same run's durations; (2) inventory preserved (same total files, planner `substituted` recorded); (3) runner-minute cost delta computed from observed job minutes (fast-gate job minutes at N minus at 3) and explicitly accepted here; (4) observed post-activation check run recorded here with no material max-shard regression |
+| Decision (2026-08-24) | **KEEP `3`** — report-only phase wired; no hosted study artifact with post-W1/W2 4/6/8 predictions has been transcribed yet, so no activation criterion is evaluable. Activation requires the table + accepted cost delta recorded in a dated addendum below. |
+| Revert command | `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_COUNT -f value=3` and restore the `ci.yml` fast-gate matrix to `[1, 2, 3]` (the variable alone does not resize the matrix; the matrix literal is the source of truth) |
+
+### Constraints reaffirmed
+
+Gate structure (fast / platform / workflows / cross-version), job names, and
+required status checks are unchanged; the workflows contain zero
+impact-selector flags (verify gate: `grep -rn "changed-base\|changed-head\|impact-dry-run" q/.github/workflows/ \| wc -l` = 0); a timeout is never reported as a pass.

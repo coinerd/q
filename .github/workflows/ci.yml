@@ -1,16 +1,25 @@
 name: CI
 
-# W3 prepared-environment note (docs/reports/prepared-environment-pilot-v1.00.11.md):
-# The 26 setup-racket call sites below are the ONLY default path for this
-# workflow and remain unchanged until the recorded go decision. The
-# prepared-environment pilot is report-only (.github/workflows/
-# prepared-environment-pilot.yml) and never gates anything here. Rollback
-# switch for any future cutover: repository variable RACKET_PREPARED_ARTIFACT=off
-# restores exactly this per-job path with no change to test selection or L4
-# semantics.
+# W3 prepared-environment cutover (docs/reports/prepared-environment-pilot-v1.00.11.md
+# + docs/reports/CI-RACKET-CACHE-POLICY.md):
+# The ubuntu fast-gate `test` shards below restore the verified prepared
+# environment produced by the `fast-env` job (addon-store/ + q-compiled/ +
+# manifest.json, verified against the job tuple before any test) and fall
+# back — loudly, never silently — to the full setup-racket install+compile
+# path when the producer is skipped, fails, or the restore mismatches; the
+# fallback marks the artifact as rebuilt. All other setup-racket call sites
+# keep the per-job full path. macOS platform lanes keep compile-on-every-hit
+# (v1.00.10 release condition). Rollback switch: repository variable
+# RACKET_PREPARED_ARTIFACT=off restores exactly the per-job path with no
+# change to test selection or L4 semantics.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Canonical SHA-256 of the official Racket 8.10 x64/full/CS Linux
+  # installer archive, shared by the prepared-environment producer
+  # (fast-env) and the guarded restore inside setup-racket. Mirrors
+  # .github/workflows/prepared-environment-pilot.yml.
+  INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
 
 on:
   push:
@@ -102,36 +111,102 @@ jobs:
         run: racket scripts/run-tests/classify-metadata.rkt --lint-metadata
 
   # ────────────────────────────────────────────────────────────
-  # Gate 2: Sharded test suite — 3 parallel shards on ubuntu
-  # Replaces the old single-job full-suite + redundant inter-wave-gate.
-  # All 1039+ fast tests still run; sharding cuts wall-clock 3×.
+  # Gate 1b: Prepared environment producer (v1.00.16 W3 cutover)
+  # Builds the immutable per-run artifact (addon-store/ + q-compiled/ +
+  # manifest.json) the ubuntu fast-gate `test` shards restore instead of
+  # paying per-shard Racket install + raco setup compile cost. The
+  # manifest is verified on restore against the job tuple before any
+  # test runs (see docs/reports/CI-RACKET-CACHE-POLICY.md). Skipped on
+  # workflow_dispatch (racket-version override ⇒ shards fall back to the
+  # full path) and by the rollback switch RACKET_PREPARED_ARTIFACT=off.
   # ────────────────────────────────────────────────────────────
-  test:
+  fast-env:
     needs: lint
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2]
+    if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/prepare-racket-environment
+        with:
+          racket-version: '8.10'
+          installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
+          artifact-name: prepared-env-fast
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 2: Sharded test suite — 3 parallel shards on ubuntu (default)
+  # Replaces the old single-job full-suite + redundant inter-wave-gate.
+  # All 1039+ fast tests still run; sharding cuts wall-clock 3×.
+  # W3: shards restore the prepared environment produced by fast-env
+  # through the guarded `prepared-environment: auto` input of the
+  # setup-racket action (restore + flagged fallback live inside the
+  # action, so every call site inherits the same semantics); when the
+  # producer is skipped (workflow_dispatch override, rollback switch
+  # RACKET_PREPARED_ARTIFACT=off) or the restore mismatches, the shard
+  # falls back — loudly, never silently — to the full setup path.
+  # Shard count is governed by repo variable FAST_SHARD_COUNT (default
+  # 3 = [0, 1, 2]; only the study candidates 4/6/8 widen the matrix —
+  # the study and its activation rule are recorded in
+  # docs/reports/test-regression-log.md).
+  # ────────────────────────────────────────────────────────────
+  test:
+    needs: [lint, fast-env]
+    # Run via the fallback path whenever fast-env is skipped or failed;
+    # the guarded restore inside setup-racket plus its fallback marker
+    # make that visible.
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # FAST_SHARD_COUNT (W3, guarded study, FAST_SHARD_PLAN
+        # precedent): default 3 = today's [0, 1, 2]; only the exact
+        # study candidates 4/6/8 change the matrix; any other value
+        # (unset, 3, garbage) keeps 3.
+        shard: ${{ fromJSON(vars.FAST_SHARD_COUNT == '4' && '[0, 1, 2, 3]' || vars.FAST_SHARD_COUNT == '6' && '[0, 1, 2, 3, 4, 5]' || vars.FAST_SHARD_COUNT == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
+    runs-on: ubuntu-latest
+    env:
+      # Resolved once so the legacy package-cache step below and the
+      # setup-racket call agree: 'auto' only when the prepared path is
+      # actually in play for this run (producer green, not a dispatch
+      # version-override, rollback switch not off).
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
+    steps:
+      - uses: actions/checkout@v7
+      # Legacy pre-W3 cache; only pays off on the full path.
       - name: Cache Racket packages
+        if: env.PREPARED_ENV != 'auto'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/racket
           key: racket-pkgs-test-${{ hashFiles('**/info.rkt') }}
           restore-keys: racket-pkgs-test-
+      # setup-racket owns the W3 decision: on PREPARED_ENV=auto it first
+      # attempts the manifest-verified prepared-environment restore and,
+      # on success, skips install+compile (its step summary reports the
+      # restore wall clock in place of the package-visible setup
+      # seconds); on any mismatch or failure it falls back to the full
+      # path and flags the fallback (::warning + REBUILT summary) —
+      # never a silent rebuild.
       - uses: ./.github/actions/setup-racket
+        id: setup
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Clear stale bytecode
+        if: steps.setup.outputs.prepared-env-result != 'success'
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
+      # On the prepared-env path the restore action's read-only health
+      # checks (racket --version, lock verify, (require quickcheck fmt),
+      # raco fmt --help) replace this gate; recompiling against fresh
+      # checkout mtimes would defeat the restore.
       - name: Compile gate (shared deps)
+        if: steps.setup.outputs.prepared-env-result != 'success'
         run: raco make main.rkt
 
-      - name: Run test shard ${{ matrix.shard }}/3
+      - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
         # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
         # variable FAST_SHARD_PLAN=active ONLY after the shard-plan-report
         # job below prints `activate` (predicted max-shard duration improves
@@ -146,7 +221,7 @@ jobs:
           fi
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
-            --shard-index ${{ matrix.shard }} --shard-total 3 \
+            --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             $PLAN_ARGS \
             --json-out test-results.json \
             2>&1 | tee test-output.log
@@ -155,7 +230,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Test results — fast shard ${{ matrix.shard }}/3"
+            echo "## Test results — fast shard ${{ matrix.shard }}/${{ strategy.job-total }}"
             if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
               jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
                      "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
@@ -254,17 +329,35 @@ jobs:
             echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
             exit 0
           fi
+          # Current shard total = number of staged per-shard duration JSONs
+          # (3 today; N once FAST_SHARD_COUNT is activated per the ledger).
+          CURRENT_TOTAL=$(ls -1 durations/*.json | wc -l)
           racket scripts/run-tests.rkt \
-            --suite fast --shard-total 3 \
+            --suite fast --shard-total "$CURRENT_TOTAL" \
             --shard-plan report --durations durations \
             2>&1 | tee shard-plan-report.log
+          # FAST_SHARD_COUNT study (v1.00.16 W3, report-only): predicted
+          # max shard at N=4/6/8 over this run's post-W1/W2 durations.
+          # Activation rule (FAST_SHARD_PLAN precedent): activate N only
+          # if the predicted max shard improves AND the runner-minute
+          # cost delta is recorded and accepted in
+          # docs/reports/test-regression-log.md.
+          echo ";; FAST_SHARD_COUNT study (W3, report-only): predicted max shard at N=4/6/8" | tee -a shard-plan-report.log
+          for n in 4 6 8; do
+            [ "$n" = "$CURRENT_TOTAL" ] && continue
+            echo ";; ---- N=$n ----"
+            racket scripts/run-tests.rkt \
+              --suite fast --shard-total "$n" \
+              --shard-plan report --durations durations 2>&1 \
+              | grep -E '^shard [0-9]+/[0-9]+:|^;; ' || echo ";; (planner produced no report for N=$n)"
+          done | tee -a shard-plan-report.log
       - name: Post predicted-vs-observed summary
         if: always()
         run: |
           {
             echo "## Shard plan report (W7, report-only)"
             echo '```'
-            grep -E 'shard [0-9]+/3:|^;; ' shard-plan-report.log || true
+            grep -E 'shard [0-9]+/[0-9]+:|^;; ' shard-plan-report.log || true
             echo '```'
             if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
               echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
@@ -275,6 +368,7 @@ jobs:
               echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
             fi
             echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
+            echo "- FAST_SHARD_COUNT (W3, report-only): predicted max shard for N=4/6/8 printed above from the same durations. Default stays 3; activate N only if the predicted max shard improves AND the runner-minute cost delta is recorded and accepted in \`docs/reports/test-regression-log.md\` (activation + revert procedure recorded there)."
           } >> "$GITHUB_STEP_SUMMARY"
         env:
           OBSERVED: ${{ steps.observed.outputs.observed }}

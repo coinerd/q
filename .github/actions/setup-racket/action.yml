@@ -5,10 +5,92 @@ inputs:
     description: 'Racket version to install'
     required: false
     default: '8.10'
+  prepared-environment:
+    description: >-
+      'auto' lets this action restore a verified prepared environment
+      (producer artifact consumed via a needs producer in the calling
+      workflow) and skip the redundant Racket install and raco setup
+      compile below; 'off' (default) keeps the full per-job path.
+      Additional guards inside: Linux runners only and a non-empty
+      prepared-installer-sha256. The repository-level rollback switch
+      RACKET_PREPARED_ARTIFACT=off is evaluated by opting call sites
+      (it keeps this input at 'off').
+    required: false
+    default: 'off'
+  prepared-artifact-name:
+    description: 'Prepared-environment artifact name to restore when prepared-environment=auto'
+    required: false
+    default: 'prepared-env-fast'
+  prepared-installer-sha256:
+    description: >-
+      Published SHA-256 of the official installer archive; required by
+      the restore path when prepared-environment=auto (empty disables
+      the prepared path and falls through to the full path).
+    required: false
+    default: ''
+outputs:
+  prepared-env-result:
+    description: >-
+      Outcome of the guarded prepared-environment restore: 'success'
+      (manifest-verified restore; install+compile skipped),
+      'failure' (restore mismatched or failed; this action fell back to
+      the full path and flagged the fallback), or 'skipped' (prepared
+      path not requested for this call site).
+    value: ${{ steps.prepared-env.outcome }}
 runs:
   using: 'composite'
   steps:
+    # ------------------------------------------------------------------
+    # W3 prepared-environment restore (guarded; ubuntu fast-gate lanes
+    # only, docs/reports/CI-RACKET-CACHE-POLICY.md lane split). A
+    # manifest-verified restore replaces the install+compile steps below
+    # for this job; anything else — mismatch, missing artifact, or a call
+    # site that did not opt in — runs the FULL path below, and a fallback
+    # after a failed restore is flagged, never a silent rebuild. macOS
+    # lanes cannot opt in: the runner.os guard plus the per-call-site
+    # default 'off' keep the v1.00.10 compile-on-every-hit condition.
+    # ------------------------------------------------------------------
+    - name: Restore verified prepared environment (guarded)
+      id: prepared-env
+      if: ${{ inputs.prepared-environment == 'auto' && runner.os == 'Linux' && inputs.prepared-installer-sha256 != '' }}
+      continue-on-error: true
+      uses: ./.github/actions/restore-racket-environment
+      with:
+        racket-version: ${{ inputs.racket-version }}
+        installer-sha256: ${{ inputs.prepared-installer-sha256 }}
+        artifact-name: ${{ inputs.prepared-artifact-name }}
+
+    - name: Prepared-environment fallback marker (rebuilt, never silent)
+      if: steps.prepared-env.outcome == 'failure'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::warning::prepared-environment restore failed or mismatched; this job falls back to the full setup path and the artifact is marked as rebuilt (the next producer run re-uploads it)"
+        {
+          echo "## Racket package setup — prepared environment REBUILT (fallback)"
+          echo "- Restore outcome: failure — this job ran the full install+compile path; the producer rebuilds the artifact on its next run. Fallback is flagged, never silent (docs/reports/CI-RACKET-CACHE-POLICY.md)."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Prepared-environment restored (verified) — install and compile skipped
+      if: steps.prepared-env.outcome == 'success'
+      shell: bash
+      env:
+        RESTORE_MS: ${{ steps.prepared-env.outputs.restore-ms }}
+        LOCK_DIGEST: ${{ steps.prepared-env.outputs.lock-digest }}
+      run: |
+        set -euo pipefail
+        {
+          echo "## Racket package setup — prepared environment restored"
+          echo "- Restore outcome: success (manifest verified against this job's tuple; lock digest \`${LOCK_DIGEST}\`)"
+          echo "- Restore wall clock: ${RESTORE_MS:-n/a} ms"
+          echo "- Racket install + package-visible compile skipped per the ubuntu fast-gate lane split (docs/reports/CI-RACKET-CACHE-POLICY.md); the restore's four read-only health checks replace them."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # The steps below are the FULL path. They are skipped only when the
+    # guarded restore above succeeded for this job; every other run —
+    # including every exact addon-cache hit — still compiles.
     - name: Clean stale q workspace bytecode
+      if: steps.prepared-env.outcome != 'success'
       shell: bash
       run: |
         set -euo pipefail
@@ -24,6 +106,7 @@ runs:
     # bytecode from the fresh checkout.
     - name: Configure Racket user package store
       id: racket-store
+      if: steps.prepared-env.outcome != 'success'
       shell: bash
       run: |
         set -euo pipefail
@@ -36,6 +119,7 @@ runs:
     # restore a potentially incompatible package graph through a prefix key.
     - name: Restore locked Racket user package store
       id: racket-addon-cache
+      if: steps.prepared-env.outcome != 'success'
       uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
       with:
         path: ${{ steps.racket-store.outputs.addon_path }}
@@ -44,6 +128,7 @@ runs:
           ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}
 
     - name: Install Racket
+      if: steps.prepared-env.outcome != 'success'
       uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
       with:
         architecture: 'x64'
@@ -63,6 +148,7 @@ runs:
     # every q collection without rebuilding documentation.
     # ------------------------------------------------------------------
     - name: Link q and compile package-visible modules
+      if: steps.prepared-env.outcome != 'success'
       shell: bash
       run: |
         set -euo pipefail
@@ -138,6 +224,16 @@ runs:
         # package used by racket-tooling write validation. `fmt` is a build
         # dependency, so q setup alone does not reliably install its `raco`
         # command in a clean CI user store.
+        #
+        # Lane split (v1.00.16 W3, docs/reports/CI-RACKET-CACHE-POLICY.md):
+        # this full install+compile path is the FALLBACK path for the
+        # ubuntu fast-gate test shards (the guarded restore step at the
+        # top of this action carries the prepared path). On a verified
+        # prepared-environment restore this whole step is skipped; on
+        # mismatch or producer failure the restore step above routes here
+        # AND marks the artifact as rebuilt — never silently. The macOS
+        # platform lane keeps compile-on-every-hit unconditionally per the
+        # v1.00.10 release condition recorded in the policy doc.
         echo "::group::Compiling q collections and the formatter command"
         raco setup --no-docs --jobs 4 --pkgs q fmt
         raco fmt --help >/dev/null
