@@ -11,6 +11,7 @@
 ;; must be untouched when it is not (v1.00.13 semantics preserved).
 
 (require rackunit
+         (only-in "../runtime/session/session-config.rkt" hash->session-config session-config?)
          "../runtime/session/executor-inheritance.rkt")
 
 (test-case "BUG-0018: executor inherits switched model + provider with override"
@@ -35,6 +36,22 @@
 (test-case "BUG-0018: nil prior config leaves executor config unchanged"
   (define rt-config (hasheq 'model-name "glm-5.3"))
   (check-equal? (inherit-coordinator-runtime-config rt-config #f #f #f) rt-config))
+
+(test-case "BUG-0020: live session-config struct accepted (contract regression)"
+  ;; The /go campaign runner passes agent-session-config, which at runtime is
+  ;; a session-config STRUCT, not a raw hash. Before the contract fix this
+  ;; raised 'contract violation expected (or/c hash? #f)' and killed the
+  ;; campaign runner. Both shapes must be accepted and normalized.
+  (define rt-config (hasheq 'provider 'startup-provider 'model-name "glm-5.3"))
+  (define sess-cfg (hash->session-config (hasheq 'model-name "ark-code-latest" 'model-override #t)))
+  (check-pred session-config? sess-cfg)
+  (define inherited
+    (inherit-coordinator-runtime-config rt-config sess-cfg "ark-code-latest" 'switched-provider))
+  (check-equal? (hash-ref inherited 'provider) 'switched-provider)
+  (check-equal? (hash-ref inherited 'model-name) "ark-code-latest")
+  ;; session-config without override → untouched
+  (define plain-cfg (hash->session-config (hasheq 'model-name "glm-5.2")))
+  (check-equal? (inherit-coordinator-runtime-config rt-config plain-cfg "glm-5.2" 'p) rt-config))
 
 (test-case "BUG-0018: session-config struct prior config is honored"
   ;; explicit-model-override? accepts a session-config via its data hash; the
