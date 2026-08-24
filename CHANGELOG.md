@@ -4,36 +4,15 @@
 > and TDD-adoption campaign (W0–W4), and the connection-pool chunked-body
 > fix that made pooling safe to re-enable everywhere.
 
-### Fixed
-
-- **BUG-0020 — `/go` executor-inheritance contract violation (#9509).**
-  `executor-inheritance.rkt` widened to accept the full session-config struct;
-  wave executors no longer die with a contract error at spawn. Regression test
-  added (`test-executor-inheritance.rkt`).
-- **BUG-0021 — pooled chunked-body corruption (#9510).** Pooled connections did
-  not decode `Transfer-Encoding: chunked`, so raw hex chunk sizes were spliced
-  into SSE `data:` lines at TCP chunk boundaries — surfacing as malformed
-  tool-call JSON ("model typos"). New RFC 7230 decoder `make-chunked-input-port`
-  in `llm/conn-pool.rkt`: byte-exact reassembly across mid-line splits,
-  0-chunk + trailers ⇒ connection stays reusable, framing anomalies ⇒ pool
-  fault. Regression-tested against a mock 7-byte-chunk server; long-generation
-  live bake verified clean, and `networking.pool.enabled` is now ON by default
-  in local + VPS configs.
-
-### Changed
+### Features
 
 - **Prepared-env fast-gate cutover (W3, #9518).** The reusable
-  `.github/actions/setup-racket` action gained a prepared-environment path
-  (96 lines): exact-cache restore with package preflight, relink fallback, and
-  guarded install. `ci.yml` routes lanes through it behind
-  `RACKET_PREPARED_ARTIFACT`; rollback is a one-variable revert documented in
-  `docs/reports/test-regression-log.md`.
+  `.github/actions/setup-racket` action gained a prepared-environment path:
+  exact-cache restore with package preflight, relink fallback, and guarded
+  install. `ci.yml` routes lanes through it behind `RACKET_PREPARED_ARTIFACT`.
 - **`FAST_SHARD_COUNT` guarded study (W3).** Shard-count override wired through
   ci.yml matrix generation with cache-policy documentation in
   `docs/reports/CI-RACKET-CACHE-POLICY.md`; decision recorded: KEEP-3.
-
-### Added
-
 - **v1.00.16 W1+W2 banked work (#9511).** `grouped-eligible?` runner contract;
   oauth `#:on-complete` seam with deterministic semaphore sync
   (`test-oauth-callback-nonblocking` 8.23 s → 1.40 s); shared fixture builders
@@ -47,11 +26,52 @@
   retained CI runs 32745843124/32748197712; `baseline-report.rkt --check`
   proves byte-identical regeneration. Honest result recorded: sample p50
   627 s vs target ≤ 244 s (ratio 1.2848×) — MISSED; remaining cost attributed
-  to legacy setup install path (343/348 s) + max shard (276/287 s); next lever
-  (warm prepared-env restore observation) scheduled for remeasure 2026-09-30.
-  TDD plan adoption-status entry and regression-log section appended.
-- **Governance:** `sync-version.rkt` now excludes `TDD-TEST-STRATEGY-PLAN.md`,
-  mirroring the existing `lint-version.rkt` exclusion.
+  to legacy setup install path (343/348 s) + max shard (276/287 s).
+
+### Bug Fixes
+
+- **BUG-0020 — `/go` executor-inheritance contract violation (#9509).**
+  `executor-inheritance.rkt` widened to accept the full session-config struct;
+  wave executors no longer die with a contract error at spawn.
+- **BUG-0021 — pooled chunked-body corruption (#9510).** Pooled connections did
+  not decode `Transfer-Encoding: chunked`, so raw hex chunk sizes were spliced
+  into SSE `data:` lines at TCP chunk boundaries — surfacing as malformed
+  tool-call JSON ("model typos"). New RFC 7230 decoder `make-chunked-input-port`
+  in `llm/conn-pool.rkt`: byte-exact reassembly across mid-line splits,
+  0-chunk + trailers ⇒ connection stays reusable, framing anomalies ⇒ pool
+  fault. Regression-tested against a mock 7-byte-chunk server.
+
+### Breaking / Behavior Changes
+
+- Connection pooling is now ENABLED in local + VPS configs
+  (`networking.pool.enabled=true`) after the BUG-0021 fix; pooled responses are
+  chunk-decoded transparently. Disable via `networking.pool.enabled=false` to
+  return to one-connection-per-request behavior.
+
+### Migration Notes
+
+- No API changes. Operators self-hosting with custom provider configs should
+  verify their endpoints tolerate HTTP keep-alive reuse before enabling the
+  pool; hosts that close idle connections aggressively may surface first-shot
+  network errors until host-specific idle TTLs are tuned.
+
+### Testing
+
+- New regression tests: `test-executor-inheritance.rkt` (BUG-0020);
+  chunked-body decoder coverage incl. mock 7-byte-chunk server (BUG-0021);
+  oauth-callback nonblocking/security suites re-seamed onto deterministic
+  fixtures. Long-generation live bake against GLM-5.3/GLM-5.2/DeepSeek-V4-flash
+  verified clean before re-enabling the pool. Local gate evidence (fast, tui,
+  arch, workflows) recorded at this version prior to tagging.
+
+### Operational / Release
+
+- Rollback toggles (one line each, documented in
+  `docs/reports/test-regression-log.md`): `RACKET_PREPARED_ARTIFACT=off`
+  (prepared-env cutover), unset `FAST_SHARD_PLAN` (shard matrix),
+  `networking.pool.enabled=false` (pooling).
+- Halving-objective remeasure (warm prepared-env restore observation)
+  scheduled 2026-09-30.
 
 ## v1.00.15 — 2026-08-24
 
