@@ -298,11 +298,11 @@ q/
 | Source modules | 845 |
 <<<<<<< HEAD
 | Source lines | 155918 |
-| Test lines | 243449 |
+| Test lines | 243448 |
 | Test assertions | 37316 |
 =======
 | Source lines | 155918 |
-| Test lines | 243449 |
+| Test lines | 243448 |
 | Test assertions | 37316 |
 >>>>>>> origin/main
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
