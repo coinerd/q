@@ -19,10 +19,10 @@
 ;;     connection is closed instead of pooled);
 ;;   - FAULT RULE: any error/timeout/peer-close marks the connection
 ;;     single-use — it is discarded on release and NEVER handed out again;
-;;   - reuse requires deterministic body framing (Content-Length): responses
-;;     with chunked or EOF-delimited bodies are single-use-on-success, because
-;;     connection state after an incompletely consumed body is unknown.
-;;     Deliberate W2 limitation; revisit during bake.
+;;   - reuse requires deterministic framing: Content-Length bodies check in
+;;     directly; CHUNKED bodies are decoded by make-chunked-input-port
+;;     (BUG-0021) and check in only once their terminating 0-chunk has been
+;;     consumed. EOF-delimited bodies remain single-use-on-success.
 ;;
 ;; Stats (pool-stats): hits / misses / evictions / fault-closes — exposed for
 ;; bake-period evidence.
@@ -63,6 +63,8 @@
           ;; Test/unit hook: force the reusable flag (mirrors what a parsed
           ;; Content-Length response head does inside pool-send-request!).
           [mark-pool-reusable! (-> pooled-connection? void?)]
+          [make-chunked-input-port (-> input-port? pooled-connection? input-port?)]
+          [pooled-connection-in (-> pooled-connection? input-port?)]
           [pool-send-request!
            (->* (pooled-connection? string?)
                 (#:method string? #:headers (listof string?) #:data bytes? #:head-timeout positive?)
@@ -339,6 +341,96 @@
   (define r (sync/timeout timeout-secs (read-line-evt in 'return-linefeed)))
   (and (string? r) r))
 
+;; ── Chunked-transfer decoding (BUG-0021) ──────────────────────────────────
+
+;; Wrap the raw socket of a chunked response in a decoding input port.
+;; RFC 7230 §4.1: repeated `<hex-size>[;ext]CRLF <data> CRLF` chunks,
+;; terminated by a `0` chunk followed by optional trailer lines and a blank
+;; line. The wrapper yields ONLY the logical body bytes; consuming the
+;; terminating blank line marks the pooled connection reusable (the wire is
+;; back at a clean message boundary). Any framing anomaly (EOF mid-chunk,
+;; bad CRLF) faults the entry instead.
+(define (make-chunked-input-port in entry)
+  (define state (box 'read-size)) ; 'read-size | 'read-data | 'read-crlf | 'trailer | 'done
+  (define chunk-left (box 0))
+  (define (fault!)
+    (mark-pool-fault! entry)
+    (set-box! state 'done))
+  (define (finish-clean!)
+    (set-box! (pooled-connection-reusable?-box entry) #t)
+    (set-box! state 'done))
+  (define (skip-to-state! next)
+    (set-box! state next))
+  (define (read-one-chunk-header!)
+    (define line (read-line in 'return-linefeed))
+    (cond
+      [(eof-object? line)
+       (fault!)
+       'done]
+      ;; tolerate stray CRLF between chunks
+      [(equal? line "") 'again]
+      [else
+       (define n (string->number (string-trim (car (regexp-split #rx";" line))) 16))
+       (cond
+         [(not n)
+          (fault!)
+          'done]
+         [(zero? n)
+          (skip-to-state! 'trailer)
+          'again]
+         [else
+          (set-box! chunk-left n)
+          (skip-to-state! 'read-data)
+          'proceed])]))
+  (define (read! dest)
+    (let loop ()
+      (case (unbox state)
+        [(done) eof]
+        [(read-size)
+         (define r (read-one-chunk-header!))
+         (if (eq? r 'done)
+             eof
+             (loop))]
+        [(read-data)
+         (define want (min (unbox chunk-left) (bytes-length dest)))
+         (define got (read-bytes-avail! dest in 0 want))
+         (cond
+           [(or (eof-object? got) (not got) (zero? got))
+            (fault!)
+            eof]
+           [else
+            (set-box! chunk-left (- (unbox chunk-left) got))
+            (when (zero? (unbox chunk-left))
+              (skip-to-state! 'read-crlf))
+            got])]
+        [(read-crlf)
+         (define b1 (read-byte in))
+         (define b2 (read-byte in))
+         (cond
+           [(and (equal? b1 13) (equal? b2 10))
+            (skip-to-state! 'read-size)
+            (loop)]
+           [else
+            ;; malformed chunk boundary: corrupt stream, do not trust/reuse
+            (fault!)
+            eof])]
+        [(trailer)
+         (define line (read-line in 'return-linefeed))
+         (cond
+           [(eof-object? line)
+            (fault!)
+            eof]
+           [(equal? line "")
+            (finish-clean!)
+            eof]
+           [else (loop)])])))
+  (make-input-port (format "conn-pool-chunked:~a:~a"
+                           (pooled-connection-host entry)
+                           (pooled-connection-port-number entry))
+                   read!
+                   #f ; no peek support — SSE readers never peek
+                   (lambda () (set-box! state 'done)))) ; close: pool owns the socket
+
 ;; Send an HTTP/1.1 request over a pooled connection and parse the response
 ;; head. Returns (values status-line header-lines body-port). The body port is
 ;; wrapped in a limited input port when Content-Length framing is present —
@@ -397,8 +489,14 @@
        ;; underlying connection cleanly reusable for the next request.
        (set-box! (pooled-connection-reusable?-box entry) #t)
        (values status-line header-lines (make-limited-input-port in content-length #f))]
+      ;; BUG-0021: chunked bodies MUST be decoded before the SSE parser sees
+      ;; them — returning the raw socket spliced hex chunk sizes into data
+      ;; lines at every TCP write boundary ("model typos"). The de-chunking
+      ;; wrapper consumes the framing; consuming its terminating 0-chunk +
+      ;; trailers marks the connection reusable.
+      [chunked? (values status-line header-lines (make-chunked-input-port in entry))]
       [else
-       ;; Chunked or EOF-delimited: connection state after an incompletely
-       ;; consumed body is unknown → single-use-on-success (W2 limitation).
+       ;; EOF-delimited: connection state after an incompletely consumed body
+       ;; is unknown → single-use-on-success (W2 limitation).
        (set-box! (pooled-connection-reusable?-box entry) #f)
        (values status-line header-lines in)])))

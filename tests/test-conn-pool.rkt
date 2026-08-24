@@ -16,6 +16,10 @@
 
 (require rackunit
          racket/tcp
+         racket/format
+         racket/port
+         racket/string
+         (only-in json read-json)
          (only-in "../runtime/settings.rkt" q-settings)
          (only-in "../llm/conn-pool.rkt"
                   current-conn-pool
@@ -32,7 +36,9 @@
                   pool-stats-fault-closes
                   pool-send-request!
                   mark-pool-fault!
-                  mark-pool-reusable!)
+                  mark-pool-reusable!
+                  make-chunked-input-port
+                  pooled-connection-in)
          (only-in "../wiring/mode-helpers.rkt" wire-connection-pool!))
 
 ;; ---- tiny HTTP server standing in for a provider --------------------------
@@ -216,4 +222,95 @@
                   (collect-garbage)
                   (check-true (<= (open-fd-count) (+ baseline 3))
                               "no fd leak: post-shutdown fds within noise of baseline"))
+                (lambda () (stop-test-server! alive? cust close!))))
+
+;; ---- 7. BUG-0021: chunked-transfer decoding -------------------------------
+
+;; Server that answers each request with a CHUNKED body whose 7-byte chunks
+;; split the logical payload mid-line and mid-token (worst case BUG-0021).
+(define (make-chunked-test-server)
+  (define-values (port-no l)
+    (let retry ()
+      (define candidate (+ 20000 (random 40000)))
+      (with-handlers ([exn:fail:network? (lambda (_e) (retry))])
+        (values candidate (tcp-listen candidate 16 #f "127.0.0.1")))))
+  (define alive? (box #t))
+  (define srv-cust (make-custodian))
+  (parameterize ([current-custodian srv-cust])
+    (thread (lambda ()
+              (let accept-loop ()
+                (with-handlers ([exn:fail? void])
+                  (define-values (cin cout) (tcp-accept l))
+                  ;; read request head, then emit chunked reply
+                  (let drain ()
+                    (define hdr (read-line cin 'return-linefeed))
+                    (unless (or (eof-object? hdr) (equal? hdr ""))
+                      (drain)))
+                  (define body
+                    (string-append
+                     "data: {\"path\": \"/opt/ci/fixture/.planning/waves/W4.md\", "
+                     "\"note\": \"chunk boundaries must never corrupt tool arguments\"}\r\n\r\n"
+                     "data: [DONE]\r\n\r\n"))
+                  (display "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" cout)
+                  (for ([chunk (in-list (for/list ([i (in-range 0 (string-length body) 7)])
+                                          (substring body i (min (+ i 7) (string-length body)))))])
+                    (fprintf cout "~x\r\n" (string-length chunk))
+                    (display chunk cout)
+                    (display "\r\n" cout)
+                    (flush-output cout))
+                  (display "0\r\n\r\n" cout)
+                  (flush-output cout)
+                  (with-handlers ([exn:fail? void])
+                    (close-input-port cin)
+                    (close-output-port cout))
+                  (when (unbox alive?)
+                    (accept-loop)))))))
+  (values port-no alive? srv-cust (lambda () (tcp-close l))))
+
+(test-case "BUG-0021: chunked bodies decode byte-identically across chunk splits"
+  (define-values (pno alive? cust close!) (make-chunked-test-server))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define pool (make-conn-pool #:idle-ttl-secs 30 #:max-per-host 2))
+     (define e1 (pool-acquire! pool "127.0.0.1" pno #f))
+     (define-values (_s _h decoded) (pool-send-request! e1 "/" #:method "GET"))
+     ;; The de-chunked stream must equal the LOGICAL body — no hex sizes,
+     ;; no spliced CRLFs, nothing lost at the 7-byte chunk borders.
+     (define logical
+       (string-append "data: {\"path\": \"/opt/ci/fixture/.planning/waves/W4.md\", "
+                      "\"note\": \"chunk boundaries must never corrupt tool arguments\"}\r\n\r\n"
+                      "data: [DONE]\r\n\r\n"))
+     (check-equal? (port->string decoded) logical)
+     ;; Consuming the terminating 0-chunk marks the entry reusable, so the
+     ;; release checks it in and the next acquire is a HIT (same socket —
+     ;; entries are struct-copies with fresh boxes, so compare the ports).
+     (pool-release! pool e1)
+     (define e2 (pool-acquire! pool "127.0.0.1" pno #f))
+     (check-equal? (pool-stats-hits (pool-stats-for pool))
+                   1
+                   "cleanly terminated chunked body was checked in")
+     (check-equal? (pooled-connection-in e2)
+                   (pooled-connection-in e1)
+                   "hit returned the same underlying socket")
+     (pool-shutdown! pool))
+   (lambda () (stop-test-server! alive? cust close!))))
+
+(test-case "BUG-0021: SSE parse over de-chunked stream yields clean JSON lines"
+  (define-values (pno alive? cust close!) (make-chunked-test-server))
+  (dynamic-wind void
+                (lambda ()
+                  (define pool (make-conn-pool #:idle-ttl-secs 30 #:max-per-host 2))
+                  (define e1 (pool-acquire! pool "127.0.0.1" pno #f))
+                  (define-values (_s _h decoded) (pool-send-request! e1 "/" #:method "GET"))
+                  (define data-lines
+                    (for/list ([line (in-lines decoded)]
+                               #:when (string-prefix? line "data: "))
+                      (substring line 6)))
+                  (check-equal? (length data-lines) 2)
+                  ;; first line parses as JSON with the path intact (pre-fix this broke)
+                  (define parsed (with-input-from-string (car data-lines) read-json))
+                  (check-equal? (hash-ref parsed 'path) "/opt/ci/fixture/.planning/waves/W4.md")
+                  (check-equal? (cadr data-lines) "[DONE]")
+                  (pool-shutdown! pool))
                 (lambda () (stop-test-server! alive? cust close!))))
