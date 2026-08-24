@@ -225,7 +225,7 @@
       ;; v1.00.16 W2: +1 — current-auto-retry-sleep-scale in
       ;; runtime/auto-retry.rkt (deterministic backoff test seam).
       (check-equal? (length inventory-entries)
-                    201
+                    204
                     "parameter inventory should contain 199 audited parameters"))))
 
 ;; ============================================================
