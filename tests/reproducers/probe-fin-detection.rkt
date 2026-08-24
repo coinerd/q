@@ -27,7 +27,7 @@
 ;;                             converted to exn:fail:network:peer-closed.
 ;; If instead this probe observes plain EOF for the unclean case on this
 ;; platform, option 1 is inconclusive here and ladder options 2/3 must be
-;; revisited (record the outcome in STATE-v1.00.15).
+;; revisited (record the outcome in the BUG-0019 wave STATE doc).
 ;;
 ;; Run: racket tests/reproducers/probe-fin-detection.rkt
 
@@ -84,4 +84,4 @@
                                   (with-handlers ([exn:fail? void])
                                     (close-output-port out)))))
                 (lambda () (stop-mock-server! srv)))
-  (eprintf "PROBE-C: done — record the verdict in STATE-v1.00.15\n"))
+  (eprintf "PROBE-C: done — record the verdict in the BUG-0019 wave STATE doc\n"))
