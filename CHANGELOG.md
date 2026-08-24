@@ -1,3 +1,78 @@
+## v1.00.16 — 2026-08-24
+
+> Released 2026-08-24. BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate
+> and TDD-adoption campaign (W0–W4), and the connection-pool chunked-body
+> fix that made pooling safe to re-enable everywhere.
+
+### Features
+
+- **Prepared-env fast-gate cutover (W3, #9518).** The reusable
+  `.github/actions/setup-racket` action gained a prepared-environment path:
+  exact-cache restore with package preflight, relink fallback, and guarded
+  install. `ci.yml` routes lanes through it behind `RACKET_PREPARED_ARTIFACT`.
+- **`FAST_SHARD_COUNT` guarded study (W3).** Shard-count override wired through
+  ci.yml matrix generation with cache-policy documentation in
+  `docs/reports/CI-RACKET-CACHE-POLICY.md`; decision recorded: KEEP-3.
+- **v1.00.16 W1+W2 banked work (#9511).** `grouped-eligible?` runner contract;
+  oauth `#:on-complete` seam with deterministic semaphore sync
+  (`test-oauth-callback-nonblocking` 8.23 s → 1.40 s); shared fixture builders
+  `tests/helpers/{fast,oauth-callback}-fixtures.rkt`;
+  `current-auto-retry-sleep-scale` parameter; `--json-out` crash fix in the
+  runner/reporting path (string result paths → `path->string`); timesink
+  remediation report `docs/reports/fast-timesink-remediation-v1.00.16.md`.
+- **Halving-objective baseline of record (W4, #9519).** Regenerable
+  `docs/reports/test-feedback-baseline-v1.00.16.{md,json}` plus
+  `fast-gate-budget-v1.00.16.{md,json}` attribution companion, generated from
+  retained CI runs 32745843124/32748197712; `baseline-report.rkt --check`
+  proves byte-identical regeneration. Honest result recorded: sample p50
+  627 s vs target ≤ 244 s (ratio 1.2848×) — MISSED; remaining cost attributed
+  to legacy setup install path (343/348 s) + max shard (276/287 s).
+
+### Bug Fixes
+
+- **BUG-0020 — `/go` executor-inheritance contract violation (#9509).**
+  `executor-inheritance.rkt` widened to accept the full session-config struct;
+  wave executors no longer die with a contract error at spawn.
+- **BUG-0021 — pooled chunked-body corruption (#9510).** Pooled connections did
+  not decode `Transfer-Encoding: chunked`, so raw hex chunk sizes were spliced
+  into SSE `data:` lines at TCP chunk boundaries — surfacing as malformed
+  tool-call JSON ("model typos"). New RFC 7230 decoder `make-chunked-input-port`
+  in `llm/conn-pool.rkt`: byte-exact reassembly across mid-line splits,
+  0-chunk + trailers ⇒ connection stays reusable, framing anomalies ⇒ pool
+  fault. Regression-tested against a mock 7-byte-chunk server.
+
+### Breaking / Behavior Changes
+
+- Connection pooling is now ENABLED in local + VPS configs
+  (`networking.pool.enabled=true`) after the BUG-0021 fix; pooled responses are
+  chunk-decoded transparently. Disable via `networking.pool.enabled=false` to
+  return to one-connection-per-request behavior.
+
+### Migration Notes
+
+- No API changes. Operators self-hosting with custom provider configs should
+  verify their endpoints tolerate HTTP keep-alive reuse before enabling the
+  pool; hosts that close idle connections aggressively may surface first-shot
+  network errors until host-specific idle TTLs are tuned.
+
+### Testing
+
+- New regression tests: `test-executor-inheritance.rkt` (BUG-0020);
+  chunked-body decoder coverage incl. mock 7-byte-chunk server (BUG-0021);
+  oauth-callback nonblocking/security suites re-seamed onto deterministic
+  fixtures. Long-generation live bake against GLM-5.3/GLM-5.2/DeepSeek-V4-flash
+  verified clean before re-enabling the pool. Local gate evidence (fast, tui,
+  arch, workflows) recorded at this version prior to tagging.
+
+### Operational / Release
+
+- Rollback toggles (one line each, documented in
+  `docs/reports/test-regression-log.md`): `RACKET_PREPARED_ARTIFACT=off`
+  (prepared-env cutover), unset `FAST_SHARD_PLAN` (shard matrix),
+  `networking.pool.enabled=false` (pooling).
+- Halving-objective remeasure (warm prepared-env restore observation)
+  scheduled 2026-09-30.
+
 ## v1.00.15 — 2026-08-24
 
 > BUG-0019 remediation: peer FIN/CLOSE-WAIT mid-stream is now detected in

@@ -115,7 +115,8 @@
       ;; session hangs; here the runner is deterministically hung, so retries
       ;; only re-pay the 1s deadline + 2s cancel grace for no new information.
       ;; Disable them: timeout semantics under test are retry-count-agnostic.
-      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-equal? (count-completion-events dir rec) 0 "timed-out run must not invent a DONE")
@@ -131,7 +132,8 @@
         (make-wave-runner-port (lambda (idx)
                                  (sleep 30)
                                  (wave-execution-outcome 'done "late"))))
-      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-true (string-contains? (campaign-result-message result) "exceeded"))
       (check-eq? (wave-status* rec 0) 'interrupted)

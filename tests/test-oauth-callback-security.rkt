@@ -8,7 +8,7 @@
 ;;; Tests for v0.59.1 W0 (#5340): RFC7636 PKCE + CSPRNG primitives
 ;;; Tests for v0.59.1 W1 (#5344): Callback lifecycle, query decoding, CSRF
 ;;;
-;;; W2 (v1.00.16) remediation: fixed `sleep`/alarm-evt waits and unsafe
+;;; W2 remediation (current release train): fixed `sleep`/alarm-evt waits and unsafe
 ;;; listener probes replaced by the #:on-complete production seam + explicit
 ;;; semaphore waits from helpers/oauth-callback-fixtures.rkt. Every test-case
 ;;; and assertion is preserved one-for-one; no test deleted, weakened, or
@@ -128,8 +128,7 @@
                  "listener should be closed after one-shot"))
 
     (test-case "callback server closes after invalid state (#5346)"
-      (define-values (port state verifier get-code)
-        (start-callback-server #:timeout 10))
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
       (callback-send-request port "wrong" "abc")
       (define code (get-code))
       (check-false code "invalid state should return #f and close server"))
@@ -139,8 +138,7 @@
     ;; ============================================================
 
     (test-case "CSRF: missing state parameter rejects code (#5347)"
-      (define-values (port state verifier get-code)
-        (start-callback-server #:timeout 10))
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
       (callback-send-request port "" "abc")
       (define code (get-code))
       (check-false code "missing state must reject"))
@@ -157,8 +155,7 @@
     (test-case "delayed consumer: callback before get-code still works (#5463)"
       ;; Callback arrives immediately; get-code blocks until completion and
       ;; must still receive the stored code.
-      (define-values (port state verifier get-code)
-        (start-callback-server #:timeout 10))
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
       (callback-send-request port state "delayed-code")
       (define code (get-code))
       (check-equal? code "delayed-code" "delayed consumer must still receive code"))
