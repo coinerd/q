@@ -1,3 +1,38 @@
+## v1.00.15 — 2026-08-24
+
+> BUG-0019 remediation: peer FIN/CLOSE-WAIT mid-stream is now detected in
+> seconds instead of burning the whole phase timeout, plus an opt-in
+> connection pool for openai-compatible providers.
+
+### Added
+
+- **FIN-aware SSE liveness watchdog (W1).** `stream-sse-events` slices idle
+  windows into `peer-close-probe-secs` slices (default 5 s, per-model via
+  `request.peer-close-probe-secs`) with zero-timeout liveness probes. An
+  unclean peer close raises the new structured exception
+  `exn:fail:network:peer-closed` carrying `phase`/`data-received?`/
+  `content-chars`/`elapsed-ms` plus the SS-5-style message suffix — detection
+  latency drops from minutes (full thinking window) to under a second,
+  independent of `thinking-gap-cap`. EOF stays normal end-of-stream;
+  heartbeat/data bytes keep resetting the idle clock (BUG-0018 rule).
+  Auto-retry classifies peer-closed as timeout-tier; v1.00.14
+  silent-overflow economics are unchanged.
+- **Flag-off connection pooling (W2).** New `llm/conn-pool.rkt`: host-keyed
+  `(host, port, tls?)` pool with per-entry custodians, 55 s idle TTL,
+  max-per-host 4, single-use-on-fault, and deterministic-framing reuse
+  (Content-Length responses check in; chunked/EOF bodies stay single-use).
+  Gated by `networking.pool.{enabled,idle-ttl-secs,max-per-host}`, default
+  OFF — flag-off behavior is unchanged. Pooled requests skip the
+  request-scoped custodian so teardown cannot kill pooled sockets.
+  Bake-verified against GLM-5.3/GLM-5.2/DeepSeek-V4-flash; default stays OFF
+  until chunked-body reuse lands (SSE responses currently do not reuse).
+- **Reproducer suite (W0).** `tests/reproducers/mock-fin-server.rkt` models
+  unclean-close / clean-close / heartbeat-alive / true-silence peers;
+  recorded platform verdict: on Racket 8.10/OpenSSL 3 an unclean FIN always
+  surfaces as `exn:fail:network` (never plain EOF), and even graceful TLS
+  closes reach the client as errors — clean end-of-stream relies on the SSE
+  `[DONE]` marker, as providers signal it.
+
 ## v1.00.14 — 2026-08-23
 
 > BUG-0018 remediation: GLM-5.3 long-thinking sessions no longer die at the
