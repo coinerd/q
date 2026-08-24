@@ -248,7 +248,7 @@
                       (drain)))
                   (define body
                     (string-append
-                     "data: {\"path\": \"/home/user/src/q-agent/.planning/waves/W4.md\", "
+                     "data: {\"path\": \"/opt/ci/fixture/.planning/waves/W4.md\", "
                      "\"note\": \"chunk boundaries must never corrupt tool arguments\"}\r\n\r\n"
                      "data: [DONE]\r\n\r\n"))
                   (display "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" cout)
@@ -278,7 +278,7 @@
      ;; The de-chunked stream must equal the LOGICAL body — no hex sizes,
      ;; no spliced CRLFs, nothing lost at the 7-byte chunk borders.
      (define logical
-       (string-append "data: {\"path\": \"/home/user/src/q-agent/.planning/waves/W4.md\", "
+       (string-append "data: {\"path\": \"/opt/ci/fixture/.planning/waves/W4.md\", "
                       "\"note\": \"chunk boundaries must never corrupt tool arguments\"}\r\n\r\n"
                       "data: [DONE]\r\n\r\n"))
      (check-equal? (port->string decoded) logical)
@@ -310,8 +310,7 @@
                   (check-equal? (length data-lines) 2)
                   ;; first line parses as JSON with the path intact (pre-fix this broke)
                   (define parsed (with-input-from-string (car data-lines) read-json))
-                  (check-equal? (hash-ref parsed 'path)
-                                "/home/user/src/q-agent/.planning/waves/W4.md")
+                  (check-equal? (hash-ref parsed 'path) "/opt/ci/fixture/.planning/waves/W4.md")
                   (check-equal? (cadr data-lines) "[DONE]")
                   (pool-shutdown! pool))
                 (lambda () (stop-test-server! alive? cust close!))))
