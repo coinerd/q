@@ -44,6 +44,7 @@
          (only-in "../mode-helpers.rkt"
                   wire-security-config!
                   wire-timeouts!
+                  wire-connection-pool!
                   make-trace-logger
                   start-trace-logger!
                   project-tree->string
@@ -403,6 +404,9 @@
 
   ;; v0.14.2 Wave 3: Set per-model timeouts from settings
   (wire-timeouts! settings)
+
+  ;; BUG-0019 W2: wire connection pooling (flag-gated, default OFF)
+  (wire-connection-pool! settings)
 
   ;; v0.25.2 (F3): Wire security config from config.json
   (wire-security-config! settings)

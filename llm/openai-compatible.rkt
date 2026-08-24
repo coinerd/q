@@ -33,7 +33,9 @@
                   exn:fail:network:timeout:stream?)
          "request-policy.rkt"
          "http-helpers.rkt"
-         "provider-errors.rkt")
+         "provider-errors.rkt"
+         ;; BUG-0019 W2: flag-gated connection pooling (default OFF)
+         (only-in "conn-pool.rkt" current-conn-pool pool-acquire! pool-release! pool-send-request!))
 
 ;; Provider constructor
 (provide (contract-out [make-openai-compatible-provider (-> (or/c hash? openai-config?) provider?)]
@@ -377,9 +379,33 @@
     ;; before a response port is returned) under a request-scoped custodian.
     ;; Timeout cleanup shuts down that custodian before interrupting the worker;
     ;; on success, ownership remains live until the stream cleanup thunk runs.
-    (define request-custodian (make-custodian))
+    ;; BUG-0019 W2: when a conn-pool is installed (networking.pool.enabled),
+    ;; the connection is owned by the POOL's per-entry custodian — a
+    ;; request-scoped custodian must NOT wrap pooled sockets, otherwise its
+    ;; teardown would kill them (BUG_PLAN landmine). cleanup-response!
+    ;; releases the entry back to the pool instead; the pool decides
+    ;; keep-vs-discard via its framing/fault rules. Flag OFF (pool #f)
+    ;; keeps the legacy request-custodian path byte-for-byte.
+    (define pool (current-conn-pool))
+    (define request-custodian (and (not pool) (make-custodian)))
+    (define pooled-entry-box (box #f))
     (define (cleanup-response!)
-      (custodian-shutdown-all request-custodian))
+      (if pool
+          (let ([entry (unbox pooled-entry-box)])
+            (when entry
+              (with-handlers ([exn:fail? void])
+                ;; Idempotent via released?-box; a faulted/abandoned entry
+                ;; is discarded by the pool, never reused.
+                (pool-release! pool entry))))
+          (custodian-shutdown-all request-custodian)))
+    ;; Convert pooled header LINES ("Field: value") to http-sendrecv-style
+    ;; header pairs so downstream consumers see identical shapes.
+    (define (header-lines->assoc lines)
+      (for/list ([l (in-list lines)])
+        (define m (regexp-match #rx"^([^:]+):[ \t]*(.*)$" l))
+        (if m
+            (cons (string->bytes/utf-8 (cadr m)) (string->bytes/utf-8 (caddr m)))
+            (cons #"" #""))))
     (define result-vec
       (with-handlers ([exn:fail?
                        (lambda (e)
@@ -394,28 +420,40 @@
                                      #f))))])
         (call-with-request-timeout
          (lambda ()
-           (parameterize ([current-custodian request-custodian])
+           ;; Pooled requests must NOT run under the request-scoped
+           ;; custodian (it stays #f there); fall back to the ambient one.
+           (parameterize ([current-custodian (or request-custodian (current-custodian))])
              ;; v1.00.13 W4 (#9478, RL-4): connect+TLS+status+
              ;; headers bounded by the policy TTFB window; the
              ;; structured phase is 'connect/ttfb.
              (define-values (sl rh rp)
-               (provider-sendrecv/ttfb-bounded (request-network-policy-connect-ttfb-secs policy)
-                                               (lambda ()
-                                                 (if req-port
-                                                     (http-sendrecv host
-                                                                    path-str
-                                                                    #:port req-port
-                                                                    #:ssl? ssl?
-                                                                    #:method "POST"
-                                                                    #:headers headers
-                                                                    #:data body-bytes)
-                                                     (http-sendrecv host
-                                                                    path-str
-                                                                    #:ssl? ssl?
-                                                                    #:method "POST"
-                                                                    #:headers headers
-                                                                    #:data body-bytes)))
-                                               #:cleanup cleanup-response!))
+               (provider-sendrecv/ttfb-bounded
+                (request-network-policy-connect-ttfb-secs policy)
+                (lambda ()
+                  (if pool
+                      ;; Pooled path: acquire from
+                      ;; the pool, send via its
+                      ;; minimal HTTP/1.1 client.
+                      (let ([entry (pool-acquire! pool host (or req-port (if ssl? 443 80)) ssl?)])
+                        (set-box! pooled-entry-box entry)
+                        (define-values (s hs bp)
+                          (pool-send-request! entry path-str #:headers headers #:data body-bytes))
+                        (values (string->bytes/utf-8 s) (header-lines->assoc hs) bp))
+                      (if req-port
+                          (http-sendrecv host
+                                         path-str
+                                         #:port req-port
+                                         #:ssl? ssl?
+                                         #:method "POST"
+                                         #:headers headers
+                                         #:data body-bytes)
+                          (http-sendrecv host
+                                         path-str
+                                         #:ssl? ssl?
+                                         #:method "POST"
+                                         #:headers headers
+                                         #:data body-bytes))))
+                #:cleanup cleanup-response!))
              (vector sl rh rp)))
          #:timeout (request-network-policy-request-budget-secs policy)
          #:cleanup cleanup-response!)))

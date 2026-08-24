@@ -35,12 +35,14 @@
                   current-model-thinking-idle-timeouts
                   current-model-body-read-timeouts
                   current-model-thinking-gap-caps)
+         (only-in "../llm/conn-pool.rkt" current-conn-pool make-conn-pool)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget))
 
 (provide wire-security-config!
          wire-timeouts!
+         wire-connection-pool!
          wire-memory-settings!
          make-trace-logger
          start-trace-logger!
@@ -151,6 +153,24 @@
         "wiring: timeouts.models.~a.sse-read is deprecated in v1.00.13; \
 use thinking-idle and/or body-read instead"
         k)))))
+
+;; Apply connection-pool settings from config to the pool parameter.
+;; BUG-0019 W2: `networking.pool.enabled` gates pooling; default OFF keeps
+;; every request on the legacy per-request http-sendrecv path (behavior-
+;; neutral). Only when enabled is a conn-pool installed into
+;; llm/conn-pool.rkt's current-conn-pool parameter.
+(define (wire-connection-pool! settings)
+  (define merged (q-settings-merged settings))
+  (define networking-config (hash-ref merged 'networking (hash)))
+  (define pool-config (hash-ref networking-config 'pool (hash)))
+  (if (and (hash? pool-config) (hash-ref pool-config 'enabled #f))
+      (current-conn-pool
+       (make-conn-pool #:idle-ttl-secs (let ([v (hash-ref pool-config 'idle-ttl-secs 55)])
+                                         (if (exact-positive-integer? v) v 55))
+                       #:max-per-host (let ([v (hash-ref pool-config 'max-per-host 4)])
+                                        (if (exact-positive-integer? v) v 4))))
+      ;; Flag off (or malformed): guarantee disabled passthrough.
+      (current-conn-pool #f)))
 
 ;; Apply memory settings from config to current parameters.
 ;; Sets injection budget from settings.

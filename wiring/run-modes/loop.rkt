@@ -21,6 +21,7 @@
          (only-in "../mode-helpers.rkt"
                   wire-security-config!
                   wire-timeouts!
+                  wire-connection-pool!
                   resolve-permission-config)
          (only-in "../../runtime/context-assembly/config.rkt" current-task-state-aware-assembly?)
          (only-in "../../runtime/context-assembly/memory-builder.rkt" current-memory-injection-budget)
@@ -158,6 +159,8 @@
   (define new-reg (make-model-registry-from-config (q-settings-merged new-settings)))
   ;; v0.14.2 Wave 3: Refresh per-model timeouts
   (wire-timeouts! new-settings)
+  ;; BUG-0019 W2: refresh connection-pool wiring on config reload
+  (wire-connection-pool! new-settings)
   ;; v0.97.6 LF3: Re-apply context-assembly profile with updated context window
   (define new-profile
     (dict-ref base-config 'context-assembly-profile (setting-context-assembly-profile new-settings)))

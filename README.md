@@ -297,11 +297,11 @@ q/
 | Test files | 1370 |
 | Source modules | 844 |
 <<<<<<< HEAD
-| Source lines | 155344 |
+| Source lines | 155409 |
 | Test lines | 243115 |
 | Test assertions | 37291 |
 =======
-| Source lines | 155344 |
+| Source lines | 155409 |
 | Test lines | 243115 |
 | Test assertions | 37291 |
 >>>>>>> origin/main
