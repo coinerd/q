@@ -15,7 +15,65 @@
          executing-prompt
          wave-failure-prompt
          verifying-prompt
-         status-prompt)
+         status-prompt
+         executor-reanchor-role-line
+         executor-reanchor-prompt
+         wave-failure-context-block)
+
+;; ============================================================
+;; Executor re-anchor prompt (v1.00.17 W3 — #9514)
+;; ============================================================
+
+;; The executor role, stated once. `executor-reanchor-prompt` restates this
+;; VERBATIM so an empty-response retry cannot drift into interactive-assistant
+;; behavior (v1.00.16 W3 attempt-2 asked "What would you like me to do next?").
+(define executor-reanchor-role-line
+  (string-append "You are the WAVE EXECUTOR of a GSD /go campaign. Your ONLY job is to "
+                 "implement the assigned wave: edit the target files, then run the verify "
+                 "command. You are NOT an interactive assistant. Do not ask the user "
+                 "questions. Do not propose options. Do not read STATE/HANDOFF/other "
+                 "planning artifacts. Continue the implementation now."))
+
+;; Pure constructor: (wave-id campaign-id task-line last-tool-result-excerpt)
+;; → prompt that restates the executor role verbatim and ORDERS continuation
+;; of implementation. No I/O.
+(define (executor-reanchor-prompt wave-id campaign-id task-line last-tool-result-excerpt)
+  (string-append "[SYSTEM — EXECUTOR RE-ANCHOR — NOT A USER MESSAGE]\n\n"
+                 (format "Campaign: ~a\n" campaign-id)
+                 (format "Wave: ~a\n" wave-id)
+                 (format "Task (one line): ~a\n\n" task-line)
+                 "Your previous turn ended with reasoning but produced NO visible output, "
+                 "so the runtime is re-anchoring you.\n\n"
+                 "ROLE (binding, verbatim):\n"
+                 executor-reanchor-role-line
+                 "\n\n"
+                 (format "Last tool result (excerpt):\n~a\n\n"
+                         (if (and (string? last-tool-result-excerpt)
+                                  (non-empty-string? (string-trim last-tool-result-excerpt)))
+                             (string-trim last-tool-result-excerpt)
+                             "(none — no tool ran)"))
+                 "IMMEDIATELY continue where you left off: perform the next concrete "
+                 "implementation action (an edit or the verify command). Do not summarize, "
+                 "do not ask what to do next, do not re-read the plan. Act now."))
+
+;; Pure constructor: (verifier-message target-files) → failure-context block
+;; appended to the wave executor prompt for the bounded no-change retry
+;; (v1.00.17 W3 — #9515).
+(define (wave-failure-context-block verifier-message target-files)
+  (string-append "\n\n=== PREVIOUS ATTEMPT FAILED VERIFICATION — RETRY WITH CONTEXT ===\n"
+                 "Verifier message (verbatim):\n"
+                 (format "~a\n\n" verifier-message)
+                 "Declared wave target files:\n"
+                 (string-join (for/list ([f (in-list (if (list? target-files)
+                                                         target-files
+                                                         '()))])
+                                (format "- ~a" f))
+                              "\n")
+                 "\n\n"
+                 "Your previous attempt made ZERO edits to the declared wave target files. "
+                 "That is why verification failed. On this retry you MUST produce at least "
+                 "one real edit to a declared target file: read the file you are editing "
+                 "(only the one you are about to edit), then apply the first edit now."))
 
 ;; ============================================================
 ;; Planning implement prompt
@@ -53,9 +111,7 @@
 "
    "
 "
-   "The plan follows. Start implementing immediately.
-
-"))
+   "The plan follows. Start implementing immediately.\n"))
 ;; ============================================================
 ;; Exploring prompt
 ;; ============================================================

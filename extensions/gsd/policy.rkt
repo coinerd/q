@@ -20,6 +20,8 @@
          blocked-tools-for
          current-gsd-wave-timeout-seconds
          current-gsd-wave-timeout-retries
+         current-gsd-wave-no-change-retries
+         current-gsd-wave-failure-context
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
          gsd-session-iteration-budget)
@@ -88,6 +90,24 @@
 ;; NOT consumed by retries — only final exhaustion persists interrupted.
 (define current-gsd-wave-timeout-retries
   (make-parameter 5 (nonnegative-integer-guard 'current-gsd-wave-timeout-retries)))
+
+;; v1.00.17 W3 (#9515): a wave whose verifier outcome is "no wave target
+;; files changed" (the executor returned without editing any declared target
+;; — typically transient exploration paralysis, e.g. v1.00.16 W3 attempt-2)
+;; is retried this many times with the verifier's message appended to the
+;; executor prompt as failure context. Bounded (default 1): exactly one
+;; context-carrying retry, then permanent failure. The retry consumes a
+;; fresh fenced attempt exactly like a timeout retry, so at-least-once
+;; semantics are preserved.
+(define current-gsd-wave-no-change-retries
+  (make-parameter 1 (nonnegative-integer-guard 'current-gsd-wave-no-change-retries)))
+
+;; v1.00.17 W3 (#9515): rendered failure-context block (string) that the
+;; prompt layer suffixes to the wave executor prompt while the orchestrator
+;; runs a no-change retry; #f (default) outside a retry. Carried as a
+;; parameter because the runner port callback executes in the campaign
+;; thread's dynamic extent.
+(define current-gsd-wave-failure-context (make-parameter #f))
 ;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
 ;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
 ;; real implementation wave was policy-cancelled at iteration 80 mid-work

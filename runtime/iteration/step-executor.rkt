@@ -125,7 +125,9 @@
                   step-result-action
                   step-result-new-counters
                   step-result-metadata)
-         (only-in "../../agent/state.rkt" current-empty-response-retried?)
+         (only-in "../../agent/state.rkt"
+                  current-empty-response-retried?
+                  current-empty-response-nudge)
          (only-in "../../util/iteration/internal.rkt" assert-payload)
          (only-in "../../util/iteration/directive.rkt"
                   directive-recurse
@@ -481,19 +483,26 @@
      (define retried? (current-empty-response-retried?))
      (cond
        [(not retried?)
-        ;; First empty-response: inject nudge and retry
+        ;; First empty-response: inject nudge and retry.
+        ;; v1.00.17 W3 (#9514): if current-empty-response-nudge is a string
+        ;; (set by the GSD wave-executor path via executor-reanchor-prompt),
+        ;; the nudge is ROLE-ANCHORED instead of generic — a thinking-only
+        ;; turn inside a wave must retry as the implementation executor,
+        ;; not drift into interactive-assistant behavior. Interactive
+        ;; sessions keep the generic nudge (parameter defaults to #f).
+        (define nudge-text
+          (or (current-empty-response-nudge)
+              (string-append "Your previous response contained extensive reasoning "
+                             "but produced no output. Please provide a direct response "
+                             "or tool call.")))
         (define nudge-msg
-          (make-message
-           (format "empty-response-nudge-~a" (gensym))
-           #f
-           'user
-           'message
-           (list (make-text-part
-                  (string-append "Your previous response contained extensive reasoning "
-                                 "but produced no output. Please provide a direct response "
-                                 "or tool call.")))
-           (current-seconds)
-           (hasheq 'ephemeral #t)))
+          (make-message (format "empty-response-nudge-~a" (gensym))
+                        #f
+                        'user
+                        'message
+                        (list (make-text-part nudge-text))
+                        (current-seconds)
+                        (hasheq 'ephemeral #t)))
         (emit "runtime.empty-response.retry" (hasheq 'message "Retrying with output nudge."))
         (current-empty-response-retried? #t)
         ;; Persist the empty-response assistant message to session log

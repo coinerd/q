@@ -75,7 +75,10 @@
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-max-iterations
-                  current-gsd-max-consecutive-tool-calls))
+                  current-gsd-max-consecutive-tool-calls
+                  current-gsd-wave-failure-context
+                  current-gsd-wave-no-change-retries)
+         (only-in "../../agent/state.rkt" current-empty-response-nudge))
 
 (provide (contract-out
           [register-gsd-commands (-> extension-ctx? hook-result?)]
@@ -470,7 +473,16 @@
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
    (if (string=? state-content "")
        ""
-       (format "\n## Current State\n~a\n" state-content))))
+       (format "\n## Current State\n~a\n" state-content))
+   ;; v1.00.17 W3 (#9515): the go-orchestrator's bounded no-change retry sets
+   ;; current-gsd-wave-failure-context around the retrying run; the builder
+   ;; executes synchronously inside that parameterize extent, so the block is
+   ;; baked into THIS prompt (verbatim verifier message + target file list +
+   ;; the imperative "apply the first edit now").
+   (let ([failure-context (current-gsd-wave-failure-context)])
+     (if (and (string? failure-context) (non-empty-string? failure-context))
+         (string-append failure-context "\n")
+         ""))))
 
 ;; Extract the "## Last Failure" section (recorded by record-wave-failure! when
 ;; a previous attempt failed delivery verification) so a retry can adapt. The
@@ -527,21 +539,37 @@
          [(list 'ok _ _)
           (define gsd-ctx (current-gsd-ctx))
           (define effective-timeout (resolve-wave-timeout-secs input-text))
-          (define request
-            (make-campaign-request
-             base-dir
-             rec
-             (lambda (wave-idx)
-               (gsm-ctx-transition-to! gsd-ctx 'executing)
-               (build-single-wave-prompt base-dir plan wave-idx))
-             (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
-             #:timeout-sec effective-timeout))
-          (hook-amend (hasheq 'campaign-token
-                              (register-campaign-request! request)
-                              'new-session
-                              (build-single-wave-prompt base-dir plan next-wave)
-                              'text
-                              (format "Executing campaign from W~a..." next-wave)))])])))
+          ;; v1.00.17 W3 (#9514): role-anchor the wave-executor session. If a
+          ;; turn ends reasoning-only, the runtime's empty-response retry
+          ;; re-sends THIS re-anchor prompt (verbatim executor role + order to
+          ;; continue) instead of the generic output nudge, so the model can
+          ;; never reinterpret itself as an interactive assistant (the
+          ;; v1.00.16 W3 attempt-2 failure mode).
+          (define reanchor-wave (plan-wave-ref plan next-wave))
+          (define reanchor
+            (executor-reanchor-prompt
+             (format "W~a" next-wave)
+             (campaign-plan-id rec)
+             (if reanchor-wave
+                 (format "W~a: ~a" (gsd-wave-index reanchor-wave) (gsd-wave-title reanchor-wave))
+                 "implement the wave")
+             "(session start — no tool has run yet in this session)"))
+          (parameterize ([current-empty-response-nudge reanchor])
+            (define request
+              (make-campaign-request
+               base-dir
+               rec
+               (lambda (wave-idx)
+                 (gsm-ctx-transition-to! gsd-ctx 'executing)
+                 (build-single-wave-prompt base-dir plan wave-idx))
+               (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
+               #:timeout-sec effective-timeout))
+            (hook-amend (hasheq 'campaign-token
+                                (register-campaign-request! request)
+                                'new-session
+                                (build-single-wave-prompt base-dir plan next-wave)
+                                'text
+                                (format "Executing campaign from W~a..." next-wave))))])])))
 
 (define (handle-go-command base-dir input-text)
   ;; Report plan validation failures first. Repository identity becomes a hard
