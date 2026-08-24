@@ -18,7 +18,8 @@
          "../llm/stream.rkt"
          "../agent/event-emitter.rkt"
          "../util/event/event.rkt"
-         "../util/event/event-bus.rkt")
+         "../util/event/event-bus.rkt"
+         "helpers/fast-fixtures.rkt")
 
 (define event-payload* event-payload)
 
@@ -48,20 +49,23 @@
                                       (unbox attempt-count))
                               (current-continuation-marks))))
 
-   ;; Use a deterministic random source so the delay is predictable
-   (parameterize ([current-random-source (lambda () 1.0)])
-     ;; call-with-provider-retry should emit auto-retry.start with a delay > 0
-     (with-handlers ([exn:fail? (lambda (_) (void))])
-       (call-with-provider-retry failing-attempt
-                                 (list (hash 'role "user" 'content "test"))
-                                 (hash 'max-tokens 1000)
-                                 bus
-                                 "test-session"
-                                 "test-turn"
-                                 300)))
+   ;; Use a deterministic random source so the delay is predictable, and the
+   ;; fake-clock seam (shared builder, helpers/fast-fixtures.rkt) so backoff
+   ;; sleeps are skipped while the computed delay is still reported.
+   (with-deterministic-retries
+    (lambda ()
+      ;; call-with-provider-retry should emit auto-retry.start with a delay > 0
+      (with-handlers ([exn:fail? (lambda (_) (void))])
+        (call-with-provider-retry failing-attempt
+                                  (list (hash 'role "user" 'content "test"))
+                                  (hash 'max-tokens 1000)
+                                  bus
+                                  "test-session"
+                                  "test-turn"
+                                  300))))
 
-   ;; Wait for events to propagate (async emit)
-   (sleep 0.1)
+   ;; The event bus dispatches synchronously, so every event is captured
+   ;; before call-with-provider-retry returns — no sleep needed.
    (define events (get-events))
    (check-true (positive? (length events)) "at least one retry event should be emitted")
    (for ([payload (in-list events)])
@@ -90,7 +94,7 @@
                                "test-turn"
                                300))
 
-   (sleep 0.1)
+   ;; Synchronous dispatch: events captured before the call returns.
    (define events (get-events))
    ;; Circuit-break events should have delay 0 (no retry delay)
    (for ([payload (in-list events)])
@@ -113,17 +117,19 @@
      (raise (exn:fail:network (format "timeout waiting for response (attempt ~a)"
                                       (unbox attempt-count))
                               (current-continuation-marks))))
-   (parameterize ([current-random-source (lambda () 1.0)]
-                  [current-provider-retry-max-retries 5])
-     (with-handlers ([exn:fail? (lambda (_) (void))])
-       (call-with-provider-retry timeout-attempt
-                                 (list (hash 'role "user" 'content "test"))
-                                 (hash 'max-tokens 1000)
-                                 bus
-                                 "test-session"
-                                 "test-turn"
-                                 900)))
-   (sleep 0.2)
+   (with-deterministic-retries
+    (lambda ()
+      (with-handlers ([exn:fail? (lambda (_) (void))])
+        (call-with-provider-retry timeout-attempt
+                                  (list (hash 'role "user" 'content "test"))
+                                  (hash 'max-tokens 1000)
+                                  bus
+                                  "test-session"
+                                  "test-turn"
+                                  900)))
+    #:max-retries 5)
+   ;; Synchronous dispatch: all five retry events are captured before the
+   ;; call returns (backoff sleeps are scaled to 0 by the fake clock).
    (define events (get-events))
    (check-equal? (length events) 5 "five auto-retry.start events emitted for 5 timeout retries")
    (check-equal? (unbox attempt-count) 6 "initial attempt + 5 retries = 6 total attempts"))

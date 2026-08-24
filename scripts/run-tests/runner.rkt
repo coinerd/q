@@ -221,6 +221,27 @@
 (define (in-process-eligible? resolved-path)
   (module-plus-test-file? resolved-path))
 
+;; ── W1 v1.00.16 grouped eligibility contract ──────────────────────────
+;; A fast file qualifies for grouped in-process execution ONLY when it
+;; declares no `@isolation process`/`@isolation subprocess`, declares no
+;; `@mutates` (missing, `none`, or an explicit false-y token), AND uses the
+;; `(module+ test ...)` submodule form. Every other file keeps today's
+;; subprocess execution path byte-for-byte. Documented in
+;; q/docs/TEST_CONVENTIONS.md (schema contract) and audited per file in
+;; q/docs/reports/unit-fast-eligibility-v1.00.16.md.
+(define (mutates-true? raw)
+  (and raw
+       (not (member (string-downcase (string-trim raw))
+                    '("" "none" "false" "no" "0" "off")))))
+
+(define (grouped-eligible? path)
+  (define rp (resolve-test-path path))
+  (define meta (get-file-metadata rp))
+  (define isolation (hash-ref meta 'isolation #f))
+  (and (not (member isolation '("process" "subprocess")))
+       (not (mutates-true? (hash-ref meta 'mutates #f)))
+       (module-plus-test-file? rp)))
+
 ;; raco test executes each file with current-directory bound to that file's
 ;; directory; grouped/in-process execution must do the same or tests that
 ;; resolve sibling paths (e.g. "../scripts/foo.rkt") break.

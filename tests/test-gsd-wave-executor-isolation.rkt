@@ -39,7 +39,8 @@
                   run-campaign-wave
                   run-campaign!
                   campaign-result-status
-                  campaign-result-message))
+                  campaign-result-message)
+         (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-timeout-retries))
 
 ;; ============================================================
 ;; Helpers
@@ -110,7 +111,11 @@
         (make-wave-runner-port (lambda (idx)
                                  (sleep 30)
                                  (wave-execution-outcome 'done "too late"))))
-      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1))
+      ;; The default timeout-retries (5) is a production policy for transient
+      ;; session hangs; here the runner is deterministically hung, so retries
+      ;; only re-pay the 1s deadline + 2s cancel grace for no new information.
+      ;; Disable them: timeout semantics under test are retry-count-agnostic.
+      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-equal? (count-completion-events dir rec) 0 "timed-out run must not invent a DONE")
@@ -126,7 +131,7 @@
         (make-wave-runner-port (lambda (idx)
                                  (sleep 30)
                                  (wave-execution-outcome 'done "late"))))
-      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1))
+      (define result (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-true (string-contains? (campaign-result-message result) "exceeded"))
       (check-eq? (wave-status* rec 0) 'interrupted)
@@ -248,12 +253,16 @@
       (define dir (make-tmp-campaign-dir 3))
       (define rec (load-or-migrate dir))
       (define result
-        (run-campaign! dir
-                       rec
-                       #:runner (make-wave-runner-port (lambda (idx)
-                                                         (sleep 30)
-                                                         (wave-execution-outcome 'done "late")))
-                       #:timeout-sec 1))
+        ;; Same retry rationale as above: the hung runner makes each retry
+        ;; re-pay 1s deadline + 2s cancel grace, so pin the production
+        ;; timeout-retry policy off for this deterministic scenario.
+        (parameterize ([current-gsd-wave-timeout-retries 0])
+          (run-campaign! dir
+                         rec
+                         #:runner (make-wave-runner-port (lambda (idx)
+                                                           (sleep 30)
+                                                           (wave-execution-outcome 'done "late")))
+                         #:timeout-sec 1)))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-equal? (count-completion-events dir rec) 0)

@@ -251,8 +251,11 @@
                                   "(define typed-boundary-ok?\n"
                                   "  (and (= (length provider-registry-capabilities) 4) #t))\n")
                    (path->string host-services-path))))
-       (check-true (parameterize ([use-compiled-file-paths '()])
-                     (dynamic-require client-path 'typed-boundary-ok?))))
+       ;; The temp client has a unique name per run, so it always compiles
+       ;; fresh; do NOT disable compiled-file caches here (that recompiles the
+       ;; whole typed/racket tree from source, ~26s per run with no extra
+       ;; assertion coverage).
+       (check-true (dynamic-require client-path 'typed-boundary-ok?)))
      (lambda ()
        (when (file-exists? client-path)
          (delete-file client-path))))))

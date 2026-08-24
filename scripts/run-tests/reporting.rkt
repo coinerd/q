@@ -380,7 +380,12 @@
   (define counts (category-counts results))
   (define ledger-summary (and ledger (summarize-ledger-results ledger results)))
   (define (file-execution-mode r)
-    (and actual-modes (hash-ref actual-modes (path->string (test-file-result-path r)) #f)))
+    (and actual-modes
+         (let ([p (test-file-result-path r)])
+           ;; W2 FIX: result paths for metadata-missing files are stored as
+           ;; strings (not path? objects); path->string on them raises a
+           ;; contract violation, aborting JSON output (wave W2 blocker).
+           (hash-ref actual-modes (if (path? p) (path->string p) p) #f))))
   (define payload
     (hasheq 'suite
             (symbol->string suite)

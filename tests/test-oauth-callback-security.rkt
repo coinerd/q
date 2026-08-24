@@ -7,13 +7,21 @@
 ;;;
 ;;; Tests for v0.59.1 W0 (#5340): RFC7636 PKCE + CSPRNG primitives
 ;;; Tests for v0.59.1 W1 (#5344): Callback lifecycle, query decoding, CSRF
+;;;
+;;; W2 (v1.00.16) remediation: fixed `sleep`/alarm-evt waits and unsafe
+;;; listener probes replaced by the #:on-complete production seam + explicit
+;;; semaphore waits from helpers/oauth-callback-fixtures.rkt. Every test-case
+;;; and assertion is preserved one-for-one; no test deleted, weakened, or
+;;; merged. (A listener probe before completion would be accepted as a bogus
+;;; connection and complete the one-shot server with #f — probes are therefore
+;;; only used after wait-for-callback-completion confirms the server is done.)
 
 (require rackunit
          rackunit/text-ui
          file/sha1
          racket/string
-         racket/tcp
-         "../runtime/auth/oauth-callback.rkt")
+         "../runtime/auth/oauth-callback.rkt"
+         "helpers/oauth-callback-fixtures.rkt")
 
 (define security-tests
   (test-suite "OAuth2 security (v0.59.1)"
@@ -105,41 +113,24 @@
     ;; ============================================================
 
     (test-case "callback server is one-shot after success (#5346)"
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      ;; Send valid callback
-      (thread (lambda ()
-                (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-                (with-handlers ([exn:fail? (lambda (e) (void))])
-                  (define-values (in out) (tcp-connect "127.0.0.1" port))
-                  (fprintf out
-                           "GET /callback?code=auth-code&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                           state)
-                  (flush-output out)
-                  (close-output-port out)
-                  (close-input-port in))))
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      ;; Send valid callback; completion event replaces the fixed waits.
+      (callback-send-request port state "auth-code")
       (define code (get-code))
       (check-equal? code "auth-code")
-      ;; Verify listener is closed — second connection should fail
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
-      (define second-connect
-        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-          (define-values (in out) (tcp-connect "127.0.0.1" port))
-          (close-input-port in)
-          (close-output-port out)
-          'connected))
-      (check-eq? second-connect 'connection-failed "listener should be closed after one-shot"))
+      ;; Verify listener is closed — second connection should fail.
+      ;; (get-code returned only after try-complete! closed the listener, so
+      ;; no extra wait is needed before probing.)
+      (check-eq? (callback-probe-listener port)
+                 'connection-failed
+                 "listener should be closed after one-shot"))
 
     (test-case "callback server closes after invalid state (#5346)"
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (thread (lambda ()
-                (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-                (with-handlers ([exn:fail? (lambda (e) (void))])
-                  (define-values (in out) (tcp-connect "127.0.0.1" port))
-                  (fprintf out
-                           "GET /callback?code=abc&state=wrong HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                  (flush-output out)
-                  (close-output-port out)
-                  (close-input-port in))))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10))
+      (callback-send-request port "wrong" "abc")
       (define code (get-code))
       (check-false code "invalid state should return #f and close server"))
 
@@ -148,15 +139,9 @@
     ;; ============================================================
 
     (test-case "CSRF: missing state parameter rejects code (#5347)"
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (thread (lambda ()
-                (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-                (with-handlers ([exn:fail? (lambda (e) (void))])
-                  (define-values (in out) (tcp-connect "127.0.0.1" port))
-                  (fprintf out "GET /callback?code=abc HTTP/1.1\r\nHost: localhost\r\n\r\n")
-                  (flush-output out)
-                  (close-output-port out)
-                  (close-input-port in))))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10))
+      (callback-send-request port "" "abc")
       (define code (get-code))
       (check-false code "missing state must reject"))
 
@@ -170,77 +155,38 @@
     ;; ============================================================
 
     (test-case "delayed consumer: callback before get-code still works (#5463)"
-      ;; Callback arrives immediately; get-code is called after
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (thread
-       (lambda ()
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out "GET /callback?code=delayed-code&state=~a HTTP/1.1
-Host: localhost
-
-" state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      ;; Wait a moment to let callback arrive and be processed
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
+      ;; Callback arrives immediately; get-code blocks until completion and
+      ;; must still receive the stored code.
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10))
+      (callback-send-request port state "delayed-code")
       (define code (get-code))
       (check-equal? code "delayed-code" "delayed consumer must still receive code"))
 
     (test-case "concurrent double callback: only first wins (#5463)"
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      ;; Send two callbacks nearly simultaneously
-      (thread
-       (lambda ()
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out "GET /callback?code=first-code&state=~a HTTP/1.1
-Host: localhost
-
-" state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      (thread
-       (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 100)))
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out "GET /callback?code=second-code&state=~a HTTP/1.1
-Host: localhost
-
-" state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      ;; The original spaced the two callbacks 100 ms apart so the first was
+      ;; guaranteed to be processed first; the completion event makes that
+      ;; ordering deterministic: the first callback is fully processed before
+      ;; the second is sent, so it must win.
+      (callback-send-request port state "first-code")
+      (check-true (wait-for-callback-completion completion-sema 10)
+                  "first callback must complete the one-shot server")
+      (callback-send-request port state "second-code")
       (define code (get-code))
       (check-equal? code "first-code" "first callback must win")
-      ;; Second connection should fail after server shuts down
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
-      (define third-connect
-        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-          (define-values (in out) (tcp-connect "127.0.0.1" port))
-          (close-input-port in)
-          (close-output-port out)
-          'connected))
-      (check-eq? third-connect 'connection-failed "server must close after first result"))
+      ;; Second connection should fail after server shuts down.
+      (check-eq? (callback-probe-listener port)
+                 'connection-failed
+                 "server must close after first result"))
 
     (test-case "atomic completion: no unsynchronized shared state (#5463)"
       ;; Verify the semaphore model: multiple rapid connections don't corrupt state
       (for ([_ (in-range 5)])
         (define-values (port state verifier get-code) (start-callback-server #:timeout 5))
-        (thread
-         (lambda ()
-           (with-handlers ([exn:fail? (lambda (e) (void))])
-             (define-values (in out) (tcp-connect "127.0.0.1" port))
-             (fprintf out "GET /callback?code=iter-code&state=~a HTTP/1.1
-Host: localhost
-
-" state)
-             (flush-output out)
-             (close-output-port out)
-             (close-input-port in))))
+        (callback-send-request port state "iter-code")
         (define code (get-code))
         (check-equal? code "iter-code" "each iteration must get the correct code")))
 
@@ -251,28 +197,17 @@ Host: localhost
     (test-case "cleanup is independent of consumer (#5497)"
       ;; The listener must be closed BEFORE get-code is called,
       ;; so resources are reclaimed even if the consumer delays.
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (thread
-       (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out
-                    "GET /callback?code=cleanup-test&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                    state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      ;; Wait for server to process callback and close listener
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 800)))
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      (callback-send-request port state "cleanup-test")
+      ;; Wait for the server to process the callback and close the listener —
+      ;; the completion event replaces the 800 ms fixed wait.
+      (check-true (wait-for-callback-completion completion-sema 10))
       ;; Listener should be closed — new connections must fail
-      (define probe
-        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-          (define-values (in out) (tcp-connect "127.0.0.1" port))
-          (close-input-port in)
-          (close-output-port out)
-          'connected))
-      (check-eq? probe 'connection-failed "listener must be closed before consumer calls get-code")
+      (check-eq? (callback-probe-listener port)
+                 'connection-failed
+                 "listener must be closed before consumer calls get-code")
       ;; Consumer can still get the code (delayed read from channel)
       (define code (get-code))
       (check-equal? code "cleanup-test" "delayed consumer must still receive code after cleanup"))
@@ -280,21 +215,13 @@ Host: localhost
     (test-case "nonblocking completion: get-code returns immediately after callback (#5497)"
       ;; Once the callback has been processed, get-code should not block
       ;; — the result is already on the channel.
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (thread
-       (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out
-                    "GET /callback?code=nonblock-code&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                    state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      ;; Wait for callback to be fully processed
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 800)))
-      ;; get-code should return immediately (result already on channel)
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      (callback-send-request port state "nonblock-code")
+      ;; Wait for the callback to be fully processed (event replaces the
+      ;; 800 ms fixed wait), then get-code must return immediately.
+      (check-true (wait-for-callback-completion completion-sema 10))
       (define before (current-inexact-milliseconds))
       (define code (get-code))
       (define after (current-inexact-milliseconds))

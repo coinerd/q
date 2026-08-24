@@ -6,11 +6,19 @@
 
 ;;; tests/test-oauth-callback-nonblocking.rkt — v0.59.12 W0 (#5531)
 ;;; Tests proving OAuth callback completion is nonblocking without a consumer.
+;;;
+;;; W2 (v1.00.16) remediation: fixed `sleep`/alarm-evt waits and unsafe
+;;; listener probes replaced by the #:on-complete production seam + explicit
+;;; semaphore waits from helpers/oauth-callback-fixtures.rkt. Every test-case
+;;; and assertion is preserved one-for-one; no test deleted, weakened, or
+;;; merged. (A listener probe before completion would be accepted as a bogus
+;;; connection and complete the one-shot server with #f — probes are therefore
+;;; only used after wait-for-callback-completion confirms the server is done.)
 
 (require rackunit
          rackunit/text-ui
-         racket/tcp
-         "../runtime/auth/oauth-callback.rkt")
+         "../runtime/auth/oauth-callback.rkt"
+         "helpers/oauth-callback-fixtures.rkt")
 
 (define nonblocking-tests
   (test-suite "OAuth callback nonblocking completion (v0.59.12 W0)"
@@ -20,109 +28,69 @@
     ;; arrives. This test proves completion returns promptly without a consumer.
 
     (test-case "completion is nonblocking without consumer (#5532)"
-      ;; Start server, trigger callback, but never call get-code.
-      ;; The try-complete! thread must finish within a reasonable time,
-      ;; not block forever on channel-put.
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      ;; Send valid callback from background thread
-      (thread
-       (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out
-                    "GET /callback?code=no-consumer-code&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                    state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      ;; Wait long enough for callback to be processed and try-complete! to run
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 1500)))
-      ;; If try-complete! is blocking on channel-put, the listener won't be closed.
+      ;; Start server, trigger callback, but never call get-code before
+      ;; completion. The #:on-complete event fires when try-complete! has run
+      ;; (listener closed, result stored) — no consumer involved, no fixed
+      ;; delay needed.
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      (callback-send-request port state "no-consumer-code")
+      ;; If try-complete! blocks (channel-put regression), the event never
+      ;; fires and the test fails explicitly instead of probing a half-open
+      ;; listener.
+      (check-true (wait-for-callback-completion completion-sema 10)
+                  "completion must not block without a consumer")
       ;; Probe the port to verify listener was cleaned up despite no consumer.
-      (define probe
-        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-          (define-values (in out) (tcp-connect "127.0.0.1" port))
-          (close-input-port in)
-          (close-output-port out)
-          'connected))
-      (check-eq? probe
+      (check-eq? (callback-probe-listener port)
                  'connection-failed
                  "listener must be closed even without consumer calling get-code")
-      ;; Now call get-code to clean up the channel and verify result was stored
+      ;; Now call get-code to verify result was stored
       (define code (get-code))
       (check-equal? code "no-consumer-code" "delayed consumer must still receive stored code"))
 
     (test-case "timeout completion is nonblocking without consumer (#5532)"
       ;; Server times out; no consumer calls get-code.
       ;; The timeout thread's try-complete!(#f) must not block.
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 1))
-      ;; Wait for timeout to fire and try-complete! to run
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 2000)))
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 1 #:on-complete on-complete))
+      ;; Wait for the timeout's try-complete! to run (fires at ~1s).
+      (check-true (wait-for-callback-completion completion-sema 10)
+                  "timeout try-complete! must not block without a consumer")
       ;; Listener must be closed by timeout's try-complete!
-      (define probe
-        (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-          (define-values (in out) (tcp-connect "127.0.0.1" port))
-          (close-input-port in)
-          (close-output-port out)
-          'connected))
-      (check-eq? probe 'connection-failed "timeout must close listener even without consumer")
+      (check-eq? (callback-probe-listener port)
+                 'connection-failed
+                 "timeout must close listener even without consumer")
       ;; Delayed get-code should still return #f
       (define code (get-code))
       (check-false code "timeout must deliver #f to delayed consumer"))
 
     (test-case "try-complete! thread exits promptly without consumer (#5533)"
       ;; The thread running try-complete! must not be blocked at channel-put.
-      ;; We verify this by checking the thread finishes within a short window.
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
-      (define completer-done (box #f))
-      ;; Monitor thread: sets completer-done after get-code returns
-      (thread
-       (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 200)))
-         (with-handlers ([exn:fail? (lambda (e) (void))])
-           (define-values (in out) (tcp-connect "127.0.0.1" port))
-           (fprintf out
-                    "GET /callback?code=thread-exit&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                    state)
-           (flush-output out)
-           (close-output-port out)
-           (close-input-port in))))
-      ;; Wait for callback processing
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 1000)))
-      ;; Now call get-code to unblock any pending channel-put
-      ;; If try-complete! was blocking, this unblocks it and completes quickly
+      ;; The completion event is the promptness proof: it fires only after
+      ;; try-complete! has finished closing the listener and storing the result.
+      (define-values (completion-sema on-complete) (make-callback-completion))
+      (define-values (port state verifier get-code)
+        (start-callback-server #:timeout 10 #:on-complete on-complete))
+      (callback-send-request port state "thread-exit")
+      (check-true (wait-for-callback-completion completion-sema 10)
+                  "try-complete! must finish without a consumer")
       (define code (get-code))
-      (check-equal? code "thread-exit")
-      ;; Give a moment for any cleanup
-      (sync (alarm-evt (+ (current-inexact-milliseconds) 200))))
+      (check-equal? code "thread-exit"))
 
     (test-case "no-consumer cleanup: multiple servers don't leak ports (#5533)"
       ;; Start multiple servers, trigger callbacks, don't call get-code.
       ;; Verify each server's listener is cleaned up.
       (for ([i (in-range 3)])
-        (define-values (port state verifier get-code) (start-callback-server #:timeout 5))
-        (thread (lambda ()
-                  (sync (alarm-evt (+ (current-inexact-milliseconds) 100)))
-                  (with-handlers ([exn:fail? (lambda (e) (void))])
-                    (define-values (in out) (tcp-connect "127.0.0.1" port))
-                    (fprintf out
-                             "GET /callback?code=iter-~a&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                             i
-                             state)
-                    (flush-output out)
-                    (close-output-port out)
-                    (close-input-port in))))
-        ;; Don't call get-code; wait for cleanup
-        (sync (alarm-evt (+ (current-inexact-milliseconds) 1000)))
-        ;; Verify port is closed
-        (define probe
-          (with-handlers ([exn:fail? (lambda (e) 'connection-failed)])
-            (define-values (in out) (tcp-connect "127.0.0.1" port))
-            (close-input-port in)
-            (close-output-port out)
-            'connected))
-        (check-eq? probe
+        (define-values (completion-sema on-complete) (make-callback-completion))
+        (define-values (port state verifier get-code)
+          (start-callback-server #:timeout 5 #:on-complete on-complete))
+        (callback-send-request port state (format "iter-~a" i))
+        ;; Don't call get-code; wait for the completion event instead of a
+        ;; fixed second, then verify the port is closed.
+        (check-true (wait-for-callback-completion completion-sema 10))
+        (check-eq? (callback-probe-listener port)
                    'connection-failed
                    (format "iteration ~a: listener must be closed without consumer" i))))))
 
