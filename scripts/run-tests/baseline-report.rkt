@@ -960,7 +960,11 @@
                   (n fast-p50))
           "\nTop-15 slowest files by p50 with category attribution:\n\n"
           (if (null? top15-files)
-              "_not available in this retained sample: per-file runner JSON artifacts are an\nauthenticated download and were not retained; durations and categories are never\nfabricated._\n"
+              (string-append
+               "_not available in this retained sample: per-file runner JSON artifacts are an\n"
+               "authenticated download and were not retained; durations and categories are never\n"
+               "fabricated._\n"
+               "")
               (string-append "| file | p50 (s) | p95 (s) | n | grouped | subprocess | category |\n"
                              "|---|---|---|---|---|---|---|\n"
                              (string-join (for/list ([f (in-list top15-files)])
@@ -1080,7 +1084,10 @@
                         (format "- halving target: p50 ≤ ~a s\n\n" (n fast-halving-target))))
      "## Top-15 slowest fast-gate files by p50\n\n"
      (if (null? top15-files)
-         "_not available in this retained sample: per-file runner JSON artifacts are an\nauthenticated download and were not retained; never fabricated._\n"
+         (string-append
+          "_not available in this retained sample: per-file runner JSON artifacts are an\n"
+          "authenticated download and were not retained; never fabricated._\n"
+          "")
          (string-append "| file | p50 (s) | p95 (s) | n | grouped | subprocess | category |\n"
                         "|---|---|---|---|---|---|---|\n"
                         (string-join (for/list ([f (in-list top15-files)])
@@ -1109,7 +1116,9 @@
       'method
       (hasheq
        'split
-       "setup = job started_at .. execution-step started_at; execution = execution-step started_at .. completed_at (retained GitHub REST jobs JSON); never guessed"
+       (string-append
+        "setup = job started_at .. execution-step started_at; execution = execution-step started_at .. "
+        "completed_at (retained GitHub REST jobs JSON); never guessed")
        'per_run_selection
        "worst fast-gate shard by total (setup + execution) per run"
        'halving_target_rule
