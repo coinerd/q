@@ -651,3 +651,33 @@ retained-artifact mechanism the `FAST_SHARD_PLAN` decision used (run
 Gate structure (fast / platform / workflows / cross-version), job names, and
 required status checks are unchanged; the workflows contain zero
 impact-selector flags (verify gate: `grep -rn "changed-base\|changed-head\|impact-dry-run" q/.github/workflows/ \| wc -l` = 0); a timeout is never reported as a pass.
+
+## v1.00.16 W4 — halving-objective evidence, baseline of record (2026-08-24)
+
+The v1.00.16 objective (fast suite at least half the time) is measured against
+the W0 baseline of record (v1.00.11 fast-gate p50 488.0 s, ten L3 runs) using
+the regenerable-report discipline this log and the TDD plan mandate.
+
+| Field | Value |
+|---|---|
+| Sample (run IDs) | 32745843124 (PR feature/v10016-w1w2), 32748197712 (main @ 93e7996a) — 2 successful post-change fast-gate runs; retained jobs JSON in `artifacts/ci-baseline/jobs/` |
+| Before (W0 baseline p50) | 488.0 s (fast-gate-budget-v1.00.11.md / test-feedback-baseline-v1.00.11.md) |
+| After (v1.00.16 sample p50) | 627.0 s (worst-shard totals 619.0 / 635.0; shard 2/3 each) |
+| Achieved ratio | 1.2848360655737705× of the baseline p50 — **halving MISSED** (target ≤ 244.0 s) |
+| Toggle: `FAST_SHARD_PLAN` | `active` (guarded activation 2026-08-19, ledger above); duration-aware plan in effect for both runs |
+| Toggle: `FAST_SHARD_COUNT` | unset (default 3) — CI matrix literal `[0, 1, 2]`; study report-only, decision **KEEP 3** (W3) |
+| Toggle: prepared-env | NOT in effect for these runs — both predate the W3 cutover merge 1351fb05; `setup-racket` ran the legacy path (Racket install + q relink + `raco setup`) on all three ubuntu fast shards |
+| Remaining attributed cost | setup 343.0 / 348.0 s (legacy-path install/relink/`raco setup` — the dominant term) + execution max shard 276.0 / 287.0 s |
+| Named next lever | Complete the W3 prepared-env observation gate: a warm hosted run with `prepared-environment=restored` on all three ubuntu fast shards (materially reduced setup), then re-measure with a fresh retained sample; guard `RACKET_PREPARED_ARTIFACT=off` |
+| Remeasurement date | 2026-09-30 (or the next retained post-warm-run sample, whichever comes first) |
+
+Revert commands (one line per toggle):
+
+- `FAST_SHARD_PLAN`: `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off`
+- `FAST_SHARD_COUNT`: `gh api -X PUT repos/coinerd/q/actions/variables/FAST_SHARD_COUNT -f value=3` and restore the `ci.yml` fast-gate matrix literal to `[0, 1, 2]` if it was ever resized
+- Prepared-env: `gh api -X PUT repos/coinerd/q/actions/variables/RACKET_PREPARED_ARTIFACT -f value=off` (forces `auto` → `off` at all call sites and disables the `fast-env` producer)
+
+No target was massaged: the achieved ratio, the remaining attributed cost, and
+the named next lever are recorded above exactly as measured; per-file runner
+JSON artifacts were not retained (authenticated download), so no per-file
+numbers appear in the v1.00.16 report.
