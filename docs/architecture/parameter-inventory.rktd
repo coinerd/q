@@ -35,312 +35,209 @@
 ;;   must classify its semantic lifetime. State that spans turns within one
 ;;   session belongs in session-owned lifecycle-state, NOT a dynamic parameter.
 
-(("agent/blackboard.rkt"
-  (current-blackboard . SERVICE_HANDLE))
- ("agent/iteration/main-loop.rkt"
-  (current-iteration-fsm-state . ITERATION_LOCAL))
- ("agent/loop-fsm.rkt"
-  (current-turn-fsm-state . TURN_LOCAL))
- ("agent/roles/supervisor.rkt"
-  (current-use-registry . CONFIGURATION))
- ("agent/roles/tool-gateway.rkt"
-  (current-remote-tool-executor . SERVICE_HANDLE)
-  (current-tool-executor . SERVICE_HANDLE)
-  (current-routing-policy . CONFIGURATION))
- ("agent/state.rkt"
-  (current-empty-response-retried? . TURN_LOCAL))
- ("agent/stream-reducer.rkt"
-  (MAX-STREAM-CHUNKS . CONFIGURATION))
- ("agent/verification/verifier-core.rkt"
-  (current-verifier-timeout-ms . CONFIGURATION)
-  (current-verifier-provider . CONFIGURATION)
-  (current-verifier-risk-threshold . CONFIGURATION)
-  (current-verifier-model . CONFIGURATION)
-  (current-verifier-enabled . CONFIGURATION))
- ("agent/verification/verifier-prompt.rkt"
-  (current-verifier-max-file-lines . CONFIGURATION)
-  (current-verifier-max-diff-chars . CONFIGURATION)
-  (current-verifier-max-files-shown . CONFIGURATION))
- ("cli/generate-certificates.rkt"
-  (force? . OTHER_REVIEWED)
-  (output-dir . OTHER_REVIEWED))
- ("extensions/combinators.rkt"
-  (current-hook-violation-callback . SERVICE_HANDLE))
- ("extensions/github/helpers.rkt"
-  (gh-binary-path . CONFIGURATION)
-  (git-binary-path . CONFIGURATION)
-  (current-gh-exec-result . SERVICE_HANDLE)
-  (current-git-exec-result . SERVICE_HANDLE))
- ("extensions/gsd/core.rkt"
-  (current-gsd-campaign-owner . OTHER_REVIEWED)
-  (current-gsd-lifecycle-reset-suppressed? . OTHER_REVIEWED))
- ("extensions/gsd/events.rkt"
-  (current-gsd-correlation-id . TURN_LOCAL))
- ("extensions/gsd/plan-context-builder.rkt"
-  (current-git-root . CONFIGURATION))
- ("extensions/gsd/composition-root.rkt"
-  (current-gsd-effect-ports . SERVICE_HANDLE))
- ("extensions/gsd/delivery-verifier.rkt"
-  (current-gsd-delivery-verify-command . SERVICE_HANDLE)
-  (current-gsd-delivery-verify-timeout-sec . CONFIGURATION))
- ("extensions/gsd/go-orchestrator.rkt"
-  (current-gsd-wave-cancel! . SERVICE_HANDLE))
- ("extensions/gsd/policy.rkt"
-  (current-gsd-wave-max-iterations . CONFIGURATION)
-  (current-gsd-wave-timeout-retries . CONFIGURATION)
-  (current-gsd-wave-timeout-seconds . CONFIGURATION)
-  (current-gsd-max-consecutive-tool-calls . CONFIGURATION))
- ("extensions/gsd/session-state.rkt"
-  (current-gsd-session-id . SERVICE_HANDLE)
-  (current-gsd-ctx . SERVICE_HANDLE))
- ("extensions/gsd/state-machine.rkt"
-  (gsd-max-rework-iterations . CONFIGURATION)
-  (gsd-wave-gate-interval . CONFIGURATION)
-  (gsd-wave-gate-counter . OTHER_REVIEWED))
- ("extensions/hooks.rkt"
-  (current-hook-timeout-ms . CONFIGURATION))
- ("extensions/loader.rkt"
-  (current-extension-startup-timeout . CONFIGURATION))
- ("extensions/mcp/protocol.rkt"
-  (current-mcp-execute-fn . SERVICE_HANDLE))
- ("extensions/mcp/tool-bridge.rkt"
-  (current-mcp-event-sink . SERVICE_HANDLE))
- ("extensions/quarantine.rkt"
-  (current-quarantine-dir . CONFIGURATION))
- ("extensions/remote-collab/ssh-helpers.rkt"
-  (ssh-strict-mode . CONFIGURATION))
- ("extensions/ui-surface.rkt"
-  (current-ui-registry . SERVICE_HANDLE)
-  (current-ui-event-runtime . SERVICE_HANDLE))
- ("extensions/widget-lifecycle.rkt"
-  (current-lifecycle-focus . OTHER_REVIEWED))
- ("gui/lifecycle-hooks.rkt"
-  (current-gui-event-runtime . SERVICE_HANDLE)
-  (current-gui-lifecycle-hooks . SERVICE_HANDLE))
- ("gui/main.rkt"
-  (current-gui-theme-manager . SERVICE_HANDLE))
- ("gui/state-sync.rkt"
-  (notification-pending? . TURN_LOCAL))
- ("interfaces/sessions.rkt"
-  (current-sessions-fs-ops . SERVICE_HANDLE))
- ("llm/gemini.rkt"
-  (current-gemini-tool-id-counter . TURN_LOCAL))
- ("llm/request-policy.rkt"
-  (current-model-timeouts . CONFIGURATION)
-  (current-model-sse-read-timeouts . CONFIGURATION)
-  (current-model-thinking-idle-timeouts . CONFIGURATION)
-  (current-model-body-read-timeouts . CONFIGURATION)
-  (current-http-request-timeout . CONFIGURATION)
-  (current-peer-close-probe-secs . CONFIGURATION)
-  (current-max-thinking-gap-secs . CONFIGURATION)
-  (current-model-thinking-gap-caps . CONFIGURATION))
- ("llm/http-helpers.rkt"
-  (current-provider-http-sendrecv . SERVICE_HANDLE))
- ("llm/stream.rkt"
-  (current-request-mechanism-observer . SERVICE_HANDLE))
- ("runtime/auth/oauth.rkt"
-  (current-oauth-http-sendrecv . SERVICE_HANDLE))
- ("runtime/auto-retry.rkt"
-  (current-random-source . SERVICE_HANDLE))
- ("runtime/compaction/ctx-compact.rkt"
-  (current-compact-rate-window . CONFIGURATION)
-  (current-compact-rate-limit . CONFIGURATION))
- ("runtime/context-assembly/auto-distillation.rkt"
-  (current-llm-distill-fn . SERVICE_HANDLE)
-  (current-auto-distillation-enabled? . CONFIGURATION))
- ("runtime/context-assembly/config.rkt"
-  (current-ws-evolution-enabled? . CONFIGURATION)
-  (current-conclusion-token-budget . CONFIGURATION)
-  (current-graph-conclusion-selection? . CONFIGURATION)
-  (current-task-state-aware-assembly? . CONFIGURATION))
- ("runtime/context-assembly/memory-builder.rkt"
-  (current-memory-max-entry-chars . CONFIGURATION)
-  (current-memory-injection-budget . CONFIGURATION)
-  (current-memory-retrieval-timeout-ms . CONFIGURATION))
- ("runtime/context-assembly/rollback-actions.rkt"
-  (current-revert-state-fn . SERVICE_HANDLE)
-  (current-expand-context-fn . SERVICE_HANDLE)
-  (current-force-distill-fn . SERVICE_HANDLE)
-  (current-rollback-action-execution? . CONFIGURATION)
-  (current-rollback-state . OTHER_REVIEWED))
+(("agent/blackboard.rkt" (current-blackboard . SERVICE_HANDLE))
+ ("agent/iteration/main-loop.rkt" (current-iteration-fsm-state . ITERATION_LOCAL))
+ ("agent/loop-fsm.rkt" (current-turn-fsm-state . TURN_LOCAL))
+ ("agent/roles/supervisor.rkt" (current-use-registry . CONFIGURATION))
+ ("agent/roles/tool-gateway.rkt" (current-remote-tool-executor . SERVICE_HANDLE)
+                                 (current-tool-executor . SERVICE_HANDLE)
+                                 (current-routing-policy . CONFIGURATION))
+ ("agent/state.rkt" (current-empty-response-retried? . TURN_LOCAL))
+ ("agent/stream-reducer.rkt" (MAX-STREAM-CHUNKS . CONFIGURATION))
+ ("agent/verification/verifier-core.rkt" (current-verifier-timeout-ms . CONFIGURATION)
+                                         (current-verifier-provider . CONFIGURATION)
+                                         (current-verifier-risk-threshold . CONFIGURATION)
+                                         (current-verifier-model . CONFIGURATION)
+                                         (current-verifier-enabled . CONFIGURATION))
+ ("agent/verification/verifier-prompt.rkt" (current-verifier-max-file-lines . CONFIGURATION)
+                                           (current-verifier-max-diff-chars . CONFIGURATION)
+                                           (current-verifier-max-files-shown . CONFIGURATION))
+ ("cli/generate-certificates.rkt" (force? . OTHER_REVIEWED) (output-dir . OTHER_REVIEWED))
+ ("extensions/combinators.rkt" (current-hook-violation-callback . SERVICE_HANDLE))
+ ("extensions/github/helpers.rkt" (gh-binary-path . CONFIGURATION)
+                                  (git-binary-path . CONFIGURATION)
+                                  (current-gh-exec-result . SERVICE_HANDLE)
+                                  (current-git-exec-result . SERVICE_HANDLE))
+ ("extensions/gsd/core.rkt" (current-gsd-campaign-owner . OTHER_REVIEWED)
+                            (current-gsd-lifecycle-reset-suppressed? . OTHER_REVIEWED))
+ ("extensions/gsd/events.rkt" (current-gsd-correlation-id . TURN_LOCAL))
+ ("extensions/gsd/plan-context-builder.rkt" (current-git-root . CONFIGURATION))
+ ("extensions/gsd/composition-root.rkt" (current-gsd-effect-ports . SERVICE_HANDLE))
+ ("extensions/gsd/delivery-verifier.rkt" (current-gsd-delivery-verify-command . SERVICE_HANDLE)
+                                         (current-gsd-delivery-verify-timeout-sec . CONFIGURATION))
+ ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
+ ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
+                              (current-gsd-wave-timeout-retries . CONFIGURATION)
+                              (current-gsd-wave-timeout-seconds . CONFIGURATION)
+                              (current-gsd-max-consecutive-tool-calls . CONFIGURATION))
+ ("extensions/gsd/session-state.rkt" (current-gsd-session-id . SERVICE_HANDLE)
+                                     (current-gsd-ctx . SERVICE_HANDLE))
+ ("extensions/gsd/state-machine.rkt" (gsd-max-rework-iterations . CONFIGURATION)
+                                     (gsd-wave-gate-interval . CONFIGURATION)
+                                     (gsd-wave-gate-counter . OTHER_REVIEWED))
+ ("extensions/hooks.rkt" (current-hook-timeout-ms . CONFIGURATION))
+ ("extensions/loader.rkt" (current-extension-startup-timeout . CONFIGURATION))
+ ("extensions/mcp/protocol.rkt" (current-mcp-execute-fn . SERVICE_HANDLE))
+ ("extensions/mcp/tool-bridge.rkt" (current-mcp-event-sink . SERVICE_HANDLE))
+ ("extensions/quarantine.rkt" (current-quarantine-dir . CONFIGURATION))
+ ("extensions/remote-collab/ssh-helpers.rkt" (ssh-strict-mode . CONFIGURATION))
+ ("extensions/ui-surface.rkt" (current-ui-registry . SERVICE_HANDLE)
+                              (current-ui-event-runtime . SERVICE_HANDLE))
+ ("extensions/widget-lifecycle.rkt" (current-lifecycle-focus . OTHER_REVIEWED))
+ ("gui/lifecycle-hooks.rkt" (current-gui-event-runtime . SERVICE_HANDLE)
+                            (current-gui-lifecycle-hooks . SERVICE_HANDLE))
+ ("gui/main.rkt" (current-gui-theme-manager . SERVICE_HANDLE))
+ ("gui/state-sync.rkt" (notification-pending? . TURN_LOCAL))
+ ("interfaces/sessions.rkt" (current-sessions-fs-ops . SERVICE_HANDLE))
+ ("llm/gemini.rkt" (current-gemini-tool-id-counter . TURN_LOCAL))
+ ("llm/request-policy.rkt" (current-model-timeouts . CONFIGURATION)
+                           (current-model-sse-read-timeouts . CONFIGURATION)
+                           (current-model-thinking-idle-timeouts . CONFIGURATION)
+                           (current-model-body-read-timeouts . CONFIGURATION)
+                           (current-http-request-timeout . CONFIGURATION)
+                           (current-peer-close-probe-secs . CONFIGURATION)
+                           (current-max-thinking-gap-secs . CONFIGURATION)
+                           (current-model-thinking-gap-caps . CONFIGURATION))
+ ("llm/http-helpers.rkt" (current-provider-http-sendrecv . SERVICE_HANDLE))
+ ("llm/stream.rkt" (current-request-mechanism-observer . SERVICE_HANDLE))
+ ("llm/conn-pool.rkt" (current-conn-pool . SERVICE_HANDLE))
+ ("runtime/auth/oauth.rkt" (current-oauth-http-sendrecv . SERVICE_HANDLE))
+ ("runtime/auto-retry.rkt" (current-random-source . SERVICE_HANDLE)
+                           (current-auto-retry-sleep-scale . CONFIGURATION))
+ ("runtime/compaction/ctx-compact.rkt" (current-compact-rate-window . CONFIGURATION)
+                                       (current-compact-rate-limit . CONFIGURATION))
+ ("runtime/context-assembly/auto-distillation.rkt" (current-llm-distill-fn . SERVICE_HANDLE)
+                                                   (current-auto-distillation-enabled? .
+                                                                                       CONFIGURATION))
+ ("runtime/context-assembly/config.rkt" (current-ws-evolution-enabled? . CONFIGURATION)
+                                        (current-conclusion-token-budget . CONFIGURATION)
+                                        (current-graph-conclusion-selection? . CONFIGURATION)
+                                        (current-task-state-aware-assembly? . CONFIGURATION))
+ ("runtime/context-assembly/memory-builder.rkt" (current-memory-max-entry-chars . CONFIGURATION)
+                                                (current-memory-injection-budget . CONFIGURATION)
+                                                (current-memory-retrieval-timeout-ms . CONFIGURATION))
+ ("runtime/context-assembly/rollback-actions.rkt" (current-revert-state-fn . SERVICE_HANDLE)
+                                                  (current-expand-context-fn . SERVICE_HANDLE)
+                                                  (current-force-distill-fn . SERVICE_HANDLE)
+                                                  (current-rollback-action-execution? . CONFIGURATION)
+                                                  (current-rollback-state . OTHER_REVIEWED))
  ("runtime/context-assembly/state-aware-builder.rkt"
   (current-blackboard-injection-enabled . CONFIGURATION))
- ("runtime/context-assembly/state-inference.rkt"
-  (current-state-inference-threshold . CONFIGURATION))
- ("runtime/credentials/protocol.rkt"
-  (current-shell-command-runner . SERVICE_HANDLE)
-  (current-external-command-runner . SERVICE_HANDLE))
- ("runtime/goal/goal-runner.rkt"
-  (current-goal-session-log-path . CONFIGURATION)
-  (current-simulated-prompt-sink . SERVICE_HANDLE)
-  (current-eval-timeout-secs . CONFIGURATION))
- ("runtime/gsd-query.rkt"
-  (current-gsd-mode-query . SERVICE_HANDLE))
- ("runtime/iteration/retry-policy.rkt"
-  (current-loop-cooldown-left . ITERATION_LOCAL))
- ("runtime/iteration/step-executor.rkt"
-  (current-post-tool-result-hook . SERVICE_HANDLE)
-  (current-reflection-prompt-enabled . CONFIGURATION))
- ("runtime/tool-coordinator.rkt"
-  (current-tool-dispatch-timeout-ms . CONFIGURATION))
- ("runtime/memory/auto-extraction.rkt"
-  (current-auto-extraction-min-confidence . CONFIGURATION)
-  (current-auto-extraction-enabled . CONFIGURATION))
- ("runtime/memory/backends/external-protocol.rkt"
-  (current-external-timeout-ms . CONFIGURATION)
-  (current-external-backend-enabled . CONFIGURATION))
- ("runtime/memory/conclusion-bridge.rkt"
-  (current-conclusion-to-memory-bridge-enabled . CONFIGURATION))
- ("runtime/memory/embeddings.rkt"
-  (current-embedding-cache . SERVICE_HANDLE)
-  (current-batch-embedding-provider . CONFIGURATION)
-  (current-embedding-dimension . CONFIGURATION)
-  (current-embedding-provider . CONFIGURATION))
- ("runtime/memory/reflection.rkt"
-  (current-reflection-llm-fn . SERVICE_HANDLE)
-  (current-reflection-overlap-threshold . CONFIGURATION)
-  (current-reflection-min-group-size . CONFIGURATION))
- ("runtime/memory/service.rkt"
-  (current-auto-reflection-min-items . CONFIGURATION)
-  (current-auto-reflection-enabled . CONFIGURATION)
-  (current-memory-policy . CONFIGURATION)
-  (current-memory-backend . SERVICE_HANDLE))
-  ("runtime/provider-retry.rkt"
-   (current-provider-retry-ceiling-secs . CONFIGURATION)
-   (current-provider-retry-max-retries . CONFIGURATION)
-   (current-provider-retry-stall-max-consecutive . CONFIGURATION))
-  ("runtime/package.rkt"
-  (current-packages-dir . CONFIGURATION))
- ("runtime/safe-mode.rkt"
-  (current-safe-mode-locked? . CONFIGURATION))
- ("runtime/session/session-config.rkt"
-  (current-context-assembly-options-parameter . CONFIGURATION)
-  (current-goal-loop-enabled? . CONFIGURATION)
-  (current-context-assembly-profile . CONFIGURATION)
-  (current-task-state-aware-rollout-rate . CONFIGURATION))
- ("runtime/session/session-events.rkt"
-  (current-mid-session-persisted-ids . OTHER_REVIEWED)
-  (current-mid-session-bridge-enabled . CONFIGURATION))
- ("runtime/session/session-filesystem.rkt"
-  (current-filesystem-backend . SERVICE_HANDLE))
- ("runtime/session/session-mutation.rkt"
-  (current-archive-entry-fn . SERVICE_HANDLE)
-  (current-prompt-operation-session . PROMPT_LOCAL))
- ("runtime/session/session-persistence.rkt"
-  (current-crash-log-dir . CONFIGURATION))
- ("runtime/session/session-store-goal-task.rkt"
-  (current-load-session-log-gt . SERVICE_HANDLE)
-  (current-append-entry!-gt . SERVICE_HANDLE))
- ("runtime/session/session-store-tree.rkt"
-  (current-append-entry! . SERVICE_HANDLE)
-  (current-load-session-log . SERVICE_HANDLE))
- ("sandbox/evaluator.rkt"
-  (current-sandbox-path-limit . CONFIGURATION)
-  (current-sandbox-memory-limit . CONFIGURATION))
- ("sandbox/gateway-bridge.rkt"
-  (current-remote-executor . SERVICE_HANDLE)
-  (current-execution-plane-timeout-ms . CONFIGURATION)
-  (current-worker-args . CONFIGURATION)
-  (current-worker-command . CONFIGURATION)
-  (current-execution-plane-enabled . CONFIGURATION))
- ("sandbox/limits.rkt"
-  (current-max-processes . CONFIGURATION)
-  (current-process-count . OTHER_REVIEWED))
- ("sandbox/subprocess.rkt"
-  (current-subprocess-trace-id . OTHER_REVIEWED)
-  (subprocess-trace-counter . OTHER_REVIEWED)
-  (current-secret-scrub-patterns . CONFIGURATION)
-  (current-secret-scrub-allowlist . CONFIGURATION)
-  (current-secret-scrub-denylist . CONFIGURATION))
- ("sandbox/worker-tools.rkt"
-  (current-worker-edit-before-write-hook . SERVICE_HANDLE)
-  (current-worker-cumulative-limit . CONFIGURATION)
-  (current-worker-write-limit . CONFIGURATION)
-  (current-allowed-roots . CONFIGURATION))
- ("tools/builtins/bash.rkt"
-  (current-bash-execution-config . CONFIGURATION)
-  (current-allowed-commands . CONFIGURATION)
-  (current-execution-policy . CONFIGURATION))
- ("tools/builtins/edit.rkt"
-  (current-edit-before-final-replace-hook . SERVICE_HANDLE)
-  (current-edit-before-replace-hook . SERVICE_HANDLE)
-  (current-fuzzy-edit-enabled? . CONFIGURATION))
- ("tools/builtins/spawn-coordinator.rkt"
-  (current-agent-pool-limit . CONFIGURATION))
- ("tools/builtins/spawn-rate-limit.rkt"
-  (current-spawn-timestamps . OTHER_REVIEWED))
- ("tools/builtins/write.rkt"
-  (cumulative-write-budget . CONFIGURATION)
-  (current-max-write-bytes . CONFIGURATION))
- ("tools/file-mutation-queue.rkt"
-  (current-file-mutation-queue-hook . SERVICE_HANDLE))
- ("tools/scheduler-execution.rkt"
-  (max-parallel-tools . CONFIGURATION))
- ("tui/cell-diff-render.rkt"
-  (current-full-render-threshold . CONFIGURATION))
- ("tui/clipboard.rkt"
-  (current-clipboard-mode . CONFIGURATION))
- ("tui/commands/runtime-control.rkt"
-  (current-browser-launcher . SERVICE_HANDLE))
- ("tui/component.rkt"
-  (current-render-hooks . SERVICE_HANDLE))
- ("tui/input/state-types.rkt"
-  (current-input-prompt-width . CONFIGURATION))
- ("tui/keybindings/binding-resolver.rkt"
-  (current-keybindings-path . CONFIGURATION))
- ("tui/renderer.rkt"
-  (current-assert-width . CONFIGURATION))
- ("tui/render-loop/watchdog.rkt"
-  (current-streaming-watchdog-ms . CONFIGURATION)
-  (current-busy-watchdog-ms . CONFIGURATION))
- ("tui/render/status-line.rkt"
-  (current-show-context-pressure? . CONFIGURATION))
- ("tui/state-events/registry.rkt"
-  (current-event-reducers . SERVICE_HANDLE))
- ("tui/state-ui.rkt"
-  (widget-bar-height . CONFIGURATION))
- ("tui/terminal-input.rkt"
-  (current-decoder . SERVICE_HANDLE))
- ("tui/terminal.rkt"
-  (current-screen-size-provider . SERVICE_HANDLE)
-  (current-screen-size-cache-ttl-ms . CONFIGURATION))
- ("tui/theme.rkt"
-  (current-tui-theme . CONFIGURATION))
- ("tui/tui-render-loop.rkt"
-  (current-full-render-interval-frames . CONFIGURATION)
-  (current-resize-poll-interval-ms . CONFIGURATION)
-  (current-blink-interval-ms . CONFIGURATION)
-  (current-min-render-interval-ms . CONFIGURATION))
- ("tui/vdom-bridge.rkt"
-  (use-vdom-render? . CONFIGURATION))
- ("util/audit-log.rkt"
-  (current-audit-log-max-bytes . CONFIGURATION))
- ("util/capability.rkt"
-  (current-session-capabilities . OTHER_REVIEWED))
- ("util/error/output-guard.rkt"
-  (current-guarded-real-output-port . SERVICE_HANDLE))
- ("util/event/event-bus.rkt"
-  (current-circuit-breaker-cooldown-secs . CONFIGURATION)
-  (current-circuit-breaker-threshold . CONFIGURATION)
-  (current-event-bus-error-handler . SERVICE_HANDLE))
- ("util/event/event-macro.rkt"
-  (current-event-schema-registry . SERVICE_HANDLE)
-  (current-schema-version . CONFIGURATION)
-  (current-event-deserializer-registry . SERVICE_HANDLE)
-  (current-event-serializer-registry . SERVICE_HANDLE)
-  (current-event-field-registry . SERVICE_HANDLE))
- ("util/event/event-migration.rkt"
-  (current-event-migration-registry . SERVICE_HANDLE))
- ("util/iteration/decision.rkt"
-  (current-max-consecutive-tool-calls . CONFIGURATION))
- ("util/lockfile.rkt"
-  (current-locks-dir . CONFIGURATION))
- ("util/racket-source-validation.rkt"
-  (current-racket-parse-memory-limit-mb . CONFIGURATION)
-  (current-racket-parse-timeout-ms . CONFIGURATION))
- ("util/safe-mode/safe-mode-state.rkt"
-  (project-root . CONFIGURATION)
-  (current-safe-mode-config . CONFIGURATION)
-  (current-safe-mode . CONFIGURATION))
- ("util/truncation.rkt"
-  (output-overflow-dir . CONFIGURATION)))
+ ("runtime/context-assembly/state-inference.rkt" (current-state-inference-threshold . CONFIGURATION))
+ ("runtime/credentials/protocol.rkt" (current-shell-command-runner . SERVICE_HANDLE)
+                                     (current-external-command-runner . SERVICE_HANDLE))
+ ("runtime/goal/goal-runner.rkt" (current-goal-session-log-path . CONFIGURATION)
+                                 (current-simulated-prompt-sink . SERVICE_HANDLE)
+                                 (current-eval-timeout-secs . CONFIGURATION))
+ ("runtime/gsd-query.rkt" (current-gsd-mode-query . SERVICE_HANDLE))
+ ("runtime/iteration/retry-policy.rkt" (current-loop-cooldown-left . ITERATION_LOCAL))
+ ("runtime/iteration/step-executor.rkt" (current-post-tool-result-hook . SERVICE_HANDLE)
+                                        (current-reflection-prompt-enabled . CONFIGURATION))
+ ("runtime/tool-coordinator.rkt" (current-tool-dispatch-timeout-ms . CONFIGURATION))
+ ("runtime/memory/auto-extraction.rkt" (current-auto-extraction-min-confidence . CONFIGURATION)
+                                       (current-auto-extraction-enabled . CONFIGURATION))
+ ("runtime/memory/backends/external-protocol.rkt" (current-external-timeout-ms . CONFIGURATION)
+                                                  (current-external-backend-enabled . CONFIGURATION))
+ ("runtime/memory/conclusion-bridge.rkt" (current-conclusion-to-memory-bridge-enabled .
+                                                                                      CONFIGURATION))
+ ("runtime/memory/embeddings.rkt" (current-embedding-cache . SERVICE_HANDLE)
+                                  (current-batch-embedding-provider . CONFIGURATION)
+                                  (current-embedding-dimension . CONFIGURATION)
+                                  (current-embedding-provider . CONFIGURATION))
+ ("runtime/memory/reflection.rkt" (current-reflection-llm-fn . SERVICE_HANDLE)
+                                  (current-reflection-overlap-threshold . CONFIGURATION)
+                                  (current-reflection-min-group-size . CONFIGURATION))
+ ("runtime/memory/service.rkt" (current-auto-reflection-min-items . CONFIGURATION)
+                               (current-auto-reflection-enabled . CONFIGURATION)
+                               (current-memory-policy . CONFIGURATION)
+                               (current-memory-backend . SERVICE_HANDLE))
+ ("runtime/provider-retry.rkt" (current-provider-retry-ceiling-secs . CONFIGURATION)
+                               (current-provider-retry-max-retries . CONFIGURATION)
+                               (current-provider-retry-stall-max-consecutive . CONFIGURATION))
+ ("runtime/package.rkt" (current-packages-dir . CONFIGURATION))
+ ("runtime/safe-mode.rkt" (current-safe-mode-locked? . CONFIGURATION))
+ ("runtime/session/session-config.rkt" (current-context-assembly-options-parameter . CONFIGURATION)
+                                       (current-goal-loop-enabled? . CONFIGURATION)
+                                       (current-context-assembly-profile . CONFIGURATION)
+                                       (current-task-state-aware-rollout-rate . CONFIGURATION))
+ ("runtime/session/session-events.rkt" (current-mid-session-persisted-ids . OTHER_REVIEWED)
+                                       (current-mid-session-bridge-enabled . CONFIGURATION))
+ ("runtime/session/session-filesystem.rkt" (current-filesystem-backend . SERVICE_HANDLE))
+ ("runtime/session/session-mutation.rkt" (current-archive-entry-fn . SERVICE_HANDLE)
+                                         (current-prompt-operation-session . PROMPT_LOCAL))
+ ("runtime/session/session-persistence.rkt" (current-crash-log-dir . CONFIGURATION))
+ ("runtime/session/session-store-goal-task.rkt" (current-load-session-log-gt . SERVICE_HANDLE)
+                                                (current-append-entry!-gt . SERVICE_HANDLE))
+ ("runtime/session/session-store-tree.rkt" (current-append-entry! . SERVICE_HANDLE)
+                                           (current-load-session-log . SERVICE_HANDLE))
+ ("sandbox/evaluator.rkt" (current-sandbox-path-limit . CONFIGURATION)
+                          (current-sandbox-memory-limit . CONFIGURATION))
+ ("sandbox/gateway-bridge.rkt" (current-remote-executor . SERVICE_HANDLE)
+                               (current-execution-plane-timeout-ms . CONFIGURATION)
+                               (current-worker-args . CONFIGURATION)
+                               (current-worker-command . CONFIGURATION)
+                               (current-execution-plane-enabled . CONFIGURATION))
+ ("sandbox/limits.rkt" (current-max-processes . CONFIGURATION)
+                       (current-process-count . OTHER_REVIEWED))
+ ("sandbox/subprocess.rkt" (current-subprocess-trace-id . OTHER_REVIEWED)
+                           (subprocess-trace-counter . OTHER_REVIEWED)
+                           (current-secret-scrub-patterns . CONFIGURATION)
+                           (current-secret-scrub-allowlist . CONFIGURATION)
+                           (current-secret-scrub-denylist . CONFIGURATION))
+ ("sandbox/worker-tools.rkt" (current-worker-edit-before-write-hook . SERVICE_HANDLE)
+                             (current-worker-cumulative-limit . CONFIGURATION)
+                             (current-worker-write-limit . CONFIGURATION)
+                             (current-allowed-roots . CONFIGURATION))
+ ("tools/builtins/bash.rkt" (current-bash-execution-config . CONFIGURATION)
+                            (current-allowed-commands . CONFIGURATION)
+                            (current-execution-policy . CONFIGURATION))
+ ("tools/builtins/edit.rkt" (current-edit-before-final-replace-hook . SERVICE_HANDLE)
+                            (current-edit-before-replace-hook . SERVICE_HANDLE)
+                            (current-fuzzy-edit-enabled? . CONFIGURATION))
+ ("tools/builtins/spawn-coordinator.rkt" (current-agent-pool-limit . CONFIGURATION))
+ ("tools/builtins/spawn-rate-limit.rkt" (current-spawn-timestamps . OTHER_REVIEWED))
+ ("tools/builtins/write.rkt" (cumulative-write-budget . CONFIGURATION)
+                             (current-max-write-bytes . CONFIGURATION))
+ ("tools/file-mutation-queue.rkt" (current-file-mutation-queue-hook . SERVICE_HANDLE))
+ ("tools/scheduler-execution.rkt" (max-parallel-tools . CONFIGURATION))
+ ("tui/cell-diff-render.rkt" (current-full-render-threshold . CONFIGURATION))
+ ("tui/clipboard.rkt" (current-clipboard-mode . CONFIGURATION))
+ ("tui/commands/runtime-control.rkt" (current-browser-launcher . SERVICE_HANDLE))
+ ("tui/component.rkt" (current-render-hooks . SERVICE_HANDLE))
+ ("tui/input/state-types.rkt" (current-input-prompt-width . CONFIGURATION))
+ ("tui/keybindings/binding-resolver.rkt" (current-keybindings-path . CONFIGURATION))
+ ("tui/renderer.rkt" (current-assert-width . CONFIGURATION))
+ ("tui/render-loop/watchdog.rkt" (current-streaming-watchdog-ms . CONFIGURATION)
+                                 (current-busy-watchdog-ms . CONFIGURATION))
+ ("tui/render/status-line.rkt" (current-show-context-pressure? . CONFIGURATION))
+ ("tui/state-events/registry.rkt" (current-event-reducers . SERVICE_HANDLE))
+ ("tui/state-ui.rkt" (widget-bar-height . CONFIGURATION))
+ ("tui/terminal-input.rkt" (current-decoder . SERVICE_HANDLE))
+ ("tui/terminal.rkt" (current-screen-size-provider . SERVICE_HANDLE)
+                     (current-screen-size-cache-ttl-ms . CONFIGURATION))
+ ("tui/theme.rkt" (current-tui-theme . CONFIGURATION))
+ ("tui/tui-render-loop.rkt" (current-full-render-interval-frames . CONFIGURATION)
+                            (current-resize-poll-interval-ms . CONFIGURATION)
+                            (current-blink-interval-ms . CONFIGURATION)
+                            (current-min-render-interval-ms . CONFIGURATION))
+ ("tui/vdom-bridge.rkt" (use-vdom-render? . CONFIGURATION))
+ ("util/audit-log.rkt" (current-audit-log-max-bytes . CONFIGURATION))
+ ("util/capability.rkt" (current-session-capabilities . OTHER_REVIEWED))
+ ("util/error/output-guard.rkt" (current-guarded-real-output-port . SERVICE_HANDLE))
+ ("util/event/event-bus.rkt" (current-circuit-breaker-cooldown-secs . CONFIGURATION)
+                             (current-circuit-breaker-threshold . CONFIGURATION)
+                             (current-event-bus-error-handler . SERVICE_HANDLE))
+ ("util/event/event-macro.rkt" (current-event-schema-registry . SERVICE_HANDLE)
+                               (current-schema-version . CONFIGURATION)
+                               (current-event-deserializer-registry . SERVICE_HANDLE)
+                               (current-event-serializer-registry . SERVICE_HANDLE)
+                               (current-event-field-registry . SERVICE_HANDLE))
+ ("util/event/event-migration.rkt" (current-event-migration-registry . SERVICE_HANDLE))
+ ("util/iteration/decision.rkt" (current-max-consecutive-tool-calls . CONFIGURATION))
+ ("util/lockfile.rkt" (current-locks-dir . CONFIGURATION))
+ ("util/racket-source-validation.rkt" (current-racket-parse-memory-limit-mb . CONFIGURATION)
+                                      (current-racket-parse-timeout-ms . CONFIGURATION))
+ ("util/safe-mode/safe-mode-state.rkt" (project-root . CONFIGURATION)
+                                       (current-safe-mode-config . CONFIGURATION)
+                                       (current-safe-mode . CONFIGURATION))
+ ("util/truncation.rkt" (output-overflow-dir . CONFIGURATION)))

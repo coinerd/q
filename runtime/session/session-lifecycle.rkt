@@ -122,9 +122,7 @@
           [inject-system-instructions (-> (listof message?) (listof string?) (listof message?))])
          (struct-out exn:fail:session:busy))
 
-;; ============================================================
-;; Helpers
-;; ============================================================
+;; ── Helpers ──
 
 ;; session-log-path imported from session-types.rkt
 ;; ensure-persisted!, buffer-or-append! from agent-session.rkt
@@ -132,9 +130,7 @@
 ;; ============================================================
 ;; Pure helpers moved to session-lifecycle-transitions.rkt (v0.74.4)
 
-;; ============================================================
-;; build-session-context-for-prompt
-;; ============================================================
+;; ── build-session-context-for-prompt ──
 
 ;; build-session-context-for-prompt — context preparation: converts user-message,
 ;; appends to log, builds/updates index, walks tree via context-assembly,
@@ -204,9 +200,7 @@
 
   (context-build-result-context-with-system result))
 
-;; ============================================================
-;; dispatch-iteration
-;; ============================================================
+;; ── dispatch-iteration ──
 
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
@@ -376,9 +370,7 @@
     (stop-trace-logger! tracer)
     result))
 
-;; ============================================================
-;; run-prompt-internal
-;; ============================================================
+;; ── run-prompt-internal ──
 
 ;; Internal prompt execution, extracted for input hook gating.
 (define (run-prompt-internal sess
@@ -444,9 +436,7 @@
 
   (values sess final-result))
 
-;; ============================================================
-;; run-prompt!
-;; ============================================================
+;; ── run-prompt! ──
 
 ;;; run-prompt! : agent-session? (or/c string? message?)
 ;;;              [#:max-iterations (or/c integer? #f)]
@@ -607,5 +597,3 @@
                                     (log-warning "session-lifecycle: emergency persist failed: ~a"
                                                  (exn-message e)))])
          (ensure-persisted! sess))))))
-
-;; ============================================================

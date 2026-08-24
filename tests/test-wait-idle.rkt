@@ -10,6 +10,7 @@
 
 (require rackunit
          rackunit/text-ui
+         "helpers/fast-fixtures.rkt"
          "../util/event/event-bus.rkt"
          "../util/message/protocol-types.rkt"
          "../agent/wait-idle.rkt")
@@ -47,8 +48,8 @@
       ;; Give the waiter a moment to subscribe, then signal the publisher
       (sync/timeout 0.05 never-evt)
       (channel-put ready-ch 'go)
-      ;; Wait for result
-      (sync/timeout 2.0 (alarm-evt (+ (current-inexact-milliseconds) 2000)))
+      ;; Wait for result — resolves as soon as the box is set, no fixed delay
+      (wait-until (lambda () (unbox result-box)) 2.0)
       (check-equal? (unbox result-box) 'idle))
 
     (test-case "wait-for-idle! returns timeout when no event"
@@ -72,7 +73,8 @@
                 (void)))
       (sync/timeout 0.05 never-evt)
       (channel-put ready-ch 'go)
-      (sync/timeout 2.0 (alarm-evt (+ (current-inexact-milliseconds) 2000)))
+      ;; Wait for result — resolves as soon as the box is set, no fixed delay
+      (wait-until (lambda () (unbox result-box)) 2.0)
       (check-equal? (unbox result-box) 'idle))
 
     (test-case "wait-for-idle! responds to iteration.ended too"
@@ -88,7 +90,8 @@
                 (void)))
       (sync/timeout 0.05 never-evt)
       (channel-put ready-ch 'go)
-      (sync/timeout 2.0 (alarm-evt (+ (current-inexact-milliseconds) 2000)))
+      ;; Wait for result — resolves as soon as the box is set, no fixed delay
+      (wait-until (lambda () (unbox result-box)) 2.0)
       (check-equal? (unbox result-box) 'idle))))
 
 (run-tests wait-idle-tests)

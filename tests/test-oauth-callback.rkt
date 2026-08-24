@@ -11,6 +11,7 @@
          racket/port
          racket/tcp
          racket/file
+         "helpers/fast-fixtures.rkt"
          "../runtime/auth/oauth-callback.rkt"
          "../runtime/auth/oauth.rkt")
 
@@ -33,7 +34,7 @@
       (check-not-equal? s1 s2 "state should be unique"))
 
     (test-case "start-callback-server returns valid port and functions"
-      (define-values (port state verifier get-code) (start-callback-server #:timeout 5))
+      (define-values (port state verifier get-code) (start-callback-server #:timeout 1))
       (check-true (exact-positive-integer? port))
       (check-true (string? state))
       (check-true (string? verifier))
@@ -47,7 +48,6 @@
       ;; Simulate OAuth callback in a thread
       (thread
        (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
          (with-handlers ([exn:fail? (lambda (e) (void))])
            (define-values (in out) (tcp-connect "127.0.0.1" port))
            (fprintf out
@@ -64,7 +64,6 @@
       (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
       (thread
        (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
          (with-handlers ([exn:fail? (lambda (e) (void))])
            (define-values (in out) (tcp-connect "127.0.0.1" port))
            (fprintf
@@ -80,7 +79,6 @@
       (define-values (port state verifier get-code) (start-callback-server #:timeout 10))
       (thread
        (lambda ()
-         (sync (alarm-evt (+ (current-inexact-milliseconds) 500)))
          (with-handlers ([exn:fail? (lambda (e) (void))])
            (define-values (in out) (tcp-connect "127.0.0.1" port))
            (fprintf out

@@ -256,7 +256,11 @@
 ;; W8: every file record (and therefore every failure record) carries a
 ;; distinct `status` plus the execution profile and runner mode, so shard JSON
 ;; artifacts are interpretable without the workflow context that produced them.
-(define (annotate-file-jsexpr js r #:profile [profile #f] #:mode [mode #f])
+(define (annotate-file-jsexpr js
+                              r
+                              #:profile [profile #f]
+                              #:mode [mode #f]
+                              #:execution-mode [execution-mode #f])
   (define base
     (hash-set* js
                'status
@@ -270,10 +274,17 @@
       (if s
           (hash-set base 'execution_profile s)
           base)))
-  (let ([s (optional-id-string mode)])
-    (if s
-        (hash-set with-profile 'runner_mode s)
-        with-profile)))
+  (define with-mode
+    (let ([s (optional-id-string mode)])
+      (if s
+          (hash-set with-profile 'runner_mode s)
+          with-profile)))
+  ;; W0 fast-gate budget: actual per-file execution mode (schema-additive).
+  ;; Values: `grouped-in-process` (dynamic-require in the runner process,
+  ;; amortizing boot over `files_per_process` files) vs `subprocess`.
+  (if execution-mode
+      (hash-set with-mode 'execution_mode (symbol->string execution-mode))
+      with-mode))
 
 (define (shard->jsexpr shard)
   (if (pair? shard)
@@ -360,13 +371,21 @@
                              #:profile [profile 'local]
                              #:shard [shard #f]
                              #:runner-version [runner-version "unknown"]
-                             #:extra [extra #f])
+                             #:extra [extra #f]
+                             #:actual-modes [actual-modes #f])
   (define passed-files (count passed-result? results))
   (define failed-files (count failed-result? results))
   (define timeout-files (count timeout-result? results))
   (define skipped-files (count skipped-by-profile-result? results))
   (define counts (category-counts results))
   (define ledger-summary (and ledger (summarize-ledger-results ledger results)))
+  (define (file-execution-mode r)
+    (and actual-modes
+         (let ([p (test-file-result-path r)])
+           ;; W2 FIX: result paths for metadata-missing files are stored as
+           ;; strings (not path? objects); path->string on them raises a
+           ;; contract violation, aborting JSON output (wave W2 blocker).
+           (hash-ref actual-modes (if (path? p) (path->string p) p) #f))))
   (define payload
     (hasheq 'suite
             (symbol->string suite)
@@ -413,10 +432,15 @@
                        (annotate-file-jsexpr (test-result->ledger-jsexpr r ledger)
                                              r
                                              #:profile profile
-                                             #:mode mode))
+                                             #:mode mode
+                                             #:execution-mode (file-execution-mode r)))
                      results)
                 (map (lambda (r)
-                       (annotate-file-jsexpr (test-result->jsexpr r) r #:profile profile #:mode mode))
+                       (annotate-file-jsexpr (test-result->jsexpr r)
+                                             r
+                                             #:profile profile
+                                             #:mode mode
+                                             #:execution-mode (file-execution-mode r)))
                      results))))
   (define payload*
     (if extra

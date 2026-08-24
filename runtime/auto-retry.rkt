@@ -105,6 +105,10 @@
                             exact-nonnegative-integer?)])
          ;; Injectable random source (W1)
          current-random-source
+         ;; Fake-clock seam for deterministic backoff tests (W2):
+         ;; 1.0 = real wall-clock backoff; 0.0 = skip the sleep while keeping
+         ;; the computed delay in retry events/stats.
+         current-auto-retry-sleep-scale
          ;; Retry-after parsing (W1)
          (contract-out [parse-retry-after (-> (or/c string? #f) (or/c exact-nonnegative-integer? #f))]
                        ;; v1.00.13 W3 (#9473): structured retry-after source (RL-7)
@@ -134,6 +138,11 @@
 ;; Default: #f means use the system random source (random).
 ;; For deterministic testing, set to a thunk that returns values between 0.0 and 1.0.
 (define current-random-source (make-parameter #f))
+
+;; Fake-clock seam for deterministic backoff tests (W2): scales the wall-clock
+;; duration of each backoff sleep without altering the computed delay that is
+;; reported in retry events / stats. 1.0 = real backoff (production default).
+(define current-auto-retry-sleep-scale (make-parameter 1.0))
 
 ;; Generate a random float in [0.0, 1.0) using the injected source or system random.
 (define (random-float)
@@ -634,7 +643,15 @@
                ;; Call retry callback if provided (include error-type and selected delay)
                (when on-retry
                  (on-retry (add1 attempt) max-retries next-delay (exn-message exn) err-type))
-               (sleep-cancellable! next-delay cancellation-token)
+               ;; W2: injectable sleep-scale seam — 1.0 = real wall-clock backoff
+               ;; (production default), 0.0 = deterministic tests. The computed
+               ;; delay is unchanged; only the wall-clock sleep is scaled, so
+               ;; retry events/stats still report the full computed delay.
+               (define scaled-delay
+                 (exact-round (* (current-auto-retry-sleep-scale) next-delay)))
+               (if (= scaled-delay next-delay)
+                   (sleep-cancellable! next-delay cancellation-token)
+                   (sleep-cancellable! scaled-delay cancellation-token))
                (loop (add1 attempt)
                      next-delay
                      (+ total-delay next-delay)

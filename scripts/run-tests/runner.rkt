@@ -75,6 +75,12 @@
          run-suite-once
          main)
 
+;; ── W0 fast-gate budget instrumentation (schema-additive) ─────────────
+;; Wall clock at module load: the retained per-job JSON can then attribute
+;; time inside the fast gate (runner boot → selection → compile/require
+;; warmup → execution → summary) instead of one undifferentiated number.
+(define runner-start-ms (current-inexact-milliseconds))
+
 ;; ----------------------------------------------------------------------
 ;; Body extracted verbatim from run-tests.rkt (v0.99.43 W0c).
 ;; ----------------------------------------------------------------------
@@ -160,8 +166,19 @@
                     failed
                     total))
 
+;; Per-file execution mode attribution (W0 fast-budget): records how each
+;; file actually ran ('grouped-in-process vs 'subprocess) so the JSON report
+;; can separate process-boot-dominated files from in-process ones. Keys are
+;; resolved path strings (JSON-safe), values are symbols.
+(define execution-modes (make-hash))
+(define (mark-execution-mode! resolved-path mode)
+  (hash-set! execution-modes (path->string (simplify-path resolved-path)) mode))
+(define (execution-mode-of resolved-path)
+  (hash-ref execution-modes (path->string (simplify-path resolved-path)) 'subprocess))
+
 (define (run-single-file/subprocess test-path #:timeout [timeout #f])
   (define resolved-path (resolve-test-path test-path))
+  (mark-execution-mode! resolved-path 'subprocess)
   (define file-timeout (file-timeout-ms test-path timeout))
   (define t0 (current-inexact-milliseconds))
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
@@ -204,6 +221,27 @@
 (define (in-process-eligible? resolved-path)
   (module-plus-test-file? resolved-path))
 
+;; ── W1 v1.00.16 grouped eligibility contract ──────────────────────────
+;; A fast file qualifies for grouped in-process execution ONLY when it
+;; declares no `@isolation process`/`@isolation subprocess`, declares no
+;; `@mutates` (missing, `none`, or an explicit false-y token), AND uses the
+;; `(module+ test ...)` submodule form. Every other file keeps today's
+;; subprocess execution path byte-for-byte. Documented in
+;; q/docs/TEST_CONVENTIONS.md (schema contract) and audited per file in
+;; q/docs/reports/unit-fast-eligibility-v1.00.16.md.
+(define (mutates-true? raw)
+  (and raw
+       (not (member (string-downcase (string-trim raw))
+                    '("" "none" "false" "no" "0" "off")))))
+
+(define (grouped-eligible? path)
+  (define rp (resolve-test-path path))
+  (define meta (get-file-metadata rp))
+  (define isolation (hash-ref meta 'isolation #f))
+  (and (not (member isolation '("process" "subprocess")))
+       (not (mutates-true? (hash-ref meta 'mutates #f)))
+       (module-plus-test-file? rp)))
+
 ;; raco test executes each file with current-directory bound to that file's
 ;; directory; grouped/in-process execution must do the same or tests that
 ;; resolve sibling paths (e.g. "../scripts/foo.rkt") break.
@@ -232,6 +270,7 @@
     [(not (in-process-eligible? resolved-path))
      (run-single-file/subprocess test-path #:timeout timeout)]
     [else
+     (mark-execution-mode! resolved-path 'grouped-in-process)
      (define file-timeout (file-timeout-ms test-path timeout))
      (define t0 (current-inexact-milliseconds))
      (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
@@ -289,7 +328,12 @@
     [(null? lst) '()]
     [else (cons (take lst (min n (length lst))) (split-list (drop lst (min n (length lst))) n))]))
 
-(define (run-all-files files jobs timeout #:mode [mode 'subprocess])
+(define (run-all-files files
+                       jobs
+                       timeout
+                       #:mode [mode 'subprocess]
+                       #:first-batch-ms-box [first-batch-ms-box #f])
+  (define batch-t0 (current-inexact-milliseconds))
   (define results (box '()))
   (define results-lock (make-semaphore 1))
   (define (add-result! r)
@@ -313,6 +357,8 @@
                   (flush-output)
                   (add-result! result)))))
     (for-each thread-wait batch-threads)
+    (when (and first-batch-ms-box (= batch-idx 0))
+      (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) batch-t0))))
     (set! gc-counter (add1 gc-counter))
     (when (or (= 0 (modulo gc-counter 5)) (= gc-counter total-batches))
       (collect-garbage 'major)))
@@ -349,8 +395,12 @@
                         json-out
                         ledger
                         profile
-                        #:shard [shard #f])
+                        #:shard [shard #f]
+                        #:phases [phases (hasheq)]
+                        #:first-batch-ms-box [first-batch-ms-box #f])
   (define t0 (current-inexact-milliseconds))
+  (define exec-start-ms (hash-ref phases 'execution_start_ms #f))
+  (define selection-end-ms (hash-ref phases 'selection_end_ms #f))
   (define-values (skipped-files runnable-files)
     (partition (lambda (f)
                  (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
@@ -374,13 +424,17 @@
             (if (= (length serial-files) 1) "" "s")))
   (define serial-results
     (if (pair? serial-files)
-        (run-all-files serial-files 1 timeout-ms #:mode mode)
+        (run-all-files serial-files 1 timeout-ms #:mode mode #:first-batch-ms-box first-batch-ms-box)
         '()))
   (when (pair? serial-files)
     (restore-repo-surfaces! base-dir))
   (define parallel-results
     (if (pair? parallel-files)
-        (run-all-files parallel-files jobs timeout-ms #:mode mode)
+        (run-all-files parallel-files
+                       jobs
+                       timeout-ms
+                       #:mode mode
+                       #:first-batch-ms-box first-batch-ms-box)
         '()))
   (define file-order
     (for/hash ([f (in-list suite-files)]
@@ -391,7 +445,20 @@
           <
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
+  (define exec-end-ms (current-inexact-milliseconds))
   (define runner-version (detect-runner-version))
+  ;; Actual per-file execution mode, keyed by resolved path string. Skipped
+  ;; files never ran, so they carry no mode entry.
+  (define actual-mode-hash
+    (and json-out
+         (for/hash ([r (in-list results)]
+                    #:unless (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
+           (define p (test-file-result-path r))
+           (define key
+             (path->string (simplify-path (if (path? p)
+                                              p
+                                              (string->path p)))))
+           (values key (hash-ref execution-modes key 'subprocess)))))
   (print-summary results total-elapsed)
   (print-run-summary-record results
                             #:suite suite-label
@@ -409,7 +476,20 @@
                          #:ledger ledger
                          #:profile profile
                          #:shard shard
-                         #:runner-version runner-version))
+                         #:runner-version runner-version
+                         #:extra
+                         (and (or exec-start-ms selection-end-ms)
+                              (let ([m (make-hasheq)])
+                                (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
+                                (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
+                                (when exec-start-ms
+                                  (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
+                                (when selection-end-ms
+                                  (hash-set! m 'selection_end_ms (exact-round selection-end-ms)))
+                                (when (and first-batch-ms-box (unbox first-batch-ms-box))
+                                  (hash-set! m 'first_batch_ms (unbox first-batch-ms-box)))
+                                m))
+                         #:actual-modes actual-mode-hash))
   (when ledger
     (print-ledger-summary ledger results))
   (save-failure-logs results #:profile profile #:mode mode)
@@ -732,6 +812,12 @@
             repeat
             (if (= repeat 1) "" "s")))
   (define last-results (box '()))
+  ;; W0 fast-gate phases: selection finished and execution starts at the
+  ;; repeat loop; run-suite-once records runner_start/execution_end itself.
+  (define phases (make-hasheq))
+  (hash-set! phases 'selection_end_ms (current-inexact-milliseconds))
+  (hash-set! phases 'execution_start_ms (current-inexact-milliseconds))
+  (define first-batch-ms-box (box #f))
   ;; W5/W6 post-run evidence: embed selection + prioritization + changed
   ;; files into the results JSON, and surface the FIRST failing selected
   ;; test (with its selection and priority reason) on prioritized runs.
@@ -770,7 +856,9 @@
                       json-out
                       ledger
                       profile
-                      #:shard (and (> shard-total 1) (cons shard-index shard-total))))
+                      #:shard (and (> shard-total 1) (cons shard-index shard-total))
+                      #:phases phases
+                      #:first-batch-ms-box first-batch-ms-box))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (emit-impact-evidence!)

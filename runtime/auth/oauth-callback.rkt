@@ -21,7 +21,8 @@
           [generate-state (-> string?)]
           [start-callback-server
            (->* ()
-                (#:timeout exact-positive-integer?)
+                (#:timeout exact-positive-integer?
+                 #:on-complete (or/c #f (-> any/c any)))
                 (values exact-positive-integer? string? string? (-> (or/c string? #f))))])
          base64url-encode-bytes
          parse-query
@@ -52,7 +53,7 @@
 ;; to a semaphore, so try-complete! never blocks even without a consumer.
 ;; Atomic completion via semaphore-try-wait ensures only one result is stored.
 ;; Returns (values port state code-verifier get-code).
-(define (start-callback-server #:timeout [timeout 120])
+(define (start-callback-server #:timeout [timeout 120] #:on-complete [on-complete #f])
   (define state (generate-state))
   (define code-verifier (random-base64url 32))
   ;; Stored result: box holds the result once, semaphore signals availability.
@@ -88,6 +89,10 @@
                                           (log-debug "oauth-callback: kill-thread failed: ~a"
                                                      (exn-message e)))])
                (kill-thread server-thread)))
+           ;; Completion event (test seam, optional): runs AFTER the listener is
+           ;; closed and the result is stored, so observers can treat it as
+           ;; "fully complete without consuming". Default #f → no-op.
+           (when on-complete (on-complete code))
            #t)))
 
   ;; Serve in a background thread — accept connections until the listener is

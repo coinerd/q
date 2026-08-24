@@ -163,6 +163,14 @@
     [(regexp-match? network-unsafe-rx content) "network"]
     [else #f]))
 
+;; raco test runs every .rkt in this directory at module load; keep this
+;; one-off's side effects out of the suite (W0: raco test must pass).
+(define invoked-directly?
+  (let ([run-file (find-system-path 'run-file)])
+    (and (path? run-file)
+         (let ([base (file-name-from-path run-file)])
+           (and base (equal? (path->string base) "w3-migrate.rkt"))))))
+
 ;; ------------------------------------------------------------
 ;; Header rewriting
 ;; ------------------------------------------------------------
@@ -271,12 +279,13 @@
 ;; Main
 ;; ------------------------------------------------------------
 
-(define all-files (collect-test-files 'all))
-(define changed 0)
-(for ([f (in-list all-files)]
-      [i (in-naturals)])
-  (when (migrate-file f)
-    (set! changed (add1 changed)))
-  (when (zero? (modulo (add1 i) 200))
-    (printf "processed ~a/~a~n" (add1 i) (length all-files))))
-(printf "MIGRATION DONE: ~a/~a files rewritten~n" changed (length all-files))
+(when invoked-directly?
+  (define all-files (collect-test-files 'all))
+  (define changed 0)
+  (for ([f (in-list all-files)]
+        [i (in-naturals)])
+    (when (migrate-file f)
+      (set! changed (add1 changed)))
+    (when (zero? (modulo (add1 i) 200))
+      (printf "processed ~a/~a~n" (add1 i) (length all-files))))
+  (printf "MIGRATION DONE: ~a/~a files rewritten~n" changed (length all-files)))

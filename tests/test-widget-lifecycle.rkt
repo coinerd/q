@@ -8,6 +8,7 @@
 
 (require rackunit
          rackunit/text-ui
+         "helpers/fast-fixtures.rkt"
          "../extensions/widget-lifecycle.rkt"
          "../tui/state.rkt"
          "../tui/component.rkt")
@@ -308,8 +309,9 @@
                   (list-lifecycle-widgets)
                   (unregister-lifecycle-widget! id)
                   (set-box! done (add1 (unbox done))))))
-      ;; Wait for all threads to finish (with generous timeout)
-      (sync/timeout 10 (alarm-evt (+ (current-inexact-milliseconds) 10000)))
+      ;; Wait until all threads report done — resolves the moment the last
+      ;; thread finishes instead of after a fixed 10 s worst-case delay.
+      (wait-until (lambda () (= (unbox done) n)) 10.0)
       (check-equal? (unbox done) n "all concurrent operations completed")
       ;; Cleanup
       (for ([i (in-range 5)])
