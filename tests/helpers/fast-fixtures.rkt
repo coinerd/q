@@ -2,7 +2,7 @@
 
 ;; q/tests/helpers/fast-fixtures.rkt — shared builders for fast-suite tests.
 ;;
-;; W2 fast-timesink remediation (v1.00.16): hoisted from
+;; W2 fast-timesink remediation (current release train): hoisted from
 ;; tests/test-provider-retry-telemetry.rkt, where the same deterministic-retry
 ;; parameterize block was constructed three times. The fixture activates the
 ;; auto-retry fake-clock seam so provider-retry tests exercise the full retry
@@ -33,7 +33,9 @@
     (cond
       [v v]
       [(>= (current-inexact-milliseconds) deadline) v]
-      [else (sleep 0.01) (loop)])))
+      [else
+       (sleep 0.01)
+       (loop)])))
 
 ;; Runs thunk with deterministic retry behavior:
 ;;  - current-random-source returns a deterministic 1.0 (max backoff), and
@@ -42,10 +44,9 @@
 ;;    is skipped (production default scale is 1.0, unchanged).
 ;; When #:max-retries is given, current-provider-retry-max-retries is pinned
 ;; to that value for the dynamic extent; otherwise the ambient value is kept.
-(define (with-deterministic-retries thunk
-                                    #:max-retries [max-retries #f])
+(define (with-deterministic-retries thunk #:max-retries [max-retries #f])
   (parameterize ([current-random-source (lambda () 1.0)]
                  [current-auto-retry-sleep-scale 0.0]
-                 [current-provider-retry-max-retries
-                  (or max-retries (current-provider-retry-max-retries))])
+                 [current-provider-retry-max-retries (or max-retries
+                                                         (current-provider-retry-max-retries))])
     (thunk)))

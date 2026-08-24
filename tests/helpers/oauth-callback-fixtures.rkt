@@ -3,7 +3,7 @@
 ;; q/tests/helpers/oauth-callback-fixtures.rkt — deterministic fixtures for
 ;; OAuth callback-server tests.
 ;;
-;; W2 fast-timesink remediation (v1.00.16): hoisted from
+;; W2 fast-timesink remediation (current release train): hoisted from
 ;; tests/test-oauth-callback-security.rkt and
 ;; tests/test-oauth-callback-nonblocking.rkt, which previously waited on fixed
 ;; `sleep`/alarm-evt delays and probed the listener with raw TCP connects.
@@ -52,10 +52,7 @@
 (define (callback-send-request port state code)
   (with-handlers ([exn:fail? (lambda (e) (void))])
     (define-values (in out) (tcp-connect "127.0.0.1" port))
-    (fprintf out
-             "GET /callback?code=~a&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n"
-             code
-             state)
+    (fprintf out "GET /callback?code=~a&state=~a HTTP/1.1\r\nHost: localhost\r\n\r\n" code state)
     (flush-output out)
     (close-output-port out)
     (close-input-port in)))

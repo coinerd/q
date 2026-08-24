@@ -7,7 +7,7 @@
 ;;; tests/test-oauth-callback-nonblocking.rkt — v0.59.12 W0 (#5531)
 ;;; Tests proving OAuth callback completion is nonblocking without a consumer.
 ;;;
-;;; W2 (v1.00.16) remediation: fixed `sleep`/alarm-evt waits and unsafe
+;;; W2 remediation (current release train): fixed `sleep`/alarm-evt waits and unsafe
 ;;; listener probes replaced by the #:on-complete production seam + explicit
 ;;; semaphore waits from helpers/oauth-callback-fixtures.rkt. Every test-case
 ;;; and assertion is preserved one-for-one; no test deleted, weakened, or

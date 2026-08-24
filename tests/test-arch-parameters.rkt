@@ -222,7 +222,7 @@
       ;; Unification W3 (#9473): +1 — current-provider-http-sendrecv in
       ;; llm/http-helpers.rkt (injectable HTTP boundary).
       ;; BUG-0019 W2 (#9507): +1 — current-conn-pool in llm/conn-pool.rkt.
-      ;; v1.00.16 W2: +1 — current-auto-retry-sleep-scale in
+      ;; W2 (current release train): +1 — current-auto-retry-sleep-scale in
       ;; runtime/auto-retry.rkt (deterministic backoff test seam).
       (check-equal? (length inventory-entries)
                     204

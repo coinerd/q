@@ -1,3 +1,58 @@
+## v1.00.16 — 2026-08-24
+
+> Released 2026-08-24. BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate
+> and TDD-adoption campaign (W0–W4), and the connection-pool chunked-body
+> fix that made pooling safe to re-enable everywhere.
+
+### Fixed
+
+- **BUG-0020 — `/go` executor-inheritance contract violation (#9509).**
+  `executor-inheritance.rkt` widened to accept the full session-config struct;
+  wave executors no longer die with a contract error at spawn. Regression test
+  added (`test-executor-inheritance.rkt`).
+- **BUG-0021 — pooled chunked-body corruption (#9510).** Pooled connections did
+  not decode `Transfer-Encoding: chunked`, so raw hex chunk sizes were spliced
+  into SSE `data:` lines at TCP chunk boundaries — surfacing as malformed
+  tool-call JSON ("model typos"). New RFC 7230 decoder `make-chunked-input-port`
+  in `llm/conn-pool.rkt`: byte-exact reassembly across mid-line splits,
+  0-chunk + trailers ⇒ connection stays reusable, framing anomalies ⇒ pool
+  fault. Regression-tested against a mock 7-byte-chunk server; long-generation
+  live bake verified clean, and `networking.pool.enabled` is now ON by default
+  in local + VPS configs.
+
+### Changed
+
+- **Prepared-env fast-gate cutover (W3, #9518).** The reusable
+  `.github/actions/setup-racket` action gained a prepared-environment path
+  (96 lines): exact-cache restore with package preflight, relink fallback, and
+  guarded install. `ci.yml` routes lanes through it behind
+  `RACKET_PREPARED_ARTIFACT`; rollback is a one-variable revert documented in
+  `docs/reports/test-regression-log.md`.
+- **`FAST_SHARD_COUNT` guarded study (W3).** Shard-count override wired through
+  ci.yml matrix generation with cache-policy documentation in
+  `docs/reports/CI-RACKET-CACHE-POLICY.md`; decision recorded: KEEP-3.
+
+### Added
+
+- **v1.00.16 W1+W2 banked work (#9511).** `grouped-eligible?` runner contract;
+  oauth `#:on-complete` seam with deterministic semaphore sync
+  (`test-oauth-callback-nonblocking` 8.23 s → 1.40 s); shared fixture builders
+  `tests/helpers/{fast,oauth-callback}-fixtures.rkt`;
+  `current-auto-retry-sleep-scale` parameter; `--json-out` crash fix in the
+  runner/reporting path (string result paths → `path->string`); timesink
+  remediation report `docs/reports/fast-timesink-remediation-v1.00.16.md`.
+- **Halving-objective baseline of record (W4, #9519).** Regenerable
+  `docs/reports/test-feedback-baseline-v1.00.16.{md,json}` plus
+  `fast-gate-budget-v1.00.16.{md,json}` attribution companion, generated from
+  retained CI runs 32745843124/32748197712; `baseline-report.rkt --check`
+  proves byte-identical regeneration. Honest result recorded: sample p50
+  627 s vs target ≤ 244 s (ratio 1.2848×) — MISSED; remaining cost attributed
+  to legacy setup install path (343/348 s) + max shard (276/287 s); next lever
+  (warm prepared-env restore observation) scheduled for remeasure 2026-09-30.
+  TDD plan adoption-status entry and regression-log section appended.
+- **Governance:** `sync-version.rkt` now excludes `TDD-TEST-STRATEGY-PLAN.md`,
+  mirroring the existing `lint-version.rkt` exclusion.
+
 ## v1.00.15 — 2026-08-24
 
 > BUG-0019 remediation: peer FIN/CLOSE-WAIT mid-stream is now detected in
