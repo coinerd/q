@@ -1,6 +1,8 @@
 ## v1.00.16 — 2026-08-24
 
-> Released 2026-08-24. BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate
+Released 2026-08-24.
+
+> BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate
 > and TDD-adoption campaign (W0–W4), and the connection-pool chunked-body
 > fix that made pooling safe to re-enable everywhere.
 
