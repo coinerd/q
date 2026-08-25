@@ -17,7 +17,8 @@
                        [loop-state-events (-> loop-state? (listof any/c))]
                        [state-add-message! (-> loop-state? any/c void?)]
                        [state-add-event! (-> loop-state? any/c void?)]
-                       [current-empty-response-retried? (parameter/c boolean?)]))
+                       [current-empty-response-retried? (parameter/c boolean?)]
+                       [current-empty-response-nudge (parameter/c (or/c #f string?))]))
 
 ;; ============================================================
 ;; v0.99.83 W2: Empty-response auto-retry tracking
@@ -27,6 +28,17 @@
 ;; attempted. Prevents infinite retry loops when the model repeatedly
 ;; produces thinking-only responses.
 (define current-empty-response-retried? (make-parameter #f))
+
+;; v1.00.17 W3 (#9514): when non-#f, the empty-response retry injects THIS
+;; string as the next user message instead of the generic output nudge. The
+;; GSD wave-executor path parameterizes it with executor-reanchor-prompt so
+;; a thinking-only turn inside a wave retries ROLE-ANCHORED (the model is
+;; re-told it is the implementation executor and ordered to continue) rather
+;; than from free-floating conversation state — the v1.00.16 W3 attempt-2
+;; failure mode where the model reinterpreted itself as an interactive
+;; assistant ("What would you like to do next?"). Session-owned per
+;; parameterize extent; #f → generic nudge (interactive sessions unchanged).
+(define current-empty-response-nudge (make-parameter #f))
 
 ;; ============================================================
 ;; Internal struct — mutable boxes for accumulation

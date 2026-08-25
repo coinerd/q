@@ -125,6 +125,10 @@
           [set-campaign-wave-status! (-> campaign-wave? symbol? void?)]
           [set-campaign-wave-attempt-count! (-> campaign-wave? exact-nonnegative-integer? void?)]
           [set-campaign-wave-current-attempt! (-> campaign-wave? (or/c #f campaign-attempt?) void?)]
+          [campaign-wave-delivery-branch (-> campaign-wave? string?)]
+          [campaign-wave-delivery-head-sha (-> campaign-wave? string?)]
+          [set-campaign-wave-delivery-branch! (-> campaign-wave? string? void?)]
+          [set-campaign-wave-delivery-head-sha! (-> campaign-wave? string? void?)]
           [campaign-attempt-id (-> campaign-attempt? string?)]
           [campaign-attempt-fence-token (-> campaign-attempt? (or/c #f exact-nonnegative-integer?))]
           [campaign-attempt-started-at (-> campaign-attempt? exact-integer?)]
@@ -152,10 +156,21 @@
   #:constructor-name make-campaign-wave-descriptor)
 
 ;; Mutable per-wave projection of the durable campaign record.
-(struct campaign-wave (index title status attempt-count current-attempt)
+;; v1.00.17 W7 (#9512b): delivery-branch / delivery-head-sha record the
+;; branch the wave's changes live on and the head SHA at approval time.
+;; #:auto (default "") keeps the 5-arg constructor unchanged, so legacy
+;; campaign records on disk remain loadable.
+(struct campaign-wave
+        (index title
+               status
+               attempt-count
+               current-attempt
+               [delivery-branch #:auto]
+               [delivery-head-sha #:auto])
   #:transparent
   #:mutable
-  #:constructor-name make-campaign-wave)
+  #:constructor-name make-campaign-wave
+  #:auto-value "")
 
 ;; Validated constructor for public use — enforces domain constraints per §24.
 (define (make-campaign-wave* index title status attempt-count current-attempt)

@@ -168,7 +168,14 @@ use thinking-idle and/or body-read instead"
        (make-conn-pool #:idle-ttl-secs (let ([v (hash-ref pool-config 'idle-ttl-secs 55)])
                                          (if (exact-positive-integer? v) v 55))
                        #:max-per-host (let ([v (hash-ref pool-config 'max-per-host 4)])
-                                        (if (exact-positive-integer? v) v 4))))
+                                        (if (exact-positive-integer? v) v 4))
+                       ;; BUG-0022 W1B: per-host idle-TTL overrides
+                       ;; (networking.pool.host-idle-ttl, host → secs) so
+                       ;; aggressive keep-alive closers (e.g. api.z.ai) can be
+                       ;; pinned below the global TTL. Non-map / empty / all-
+                       ;; invalid values degrade to "no overrides".
+                       #:host-idle-ttl (let ([v (hash-ref pool-config 'host-idle-ttl #f)])
+                                         (if (hash? v) v #f))))
       ;; Flag off (or malformed): guarantee disabled passthrough.
       (current-conn-pool #f)))
 

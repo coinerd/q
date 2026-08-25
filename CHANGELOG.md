@@ -1,3 +1,50 @@
+## v1.00.17 — 2026-08-25
+
+Released 2026-08-25.
+
+> v1.00.17: the /go executor-hardening campaign (#9512–#9516), BUG-0022
+> (#9517) remediation, the W8 integration bake, and the v1.00.17 release.
+
+### Features
+
+- **#9512 — per-wave worktree isolation.** `/go` wave executors run in
+  dedicated git worktrees (`gsd.worktree-isolation`, default **ON** since the
+  W8 bake; `#:isolate? #f` disables for tests), so concurrent waves can no
+  longer read or clobber each other's uncommitted trees.
+- **#9515 — auto-retry with failure context.** A failed wave delivery attempt
+  no longer silently ends the campaign: the executor injects the recorded
+  failure reason into the retry prompt ("Previous attempt failed — adapt").
+- **#9513 — mutation-stall steering.** Repeated identical tool calls without
+  intervening text now trigger steering that forces a concrete implementation
+  step instead of an infinite exploration loop.
+- **#9514 — role re-anchor after empty response.** An empty/whitespace-only
+  model response re-anchors the executor role instead of continuing with a
+  decontextualized agent.
+- **#9516 — shell-risk false-positive severity.** The shell-risk classifier no
+  longer aborts benign multi-command lines; findings are severity-graded.
+- **#9518-lesson — branch-based delivery verification (W5).** Wave DONE now
+  requires evidence against the wave branch's *pushed* head SHA, never a local
+  claim — making "branch merged before its final commit existed upstream"
+  unrepresentable.
+- **BUG-0022 (#9517) remediation (W1B/W2B).** Connection-pool stale keep-alive
+  reuse now transparently retries; the health gate no longer counts same-turn
+  retries against the budget (5 → silent truncation to 2 fixed).
+
+### Bug Fixes
+
+- **`release-dry-run.rkt` cwd fragility (W8).** The script resolved
+  `util/version.rkt` relative to the caller's cwd, so wave verify commands
+  that run it from the campaign base-dir (the parent of `q/`) failed with
+  "Run from q/ project root". It now resolves its project root from its own
+  file location (`scripts/` always sits directly under `q/`) and runs all
+  checks with `cwd = q/`; exit-code semantics unchanged (6/6 checks).
+
+### Reports
+
+- `docs/reports/GSD-EXECUTOR-HARDENING-BAKE-v1.00.17.md` — W8 live-bake
+  evidence: dogfooded worktree isolation, branch-based verification, and the
+  #9515 failure-context retry on a synthetic no-op first attempt.
+
 ## v1.00.16 — 2026-08-24
 
 Released 2026-08-24.

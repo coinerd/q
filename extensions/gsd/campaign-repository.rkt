@@ -139,6 +139,11 @@
       (corrupt! "non-canonical wave status ~s" (campaign-wave-status w)))
     (unless (exact-nonnegative-integer? (campaign-wave-attempt-count w))
       (corrupt! "attempt count must be a non-negative integer"))
+    ;; v1.00.17 W7: delivery provenance fields are strings ("" = unrecorded).
+    (unless (string? (campaign-wave-delivery-branch w))
+      (corrupt! "delivery-branch must be a string"))
+    (unless (string? (campaign-wave-delivery-head-sha w))
+      (corrupt! "delivery-head-sha must be a string"))
     (define attempt (campaign-wave-current-attempt w))
     (when attempt
       (unless (campaign-attempt? attempt)
@@ -191,7 +196,9 @@
         (and (campaign-wave-current-attempt w)
              (list (campaign-attempt-id (campaign-wave-current-attempt w))
                    (campaign-attempt-fence-token (campaign-wave-current-attempt w))
-                   (campaign-attempt-started-at (campaign-wave-current-attempt w))))))
+                   (campaign-attempt-started-at (campaign-wave-current-attempt w))))
+        (campaign-wave-delivery-branch w)
+        (campaign-wave-delivery-head-sha w)))
 
 (define (datum->manifest d)
   (match d
@@ -208,6 +215,20 @@
 
 (define (datum->wave d)
   (match d
+    ;; v1.00.17 W7: 7-field form carries delivery-branch/head-sha.
+    [(list idx title status acct attempt branch head-sha)
+     (define w
+       (make-campaign-wave idx
+                           title
+                           status
+                           acct
+                           (and attempt
+                                (match attempt
+                                  [(list aid fence started) (campaign-attempt aid fence started)]))))
+     (set-campaign-wave-delivery-branch! w branch)
+     (set-campaign-wave-delivery-head-sha! w head-sha)
+     w]
+    ;; Legacy 5-field records (pre-W7) load with "" delivery fields.
     [(list idx title status acct attempt)
      (make-campaign-wave idx
                          title

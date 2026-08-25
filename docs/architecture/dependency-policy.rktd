@@ -394,4 +394,12 @@
       ("extensions/gsd/command-handlers.rkt"
        (risk
         . "GSD command dispatch + wave prompt builder; grew via delivery-verifier fixes #9382/#9386/#9390; high change frequency")
+       (owner . "extensions"))
+      ("llm/conn-pool.rkt"
+       (risk
+        . "Connection pool with keep-alive reuse, stale-connection detection and transparent retry (#9517 W1B), and health-check gating; grew with v1.00.17 executor hardening; score 80682")
+       (owner . "llm"))
+      ("extensions/gsd/go-orchestrator.rkt"
+       (risk
+        . "GSD /go campaign orchestrator: wave sequencing, failure-context steering and auto-retry wiring (#9513/#9515), role re-anchoring (#9514), worktree isolation toggling (#9512); v1.00.17 executor hardening; score 24400")
        (owner . "extensions"))))))

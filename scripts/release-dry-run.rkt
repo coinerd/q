@@ -231,48 +231,59 @@
 ;; Main
 ;; ---------------------------------------------------------------------------
 
+;; v1.00.17 W8: resolve the q/ project root from this script's own
+;; location (scripts/ always sits directly under q/) instead of trusting
+;; the caller's cwd — wave verify commands run this script from the
+;; campaign base-dir (q-agent/, the parent), where relative paths like
+;; util/version.rkt would not resolve. All checks still execute with
+;; cwd = q/, so their relative paths are unchanged.
+(define (script-project-root)
+  (simplify-path
+   (path->complete-path (build-path (find-system-path 'run-file) 'up 'up))))
+
 (define (main)
   (define argv (vector->list (current-command-line-arguments)))
   (define-values (version context) (parse-dry-run-args argv))
 
-  (unless (file-exists? "util/version.rkt")
-    (displayln "ERROR: Run from q/ project root (util/version.rkt not found)")
-    (exit 1))
+  (parameterize ([current-directory (script-project-root)])
+    (unless (file-exists? "util/version.rkt")
+      (displayln "ERROR: Run from q/ project root (util/version.rkt not found)")
+      (exit 1))
 
-  (displayln "=== Release Dry-Run ===")
-  (printf "Context: ~a~n" context)
-  (when version
-    (printf "Requested version: ~a~n" version))
-  (displayln "")
+    (displayln "=== Release Dry-Run ===")
+    (printf "Context: ~a~n" context)
+    (when version
+      (printf "Requested version: ~a~n" version))
+    (displayln "")
 
-  ;; Determine canonical version for display
-  (define canonical (extract-canonical-version (file->string "util/version.rkt")))
-  (printf "Canonical version: ~a~n~n" (or canonical "UNKNOWN"))
+    ;; Determine canonical version for display
+    (define canonical (extract-canonical-version (file->string "util/version.rkt")))
+    (printf "Canonical version: ~a~n~n" (or canonical "UNKNOWN"))
 
-  (displayln "--- Checks ---")
-  (define checks (dry-run-checks version context file-exists? file->string run-subprocess/real))
+    (displayln "--- Checks ---")
+    (define checks (dry-run-checks version context file-exists? file->string run-subprocess/real))
 
-  (define results
-    (for/list ([c (in-list checks)])
-      (define name (car c))
-      (define result ((cdr c)))
-      (printf "  [~a] ~a: ~a~n"
-              (if (dry-run-result-pass? result) "PASS" "FAIL")
-              name
-              (dry-run-result-message result))
-      result))
+    (define results
+      (for/list ([c (in-list checks)])
+        (define name (car c))
+        (define result ((cdr c)))
+        (printf "  [~a] ~a: ~a~n"
+                (if (dry-run-result-pass? result) "PASS" "FAIL")
+                name
+                (dry-run-result-message result))
+        result))
 
-  ;; Summary
-  (define failures (dry-run-results-failures results))
-  (displayln "")
-  (displayln "--- Summary ---")
-  (printf "Checks: ~a total, ~a passed, ~a failed~n"
-          (length results)
-          (- (length results) (length failures))
-          (length failures))
-  (displayln "No tags or releases were created. (Dry-run only)")
+    ;; Summary
+    (define failures (dry-run-results-failures results))
+    (displayln "")
+    (displayln "--- Summary ---")
+    (printf "Checks: ~a total, ~a passed, ~a failed~n"
+            (length results)
+            (- (length results) (length failures))
+            (length failures))
+    (displayln "No tags or releases were created. (Dry-run only)")
 
-  (exit (dry-run-result-exit-code results)))
+    (exit (dry-run-result-exit-code results))))
 
 (module+ main
   (main))
