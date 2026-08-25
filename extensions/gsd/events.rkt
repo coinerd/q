@@ -48,7 +48,10 @@
                          gsd.archive.failed
                          gsd.verification.started
                          gsd.verification.completed
-                         gsd.verification.escalated))
+                         gsd.verification.escalated
+                         ;; v1.00.18 (BUG-0024 W3): automatic campaign-level
+                         ;; infra retry (payload: wave idx, attempt, delay).
+                         gsd.campaign.infra-retry))
 
 ;; ============================================================
 ;; Correlation ID parameter

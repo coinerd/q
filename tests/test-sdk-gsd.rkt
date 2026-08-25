@@ -102,6 +102,34 @@
   (check-true (string-contains? result "build a foo") "submit text should contain the task")
   (cleanup-gsd! tmp))
 
+;; Campaign-layer fixtures must be INDEX-format (BUG-0023 W2): the campaign
+;; record seeds from parse-plan-index rows, so bare inline plans yield zero
+;; actionable waves. Write PLAN.md index + per-wave docs on disk.
+(define (write-index-plan! tmp waves)
+  (define plan-dir (build-path tmp ".planning"))
+  (make-directory* plan-dir)
+  (define waves-dir (build-path plan-dir "waves"))
+  (make-directory* waves-dir)
+  (call-with-output-file (build-path plan-dir "PLAN.md")
+                         (lambda (out)
+                           (for ([w waves])
+                             (fprintf out
+                                      "- [Inbox] W~a: ~a → waves/W~a-~a.md\n"
+                                      (list-ref w 0)
+                                      (list-ref w 1)
+                                      (list-ref w 0)
+                                      (list-ref w 2))))
+                         #:exists 'truncate)
+  (for ([w waves])
+    (call-with-output-file (build-path waves-dir (format "W~a-~a.md" (list-ref w 0) (list-ref w 2)))
+                           (lambda (out)
+                             (fprintf out
+                                      "## Wave ~a: ~a\n- File: q/test~a.rkt\n- Verify: raco test\n"
+                                      (list-ref w 0)
+                                      (list-ref w 1)
+                                      (list-ref w 0)))
+                           #:exists 'truncate)))
+
 (test-case "W2: q:go dispatches through extension and returns submit text (no session)"
   (reset-all-gsd-state!)
   ;; Need a PLAN.md for /go to work — write one via planning-write
@@ -109,13 +137,7 @@
   ;; First write a plan via planning-write (directly)
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
-  (call-with-output-file
-   (build-path plan-dir "PLAN.md")
-   (lambda (out)
-     (display
-      "# Plan: SDK\n- [Inbox] W0: Test\n## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
-      out))
-   #:exists 'truncate)
+  (write-index-plan! tmp '((0 "Test" "test")))
   ;; Pin the planning dir so the extension finds it
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))
@@ -146,14 +168,7 @@
                          (set-box! observed-session-ids (cons sid (unbox observed-session-ids))))))
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
-  (call-with-output-file
-   (build-path plan-dir "PLAN.md")
-   (lambda (out)
-     (display (string-append "# Plan: SDK\n- [Inbox] W0: Test\n- [Inbox] W1: Test two\n"
-                             "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n"
-                             "## Wave 1: Test two\n- File: q/test2.rkt\n- Verify: raco test\n")
-              out))
-   #:exists 'truncate)
+  (write-index-plan! tmp '((0 "Test" "test") (1 "Test two" "test-two")))
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result)
     (parameterize ([current-verifier-enabled #f])

@@ -229,14 +229,17 @@
       ;; extensions/gsd/delivery-verifier.rkt (W5 branch-based verification);
       ;; +1 — current-gsd-wave-failure-context in extensions/gsd/policy.rkt
       ;; (#9515 failure-context retry, TURN_LOCAL: only during a no-change retry).
-      ;; +3 — current-gsd-stall-steerer (go-orchestrator, SERVICE_HANDLE),
+      ;; +5 — current-gsd-stall-steerer (go-orchestrator, SERVICE_HANDLE),
       ;; current-gsd-wave-no-change-retries (policy.rkt, CONFIGURATION),
       ;; current-gsd-worktree-isolation (wave-executor, CONFIGURATION): the
       ;; #9512–#9516 hardening parameters shipped in the executor-hardening
-      ;; release were absent from the inventory (W8 release audit).
+      ;; release were absent from the inventory (W8 release audit); plus
+      ;; current-gsd-campaign-infra-retries (CONFIGURATION) and
+      ;; current-gsd-campaign-infra-retry-delay (TURN_LOCAL) from the
+      ;; BUG-0024 infra-retry work (campaign W3).
       (check-equal? (length inventory-entries)
-                    210
-                    "parameter inventory should contain 199 audited parameters"))))
+                    212
+                    "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

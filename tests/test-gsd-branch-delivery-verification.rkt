@@ -268,12 +268,14 @@
               (parameterize ([current-gsd-delivery-branch-context ctx])
                 (run-delivery-verification proj plan 0)))
             (check-false (delivery-verification-approved? v-branch))
-            (check-equal? (files-check v-branch)
-                          (cons #f "no wave target files changed: q/ui-core/preferences.rkt"))
-            ;; legacy path on a clean shared tree emits the SAME files detail
+            ;; BUG-0025 (W1): the files-gate rejection now carries a
+            ;; per-file git-relative mapping, so pin the shared prefix.
+            (check-true (regexp-match? #rx"^no wave target files changed: q/ui-core/preferences[.]rkt"
+                                       (cdr (files-check v-branch))))
+            ;; legacy path on a clean shared tree emits the SAME files prefix
             (define v-legacy (run-delivery-verification proj plan 0))
-            (check-equal? (files-check v-legacy)
-                          (cons #f "no wave target files changed: q/ui-core/preferences.rkt"))
+            (check-true (regexp-match? #rx"^no wave target files changed: q/ui-core/preferences[.]rkt"
+                                       (cdr (files-check v-legacy))))
             (cleanup-wave-worktree! wt)
             (cleanup proj))))
 

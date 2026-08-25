@@ -144,6 +144,9 @@
       (corrupt! "delivery-branch must be a string"))
     (unless (string? (campaign-wave-delivery-head-sha w))
       (corrupt! "delivery-head-sha must be a string"))
+    ;; v1.00.18 (BUG-0024 W3): infra-retry hand-off context ("" = none).
+    (unless (string? (campaign-wave-attempt-context w))
+      (corrupt! "attempt-context must be a string"))
     (define attempt (campaign-wave-current-attempt w))
     (when attempt
       (unless (campaign-attempt? attempt)
@@ -198,7 +201,10 @@
                    (campaign-attempt-fence-token (campaign-wave-current-attempt w))
                    (campaign-attempt-started-at (campaign-wave-current-attempt w))))
         (campaign-wave-delivery-branch w)
-        (campaign-wave-delivery-head-sha w)))
+        (campaign-wave-delivery-head-sha w)
+        ;; v1.00.18 (BUG-0024 W3): 8th field is the infra-retry hand-off
+        ;; context ("" when none). Legacy 7/5-field records load as "".
+        (campaign-wave-attempt-context w)))
 
 (define (datum->manifest d)
   (match d
@@ -215,6 +221,20 @@
 
 (define (datum->wave d)
   (match d
+    ;; v1.00.18 (BUG-0024 W3): 8-field form carries attempt-context.
+    [(list idx title status acct attempt branch head-sha attempt-context)
+     (define w
+       (make-campaign-wave idx
+                           title
+                           status
+                           acct
+                           (and attempt
+                                (match attempt
+                                  [(list aid fence started) (campaign-attempt aid fence started)]))))
+     (set-campaign-wave-delivery-branch! w branch)
+     (set-campaign-wave-delivery-head-sha! w head-sha)
+     (set-campaign-wave-attempt-context! w (if (string? attempt-context) attempt-context ""))
+     w]
     ;; v1.00.17 W7: 7-field form carries delivery-branch/head-sha.
     [(list idx title status acct attempt branch head-sha)
      (define w

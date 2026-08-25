@@ -28,6 +28,9 @@
                   run-campaign-wave
                   campaign-result-status
                   campaign-result-message)
+         (only-in "../extensions/gsd/policy.rkt"
+                  current-gsd-campaign-infra-retries
+                  current-gsd-campaign-infra-retry-delay)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-wave
                   make-campaign-record
@@ -168,14 +171,19 @@
                   (check-eq? (wave-status* rec 0) 'pending)
                   (check-equal? (wave-attempt-count* rec 0) 0)
                   ;; Runner returns an infra-failed outcome directly.
+                  ;; BUG-0024 (W3): pin the campaign-level infra
+                  ;; retry bound to 0 so this stays the deterministic
+                  ;; legacy fail-closed path (bound exhaustion → stop).
                   (define result
-                    (run-campaign-wave dir
-                                       rec
-                                       0
-                                       #:runner (lambda (_)
-                                                  (wave-execution-outcome 'infra-failed
-                                                                          "provider/network failure"))
-                                       #:verifier (lambda (_) #t)))
+                    (parameterize ([current-gsd-campaign-infra-retries 0]
+                                   [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+                      (run-campaign-wave
+                       dir
+                       rec
+                       0
+                       #:runner (lambda (_)
+                                  (wave-execution-outcome 'infra-failed "provider/network failure"))
+                       #:verifier (lambda (_) #t))))
                   (check-eq? (campaign-result-status result) 'wave-cancelled)
                   (check-true (string-contains? (campaign-result-message result) "not consumed"))
                   ;; Durable record: wave back to pending, attempt count UNCHANGED (0).

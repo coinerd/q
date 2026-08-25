@@ -298,6 +298,20 @@
 ;; Load plan from disk (PLAN.md index + wave docs)
 ;; ============================================================
 
+;; missing-wave-docs-error-text : (listof wave-index-entry?) (listof string?) -> string?
+;; BUG-0023 (W2): error text naming each missing wave doc plus the expected
+;; filename convention, so authors can comply immediately.
+(define (missing-wave-docs-error-text entries missing)
+  (format (string-append "Plan index has ~a wave entr~a but ~a wave doc~a missing on disk: ~a\n"
+                         "Expected filename convention: waves/W<idx>-<slug>.md "
+                         "(e.g. .planning/waves/W0-title-slug.md). "
+                         "Create the missing file(s) or fix the index target path.")
+          (length entries)
+          (if (= (length entries) 1) "y" "ies")
+          (length missing)
+          (if (= (length missing) 1) " is" "s are")
+          (string-join missing ", ")))
+
 (define (load-plan-from-index base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (if (not (file-exists? plan-path))
@@ -306,24 +320,32 @@
              [entries (parse-plan-index text)])
         (if (null? entries)
             #f
-            (let* ([title (extract-plan-title text)]
-                   [waves (for/list ([e entries])
-                            (define idx (wave-index-entry-idx e))
-                            (define slug (wave-index-entry-slug e))
-                            (define wave-data (read-wave-doc base-dir idx slug))
-                            (define wave-content
-                              (if wave-data
-                                  (hash-ref wave-data 'content)
-                                  ""))
-                            (gsd-wave idx
-                                      (wave-index-entry-title e)
-                                      (string->wave-status-from-entry e)
-                                      wave-content
-                                      (extract-files-from-content wave-content)
-                                      '()
-                                      (extract-verify-from-content wave-content)
-                                      '()))])
-              (gsd-plan waves #f '() '()))))))
+            ;; BUG-0023 (W2): strict index validation. An index entry whose
+            ;; target wave doc does not exist is a load ERROR naming the
+            ;; expected path — previously read-wave-doc returned #f and the
+            ;; wave loaded with silent empty content.
+            (let ([missing (missing-index-doc-paths base-dir entries)])
+              (if (pair? missing)
+                  (raise (exn:fail (missing-wave-docs-error-text entries missing)
+                                   (current-continuation-marks)))
+                  (let* ([title (extract-plan-title text)]
+                         [waves (for/list ([e entries])
+                                  (define idx (wave-index-entry-idx e))
+                                  (define slug (wave-index-entry-slug e))
+                                  (define wave-data (read-wave-doc base-dir idx slug))
+                                  (define wave-content
+                                    (if wave-data
+                                        (hash-ref wave-data 'content)
+                                        ""))
+                                  (gsd-wave idx
+                                            (wave-index-entry-title e)
+                                            (string->wave-status-from-entry e)
+                                            wave-content
+                                            (extract-files-from-content wave-content)
+                                            '()
+                                            (extract-verify-from-content wave-content)
+                                            '()))])
+                    (gsd-plan waves #f '() '()))))))))
 
 ;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY)
 

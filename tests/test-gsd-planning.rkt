@@ -562,6 +562,15 @@
                      (check-false (hash-ref payload 'submit #f) "no submit without plan")
                      (check-true (string-contains? (hash-ref payload 'text) "No PLAN found"))))))
 
+;; BUG-0023 (W2): strict index validation requires each index entry's wave
+;; doc to exist on disk. Helper writes minimal wave docs for the fixtures.
+(define (write-test-wave-docs dir . filenames)
+  (make-directory* (build-path dir ".planning" "waves"))
+  (for ([f filenames])
+    (call-with-output-file (build-path dir ".planning" "waves" f)
+                           (lambda (out) (display (string-append "# Wave\n- File: foo.rkt") out))
+                           #:exists 'truncate)))
+
 (test-case "/go returns a runtime campaign request with an isolated first-wave prompt"
   (with-gsd-cleanup
    (lambda ()
@@ -586,6 +595,7 @@
                                      "W0 depends on SECRET-CROSS-WAVE-W1")
                       out))
            #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix-bug.md" "W1-future-work.md")
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go")))
           (check-equal? (hook-result-action result) 'amend)
@@ -655,6 +665,7 @@
           (call-with-output-file (build-path dir ".planning" "STATE.md")
                                  (lambda (out) (display "| W0 | Fix | PENDING |" out))
                                  #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix.md")
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go")))
           (define submit-text (hash-ref (hook-result-payload result) 'new-session))
@@ -677,6 +688,7 @@
                              "## Wave 2: Test\n- File: baz.rkt")
               out))
            #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix.md" "W1-core.md" "W2-test.md")
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go 2")))
           (define payload (hook-result-payload result))
@@ -699,6 +711,7 @@
               "# Plan\n- [Inbox] W0: Fix\n- [Inbox] W1: Polish\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Polish\n- File: bar.rkt"
               out))
            #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix.md" "W1-polish.md")
           ;; Set up events.rkt event collector
           (define-values (collector get-events) (events:make-event-collector))
           (events:set-gsd-event-bus! collector)
@@ -727,6 +740,7 @@
            (build-path dir ".planning" "PLAN.md")
            (lambda (out) (display "# Plan\n- [Inbox] W0: Fix\n## Wave 0: Fix\n- File: foo.rkt" out))
            #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix.md")
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/implement" 'input "/implement")))
           (check-equal? (hook-result-action result) 'amend)

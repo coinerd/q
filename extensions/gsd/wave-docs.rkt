@@ -55,7 +55,10 @@
           [plan-overall-status (-> path-string? symbol?)]
           [compute-plan-overall-status (-> (listof wave-index-entry?) symbol?)]
           [wave-exists? (-> path-string? exact-nonnegative-integer? string? boolean?)]
-          [wave-status-markers (-> (listof pair?))]))
+          [wave-status-markers (-> (listof pair?))]
+          [count-inline-wave-sections (-> string? exact-nonnegative-integer?)]
+          [index-entry-doc-display-path (-> wave-index-entry? string?)]
+          [missing-index-doc-paths (-> path-string? (listof wave-index-entry?) (listof string?))]))
 
 ;; ============================================================
 ;; Constants
@@ -164,9 +167,7 @@
                [idx (string->number (caddr m))]
                [title (string-trim (cadddr m))]
                [target (and (list? m) (> (length m) 4) (list-ref m 4))]
-               [slug (if target
-                         (extract-slug-from-target target)
-                         (slugify title))])
+               [slug (or (and target (extract-slug-from-target target)) (slugify title))])
           (append entries (list (wave-index-entry idx title slug status))))
         ;; Try relaxed format: - W0: Title (without status bracket)
         (let ([rm (regexp-match relaxed-index-line-rx line)])
@@ -174,16 +175,49 @@
               (let* ([idx (string->number (cadr rm))]
                      [title (string-trim (caddr rm))]
                      [target (and (list? rm) (> (length rm) 3) (list-ref rm 3))]
-                     [slug (if target
-                               (extract-slug-from-target target)
-                               (slugify title))])
+                     [slug (or (and target (extract-slug-from-target target)) (slugify title))])
                 (append entries (list (wave-index-entry idx title slug STATUS-INBOX))))
               entries)))))
+;; BUG-0023 (W2): a target that does not follow the W<n>-<slug>.md
+;; convention yields NO slug, so the caller falls back to slugify(title).
+;; Previously this returned (slugify target), producing nonsense expected
+;; paths like W0-wavesnotesmd.md in strict-validation errors.
 (define (extract-slug-from-target target)
   (define m (regexp-match slug-from-target-rx target))
-  (if m
-      (cadr m)
-      (slugify target)))
+  (and m (cadr m)))
+
+;; ============================================================
+;; Plan-format provenance & strict index validation (BUG-0023, W2)
+;; ============================================================
+
+;; Inline wave-section header — mirrors the wave-start regex in
+;; plan-types-parser.rkt (`^## +[Ww]ave +[0-9]+`) so diagnostics report
+;; exactly what the inline parser family would find.
+(define inline-wave-section-rx #rx"^## +[Ww]ave +[0-9]+")
+
+;; count-inline-wave-sections : string? -> exact-nonnegative-integer?
+;; Count inline `## Wave N:` sections in PLAN.md text. Used by the /go
+;; no-waves diagnostic (BUG-0023) so a rejection reports parser-provenance
+;; counts for BOTH accepted formats instead of a bare "Plan has no waves".
+(define (count-inline-wave-sections md-text)
+  (for/sum ([line (in-list (string-split md-text "\n"))])
+           (if (regexp-match? inline-wave-section-rx line) 1 0)))
+
+;; index-entry-doc-display-path : wave-index-entry? -> string?
+;; Path (relative to the project root) where an index entry's wave doc is
+;; expected, following the W<n>-<slug>.md convention. Named verbatim in
+;; strict-validation errors so authors can comply immediately.
+(define (index-entry-doc-display-path e)
+  (format ".planning/waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)))
+
+;; missing-index-doc-paths : path-string? (listof wave-index-entry?) -> (listof string?)
+;; Display paths of index entries whose target wave doc does not exist on
+;; disk. A non-empty result is a validation error (BUG-0023): previously the
+;; wave loaded with silent empty content instead of erroring.
+(define (missing-index-doc-paths base-dir entries)
+  (for/list ([e (in-list entries)]
+             #:unless (wave-exists? base-dir (wave-index-entry-idx e) (wave-index-entry-slug e)))
+    (index-entry-doc-display-path e)))
 
 ;; ============================================================
 ;; PLAN.md index status update

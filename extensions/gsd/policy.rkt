@@ -22,6 +22,8 @@
          current-gsd-wave-timeout-retries
          current-gsd-wave-no-change-retries
          current-gsd-wave-failure-context
+         current-gsd-campaign-infra-retries
+         current-gsd-campaign-infra-retry-delay
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
          gsd-session-iteration-budget)
@@ -101,6 +103,35 @@
 ;; semantics are preserved.
 (define current-gsd-wave-no-change-retries
   (make-parameter 1 (nonnegative-integer-guard 'current-gsd-wave-no-change-retries)))
+
+;; v1.00.18 W? (BUG-0024): campaign-level infra-failure retry ceiling. When a
+;; wave run classifies as 'infra-failed (D8 #9357: provider/network/SSE
+;; transient failure) the coordinator re-attempts the SAME wave automatically
+;; up to this many times with exponential backoff instead of returning
+;; wave-cancelled ("re-run /go") and stopping the whole campaign. Observed 5x
+;; during the v1.00.17 campaign; each stop required a manual /retry. The
+;; attempt is NOT consumed by an automatic retry (D8 semantics preserved —
+;; the attempt-count rollback in the infra branch keeps it so). Only bound
+;; exhaustion stops the campaign, with an aggregated message listing all
+;; failure timestamps. Settings key: gsd.campaign-infra-retries.
+(define current-gsd-campaign-infra-retries
+  (make-parameter 3 (nonnegative-integer-guard 'current-gsd-campaign-infra-retries)))
+
+;; Backoff delay (seconds) for the Nth automatic infra retry (1-based).
+;; Default: 30s → 60s → 120s → flat 120s. Parameterized as a function so
+;; tests pin it to 0 and keep the retry loop deterministic.
+(define (infra-retry-delay-guard who)
+  (lambda (value)
+    (if (and (procedure? value) (procedure-arity-includes? value 1))
+        value
+        (raise-argument-error who "(-> exact-positive-integer? real?)" value))))
+
+(define (default-infra-retry-delay attempt)
+  (min 120 (* 30 (expt 2 (max 0 (sub1 attempt))))))
+
+(define current-gsd-campaign-infra-retry-delay
+  (make-parameter default-infra-retry-delay
+                  (infra-retry-delay-guard 'current-gsd-campaign-infra-retry-delay)))
 
 ;; v1.00.17 W3 (#9515): rendered failure-context block (string) that the
 ;; prompt layer suffixes to the wave executor prompt while the orchestrator
