@@ -302,13 +302,15 @@
 ;; BUG-0023 (W2): error text naming each missing wave doc plus the expected
 ;; filename convention, so authors can comply immediately.
 (define (missing-wave-docs-error-text entries missing)
-  (format
-   "Plan index has ~a wave entr~a but ~a wave doc~a missing on disk: ~a\nExpected filename convention: waves/W<idx>-<slug>.md (e.g. .planning/waves/W0-title-slug.md). Create the missing file(s) or fix the index target path."
-   (length entries)
-   (if (= (length entries) 1) "y" "ies")
-   (length missing)
-   (if (= (length missing) 1) " is" "s are")
-   (string-join missing ", ")))
+  (format (string-append "Plan index has ~a wave entr~a but ~a wave doc~a missing on disk: ~a\n"
+                         "Expected filename convention: waves/W<idx>-<slug>.md "
+                         "(e.g. .planning/waves/W0-title-slug.md). "
+                         "Create the missing file(s) or fix the index target path.")
+          (length entries)
+          (if (= (length entries) 1) "y" "ies")
+          (length missing)
+          (if (= (length missing) 1) " is" "s are")
+          (string-join missing ", ")))
 
 (define (load-plan-from-index base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))

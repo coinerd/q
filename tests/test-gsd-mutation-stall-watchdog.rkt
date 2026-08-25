@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; q/tests/test-gsd-mutation-stall-watchdog.rkt — v1.00.18 W5 (#9513)
+;; q/tests/test-gsd-mutation-stall-watchdog.rkt — GSD mutation-stall watchdog characterization (#9513)
 ;;
 ;; Mutation-stall watchdog: mid-session steering for wave executors.
 ;; v1.00.16 W3 attempt-2 made 92 read-only tool calls, never edited a

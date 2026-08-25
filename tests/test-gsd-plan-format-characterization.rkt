@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; tests/test-gsd-plan-format-characterization.rkt — GSD plan-format
-;; characterization pins (v1.00.18 campaign d079a35e successor; BUG-0023,
+;; characterization pins (GSD plan-format campaign; BUG-0023,
 ;; BUG-0025).
 ;;
 ;; W0 pinned CURRENT behavior so later waves flip explicit reviewed pins:

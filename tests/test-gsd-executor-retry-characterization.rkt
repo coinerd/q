@@ -88,9 +88,10 @@
 
     ;; ── 2. Delivery-verifier "no wave target files changed" shape ──
     (test-case "delivery-verifier unchanged-targets message shape"
-      ;; delivery-verifier.rkt:288 — when no declared target changed, the
-      ;; message lists ALL declared targets verbatim, comma-space-joined.
-      (contains? verifier-src "(format \"no wave target files changed: ~a\"")
+      ;; delivery-verifier.rkt — when no declared target changed, the message
+      ;; lists ALL declared targets verbatim, comma-space-joined, plus per-file
+      ;; git-relative mapping lines (BUG-0025 W1 diagnostic addition).
+      (contains? verifier-src "(format \"no wave target files changed: ~a~a\"")
       (contains? verifier-src "(string-join files \", \")")
       ;; The pass branch is the positive counterpart.
       (contains? verifier-src "(format \"changed: ~a\"")

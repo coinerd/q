@@ -212,7 +212,8 @@
    (make-entry "command-handlers.rkt"
                'ui-glue
                ;; W8/v1.00.17: empty-response re-anchor (#9514) added parameterize.
-               '(fs-delete mkdir parameterize)
+               ;; BUG-0032 fix: waves-dir backup rotation added fs-rename + path-ops.
+               '(fs-delete mkdir parameterize fs-rename path-ops)
                '()
                '("racket/contract" "racket/match"
                                    "racket/string"

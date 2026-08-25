@@ -632,12 +632,18 @@
   (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
   (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
   (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
-  ;; Clean old wave files to prevent stale state (fast: delete+recreate dir)
+  ;; Clean old wave files to prevent stale state (fast: delete+recreate dir).
+  ;; BUG-0032 fix: a bare delete here wiped ACTIVE campaign wave docs whenever
+  ;; /plan <text> ran mid-campaign (observed twice live, 2026-08-25). Back up
+  ;; the previous waves dir instead of destroying it; the backup is rotated.
   (define waves-dir (build-path base-dir ".planning" "waves"))
+  (define waves-backup-dir (build-path base-dir ".planning" "waves-pre-plan-backup"))
   (with-handlers ([exn:fail? (lambda (e)
                                (log-debug "gsd: wave dir cleanup failed: ~a" (exn-message e)))])
     (when (directory-exists? waves-dir)
-      (delete-directory/files waves-dir)))
+      (when (directory-exists? waves-backup-dir)
+        (delete-directory/files waves-backup-dir))
+      (rename-file-or-directory waves-dir waves-backup-dir)))
   (make-directory* waves-dir)
   (when saved-bus
     (set-gsd-event-bus! saved-bus))

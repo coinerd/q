@@ -268,7 +268,7 @@
               (parameterize ([current-gsd-delivery-branch-context ctx])
                 (run-delivery-verification proj plan 0)))
             (check-false (delivery-verification-approved? v-branch))
-            ;; BUG-0025 (v1.00.18 W1): the files-gate rejection now carries a
+            ;; BUG-0025 (W1): the files-gate rejection now carries a
             ;; per-file git-relative mapping, so pin the shared prefix.
             (check-true (regexp-match? #rx"^no wave target files changed: q/ui-core/preferences[.]rkt"
                                        (cdr (files-check v-branch))))

@@ -71,6 +71,8 @@
                                        (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
+                              (current-gsd-campaign-infra-retries . CONFIGURATION)
+                              (current-gsd-campaign-infra-retry-delay . TURN_LOCAL)
                               (current-gsd-wave-timeout-retries . CONFIGURATION)
                               (current-gsd-wave-timeout-seconds . CONFIGURATION)
                               (current-gsd-wave-failure-context . TURN_LOCAL)

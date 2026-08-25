@@ -171,7 +171,7 @@
                   (check-eq? (wave-status* rec 0) 'pending)
                   (check-equal? (wave-attempt-count* rec 0) 0)
                   ;; Runner returns an infra-failed outcome directly.
-                  ;; v1.00.18 (BUG-0024 W3): pin the campaign-level infra
+                  ;; BUG-0024 (W3): pin the campaign-level infra
                   ;; retry bound to 0 so this stays the deterministic
                   ;; legacy fail-closed path (bound exhaustion → stop).
                   (define result
