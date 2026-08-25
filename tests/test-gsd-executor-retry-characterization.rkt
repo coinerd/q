@@ -231,9 +231,11 @@
 
     (test-case "W3 structural pins: exactly-once no-change retry"
       ;; run-campaign-wave takes the bounded retry budget (default 1 from the
-      ;; current-gsd-wave-no-change-retries parameter).
-      (contains? orchestrator-src
-                 "#:no-change-retries [no-change-retries (current-gsd-wave-no-change-retries)]")
+      ;; current-gsd-wave-no-change-retries parameter). raco fmt may wrap
+      ;; between the keyword and its default expression, so pin them as two
+      ;; separate wrap-tolerant fragments.
+      (contains? orchestrator-src "#:no-change-retries")
+      (contains? orchestrator-src "[no-change-retries (current-gsd-wave-no-change-retries)]")
       (contains? orchestrator-src "(> no-change-retries-left 0)")
       ;; Exactly-once: the retry consumes the budget.
       ;; W7 campaign: run-once was renamed run-once* (worktree boxes added);
