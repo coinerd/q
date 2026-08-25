@@ -37,6 +37,7 @@
          racket/system
          racket/port
          "plan-types.rkt"
+         (only-in "../../runtime/settings-query.rkt" gsd-worktree-isolation-enabled?)
          "../gsd/wave-docs.rkt"
          (only-in "shared.rkt" extract-plan-title)
          (only-in "state-machine.rkt"
@@ -95,6 +96,9 @@
          WORKTREE-DIRNAME-PREFIX
          current-gsd-worktree-isolation
          worktree-isolation-enabled?
+         resolve-worktree-isolation
+         apply-worktree-isolation-setting!
+         worktree-isolation-banner
          worktree-hash8
          wave-worktree-dirname
          wave-worktree-dir
@@ -549,6 +553,46 @@
       (current-gsd-worktree-isolation)
       (and override #t)))
 
+;; BUG-0028 S1 (v1.00.19 W2): settings wiring. The gsd.worktree-isolation key
+;; is declared in the settings surface; resolve-worktree-isolation connects it
+;; to the runtime flag at the composition root (go-orchestrator
+;; run-campaign-wave, which calls apply-worktree-isolation-setting!).
+;;
+;; Precedence, highest first:
+;;   1. EXPLICIT #:isolate? argument ('auto = not given) — operator override,
+;;      honored in both directions (#t forces ON, #f forces OFF).
+;;   2. gsd.worktree-isolation project-settings key (settings may be #f when
+;;      no project settings could be loaded ⇒ key absent).
+;;   3. current-gsd-worktree-isolation parameter default (OFF — the BUG-0028
+;;      hotfix rollback stands until the W6 bake proves zero denials).
+(define (resolve-worktree-isolation settings #:isolate? (override 'auto))
+  (cond
+    [(not (eq? override 'auto)) (and override #t)]
+    [(and settings (gsd-worktree-isolation-enabled? settings)) #t]
+    [else (current-gsd-worktree-isolation)]))
+
+;; Composition-root application: resolve per the precedence above and leave
+;; the parameter consistent with the outcome so downstream
+;; worktree-isolation-enabled? (default 'auto) readers agree. Returns the
+;; effective flag.
+(define (apply-worktree-isolation-setting! settings #:isolate? (override 'auto))
+  (define effective (resolve-worktree-isolation settings #:isolate? override))
+  (current-gsd-worktree-isolation effective)
+  effective)
+
+;; BUG-0028 S2 (v1.00.19 W2): /doctor-style one-liner emitted at executor
+;; start when isolation is ON — active worktree + resolved allowed roots, so
+;; future staleness is visible immediately instead of via failed edits.
+;; Pure; callers log it.
+(define (worktree-isolation-banner worktree-path allowed-roots)
+  (define (->s p)
+    (if (string? p)
+        p
+        (path->string p)))
+  (format "gsd worktree isolation ON — active worktree: ~a; allowed roots: ~a"
+          (->s worktree-path)
+          (string-join (map ->s allowed-roots) ", ")))
+
 ;; ---- Pure naming ----------------------------------------------------------
 
 (define (->path p)
@@ -670,7 +714,13 @@
                              (git-result-code r)
                              (string-trim (git-result-stderr r)))
                      (current-continuation-marks))))
-  (wave-worktree repo dir branch base-ref (build-path base ".planning")))
+  ;; BUG-0028 S2 (v1.00.19 W2): executor-start diagnostic — active worktree +
+  ;; resolved allowed roots, one line, so staleness is visible immediately.
+  (define wt (wave-worktree repo dir branch base-ref (build-path base ".planning")))
+  (log-info (worktree-isolation-banner (wave-worktree-path wt)
+                                       (list (wave-worktree-path wt)
+                                             (wave-worktree-planning-dir wt))))
+  wt)
 
 ;; Best-effort, NEVER raises, never masks the terminal outcome: remove the
 ;; worktree, then delete the branch (order matters — branch -D refuses while

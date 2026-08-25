@@ -117,8 +117,7 @@
     (define complete (path->complete-path (expand-user-path r) (current-directory)))
     ;; Allowed roots are configuration, not paths to be created. An invalid or
     ;; unresolvable root fails closed rather than broadening authorization.
-    (and (directory-exists? complete)
-         (resolve-longest-prefix complete))))
+    (and (directory-exists? complete) (resolve-longest-prefix complete))))
 
 (define (path-within-root? resolved root)
   (define resolved-str (path->string resolved))
@@ -141,6 +140,19 @@
        (for/or ([root (in-list (current-allowed-roots))])
          (define canonical-root (canonical-existing-root root))
          (and canonical-root (path-within-root? resolved canonical-root)))))
+
+;; BUG-0028 S2 (v1.00.19 W2): denials must be self-diagnosing — they name the
+;; allowed roots in force at denial time so stale-roots outages are visible in
+;; the denial itself instead of hours of archaeology. Redaction rules are
+;; unchanged: we only ever print the configured roots, never other paths.
+(define (allowed-roots-suffix)
+  (format " (allowed roots: ~a)"
+          (string-join (map (lambda (r)
+                              (if (string? r)
+                                  r
+                                  (path->string r)))
+                            (current-allowed-roots))
+                       ", ")))
 
 ;; ── SEC-7 (v0.99.76 W2): Worker file-op safety parity ───────────
 ;; Mirrors main tool-write/tool-edit guards: per-write size limit,
@@ -264,7 +276,7 @@
     [(not (and command (string? command)))
      (make-error-response #f "bash: missing 'command' argument")]
     [(and cwd (not (path-allowed? cwd)))
-     (make-error-response #f (format "bash: cwd not allowed: ~a" cwd))]
+     (make-error-response #f (format "bash: cwd not allowed: ~a~a" cwd (allowed-roots-suffix)))]
     ;; SEC-1 (v0.99.76 W1): worker safety chain — regex blocklist first, then
     ;; fail-closed structured classifier for obfuscated commands. Worker policy
     ;; is BLOCK (stricter than main's warn): the worker has no approval channel.
@@ -337,7 +349,8 @@
   (define content (hash-ref args 'content ""))
   (cond
     [(not path) (make-error-response #f "write: missing 'path' argument")]
-    [(not (path-allowed? path)) (make-error-response #f (format "write: path not allowed: ~a" path))]
+    [(not (path-allowed? path))
+     (make-error-response #f (format "write: path not allowed: ~a~a" path (allowed-roots-suffix)))]
     [else
      (define content-str
        (cond
@@ -390,7 +403,8 @@
      (make-error-response #f "edit: fuzzy? must be a boolean (#t or #f)")]
     [(not (boolean? global-fuzzy-enabled?))
      (make-error-response #f "edit: fuzzy edit policy must be boolean")]
-    [(not (path-allowed? path)) (make-error-response #f (format "edit: path not allowed: ~a" path))]
+    [(not (path-allowed? path))
+     (make-error-response #f (format "edit: path not allowed: ~a~a" path (allowed-roots-suffix)))]
     [else
      (define resolved (path->complete-path (expand-user-path path) (current-directory)))
      (cond
@@ -478,7 +492,7 @@
     [(not command) (make-error-response #f "git: missing 'command' argument")]
     ;; SEC-4 (v0.99.76 W0): cwd confinement — fail closed before safety eval.
     [(and cwd (not (path-allowed? cwd)))
-     (make-error-response #f (format "git: cwd not allowed: ~a" cwd))]
+     (make-error-response #f (format "git: cwd not allowed: ~a~a" cwd (allowed-roots-suffix)))]
     ;; SEC-1 (v0.99.76 W1): block destructive git compositions — force push to
     ;; shared branches, clean -fdx, reset --hard (data loss). Fail closed.
     [(and (string=? command "push")
@@ -542,7 +556,9 @@
     [(not (exact-integer? end-line))
      (make-error-response #f (format "delete-lines: end-line must be integer, got: ~v" end-line))]
     [(not (path-allowed? path))
-     (make-error-response #f (format "delete-lines: path not allowed: ~a" path))]
+     (make-error-response
+      #f
+      (format "delete-lines: path not allowed: ~a~a" path (allowed-roots-suffix)))]
     [else
      (define resolved (path->complete-path (expand-user-path path) (current-directory)))
      (cond

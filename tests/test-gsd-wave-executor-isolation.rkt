@@ -270,11 +270,82 @@
       (check-equal? (count-completion-events dir rec) 0)
       (cleanup-tmp dir))))
 
+;; ============================================================
+;; BUG-0028 S1/S2 (v1.00.19 W2): gsd.worktree-isolation settings wiring
+;; ============================================================
+;; Precedence (documented at resolve-worktree-isolation):
+;;   explicit #:isolate? > gsd.worktree-isolation key > parameter default (OFF).
+;; (a) key false/absent → shared checkout route (isolation stays OFF);
+;; (b) key true → isolated route;
+;; (c) explicit #:isolate? overrides the key in BOTH directions;
+;; (d) banner names active worktree + resolved allowed roots.
+
+(require (only-in "../extensions/gsd/wave-executor.rkt"
+                  current-gsd-worktree-isolation
+                  worktree-isolation-enabled?
+                  resolve-worktree-isolation
+                  apply-worktree-isolation-setting!
+                  worktree-isolation-banner)
+         (only-in "../runtime/settings-core.rkt" q-settings))
+
+(define settings-wiring-suite
+  (test-suite "BUG-0028: gsd.worktree-isolation settings wiring"
+
+    (test-case "(a) key false → shared checkout route (isolation OFF)"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #f))))
+        (check-false (resolve-worktree-isolation settings))
+        (check-false (apply-worktree-isolation-setting! settings))
+        (check-false (worktree-isolation-enabled?))))
+
+    (test-case "(a-bis) key absent → shared checkout route (default OFF)"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash)))
+        (check-false (resolve-worktree-isolation settings))
+        ;; settings unavailable (#f) ⇒ key absent ⇒ default OFF
+        (check-false (resolve-worktree-isolation #f))))
+
+    (test-case "(b) key true → isolated route (isolation ON)"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #t))))
+        (check-true (resolve-worktree-isolation settings))
+        (check-true (apply-worktree-isolation-setting! settings))
+        (check-true (worktree-isolation-enabled?))))
+
+    (test-case "(c) explicit #:isolate? #f overrides key true"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #t))))
+        (check-false (resolve-worktree-isolation settings #:isolate? #f))
+        (check-false (apply-worktree-isolation-setting! settings #:isolate? #f))
+        (check-false (worktree-isolation-enabled?))))
+
+    (test-case "(c-bis) explicit #:isolate? #t overrides key false"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #f))))
+        (check-true (resolve-worktree-isolation settings #:isolate? #t))
+        (check-true (apply-worktree-isolation-setting! settings #:isolate? #t))))
+
+    (test-case "(c-ter) 'auto means honor the settings key"
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (define settings (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #t))))
+        (check-true (resolve-worktree-isolation settings #:isolate? 'auto))))
+
+    (test-case "(d) banner names active worktree + resolved allowed roots"
+      (define wt "/tmp/wt-demo")
+      (define roots (list "/tmp/wt-demo" "/tmp/wt-demo/.planning"))
+      (define banner (worktree-isolation-banner wt roots))
+      (check-true (string-contains? banner "isolation ON")
+                  (format "banner must state isolation ON: ~a" banner))
+      (check-true (string-contains? banner wt) (format "banner must name active worktree: ~a" banner))
+      (check-true (string-contains? banner "/tmp/wt-demo/.planning")
+                  (format "banner must enumerate resolved roots: ~a" banner)))))
+
 (define all-suites
   (test-suite "wave executor isolation"
     exactly-once-suite
     timeout-suite
     pending-cancel-suite
-    compat-suite))
+    compat-suite
+    settings-wiring-suite))
 
 (exit (if (zero? (run-tests all-suites)) 0 1))

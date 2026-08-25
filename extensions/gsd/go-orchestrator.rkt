@@ -55,6 +55,11 @@
                   stall-watchdog-snapshot
                   ;; v1.00.17 W6 (#9512a): wave worktree isolation
                   worktree-isolation-enabled?
+                  ;; v1.00.19 W2 (BUG-0028 S1): gsd.worktree-isolation
+                  ;; settings wiring + start banner.
+                  resolve-worktree-isolation
+                  apply-worktree-isolation-setting!
+                  worktree-isolation-banner
                   find-repo-root
                   wave-worktree-path
                   wave-worktree-branch
@@ -701,7 +706,19 @@
                            ;; v1.00.17 W6 (#9512a): wave worktree isolation
                            ;; (gsd.worktree-isolation; #t forces isolation,
                            ;; #f forces it off — overrides the flag for tests).
-                           #:isolate? [isolate? (worktree-isolation-enabled?)])
+                           ;; v1.00.19 W2 (BUG-0028 S1): 'auto = honor the
+                           ;; gsd.worktree-isolation project-settings key.
+                           ;; Explicit #t/#f overrides the key; key absent
+                           ;; falls back to current-gsd-worktree-isolation
+                           ;; (default OFF). Precedence documented at
+                           ;; resolve-worktree-isolation (wave-executor.rkt).
+                           #:isolate? [isolate-arg 'auto])
+  ;; BUG-0028 S1 (v1.00.19 W2): composition-root settings wiring — the
+  ;; gsd.worktree-isolation key drives isolation from here on.
+  ;; isolate-arg is the explicit caller choice; 'auto defers to settings.
+  (define isolate?
+    (apply-worktree-isolation-setting! (load-project-settings-silently base-dir)
+                                       #:isolate? isolate-arg))
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
@@ -1142,6 +1159,16 @@
                   (release-wave-worktree! wt)
                   (cleanup-wave-worktree! wt)))))))]))
 
+(require (only-in "../../runtime/settings.rkt" load-settings))
+
+;; BUG-0028 S1 (v1.00.19 W2): best-effort project-settings load for the
+;; gsd.worktree-isolation wiring at the composition root. NEVER raises —
+;; settings unavailable means the key is absent, which resolves to the
+;; current-gsd-worktree-isolation default (OFF).
+(define (load-project-settings-silently base-dir)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (load-settings base-dir)))
+
 ;; ============================================================
 ;; Full campaign execution (loop one wave at a time)
 ;; ============================================================
@@ -1153,7 +1180,15 @@
                        #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
                        #:timeout-sec [timeout-sec #f]
                        #:lease-owner [lease-owner "unknown"]
-                       #:isolate? [isolate? (worktree-isolation-enabled?)])
+                       ;; v1.00.19 W2 (BUG-0028 S1): 'auto = honor the
+                       ;; gsd.worktree-isolation project-settings key (see
+                       ;; resolve-worktree-isolation in wave-executor.rkt).
+                       #:isolate? [isolate-arg 'auto])
+  ;; Resolve ONCE at campaign start so every downstream reader (including
+  ;; the pre-wave isolation log) sees the effective flag, settings included.
+  (define isolate?
+    (apply-worktree-isolation-setting! (load-project-settings-silently base-dir)
+                                       #:isolate? isolate-arg))
   (define plan-id (campaign-plan-id rec))
   ;; D4 (#9351): pass the owning session id so the lease file names its
   ;; holder instead of the opaque "unknown" observed in incident 81f9be4b.
