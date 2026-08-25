@@ -26,6 +26,16 @@
 
 ;; ============================================================
 ;; 1. executor-reanchor-prompt (#9514)
+
+;; count-substring: defined BEFORE first use (module-level order matters).
+(define (count-substring needle haystack)
+  (define n (string-length needle))
+  (let loop ([i 0]
+             [count 0])
+    (cond
+      [(> (+ i n) (string-length haystack)) count]
+      [(string=? (substring haystack i (+ i n)) needle) (loop (add1 i) (add1 count))]
+      [else (loop (add1 i) count)])))
 ;; ============================================================
 
 (define reanchor
@@ -35,7 +45,7 @@
                             "(edit applied: prompts.rkt:40)"))
 
 (test-case "re-anchor restates the executor role verbatim"
-  (check-equal? (count-substring (executor-reanchor-role-line) reanchor) 1))
+  (check-equal? (count-substring executor-reanchor-role-line reanchor) 1))
 
 (test-case "re-anchor names wave-id, campaign-id, task, tool excerpt"
   (check-pred (lambda (s) (string-contains? s "W3")) reanchor)
@@ -111,18 +121,8 @@
 ;; fake-verifier harness. This file pins the prompt constructors and
 ;; the policy defaults they coordinate through.
 
-;; helper
-(define (count-substring needle haystack)
-  (define n (string-length needle))
-  (let loop ([i 0]
-             [count 0])
-    (cond
-      [(> (+ i n) (string-length haystack)) count]
-      [(string=? (substring haystack i (+ i n)) needle) (loop (add1 i) (add1 count))]
-      [else (loop (add1 i) count)])))
-
 (test-case "reanchor + failure-context compose without losing either role statement"
   (define combined (string-append reanchor "\n\n" ctx-block))
-  (check-equal? (count-substring (executor-reanchor-role-line) combined) 1)
+  (check-equal? (count-substring executor-reanchor-role-line combined) 1)
   (check-pred (lambda (s) (string-contains? (string-downcase s) "apply the first edit now"))
               combined))

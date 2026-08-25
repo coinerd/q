@@ -23,9 +23,20 @@
 ;;     directly; CHUNKED bodies are decoded by make-chunked-input-port
 ;;     (BUG-0021) and check in only once their terminating 0-chunk has been
 ;;     consumed. EOF-delimited bodies remain single-use-on-success.
+;;   - STALE-REUSE TRANSPARENT RETRY (BUG-0022 W1B / #9517): a request on a
+;;     REUSED idle entry that dies at the status-line read with NO response
+;;     byte received (server already closed the keep-alive socket; the write
+;;     went into the void) is retried transparently ONCE on a freshly dialed
+;;     connection — the failure never reaches the application. Never retried:
+;;     fresh connections, failures after any response byte, or status-read
+;;     timeouts (the peer may still be silently working; resending would risk
+;;     double execution).
+;;   - PER-HOST idle TTL overrides (networking.pool.host-idle-ttl, host →
+;;     secs) so operators can pin aggressive keep-alive closers (e.g.
+;;     api.z.ai) without lowering the global TTL.
 ;;
-;; Stats (pool-stats): hits / misses / evictions / fault-closes — exposed for
-;; bake-period evidence.
+;; Stats (pool-stats): hits / misses / evictions / fault-closes /
+;; stale-reuse-retries — exposed for bake-period evidence.
 
 (require racket/contract
          racket/match
@@ -38,12 +49,16 @@
           (struct pool-stats
                   ([hits exact-nonnegative-integer?] [misses exact-nonnegative-integer?]
                                                      [evictions exact-nonnegative-integer?]
-                                                     [fault-closes exact-nonnegative-integer?]))
+                                                     [fault-closes exact-nonnegative-integer?]
+                                                     [stale-reuse-retries
+                                                      exact-nonnegative-integer?]))
           [make-conn-pool
            (->* ()
                 (#:idle-ttl-secs positive?
                                  #:max-per-host exact-positive-integer?
-                                 #:connect-timeout-secs positive?)
+                                 #:connect-timeout-secs positive?
+                                 ;; BUG-0022 W1B: host → secs overrides.
+                                 #:host-idle-ttl (or/c #f hash?))
                 conn-pool?)]
           [conn-pool? (-> any/c boolean?)]
           [current-conn-pool (parameter/c (or/c conn-pool? #f))]
@@ -74,8 +89,9 @@
 ;; Data types
 ;; ============================================================
 
-;; Immutable snapshot of the four pool counters (BUG_PLAN W2).
-(struct pool-stats (hits misses evictions fault-closes) #:transparent)
+;; Immutable snapshot of the five pool counters (BUG_PLAN W2; fifth counter
+;; BUG-0022 W1B).
+(struct pool-stats (hits misses evictions fault-closes stale-reuse-retries) #:transparent)
 
 ;; A pooled TCP/TLS connection. All ports live under `custodian`, which is a
 ;; child of the owning pool's custodian — deliberately NOT under any
@@ -83,22 +99,42 @@
 (struct pooled-connection
         (host port-number
               tls?
-              custodian
-              in
-              out
+              ;; BUG-0022 W1B: custodian/in/out are MUTABLE so the stale-reuse
+              ;; retry can swap a freshly dialed connection into the SAME
+              ;; entry handle the caller holds (release/check-in then operate
+              ;; on the live socket, never the dead one).
+              [custodian #:mutable]
+              [in #:mutable]
+              [out #:mutable]
               ;; reusable?-box: set by pool-send-request! when response framing
               ;; allows safe reuse (Content-Length). Any fault clears it.
               reusable?-box
               ;; released?-box: idempotence guard — a connection is released
               ;; (checked in OR discarded) exactly once; later releases no-op.
               released?-box
-              last-used-ms)
+              last-used-ms
+              ;; Owning pool (for the stale-reuse retry's fresh dial + stats).
+              pool
+              ;; BUG-0022 W1B: #t iff this entry was checked in after serving a
+              ;; prior exchange and re-acquired from the pool (i.e. REUSED, not
+              ;; freshly dialed). Only reused entries are transparently
+              ;; retried on a no-response-byte status-line failure.
+              reused?)
   #:transparent)
 
 ;; Internal pool record. `stats-vec` is (vector hits misses evictions
-;; fault-closes), mutated only while holding `lock`.
+;; fault-closes stale-reuse-retries), mutated only while holding `lock`.
+;; `host-idle-ttl` is a downcased host → secs override map (BUG-0022 W1B) or
+;; #f when no overrides are configured.
 (struct conn-pool
-        (lock table stats-vec idle-ttl-secs max-per-host connect-timeout-secs custodian closed?-box)
+        (lock table
+              stats-vec
+              idle-ttl-secs
+              host-idle-ttl
+              max-per-host
+              connect-timeout-secs
+              custodian
+              closed?-box)
   #:transparent)
 
 ;; Disabled passthrough is the DEFAULT (flag off ⇒ behavior-neutral).
@@ -115,18 +151,37 @@
 (define STAT-MISS 1)
 (define STAT-EVICT 2)
 (define STAT-FAULT 3)
+(define STAT-STALE-RETRY 4)
 
 ;; Pool key: case-insensitive host + port + tls flag.
 (define (pool-key host port tls?)
   (list (string-downcase host) port tls?))
 
+;; Normalize a per-host idle-TTL map (host → secs): downcase host keys to
+;; match pool-key, stringify non-string keys, drop non-positive values.
+;; Returns #f (no overrides) unless at least one usable entry remains.
+(define (normalize-host-idle-ttl m)
+  (and m
+       (hash? m)
+       (let ([norm (for/fold ([acc (hash)])
+                             ([(k v) (in-hash m)]
+                              #:when (and (real? v) (positive? v)))
+                     (hash-set acc
+                               (string-downcase (if (string? k)
+                                                    k
+                                                    (format "~a" k)))
+                               v))])
+         (and (positive? (hash-count norm)) norm))))
+
 (define (make-conn-pool #:idle-ttl-secs [idle-ttl-secs 55]
                         #:max-per-host [max-per-host 4]
-                        #:connect-timeout-secs [connect-timeout-secs 10])
+                        #:connect-timeout-secs [connect-timeout-secs 10]
+                        #:host-idle-ttl [host-idle-ttl #f])
   (conn-pool (make-semaphore 1)
              (make-hash)
-             (vector 0 0 0 0)
+             (vector 0 0 0 0 0)
              idle-ttl-secs
+             (normalize-host-idle-ttl host-idle-ttl)
              max-per-host
              connect-timeout-secs
              (make-custodian)
@@ -147,12 +202,28 @@
                                                     (exn-message e))))])
     (custodian-shutdown-all (pooled-connection-custodian entry))))
 
+;; Effective idle TTL (ms) for one pool key: the per-host override
+;; (BUG-0022 W1B, networking.pool.host-idle-ttl) wins over the global
+;; idle-ttl-secs so aggressive keep-alive closers (e.g. api.z.ai) can be
+;; pinned without lowering the TTL for everyone.
+(define (key-idle-ttl-ms pool key)
+  (define override
+    (cond
+      [(conn-pool-host-idle-ttl pool)
+       =>
+       (lambda (m) (hash-ref m (car key) #f))]
+      [else #f]))
+  (* 1000
+     (if (and override (real? override) (positive? override))
+         override
+         (conn-pool-idle-ttl-secs pool))))
+
 ;; Drop expired entries from one bucket. Returns how many were evicted.
 ;; Caller holds the lock.
 (define (evict-expired-for-key! pool key)
   (define bucket (hash-ref (conn-pool-table pool) key '()))
   (define now (current-inexact-milliseconds))
-  (define ttl-ms (* 1000 (conn-pool-idle-ttl-secs pool)))
+  (define ttl-ms (key-idle-ttl-ms pool key))
   (define expired
     (for/list ([entry (in-list bucket)]
                #:when (> (- now (pooled-connection-last-used-ms entry)) ttl-ms))
@@ -210,7 +281,12 @@
                         ;; Content-Length response head flips this to #t.
                         (box #f)
                         (box #f)
-                        (current-inexact-milliseconds))]))
+                        (current-inexact-milliseconds)
+                        pool
+                        ;; BUG-0022 W1B: freshly dialed — NOT a reused entry,
+                        ;; so a no-response-byte failure is never transparently
+                        ;; retried.
+                        #f)]))
 
 ;; ============================================================
 ;; Public API
@@ -224,7 +300,8 @@
                          (pool-stats (vector-ref v STAT-HIT)
                                      (vector-ref v STAT-MISS)
                                      (vector-ref v STAT-EVICT)
-                                     (vector-ref v STAT-FAULT)))))
+                                     (vector-ref v STAT-FAULT)
+                                     (vector-ref v STAT-STALE-RETRY)))))
 
 ;; Acquire a healthy connection for (host, port, tls?): return a pooled idle
 ;; connection when one exists (hit), otherwise open a fresh one (miss).
@@ -293,12 +370,17 @@
              ;; mutable state with the pooled copy, otherwise the pooled
              ;; entry would inherit released?#t (making the next release a
              ;; silent no-op) and fault marks would leak across generations.
+             ;; The checked-in copy is marked reused?=#t (BUG-0022 W1B): it
+             ;; has completed at least one exchange, so its next failure at
+             ;; status-line read is a candidate for the transparent stale
+             ;; retry.
              (hash-set! (conn-pool-table pool)
                         key
                         (cons (struct-copy pooled-connection
                                            entry
                                            [reusable?-box (box #t)]
                                            [released?-box (box #f)]
+                                           [reused? #t]
                                            [last-used-ms (current-inexact-milliseconds)])
                               bucket))])])))))
 
@@ -431,22 +513,101 @@
                    #f ; no peek support — SSE readers never peek
                    (lambda () (set-box! state 'done)))) ; close: pool owns the socket
 
+;; BUG-0022 W1B: internal signal — the status-line read on a REUSED entry saw
+;; a clean peer close with NO response byte (server closed the keep-alive
+;; socket while it sat idle in the pool). Subclass of exn:fail:network so the
+;; legacy adapter retry layers keep matching if it ever escapes to them.
+(struct exn:fail:network:stale-reuse exn:fail:network (origin-message))
+
+;; Timed status-line read distinguishing the stale-reuse signature from a
+;; timeout. Returns the line (string), 'eof (peer closed before ANY byte —
+;; the stale keep-alive signature), or 'timeout.
+(define (read-status-line in timeout-secs)
+  (define r (sync/timeout timeout-secs (read-line-evt in 'return-linefeed)))
+  (cond
+    [(not r) 'timeout]
+    [(eof-object? r) 'eof]
+    [else r]))
+
+;; Counter bump that takes the pool lock (pool-send-request! runs unlocked).
+(define (bump-stat-locked! pool idx)
+  (call-with-semaphore (conn-pool-lock pool) (lambda () (bump-stat! pool idx))))
+
+;; BUG-0022 W1B: splice a freshly dialed connection into an existing entry
+;; handle so release/check-in logic keeps operating on live ports. The dead
+;; socket's custodian is shut down after the swap; never raises.
+(define (install-fresh-connection! entry fresh)
+  (define old-cust (pooled-connection-custodian entry))
+  (set-pooled-connection-custodian! entry (pooled-connection-custodian fresh))
+  (set-pooled-connection-in! entry (pooled-connection-in fresh))
+  (set-pooled-connection-out! entry (pooled-connection-out fresh))
+  (with-handlers ([exn:fail? void])
+    (custodian-shutdown-all old-cust)))
+
 ;; Send an HTTP/1.1 request over a pooled connection and parse the response
 ;; head. Returns (values status-line header-lines body-port). The body port is
 ;; wrapped in a limited input port when Content-Length framing is present —
 ;; consuming it fully leaves the connection cleanly reusable. Any failure
 ;; marks the connection as faulted before re-raising.
+;;
+;; BUG-0022 W1B: when this entry was REUSED from the pool (checked in after a
+;; prior exchange, not freshly dialed) and the peer closes before sending any
+;; response byte, the request is transparently retried ONCE on a freshly
+;; dialed connection — the stale keep-alive failure never reaches the caller.
+;; Never retried transparently: fresh first-use connections, failures after
+;; any response byte was received, and status-line timeouts.
 (define (pool-send-request! entry
                             path-str
                             #:method [method "POST"]
                             #:headers [headers '()]
                             #:data [data #""]
                             #:head-timeout [head-timeout 10])
+  (define pool (pooled-connection-pool entry))
+  (define reused-entry? (pooled-connection-reused? entry))
+  (define (attempt! allow-retry?)
+    (with-handlers
+        ([exn:fail:network:stale-reuse?
+          (lambda (e)
+            (cond
+              [(and reused-entry? allow-retry? (conn-pool? pool))
+               ;; The request write went into a socket the server
+               ;; had already closed while idle; zero response
+               ;; bytes were lost. Fault the dead socket, dial a
+               ;; fresh connection, retry the identical request.
+               (log-info
+                (format
+                 "llm/conn-pool: stale reuse ~a:~a — no response byte; transparently retrying once on a fresh connection"
+                 (pooled-connection-host entry)
+                 (pooled-connection-port-number entry)))
+               (bump-stat-locked! pool STAT-STALE-RETRY)
+               (define fresh
+                 (open-connection! pool
+                                   (pooled-connection-host entry)
+                                   (pooled-connection-port-number entry)
+                                   (pooled-connection-tls? entry)))
+               (install-fresh-connection! entry fresh)
+               (attempt! #f)]
+              [else (raise e)]))])
+      (send-once! entry
+                  (pooled-connection-out entry)
+                  (pooled-connection-in entry)
+                  path-str
+                  method
+                  headers
+                  data
+                  head-timeout
+                  reused-entry?)))
   (with-handlers ([exn:fail? (lambda (e)
                                (mark-pool-fault! entry)
                                (raise e))])
-    (define out (pooled-connection-out entry))
-    (define in (pooled-connection-in entry))
+    (attempt! #t)))
+
+;; One request/response-head exchange over the given ports. Raises
+;; exn:fail:network:stale-reuse ONLY for a zero-byte status-line read on a
+;; reused entry; every other failure raises the legacy exn:fail:network
+;; errors (single-use-on-fault, surfaced to the caller).
+(define (send-once! entry out in path-str method headers data head-timeout reused?)
+  (let ()
     ;; --- request head + body ---
     (fprintf out "~a ~a HTTP/1.1\r\n" method path-str)
     (fprintf out "Host: ~a\r\n" (pooled-connection-host entry))
@@ -461,10 +622,25 @@
       (write-bytes data out))
     (flush-output out)
     ;; --- response head ---
-    (define status-line (read-head-line in head-timeout))
-    (unless status-line
-      (raise (exn:fail:network "llm/conn-pool: no response status line from peer"
-                               (current-continuation-marks))))
+    ;; BUG-0022 W1B: 'eof here on a REUSED entry is the stale keep-alive
+    ;; signature — raise the marker so pool-send-request! can transparently
+    ;; retry once. Fresh entries (first use) and 'timeout keep the legacy
+    ;; surfaced error.
+    (define status-result (read-status-line in head-timeout))
+    (define status-line
+      (cond
+        [(string? status-result) status-result]
+        [(eq? status-result 'eof)
+         (if reused?
+             (raise (exn:fail:network:stale-reuse
+                     "llm/conn-pool: no response status line from peer"
+                     (current-continuation-marks)
+                     "peer closed a pooled (reused) connection before any response byte"))
+             (raise (exn:fail:network "llm/conn-pool: no response status line from peer"
+                                      (current-continuation-marks))))]
+        [else ; 'timeout
+         (raise (exn:fail:network "llm/conn-pool: no response status line from peer"
+                                  (current-continuation-marks)))]))
     (define header-lines
       (let loop ([acc '()])
         (define line (read-head-line in head-timeout))

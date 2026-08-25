@@ -236,7 +236,9 @@
                  "#:no-change-retries [no-change-retries (current-gsd-wave-no-change-retries)]")
       (contains? orchestrator-src "(> no-change-retries-left 0)")
       ;; Exactly-once: the retry consumes the budget.
-      (contains? orchestrator-src "(run-once (sub1 no-change-retries-left))")
+      ;; W7 campaign: run-once was renamed run-once* (worktree boxes added);
+      ;; the exactly-once decremented re-entry invariant is unchanged.
+      (contains? orchestrator-src "(run-once* (sub1 no-change-retries-left)")
       ;; At-least-once semantics preserved: the wave is reset to pending and
       ;; persisted BEFORE the re-run, so a crash leaves it re-attemptable.
       (contains? orchestrator-src "(set-campaign-wave-status! retry-wave 'pending)")

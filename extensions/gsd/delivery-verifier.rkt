@@ -15,6 +15,15 @@
 ;;   3. at least one wave target file changed vs HEAD (or untracked-new);
 ;;   4. a bounded verify command exits 0 (compile gate by default).
 ;;
+;; v1.00.17 W7 (#9512b) — branch-based delivery: when the coordinator binds
+;; `current-gsd-delivery-branch-context` (worktree isolation ON), checks 2–4
+;; evaluate the wave BRANCH instead of any working tree: the changed set is
+;; the committed diff of the branch vs the base commit captured at attempt
+;; start, the expected branch is the recorded campaign branch, and the
+;; verify command runs from the wave worktree. Uncommitted dirt can never
+;; satisfy delivery. With the context unbound (#f) the legacy shared-tree
+;; behavior above is byte-identical to pre-W7 (characterized in W0).
+;;
 ;; Returns a `delivery-verification` struct whose approved?/message the
 ;; coordinator surfaces on rejection. This is the only result that may
 ;; cross the durable DONE commit point.
@@ -38,6 +47,11 @@
          run-delivery-verification
          current-gsd-delivery-verify-command
          current-gsd-delivery-verify-timeout-sec
+         current-gsd-delivery-branch-context
+         make-branch-delivery-context
+         branch-delivery-context?
+         branch-delivery-context-ref
+         committed-branch-changed-files
          check-git-available
          check-branch-matches
          check-wave-files-changed
@@ -73,6 +87,92 @@
      (if (and (real? v) (positive? v))
          v
          (raise-argument-error 'current-gsd-delivery-verify-timeout-sec "positive-real?" v)))))
+
+;; ============================================================
+;; v1.00.17 W7 (#9512b): branch-based delivery context
+;; ============================================================
+
+;; When worktree isolation is active, the campaign coordinator binds this
+;; parameter around the verifier call. Delivery evidence then comes ONLY
+;; from the COMMITTED diff of the wave branch vs the base commit captured
+;; at attempt start — never from any working tree. Consequences (the W7
+;; root cause being fixed):
+;;   * uncommitted mutations in the shared checkout (or in the wave
+;;     worktree) do NOT count as delivered;
+;;   * a `git checkout .` in the shared checkout can no longer destroy
+;;     "done" work — approved delivery lives on the recorded branch;
+;;   * wave ownership of changes is exact: the branch diff IS the wave.
+;; #f (the default) selects the legacy shared-checkout verification whose
+;; behavior is byte-identical to the pre-W7 verifier (characterized in W0
+;; and pinned by test-gsd-executor-retry-characterization.rkt).
+;;
+;; Context keys:
+;;   repo-root     — git root holding the campaign branch (string/path)
+;;   branch        — wave branch name, "campaign/<hash8>/w<N>"
+;;   base-commit   — base commit SHA captured at attempt start
+;;   worktree-path — #f or the worktree checkout of the branch; the verify
+;;                   command runs with this as cwd so gates exercise the
+;;                   delivered (committed) tree
+(define (make-branch-delivery-context #:repo-root repo-root
+                                      #:branch branch
+                                      #:base-commit base-commit
+                                      #:worktree-path [worktree-path #f])
+  (hasheq 'repo-root repo-root 'branch branch 'base-commit base-commit 'worktree-path worktree-path))
+
+(define (branch-delivery-context? v)
+  (and (hash? v) (hash-ref v 'repo-root #f) (hash-ref v 'branch #f) (hash-ref v 'base-commit #f) #t))
+
+(define (branch-delivery-context-ref ctx key)
+  (hash-ref ctx key #f))
+
+(define current-gsd-delivery-branch-context
+  (make-parameter #f
+                  (lambda (v)
+                    (cond
+                      [(not v) v]
+                      [(branch-delivery-context? v) v]
+                      [else
+                       (raise-argument-error 'current-gsd-delivery-branch-context
+                                             "(or/c #f branch-delivery-context?)"
+                                             v)]))))
+
+;; Effective git root for git evidence: under an active branch context the
+;; campaign branch's repo; otherwise the base-dir checkout.
+(define (evidence-git-root base-dir)
+  (define ctx (current-gsd-delivery-branch-context))
+  (or (and ctx (branch-delivery-context-ref ctx 'repo-root)) (git-root-for base-dir)))
+
+;; Effective cwd for the verify command: under an active branch context the
+;; wave worktree (the delivered tree as committed); otherwise the git root.
+(define (verify-command-cwd base-dir git-root)
+  (define ctx (current-gsd-delivery-branch-context))
+  (or (and ctx (branch-delivery-context-ref ctx 'worktree-path)) git-root))
+
+;; The committed delivery diff of the wave branch: names changed between
+;; the base commit (captured at attempt start) and the wave branch tip.
+;; Three-dot semantics (merge-base...branch) keep the diff exact even if
+;; origin/main moved since the attempt started. Fail closed: any git
+;; failure — or a missing branch context — yields the empty set, so an
+;; unverifiable branch can never satisfy delivery. The result is an
+;; equal-based set: membership must compare path STRINGS by value, since
+;; git output and find-relative-path produce fresh (never eq?) strings.
+(define (committed-branch-changed-files)
+  (define ctx (current-gsd-delivery-branch-context))
+  (if (not ctx)
+      (set)
+      (let ()
+        (define root (branch-delivery-context-ref ctx 'repo-root))
+        (define result
+          (run-git* root
+                    (list "diff"
+                          "--name-only"
+                          (format "~a...~a"
+                                  (branch-delivery-context-ref ctx 'base-commit)
+                                  (branch-delivery-context-ref ctx 'branch)))))
+        (define out (and (car result) (eq? (car result) 0) (string-split (cadr result) "\n")))
+        (for/set ([p (in-list (or out '()))]
+                  #:when (not (string=? (string-trim p) "")))
+          (string-trim p)))))
 
 ;; ============================================================
 ;; Git helpers
@@ -160,20 +260,37 @@
             (cons #f "no git repository reachable"))))
 
 (define (check-branch-matches base-dir wave-idx)
-  (define root (git-root-for base-dir))
-  (define branch (and root (current-branch root)))
-  (define expected (expected-wave-branch base-dir wave-idx))
-  (define detail (format "branch=~a expected=~a" branch (or expected "?")))
-  (cons
-   "branch"
-   (cond
-     ;; Issue-less campaign: no per-wave GitHub issue table in STATE.md,
-     ;; so no expected feature branch exists (work happens on main or the
-     ;; current branch). Only enforce the branch match when the campaign
-     ;; actually declares per-wave issues.
-     [(not expected) (cons #t (string-append detail " (issue-less campaign: no expected branch)"))]
-     [(and branch (string=? branch expected)) (cons #t detail)]
-     [else (cons #f detail)])))
+  (define ctx (current-gsd-delivery-branch-context))
+  (cond
+    ;; W7 (#9512b) isolated delivery: the expected branch is the recorded
+    ;; wave branch (campaign/<hash8>/w<N>), and it must resolve as a ref in
+    ;; the campaign repo. The shared checkout's current branch is
+    ;; irrelevant — delivery is evaluated on the branch, not any checkout.
+    [ctx
+     (define root (branch-delivery-context-ref ctx 'repo-root))
+     (define expected (branch-delivery-context-ref ctx 'branch))
+     (define branch
+       (and (git-exit-ok? (run-git* root (list "rev-parse" "--verify" expected))) expected))
+     (define detail (format "branch=~a expected=~a (isolated)" (or branch #f) expected))
+     (cons "branch"
+           (if branch
+               (cons #t detail)
+               (cons #f detail)))]
+    [else
+     (define root (git-root-for base-dir))
+     (define branch (and root (current-branch root)))
+     (define expected (expected-wave-branch base-dir wave-idx))
+     (define detail (format "branch=~a expected=~a" branch (or expected "?")))
+     (cons
+      "branch"
+      (cond
+        ;; Issue-less campaign: no per-wave GitHub issue table in STATE.md,
+        ;; so no expected feature branch exists (work happens on main or the
+        ;; current branch). Only enforce the branch match when the campaign
+        ;; actually declares per-wave issues.
+        [(not expected) (cons #t (string-append detail " (issue-less campaign: no expected branch)"))]
+        [(and branch (string=? branch expected)) (cons #t detail)]
+        [else (cons #f detail)]))]))
 
 (define (wave-file->git-relative base-dir git-root wave-file)
   ;; Wave files may be declared either repo-root-relative (e.g.
@@ -271,12 +388,18 @@
     (if wave
         (gsd-wave-files wave)
         '()))
-  (define root (git-root-for base-dir))
+  (define root (evidence-git-root base-dir))
   (cond
     [(not root) (cons "files" (cons #f "no git root"))]
     [(null? files) (cons "files" (cons #f "wave declares no target files"))]
     [else
-     (let* ([changed (changed-files-set base-dir root campaign-created-at)]
+     ;; W7 (#9512b): under an active branch context the changed set is the
+     ;; COMMITTED branch diff ONLY — uncommitted worktree dirt (shared
+     ;; checkout or wave worktree) never satisfies delivery. The failure
+     ;; message is byte-identical to the legacy path.
+     (let* ([changed (if (current-gsd-delivery-branch-context)
+                         (committed-branch-changed-files)
+                         (changed-files-set base-dir root campaign-created-at))]
             [changed-wave-files
              (for/list ([f (in-list files)]
                         #:when
@@ -300,7 +423,13 @@
     (if wave
         (gsd-wave-files wave)
         '()))
-  (define changed (changed-files-set base-dir git-root))
+  ;; W7 (#9512b): under an active branch context the "changed" set is the
+  ;; committed branch diff; the gate compiles the wave's delivered sources
+  ;; (targets are git-relative and layout-identical across checkouts).
+  (define changed
+    (if (current-gsd-delivery-branch-context)
+        (committed-branch-changed-files)
+        (changed-files-set base-dir git-root)))
   (define (racket-source? p)
     (regexp-match? #rx"[.]rktl?$" p))
   (define targets
@@ -344,8 +473,12 @@
   (define root (git-root-for base-dir))
   (define explicit (current-gsd-delivery-verify-command))
   (define gate (and root (not explicit) (build-compile-gate base-dir root wave-idx plan)))
+  ;; W7 (#9512b): under an active branch context the command runs from the
+  ;; wave WORKTREE (the delivered tree as committed), not the shared
+  ;; checkout — the shared tree does not contain the wave's changes.
+  (define run-cwd (verify-command-cwd base-dir root))
   (define (run-cmd command)
-    (let* ([result (run-verify-command command root (current-gsd-delivery-verify-timeout-sec))]
+    (let* ([result (run-verify-command command run-cwd (current-gsd-delivery-verify-timeout-sec))]
            [exit-code (car result)]
            [detail (format "cmd=~a exit=~a" command exit-code)])
       (cons "verify"

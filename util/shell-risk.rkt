@@ -254,9 +254,43 @@
       [(string-prefix? val "exec") (add! 'exec 'medium (format "Process replacement: ~a" val) pos)]
       [(and (string-prefix? val "git") (string-contains? val "--force"))
        (add! 'destructive 'high (format "Force push: ~a" val) pos)]
-      [(string-prefix? val "mv ") (add! 'destructive 'medium (format "Move operation: ~a" val) pos)]))
+      ;; #9516: bare `mv a b` renames are routine shell usage and were pure
+      ;; warning fatigue; only root-target moves (mv /...) stay destructive.
+      [(string-prefix? val "mv /")
+       (add! 'destructive 'medium (format "Move operation (root target): ~a" val) pos)]))
 
   ;; Substitution and pipe detection on individual tokens
+  ;;
+  ;; #9516: benign $(...)/`...` substitutions are downgraded to 'low.
+  ;; Flagging every substitution 'high produced constant false alarms
+  ;; (e.g. echo $(basename file), p=$(basename "$f")) and trained users
+  ;; and models to ignore real findings. Substitutions whose output feeds
+  ;; a pipe-to-shell target (| sh / | bash / | cmd / | powershell —
+  ;; including a substitution used as the piped command) stay 'high,
+  ;; together with the network-pipe finding.
+  (define (pipe-target-index idx)
+    (let loop ([j (add1 idx)])
+      (cond
+        [(>= j (length tokens)) #f]
+        [(eq? (shell-token-type (list-ref tokens j)) 'whitespace) (loop (add1 j))]
+        [else j])))
+
+  (define (shell-target-token? tok)
+    (or (eq? (shell-token-type tok) 'substitution)
+        (and (eq? (shell-token-type tok) 'word)
+             (member (string-downcase (shell-token-value tok)) '("sh" "bash" "cmd" "powershell")))))
+
+  (define pipe-to-shell?
+    (for/or ([tok (in-list tokens)]
+             [idx (in-naturals)])
+      (and (eq? (shell-token-type tok) 'separator)
+           (string=? (string-downcase (shell-token-value tok)) "|")
+           (cond
+             [(pipe-target-index idx)
+              =>
+              (lambda (j) (and (shell-target-token? (list-ref tokens j)) #t))]
+             [else #f]))))
+
   (for ([tok (in-list tokens)]
         [idx (in-naturals)])
     (define type (shell-token-type tok))
@@ -264,25 +298,26 @@
     (define pos (shell-token-start tok))
 
     (when (eq? type 'substitution)
-      (add! 'command-substitution 'high (format "Command substitution: ~a" val) pos))
+      ;; #9516: 'low unless the command pipes into a shell interpreter.
+      (add! 'command-substitution
+            (if pipe-to-shell? 'high 'low)
+            (format "Command substitution: ~a" val)
+            pos))
 
     (when (and (eq? type 'separator) (string=? (string-downcase val) "|"))
       ;; Skip whitespace to find next word
-      (define next-idx
-        (let loop ([j (add1 idx)])
-          (cond
-            [(>= j (length tokens)) #f]
-            [(eq? (shell-token-type (list-ref tokens j)) 'whitespace) (loop (add1 j))]
-            [else j])))
+      (define next-idx (pipe-target-index idx))
       (when next-idx
         (define next-tok (list-ref tokens next-idx))
-        (when (eq? (shell-token-type next-tok) 'word)
-          (define next-val (string-downcase (shell-token-value next-tok)))
-          (when (member next-val '("sh" "bash" "cmd" "powershell"))
-            (add! 'network-pipe
-                  'high
-                  (format "Pipe to shell: | ~a" next-val)
-                  (shell-token-start next-tok)))))))
+        (when (shell-target-token? next-tok)
+          (define next-val
+            (if (eq? (shell-token-type next-tok) 'word)
+                (string-downcase (shell-token-value next-tok))
+                (shell-token-value next-tok)))
+          (add! 'network-pipe
+                'high
+                (format "Pipe to shell: | ~a" next-val)
+                (shell-token-start next-tok))))))
 
   (reverse findings))
 
