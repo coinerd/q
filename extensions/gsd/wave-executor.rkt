@@ -25,9 +25,9 @@
 ;; make-wave-worktree!/cleanup-wave-worktree!/reclaim-orphaned-worktrees!
 ;; give each wave attempt its own git worktree + campaign branch, sibling of
 ;; the project root, so the shared checkout is never mutated by an in-flight
-;; attempt. Gated behind the `gsd.worktree-isolation` flag (default OFF until
-;; the W8 integration bake); the legacy shared-checkout path is untouched
-;; while the flag is OFF. Path placement is LOAD-BEARING: see
+;; attempt. Gated behind the `gsd.worktree-isolation` flag (default ON since
+;; the v1.00.17 W8 integration bake); `#:isolate? #f` selects the legacy
+;; shared-checkout path. Path placement is LOAD-BEARING: see
 ;; docs/reports/GSD-WORKTREE-ISOLATION-v1.00.17.md.
 
 (require racket/format
@@ -501,14 +501,20 @@
 ;; docs/reports/GSD-WORKTREE-ISOLATION-v1.00.17.md.
 ;; ============================================================
 
-;; User-facing setting name (documented in the design record). Default OFF
-;; until the W8 integration bake flips it after verification.
+;; User-facing setting name (documented in the design record). Default ON
+;; since the v1.00.17 W8 integration bake (dogfooded on this campaign:
+;; waves ran worktree-isolated end-to-end; see
+;; docs/reports/GSD-EXECUTOR-HARDENING-BAKE-v1.00.17.md). The `#:isolate? #f`
+;; keyword on run-campaign-wave / run-wave remains the explicit disable
+;; switch for tests and operators.
 (define WORKTREE-ISOLATION-SETTING-NAME "gsd.worktree-isolation")
 (define WORKTREE-DIRNAME-PREFIX "wt-campaign-")
 
 ;; Feature flag, mirroring the policy.rkt parameter pattern. `#:isolate?`
 ;; keyword arguments (tests, explicit operator override) take precedence.
-(define current-gsd-worktree-isolation (make-parameter #f (lambda (v) (and v #t))))
+;; Default #t (W8 bake, v1.00.17): pass #:isolate? #f to force the legacy
+;; shared-checkout behavior.
+(define current-gsd-worktree-isolation (make-parameter #t (lambda (v) (and v #t))))
 
 (define (worktree-isolation-enabled? #:isolate? (override #f))
   (or override (current-gsd-worktree-isolation)))

@@ -14,8 +14,8 @@
 ;;   * Orphaned worktrees from a crashed attempt are reclaimed on the next
 ;;     campaign start (reclaim-orphaned-worktrees!); unrelated worktrees
 ;;     are untouched.
-;;   * Feature flag `gsd.worktree-isolation` defaults OFF (until the W8
-;;     bake); `#:isolate?` overrides for tests.
+;;   * Feature flag `gsd.worktree-isolation` defaults ON (flipped by the
+;;     v1.00.17 W8 integration bake); `#:isolate? #f` overrides for tests.
 ;;
 ;; Layer 1 tests are pure (no git binary). Layer 2 tests run against a real
 ;; throwaway git repository in a temp sandbox; git-dependent cases are
@@ -122,12 +122,14 @@
                           "/x/proj/wt-campaign-01234567-w1"
                           "origin/main")))
 
-    (test-case "isolation flag defaults OFF; #:isolate? overrides (W8 bake gate)"
-      (check-equal? (current-gsd-worktree-isolation) #f)
-      (check-equal? (worktree-isolation-enabled?) #f)
+    (test-case "isolation flag defaults ON since W8 bake; #:isolate? #f disables"
+      (check-equal? (current-gsd-worktree-isolation) #t)
+      (check-equal? (worktree-isolation-enabled?) #t)
       (check-equal? (worktree-isolation-enabled? #:isolate? #t) #t)
-      (parameterize ([current-gsd-worktree-isolation #t])
-        (check-equal? (worktree-isolation-enabled?) #t)))
+      (check-equal? (worktree-isolation-enabled? #:isolate? #f) #f
+                    "explicit #:isolate? #f is the disable switch")
+      (parameterize ([current-gsd-worktree-isolation #f])
+        (check-equal? (worktree-isolation-enabled?) #f)))
 
     (test-case "find-repo-root supports both layouts with base-dir precedence"
       (check-equal? (find-repo-root "/does/not/exist") #f)
