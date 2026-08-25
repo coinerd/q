@@ -45,6 +45,47 @@ Released 2026-08-25.
   evidence: dogfooded worktree isolation, branch-based verification, and the
   #9515 failure-context retry on a synthetic no-op first attempt.
 
+### Breaking / Behavior Changes
+
+- `gsd.worktree-isolation` now defaults ON: campaign wave executors run in
+  dedicated git worktrees instead of the shared checkout. Set it to `false`
+  to restore shared-checkout execution.
+- Delivery verification is branch-based: a wave completes only when its
+  deliverables exist as a committed diff on the wave branch (pushed head SHA
+  recorded in the durable campaign record); uncommitted working-tree mutations
+  no longer count as delivery.
+- Shell-risk severities for `$()`/backtick substitution and bare two-operand
+  `mv` are downgraded one tier; critical anchors (`rm -rf`, `dd of=/dev/`,
+  force-push) are unchanged.
+
+### Migration Notes
+
+- No API changes. Operators with automation keyed to shell-risk severity strings
+  should re-check thresholds against the new tiers; use
+  `networking.pool.host-idle-ttl` to pin aggressive keep-alive hosts (e.g.
+  api.z.ai) without lowering the global idle TTL.
+- Campaign operators: provider/network infra failures now auto-retry at the
+  campaign level before stopping; `/retry` remains available as manual override.
+
+### Testing
+
+- New characterization + hardening tests: executor-retry characterization pins,
+  shell-risk severity baseline, conn-pool stale-reuse retry, health-gate
+  turn-scoped accounting, mutation-stall watchdog, wave-worktree lifecycle,
+  branch-based delivery verification. Fast suite 1129 files / 16406 tests,
+  tui 88, arch 31, workflows 29 — all green; local gate evidence recorded at
+  the release SHA prior to tagging.
+
+### Operational / Release
+
+- Rollback toggles: `gsd.worktree-isolation=false` (shared-checkout executors);
+  `networking.pool.enabled=false` (pooling); stall watchdog thresholds via
+  settings (defaults soft 25 / hard 60 tool calls).
+- Known follow-up defects observed during the bake and filed for the next
+  series: BUG-0023–BUG-0027 in `.planning/bugs/` (plan-format fragility,
+  campaign halt on infra failure, verifier annotation false negative, scratch-
+  workflow guard friction, git-root contract gap).
+
 ## v1.00.16 — 2026-08-24
 
 Released 2026-08-24.
