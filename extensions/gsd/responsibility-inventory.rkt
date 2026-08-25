@@ -158,7 +158,9 @@
                                    "event-structs"))
    (make-entry "wave-executor.rkt"
                'campaign-state
-               '(fs-read)
+               ;; W8/v1.00.17: worktree isolation (W1-W5) added git + fs-delete
+               ;; + parameter/make-parameter + path ops to this module.
+               '(fs-read fs-delete git make-param parameterize path-ops)
                '()
                '("racket/format" "racket/string"
                                  "racket/file"
@@ -209,7 +211,8 @@
                                    "events"))
    (make-entry "command-handlers.rkt"
                'ui-glue
-               '(fs-delete mkdir)
+               ;; W8/v1.00.17: empty-response re-anchor (#9514) added parameterize.
+               '(fs-delete mkdir parameterize)
                '()
                '("racket/contract" "racket/match"
                                    "racket/string"

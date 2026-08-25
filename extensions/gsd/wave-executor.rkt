@@ -516,8 +516,13 @@
 ;; shared-checkout behavior.
 (define current-gsd-worktree-isolation (make-parameter #t (lambda (v) (and v #t))))
 
-(define (worktree-isolation-enabled? #:isolate? (override #f))
-  (or override (current-gsd-worktree-isolation)))
+;; 'auto sentinel (not #f) so an EXPLICIT #:isolate? #f is honored as the
+;; documented disable switch instead of falling through to the parameter —
+;; W8 bake fix, v1.00.17.
+(define (worktree-isolation-enabled? #:isolate? [override 'auto])
+  (if (eq? override 'auto)
+      (current-gsd-worktree-isolation)
+      (and override #t)))
 
 ;; ---- Pure naming ----------------------------------------------------------
 
