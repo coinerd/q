@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.16 -->
+<!-- verified-against: 1.00.17 -->
 # Workflow Testing Guide
 
 This guide covers q's workflow-level integration tests that verify
@@ -124,4 +124,4 @@ Use relative paths from the test file:
 
 ## Version 1.00.16
 
-This documentation reflects q 1.00.16.
+This documentation reflects .00.17.
