@@ -129,6 +129,8 @@
           [campaign-wave-delivery-head-sha (-> campaign-wave? string?)]
           [set-campaign-wave-delivery-branch! (-> campaign-wave? string? void?)]
           [set-campaign-wave-delivery-head-sha! (-> campaign-wave? string? void?)]
+          [campaign-wave-attempt-context (-> campaign-wave? string?)]
+          [set-campaign-wave-attempt-context! (-> campaign-wave? string? void?)]
           [campaign-attempt-id (-> campaign-attempt? string?)]
           [campaign-attempt-fence-token (-> campaign-attempt? (or/c #f exact-nonnegative-integer?))]
           [campaign-attempt-started-at (-> campaign-attempt? exact-integer?)]
@@ -166,7 +168,11 @@
                attempt-count
                current-attempt
                [delivery-branch #:auto]
-               [delivery-head-sha #:auto])
+               [delivery-head-sha #:auto]
+               ;; v1.00.18 (BUG-0024 W3): durable hand-off context captured
+               ;; from the prior executor session when it died on an infra
+               ;; failure ("" = none). Consumed by the next attempt's prompt.
+               [attempt-context #:auto])
   #:transparent
   #:mutable
   #:constructor-name make-campaign-wave

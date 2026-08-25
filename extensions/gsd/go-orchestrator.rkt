@@ -38,8 +38,14 @@
                   current-gsd-wave-timeout-retries
                   current-gsd-wave-no-change-retries
                   current-gsd-wave-failure-context
-                  current-gsd-max-consecutive-tool-calls)
-         (only-in "prompts.rkt" wave-failure-context-block executor-reanchor-prompt)
+                  current-gsd-max-consecutive-tool-calls
+                  current-gsd-campaign-infra-retries
+                  current-gsd-campaign-infra-retry-delay)
+         (only-in "prompts.rkt"
+                  wave-failure-context-block
+                  wave-attempt-context-block
+                  executor-reanchor-prompt)
+         (only-in "events.rkt" emit-gsd-event!)
          (only-in "wave-executor.rkt"
                   STALL-SOFT-LIMIT-DEFAULT
                   STALL-HARD-LIMIT-DEFAULT
@@ -478,6 +484,41 @@
        (>= (string-length verifier-message) (string-length no-change-rejection-prefix))
        (string-prefix? verifier-message no-change-rejection-prefix)))
 
+;; ============================================================
+;; Campaign-level infra-failure retry (v1.00.18 BUG-0024 W3)
+;; ============================================================
+
+;; Hard cap on the durable prior-attempt context (~2 KB per the wave spec).
+(define attempt-context-max-chars 2048)
+
+;; Build the ≤2 KB prior-attempt context captured into the campaign record's
+;; attempt-context field when an executor session dies on an infra failure.
+;; The next (automatic) attempt of the SAME wave gets this prepended to its
+;; prompt, so it resumes from recorded context instead of re-exploring from
+;; zero (~12 duplicated tool calls observed per restart in the v1.00.17
+;; campaign).
+(define (build-wave-attempt-context wave-idx attempt error-message)
+  (define raw
+    (format (string-append "Prior attempt ~a of wave W~a ended in an INFRASTRUCTURE failure "
+                           "(provider/network), not a logic failure. Work already done lives on "
+                           "the attempt branch — check git status / git diff there before writing "
+                           "anything.\nLast executor error: ~a\n"
+                           "Resume from that state; do NOT restart exploration from zero.")
+            attempt
+            wave-idx
+            error-message))
+  (substring raw 0 (min (string-length raw) attempt-context-max-chars)))
+
+;; Best-effort observability: every automatic retry emits
+;; gsd.campaign.infra-retry (payload: wave idx, attempt, delay seconds).
+;; A bus failure must never break the retry loop itself.
+(define (emit-infra-retry-event! wave-idx attempt delay-secs)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "gsd: infra-retry event emission failed: ~a"
+                                            (exn-message e)))])
+    (emit-gsd-event! 'gsd.campaign.infra-retry
+                     (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs))))
+
 ;; "no wave target files changed: f1, f2" → '("f1" "f2"). The verifier
 ;; comma-space-joins the declared targets into its message; recover the list
 ;; so the retry prompt can name the files explicitly.
@@ -682,6 +723,13 @@
      ;; parameterized so the executor prompt carries the verbatim verifier
      ;; verdict. Bounded + at-least-once: a crash mid-retry leaves the
      ;; durable wave status 'pending (re-attemptable), never lost.
+     ;; BUG-0024 W3: campaign-level infra-retry state, closed over by run-once*
+     ;; across recursive re-attempts. car = automatic retries left (initial
+     ;; current-gsd-campaign-infra-retries, default 3); cdr = accumulated failure
+     ;; descriptors ((attempt unix-timestamp) ...) for the aggregated stop
+     ;; message once the bound is exhausted.
+     (define infra-retry-state (box (cons (current-gsd-campaign-infra-retries) '())))
+
      (define (run-once* no-change-retries-left wt-box keep-branch-box)
        (set-campaign-fence-token! active fence)
        (begin-attempt! active wave-idx fence)
@@ -888,6 +936,20 @@
                             ;; KEEP the branch (it is the merge evidence).
                             (when wt
                               (set-box! keep-branch-box #t))
+                            ;; BUG-0024 W3: success clears the durable
+                            ;; prior-attempt context so the next wave starts
+                            ;; from zero context.
+                            (let ([done-rec (observe)])
+                              (define done-wave
+                                (and done-rec
+                                     (for/first ([w (campaign-record-waves done-rec)]
+                                                 #:when (= (campaign-wave-index w) wave-idx))
+                                       w)))
+                              (when (and done-wave
+                                         (positive? (string-length (campaign-wave-attempt-context
+                                                                    done-wave))))
+                                (set-campaign-wave-attempt-context! done-wave "")
+                                (persist-campaign! base-dir done-rec)))
                             (campaign-result 'wave-done (list wave-idx) "wave completed")]
                            [(failed)
                             (cond
@@ -944,28 +1006,85 @@
                                                    (lambda (idx) (wave-slug base-dir idx)))
                    (campaign-result 'wave-failed '() "runner error"))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
-            ;; D8 (#9357): transient provider/network/SSE failure — do NOT
-            ;; consume the attempt. Roll back the begin-attempt! increment,
-            ;; reset the wave to pending, and stop the campaign so the user
-            ;; re-runs /go when the provider is healthy. Avoids both attempt
-            ;; churn (attempt-4: 30 tools done, one 120 s SSE read timeout
-            ;; → wave-failed) and hot-looping on a sick provider.
+            ;; D8 (#9357) + BUG-0024 W3: transient provider/network/SSE
+            ;; failure — do NOT consume the attempt. Roll back the
+            ;; begin-attempt! increment, reset the wave to pending, and
+            ;; AUTOMATICALLY re-attempt the same wave with exponential
+            ;; backoff (30s/60s/120s), bounded by
+            ;; current-gsd-campaign-infra-retries (default 3). Each retry
+            ;; emits gsd.campaign.infra-retry and carries a durable
+            ;; prior-attempt context. Only when the bound is exhausted does
+            ;; the campaign stop with an aggregated message listing all
+            ;; failure timestamps — no manual /retry needed for transient
+            ;; outages, no hot-looping on a sick provider.
             [(infra-failed)
              (define infra-wave (current-wave-for-attempt after-run wave-idx fence expected-id))
+             (define failed-attempt (and infra-wave (campaign-wave-attempt-count infra-wave)))
              (when infra-wave
-               (set-campaign-wave-status! infra-wave 'pending)
-               (set-campaign-wave-attempt-count!
-                infra-wave
-                (max 0 (sub1 (campaign-wave-attempt-count infra-wave))))
-               (set-campaign-wave-current-attempt! infra-wave #f)
+               (define (roll-back-wave! w)
+                 (set-campaign-wave-status! w 'pending)
+                 (set-campaign-wave-attempt-count! w (max 0 (sub1 (campaign-wave-attempt-count w))))
+                 (set-campaign-wave-current-attempt! w #f)
+                 ;; W3: durable prior-attempt context so the automatic
+                 ;; re-attempt resumes instead of re-exploring from zero.
+                 (set-campaign-wave-attempt-context!
+                  w
+                  (build-wave-attempt-context wave-idx
+                                              (or failed-attempt 0)
+                                              (wave-execution-outcome-message run-result))))
+               ;; Roll back BOTH views: the disk-truth `after-run` copy (which
+               ;; is persisted) and the in-memory `active` wave — the
+               ;; recursive run-once* re-entry re-begins the attempt on
+               ;; `active`, so without this the re-attempt would start from
+               ;; the stale, un-rolled-back attempt count.
+               (roll-back-wave! infra-wave)
+               (define active-wave (find-wave active wave-idx))
+               (when active-wave
+                 (roll-back-wave! active-wave))
                (persist-campaign! base-dir after-run)
                (mirror-status! 'pending))
-             (campaign-result
-              'wave-cancelled
-              '()
-              (format
-               "provider/network failure: ~a — wave preserved (attempt not consumed); re-run /go"
-               (wave-execution-outcome-message run-result)))]
+             (set-box! infra-retry-state
+                       (cons (sub1 (car (unbox infra-retry-state)))
+                             (append (cdr (unbox infra-retry-state))
+                                     (list (list (or failed-attempt 0) (current-seconds))))))
+             (define infra-retries-left (car (unbox infra-retry-state)))
+             ;; retries-left is the budget AFTER this failure; a bound of N
+             ;; permits N automatic re-attempts, so re-enter while the budget
+             ;; is non-negative (0 = one last retry; -1 = exhausted).
+             (if (>= infra-retries-left 0)
+                 (let* ([this-retry (- (current-gsd-campaign-infra-retries) infra-retries-left)]
+                        [delay-secs ((current-gsd-campaign-infra-retry-delay) this-retry)])
+                   (log-info
+                    "gsd: wave ~a infra failure — automatic retry ~a/~a in ~as (attempt not consumed)"
+                    wave-idx
+                    this-retry
+                    (current-gsd-campaign-infra-retries)
+                    delay-secs)
+                   (emit-infra-retry-event! wave-idx (or failed-attempt 0) delay-secs)
+                   (when (> delay-secs 0)
+                     (sleep delay-secs))
+                   ;; Re-enter run-once* for the SAME wave with the same
+                   ;; attempt budget. The prior-attempt context block rides
+                   ;; the existing current-gsd-wave-failure-context prompt
+                   ;; plumbing — no parallel state.
+                   (parameterize ([current-gsd-wave-failure-context
+                                   (wave-attempt-context-block
+                                    (and infra-wave (campaign-wave-attempt-context infra-wave)))])
+                     (run-once* no-change-retries-left wt-box keep-branch-box)))
+                 ;; Bound exhausted: fail closed with an aggregated message
+                 ;; listing every failure timestamp (attempt not consumed —
+                 ;; the durable wave stays pending and re-attemptable).
+                 (campaign-result
+                  'wave-cancelled
+                  '()
+                  (format
+                   (string-append "provider/network failure persisted after ~a automatic retries "
+                                  "(attempt not consumed); re-run /go when the provider is healthy. "
+                                  "Failures: ~a")
+                   (current-gsd-campaign-infra-retries)
+                   (string-join (for/list ([f (cdr (unbox infra-retry-state))])
+                                  (format "attempt ~a at ~a" (car f) (cadr f)))
+                                "; "))))]
             [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
             ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
             ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
@@ -1003,6 +1122,12 @@
      ;; when isolation is off / creation fell back to the shared checkout).
      (let ([wt-box (box #f)]
            [keep-branch-box (box #f)])
+       ;; BUG-0024 W3: each campaign-wave run starts with a FRESH infra-retry
+       ;; budget so (a) a parameterized current-gsd-campaign-infra-retries
+       ;; is honored (the module-level box captured its value at module load)
+       ;; and (b) back-to-back runs (tests, /go restarts) never inherit a
+       ;; partially-consumed budget.
+       (set-box! infra-retry-state (cons (current-gsd-campaign-infra-retries) '()))
        (dynamic-wind
         void
         (lambda () (run-once* no-change-retries wt-box keep-branch-box))

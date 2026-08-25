@@ -18,7 +18,8 @@
          status-prompt
          executor-reanchor-role-line
          executor-reanchor-prompt
-         wave-failure-context-block)
+         wave-failure-context-block
+         wave-attempt-context-block)
 
 ;; ============================================================
 ;; Executor re-anchor prompt (v1.00.17 W3 — #9514)
@@ -74,6 +75,19 @@
                  "That is why verification failed. On this retry you MUST produce at least "
                  "one real edit to a declared target file: read the file you are editing "
                  "(only the one you are about to edit), then apply the first edit now."))
+
+;; Pure constructor: (prior-attempt-context) → context block PREFIXED to the
+;; wave executor prompt for any non-first attempt of the same wave after an
+;; automatic campaign-level infra retry (v1.00.18 BUG-0024 W3). Carried through
+;; current-gsd-wave-failure-context so it reuses the existing prompt plumbing —
+;; no parallel state. Empty context → #f (no block).
+(define (wave-attempt-context-block prior-context)
+  (if (or (not prior-context) (zero? (string-length prior-context)))
+      #f
+      (string-append
+       "=== PRIOR ATTEMPT CONTEXT (infra failure — resume, do NOT restart from zero) ===\n"
+       prior-context
+       "\n=== END PRIOR ATTEMPT CONTEXT ===\n\n")))
 
 ;; ============================================================
 ;; Planning implement prompt
