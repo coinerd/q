@@ -13,35 +13,92 @@
 ;; Parsing helpers
 ;; ============================================================
 
-;; Clean file path: strip surrounding backticks and whitespace.
-(define (clean-file-path s)
-  (define trimmed (string-trim s))
-  (define stripped
-    (cond
-      [(>= (string-length trimmed) 6)
-       (define triple-back (string-prefix? trimmed "```"))
-       (define triple-end (string-suffix? trimmed "```"))
-       (if (and triple-back triple-end)
-           (string-trim (substring trimmed 3 (- (string-length trimmed) 3)))
-           (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-               (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-               trimmed))]
-      [(>= (string-length trimmed) 2)
-       (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-           (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-           trimmed)]
-      [else trimmed]))
-  ;; Strip trailing parenthetical annotations used in wave docs, e.g.
-  ;;   - File: q/docs/reports/test-regression-log.md (new: full-regression evidence log)
-  ;; The annotation is explanatory prose, not part of the path. A path like
-  ;; `q/foo (bar)/x.rkt` (parentheses INSIDE the path, no space before them)
-  ;; is preserved because the annotation form always has " (" (space + paren).
-  (define paren-pos (regexp-match-positions #rx" \\(" stripped))
+;; Strip surrounding backticks and whitespace from a path token.
+;; `q/foo.rkt`, `` `q/foo.rkt` `` and triple-backtick forms all yield
+;; `q/foo.rkt`.
+(define (strip-backticks s)
+  (cond
+    [(>= (string-length s) 6)
+     (define triple-back (string-prefix? s "```"))
+     (define triple-end (string-suffix? s "```"))
+     (if (and triple-back triple-end)
+         (string-trim (substring s 3 (- (string-length s) 3)))
+         (if (and (string-prefix? s "`") (string-suffix? s "`"))
+             (string-trim (substring s 1 (- (string-length s) 1)))
+             s))]
+    [(>= (string-length s) 2)
+     (if (and (string-prefix? s "`") (string-suffix? s "`"))
+         (string-trim (substring s 1 (- (string-length s) 1)))
+         s)]
+    [else s]))
+
+;; Strip a trailing parenthetical annotation used in wave docs, e.g.
+;;   - File: q/docs/reports/test-regression-log.md (new: full-regression evidence log)
+;; The annotation is explanatory prose, not part of the path. A path like
+;; `q/foo (bar)/x.rkt` (parentheses INSIDE the path, no space before them)
+;; is preserved because the annotation form always has " (" (space + paren).
+(define (strip-trailing-paren-annotation s)
+  (define paren-pos (regexp-match-positions #rx" \\(" s))
   (if (and paren-pos
            ;; only strip when the paren segment runs to end-of-line (annotation)
-           (string-suffix? (string-trim stripped) ")"))
-      (string-trim (substring stripped 0 (car (car paren-pos))))
-      stripped))
+           (string-suffix? (string-trim s) ")"))
+      (string-trim (substring s 0 (car (car paren-pos))))
+      s))
+
+;; Strip a trailing bracket annotation (BUG-0025, v1.00.18 W1): wave docs
+;; mark delivery intent after the declared path, e.g.
+;;   - File: q/tests/foo.rkt  [NEW]
+;;   - File: q/docs/design.md [NEW, design record]
+;; Any whitespace-separated "[...]" segment running to end-of-line is
+;; annotation metadata about the delivery, not part of the path. Interior
+;; brackets glued to the path (`q/foo[1]/x.rkt`) are preserved: they have
+;; no separating space and do not terminate the string.
+(define (strip-trailing-bracket-annotation s)
+  (define bracket-pos (regexp-match-positions #rx" \\[[^\\[\n]*\\] *$" s))
+  (if bracket-pos
+      (string-trim (substring s 0 (car (car bracket-pos))))
+      s))
+
+;; Strip trailing annotation prose — parenthetical and/or bracketed — to a
+;; fixpoint, so mixed forms like `q/x.md (new: log) [NEW]` fully clean.
+;; Every iteration strictly shortens the string, so the recursion terminates.
+(define (strip-trailing-annotations s)
+  (define once (strip-trailing-paren-annotation (strip-trailing-bracket-annotation s)))
+  (if (string=? once s)
+      s
+      (strip-trailing-annotations once)))
+
+;; Clean file path: strip surrounding backticks/whitespace and trailing
+;; annotation prose ("[NEW]", "[NEW, design record]", "(new: evidence log)")
+;; to a fixpoint, so combined forms — "`q/foo.rkt` [NEW]" — also clean.
+;; Before BUG-0025 (v1.00.17 W0) bracket annotations survived into the
+;; declared path ("q/tests/foo.rkt  [NEW]" parsed verbatim), so the delivery
+;; verifier never matched real files and failed waves with
+;; "no wave target files changed" despite green delivery.
+(define (clean-file-path s)
+  (define once (strip-trailing-annotations (strip-backticks (string-trim s))))
+  (if (string=? once s)
+      once
+      (clean-file-path once)))
+
+;; Split a comma-separated declared-path list on ANNOTATION-AWARE commas
+;; (BUG-0025): a comma inside a [...] or (...) group belongs to annotation
+;; prose ("[NEW, design record]", "(new: a, b)"), not to the separator.
+;; Only depth-0 commas split; pieces are trimmed like the old
+;; (map string-trim (string-split s ",")) behavior.
+(define (split-declared-paths s)
+  (define (go chars depth seg acc)
+    (cond
+      [(null? chars) (reverse (cons (apply string (reverse seg)) acc))]
+      [else
+       (define c (car chars))
+       (cond
+         [(and (char=? c #\,) (zero? depth))
+          (go (cdr chars) depth '() (cons (apply string (reverse seg)) acc))]
+         [(or (char=? c #\[) (char=? c #\()) (go (cdr chars) (add1 depth) (cons c seg) acc)]
+         [(or (char=? c #\]) (char=? c #\))) (go (cdr chars) (max 0 (sub1 depth)) (cons c seg) acc)]
+         [else (go (cdr chars) depth (cons c seg) acc)])]))
+  (map string-trim (go (string->list s) 0 '() '())))
 
 ;; Parse structured fields from wave document content.
 (define (parse-wave-content content)
@@ -72,8 +129,11 @@
       [(regexp-match #rx"^- +[Ff]iles *: *(.+)$" line)
        =>
        (lambda (m)
-         (define paths (string-split (string-trim (cadr m)) ","))
-         (set! files (append files (map (lambda (p) (clean-file-path (string-trim p))) paths))))]
+         ;; Comma-separated paths, but commas inside bracket/paren
+         ;; annotations ("[NEW, design record]") are prose, not
+         ;; separators (BUG-0025).
+         (define paths (split-declared-paths (cadr m)))
+         (set! files (append files (map clean-file-path paths))))]
       [(regexp-match #rx"^- +[Ff]ile *: *(.+)$" line)
        =>
        (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]

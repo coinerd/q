@@ -301,14 +301,20 @@
   ;; verbatim. This makes the verifier tolerant of BOTH conventions: the
   ;; canonical repo-root-relative form and the git-root-relative form that
   ;; wave authors commonly use for CI/workflow paths.
-  (define abs (path->complete-path (build-path base-dir wave-file)))
+  ;; BUG-0025 (v1.00.18 W1): normalize the declared path FIRST (strip
+  ;; backticks and trailing "[NEW]"-style annotation prose). The parser
+  ;; already cleans at parse time, but the verifier also receives manually
+  ;; constructed plans, so defense in depth: never let annotation prose
+  ;; reach the git mapping.
+  (define f (clean-file-path wave-file))
+  (define abs (path->complete-path (build-path base-dir f)))
   (define rel (find-relative-path git-root abs))
   (define rel-str (path->string rel))
   ;; The repo-root mapping escapes the git root ("../...") when the wave
   ;; file was declared git-root-relative. Detect the escape by prefix —
   ;; string-prefix? is clearer than a char-class regexp here.
   (if (or (string-prefix? rel-str "../") (string-prefix? rel-str "..\\"))
-      (string-trim wave-file)
+      (string-trim f)
       rel-str))
 
 (define (base-branch-ref git-root)
@@ -386,7 +392,13 @@
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
     (if wave
-        (gsd-wave-files wave)
+        ;; BUG-0025 (v1.00.18 W1): normalize declared paths — strip backticks
+        ;; and trailing "[NEW]"-style annotation prose — before matching and
+        ;; before building diagnostics. The parser cleans at parse time, but
+        ;; manually constructed plans (and any future declaration route) must
+        ;; not let annotation prose defeat file matching; the failure message
+        ;; must show computed paths, never raw annotated declarations.
+        (map clean-file-path (gsd-wave-files wave))
         '()))
   (define root (evidence-git-root base-dir))
   (cond
@@ -408,7 +420,20 @@
        (cons "files"
              (if (pair? changed-wave-files)
                  (cons #t (format "changed: ~a" (string-join changed-wave-files ", ")))
-                 (cons #f (format "no wave target files changed: ~a" (string-join files ", "))))))]))
+                 ;; BUG-0025 (v1.00.18 W1): show the computed git-relative
+                 ;; mapping per unmatched declared file so path mismatches
+                 ;; (e.g. annotation prose surviving into the declared path,
+                 ;; or a wrong path convention) are diagnosable from the
+                 ;; rejection message alone.
+                 (cons #f
+                       (format "no wave target files changed: ~a~a"
+                               (string-join files ", ")
+                               (string-append
+                                "\n"
+                                (string-join
+                                 (for/list ([f (in-list files)])
+                                   (format "  ~a -> ~a" f (wave-file->git-relative base-dir root f)))
+                                 "\n")))))))]))
 
 ;; ============================================================
 ;; Verify command (bounded)
@@ -421,7 +446,11 @@
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
     (if wave
-        (gsd-wave-files wave)
+        ;; BUG-0025 (v1.00.18 W1): normalize declared paths (strip
+        ;; annotations/backticks) so annotated "[NEW]" declarations are
+        ;; still recognized as Racket sources and matched against the
+        ;; changed set.
+        (map clean-file-path (gsd-wave-files wave))
         '()))
   ;; W7 (#9512b): under an active branch context the "changed" set is the
   ;; committed branch diff; the gate compiles the wave's delivered sources
