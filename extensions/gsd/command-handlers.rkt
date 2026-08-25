@@ -63,7 +63,8 @@
                   set-gsd-event-bus!
                   current-gsd-ctx
                   current-gsd-session-id)
-         (only-in "plan-context-builder.rkt" build-enriched-plan-ctx)
+         (only-in "plan-context-builder.rkt" build-enriched-plan-ctx find-git-root-dir)
+         (only-in racket/path find-relative-path)
          (only-in "../../agent/verification/verifier-gate.rkt" execute-verification-gate)
          (only-in "../../agent/verification/verifier-core.rkt" current-verifier-enabled)
          racket/file
@@ -391,6 +392,29 @@
                  line)
                "\n"))
 
+;; BUG-0027 (W4): executors ran git at the project base and burned 3-6 calls
+;; on "fatal: Kein Git-Repository" before rediscovering q/ (observed in three
+;; sessions 2026-08-24/25; contributed to the v1.00.16 W3 budget timeout).
+;; The Working Directory Contract must therefore pin the git root, resolved
+;; at runtime with the delivery verifier's git-root-for logic (git-root-for
+;; delegates to find-git-root-dir, imported here so there is exactly one
+;; resolution path). The "run all git commands" correction line is emitted
+;; only when base-dir is NOT the git root — nothing to correct otherwise.
+(define (git-root-contract-lines base-dir)
+  (define git-root (find-git-root-dir base-dir))
+  (cond
+    [(not git-root) (list (format "- Git root: none found (no .git at or above ~a)\n" base-dir))]
+    [else
+     (define root-s (simplify-path (path->complete-path git-root)))
+     (define base-s (simplify-path (path->complete-path base-dir)))
+     (if (equal? root-s base-s)
+         (list (format "- Git root: ~a\n" git-root))
+         (let ([rel (path->string (find-relative-path base-s root-s))])
+           (list (format "- Git root: ~a\n" git-root)
+                 (format "- run all git commands against the git root (`cd ~a` or `git -C ~a`)\n"
+                         rel
+                         rel))))]))
+
 (define (build-single-wave-prompt base-dir plan wave-idx)
   (define wave (plan-wave-ref plan wave-idx))
   (unless wave
@@ -434,6 +458,9 @@
      (format "## Working Directory Contract\n")
      (format "- Project root (base-dir): ~a\n" base-dir)
      (format "- Process working directory: ~a\n" repo-root)
+     ;; BUG-0027 (W4): pin the git root next to the contract lines above so
+     ;; executors run git against the right checkout from the first call.
+     (apply string-append (git-root-contract-lines base-dir))
      (format
       "- Source subdir is 'q' under the project root. Resolve 'File:' paths relative to the project root unless they are absolute.\n")
      (if (null? (gsd-wave-files wave))

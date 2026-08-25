@@ -123,6 +123,8 @@
 "
    "   changed wave files, passing verify command). Only that evidence marks the wave DONE.
 "
+   "8. Scratch files (BUG-0026): for throwaway experiments use the edit tool to create files under `tmp/`, run them, then delete them.
+"
    "
 "
    "The plan follows. Start implementing immediately.\n"))
