@@ -1,3 +1,86 @@
+## v1.00.18 — 2026-08-25
+
+Released 2026-08-25.
+
+> v1.00.18: the GSD workflow remediation campaign (BUG-0023–BUG-0027) —
+> plan-format diagnostics, infra-failure auto-resume, path-annotation
+> normalization, git-root/scratch ergonomics — plus the BUG-0028/BUG-0032
+> executor-infrastructure fixes and the W5 integration bake.
+
+### Features
+
+- **BUG-0024 — campaign-level infra-failure auto-resume (W3).** An
+  `infra-failed` wave now auto-retries the same wave with exponential
+  backoff (30s/60s/120s, bounded by `current-gsd-campaign-infra-retries`,
+  default 3) without consuming delivery attempts; each retry emits a
+  `gsd.campaign.infra-retry` event, and bound exhaustion stops the
+  campaign with an aggregated failure message. Retried waves receive a
+  PRIOR ATTEMPT CONTEXT block distilled from the dead executor session
+  (steering/log lines + edited files, durable, ~2 KB cap).
+- **BUG-0023 — actionable plan-format diagnostics (W2).** A plan rejected
+  for having no waves gets a companion diagnostic spelling out both
+  accepted formats (index + inline) with a skeleton example. Index-based
+  plans are validated strictly: missing wave docs are a hard error naming
+  each file and the `W<idx>-<slug>.md` convention (`load-plan-from-index`
+  no longer loads silent empty content), and non-conventional targets
+  fall back to title-slug paths.
+- **BUG-0025 — annotated file declarations verify correctly (W1).**
+  `clean-file-path` strips trailing bracket annotations from declared
+  wave file paths, and delivery-verifier rejections carry per-file
+  git-relative mapping lines so path-convention mistakes are diagnosable
+  from the message alone.
+- **BUG-0027/BUG-0026 — executor ergonomics (W4).** Single-wave prompts
+  carry a git-root working-directory contract block and scratch-file
+  guidance, ending the "Kein Git-Repository" mislocation pattern.
+
+### Bug Fixes
+
+- **BUG-0028 — worktree-isolation default OFF.** With isolation ON,
+  per-attempt worktrees invalidated the tool worker's captured
+  allowed-roots (cwd at worker start, never refreshed), so executors
+  could not edit ANY path and fell back to raw shell mutation. The
+  default is rolled back to the proven shared-checkout path;
+  `#:isolate? #t` remains the explicit opt-in until worker allowed-roots
+  track worktree lifecycle (#9529).
+- **BUG-0032 — `/plan <text>` no longer destroys active wave docs.** The
+  plan-submit handler rotates `.planning/waves/` into
+  `waves-pre-plan-backup/` instead of deleting it (wiped active campaign
+  wave docs twice during the live bake).
+
+### Reports
+
+- `docs/reports/GSD-WORKFLOW-REMEDIATION-BAKE-v1.00.18.md` — W5
+  integration bake evidence for the five-wave remediation campaign.
+
+### Breaking / Behavior Changes
+
+- Strict index validation: index-format plans referencing missing wave
+  docs now fail `/go` with a naming error instead of loading silent
+  empty waves.
+- Worktree isolation default flipped OFF (see BUG-0028 above); campaigns
+  run in the shared checkout unless explicitly opted in via
+  `#:isolate? #t`.
+
+### Migration Notes
+
+- No user data migration required. Campaign records under
+  `.planning/campaigns/` are forward-compatible; operators who relied on
+  worktree isolation must pass the explicit opt-in flag.
+- Operators who set `gsd.worktree-isolation` in config should note the
+  settings key is not yet wired (BUG-0028 S1); use `#:isolate?` instead.
+
+### Testing
+
+- Fast suite: 1133 files, 0 failures at the release SHA.
+- TUI 88, arch 31, workflows 29 — all green with recorded gate evidence
+  (`.gate-evidence/`, four suites).
+
+### Operational / Release
+
+- Tag `v1.00.18`; release artifacts built by release-core.yml with
+  tarball + manifest; gate evidence recorded locally per tag-publish
+  policy.
+
 ## v1.00.17 — 2026-08-25
 
 Released 2026-08-25.
