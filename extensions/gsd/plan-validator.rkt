@@ -9,6 +9,20 @@
          racket/string
          "plan-types.rkt")
 
+;; BUG-0023 (W2): actionable zero-waves diagnostic. Rejections previously
+;; collapsed to the single unactionable "Plan has no waves". This companion
+;; error reports BOTH accepted formats with a skeleton example, so authors
+;; can fix the plan shape immediately. Kept as a SEPARATE error string so
+;; existing assertions on "Plan has no waves" keep matching.
+(: no-waves-format-diagnostic : String)
+(define no-waves-format-diagnostic
+  (string-append
+   "found 0 index entries (`- [Inbox] W0: Title → waves/W0-slug.md`) and 0 inline `## Wave N:` sections — "
+   "expected one of:\n"
+   "  - Index format in .planning/PLAN.md: `- [Inbox] W0: Title → waves/W0-title-slug.md` "
+   "(the target wave doc .planning/waves/W0-title-slug.md must exist)\n"
+   "  - Inline format in .planning/PLAN.md: `## Wave 0: Title` sections (parsed only when no index entries exist)"))
+
 (: validate-plan-strict : gsd-plan -> validation-result)
 (define (validate-plan-strict plan)
   (define waves (gsd-plan-waves plan))
@@ -21,7 +35,7 @@
         :
         (Listof String)
         (if (null? waves)
-            (list "Plan has no waves")
+            (list "Plan has no waves" no-waves-format-diagnostic)
             '())]
        [warnings : (Listof String) '()])
       ([w waves])
@@ -71,7 +85,7 @@
         :
         (Listof String)
         (if (null? waves)
-            (list "Plan has no waves")
+            (list "Plan has no waves" no-waves-format-diagnostic)
             '())]
        [warnings : (Listof String) '()])
       ([w waves])
