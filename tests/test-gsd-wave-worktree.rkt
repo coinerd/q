@@ -123,15 +123,14 @@
                           "/x/proj/wt-campaign-01234567-w1"
                           "origin/main")))
 
-    (test-case "isolation flag defaults ON since W8 bake; #:isolate? #f disables"
-      (check-equal? (current-gsd-worktree-isolation) #t)
-      (check-equal? (worktree-isolation-enabled?) #t)
-      (check-equal? (worktree-isolation-enabled? #:isolate? #t) #t)
-      (check-equal? (worktree-isolation-enabled? #:isolate? #f)
-                    #f
-                    "explicit #:isolate? #f is the disable switch")
-      (parameterize ([current-gsd-worktree-isolation #f])
-        (check-equal? (worktree-isolation-enabled?) #f)))
+    (test-case "isolation flag defaults OFF (BUG-0028 hotfix); #:isolate? #t opts in"
+      (check-equal? (current-gsd-worktree-isolation) #f)
+      (check-equal? (worktree-isolation-enabled?) #f)
+      (check-equal? (worktree-isolation-enabled? #:isolate? #t)
+                    #t
+                    "explicit #:isolate? #t is the opt-in switch")
+      (parameterize ([current-gsd-worktree-isolation #t])
+        (check-equal? (worktree-isolation-enabled?) #t)))
 
     (test-case "find-repo-root supports both layouts with base-dir precedence"
       (check-equal? (find-repo-root "/does/not/exist") #f)

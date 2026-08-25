@@ -512,14 +512,17 @@
 
 ;; Feature flag, mirroring the policy.rkt parameter pattern. `#:isolate?`
 ;; keyword arguments (tests, explicit operator override) take precedence.
-;; Default #t (W8 bake, v1.00.17): pass #:isolate? #f to force the legacy
-;; shared-checkout behavior.
-(define current-gsd-worktree-isolation (make-parameter #t (lambda (v) (and v #t))))
+;; BUG-0028 hotfix (v1.00.17): default rolled back to #f — with isolation ON,
+;; per-attempt worktrees invalidate the worker's captured allowed-roots
+;; (current-allowed-roots = cwd at worker start, never refreshed), so executors
+;; cannot edit ANY path and fall back to raw shell mutation. Isolation returns
+;; as a default only after worker allowed-roots track worktree lifecycle.
+(define current-gsd-worktree-isolation (make-parameter #f (lambda (v) (and v #t))))
 
 ;; 'auto sentinel (not #f) so an EXPLICIT #:isolate? #f is honored as the
 ;; documented disable switch instead of falling through to the parameter —
 ;; W8 bake fix, v1.00.17.
-(define (worktree-isolation-enabled? #:isolate? [override 'auto])
+(define (worktree-isolation-enabled? #:isolate? (override 'auto))
   (if (eq? override 'auto)
       (current-gsd-worktree-isolation)
       (and override #t)))
