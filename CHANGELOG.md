@@ -1,4 +1,6 @@
-## v1.00.17 — 2026-08-24
+## v1.00.17 — 2026-08-25
+
+Released 2026-08-25.
 
 > v1.00.17: the /go executor-hardening campaign (#9512–#9516), BUG-0022
 > (#9517) remediation, the W8 integration bake, and the v1.00.17 release.

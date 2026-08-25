@@ -351,13 +351,17 @@
 ;; classifies it as a genuine attempt failure, not a transient provider
 ;; error: an exploring-only attempt must consume its failure honestly.
 (define (stall-hard-failure-message calls-since-mutation limit target-files)
+  (define targets-desc
+    (if (null? target-files)
+        "(none recorded)"
+        (string-join target-files ", ")))
   (format
-   "mutation-stall watchdog: ~a tool calls without any file mutation exceeded the hard limit (~a). Target files: ~a. Attempt terminated for exploration-only behavior — an implementation wave must edit its target files."
+   (string-append "mutation-stall watchdog: ~a tool calls without any file mutation exceeded "
+                  "the hard limit (~a). Target files: ~a. Attempt terminated for "
+                  "exploration-only behavior — an implementation wave must edit its target files.")
    calls-since-mutation
    limit
-   (if (null? target-files)
-       "(none recorded)"
-       (string-join target-files ", "))))
+   targets-desc))
 
 ;; Steering injection hook. Default implementation logs the steering and
 ;; arms the thread's empty-response re-anchor (W2's plumbing: the same

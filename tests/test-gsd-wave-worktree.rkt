@@ -1,6 +1,7 @@
 #lang racket/base
 
-;; q/tests/test-gsd-wave-worktree.rkt — v1.00.17 W6 (#9512a)
+;; q/tests/test-gsd-wave-worktree.rkt — W6 (#9512a) of the
+;; executor-hardening release.
 ;;
 ;; Wave worktree isolation lifecycle, per
 ;; .planning/waves/W6-worktree-execution.md:
@@ -15,7 +16,7 @@
 ;;     campaign start (reclaim-orphaned-worktrees!); unrelated worktrees
 ;;     are untouched.
 ;;   * Feature flag `gsd.worktree-isolation` defaults ON (flipped by the
-;;     v1.00.17 W8 integration bake); `#:isolate? #f` overrides for tests.
+;;     W8 integration bake of this release); `#:isolate? #f` overrides.
 ;;
 ;; Layer 1 tests are pure (no git binary). Layer 2 tests run against a real
 ;; throwaway git repository in a temp sandbox; git-dependent cases are
@@ -84,7 +85,7 @@
 ;; All cases run in one suite so the file's process exit code is the
 ;; rackunit failure count (0 = pass) under plain `racket file.rkt`.
 (define w6-suite
-  (test-suite "wave worktree isolation (v1.00.17 W6, #9512a)"
+  (test-suite "wave worktree isolation (v1.00.x W6, #9512a)"
 
     (test-case "worktree-hash8 takes first 8 hex chars, downcased"
       (check-equal? (worktree-hash8 CID) "01234567")
@@ -126,7 +127,8 @@
       (check-equal? (current-gsd-worktree-isolation) #t)
       (check-equal? (worktree-isolation-enabled?) #t)
       (check-equal? (worktree-isolation-enabled? #:isolate? #t) #t)
-      (check-equal? (worktree-isolation-enabled? #:isolate? #f) #f
+      (check-equal? (worktree-isolation-enabled? #:isolate? #f)
+                    #f
                     "explicit #:isolate? #f is the disable switch")
       (parameterize ([current-gsd-worktree-isolation #f])
         (check-equal? (worktree-isolation-enabled?) #f)))

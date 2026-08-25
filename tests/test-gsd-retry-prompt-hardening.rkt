@@ -1,6 +1,7 @@
 #lang racket/base
 
-;; q/tests/test-gsd-retry-prompt-hardening.rkt — v1.00.17 W3 (#9514, #9515)
+;; q/tests/test-gsd-retry-prompt-hardening.rkt — W3 (#9514, #9515) of the
+;; executor-hardening release.
 ;;
 ;; Retry-prompt hardening for the /go campaign coordinator:
 ;;   1. `executor-reanchor-prompt` (prompts.rkt) — pure constructor; the

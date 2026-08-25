@@ -141,6 +141,8 @@
 (define hardcoded-path-allowlist
   '("test-gsd-policy.rkt" "test-tool-bash-security.rkt"
                           "test-subprocess.rkt"
+                          "test-gsd-wave-worktree.rkt"
+                          "test-gsd-branch-delivery-verification.rkt"
                           "test-operational-checkpoint.rkt"
                           "test-operational-checkpoint-injection.rkt"))
 

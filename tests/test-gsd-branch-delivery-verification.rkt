@@ -1,6 +1,7 @@
 #lang racket/base
 
-;; q/tests/test-gsd-branch-delivery-verification.rkt — v1.00.17 W7 (#9512b)
+;; q/tests/test-gsd-branch-delivery-verification.rkt — W7 (#9512b) of the
+;; executor-hardening release.
 ;;
 ;; Branch-based delivery verification with worktree isolation ON:
 ;;   * delivery = COMMITTED diff of the wave branch vs its base commit
@@ -151,7 +152,7 @@
   (delete-directory/files proj #:must-exist? #f))
 
 (define w7-suite
-  (test-suite "branch-based delivery verification (v1.00.17 W7, #9512b)"
+  (test-suite "branch-based delivery verification (W7, #9512b)"
 
     ;; ---------------- Layer 1: pure ----------------
 

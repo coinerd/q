@@ -224,7 +224,7 @@
       ;; BUG-0019 W2 (#9507): +1 — current-conn-pool in llm/conn-pool.rkt.
       ;; W2 (current release train): +1 — current-auto-retry-sleep-scale in
       ;; runtime/auto-retry.rkt (deterministic backoff test seam).
-      ;; v1.00.17 executor hardening: +1 — current-empty-response-nudge in
+      ;; Executor hardening release: +1 — current-empty-response-nudge in
       ;; agent/state.rkt (#9514); +1 — current-gsd-delivery-branch-context in
       ;; extensions/gsd/delivery-verifier.rkt (W5 branch-based verification);
       ;; +1 — current-gsd-wave-failure-context in extensions/gsd/policy.rkt
@@ -232,8 +232,8 @@
       ;; +3 — current-gsd-stall-steerer (go-orchestrator, SERVICE_HANDLE),
       ;; current-gsd-wave-no-change-retries (policy.rkt, CONFIGURATION),
       ;; current-gsd-worktree-isolation (wave-executor, CONFIGURATION): the
-      ;; #9512–#9516 hardening parameters shipped in v1.00.17 were absent
-      ;; from the inventory (W8 release audit).
+      ;; #9512–#9516 hardening parameters shipped in the executor-hardening
+      ;; release were absent from the inventory (W8 release audit).
       (check-equal? (length inventory-entries)
                     210
                     "parameter inventory should contain 199 audited parameters"))))

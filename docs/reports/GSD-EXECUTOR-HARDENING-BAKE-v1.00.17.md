@@ -138,10 +138,40 @@ the "sync metrics AFTER content commit" release ordering.
 | Issue | Fix | Observed in bake |
 |-------|-----|------------------|
 | #9512 per-wave worktrees | W6 | live (§2.1) |
-| #9513 mutation-stall steering | W5 | live, 2 events (§2.2) |
+| #9513 mutation-stall steering | W5 | live, 3 events (§2.2, §6) |
 | #9514 role re-anchor after empty response | W3 | tests only (§2.3) |
 | #9515 auto-retry with failure context | W2 | live, synthetic no-op attempt (§2.4) |
 | #9516 shell-risk false-positive severity | W1 | live (§2.5) |
 
 All five are shipped in v1.00.17; #9514's live observation remains open for
 the next natural occurrence (mechanism is test-covered in the meantime).
+
+## 6. Release close-out addendum (2026-08-25)
+
+- **Third live #9513 steering event.** The W8 executor attempt itself hit
+  the mutation-stall steering guard ("exploration loop detected: pair
+  repeated 11 times, threshold 6") after an over-long read/analysis phase
+  during gate-evidence discovery. The steering fired correctly, the loop
+  broke, and the very next action was the concrete CHANGELOG `Released`
+  marker edit — exactly the intended recovery behavior. Evidence: steering
+  notice in the W8 campaign session (2026-08-25), followed by the release
+  content commit on `campaign/d079a35e/w8`.
+- **#9521 lesson (nearly) repeated and caught pre-tag.** The first W8
+  attempt's CHANGELOG block for v1.00.17 carried the version-heading date
+  but no standalone `Released YYYY-MM-DD.` line, which is precisely what
+  the v1.00.16 campaign needed a second PR (#9521) to repair. Here the
+  tag-gate requirement was re-checked *before* tagging (strict
+  `lint-release-readiness` + `release-dry-run`), the marker was added in
+  the release content commit, and `lint-changelog-dates` reports 8 entries,
+  0 warnings. No repair PR needed.
+- **Delivery-verification failure absorbed.** W8's first run failed
+  coordinator verification ("wave declares no target files" — the campaign
+  manifest carried no Files block into the verifier). The retry re-ran with
+  the failure reason in context (the #9515 pattern applied at campaign
+  scope) and this attempt completes against the explicit seven-file target
+  list in the wave doc. All seven files are changed on
+  `campaign/d079a35e/w8` relative to main.
+- **Gate evidence re-recorded at the final release SHA** for all four
+  required suites (fast/tui/arch/workflows) after the content and metrics
+  commits landed, per the v1.00.16 lesson; `.gate-evidence/*.json` now
+  carries version 1.00.17 and the release-head SHA.
