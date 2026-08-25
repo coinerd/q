@@ -236,7 +236,7 @@
       ;; release were absent from the inventory (W8 release audit); plus
       ;; current-gsd-campaign-infra-retries (CONFIGURATION) and
       ;; current-gsd-campaign-infra-retry-delay (TURN_LOCAL) from the
-      ;; BUG-0024 infra-retry work (v1.00.18 W3).
+      ;; BUG-0024 infra-retry work (campaign W3).
       (check-equal? (length inventory-entries)
                     212
                     "parameter inventory should contain audited parameters"))))
