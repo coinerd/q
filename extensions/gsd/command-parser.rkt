@@ -51,7 +51,9 @@
          command-wave-intent
          command-wave-timeout-arg
          gsd-command-intent
-         go-wave-valid?)
+         go-wave-valid?
+         ;; v1.00.19 W3 (BUG-0031): explicit stale-build override flag for /go
+         command-allow-stale?)
 
 ;; -- Base struct --
 
@@ -125,11 +127,30 @@
 ;; Extract the trailing numeric token from an arg/input string.
 ;; "/go 3" → 3; "/go" → #f; "/go 3 extra" → #f (last token non-numeric).
 ;; Byte-identical semantics to the executor's former requested-wave-index.
+;; v1.00.19 W3 (BUG-0031): a TRAILING `allow-stale` token is treated as a
+;; flag, not as the wave argument — "/go 3 allow-stale" → 3 (the operator
+;; asked for wave 3 AND accepted a stale build). All other trailing tokens
+;; keep the original semantics, so this is a pure extension.
 (define (command-wave-intent arg-text)
   (define trimmed (string-trim (or arg-text "")))
-  (define parts (string-split trimmed))
+  (define raw-parts (string-split trimmed))
+  (define parts
+    (if (and (pair? raw-parts)
+             (string=? (list-ref raw-parts (sub1 (length raw-parts))) "allow-stale"))
+        ;; all but the last token, without needing racket/list
+        (for/list ([i (in-range (sub1 (length raw-parts)))])
+          (list-ref raw-parts i))
+        raw-parts))
   (define last-part (and (pair? parts) (list-ref parts (sub1 (length parts)))))
   (and last-part (regexp-match? #rx"^[0-9]+$" last-part) (string->number last-part)))
+
+;; v1.00.19 W3 (BUG-0031): the explicit stale-build escape hatch.
+;; "/go allow-stale", "/go 3 allow-stale", "/go --wave-timeout=60 allow-stale"
+;; → #t. Only the EXACT token counts: "allow_stale", "allowstale",
+;; "-allow-stale", "ALLOW-STALE" all → #f — an override must be an
+;; unambiguous operator decision, never an inferred or fuzzy one.
+(define (command-allow-stale? arg-text)
+  (and (member "allow-stale" (string-split (string-trim (or arg-text "")))) #t))
 
 ;; Extract an explicit per-wave timeout flag from /go args.
 ;; "/go --wave-timeout=3600" → 3600; "/go 3 --wave-timeout=7200" → 7200;

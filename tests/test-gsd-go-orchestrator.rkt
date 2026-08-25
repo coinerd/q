@@ -38,7 +38,12 @@
                   make-campaign-cancellation
                   begin-attempt!
                   select-next-actionable-wave
-                  migrate-campaign!)
+                  migrate-campaign!
+                  campaign-record-build-version
+                  campaign-record-main-head-sha
+                  campaign-record-stale-override
+                  set-campaign-record-build-version!
+                  set-campaign-record-stale-override!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
@@ -52,12 +57,24 @@
                   campaign-lease?
                   make-campaign-request
                   campaign-request-timeout-sec
+                  campaign-request-allow-stale?
                   execute-campaign-request!
                   current-gsd-wave-cancel!
+                  current-gsd-freshness-check
+                  campaign-freshness
+                  campaign-freshness?
+                  freshness-running-version
+                  freshness-stale?
+                  freshness-refusal-message
+                  freshness-offline-warning
+                  check-campaign-freshness
+                  read-checkout-build-version
+                  stamp-campaign-build-identity!
                   find-git-root
                   git-available?)
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
          (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../util/version.rkt" q-version)
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries))
@@ -691,6 +708,188 @@
                     (lambda () (delete-directory/files tmp))))))
 
 ;; ============================================================
+;; BUG-0031 (W3): version-freshness guard at /go entry
+;; ============================================================
+
+;; The guard's ingredients are injected through current-gsd-freshness-check
+;; so no test touches the real checkout or network. All helpers below build
+;; campaign-freshness values directly (pure struct, 5 fields).
+(define (fake-freshness running checkout origin-head behind offline?)
+  (campaign-freshness running checkout origin-head behind offline?))
+
+(define (freshness-suite/guarded dir rec freshness thunk)
+  (parameterize ([current-gsd-freshness-check (lambda (_) freshness)])
+    (thunk)))
+
+(define freshness-guard-suite
+  (test-suite "BUG-0031: /go freshness guard"
+
+    (test-case "running version ≠ checkout version → stale"
+      (check-true (freshness-stale? (fake-freshness "1.00.18" "1.00.19" #f #f #f)))
+      ;; Fail open: unknown checkout version is never stale.
+      (check-false (freshness-stale? (fake-freshness "1.00.18" #f #f #f #f)))
+      ;; Offline with matching versions is never stale.
+      (check-false (freshness-stale? (fake-freshness "1.00.19" "1.00.19" #f #f #t)))
+      ;; Strictly behind origin/main is stale even with matching versions.
+      (check-true (freshness-stale? (fake-freshness "1.00.19" "1.00.19" "sha1" #t #f))))
+
+    (test-case "refusal message names both versions (restart required)"
+      (define msg (freshness-refusal-message (fake-freshness "1.00.18" "1.00.19" #f #f #f)))
+      (check-true (string-contains? msg "restart required") msg)
+      (check-true (string-contains? msg "running 1.00.18") msg)
+      (check-true (string-contains? msg "checkout 1.00.19") msg)
+      ;; Behind-origin refusal names the update path, not "restart".
+      (define behind-msg
+        (freshness-refusal-message (fake-freshness "1.00.19" "1.00.19" "abc123" #t #f)))
+      (check-true (string-contains? behind-msg "behind origin/main") behind-msg))
+
+    (test-case "offline warning is emitted only when origin is unreachable"
+      (define w (freshness-offline-warning (fake-freshness "1.00.19" "1.00.19" #f #f #t)))
+      (check-true (and (string? w) (string-contains? w "origin/main unreachable")) w)
+      (check-false (freshness-offline-warning (fake-freshness "1.00.19" "1.00.19" "sha" #f #f))))
+
+    (test-case "stale build is refused loudly at /go entry (runner never called)"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define calls 0)
+      (define result
+        (freshness-suite/guarded dir
+                                 rec
+                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
+                                 (lambda ()
+                                   (execute-campaign-request!
+                                    request
+                                    (lambda (_)
+                                      (set! calls (add1 calls))
+                                      (make-loop-result '() 'completed (hasheq)))))))
+      (check-eq? (campaign-result-status result) 'error)
+      (check-true (string-contains? (campaign-result-message result)
+                                    "restart required (running 1.00.18, checkout 1.00.19)")
+                  (campaign-result-message result))
+      (check-equal? calls 0 "refusal must not invoke the runner")
+      ;; Refusal is not an override: the flag stays unset.
+      (check-false (campaign-record-stale-override rec))
+      (check-eq? (wave-status* rec 0) 'pending)
+      (cleanup-tmp dir))
+
+    (test-case "allow-stale override bypasses refusal and records stale-override: true"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request
+        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:allow-stale? #t))
+      (define result
+        (freshness-suite/guarded dir
+                                 rec
+                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
+                                 (lambda ()
+                                   (execute-campaign-request!
+                                    request
+                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-true (campaign-record-stale-override rec)
+                  "override must record stale-override: true in the campaign record")
+      (check-eq? (wave-status* rec 0) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "execute-campaign-request! #:allow-stale? argument also overrides"
+      ;; The handler path may pass the flag directly rather than on the request.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (freshness-suite/guarded dir
+                                 rec
+                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
+                                 (lambda ()
+                                   (execute-campaign-request!
+                                    request
+                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))
+                                    #:allow-stale? #t))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-true (campaign-record-stale-override rec))
+      (cleanup-tmp dir))
+
+    (test-case "offline mode warns but proceeds (never blocks offline operators)"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (freshness-suite/guarded dir
+                                 rec
+                                 (fake-freshness "1.00.19" "1.00.19" #f #f #t)
+                                 (lambda ()
+                                   (execute-campaign-request!
+                                    request
+                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-false (campaign-record-stale-override rec) "a warning is not an override")
+      (cleanup-tmp dir))
+
+    (test-case "fresh build proceeds without override and stamps build identity"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define result
+        (freshness-suite/guarded dir
+                                 rec
+                                 (fake-freshness q-version q-version #f #f #f)
+                                 (lambda ()
+                                   (execute-campaign-request!
+                                    request
+                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      ;; Every campaign record identifies the exact build that produced it.
+      (check-equal? (campaign-record-build-version rec) q-version)
+      ;; main-head-sha is best-effort: #f outside a work tree is acceptable,
+      ;; but the field must be present (either a sha string or #f, no error).
+      (check-true (or (not (campaign-record-main-head-sha rec))
+                      (string? (campaign-record-main-head-sha rec))))
+      (cleanup-tmp dir))
+
+    (test-case "stamp-campaign-build-identity! stamps the running build"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (stamp-campaign-build-identity! rec dir)
+      (check-equal? (campaign-record-build-version rec) q-version)
+      (check-true (or (not (campaign-record-main-head-sha rec))
+                      (string? (campaign-record-main-head-sha rec))))
+      ;; Idempotent re-stamp is fine; it must not clear a recorded override.
+      (set-campaign-record-stale-override! rec #t)
+      (stamp-campaign-build-identity! rec dir)
+      (check-true (campaign-record-stale-override rec))
+      (cleanup-tmp dir))
+
+    (test-case "read-checkout-build-version reads util/version.rkt fresh from disk"
+      (define tmp (make-temporary-file "bug31-ver-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory* (build-path tmp "util"))
+                      (call-with-output-file (build-path tmp "util" "version.rkt")
+                                             (lambda (out)
+                                               (display "(define q-version \"7.7.77\")\n" out)))
+                      (check-equal? (read-checkout-build-version tmp) "7.7.77")
+                      ;; A repo root without the file → #f, never an error.
+                      (check-false (read-checkout-build-version (make-temporary-file "bug31-nover-~a"
+                                                                                     'directory))))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "check-campaign-freshness fail-opens outside a work tree"
+      ;; No .git, no util/version.rkt: the real /go check must still return a
+      ;; freshness value (not raise) and must NOT report stale — BUG-0031
+      ;; action 4: never block an operator on an unreadable environment.
+      (define tmp (make-temporary-file "bug31-fresh-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (define f
+                        (parameterize ([current-directory tmp])
+                          (check-campaign-freshness tmp)))
+                      (check-true (campaign-freshness? f))
+                      (check-false (freshness-stale? f))
+                      (check-equal? (freshness-running-version f) q-version))
+                    (lambda () (delete-directory/files tmp))))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -701,6 +900,7 @@
     lease-suite
     go-n-suite
     request-suite
-    git-root-suite))
+    git-root-suite
+    freshness-guard-suite))
 
 (void (run-tests all-tests))

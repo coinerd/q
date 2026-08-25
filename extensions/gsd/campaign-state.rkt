@@ -117,6 +117,12 @@
           [campaign-record-provenance (-> campaign-record? (or/c #f string? symbol?))]
           [campaign-record-created-at (-> campaign-record? exact-integer?)]
           [campaign-record-updated-at (-> campaign-record? exact-integer?)]
+          [campaign-record-build-version (-> campaign-record? (or/c #f string?))]
+          [campaign-record-main-head-sha (-> campaign-record? (or/c #f string?))]
+          [campaign-record-stale-override (-> campaign-record? any/c)]
+          [set-campaign-record-build-version! (-> campaign-record? (or/c #f string?) void?)]
+          [set-campaign-record-main-head-sha! (-> campaign-record? (or/c #f string?) void?)]
+          [set-campaign-record-stale-override! (-> campaign-record? any/c void?)]
           [campaign-wave-index (-> campaign-wave? exact-nonnegative-integer?)]
           [campaign-wave-title (-> campaign-wave? string?)]
           [campaign-wave-status (-> campaign-wave? symbol?)]
@@ -200,10 +206,33 @@
 
 ;; Authoritative campaign record (D2).  plan-id == manifest hash.
 ;; #:mutable only for cancellation and fence-token (D5 restart safety).
+;; v1.00.19 W3 (BUG-0031): build identity is recorded at campaign start and
+;; rides the record through every wave report/evidence write (the record is
+;; the durable evidence store — each persist rewrites it wholesale).
+;;   build-version : exact (q-version) string of the RUNNING process — this
+;;                   is what actually produced the evidence, not what is on
+;;                   disk at analysis time.
+;;   main-head-sha : origin/main HEAD at campaign start (best-effort; #f
+;;                   outside a work tree / offline — must never fail a run).
+;;   stale-override: #f, or #t when the operator bypassed the freshness
+;;                   refusal with an explicit `allow-stale`.
+;; #:auto keeps the 8-arg constructor unchanged, so legacy campaign records
+;; on disk (and every existing caller) remain valid; pre-v1.00.19 records
+;; deserialize with #f identity (absent ≠ corrupt).
 (struct campaign-record
-        (plan-id manifest waves cancellation fence-token provenance created-at updated-at)
+        (plan-id manifest
+                 waves
+                 cancellation
+                 fence-token
+                 provenance
+                 created-at
+                 updated-at
+                 [build-version #:auto]
+                 [main-head-sha #:auto]
+                 [stale-override #:auto])
   #:transparent
   #:mutable
+  #:auto-value #f
   #:constructor-name make-campaign-record)
 
 ;; Raised when migration sources conflict (D3 fail-closed).

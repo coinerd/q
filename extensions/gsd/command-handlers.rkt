@@ -590,7 +590,12 @@
                  (gsm-ctx-transition-to! gsd-ctx 'executing)
                  (build-single-wave-prompt base-dir plan wave-idx))
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
-               #:timeout-sec effective-timeout))
+               #:timeout-sec effective-timeout
+               ;; v1.00.19 W3 (BUG-0031): the trailing `allow-stale` token
+               ;; parsed out of /go <args> by command-parser.rkt flows onto
+               ;; the request; execute-campaign-request! then bypasses the
+               ;; version-freshness refusal and records stale-override: true.
+               #:allow-stale? (command-allow-stale? input-text)))
             (hook-amend (hasheq 'campaign-token
                                 (register-campaign-request! request)
                                 'new-session

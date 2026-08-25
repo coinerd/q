@@ -68,7 +68,11 @@
                                          (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
                                          (current-gsd-delivery-branch-context . SERVICE_HANDLE))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE)
-                                       (current-gsd-stall-steerer . SERVICE_HANDLE))
+                                       (current-gsd-stall-steerer . SERVICE_HANDLE)
+                                       ;; test seam: overrides the version-freshness
+                                       ;; probe (running version vs checkout) so tests
+                                       ;; can simulate a stale build; never set in prod
+                                       (current-gsd-freshness-check . OTHER_REVIEWED))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)

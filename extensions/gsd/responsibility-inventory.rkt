@@ -86,7 +86,7 @@
                                "campaign-state"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(git make-param mkdir path-ops parameterize)
+               '(git make-param mkdir path-ops parameterize fs-read)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"

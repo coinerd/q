@@ -166,6 +166,11 @@
 ;; ============================================================
 
 (define (record->datum rec)
+  ;; v1.00.19 W3 (BUG-0031): the trailing 3 fields are the build identity
+  ;; (build-version / main-head-sha / stale-override). Every wave report and
+  ;; evidence write rewrites this datum, so the identity travels with every
+  ;; piece of recorded campaign evidence. #f values are written explicitly so
+  ;; the datum always self-describes its producer (or its pre-W3 origin).
   (list 'campaign-record
         (campaign-plan-id rec)
         (manifest->datum (campaign-record-manifest rec))
@@ -177,7 +182,10 @@
         (campaign-fence-token rec)
         (campaign-record-provenance rec)
         (campaign-record-created-at rec)
-        (campaign-record-updated-at rec)))
+        (campaign-record-updated-at rec)
+        (campaign-record-build-version rec)
+        (campaign-record-main-head-sha rec)
+        (campaign-record-stale-override rec)))
 
 (define (manifest->datum m)
   (list 'manifest
@@ -260,6 +268,36 @@
 
 (define (datum->record d)
   (match d
+    ;; v1.00.19 W3 (BUG-0031): 11-field form carries the build identity.
+    [(list 'campaign-record
+           pid
+           m
+           waves
+           cancellation
+           fence
+           prov
+           created
+           updated
+           build-version
+           main-head-sha
+           stale-override)
+     (define rec
+       (make-campaign-record pid
+                             (datum->manifest m)
+                             (map datum->wave waves)
+                             (and cancellation
+                                  (match cancellation
+                                    [(list 'cancellation r t) (make-campaign-cancellation r t)]))
+                             fence
+                             prov
+                             created
+                             updated))
+     (set-campaign-record-build-version! rec (if (string? build-version) build-version #f))
+     (set-campaign-record-main-head-sha! rec (if (string? main-head-sha) main-head-sha #f))
+     (set-campaign-record-stale-override! rec (if (boolean? stale-override) stale-override #f))
+     rec]
+    ;; Legacy 8-field records (pre-v1.00.19) MUST still load: missing build
+    ;; identity is treated as absent (#f), never as corruption.
     [(list 'campaign-record pid m waves cancellation fence prov created updated)
      (make-campaign-record pid
                            (datum->manifest m)

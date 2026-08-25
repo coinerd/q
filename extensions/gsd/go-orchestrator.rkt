@@ -23,6 +23,7 @@
          racket/match
          racket/string
          racket/system
+         (only-in "../../util/version.rkt" q-version)
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "wave-completion.rkt"
@@ -174,16 +175,17 @@
 ;; then ~/.q/config.json wave-timeout-seconds, then the parameter default.
 ;; #f → use the current parameter value at execution time. Carried on the
 ;; request (not the parameter) because the campaign runs in a separate thread.
-(struct campaign-request (base-dir record prompt-for-wave verifier timeout-sec)
+(struct campaign-request (base-dir record prompt-for-wave verifier timeout-sec allow-stale?)
   #:transparent
-  #:constructor-name make-campaign-request/5)
+  #:constructor-name make-campaign-request/6)
 
 (define (make-campaign-request base-dir
                                record
                                prompt-for-wave
                                verifier
-                               #:timeout-sec [timeout-sec #f])
-  (make-campaign-request/5 base-dir record prompt-for-wave verifier timeout-sec))
+                               #:timeout-sec [timeout-sec #f]
+                               #:allow-stale? [allow-stale? #f])
+  (make-campaign-request/6 base-dir record prompt-for-wave verifier timeout-sec allow-stale?))
 
 ;; D8 (#9357): classify a loop-result as an infrastructure failure (provider/
 ;; network/SSE timeout) rather than a genuine agent/code failure. Positive
@@ -237,9 +239,46 @@
     [(eq? result 'cancelled) (wave-execution-outcome 'cancelled "")]
     [else (wave-execution-outcome 'failed (format "unknown runner result: ~s" result))]))
 
-(define (execute-campaign-request! request run-prompt #:lease-owner [lease-owner "unknown"])
+(define (execute-campaign-request! request
+                                   run-prompt
+                                   #:lease-owner [lease-owner "unknown"]
+                                   #:allow-stale? [allow-stale-arg #f])
   (define base-dir (campaign-request-base-dir request))
   (define record (campaign-request-record request))
+  (define plan-id (campaign-plan-id record))
+  ;; v1.00.19 W3 (BUG-0031): version-freshness guard at /go entry. A stale
+  ;; build is refused loudly ("restart required (running X, checkout Y)")
+  ;; unless the operator passed allow-stale through the command parser;
+  ;; the override is recorded in the campaign record. Offline mode warns
+  ;; but never blocks.
+  (define allow-stale? (or allow-stale-arg (campaign-request-allow-stale? request)))
+  (define freshness ((current-gsd-freshness-check) base-dir))
+  (cond
+    [(and (freshness-stale? freshness) (not allow-stale?))
+     (campaign-result 'error '() (freshness-refusal-message freshness))]
+    [else
+     (when (freshness-offline-warning freshness)
+       (log-warning "~a" (freshness-offline-warning freshness)))
+     (when (and allow-stale? (freshness-stale? freshness))
+       (set-campaign-record-stale-override! record #t)
+       (log-warning
+        "gsd freshness: stale override accepted — recording stale-override: true (running ~a, checkout ~a)"
+        (freshness-running-version freshness)
+        (or (freshness-checkout-version freshness) "?")))
+     ;; Every campaign record identifies the exact build that produced it.
+     (stamp-campaign-build-identity! record base-dir)
+     (execute-stamped-campaign-request! request
+                                        run-prompt
+                                        record
+                                        freshness
+                                        #:lease-owner lease-owner)]))
+
+(define (execute-stamped-campaign-request! request
+                                           run-prompt
+                                           record
+                                           freshness
+                                           #:lease-owner [lease-owner "unknown"])
+  (define base-dir (campaign-request-base-dir request))
   (define plan-id (campaign-plan-id record))
   ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
   ;; > parameter) and carried on the request because the campaign runs in a
@@ -672,6 +711,134 @@
       (define target-wave (find-wave target (campaign-wave-index durable-wave)))
       (when target-wave
         (set-campaign-wave-status! target-wave (campaign-wave-status durable-wave))))))
+
+;; ============================================================
+;; Build identity & version-freshness guard (v1.00.19 W3 — BUG-0031)
+;;
+;; A long-running TUI executes modules loaded at process start. After a
+;; release lands, /go campaigns silently run on OLD code until the operator
+;; remembers to restart. Detection is exact and network-free: the running
+;; process holds the OLD (q-version) value in memory while the checkout's
+;; util/version.rkt on disk already has the new one — compare the two.
+;; origin/main is a secondary, best-effort signal; when it cannot be
+;; resolved (offline) the guard proceeds with a warning instead of
+;; blocking. Every campaign record also gains build identity fields
+;; (build-version / main-head-sha) so evidence is attributable to the
+;; exact build that produced it.
+;; ============================================================
+
+;; Pure status value. running-version  : the RUNNING process's (q-version)
+;; checkout-version    : freshly-read util/version.rkt version, or #f when
+;;                       no repo checkout is resolvable (then nothing can
+;;                       diverge and the run proceeds — legacy behavior)
+;; origin-head         : origin/main HEAD SHA at /go time, or #f (offline /
+;;                       no such ref / outside a work tree — never fatal)
+;; behind-origin?      : #t when the checkout HEAD is a strict ancestor of
+;;                       origin/main (checkout is out of date)
+;; offline?            : #t when origin/main could not be resolved → the
+;;                       operator is warned but NEVER blocked
+(struct campaign-freshness (running-version checkout-version origin-head behind-origin? offline?)
+  #:transparent)
+
+;; Short aliases used by the guard, the /go entry path, and the tests.
+(define freshness-running-version campaign-freshness-running-version)
+(define freshness-checkout-version campaign-freshness-checkout-version)
+(define freshness-origin-head campaign-freshness-origin-head)
+(define freshness-behind-origin? campaign-freshness-behind-origin?)
+(define freshness-offline? campaign-freshness-offline?)
+
+;; util/version.rkt is `(define q-version "1.00.19")`. Read FRESH from disk —
+;; the module binding in this process is exactly the thing that may be stale.
+(define FRESHNESS-VERSION-RX #rx"q-version[ \t]*\"([^\"]+)\"")
+
+(define (read-checkout-build-version repo-root)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and repo-root
+         (let ([version-file (build-path repo-root "util" "version.rkt")])
+           (and (file-exists? version-file)
+                (let ([m (regexp-match FRESHNESS-VERSION-RX
+                                       (file->string version-file #:mode 'text))])
+                  (and m (cadr m))))))))
+
+(define (resolve-origin-main-head repo-root)
+  (and repo-root
+       (let ([r (default-run-git repo-root '("rev-parse" "origin/main"))])
+         (and (zero? (git-result-code r))
+              (non-empty-string? (git-result-stdout r))
+              (string-trim (git-result-stdout r))))))
+
+;; Strictly-behind = HEAD is an ancestor of origin/main AND differs from it.
+;; A campaign branch with its own commits, or a checkout equal to main, is
+;; NOT behind — the guard never blocks legitimate forward work.
+(define (checkout-behind-origin-main? repo-root origin-head)
+  (and repo-root
+       origin-head
+       (let* ([head-r (default-run-git repo-root '("rev-parse" "HEAD"))]
+              [head (and (zero? (git-result-code head-r))
+                         (non-empty-string? (git-result-stdout head-r))
+                         (string-trim (git-result-stdout head-r)))])
+         (and head
+              (not (string=? head origin-head))
+              (zero? (git-result-code
+                      (default-run-git repo-root
+                                       (list "merge-base" "--is-ancestor" head origin-head))))))))
+
+;; The authoritative /go-time check. Pure w.r.t. injected ingredients so
+;; tests can simulate a stale build without mutating the real checkout.
+(define (check-campaign-freshness base-dir
+                                  #:running-version [running-version q-version]
+                                  #:repo-root [repo-root (find-repo-root base-dir)])
+  (define checkout-version (read-checkout-build-version repo-root))
+  (define origin-head (resolve-origin-main-head repo-root))
+  (campaign-freshness running-version
+                      checkout-version
+                      origin-head
+                      (checkout-behind-origin-main? repo-root origin-head)
+                      (not origin-head)))
+
+;; Stale = running version ≠ checkout version (authoritative), or the
+;; checkout itself is behind origin/main. Unknown checkout (#f) or offline
+;; origin NEVER counts as stale — the guard fails open there.
+(define (freshness-stale? f)
+  (and (campaign-freshness? f)
+       (or (and (freshness-checkout-version f)
+                (not (string=? (freshness-running-version f) (freshness-checkout-version f))))
+           (freshness-behind-origin? f))))
+
+(define (freshness-refusal-message f)
+  (cond
+    [(and (freshness-checkout-version f)
+          (not (string=? (freshness-running-version f) (freshness-checkout-version f))))
+     (format
+      "/go refused — restart required (running ~a, checkout ~a): the running q process predates the checked-out build. Exit and restart q, then /go again. To override anyway: /go <plan> allow-stale (records stale-override: true in the campaign record)."
+      (freshness-running-version f)
+      (freshness-checkout-version f))]
+    [(freshness-behind-origin? f)
+     (format
+      "/go refused — update required: checkout HEAD is behind origin/main (~a). Run git pull and restart q, then /go again. To override anyway: /go <plan> allow-stale (records stale-override: true in the campaign record)."
+      (freshness-origin-head f))]
+    [else "/go refused — running build is stale."]))
+
+;; Offline operators are warned, never blocked (BUG-0031 action 4).
+(define (freshness-offline-warning f)
+  (and
+   (freshness-offline? f)
+   (format
+    "gsd freshness: origin/main unreachable — continuing with checkout-only version comparison (running ~a)."
+    (freshness-running-version f))))
+
+;; Stamp build identity onto a campaign record (idempotent re-stamp is fine —
+;; the running build IS the identity). stale-override is owned by the guard
+;; decision and is never cleared here.
+(define (stamp-campaign-build-identity! rec base-dir)
+  (define repo-root (find-repo-root base-dir))
+  (set-campaign-record-build-version! rec q-version)
+  (set-campaign-record-main-head-sha! rec (resolve-origin-main-head repo-root))
+  rec)
+
+;; Injection point for tests: replace the /go-entry check without touching
+;; the real checkout or network.
+(define current-gsd-freshness-check (make-parameter check-campaign-freshness))
 
 ;; ============================================================
 ;; Single-wave campaign coordinator (D1)
@@ -1368,6 +1535,24 @@
          no-change-rejection?
          no-change-target-files
          execute-campaign-token!
+         ;; v1.00.19 W3 (BUG-0031): version-freshness guard + build identity
+         campaign-freshness
+         campaign-freshness?
+         freshness-running-version
+         freshness-checkout-version
+         freshness-origin-head
+         freshness-behind-origin?
+         freshness-offline?
+         check-campaign-freshness
+         read-checkout-build-version
+         resolve-origin-main-head
+         checkout-behind-origin-main?
+         freshness-stale?
+         freshness-refusal-message
+         freshness-offline-warning
+         stamp-campaign-build-identity!
+         current-gsd-freshness-check
+         campaign-request-allow-stale?
          ;; v1.00.18 W5 (#9513): mutation-stall watchdog
          gsd-stall-exn
          gsd-stall-exn?
