@@ -50,32 +50,32 @@
       (check-false (memq 'hard-stall out) "distinct reads must NEVER accumulate toward a kill")
       (check-false (memq 'soft-stall out)))
 
-    (test-case "identical read repeated: soft steer at 5, hard kill at 8"
+    (test-case "identical read repeated: soft steer at 8, hard kill at 15"
       (define wd (make-stall-watchdog))
-      (for ([i (in-range 4)])
+      (for ([i (in-range 7)])
         (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok))
       (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'soft-stall)
       (define snap (stall-watchdog-snapshot wd))
       (check-eq? (hash-ref snap 'stall-reason) 'repetition)
-      (check-eq? (hash-ref snap 'stall-repeats) 5)
+      (check-eq? (hash-ref snap 'stall-repeats) 8)
       (check-equal? (hash-ref snap 'stall-tool) "read")
-      ;; Latched steering; counts 6 and 7 stay ok, 8 kills.
-      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok)
-      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok)
+      ;; Latched steering; counts 9..14 stay ok, 15 kills.
+      (for ([i (in-range 6)])
+        (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok))
       (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'hard-stall)
-      (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-repeats) 8))
+      (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-repeats) 15))
 
     (test-case "enough distinct reads age a repeated signature out of the window"
       ;; window=10: repeat one read twice, then 10 distinct reads — BOTH
       ;; occurrences fall out of the newest-10 window, no trip.
       (define wd (make-stall-watchdog))
-      ;; Latch the soft steer with 5 identical repeats first.
-      (for ([i (in-range 4)])
+      ;; Latch the soft steer with 8 identical repeats first.
+      (for ([i (in-range 7)])
         (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok))
       (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'soft-stall)
       ;; offset 100: genuinely disjoint from same-read's file-7 path.
-      ;; window=20 → 20 distinct reads flush ALL occurrences.
-      (define out (observe-each wd (lambda (i) (read-call (+ 100 i))) 20))
+      ;; window=30 → 30 distinct reads flush ALL occurrences.
+      (define out (observe-each wd (lambda (i) (read-call (+ 100 i))) 30))
       (check-false (memq 'hard-stall out))
       (check-eq? (stall-watchdog-observe! wd (list (same-read)))
                  'ok
@@ -109,7 +109,7 @@
       (define tripped
         (let loop ([i 0])
           (cond
-            [(>= i 200) #f]
+            [(>= i 300) #f]
             [else
              (define r (stall-watchdog-observe! wd (list (read-call i))))
              (set! out (cons r out))
@@ -118,7 +118,7 @@
                  (loop (add1 i)))])))
       (check-true tripped "cycling signatures must die at the backstop")
       (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-reason) 'backstop)
-      (check-equal? (length out) 200))
+      (check-equal? (length out) 300))
 
     (test-case "a mutation resets calls-since-mutation AND clears the window"
       (define wd (make-stall-watchdog))
@@ -147,10 +147,10 @@
                   "same tool + same args → same signature"))
 
     (test-case "default limits are the documented v2 values"
-      (check-equal? STALL-SOFT-LIMIT-DEFAULT 5)
-      (check-equal? STALL-HARD-LIMIT-DEFAULT 8)
-      (check-equal? STALL-REPETITION-WINDOW-DEFAULT 20)
-      (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 200))
+      (check-equal? STALL-SOFT-LIMIT-DEFAULT 8)
+      (check-equal? STALL-HARD-LIMIT-DEFAULT 15)
+      (check-equal? STALL-REPETITION-WINDOW-DEFAULT 30)
+      (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
     (test-case "LIVE REGRESSION: repeated grep/test re-runs between reads stay alive"
       ;; v1.00.20 W2 attempt 1 died at 4 calls: 3 identical greps tripped
@@ -174,7 +174,8 @@
       ;; NEVER a kill.
       (check-false (memq 'hard-stall results)
                    "interleaved legitimate repetition must not escalate to a kill")
-      (check-equal? (length (filter (lambda (r) (eq? r 'soft-stall)) results)) 1))
+      (check-false (memq 'soft-stall results)
+                   "6 legit re-runs spread across other calls stay under even the steer line"))
 
     (test-case "#f limits disable their channel; fully inert watchdog"
       (define wd-none (make-stall-watchdog #:soft-limit #f #:hard-limit #f #:backstop #f))
@@ -183,7 +184,7 @@
       (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
       (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
       (define wd-no-hard (make-stall-watchdog #:hard-limit #f #:backstop #f))
-      (for ([i (in-range 4)])
+      (for ([i (in-range 7)])
         (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read))) 'ok))
       (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read))) 'soft-stall)
       (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read)))
@@ -200,7 +201,7 @@
       ;; A batch that crosses the hard limit inside itself: hard.
       (define wd2 (make-stall-watchdog))
       (stall-watchdog-observe! wd2 (list (same-read)))
-      (check-eq? (stall-watchdog-observe! wd2 (same-reads-batch 7)) 'hard-stall))))
+      (check-eq? (stall-watchdog-observe! wd2 (same-reads-batch 14)) 'hard-stall))))
 
 (module+ main
   (exit (run-tests suite)))

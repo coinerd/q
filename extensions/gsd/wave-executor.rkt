@@ -14,13 +14,15 @@
 ;; racket_codemod (with write=true) | planning-write. Reads, greps, finds and
 ;; bash (even mutating bash) do NOT count — during implementation the file
 ;; tools are the deliverable signal.
-;;   STALL-SOFT-LIMIT-DEFAULT = 5 repeats of the same call signature within
+;;   STALL-SOFT-LIMIT-DEFAULT = 8 repeats of the same call signature within
 ;;     the recent window → one steering injection into the live executor
 ;;     session ("stop repeating yourself — begin the first edit now").
-;;   STALL-HARD-LIMIT-DEFAULT = 8 repeats → the attempt is failed with an
+;;   STALL-HARD-LIMIT-DEFAULT = 15 repeats → the attempt is failed with an
 ;;     explicit stall cause so verification/retry see it. A true livelock
-;;     repeats dozens of times; legitimate re-runs of the same grep/test
-;;     stay well under 5.
+;;     repeats the IDENTICAL call dozens of times back-to-back; legitimate
+;;     work re-runs a grep/test a handful of times spread across other
+;;     calls. Calibrated from three live false-kills (v1.00.20: died at
+;;     3, then 3, then 8 repeats of ordinary exploration patterns).
 ;; Both limits are keyword-configurable on run-campaign-wave; #f disables.
 ;; Pure accounting lives here; injection/termination live in go-orchestrator.
 ;;
@@ -478,11 +480,11 @@
 ;; the first edit; the flat budget killed them (v1.00.19 campaign W5 died
 ;; twice on this). v2:
 ;;
-;;   * soft-limit  (default 5)  — same call signature repeated ≥5× within
+;;   * soft-limit  (default 8)  — same call signature repeated ≥8× within
 ;;                                the window → steer once (latched)
-;;   * hard-limit  (default 8)  — same call signature repeated ≥8× within
+;;   * hard-limit  (default 15) — same call signature repeated ≥15× within
 ;;                                the window → kill the attempt
-;;   * window      (default 20) — sliding window of recent call
+;;   * window      (default 30) — sliding window of recent call
 ;;                                signatures; distinct calls NEVER
 ;;                                accumulate toward a kill
 ;;   * backstop    (default 200) — absolute mutation-free-call budget that
@@ -494,10 +496,10 @@
 ;; file A" 3× in a row is one signature 3×.
 ;; ============================================================
 
-(define STALL-SOFT-LIMIT-DEFAULT 5)
-(define STALL-HARD-LIMIT-DEFAULT 8)
-(define STALL-REPETITION-WINDOW-DEFAULT 20)
-(define STALL-BACKSTOP-LIMIT-DEFAULT 200)
+(define STALL-SOFT-LIMIT-DEFAULT 8)
+(define STALL-HARD-LIMIT-DEFAULT 15)
+(define STALL-REPETITION-WINDOW-DEFAULT 30)
+(define STALL-BACKSTOP-LIMIT-DEFAULT 300)
 
 ;; A limit is either disabled (#f) or a positive integer.
 (define (stall-limit? v)
