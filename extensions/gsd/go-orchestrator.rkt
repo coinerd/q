@@ -317,7 +317,13 @@
      #:lease-owner lease-owner
      #:runner (make-wave-runner-port
                (lambda (wave-idx)
-                 (with-handlers ([exn:fail? (lambda (e)
+                 ;; BUG-0037 W1: a stall kill is retryable infrastructure —
+                 ;; distinct clause BEFORE the generic exn:fail? fallback.
+                 (with-handlers ([gsd-stall-exn?
+                                  (lambda (e)
+                                    (log-error "campaign runner stall-killed: ~a" (exn-message e))
+                                    (wave-execution-outcome 'infra-failed (exn-message e)))]
+                                 [exn:fail? (lambda (e)
                                               (log-error "campaign runner failed: ~a" (exn-message e))
                                               (wave-execution-outcome 'failed (exn-message e)))])
                    (define returned-values
@@ -405,22 +411,37 @@
                (string-join target-files ", ")))
    "Begin the first edit now."))
 
-;; Hard-limit failure cause. Wording deliberately avoids the
-;; infra-failure? vocabulary (network/connection/stream/...) so D8 (#9357)
-;; classifies it as a genuine attempt failure, not a transient provider
-;; error: an exploring-only attempt must consume its failure honestly.
-(define (stall-hard-failure-message calls-since-mutation limit target-files)
+;; Hard-limit failure cause. BUG-0037 W1 reclassification: a stall death
+;; during an attempt with zero file mutations maps to the INFRA-RETRY path
+;; ('infra-failed outcome), not straight to campaign stop — the bounded
+;; automatic re-attempt carries prior-attempt context instead of forcing a
+;; manual /retry. Wording keeps D8 (#9357)'s infra vocabulary out so
+;; infra-failure? itself does not double-match; classification happens via
+;; the explicit gsd-stall-exn? handlers.
+(define (stall-hard-failure-message calls-since-mutation
+                                    limit
+                                    target-files
+                                    [stall-tool #f]
+                                    [recent-tools '()])
   (define targets-desc
     (if (null? target-files)
         "(none recorded)"
         (string-join target-files ", ")))
-  (format
-   (string-append "mutation-stall watchdog: ~a tool calls without any file mutation exceeded "
-                  "the hard limit (~a). Target files: ~a. Attempt terminated for "
-                  "exploration-only behavior — an implementation wave must edit its target files.")
-   calls-since-mutation
-   limit
-   targets-desc))
+  (define tools-desc
+    (if (null? recent-tools)
+        "(none recorded)"
+        (string-join (map (lambda (t) (format "~a" t)) recent-tools) ", ")))
+  (format (string-append "mutation-stall watchdog: attempt terminated after ~a mutation-free "
+                         "calls (limit ~a)~a. Target files: ~a. Recent tools: ~a. "
+                         "The attempt will be re-attempted automatically with its prior "
+                         "context preserved — resume implementation from recorded state.")
+          calls-since-mutation
+          limit
+          (if stall-tool
+              (format " — repeating '~a'" stall-tool)
+              "")
+          targets-desc
+          tools-desc))
 
 ;; Steering injection hook. Default implementation logs the steering and
 ;; arms the thread's empty-response re-anchor (W2's plumbing: the same
@@ -484,18 +505,28 @@
              [campaign-id (campaign-plan-id rec)]
              [prev-hook (current-post-tool-result-hook)])
         (lambda (idx)
+          ;; BUG-0037 W1: a watchdog kill is RETRYABLE infrastructure —
+          ;; map to 'infra-failed so run-once*'s bounded auto-retry picks
+          ;; the attempt back up with prior-attempt context instead of
+          ;; halting the campaign on 'wave-failed.
           (with-handlers ([gsd-stall-exn? (lambda (e)
-                                            (wave-execution-outcome 'failed (exn-message e)))])
+                                            (wave-execution-outcome 'infra-failed (exn-message e)))])
             (parameterize
                 ([current-post-tool-result-hook
                   (lambda (msgs sid root)
                     (prev-hook msgs sid root)
+                    ;; BUG-0037 W1: records MUST carry 'arguments — the v2
+                    ;; signature is tool name + normalized arguments hash,
+                    ;; so a read of file A and a read of file B are
+                    ;; DIFFERENT signatures. Without arguments every read
+                    ;; collapses to one signature and any three reads trip
+                    ;; the repetition limit.
                     (define records
                       (for/list ([m (in-list (if (list? msgs)
                                                  msgs
                                                  '()))]
                                  #:when (and (hash? m) (hash-ref m 'name #f)))
-                        (hasheq 'name (hash-ref m 'name #f))))
+                        (hasheq 'name (hash-ref m 'name #f) 'arguments (hash-ref m 'arguments #f))))
                     (define event (stall-watchdog-observe! watchdog records))
                     (case event
                       [(soft-stall)
@@ -511,13 +542,17 @@
                                                 target-files))]
                       [(hard-stall)
                        (define snap (stall-watchdog-snapshot watchdog))
-                       (log-error "gsd: wave ~a hard stall (~a calls, no mutation) — failing attempt"
-                                  wave-idx
-                                  (hash-ref snap 'calls-since-mutation))
+                       (log-error
+                        "gsd: wave ~a hard stall (~a calls, no mutation, reason ~a) — failing attempt"
+                        wave-idx
+                        (hash-ref snap 'calls-since-mutation)
+                        (hash-ref snap 'stall-reason 'unknown))
                        (raise (make-gsd-stall-exn (stall-hard-failure-message
                                                    (hash-ref snap 'calls-since-mutation)
                                                    (or hard-limit 0)
-                                                   target-files)))]
+                                                   target-files
+                                                   (hash-ref snap 'stall-tool #f)
+                                                   (hash-ref snap 'recent-tools '()))))]
                       [else (void)]))])
               (run-one-fn idx)))))))
 

@@ -1,15 +1,15 @@
 #lang racket/base
 
-;; BUG-0037 characterization — mutation-stall watchdog counts CALLS, not
-;; DISTINCT activity. Today:
-;;   * 60+ DISTINCT read calls → 'hard-stall (kill signaled) — a genuine
-;;     long exploration of many different files is killed at the same
-;;     threshold as an identical-call loop.
-;;   * repeated IDENTICAL calls → also 'hard-stall.
-;; The owning fix wave flips these pins: distinct calls must be
-;; distinguished from an identical-call loop.
+;; BUG-0037 v1.00.20 W1 — mutation-stall watchdog v2: a stall is
+;; REPETITION, not the mere absence of mutation.
 ;;
-;; This file pins CURRENT behavior — every test PASSES today.
+;;   * 70 DISTINCT reads → never trip (healthy exploration survives).
+;;   * same call signature ≥3× within the window → hard-stall
+;;     (soft-steer at 2, latched once).
+;;   * absolute backstop (200) still kills signature-cycling livelocks.
+;;   * a mutation resets the counter AND clears the repetition window.
+;;   * snapshot carries stall-reason / stall-tool / recent-tools so kill
+;;     messages tell operators what looped.
 
 (require rackunit
          (only-in rackunit/text-ui run-tests)
@@ -18,99 +18,146 @@
                   stall-watchdog-observe!
                   stall-watchdog-snapshot
                   STALL-SOFT-LIMIT-DEFAULT
-                  STALL-HARD-LIMIT-DEFAULT))
+                  STALL-HARD-LIMIT-DEFAULT
+                  STALL-REPETITION-WINDOW-DEFAULT
+                  STALL-BACKSTOP-LIMIT-DEFAULT
+                  tool-call-signature))
 
-;; A read tool-call record: name only (no 'arguments needed unless the
-;; tool is conditional like racket_codemod).
+;; A read of a DISTINCT path per index (distinct signatures).
 (define (read-call [i 0])
   (hasheq 'name 'read 'arguments (hasheq 'path (format "/tmp/file-~a.rkt" i))))
+
+;; The SAME read repeated (one signature).
+(define (same-read)
+  (read-call 7))
 
 (define (mutation-call)
   (hasheq 'name 'write 'arguments (hasheq 'path "/tmp/out.rkt")))
 
-;; Observe `n` calls one at a time; return list of classifications.
 (define (observe-each wd mk n)
   (for/list ([i (in-range n)])
     (stall-watchdog-observe! wd (list (mk i)))))
 
-(define-syntax check-final
-  (syntax-rules ()
-    [(_ wd expected msg) (check-equal? (stall-watchdog-observe! wd '()) expected msg)]))
-
 (define suite
-  (test-suite "BUG-0037: stall watchdog trips on raw call COUNT — distinctness ignored"
+  (test-suite "BUG-0037 W1: repetition-based stall detection"
 
-    (test-case "60+ DISTINCT read calls trip the hard limit today (kill signaled)"
+    (test-case "70 DISTINCT reads never trip (the v1.00.19 W5 death is impossible)"
       (define wd (make-stall-watchdog))
-      (define out (observe-each wd read-call 59))
-      (check-false (memq 'hard-stall out) "59 distinct reads must not yet hard-trip")
-      (check-final wd 'ok "at 59 calls the watchdog must still be 'ok")
-      ;; The 60th DISTINCT call crosses the hard limit.
-      (check-equal? (stall-watchdog-observe! wd (list (read-call 59)))
-                    'hard-stall
-                    "the 60th distinct read must hard-trip today (trip-on-count semantics)"))
+      (define out (observe-each wd read-call 70))
+      (check-false (memq 'hard-stall out) "distinct reads must NEVER accumulate toward a kill")
+      (check-false (memq 'soft-stall out)))
 
-    (test-case "repeated IDENTICAL calls trip identically (no distinctness window)"
+    (test-case "identical read repeated: soft steer at 2, hard kill at 3"
       (define wd (make-stall-watchdog))
-      (define same (lambda (_) (read-call 7)))
-      (define out (observe-each wd same 59))
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'soft-stall)
+      (define snap (stall-watchdog-snapshot wd))
+      (check-eq? (hash-ref snap 'stall-reason) 'repetition)
+      (check-eq? (hash-ref snap 'stall-repeats) 2)
+      (check-equal? (hash-ref snap 'stall-tool) "read")
+      ;; Latched: further identical repeats go straight to hard.
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'hard-stall)
+      (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-repeats) 3))
+
+    (test-case "enough distinct reads age a repeated signature out of the window"
+      ;; window=10: repeat one read twice, then 10 distinct reads — BOTH
+      ;; occurrences fall out of the newest-10 window, no trip.
+      (define wd (make-stall-watchdog))
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'soft-stall)
+      ;; offset 100: genuinely disjoint from same-read's file-7 path.
+      (define out (observe-each wd (lambda (i) (read-call (+ 100 i))) 10))
       (check-false (memq 'hard-stall out))
-      (check-equal? (stall-watchdog-observe! wd (list (same 0)))
-                    'hard-stall
-                    "an identical-call loop must hard-trip at the same count today"))
-
-    (test-case "distinct vs identical are INDISTINGUISHABLE today (the defect)"
-      (define wd-distinct (make-stall-watchdog))
-      (define wd-loop (make-stall-watchdog))
-      (for ([i (in-range 59)])
-        (stall-watchdog-observe! wd-distinct (list (read-call i)))
-        (stall-watchdog-observe! wd-loop (list (read-call 0))))
-      (define snap-distinct (stall-watchdog-snapshot wd-distinct))
-      (define snap-loop (stall-watchdog-snapshot wd-loop))
-      (check-equal?
-       (hash-ref snap-distinct 'calls-since-mutation)
-       (hash-ref snap-loop 'calls-since-mutation)
-       "BUG-0037 pin: the snapshot cannot distinguish 59 distinct reads from 59 identical reads — flip this when the fix adds a distinctness signal"))
-
-    (test-case "a mutation resets the counter even amid distinct reads"
+      (check-eq? (stall-watchdog-observe! wd (list (same-read)))
+                 'ok
+                 "signature aged out of the window — fresh start"))
+    (test-case "two repeats plus fewer-than-window distinct reads stay dangerous"
+      ;; 2× sig + 5 distinct: all three sig occurrences still fit in the
+      ;; newest-10 window → one more repeat = 3-in-window → hard.
+      ;; Correct v2 semantics (repetition within the RECENT window;
+      ;; the cap decays the OLDEST occurrence first, so at most 9
+      ;; intervening calls keep a triple alive).
       (define wd (make-stall-watchdog))
-      (for ([i (in-range 50)])
-        (stall-watchdog-observe! wd (list (read-call i))))
-      (check-equal? (hash-ref (stall-watchdog-snapshot wd) 'calls-since-mutation) 50)
+      (stall-watchdog-observe! wd (list (same-read)))
+      (stall-watchdog-observe! wd (list (same-read)))
+      (define out (observe-each wd (lambda (i) (read-call (+ 200 i))) 5))
+      (check-false (memq 'hard-stall out))
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'hard-stall))
+
+    (test-case "backstop kills signature-cycling livelocks at 200 mutation-free calls"
+      (define wd (make-stall-watchdog #:window #f))
+      ;; window disabled → only the backstop can fire; cycle signatures.
+      (define out '())
+      (define tripped
+        (let loop ([i 0])
+          (cond
+            [(>= i 200) #f]
+            [else
+             (define r (stall-watchdog-observe! wd (list (read-call i))))
+             (set! out (cons r out))
+             (if (eq? r 'hard-stall)
+                 #t
+                 (loop (add1 i)))])))
+      (check-true tripped "cycling signatures must die at the backstop")
+      (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-reason) 'backstop)
+      (check-equal? (length out) 200))
+
+    (test-case "a mutation resets calls-since-mutation AND clears the window"
+      (define wd (make-stall-watchdog))
+      (stall-watchdog-observe! wd (list (same-read)))
+      (stall-watchdog-observe! wd (list (same-read))) ; soft latched
       (stall-watchdog-observe! wd (list (mutation-call)))
-      (check-equal? (hash-ref (stall-watchdog-snapshot wd) 'calls-since-mutation)
-                    0
-                    "a write resets calls-since-mutation today")
-      (check-equal? (hash-ref (stall-watchdog-snapshot wd) 'mutations) 1))
+      (define snap (stall-watchdog-snapshot wd))
+      (check-equal? (hash-ref snap 'calls-since-mutation) 0)
+      (check-equal? (hash-ref snap 'mutations) 1)
+      (check-equal? (hash-ref snap 'window) '() "progress invalidates repetition evidence")
+      ;; Post-mutation identical repeats restart from a clean slate.
+      (check-eq? (stall-watchdog-observe! wd (list (same-read))) 'ok))
 
-    (test-case "hard-stall outranks soft-stall when both limits are crossed"
-      (define wd (make-stall-watchdog))
-      ;; Feed all 70 at once: classification must be 'hard-stall, not a
-      ;; late soft steer — an exploring executor deep past both limits
-      ;; must fail today, not be re-steered.
-      (define r
-        (stall-watchdog-observe! wd
-                                 (for/list ([i (in-range 70)])
-                                   (read-call i))))
-      (check-equal? r 'hard-stall)
-      (check-true (hash-ref (stall-watchdog-snapshot wd) 'soft-sent?)
-                  "hard-stall latches soft-sent? too (no further steering)"))
-
-    (test-case "no distinct-call tracking seam exists today (documented absent seam)"
-      ;; The planned fix needs a distinctness window (distinct calls seen /
-      ;; recent distinct signatures). Today the state carries none — this
-      ;; is the seam BUG-0037's wave will add; its absence is pinned here.
+    (test-case "recent-tools names the last distinct tools for kill messages"
       (define wd (make-stall-watchdog))
       (stall-watchdog-observe! wd (list (read-call 0)))
-      (define st (stall-watchdog-snapshot wd))
-      (check-false
-       (ormap (lambda (k) (hash-ref st k #f))
-              '(distinct-calls distinct-count recent-distinct distinct-window))
-       "no distinctness key exists in the snapshot today; if one appears, BUG-0037's seam landed — flip this pin"))
+      (stall-watchdog-observe! wd (list (mutation-call)))
+      (stall-watchdog-observe! wd (list (hasheq 'name 'grep 'arguments (hasheq 'pattern "x"))))
+      (define tools (hash-ref (stall-watchdog-snapshot wd) 'recent-tools))
+      (check-equal? tools '(grep write read) "newest-first, distinct, includes mutations"))
 
-    (test-case "default limits are 25/60 (fixture sanity)"
-      (check-equal? STALL-SOFT-LIMIT-DEFAULT 25)
-      (check-equal? STALL-HARD-LIMIT-DEFAULT 60))))
+    (test-case "signatures distinguish tool name and arguments"
+      (check-false (equal? (tool-call-signature (read-call 1)) (tool-call-signature (read-call 2)))
+                   "different paths → different signatures")
+      (check-true (equal? (tool-call-signature (read-call 7)) (tool-call-signature (same-read)))
+                  "same tool + same args → same signature"))
+
+    (test-case "default limits are the documented v2 values"
+      (check-equal? STALL-SOFT-LIMIT-DEFAULT 2)
+      (check-equal? STALL-HARD-LIMIT-DEFAULT 3)
+      (check-equal? STALL-REPETITION-WINDOW-DEFAULT 10)
+      (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 200))
+
+    (test-case "#f limits disable their channel; fully inert watchdog"
+      (define wd-none (make-stall-watchdog #:soft-limit #f #:hard-limit #f #:backstop #f))
+      (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
+      (define wd-no-hard (make-stall-watchdog #:hard-limit #f #:backstop #f))
+      (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read))) 'ok)
+      (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read))) 'soft-stall)
+      (check-eq? (stall-watchdog-observe! wd-no-hard (list (same-read)))
+                 'ok
+                 "no hard limit → steer once, keep going"))
+
+    (test-case "batch observation classifies by worst outcome in the batch"
+      (define wd (make-stall-watchdog))
+      ;; A single batch of 92 distinct reads: healthy under v2.
+      (check-eq? (stall-watchdog-observe! wd
+                                          (for/list ([i (in-range 92)])
+                                            (read-call i)))
+                 'ok)
+      ;; A single batch carrying an already-latched triple: hard.
+      (define wd2 (make-stall-watchdog))
+      (stall-watchdog-observe! wd2 (list (same-read) (same-read)))
+      (check-eq? (stall-watchdog-observe! wd2 (list (same-read))) 'hard-stall))))
 
 (module+ main
   (exit (run-tests suite)))

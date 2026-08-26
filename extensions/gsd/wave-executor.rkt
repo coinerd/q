@@ -156,10 +156,17 @@
          ;; v1.00.18 W5 (#9513): mutation-stall watchdog
          STALL-SOFT-LIMIT-DEFAULT
          STALL-HARD-LIMIT-DEFAULT
+         STALL-REPETITION-WINDOW-DEFAULT
+         STALL-BACKSTOP-LIMIT-DEFAULT
          stall-limit?
          mutation-tool-call?
          mutation-tool-name?
          stall-state
+         stall-fold-record
+         tool-call-signature
+         window-repeat-leader
+         stall-watchdog-window
+         stall-watchdog-backstop
          make-stall-watchdog
          stall-watchdog?
          stall-watchdog-soft-limit
@@ -459,11 +466,35 @@
 ;; tool-call records that counts calls since the last file mutation.
 ;; ============================================================
 
-;; Default thresholds, documented here per the wave Done criteria.
-;; 25 exploring calls ≈ several minutes of read-only loops; 60 is well past
-;; "gathering context" and into "not implementing".
-(define STALL-SOFT-LIMIT-DEFAULT 25)
-(define STALL-HARD-LIMIT-DEFAULT 60)
+;; ============================================================
+;; v2 semantics (BUG-0037, v1.00.20 W1): a stall is REPETITION, not the
+;; mere absence of mutation.
+;;
+;; v1 counted ALL mutation-free calls against one flat budget (25/60).
+;; Orchestrator-scale waves legitimately need 60+ DISTINCT reads before
+;; the first edit; the flat budget killed them (v1.00.19 campaign W5 died
+;; twice on this). v2:
+;;
+;;   * soft-limit  (default 2)  — same call signature repeated ≥2× within
+;;                                the window → steer once (latched)
+;;   * hard-limit  (default 3)  — same call signature repeated ≥3× within
+;;                                the window → kill the attempt
+;;   * window      (default 10) — sliding window of recent call
+;;                                signatures; distinct calls NEVER
+;;                                accumulate toward a kill
+;;   * backstop    (default 200) — absolute mutation-free-call budget that
+;;                                still kills signature-cycling livelocks;
+;;                                INFO-logged when approached (75%)
+;;
+;; A signature is tool name + normalized arguments hash, so "read of
+;; file A" and "read of file B" are different signatures while "read of
+;; file A" 3× in a row is one signature 3×.
+;; ============================================================
+
+(define STALL-SOFT-LIMIT-DEFAULT 2)
+(define STALL-HARD-LIMIT-DEFAULT 3)
+(define STALL-REPETITION-WINDOW-DEFAULT 10)
+(define STALL-BACKSTOP-LIMIT-DEFAULT 200)
 
 ;; A limit is either disabled (#f) or a positive integer.
 (define (stall-limit? v)
@@ -504,85 +535,248 @@
                    (and (not (eq? w #f)) (not (equal? w "false")))))]
            [else #f]))))
 
+;; Canonical argument value → short stable string (args are flat hashes
+;; of scalars in practice). Long values are truncated so signatures stay
+;; cheap and bounded.
+(define (normalize-arg-value v)
+  (define s (format "~s" v))
+  (if (> (string-length s) 64)
+      (substring s 0 64)
+      s))
+
+;; Tool-call signature: tool name + normalized arguments hash. Two calls
+;; with the same name and same arguments → SAME signature (that is the
+;; repetition the watchdog hunts); a read of file A vs file B → DIFFERENT
+;; signatures (that is healthy exploration, never a stall).
+(define (tool-call-signature rec)
+  (define name (normalize-tool-name (hash-ref rec 'name #f)))
+  (define args (hash-ref rec 'arguments #f))
+  (string-append (if name
+                     (symbol->string name)
+                     "?")
+                 "|"
+                 (cond
+                   [(not (hash? args)) ""]
+                   [else
+                    (string-join (sort (for/list ([(k v) (in-hash args)])
+                                         (format "~a=~a" k (normalize-arg-value v)))
+                                       string<?)
+                                 ";")])))
+
+;; Initial watchdog state. window/recent-tools carry the v2 distinctness
+;; seam (BUG-0037): the window holds recent signatures (newest first),
+;; recent-tools holds recent DISTINCT tool names (newest first, capped 6).
+(define (initial-stall-state)
+  (hasheq 'calls-since-mutation
+          0
+          'total-calls
+          0
+          'mutations
+          0
+          'soft-sent?
+          #f
+          'window
+          '()
+          'recent-tools
+          '()
+          'backstop-logged?
+          #f
+          'stall-reason
+          #f
+          'stall-repeats
+          0
+          'stall-tool
+          #f))
+
+;; Remember the record's tool name, newest-first, distinct, capped at 6 —
+;; the kill message names the last distinct tools so operators can tell
+;; healthy exploration from a true stall at a glance.
+(define (stall-take-at-most lst n)
+  (let loop ([xs lst]
+             [i 0]
+             [acc '()])
+    (if (or (null? xs) (>= i n))
+        (reverse acc)
+        (loop (cdr xs) (add1 i) (cons (car xs) acc)))))
+
+(define (remember-tool tools rec)
+  (define n (normalize-tool-name (hash-ref rec 'name #f)))
+  (stall-take-at-most (if n
+                          (cons n (remq n tools))
+                          tools)
+                      6))
+
+;; Fold one record into a stall state (pure). A mutation resets
+;; calls-since-mutation AND clears the repetition window: progress
+;; invalidates accumulated repetition evidence.
+(define (stall-fold-record st rec [window-size STALL-REPETITION-WINDOW-DEFAULT])
+  (define base
+    (hasheq 'total-calls
+            (add1 (hash-ref st 'total-calls))
+            'soft-sent?
+            (hash-ref st 'soft-sent?)
+            'backstop-logged?
+            (hash-ref st 'backstop-logged?)
+            'stall-reason
+            (hash-ref st 'stall-reason)
+            'stall-repeats
+            (hash-ref st 'stall-repeats)
+            'stall-tool
+            (hash-ref st 'stall-tool)))
+  (if (mutation-tool-call? rec)
+      (hash-set* base
+                 'calls-since-mutation
+                 0
+                 'mutations
+                 (add1 (hash-ref st 'mutations))
+                 'window
+                 '()
+                 'recent-tools
+                 (remember-tool (hash-ref st 'recent-tools) rec))
+      (hash-set* base
+                 'calls-since-mutation
+                 (add1 (hash-ref st 'calls-since-mutation))
+                 'mutations
+                 (hash-ref st 'mutations)
+                 'window
+                 (if (and window-size (positive? window-size))
+                     (stall-take-at-most (cons (tool-call-signature rec) (hash-ref st 'window))
+                                         window-size)
+                     '())
+                 'recent-tools
+                 (remember-tool (hash-ref st 'recent-tools) rec))))
+
 ;; Pure fold: sequence of tool-call records → stall snapshot
-;;   'calls-since-mutation — the watchdog signal (0 right after a mutation)
-;;   'total-calls           — every observed call
-;;   'mutations             — number of file mutations observed
+;;   'calls-since-mutation — mutation-free calls since the last mutation
+;;                           (the absolute backstop signal)
+;;   'total-calls          — every observed call
+;;   'mutations            — number of file mutations observed
+;;   'window               — recent signatures, newest first (distinctness)
+;;   'recent-tools         — recent DISTINCT tool names, newest first
 ;; No I/O, no state. Pure so tests can drive synthetic call sequences.
 (define (stall-state records)
-  (for/fold ([since 0]
-             [total 0]
-             [mutations 0]
-             #:result (hasheq 'calls-since-mutation since 'total-calls total 'mutations mutations))
+  (for/fold ([st (initial-stall-state)])
             ([rec (in-list (if (list? records)
                                records
                                '()))])
-    (if (mutation-tool-call? rec)
-        (values 0 (add1 total) (add1 mutations))
-        (values (add1 since) (add1 total) mutations))))
+    (stall-fold-record st rec)))
+
+;; Most-repeated signature in the window → (values count signature).
+;; O(window²) with window ≤ 10 by default — negligible. (No racket/list
+;; dependency: count-by hand.)
+(define (window-repeat-leader sigs)
+  (define (count-sig s)
+    (let loop ([xs sigs]
+               [c 0])
+      (cond
+        [(null? xs) c]
+        [(string=? (car xs) s) (loop (cdr xs) (add1 c))]
+        [else (loop (cdr xs) c)])))
+  (for/fold ([best-count 0]
+             [best-sig #f])
+            ([s (in-list sigs)])
+    (let ([c (count-sig s)])
+      (if (> c best-count)
+          (values c s)
+          (values best-count best-sig)))))
 
 ;; Stateful watchdog over a single attempt/session. One soft injection per
 ;; session (not per call): the 'soft-stall? flag latches once tripped.
 ;; The host (go-orchestrator) observes tool batches through
 ;; stall-watchdog-observe! and receives 'ok | 'soft-stall | 'hard-stall.
-(struct stall-watchdog (soft-limit hard-limit state) #:transparent)
+(struct stall-watchdog (soft-limit hard-limit window backstop state) #:transparent)
 
 (define (make-stall-watchdog #:soft-limit [soft-limit STALL-SOFT-LIMIT-DEFAULT]
-                             #:hard-limit [hard-limit STALL-HARD-LIMIT-DEFAULT])
+                             #:hard-limit [hard-limit STALL-HARD-LIMIT-DEFAULT]
+                             #:window [window STALL-REPETITION-WINDOW-DEFAULT]
+                             #:backstop [backstop STALL-BACKSTOP-LIMIT-DEFAULT])
   (unless (stall-limit? soft-limit)
     (raise-argument-error 'make-stall-watchdog "(or/c #f exact-positive-integer?)" soft-limit))
   (unless (stall-limit? hard-limit)
     (raise-argument-error 'make-stall-watchdog "(or/c #f exact-positive-integer?)" hard-limit))
-  (stall-watchdog soft-limit
-                  hard-limit
-                  (box (hasheq 'calls-since-mutation 0 'total-calls 0 'mutations 0 'soft-sent? #f))))
+  (unless (stall-limit? window)
+    (raise-argument-error 'make-stall-watchdog "(or/c #f exact-positive-integer?)" window))
+  (unless (stall-limit? backstop)
+    (raise-argument-error 'make-stall-watchdog "(or/c #f exact-positive-integer?)" backstop))
+  (stall-watchdog soft-limit hard-limit window backstop (box (initial-stall-state))))
 
 (define (stall-watchdog-snapshot wd)
   (unbox (stall-watchdog-state wd)))
 
 ;; Fold one batch of records into the watchdog and classify the outcome.
-;;   'hard-stall — hard limit crossed (checked FIRST: an exploring executor
-;;                 deep past both limits must fail, not be re-steered)
-;;   'soft-stall — soft limit crossed for the first time (latched: exactly
-;;                 one injection per session)
-;;   'ok         — keep going
-;; When both limits are #f the watchdog is inert (always 'ok).
+;;   'hard-stall — (a) one signature repeated ≥ hard-limit times within the
+;;                 window (repetition livelock), or (b) the absolute backstop
+;;                 of mutation-free calls reached (signature-cycling
+;;                 livelock). Checked FIRST: an executor deep past every
+;;                 limit must fail, not be re-steered. The trip reason is
+;;                 recorded in the snapshot ('stall-reason).
+;;   'soft-stall — one signature repeated ≥ soft-limit times within the
+;;                 window, first time only (latched: exactly one injection
+;;                 per session)
+;;   'ok         — keep going (distinct calls never accumulate toward a kill)
+;; When soft/hard/backstop are all #f the watchdog is inert (always 'ok).
+;; Backstop approach (≥75%) is logged at INFO once so operators can see a
+;; true livelock coming before it dies.
 (define (stall-watchdog-observe! wd records)
   (define st0 (stall-watchdog-snapshot wd))
+  (define wsize (or (stall-watchdog-window wd) STALL-REPETITION-WINDOW-DEFAULT))
   (define st1
     (for/fold ([st st0])
               ([rec (in-list (if (list? records)
                                  records
                                  '()))])
-      (if (mutation-tool-call? rec)
-          (hasheq 'calls-since-mutation
-                  0
-                  'total-calls
-                  (add1 (hash-ref st 'total-calls))
-                  'mutations
-                  (add1 (hash-ref st 'mutations))
-                  'soft-sent?
-                  (hash-ref st 'soft-sent?))
-          (hasheq 'calls-since-mutation
-                  (add1 (hash-ref st 'calls-since-mutation))
-                  'total-calls
-                  (add1 (hash-ref st 'total-calls))
-                  'mutations
-                  (hash-ref st 'mutations)
-                  'soft-sent?
-                  (hash-ref st 'soft-sent?)))))
+      (stall-fold-record st rec wsize)))
   (define hard (stall-watchdog-hard-limit wd))
   (define soft (stall-watchdog-soft-limit wd))
+  (define backstop (stall-watchdog-backstop wd))
   (define since (hash-ref st1 'calls-since-mutation))
+  (define-values (max-repeat leader-sig) (window-repeat-leader (hash-ref st1 'window)))
+  (define leader-tool (and leader-sig (car (string-split leader-sig "|"))))
+  (define (commit! st)
+    (set-box! (stall-watchdog-state wd) st))
   (cond
-    [(and hard (>= since hard))
-     (set-box! (stall-watchdog-state wd) (hash-set st1 'soft-sent? #t))
+    [(and hard wsize (>= max-repeat hard))
+     (commit! (hash-set* st1
+                         'soft-sent?
+                         #t
+                         'stall-reason
+                         'repetition
+                         'stall-repeats
+                         max-repeat
+                         'stall-tool
+                         leader-tool))
      'hard-stall]
-    [(and soft (>= since soft) (not (hash-ref st1 'soft-sent?)))
-     (set-box! (stall-watchdog-state wd) (hash-set st1 'soft-sent? #t))
+    [(and backstop (>= since backstop))
+     (commit! (hash-set* st1
+                         'soft-sent?
+                         #t
+                         'stall-reason
+                         'backstop
+                         'stall-repeats
+                         max-repeat
+                         'stall-tool
+                         leader-tool))
+     'hard-stall]
+    [(and soft wsize (>= max-repeat soft) (not (hash-ref st1 'soft-sent?)))
+     (commit! (hash-set* st1
+                         'soft-sent?
+                         #t
+                         'stall-reason
+                         'repetition
+                         'stall-repeats
+                         max-repeat
+                         'stall-tool
+                         leader-tool))
      'soft-stall]
     [else
-     (set-box! (stall-watchdog-state wd) st1)
+     (when (and backstop
+                (not (hash-ref st1 'backstop-logged?))
+                (>= since (quotient (* 3 backstop) 4)))
+       (log-info "gsd mutation-stall watchdog: backstop approaching (~a/~a mutation-free calls)"
+                 since
+                 backstop)
+       (commit! (hash-set st1 'backstop-logged? #t)))
+     (commit! st1)
      'ok]))
 
 ;; ============================================================
