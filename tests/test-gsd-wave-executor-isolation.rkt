@@ -271,7 +271,7 @@
       (cleanup-tmp dir))))
 
 ;; ============================================================
-;; BUG-0028 S1/S2 (v1.00.19 W2): gsd.worktree-isolation settings wiring
+;; BUG-0028 S1/S2 (W2): gsd.worktree-isolation settings wiring
 ;; ============================================================
 ;; Precedence (documented at resolve-worktree-isolation):
 ;;   explicit #:isolate? > gsd.worktree-isolation key > parameter default (OFF).
