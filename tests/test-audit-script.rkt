@@ -14,15 +14,12 @@
          racket/string
          racket/file
          racket/path
-         racket/port)
+         racket/port
+         racket/runtime-path)
 
-;; Resolve q-dir: go up from tests/ directory
-(define q-dir
-  (let* ([test-dir (current-directory)]
-         [parent (simplify-path (build-path test-dir ".."))])
-    (if (directory-exists? (build-path parent "runtime"))
-        parent
-        (simplify-path (build-path parent "q")))))
+;; BUG-0033: resolve q-dir relative to THIS FILE so the test passes from
+;; any cwd (was (current-directory)-based).
+(define-runtime-path q-dir "..")
 
 (define audit-script (build-path q-dir "scripts" "audit-project.rkt"))
 

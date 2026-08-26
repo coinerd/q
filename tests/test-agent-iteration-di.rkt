@@ -12,6 +12,7 @@
 (require rackunit
          racket/file
          racket/list
+         racket/runtime-path
          "../agent/iteration/loop-config.rkt"
          "../agent/iteration/loop-state.rkt"
          (prefix-in ml: "../agent/iteration/main-loop.rkt")
@@ -87,15 +88,17 @@
              (lambda () (ml:run-iteration-loop/v2 cfg))
              "Should error when build-context-fn is not supplied"))
 
+;; BUG-0033: source-relative paths (were cwd-relative) — passes from any cwd.
+(define-runtime-path main-loop-src "../agent/iteration/main-loop.rkt")
+(define-runtime-path step-interpreter-path "../agent/iteration/step-interpreter.rkt")
+
 (test-case "v0.99.85: main-loop.rkt does not import runtime orchestration"
   ;; Structural verification: the agent iteration module should not
   ;; import from the runtime orchestration layer
-  (define src
-    (file->string (build-path (current-directory) ".." "agent" "iteration" "main-loop.rkt")))
+  (define src (file->string main-loop-src))
   (check-false (string-contains? src "turn-orchestrator")
                "main-loop.rkt must not import the runtime orchestration layer"))
 
 (test-case "v0.99.86: agent/iteration/ no longer has step-interpreter.rkt"
-  (define path (build-path (current-directory) ".." "agent" "iteration" "step-interpreter.rkt"))
-  (check-false (file-exists? path)
+  (check-false (file-exists? step-interpreter-path)
                "step-interpreter.rkt must not exist in agent/iteration/ after relocation"))
