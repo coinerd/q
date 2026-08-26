@@ -237,6 +237,12 @@
         (wave-execution-outcome 'failed "tool calls remain pending")]
        [(eq? termination 'empty-response)
         (wave-execution-outcome 'failed "model returned an empty response")]
+       [(let ([e (hash-ref metadata 'error #f)]) (stall-cause-message? e))
+        ;; BUG-0037 W1: watchdog kill → retryable infrastructure, bounded
+        ;; auto-resume with prior-attempt context (never a manual /retry).
+        (wave-execution-outcome 'infra-failed
+                                (format "~a attempt preserved for automatic re-attempt"
+                                        (hash-ref metadata 'error "")))]
        [(infra-failure? result)
         ;; D8 (#9357): transient provider/network/SSE failure — distinct
         ;; outcome so run-campaign-wave can preserve the attempt.
@@ -565,6 +571,19 @@
 ;; files changed: f1, f2, ..."). Only this verdict gets the bounded
 ;; failure-context retry: a plain "verifier rejected" (empty message) or any
 ;; other rejection still fails the wave on the first attempt.
+;; BUG-0037 W1 follow-up (live campaign evidence, v1.00.20 W2 attempt 1):
+;; the executor session's tool loop catches the gsd-stall-exn INSIDE the
+;; worker and converts it to a loop-result 'error termination carrying the
+;; stall message — so the gsd-stall-exn? handlers at the runner boundary
+;; never fire and the death classified as a plain 'failed. Recognize the
+;; canonical prefix here and route it to the retryable infra-failed path.
+(define stall-cause-prefix "mutation-stall watchdog:")
+
+(define (stall-cause-message? msg)
+  (and (string? msg)
+       (>= (string-length msg) (string-length stall-cause-prefix))
+       (string-prefix? msg stall-cause-prefix)))
+
 (define no-change-rejection-prefix "no wave target files changed")
 
 (define (no-change-rejection? verifier-message)

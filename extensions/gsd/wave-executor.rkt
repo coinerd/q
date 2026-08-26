@@ -14,10 +14,13 @@
 ;; racket_codemod (with write=true) | planning-write. Reads, greps, finds and
 ;; bash (even mutating bash) do NOT count — during implementation the file
 ;; tools are the deliverable signal.
-;;   STALL-SOFT-LIMIT-DEFAULT = 25 calls without a mutation → one steering
-;;     injection into the live executor session ("begin the first edit now").
-;;   STALL-HARD-LIMIT-DEFAULT = 60 calls without a mutation → the attempt is
-;;     failed with an explicit stall cause so verification/retry see it.
+;;   STALL-SOFT-LIMIT-DEFAULT = 5 repeats of the same call signature within
+;;     the recent window → one steering injection into the live executor
+;;     session ("stop repeating yourself — begin the first edit now").
+;;   STALL-HARD-LIMIT-DEFAULT = 8 repeats → the attempt is failed with an
+;;     explicit stall cause so verification/retry see it. A true livelock
+;;     repeats dozens of times; legitimate re-runs of the same grep/test
+;;     stay well under 5.
 ;; Both limits are keyword-configurable on run-campaign-wave; #f disables.
 ;; Pure accounting lives here; injection/termination live in go-orchestrator.
 ;;
@@ -475,11 +478,11 @@
 ;; the first edit; the flat budget killed them (v1.00.19 campaign W5 died
 ;; twice on this). v2:
 ;;
-;;   * soft-limit  (default 2)  — same call signature repeated ≥2× within
+;;   * soft-limit  (default 5)  — same call signature repeated ≥5× within
 ;;                                the window → steer once (latched)
-;;   * hard-limit  (default 3)  — same call signature repeated ≥3× within
+;;   * hard-limit  (default 8)  — same call signature repeated ≥8× within
 ;;                                the window → kill the attempt
-;;   * window      (default 10) — sliding window of recent call
+;;   * window      (default 20) — sliding window of recent call
 ;;                                signatures; distinct calls NEVER
 ;;                                accumulate toward a kill
 ;;   * backstop    (default 200) — absolute mutation-free-call budget that
@@ -491,9 +494,9 @@
 ;; file A" 3× in a row is one signature 3×.
 ;; ============================================================
 
-(define STALL-SOFT-LIMIT-DEFAULT 2)
-(define STALL-HARD-LIMIT-DEFAULT 3)
-(define STALL-REPETITION-WINDOW-DEFAULT 10)
+(define STALL-SOFT-LIMIT-DEFAULT 5)
+(define STALL-HARD-LIMIT-DEFAULT 8)
+(define STALL-REPETITION-WINDOW-DEFAULT 20)
 (define STALL-BACKSTOP-LIMIT-DEFAULT 200)
 
 ;; A limit is either disabled (#f) or a positive integer.

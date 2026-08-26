@@ -30,6 +30,10 @@
 
 (require racket/string
          rackunit
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../extensions/gsd/wave-runner-port.rkt"
+                  wave-execution-outcome-kind
+                  wave-execution-outcome-message)
          "../extensions/gsd/wave-executor.rkt"
          "../extensions/gsd/go-orchestrator.rkt")
 
@@ -60,11 +64,27 @@
 ;; 1. Defaults are what the module header documents (v2)
 ;; ============================================================
 
-(test-case "defaults: soft 2, hard 3, window 10, backstop 200"
-  (check-equal? STALL-SOFT-LIMIT-DEFAULT 2)
-  (check-equal? STALL-HARD-LIMIT-DEFAULT 3)
-  (check-equal? STALL-REPETITION-WINDOW-DEFAULT 10)
+(test-case "defaults: soft 5, hard 8, window 20, backstop 200"
+  (check-equal? STALL-SOFT-LIMIT-DEFAULT 5)
+  (check-equal? STALL-HARD-LIMIT-DEFAULT 8)
+  (check-equal? STALL-REPETITION-WINDOW-DEFAULT 20)
   (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 200))
+
+(test-case "LIVE REGRESSION: repeated identical greps between reads never kill"
+  ;; v1.00.20 W2 attempt 1: killed at 4 calls for 3 identical greps.
+  ;; Interleaved legitimate repetition must stay alive under 5/8.
+  (define wd (make-stall-watchdog))
+  (define (grep-call)
+    (call 'grep (hasheq 'pattern "stall" 'path "extensions/gsd")))
+  (define results '())
+  (for ([i (in-range 6)])
+    (set! results
+          (append results
+                  (list (stall-watchdog-observe! wd (list (grep-call)))
+                        (stall-watchdog-observe! wd (reads 1 (* 100 i)))))))
+  ;; At most one non-fatal steering nudge across 6 legit re-runs; NEVER a kill.
+  (check-false (memq 'hard-stall results) "legit repetition must not kill")
+  (check-equal? (length (filter (lambda (r) (eq? r 'soft-stall)) results)) 1))
 
 (test-case "run-campaign-wave exposes the limits as keyword arguments"
   ;; Contract-level check: the coordinator passes #:stall-soft-limit /
@@ -88,8 +108,8 @@
   (check-equal? (hash-ref st 'calls-since-mutation) 30)
   (check-equal? (hash-ref st 'total-calls) 30)
   (check-equal? (hash-ref st 'mutations) 0)
-  ;; Window capped at the default size (newest 10).
-  (check-equal? (length (hash-ref st 'window)) 10))
+  ;; Window capped at the default size (newest 20).
+  (check-equal? (length (hash-ref st 'window)) 20))
 
 (test-case "stall-state: a mutation resets the counter AND clears the window"
   (define st (stall-state (append (reads 24) (list (call 'edit)) (reads 5 500))))
@@ -129,16 +149,19 @@
 ;; 3. Watchdog v2: repetition steers at 2, kills at 3; backstop at 200
 ;; ============================================================
 
-(test-case "identical reads: soft steer at 2 (latched once), hard kill at 3"
+(test-case "identical reads: soft steer at 5 (latched once), hard kill at 8"
   (define wd (make-stall-watchdog))
-  (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok)
+  (for ([i (in-range 4)])
+    (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'soft-stall)
   (check-true (hash-ref (stall-watchdog-snapshot wd) 'soft-sent?))
-  ;; More identical reads: never re-steered (latched), straight to hard.
+  ;; Latched: counts 6 and 7 stay ok, the 8th kills.
+  (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok)
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'hard-stall)
   (define snap (stall-watchdog-snapshot wd))
   (check-eq? (hash-ref snap 'stall-reason) 'repetition)
-  (check-eq? (hash-ref snap 'stall-repeats) 3))
+  (check-eq? (hash-ref snap 'stall-repeats) 8))
 
 (test-case "70 DISTINCT reads NEVER trip (the pre-fix W5 death is impossible)"
   (define wd (make-stall-watchdog))
@@ -159,7 +182,7 @@
 
 (test-case "an edit between observations resets the counter and the window"
   (define wd (make-stall-watchdog))
-  (check-eq? (stall-watchdog-observe! wd (same-reads 2)) 'soft-stall)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 5)) 'soft-stall)
   ;; The executor heeds the steering and edits.
   (check-eq? (stall-watchdog-observe! wd (list (call 'edit))) 'ok)
   (define snap (stall-watchdog-snapshot wd))
@@ -205,14 +228,14 @@
   (define wd (make-stall-watchdog #:soft-limit #f))
   (check-false (stall-watchdog-soft-limit wd))
   ;; Identical reads skip steering entirely...
-  (check-eq? (stall-watchdog-observe! wd (same-reads 2)) 'ok)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 7)) 'ok)
   (check-false (hash-ref (stall-watchdog-snapshot wd) 'soft-sent?))
-  ;; ...and go straight to the hard kill at 3.
+  ;; ...and go straight to the hard kill at 8.
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'hard-stall))
 
 (test-case "#f hard limit disables termination; backstop remains"
   (define wd (make-stall-watchdog #:hard-limit #f))
-  (check-eq? (stall-watchdog-observe! wd (same-reads 2)) 'soft-stall)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 5)) 'soft-stall)
   ;; Steered once, then identical repeats continue harmlessly...
   (for ([i (in-range 50)])
     (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
@@ -240,7 +263,7 @@
 
 (test-case "stall-steering-message carries the executor role and the order"
   (define msg
-    (stall-steering-message 2
+    (stall-steering-message 5
                             "W3"
                             "camp-42"
                             "Add the stall watchdog"
@@ -250,14 +273,14 @@
   (check-pred (lambda (s) (string-contains? s "W3")) msg)
   (check-pred (lambda (s) (string-contains? s "camp-42")) msg)
   (check-pred (lambda (s) (string-contains? s "Add the stall watchdog")) msg)
-  (check-pred (lambda (s) (string-contains? s "2")) msg)
+  (check-pred (lambda (s) (string-contains? s "5")) msg)
   (check-pred (lambda (s) (string-contains? s "q/extensions/gsd/wave-executor.rkt")) msg)
   (check-pred (lambda (s) (string-contains? s "q/tests/test-gsd-mutation-stall-watchdog.rkt")) msg)
   (check-pred (lambda (s) (string-contains? (string-downcase s) "edit")) msg))
 
 (test-case "stall-steering-message degrades without target files"
-  (define msg (stall-steering-message 2 "W2" "camp-42" "Do the thing" '()))
-  (check-pred (lambda (s) (string-contains? s "2")) msg)
+  (define msg (stall-steering-message 5 "W2" "camp-42" "Do the thing" '()))
+  (check-pred (lambda (s) (string-contains? s "5")) msg)
   (check-pred string? msg))
 
 (test-case "stall-hard-failure-message names reason, looped tool, and recent tools"
@@ -272,6 +295,23 @@
   (check-pred (lambda (s) (string-contains? s "grep")) msg)
   (check-pred (lambda (s) (string-contains? s "q/extensions/gsd/wave-executor.rkt")) msg)
   (check-pred (lambda (s) (string-contains? (string-downcase s) "re-attempted")) msg))
+
+(test-case "stall-cause errors classify as RETRYABLE infra-failed (live-campaign regression)"
+  ;; v1.00.20 W2 attempt 1: the session layer converted the stall exn to a
+  ;; loop-result 'error; the campaign then STOPPED instead of auto-retrying.
+  (define r
+    (prompt-run-result->outcome
+     (make-loop-result
+      '()
+      'error
+      (hasheq 'error "mutation-stall watchdog: attempt terminated after 4 mutation-free calls"))))
+  (check-eq? (wave-execution-outcome-kind r) 'infra-failed)
+  (check-pred (lambda (s) (string-contains? s "mutation-stall watchdog"))
+              (wave-execution-outcome-message r))
+  ;; Non-stall errors must NOT be reclassified.
+  (define other
+    (prompt-run-result->outcome (make-loop-result '() 'error (hasheq 'error "some logic failure"))))
+  (check-eq? (wave-execution-outcome-kind other) 'failed))
 
 (test-case "gsd-stall-exn is a transparent failure exception"
   (define e (make-gsd-stall-exn "mutation-stall watchdog: boom"))
