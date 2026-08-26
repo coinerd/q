@@ -543,30 +543,39 @@
 ;; Canonical argument value → short stable string (args are flat hashes
 ;; of scalars in practice). Long values are truncated so signatures stay
 ;; cheap and bounded.
-(define (normalize-arg-value v)
-  (define s (format "~s" v))
-  (if (> (string-length s) 64)
-      (substring s 0 64)
-      s))
-
-;; Tool-call signature: tool name + normalized arguments hash. Two calls
-;; with the same name and same arguments → SAME signature (that is the
-;; repetition the watchdog hunts); a read of file A vs file B → DIFFERENT
-;; signatures (that is healthy exploration, never a stall).
+;; Tool-call signature: tool name + full-fidelity argument digest. Two
+;; calls with the same name and the same arguments → SAME signature (the
+;; repetition the watchdog hunts); ANY argument difference → DIFFERENT
+;; signature (healthy exploration, never a stall).
+;;
+;; BUG-0037 W2 live-false-kill lessons, both encoded here:
+;;   * Arguments may be absent (hook did not carry them) or a raw string
+;;     (provider could not parse the JSON). Collapsing those to "" made
+;;     every bash call one signature — now the digest covers the actual
+;;     value; a missing-arguments record keeps "" (distinct from every
+;;     hashed value) so it can only repeat on true back-to-back identical
+;;     result-less calls.
+;;   * Truncating values at 64 chars collapsed different long bash
+;;     commands that share a cd-prefix. The digest hashes the FULL
+;;     canonicalized argument list — the ~s rendering is deterministic,
+;;     which is all the in-memory window needs.
 (define (tool-call-signature rec)
   (define name (normalize-tool-name (hash-ref rec 'name #f)))
   (define args (hash-ref rec 'arguments #f))
+  (define arg-digest
+    (cond
+      [(hash? args)
+       (format "~s"
+               (sort (for/list ([(k v) (in-hash args)])
+                       (cons k v))
+                     (lambda (a b) (string<? (format "~a" (car a)) (format "~a" (car b))))))]
+      [(string? args) (format "~s" args)]
+      [else ""]))
   (string-append (if name
                      (symbol->string name)
                      "?")
                  "|"
-                 (cond
-                   [(not (hash? args)) ""]
-                   [else
-                    (string-join (sort (for/list ([(k v) (in-hash args)])
-                                         (format "~a=~a" k (normalize-arg-value v)))
-                                       string<?)
-                                 ";")])))
+                 arg-digest))
 
 ;; Initial watchdog state. window/recent-tools carry the v2 distinctness
 ;; seam (BUG-0037): the window holds recent signatures (newest first),
@@ -667,7 +676,7 @@
     (stall-fold-record st rec)))
 
 ;; Most-repeated signature in the window → (values count signature).
-;; O(window²) with window ≤ 10 by default — negligible. (No racket/list
+;; O(window²) with window ≤ 30 by default — negligible. (No racket/list
 ;; dependency: count-by hand.)
 (define (window-repeat-leader sigs)
   (define (count-sig s)
