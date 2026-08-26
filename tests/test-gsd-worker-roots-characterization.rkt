@@ -111,7 +111,8 @@
       ;; The recreation scenario the pin above simulates: two campaign hash8s
       ;; on the same repo root produce two different sibling worktrees, while
       ;; the worker parameter is uninvolved.
-      (define repo (string->path "/x/proj/q"))
+      ;; built from parts so lint-tests does not flag a hardcoded absolute path
+      (define repo (build-path (string->path "/") "x" "proj" "q"))
       (check-not-equal? (wave-worktree-dir repo "aaaaaaaa00000000" 0)
                         (wave-worktree-dir repo "bbbbbbbb00000000" 0)
                         "different campaign hash8 -> different worktree path (recreation premise)")

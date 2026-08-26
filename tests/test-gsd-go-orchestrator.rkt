@@ -725,22 +725,26 @@
   (test-suite "BUG-0031: /go freshness guard"
 
     (test-case "running version ≠ checkout version → stale"
-      (check-true (freshness-stale? (fake-freshness "1.00.18" "1.00.19" #f #f #f)))
+      (check-true
+       (freshness-stale?
+        (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)))
       ;; Fail open: unknown checkout version is never stale.
-      (check-false (freshness-stale? (fake-freshness "1.00.18" #f #f #f #f)))
+      (check-false (freshness-stale? (fake-freshness q-version #f #f #f #f)))
       ;; Offline with matching versions is never stale.
-      (check-false (freshness-stale? (fake-freshness "1.00.19" "1.00.19" #f #f #t)))
+      (check-false (freshness-stale? (fake-freshness q-version q-version #f #f #t)))
       ;; Strictly behind origin/main is stale even with matching versions.
-      (check-true (freshness-stale? (fake-freshness "1.00.19" "1.00.19" "sha1" #t #f))))
+      (check-true (freshness-stale? (fake-freshness q-version q-version "sha1" #t #f))))
 
     (test-case "refusal message names both versions (restart required)"
-      (define msg (freshness-refusal-message (fake-freshness "1.00.18" "1.00.19" #f #f #f)))
+      (define msg
+        (freshness-refusal-message
+         (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)))
       (check-true (string-contains? msg "restart required") msg)
-      (check-true (string-contains? msg "running 1.00.18") msg)
-      (check-true (string-contains? msg "checkout 1.00.19") msg)
+      (check-true (string-contains? msg (string-append "running " q-version "-old")) msg)
+      (check-true (string-contains? msg (string-append "checkout " q-version "-new")) msg)
       ;; Behind-origin refusal names the update path, not "restart".
       (define behind-msg
-        (freshness-refusal-message (fake-freshness "1.00.19" "1.00.19" "abc123" #t #f)))
+        (freshness-refusal-message (fake-freshness q-version q-version "abc123" #t #f)))
       (check-true (string-contains? behind-msg "behind origin/main") behind-msg))
 
     (test-case "offline warning is emitted only when origin is unreachable"
@@ -754,19 +758,21 @@
       (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define calls 0)
       (define result
-        (freshness-suite/guarded dir
-                                 rec
-                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
-                                 (lambda ()
-                                   (execute-campaign-request!
-                                    request
-                                    (lambda (_)
-                                      (set! calls (add1 calls))
-                                      (make-loop-result '() 'completed (hasheq)))))))
+        (freshness-suite/guarded
+         dir
+         rec
+         (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)
+         (lambda ()
+           (execute-campaign-request! request
+                                      (lambda (_)
+                                        (set! calls (add1 calls))
+                                        (make-loop-result '() 'completed (hasheq)))))))
       (check-eq? (campaign-result-status result) 'error)
-      (check-true (string-contains? (campaign-result-message result)
-                                    "restart required (running 1.00.18, checkout 1.00.19)")
-                  (campaign-result-message result))
+      (check-true
+       (string-contains?
+        (campaign-result-message result)
+        (string-append "restart required (running " q-version "-old, checkout " q-version "-new)"))
+       (campaign-result-message result))
       (check-equal? calls 0 "refusal must not invoke the runner")
       ;; Refusal is not an override: the flag stays unset.
       (check-false (campaign-record-stale-override rec))
@@ -779,13 +785,13 @@
       (define request
         (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:allow-stale? #t))
       (define result
-        (freshness-suite/guarded dir
-                                 rec
-                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
-                                 (lambda ()
-                                   (execute-campaign-request!
-                                    request
-                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
+        (freshness-suite/guarded
+         dir
+         rec
+         (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)
+         (lambda ()
+           (execute-campaign-request! request
+                                      (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-true (campaign-record-stale-override rec)
                   "override must record stale-override: true in the campaign record")
@@ -798,14 +804,14 @@
       (define rec (load-or-migrate dir))
       (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define result
-        (freshness-suite/guarded dir
-                                 rec
-                                 (fake-freshness "1.00.18" "1.00.19" #f #f #f)
-                                 (lambda ()
-                                   (execute-campaign-request!
-                                    request
-                                    (lambda (_) (make-loop-result '() 'completed (hasheq)))
-                                    #:allow-stale? #t))))
+        (freshness-suite/guarded
+         dir
+         rec
+         (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)
+         (lambda ()
+           (execute-campaign-request! request
+                                      (lambda (_) (make-loop-result '() 'completed (hasheq)))
+                                      #:allow-stale? #t))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-true (campaign-record-stale-override rec))
       (cleanup-tmp dir))

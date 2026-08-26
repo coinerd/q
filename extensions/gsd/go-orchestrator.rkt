@@ -1231,12 +1231,17 @@
     [(and (freshness-checkout-version f)
           (not (string=? (freshness-running-version f) (freshness-checkout-version f))))
      (format
-      "/go refused — restart required (running ~a, checkout ~a): the running q process predates the checked-out build. Exit and restart q, then /go again. To override anyway: /go <plan> allow-stale (records stale-override: true in the campaign record)."
+      (string-append
+       "/go refused — restart required (running ~a, checkout ~a): the running q "
+       "process predates the checked-out build. Exit and restart q, then /go "
+       "again. To override anyway: /go <plan> allow-stale (records stale-override: true in the campaign record).")
       (freshness-running-version f)
       (freshness-checkout-version f))]
     [(freshness-behind-origin? f)
      (format
-      "/go refused — update required: checkout HEAD is behind origin/main (~a). Run git pull and restart q, then /go again. To override anyway: /go <plan> allow-stale (records stale-override: true in the campaign record)."
+      (string-append "/go refused — update required: checkout HEAD is behind origin/main (~a). "
+                     "Run git pull and restart q, then /go again. To override anyway: "
+                     "/go <plan> allow-stale (records stale-override: true in the campaign record).")
       (freshness-origin-head f))]
     [else "/go refused — running build is stale."]))
 
