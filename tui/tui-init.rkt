@@ -50,7 +50,16 @@
                   current-gsd-campaign-owner
                   call-with-gsd-owned-session-switch)
          (only-in "../tui/context.rkt" tui-ctx-set-preferences!)
-         (only-in "../ui-core/preferences.rkt" load-preferences current-preferences))
+         (only-in "../ui-core/preferences.rkt" load-preferences current-preferences)
+         ;; BUG-0038 (v1.00.20 W3): concurrent-session warning at startup +
+         ;; idle-demote threshold from settings (`session.idle-demote-hours`).
+         (only-in "../runtime/session/tracked-write-hygiene.rkt"
+                  register-q-process!
+                  unregister-q-process!
+                  concurrent-q-processes
+                  concurrent-writer-warning-once!
+                  settings-idle-demote-hours
+                  set-idle-demote-hours!))
 
 ;; TUI entry point contracts.
 ;; Most params use any/c because runtime/tui-ctx are opaque structs
@@ -423,13 +432,23 @@
        ;; The channel is shared via a module-level box so session threads see it.
        ;; GAP-EA (v0.98.7 W0): Wire UI event actions flag from config.json.
        (define settings (dict-ref rt-config 'settings #f))
-       (wire-ui-event-actions-from-config! settings)
-       ;; F1/EMIT-01: Let extensions/ui-surface.rkt emit to this runtime bus.
-       (current-ui-event-runtime rt-config)
-       (define-values (ctx sess scrollback-path) (create-tui-session rt-config cli-cfg))
-       (load-tui-scrollback ctx sess rt-config scrollback-path)
-       (init-tui-terminal ctx)
-       (run-tui-loop ctx scrollback-path))))
+       ;; BUG-0038 (v1.00.20 W3): announce any other live q process on this
+       ;; checkout BEFORE registering ourselves, adopt the configured idle
+       ;; demotion threshold, and stay registered for the whole TUI lifetime
+       ;; so later sessions see this one as the concurrent writer.
+       (concurrent-writer-warning-once!)
+       (set-idle-demote-hours! (settings-idle-demote-hours settings))
+       (dynamic-wind register-q-process!
+                     (lambda ()
+                       (wire-ui-event-actions-from-config! settings)
+                       ;; F1/EMIT-01: Let extensions/ui-surface.rkt emit to this runtime bus.
+                       (current-ui-event-runtime rt-config)
+                       (define-values (ctx sess scrollback-path)
+                         (create-tui-session rt-config cli-cfg))
+                       (load-tui-scrollback ctx sess rt-config scrollback-path)
+                       (init-tui-terminal ctx)
+                       (run-tui-loop ctx scrollback-path))
+                     (lambda () (unregister-q-process!))))))
   (displayln "Goodbye."))
 
 ;; Simple TUI run (for testing without full runtime)
