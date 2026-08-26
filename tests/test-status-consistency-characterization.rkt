@@ -63,7 +63,9 @@
                  "- [Inbox] W2: Third → waves/W2-third.md\n"))
 
 (define suite
-  (test-suite "BUG-0034 W2 flip / BUG-0035 characterization: dual wave-status divergences are loud, precedence is deterministic; inline/relaxed formats still accepted silently"
+  (test-suite (string-append
+               "BUG-0034 W2 flip / BUG-0035 characterization: dual wave-status divergences are loud, "
+               "precedence is deterministic; inline/relaxed formats still accepted silently")
     (test-case "BUG-0034 W2 flip: PLAN row DONE vs wave-doc PENDING is REPORTED with both statuses and both file paths"
       (define tmp (make-temp-planning))
       (dynamic-wind
