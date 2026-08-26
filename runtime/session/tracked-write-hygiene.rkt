@@ -129,7 +129,9 @@
 (define (announce-override! reason path running on-disk)
   (define msg
     (format
-     "TRACKED-WRITE OVERRIDE accepted (pid ~a): ~a write to ~a from a ~a process — running version ~a, checkout version ~a. Legitimate only for release tooling; a stale process must not modify tracked files; restart q."
+     (string-append "TRACKED-WRITE OVERRIDE accepted (pid ~a): ~a write to ~a from a ~a process"
+                    " — running version ~a, checkout version ~a. Legitimate only for release"
+                    " tooling; a stale process must not modify tracked files; restart q.")
      (lockfile-getpid)
      reason
      path
@@ -155,28 +157,30 @@
            (announce-override! "stale" path running on-disk)
            (void)]
           [else
-           (raise
-            (exn:fail
-             (format
-              "stale process must not modify tracked files; restart q (pid ~a, running version ~a, checkout version ~a). To override for legitimate tooling: parameterize current-allow-stale-tracked-writes to #t."
-              (lockfile-getpid)
-              running
-              on-disk)
-             (current-continuation-marks)))])]
+           (raise (exn:fail
+                   (format (string-append "stale process must not modify tracked files; restart q"
+                                          " (pid ~a, running version ~a, checkout version ~a)."
+                                          " To override for legitimate tooling: parameterize"
+                                          " current-allow-stale-tracked-writes to #t.")
+                           (lockfile-getpid)
+                           running
+                           on-disk)
+                   (current-continuation-marks)))])]
        [(unbox session-idle-readonly-box)
         (cond
           [(current-allow-stale-tracked-writes)
            (announce-override! "idle" path running on-disk)
            (void)]
           [else
-           (raise
-            (exn:fail
-             (format
-              "idle session is read-only until the user interacts (pid ~a, running version ~a, checkout version ~a): session demoted after session.idle-demote-hours without input; auto-write paths disabled."
-              (lockfile-getpid)
-              running
-              (or on-disk "?"))
-             (current-continuation-marks)))])]
+           (raise (exn:fail
+                   (format (string-append "idle session is read-only until the user interacts"
+                                          " (pid ~a, running version ~a, checkout version ~a):"
+                                          " session demoted after session.idle-demote-hours without"
+                                          " input; auto-write paths disabled.")
+                           (lockfile-getpid)
+                           running
+                           (or on-disk "?"))
+                   (current-continuation-marks)))])]
        [else (void)])]))
 
 ;; ============================================================
@@ -238,7 +242,9 @@
       [(>= (- now-ms (unbox last-activity-ms-box)) (* (unbox idle-demote-hours-box) 3600.0 1000.0))
        (set-box! session-idle-readonly-box #t)
        (log-q-session-hygiene-warning
-        "idle session demoted to read-only: no user input for ~a h (session.idle-demote-hours) — auto-write paths disabled until the user interacts (pid ~a, running version ~a)"
+        (string-append "idle session demoted to read-only: no user input for ~a h"
+                       " (session.idle-demote-hours) — auto-write paths disabled until"
+                       " the user interacts (pid ~a, running version ~a)")
         (unbox idle-demote-hours-box)
         (lockfile-getpid)
         (tracked-write-running-version))
@@ -325,12 +331,13 @@
          [else
           (set-box! concurrent-warning-emitted-box #t)
           (define msg
-            (format
-             "concurrent-writer warning: ~a other live q process~a on this checkout (pid~a ~a) — two writers can silently revert tracked files; exit one of them."
-             (length others)
-             (if (= 1 (length others)) "" "es")
-             (if (= 1 (length others)) "" "s")
-             (string-join (map ~a others) ", ")))
+            (format (string-append "concurrent-writer warning: ~a other live q process~a on this"
+                                   " checkout (pid~a ~a) — two writers can silently revert tracked"
+                                   " files; exit one of them.")
+                    (length others)
+                    (if (= 1 (length others)) "" "es")
+                    (if (= 1 (length others)) "" "s")
+                    (string-join (map ~a others) ", ")))
           (displayln msg)
           (log-q-session-hygiene-warning "~a" msg)
           msg])))))
