@@ -75,7 +75,13 @@
                   git-result-code
                   git-result-stdout
                   git-result-stderr
-                  reclaim-orphaned-worktrees!)
+                  reclaim-orphaned-worktrees!
+                  ;; v1.00.20 W4 (BUG-0030): mid-wave checkpoint contract
+                  checkpoint-contract-lines
+                  commit-wave-checkpoint!
+                  checkpoint-commit-message?
+                  CHECKPOINT-COMMIT-PREFIX
+                  wave-checkpoint-commit-message)
          (only-in "wave-docs.rkt" wave-slug plan-slug-map read-wave-doc)
          (only-in "../../runtime/iteration/step-executor.rkt" current-post-tool-result-hook)
          (only-in "../../agent/state.rkt" current-empty-response-nudge)
@@ -553,6 +559,199 @@
             error-message))
   (substring raw 0 (min (string-length raw) attempt-context-max-chars)))
 
+;; ============================================================
+;; Mid-wave dirty-state hand-off + drift guard (v1.00.20 W4 — BUG-0030)
+;;
+;; Complements the mid-wave CHECKPOINT contract (wave-executor.rkt):
+;; checkpoints make progress durable, but an attempt can still die with
+;; uncommitted residue in its worktree. When it does, the orchestrator
+;; captures that dirty state into the campaign record — joining the
+;; PRIOR ATTEMPT CONTEXT block above (same carrier, same ~2 KB cap) —
+;; so the retry resumes from a recorded, recoverable snapshot instead
+;; of re-deriving context. The coordinator also guards the OTHER
+;; failure mode: uncommitted .rkt drift in the main checkout OUTSIDE
+;; the active attempt lease/worktree (exactly what polluted PR #9529's
+;; metrics twice with "expected 158320, found 158324").
+;; ============================================================
+
+;; One porcelain line ("XY <path>" or "XY <old> -> <new>") → the path the
+;; change lands on (new name for renames, quotes stripped). Pure.
+(define (porcelain-file-path line)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define rest (substring line 3))
+    (define parts (string-split rest " -> "))
+    (define raw
+      (string-trim (if (= (length parts) 2)
+                       (cadr parts)
+                       (car parts))))
+    (define unquoted
+      (if (and (>= (string-length raw) 2) (string-prefix? raw "\"") (string-suffix? raw "\""))
+          (substring raw 1 (sub1 (string-length raw)))
+          raw))
+    (and (non-empty-string? unquoted) unquoted)))
+
+;; Capture the dirty state of a dying attempt's worktree as pure data:
+;;   dirty-sha    — `git stash create` output: the SHA of a REAL commit
+;;                  object holding the uncommitted tracked changes
+;;                  ("dirty-sha-if-committed"; recoverable via that SHA
+;;                  without moving HEAD or touching the index), or #f
+;;                  when clean / untracked-only (stash create ignores
+;;                  untracked files — the file list still names them)
+;;   diff-stat    — `git diff --stat` vs HEAD ("" when clean)
+;;   edited-files — files with uncommitted changes, tracked + untracked
+;;                  (git-relative)
+;; Never raises: any git failure degrades to the "clean" shape.
+(define (capture-worktree-dirty-state wt)
+  (define clean (hasheq 'dirty-sha #f 'diff-stat "" 'edited-files '()))
+  (with-handlers ([exn:fail? (lambda (_) clean)])
+    (define dir (wave-worktree-path wt))
+    (define r-status (default-run-git dir (list "status" "--porcelain")))
+    (define dirty-lines
+      (if (zero? (git-result-code r-status))
+          (filter non-empty-string? (string-split (git-result-stdout r-status) "\n"))
+          '()))
+    (cond
+      [(null? dirty-lines) clean]
+      [else
+       (define edited-files
+         (filter values
+                 (for/list ([line (in-list dirty-lines)])
+                   (porcelain-file-path line))))
+       (define r-diff (default-run-git dir (list "diff" "--stat")))
+       (define diff-stat
+         (if (zero? (git-result-code r-diff))
+             (string-trim (git-result-stdout r-diff))
+             ""))
+       (define r-stash (default-run-git dir (list "stash" "create")))
+       (define dirty-sha
+         (let ([sha (and (zero? (git-result-code r-stash))
+                         (string-trim (git-result-stdout r-stash)))])
+           (and (non-empty-string? sha) sha)))
+       (hasheq 'dirty-sha dirty-sha 'diff-stat diff-stat 'edited-files edited-files)])))
+
+;; Take at most n elements of lst (racket/base-only helper).
+(define (take-up-to lst n)
+  (for/list ([x (in-list lst)]
+             [i (in-naturals)]
+             #:break (>= i n))
+    x))
+
+;; Append the captured dirty state to a base attempt-context (the BUG-0024
+;; PRIOR ATTEMPT CONTEXT block), hard-capped at attempt-context-max-chars.
+;; Pure. A clean capture appends nothing — no noise for clean restarts.
+(define (append-dirty-capture-to-context base-context capture)
+  (define dirty-sha (and capture (hash-ref capture 'dirty-sha #f)))
+  (define diff-stat (and capture (hash-ref capture 'diff-stat "")))
+  (define edited-files (and capture (hash-ref capture 'edited-files '())))
+  (define has-dirt?
+    (or dirty-sha
+        (and (string? diff-stat) (non-empty-string? diff-stat))
+        (and (list? edited-files) (pair? edited-files))))
+  (define raw
+    (if (not has-dirt?)
+        base-context
+        (string-append
+         base-context
+         "\n"
+         "Dirty state captured at infra-stop (BUG-0030):\n"
+         (format "- dirty-sha-if-committed: ~a\n"
+                 (or dirty-sha "none (clean or untracked-only residue)"))
+         (format "- diff-summary-stat: ~a\n"
+                 (string-join (take-up-to (string-split (or diff-stat "") "\n") 3) " | "))
+         (format "- edited-files: ~a\n" (string-join (take-up-to (or edited-files '()) 12) ", ")))))
+  (substring raw 0 (min (string-length raw) attempt-context-max-chars)))
+
+;; Uncommitted .rkt files in `repo-root`, excluding an explicit exempt
+;; list (the dying/resumed attempt's own recorded files) — pure
+;; detection, never raises, never mutates.
+(define (outside-lease-dirty-rkt-files repo-root #:exempt [exempt '()])
+  (with-handlers ([exn:fail? (lambda (_) '())])
+    (and
+     repo-root
+     (let ([r (default-run-git repo-root (list "status" "--porcelain"))])
+       (if (not (zero? (git-result-code r)))
+           '()
+           (filter
+            values
+            (for/list ([line (in-list (filter non-empty-string?
+                                              ;; BUG-0030: do NOT trim the whole stdout —
+                                              ;; porcelain's first line is " M file"; a global
+                                              ;; trim eats that leading space and shifts
+                                              ;; every column by one ("racked.rkt").
+                                              (string-split (git-result-stdout r) "\n" #:trim? #f)))])
+              (define f (porcelain-file-path line))
+              (and f (non-empty-string? f) (string-suffix? f ".rkt") (not (member f exempt)) f))))))))
+
+;; Coordinator-side drift guard (BUG-0030 action 4): BEFORE an attempt
+;; starts, detect uncommitted .rkt changes in the main checkout OUTSIDE
+;; the active attempt lease/worktree and build the LOUD warning naming
+;; them. This is exactly what would have caught both PR #9529
+;; metrics-drift incidents. Pure: it NEVER auto-commits, auto-discards,
+;; or blocks the attempt — call sites log it loudly and continue.
+(define (outside-lease-dirty-warning repo-root
+                                     #:worktree-path [worktree-path #f]
+                                     #:exempt [exempt '()])
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and repo-root
+         (let ([wt-prefix (and worktree-path
+                               (if (string? worktree-path)
+                                   worktree-path
+                                   (path->string worktree-path)))])
+           (define files
+             (filter (lambda (f) (not (and wt-prefix (string-prefix? f wt-prefix))))
+                     (outside-lease-dirty-rkt-files repo-root #:exempt exempt)))
+           (and (pair? files)
+                (format (string-append
+                         "UNCOMMITTED DRIFT (BUG-0030): ~a uncommitted .rkt change(s) in the main "
+                         "checkout OUTSIDE the active attempt lease/worktree: ~a. These will NOT be "
+                         "auto-committed or auto-discarded — review them before they pollute metrics "
+                         "or successor attempts (cf. PR #9529 metrics-drift incidents).")
+                        (length files)
+                        (string-join (take-up-to files 15) ", ")))))))
+
+;; Effectful half of the guard: log the warning loudly, return it (tests
+;; observe the string; operations observe the log).
+(define (warn-outside-lease-dirty-state! repo-root
+                                         #:worktree-path [worktree-path #f]
+                                         #:exempt [exempt '()])
+  (define warning
+    (outside-lease-dirty-warning repo-root #:worktree-path worktree-path #:exempt exempt))
+  (when warning
+    (log-warning "gsd: ~a" warning))
+  warning)
+
+;; Count commits on `branch` since `base-commit` (repo-root-relative);
+;; #f when git fails (never raises).
+(define (wave-branch-commit-count repo-root base-commit branch)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and repo-root
+         base-commit
+         branch
+         (let ([r (default-run-git repo-root
+                                   (list "rev-list" "--count" (format "~a..~a" base-commit branch)))])
+           (and (zero? (git-result-code r)) (string->number (string-trim (git-result-stdout r))))))))
+
+;; BUG-0030 action 2 (tolerance half): delivery verification checks
+;; FILES/TARGETS, never commit count — a delivered branch may carry N
+;; checkpoint commits plus the final state. A DONE wave with ZERO commits
+;; on its delivery branch is nonsensical (an empty diff cannot pass), so
+;; warn — never fail.
+(define (warn-zero-commit-delivery-branch! delivery-ctx)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and
+     delivery-ctx
+     (let* ([repo (branch-delivery-context-ref delivery-ctx 'repo-root)]
+            [base (branch-delivery-context-ref delivery-ctx 'base-commit)]
+            [branch (branch-delivery-context-ref delivery-ctx 'branch)]
+            [n (and repo base branch (wave-branch-commit-count repo base branch))])
+       (and
+        (equal? n 0)
+        (log-warning
+         "gsd: DONE wave delivered on ~a with ZERO commits since ~a — expected at least the delivery commit"
+         branch
+         base)
+        #t)))))
+
 ;; Best-effort observability: every automatic retry emits
 ;; gsd.campaign.infra-retry (payload: wave idx, attempt, delay seconds).
 ;; A bus failure must never break the retry loop itself.
@@ -920,6 +1119,16 @@
        (persist-campaign! base-dir active)
        (define started-attempt (campaign-wave-current-attempt (find-wave active wave-idx)))
        (define expected-id (campaign-attempt-id started-attempt))
+       ;; BUG-0030 (action 4): before the attempt starts, warn LOUDLY about
+       ;; uncommitted .rkt changes in the main checkout OUTSIDE the active
+       ;; attempt lease/worktree — exactly what polluted PR #9529's metrics
+       ;; twice ("expected 158320, found 158324"). Pure warning: never
+       ;; auto-commits, never auto-discards, never blocks. Only meaningful
+       ;; when the attempt runs in an isolated worktree (in shared-checkout
+       ;; mode the attempt's own edits legitimately live there and are
+       ;; covered by the infra-stop dirty capture instead).
+       (when (worktree-isolation-enabled? #:isolate? isolate?)
+         (warn-outside-lease-dirty-state! (find-repo-root base-dir)))
        (define (observe)
          (load-campaign-record base-dir (campaign-plan-id active)))
        (define (mirror-status! status)
@@ -1115,7 +1324,14 @@
                                                      wave-idx
                                                      (branch-delivery-context-ref delivery-ctx
                                                                                   'branch)
-                                                     (wave-worktree-head-sha wt)))
+                                                     (wave-worktree-head-sha wt))
+                              ;; BUG-0030 (action 2): verification is
+                              ;; files/targets-based, NEVER commit-count
+                              ;; based — a delivered branch may legitimately
+                              ;; carry N mid-wave checkpoints plus the final
+                              ;; state. A DONE branch with ZERO commits is
+                              ;; nonsensical, so WARN (never fail).
+                              (warn-zero-commit-delivery-branch! delivery-ctx))
                             ;; Delivery approved: the release wrapper must
                             ;; KEEP the branch (it is the merge evidence).
                             (when wt
@@ -1204,6 +1420,23 @@
             [(infra-failed)
              (define infra-wave (current-wave-for-attempt after-run wave-idx fence expected-id))
              (define failed-attempt (and infra-wave (campaign-wave-attempt-count infra-wave)))
+             ;; BUG-0030 (action 3): the attempt died mid-wave — capture its
+             ;; worktree's uncommitted state (dirty-sha / diff-stat /
+             ;; edited-files) NOW, before anything can clean it, and join it
+             ;; to the PRIOR ATTEMPT CONTEXT block (same carrier, ~2 KB cap)
+             ;; so the automatic re-attempt resumes from recorded, recoverable
+             ;; progress instead of re-deriving context from zero.
+             (define dying-wt (unbox wt-box))
+             (define dirty-capture
+               (and dying-wt
+                    (worktree-isolation-enabled? #:isolate? isolate?)
+                    (capture-worktree-dirty-state dying-wt)))
+             (when dirty-capture
+               (log-info
+                "gsd: wave ~a infra-stopped with dirty worktree state — captured ~a file(s), dirty-sha ~a"
+                wave-idx
+                (length (hash-ref dirty-capture 'edited-files '()))
+                (or (hash-ref dirty-capture 'dirty-sha #f) "none")))
              (when infra-wave
                (define (roll-back-wave! w)
                  (set-campaign-wave-status! w 'pending)
@@ -1211,11 +1444,14 @@
                  (set-campaign-wave-current-attempt! w #f)
                  ;; W3: durable prior-attempt context so the automatic
                  ;; re-attempt resumes instead of re-exploring from zero.
+                 ;; W4 (BUG-0030): the dirty-state capture joins it.
                  (set-campaign-wave-attempt-context!
                   w
-                  (build-wave-attempt-context wave-idx
-                                              (or failed-attempt 0)
-                                              (wave-execution-outcome-message run-result))))
+                  (append-dirty-capture-to-context
+                   (build-wave-attempt-context wave-idx
+                                               (or failed-attempt 0)
+                                               (wave-execution-outcome-message run-result))
+                   dirty-capture)))
                ;; Roll back BOTH views: the disk-truth `after-run` copy (which
                ;; is persisted) and the in-memory `active` wave — the
                ;; recursive run-once* re-entry re-begins the attempt on
@@ -1566,4 +1802,13 @@
          ;; (exposed for testing; the commit step itself runs pre-approval)
          wave-delivery-commit-message
          commit-wave-worktree!
-         wave-worktree-base-commit)
+         wave-worktree-base-commit
+         ;; v1.00.20 W4 (BUG-0030): mid-wave dirty-state hand-off + guard
+         capture-worktree-dirty-state
+         append-dirty-capture-to-context
+         outside-lease-dirty-rkt-files
+         outside-lease-dirty-warning
+         warn-outside-lease-dirty-state!
+         wave-branch-commit-count
+         warn-zero-commit-delivery-branch!
+         take-up-to)

@@ -111,6 +111,19 @@
    "  * q/missing-file.rkt [MISSING]\n"
    "\n"))
 
+;; The exact BUG-0030 checkpoint contract block (normalized) that W4 appends
+;; after the declared file targets. Snapshot tests strip it alongside the
+;; git-root lines to prove nothing else in the section changed.
+(define checkpoint-contract-block
+  (string-append
+   "## Mid-Wave Checkpoint Contract (BUG-0030)\n"
+   "- After EACH completed implementation step with green tests, commit to the delivery branch:\n"
+   "  `git add -A && git commit -m \"checkpoint: <step summary>\"`\n"
+   "- Checkpoints are normal commits: they do NOT trigger delivery verification, do NOT mark the\n"
+   "  wave DONE, and never replace the final completion flow (run the wave's verify command, then return).\n"
+   "- Keep checkpointing even if you expect to finish the wave: an infra stop mid-wave must find\n"
+   "  committed progress, not uncommitted residue.\n\n"))
+
 ;; The exact pre-W4 planning-implement-prompt (rules 1-7 + tail, no rule 8).
 (define pre-w4-planning-implement-prompt
   (string-append
@@ -195,7 +208,7 @@
 ;; Snapshot assertions: no other template text changed
 ;; ============================================================
 
-(test-case "snapshot: contract section = pre-W4 text + exactly the two git-root lines (base ≠ root)"
+(test-case "snapshot: contract section = pre-W4 text + git-root lines + checkpoint block (base ≠ root)"
   (define dir (make-fixture-dir #:git-at-q? #t))
   (dynamic-wind
    void
@@ -213,13 +226,17 @@
        "- Declared file targets (existence checked against project root):\n"
        "  * q/tui/keybindings/key-dispatch.rkt [exists]\n"
        "  * q/missing-file.rkt [MISSING]\n"
-       "\n"))
-     ;; Stripping the two added lines must yield the exact
-     ;; pre-W4 section — proves nothing else changed.
+       "\n"
+       checkpoint-contract-block))
+     ;; Stripping the two added lines and the checkpoint block must yield
+     ;; the exact pre-W4 section — proves nothing else changed.
      (check-equal?
-      (string-replace (string-replace section "- Git root: <GITROOT>\n" "")
-                      "- run all git commands against the git root (`cd q` or `git -C q`)\n"
-                      "")
+      (string-replace
+       (string-replace (string-replace section "- Git root: <GITROOT>\n" "")
+                       "- run all git commands against the git root (`cd q` or `git -C q`)\n"
+                       "")
+       checkpoint-contract-block
+       "")
       pre-w4-contract-section))
    (lambda () (cleanup-tmp dir))))
 
@@ -228,7 +245,11 @@
   (dynamic-wind void
                 (lambda ()
                   (define section (normalize-section (contract-section (build-prompt dir))))
-                  (check-equal? (string-replace section "- Git root: <GITROOT>\n" "")
+                  (check-true (string-contains? section "## Mid-Wave Checkpoint Contract (BUG-0030)")
+                              "BUG-0030 block present in base==root fixture too")
+                  (check-equal? (string-replace (string-replace section "- Git root: <GITROOT>\n" "")
+                                                checkpoint-contract-block
+                                                "")
                                 pre-w4-contract-section)
                   (check-false (string-contains? section "run all git commands")))
                 (lambda () (cleanup-tmp dir))))

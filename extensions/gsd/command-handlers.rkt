@@ -475,6 +475,9 @@
   (string-append
    planning-implement-prompt
    file-contract
+   ;; BUG-0030 (action 1): checkpoint cadence contract so mid-wave infra
+   ;; stops leave committed, discoverable progress on the delivery branch.
+   (apply string-append (checkpoint-contract-lines))
    "# Runtime-Enforced Single-Wave Execution\n\n"
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"

@@ -402,4 +402,8 @@
       ("extensions/gsd/go-orchestrator.rkt"
        (risk
         . "GSD /go campaign orchestrator: wave sequencing, failure-context steering and auto-retry wiring (#9513/#9515), role re-anchoring (#9514), worktree isolation toggling (#9512); v1.00.17 executor hardening; score 24400")
+       (owner . "extensions"))
+      ("extensions/gsd/wave-executor.rkt"
+       (risk
+        . "GSD wave executor: prompt assembly with inlined reference material (BUG-0023), checkpoint-commit contract + dirty-state hand-off capture (BUG-0030); score 20780")
        (owner . "extensions"))))))

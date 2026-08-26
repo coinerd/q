@@ -121,7 +121,13 @@
          make-wave-worktree!
          cleanup-wave-worktree!
          release-wave-worktree!
-         reclaim-orphaned-worktrees!)
+         reclaim-orphaned-worktrees!
+         ;; v1.00.20 W4 (BUG-0030): mid-wave checkpoint commits
+         CHECKPOINT-COMMIT-PREFIX
+         wave-checkpoint-commit-message
+         checkpoint-commit-message?
+         commit-wave-checkpoint!
+         checkpoint-contract-lines)
 
 ;; ============================================================
 ;; Wave status struct
@@ -933,3 +939,101 @@
        (if dir
            (cons (path->string dir) reclaimed)
            reclaimed)])))
+
+;; ============================================================
+;; Mid-wave checkpoint commits (v1.00.20 W4 — BUG-0030)
+;;
+;; Root cause: executor edits lived only as uncommitted working-tree
+;; state until wave completion, so any infra stop mid-wave (observed
+;; every 30-50 min during the v1.00.18 bake) stranded the work as
+;; unreviewed residue in whatever checkout the executor used. Contract
+;; change: the executor commits after EACH completed implementation step
+;; with green tests, to the delivery branch, with the deterministic
+;; `checkpoint: <step summary>` message.
+;;
+;; Checkpoints are NORMAL COMMITS: they carry recoverable progress, they
+;; do NOT trigger delivery verification (the coordinator still verifies
+;; the wave's FILES/TARGETS against the branch diff, never commit count),
+;; and they are NOT the wave completion signal.
+;; ============================================================
+
+(define CHECKPOINT-COMMIT-PREFIX "checkpoint: ")
+
+;; Pure: step summary → deterministic checkpoint commit message.
+(define (wave-checkpoint-commit-message step-summary)
+  (string-append CHECKPOINT-COMMIT-PREFIX (string-trim (if (string? step-summary) step-summary ""))))
+
+;; Pure: is this commit message a checkpoint commit? Distinguishes
+;; progress checkpoints (CHECKPOINT-COMMIT-PREFIX) from the final
+;; delivery commit ("feat(<hash8>/w<N>): ..."), so consumers can count
+;; checkpoints without confusing them with the delivery.
+(define (checkpoint-commit-message? message)
+  (and (string? message)
+       (>= (string-length message) (string-length CHECKPOINT-COMMIT-PREFIX))
+       (string-prefix? message CHECKPOINT-COMMIT-PREFIX)))
+
+;; Commit any uncommitted state in `dir` (the wave worktree/checkout the
+;; executor ran in) as a checkpoint commit: git add -A + git commit with
+;; a hermetic identity (no global git config required) and the
+;; deterministic checkpoint message. NEVER raises — a failed checkpoint
+;; must never kill the attempt that made the progress: git failures are
+;; logged and reported as #f. "Nothing to commit" is a successful no-op
+;; (#t): the contract fires after green steps, and a step that produced
+;; no diff has nothing to checkpoint.
+(define (commit-wave-checkpoint! dir step-summary #:run-git [run-git default-run-git])
+  (define dir-path (->path dir))
+  (define dir-str (path->string dir-path))
+  (define (safe-run args)
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "commit-wave-checkpoint!: git invocation failed: ~a"
+                                              (exn-message e))
+                                 (git-result 127 "" (exn-message e)))])
+      (run-git dir-path args)))
+  (cond
+    [(not (directory-exists? dir-path)) #f]
+    [else
+     (define r-status (safe-run (list "status" "--porcelain")))
+     (define clean?
+       (and (zero? (git-result-code r-status))
+            (string=? (string-trim (git-result-stdout r-status)) "")))
+     (cond
+       [clean? #t]
+       [else
+        (define r-add (safe-run (list "add" "-A")))
+        (unless (zero? (git-result-code r-add))
+          (log-warning "commit-wave-checkpoint!: git add -A failed in ~a: ~a"
+                       dir-str
+                       (string-trim (git-result-stderr r-add))))
+        (define r-commit
+          (safe-run (list "-c"
+                          "user.name=gsd-checkpoint"
+                          "-c"
+                          "user.email=checkpoint@gsd.local"
+                          "commit"
+                          "-m"
+                          (wave-checkpoint-commit-message step-summary))))
+        (cond
+          [(zero? (git-result-code r-commit)) #t]
+          [(regexp-match? #rx"nothing to commit"
+                          (string-append (git-result-stdout r-commit) (git-result-stderr r-commit)))
+           #t]
+          [else
+           (log-warning "commit-wave-checkpoint!: git commit failed in ~a: ~a"
+                        dir-str
+                        (string-trim (git-result-stderr r-commit)))
+           #f])])]))
+
+;; Pure: executor-contract lines embedded verbatim in the wave prompt
+;; environment block (command-handlers). Cadence is "after each completed
+;; implementation step with green tests" so an infra stop mid-wave always
+;; finds committed, discoverable progress on the delivery branch instead
+;; of working-tree residue.
+(define (checkpoint-contract-lines)
+  (list
+   "## Mid-Wave Checkpoint Contract (BUG-0030)\n"
+   "- After EACH completed implementation step with green tests, commit to the delivery branch:\n"
+   "  `git add -A && git commit -m \"checkpoint: <step summary>\"`\n"
+   "- Checkpoints are normal commits: they do NOT trigger delivery verification, do NOT mark the\n"
+   "  wave DONE, and never replace the final completion flow (run the wave's verify command, then return).\n"
+   "- Keep checkpointing even if you expect to finish the wave: an infra stop mid-wave must find\n"
+   "  committed progress, not uncommitted residue.\n\n"))
