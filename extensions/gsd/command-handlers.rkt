@@ -558,7 +558,25 @@
         (and (number? raw) (positive? raw) raw))
       (current-gsd-wave-timeout-seconds)))
 
-(define (prepare-go-campaign base-dir input-text plan validation)
+;; BUG-0034 (W2): dual-source status consistency warnings.
+;; Wave status lives twice (PLAN.md index row + wave-doc `Status:`
+;; header). This turns any divergence into named, user-visible warnings
+;; (one per wave, naming both files). ADVISORY ONLY: they never block
+;; /go by themselves — selection already resolves through the documented
+;; precedence (see resolve-status-precedence in wave-docs.rkt).
+(define (status-divergence-warning-lines base-dir)
+  (if (not base-dir)
+      '()
+      (for/list ([d (in-list (check-status-consistency base-dir))])
+        (format-status-divergence-warning d))))
+
+;; Append the warning block to a user-facing text (identity when silent).
+(define (append-divergence-warnings text warnings)
+  (if (null? warnings)
+      text
+      (string-append text "\n\n" (string-join warnings "\n"))))
+
+(define (prepare-go-campaign base-dir input-text plan validation divergence-warnings)
   (with-handlers ([exn:fail:campaign-migration?
                    (lambda (e)
                      (hook-amend (hasheq 'text
@@ -614,7 +632,9 @@
                                 'new-session
                                 (build-single-wave-prompt base-dir plan next-wave)
                                 'text
-                                (format "Executing campaign from W~a..." next-wave))))])])))
+                                (append-divergence-warnings (format "Executing campaign from W~a..."
+                                                                    next-wave)
+                                                            divergence-warnings))))])])))
 
 (define (handle-go-command base-dir input-text)
   ;; Report plan validation failures first. Repository identity becomes a hard
@@ -625,7 +645,13 @@
      (if (not (git-available? base-dir))
          (hook-amend (hasheq 'text
                              (format "/go blocked: no Git repository reachable from ~a." base-dir)))
-         (prepare-go-campaign base-dir input-text plan validation))]))
+         ;; BUG-0034 (W2): computed at /go validation time; advisory only —
+         ;; divergences never block /go, they surface as named warnings.
+         (prepare-go-campaign base-dir
+                              input-text
+                              plan
+                              validation
+                              (status-divergence-warning-lines base-dir)))]))
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================
@@ -639,7 +665,15 @@
           (if (> tw 0)
               (format "Waves: ~a/~a complete" (set-count cw) tw)
               "Waves: not set")))
-  (hook-amend (hasheq 'text (string-join parts "\n"))))
+  ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences
+  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
+  ;; status block. Advisory only, never blocks anything.
+  (define base-dir (or (current-pinned-dir) (current-directory)))
+  (define divergence-lines
+    (if (not base-dir)
+        '()
+        (status-divergence-warning-lines base-dir)))
+  (hook-amend (hasheq 'text (append-divergence-warnings (string-join parts "\n") divergence-lines))))
 
 ;; ============================================================
 ;; Artifact display and /plan <text> handler
