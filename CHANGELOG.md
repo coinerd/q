@@ -1,3 +1,77 @@
+## v1.00.19 — 2026-08-26
+
+Released 2026-08-26.
+
+> v1.00.19: executor infrastructure hardening — the BUG-0028 core fix
+> (worker allowed-roots track worktree lifecycle), plus BUG-0029/0030/0031
+> remediation delivered by a live /go campaign (five waves, tmux q-go).
+
+### Features
+
+- **BUG-0028 — worker allowed-roots track worktree lifecycle (W1 core).**
+  `ipc-request` gains a coordinator-authoritative `trusted-working-dir`
+  channel; the worker extends its request-scoped allowed roots from it, so
+  with worktree isolation ON each attempt's fresh worktree is editable
+  without any refresh entry point. Model-supplied `working-directory`
+  keeps its plain cwd semantics (bash tool feature) and can never
+  authorize new roots.
+- **BUG-0028 S1+S2 — settings wiring + self-diagnosing denials (W2).**
+  `gsd.worktree-isolation` in project config verifiably routes executors
+  (precedence: explicit `#:isolate?` > config > default OFF); tool denials
+  enumerate the roots in force; executor start logs an isolation banner
+  naming active worktree + resolved roots.
+- **BUG-0031 — version-freshness guard at /go (W3).** Campaign start
+  compares the running build against the checkout (and origin/main,
+  best-effort) and refuses stale builds with a restart-required message;
+  `allow-stale` overrides with a recorded flag; every campaign record now
+  carries `build-version` + base head SHA. Offline-safe.
+- **BUG-0030 — mid-wave checkpointing (W4).** Executors commit to the
+  delivery branch after each green implementation step; infra stops capture
+  dirty-state SHA/diff summary into the attempt context; the coordinator
+  warns about uncommitted .rkt drift outside an active lease.
+- **BUG-0029 — attempt-artifact ledger + reclaim (W5).** Every attempt's
+  branch/worktree/base-SHA is recorded with terminal status; successor wave
+  prompts include an inherited-artifacts block; campaign end lists
+  non-delivery leftovers with operator-approved reclaim (never auto-delete).
+
+### Bug Fixes
+
+- Infra-retry re-entry sites carried the new attempt-id box after the W5
+  orchestrator changes (caught by tests before release).
+
+### Reports
+
+- Bake evidence for this campaign was gathered live during execution;
+  the isolation-default decision (still OFF pending a full bake under
+  isolation ON) is recorded in the campaign PLAN and bugs INDEX.
+
+### Breaking / Behavior Changes
+
+- `/go` refuses to run when the running build predates the checkout;
+  scripts that invoked /go across upgrades must pass `allow-stale` or
+  restart first.
+- Strict index plans referencing missing wave docs fail at load (v1.00.18
+  behavior, unchanged); no additional format changes.
+
+### Migration Notes
+
+- Operators who want worktree isolation set `gsd.worktree-isolation=true`
+  in project config — the settings key is now wired (it previously did
+  nothing).
+- Pre-v1.00.19 campaign records remain loadable; new fields are absent-safe.
+
+### Testing
+
+- Fast suite 1137 files, 0 failures at the release SHA; targeted suites:
+  worker-security 38, execution-plane characterization, gateway/IPC family,
+  go-orchestrator 52, campaign-state 24, checkpoint/artifact
+  characterizations — all green with recorded gate evidence.
+
+### Operational / Release
+
+- Tag `v1.00.19`; artifacts built by release-core.yml (tarball + manifest);
+  gate evidence recorded locally per tag-publish policy.
+
 ## v1.00.18 — 2026-08-25
 
 Released 2026-08-25.
