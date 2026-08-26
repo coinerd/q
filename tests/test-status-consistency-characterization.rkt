@@ -45,7 +45,8 @@
                  "- W2: Relaxed Title → waves/W2-relaxed-title.md\n"))
 
 (define suite
-  (test-suite "BUG-0034/0035 characterization: dual wave-status sources accept divergence silently; inline/relaxed formats accepted without deprecation"
+  (test-suite "BUG-0034/0035 characterization: dual wave-status sources accept divergence silently; inline/relaxed formats accepted without
+    deprecation"
 
     (test-case "BUG-0034: PLAN row DONE vs wave-doc PENDING → no divergence reported anywhere"
       (define tmp (make-temp-planning))
@@ -81,7 +82,7 @@
          ;; THE PIN: the two sources contradict each other and NOTHING
          ;; signals it. Neither parser raises, and no read-path comparison
          ;; exists anywhere on the GSD surface (source scan mirrors the
-         ;; v1.00.19 freshness-guard absent-seam pin precedent).
+         ;; predecessor freshness-guard absent-seam pin precedent).
          (check-true (not (string=? (string-downcase (format "~a" (wave-index-entry-status w0)))
                                     (string-downcase (format "~a" (hash-ref doc 'status)))))
                      "precondition: sources genuinely diverge")

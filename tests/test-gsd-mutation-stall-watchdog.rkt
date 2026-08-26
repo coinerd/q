@@ -6,7 +6,7 @@
 ;; v1.00.16 W3 attempt-2 made 92 read-only tool calls, never edited a file,
 ;; and nothing noticed until delivery verification (~40 min, ~$12). The v1
 ;; watchdog fixed that with a flat call-count budget — and then killed
-;; legitimate 60+ distinct-read exploration twice in the v1.00.19 campaign.
+;; legitimate 60+ distinct-read exploration twice in the previous campaign.
 ;;
 ;; v2 semantics (BUG-0037): a stall is REPETITION within a recent window,
 ;; not the mere absence of mutation:
@@ -140,7 +140,7 @@
   (check-eq? (hash-ref snap 'stall-reason) 'repetition)
   (check-eq? (hash-ref snap 'stall-repeats) 3))
 
-(test-case "70 DISTINCT reads NEVER trip (the v1.00.19 W5 death is impossible)"
+(test-case "70 DISTINCT reads NEVER trip (the pre-fix W5 death is impossible)"
   (define wd (make-stall-watchdog))
   (for ([i (in-range 7)])
     (check-eq? (stall-watchdog-observe! wd (reads 10 (* 100 i))) 'ok))

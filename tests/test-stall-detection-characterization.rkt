@@ -41,7 +41,7 @@
 (define suite
   (test-suite "BUG-0037 W1: repetition-based stall detection"
 
-    (test-case "70 DISTINCT reads never trip (the v1.00.19 W5 death is impossible)"
+    (test-case "70 DISTINCT reads never trip (the pre-fix W5 death is impossible)"
       (define wd (make-stall-watchdog))
       (define out (observe-each wd read-call 70))
       (check-false (memq 'hard-stall out) "distinct reads must NEVER accumulate toward a kill")

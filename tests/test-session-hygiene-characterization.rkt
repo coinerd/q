@@ -10,7 +10,7 @@
 ;; divergence) can still write working-tree files through the tracked-file
 ;; write path — nothing refuses, warns, or blocks. This is the documented
 ;; absent-seam marker at the planned interception point (the tracked-file
-;; write path), mirroring the v1.00.19 freshness-guard W0 pin: that guard
+;; write path), mirroring the predecessor freshness-guard W0 pin: that guard
 ;; protects /go ENTRY, not background writes.
 ;;
 ;; BUG-0033 half: the project-root test-runner shim
@@ -19,7 +19,7 @@
 ;;
 ;; Pin convention: every test PASSES today. BUG-0038's owning wave (W3)
 ;; adds the write-path freshness guard and flips the absence pins;
-;; BUG-0033's wave fixes/removes the root shim and flips its pin.
+;; BUG-0033's wave will repair the shim situation (remove or delegate) and flips its pin.
 ;; Pure-level pin: temp files + source-surface scans only, NO live
 ;; TUI/worker subprocess.
 
@@ -104,7 +104,7 @@
       (define go-src (repo-file "extensions" "gsd" "go-orchestrator.rkt"))
       (check-true (and go-src (file-exists? go-src)))
       (check-true (regexp-match? #rx"freshness" (file->string go-src))
-                  "precondition: /go entry freshness guard exists (v1.00.19 W3)")
+                  "precondition: /go entry freshness guard exists (v10019 W3)")
       (define hits (scan (list #rx"freshness") WRITE-PATH-SOURCES))
       (check-equal? hits
                     '()
@@ -146,7 +146,7 @@
       (define shim-src (file->string root-shim))
       (check-true
        (regexp-match? #rx"run-tests/classify[.]rkt" shim-src)
-       "root shim still (require \"run-tests/classify.rkt\") — BUG-0033's wave fixes/removes the shim and flips this pin")
+       "root shim still (require \"run-tests/classify.rkt\") — BUG-0033's wave will repair the shim situation and flips this pin")
       (define root-submodule-dir (base-file "scripts" "run-tests"))
       (check-false (and (directory-exists? root-submodule-dir) #t)
                    "precondition: scripts/run-tests/ still absent at project root (shim cannot load)")
