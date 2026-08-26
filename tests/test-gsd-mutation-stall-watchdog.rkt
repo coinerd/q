@@ -64,11 +64,11 @@
 ;; 1. Defaults are what the module header documents (v2)
 ;; ============================================================
 
-(test-case "defaults: soft 5, hard 8, window 20, backstop 200"
-  (check-equal? STALL-SOFT-LIMIT-DEFAULT 5)
-  (check-equal? STALL-HARD-LIMIT-DEFAULT 8)
-  (check-equal? STALL-REPETITION-WINDOW-DEFAULT 20)
-  (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 200))
+(test-case "defaults: soft 8, hard 15, window 30, backstop 300"
+  (check-equal? STALL-SOFT-LIMIT-DEFAULT 8)
+  (check-equal? STALL-HARD-LIMIT-DEFAULT 15)
+  (check-equal? STALL-REPETITION-WINDOW-DEFAULT 30)
+  (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
 (test-case "LIVE REGRESSION: repeated identical greps between reads never kill"
   ;; v1.00.20 W2 attempt 1: killed at 4 calls for 3 identical greps.
@@ -82,9 +82,9 @@
           (append results
                   (list (stall-watchdog-observe! wd (list (grep-call)))
                         (stall-watchdog-observe! wd (reads 1 (* 100 i)))))))
-  ;; At most one non-fatal steering nudge across 6 legit re-runs; NEVER a kill.
+  ;; Zero nudges across 6 legit re-runs spread across other calls; NEVER a kill.
   (check-false (memq 'hard-stall results) "legit repetition must not kill")
-  (check-equal? (length (filter (lambda (r) (eq? r 'soft-stall)) results)) 1))
+  (check-false (memq 'soft-stall results) "legit repetition stays under the steer line"))
 
 (test-case "run-campaign-wave exposes the limits as keyword arguments"
   ;; Contract-level check: the coordinator passes #:stall-soft-limit /
@@ -108,8 +108,8 @@
   (check-equal? (hash-ref st 'calls-since-mutation) 30)
   (check-equal? (hash-ref st 'total-calls) 30)
   (check-equal? (hash-ref st 'mutations) 0)
-  ;; Window capped at the default size (newest 20).
-  (check-equal? (length (hash-ref st 'window)) 20))
+  ;; Window capped at the default size (newest 30).
+  (check-equal? (length (hash-ref st 'window)) 30))
 
 (test-case "stall-state: a mutation resets the counter AND clears the window"
   (define st (stall-state (append (reads 24) (list (call 'edit)) (reads 5 500))))
@@ -149,19 +149,19 @@
 ;; 3. Watchdog v2: repetition steers at 2, kills at 3; backstop at 200
 ;; ============================================================
 
-(test-case "identical reads: soft steer at 5 (latched once), hard kill at 8"
+(test-case "identical reads: soft steer at 8 (latched once), hard kill at 15"
   (define wd (make-stall-watchdog))
-  (for ([i (in-range 4)])
+  (for ([i (in-range 7)])
     (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'soft-stall)
   (check-true (hash-ref (stall-watchdog-snapshot wd) 'soft-sent?))
-  ;; Latched: counts 6 and 7 stay ok, the 8th kills.
-  (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok)
-  (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok)
+  ;; Latched: counts 9..14 stay ok, the 15th kills.
+  (for ([i (in-range 6)])
+    (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'hard-stall)
   (define snap (stall-watchdog-snapshot wd))
   (check-eq? (hash-ref snap 'stall-reason) 'repetition)
-  (check-eq? (hash-ref snap 'stall-repeats) 8))
+  (check-eq? (hash-ref snap 'stall-repeats) 15))
 
 (test-case "70 DISTINCT reads NEVER trip (the pre-fix W5 death is impossible)"
   (define wd (make-stall-watchdog))
@@ -170,19 +170,19 @@
   (check-equal? (hash-ref (stall-watchdog-snapshot wd) 'calls-since-mutation) 70)
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
 
-(test-case "backstop kills signature-cycling livelocks at 200"
+(test-case "backstop kills signature-cycling livelocks at 300"
   (define wd (make-stall-watchdog #:window #f))
   (let loop ([i 0])
     (define r (stall-watchdog-observe! wd (reads 1 i)))
-    (unless (or (eq? r 'hard-stall) (>= i 199))
+    (unless (or (eq? r 'hard-stall) (>= i 299))
       (loop (add1 i))))
   (define snap (stall-watchdog-snapshot wd))
-  (check-eq? (hash-ref snap 'calls-since-mutation) 200)
+  (check-eq? (hash-ref snap 'calls-since-mutation) 300)
   (check-eq? (hash-ref snap 'stall-reason) 'backstop))
 
 (test-case "an edit between observations resets the counter and the window"
   (define wd (make-stall-watchdog))
-  (check-eq? (stall-watchdog-observe! wd (same-reads 5)) 'soft-stall)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 8)) 'soft-stall)
   ;; The executor heeds the steering and edits.
   (check-eq? (stall-watchdog-observe! wd (list (call 'edit))) 'ok)
   (define snap (stall-watchdog-snapshot wd))
@@ -228,21 +228,21 @@
   (define wd (make-stall-watchdog #:soft-limit #f))
   (check-false (stall-watchdog-soft-limit wd))
   ;; Identical reads skip steering entirely...
-  (check-eq? (stall-watchdog-observe! wd (same-reads 7)) 'ok)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 14)) 'ok)
   (check-false (hash-ref (stall-watchdog-snapshot wd) 'soft-sent?))
-  ;; ...and go straight to the hard kill at 8.
+  ;; ...and go straight to the hard kill at 15.
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'hard-stall))
 
 (test-case "#f hard limit disables termination; backstop remains"
   (define wd (make-stall-watchdog #:hard-limit #f))
-  (check-eq? (stall-watchdog-observe! wd (same-reads 5)) 'soft-stall)
+  (check-eq? (stall-watchdog-observe! wd (same-reads 8)) 'soft-stall)
   ;; Steered once, then identical repeats continue harmlessly...
   (for ([i (in-range 50)])
     (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
   ;; ...but the ABSOLUTE backstop still terminates a livelock eventually.
   (let loop ([i 0]
              [r 'ok])
-    (unless (or (eq? r 'hard-stall) (>= i 150))
+    (unless (or (eq? r 'hard-stall) (>= i 300))
       (loop (add1 i) (stall-watchdog-observe! wd (reads 1 (+ 900 i))))))
   (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-reason) 'backstop))
 
