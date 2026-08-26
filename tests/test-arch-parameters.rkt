@@ -241,8 +241,10 @@
       ;; test seam for the BUG-0031 version-freshness guard; overrides the
       ;; running-vs-checkout version probe so tests can simulate a stale
       ;; build. Never set in production code paths.
+      ;; +1 — current-gsd-wave-inherited-artifacts (wave-executor, TURN_LOCAL):
+      ;; BUG-0029 W5 inherited-artifacts prompt block.
       (check-equal? (length inventory-entries)
-                    213
+                    214
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

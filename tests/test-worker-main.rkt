@@ -173,7 +173,13 @@
       (define-values (proc out-in in-out err-in)
         (subprocess #f #f #f racket-bin (path->string worker-main-src)))
       (define req
-        (ipc-request "integ-1" "bash" (hasheq 'command "echo integration") 5000 #f 'shell-exec 1))
+        (make-ipc-request "integ-1"
+                          "bash"
+                          (hasheq 'command "echo integration")
+                          5000
+                          #f
+                          'shell-exec
+                          1))
       (display (jsexpr->string (ipc-request->jsexpr req)) in-out)
       (newline in-out)
       (flush-output in-out)

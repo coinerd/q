@@ -112,12 +112,15 @@
 (define pure-suite
   (test-suite "BUG-0030 fixed behavior (pure): checkpoint surface + capture helpers"
 
-    (test-case "campaign-wave keeps 9 fields: progress rides attempt-context, not a new slot"
+    (test-case "campaign-wave has 10 fields: W5 adds the artifact ledger slot"
       ;; W4 DESIGN DECISION: dirty-state hand-off reuses the existing
       ;; attempt-context (BUG-0024 PRIOR ATTEMPT CONTEXT block) instead of
-      ;; growing the struct. The slot count must stay 9.
+      ;; growing the struct (slot count stayed 9 through W4).
+      ;; W5 (v1.00.19, BUG-0029) later added exactly ONE slot: the attempt-
+      ;; artifact ledger. The count must now stay 10 — any further growth is a
+      ;; schema-review event.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
-      (check-equal? (vector-length (struct->vector w)) 9)
+      (check-equal? (vector-length (struct->vector w)) 10)
       (check-equal? (campaign-wave-attempt-context w) ""))
 
     (test-case "wave-executor exports the checkpoint contract surface"

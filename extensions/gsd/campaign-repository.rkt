@@ -147,6 +147,24 @@
     ;; v1.00.18 (BUG-0024 W3): infra-retry hand-off context ("" = none).
     (unless (string? (campaign-wave-attempt-context w))
       (corrupt! "attempt-context must be a string"))
+    ;; v1.00.21 W5 (BUG-0029): artifact ledger — validated per entry.
+    (for ([e (in-list (wave-artifact-ledger w))])
+      (unless (campaign-artifact-entry? e)
+        (corrupt! "artifact ledger entry must be a campaign-artifact-entry: ~s" e))
+      (unless (and (string? (campaign-artifact-entry-attempt-id e))
+                   (positive? (string-length (campaign-artifact-entry-attempt-id e))))
+        (corrupt! "artifact entry attempt-id must be a non-empty string"))
+      (for ([accessor (in-list (list campaign-artifact-entry-branch
+                                     campaign-artifact-entry-worktree-path
+                                     campaign-artifact-entry-base-sha))])
+        (unless (string? (accessor e))
+          (corrupt! "artifact entry field must be a string: ~s" (accessor e))))
+      (unless (symbol? (campaign-artifact-entry-terminal-status e))
+        (corrupt! "artifact entry terminal-status must be a symbol"))
+      (unless (symbol? (campaign-artifact-entry-merge-status e))
+        (corrupt! "artifact entry merge-status must be a symbol"))
+      (unless (symbol? (campaign-artifact-entry-teardown-status e))
+        (corrupt! "artifact entry teardown-status must be a symbol")))
     (define attempt (campaign-wave-current-attempt w))
     (when attempt
       (unless (campaign-attempt? attempt)
@@ -212,7 +230,18 @@
         (campaign-wave-delivery-head-sha w)
         ;; v1.00.18 (BUG-0024 W3): 8th field is the infra-retry hand-off
         ;; context ("" when none). Legacy 7/5-field records load as "".
-        (campaign-wave-attempt-context w)))
+        (campaign-wave-attempt-context w)
+        ;; v1.00.21 W5 (BUG-0029): 9th field is the attempt-artifact
+        ;; ledger. Written as '() when empty so legacy readers still see a
+        ;; well-formed list; pre-W5 (8-field) records load with '().
+        (for/list ([e (in-list (wave-artifact-ledger w))])
+          (list (campaign-artifact-entry-attempt-id e)
+                (campaign-artifact-entry-branch e)
+                (campaign-artifact-entry-worktree-path e)
+                (campaign-artifact-entry-base-sha e)
+                (campaign-artifact-entry-terminal-status e)
+                (campaign-artifact-entry-merge-status e)
+                (campaign-artifact-entry-teardown-status e)))))
 
 (define (datum->manifest d)
   (match d
@@ -229,6 +258,19 @@
 
 (define (datum->wave d)
   (match d
+    ;; v1.00.21 W5 (BUG-0029): 9-field form carries the artifact ledger.
+    ;; Record-schema evolution: pre-W5 (8/7/5-field) records lack the field
+    ;; and load with an EMPTY ledger — never a load failure (same tolerance
+    ;; rule as attempt-context / delivery provenance in W3/W7).
+    [(list idx title status acct attempt branch head-sha attempt-context ledger)
+     (define w (datum->wave (list idx title status acct attempt branch head-sha attempt-context)))
+     (set-campaign-wave-artifact-ledger! w
+                                         (filter campaign-artifact-entry?
+                                                 (map datum->artifact-entry
+                                                      (if (list? ledger)
+                                                          ledger
+                                                          '()))))
+     w]
     ;; v1.00.18 (BUG-0024 W3): 8-field form carries attempt-context.
     [(list idx title status acct attempt branch head-sha attempt-context)
      (define w
@@ -265,6 +307,24 @@
                          (and attempt
                               (match attempt
                                 [(list aid fence started) (campaign-attempt aid fence started)])))]))
+
+;; v1.00.21 W5 (BUG-0029): ledger entries deserialize with full tolerance —
+;; a 4-field (start-time only) entry loads with lifecycle defaults, and any
+;; malformed shape loads as #f and is dropped rather than failing the load
+;; (the ledger is advisory provenance, never load-critical).
+(define (datum->artifact-entry d)
+  (match d
+    [(list aid branch wt base term merge teardown)
+     (define e (make-campaign-artifact-entry aid branch wt base))
+     (when (symbol? term)
+       (set-campaign-artifact-entry-terminal-status! e term))
+     (when (symbol? merge)
+       (set-campaign-artifact-entry-merge-status! e merge))
+     (when (symbol? teardown)
+       (set-campaign-artifact-entry-teardown-status! e teardown))
+     e]
+    [(list aid branch wt base) (make-campaign-artifact-entry aid branch wt base)]
+    [_ #f]))
 
 (define (datum->record d)
   (match d

@@ -121,15 +121,15 @@
        (if (and (number? timeout-ms) (positive? timeout-ms))
            (inexact->exact (floor timeout-ms))
            (current-execution-plane-timeout-ms))) ; L7: use parameter
-     (ipc-request req-id
-                  (if (symbol? tool-name)
-                      (symbol->string tool-name)
-                      tool-name)
-                  arguments
-                  timeout
-                  #f ; working-dir — let worker use its CWD
-                  capability
-                  IPC-SCHEMA-VERSION)]))
+     (make-ipc-request req-id
+                       (if (symbol? tool-name)
+                           (symbol->string tool-name)
+                           tool-name)
+                       arguments
+                       timeout
+                       #f ; working-dir — let worker use its CWD
+                       capability
+                       IPC-SCHEMA-VERSION)]))
 
 ;; ── IPC Response → Result Hash ──────────────────────────────────
 
@@ -227,8 +227,17 @@
 ;; This is the scheduler's single entry point — it bypasses the envelope layer.
 ;; The scheduler then translates the ipc-response to tool-result.
 ;; If args contains 'working-directory, it is used as the IPC working directory
-;; and removed from the forwarded args to avoid polluting the tool's argument namespace.
-(define (execute-tool-via-worker tool-name args required-capability)
+;; and removed from the forwarded args to avoid polluting the tool's argument
+;; namespace.
+;; BUG-0028 core fix (v1.00.19 W1): #:coordinator-wd carries the execution
+;; context's working directory on a TRUSTED channel (ipc-request
+;; trusted-working-dir). The worker extends its request-scoped allowed roots
+;; only from that field — never from model-supplied 'working-directory, which
+;; keeps its plain cwd semantics for tools like bash.
+(define (execute-tool-via-worker tool-name
+                                 args
+                                 required-capability
+                                 #:coordinator-wd [coordinator-wd #f])
   (with-handlers ([exn:fail?
                    (lambda (e)
                      (make-error-response #f (format "execution plane error: ~a" (exn-message e))))])
@@ -244,14 +253,16 @@
       (if wd
           (hash-remove args 'working-directory)
           args))
+    (define effective-wd (or coordinator-wd (and (string? wd) wd)))
     (define req
-      (ipc-request req-id
-                   tool-name
-                   clean-args
-                   timeout-ms
-                   (and (string? wd) wd)
-                   required-capability
-                   IPC-SCHEMA-VERSION))
+      (make-ipc-request req-id
+                        tool-name
+                        clean-args
+                        timeout-ms
+                        effective-wd
+                        required-capability
+                        IPC-SCHEMA-VERSION
+                        coordinator-wd))
     (define gw (ensure-worker!))
     (send-request! gw req timeout-ms)))
 
@@ -345,6 +356,8 @@
          gateway-alive?
          gateway-worker-process)
 
-(provide (contract-out [ensure-worker! (-> gateway-worker?)]
-                       [execute-via-worker (-> any/c hash?)]
-                       [execute-tool-via-worker (-> string? hash? symbol? ipc-response?)]))
+(provide (contract-out
+          [ensure-worker! (-> gateway-worker?)]
+          [execute-via-worker (-> any/c hash?)]
+          [execute-tool-via-worker
+           (->* (string? hash? symbol?) (#:coordinator-wd (or/c string? #f)) ipc-response?)]))

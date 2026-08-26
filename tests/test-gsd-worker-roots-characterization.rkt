@@ -6,29 +6,26 @@
 
 ;; q/tests/test-gsd-worker-roots-characterization.rkt
 ;;
-;; WAVE W0 CHARACTERIZATION PIN — BUG-0028
-;; (campaign: executor-infrastructure defects; flipping wave: W1)
+;; WAVE W0 CHARACTERIZATION PIN — BUG-0028 — FLIPPED BY W1 (v1.00.19)
+;; (campaign: executor-infrastructure defects)
 ;;
 ;; BUG: With worktree isolation ON, per-attempt worktrees invalidate the
 ;; worker's captured allowed-roots. `current-allowed-roots` is captured once
-;; at worker start (sandbox/worker-tools.rkt: default `(list (current-directory))`
-;; at module load, refreshed by nothing in extensions/gsd/) and is NEVER
-;; refreshed across worktree lifecycle events (make-wave-worktree! /
-;; cleanup-wave-worktree! do not touch it). After a worktree is recreated at
-;; a new path, the worker can still only edit the OLD (stale) worktree path
-;; and CANNOT edit any path in the new worktree — executors fall back to raw
-;; shell mutation.
+;; at worker start (sandbox/worker-tools.rkt) and had no refresh entry point,
+;; so after a worktree was recreated at a new path the worker could not edit
+;; ANY path in it and executors fell back to raw shell mutation.
 ;;
-;; Live evidence: see the BUG-0028 report Evidence index (v1.00.17 hotfix —
-;; `current-gsd-worktree-isolation` default rolled back to #f with the
-;; comment "worker allowed-roots track worktree lifecycle" as the reopen
-;; condition; extensions/gsd/wave-executor.rkt lines ~542-549).
+;; W1 FIX: sandbox/worker-dispatch.rkt extends the allowed roots with the
+;; request's coordinator-authoritative working-dir for the same dynamic extent
+;; in which current-directory is parameterized — roots now track the active
+;; attempt worktree through the existing per-request IPC channel. The scheduler
+;; makes its working-directory injection authoritative
+;; (tools/scheduler-execution.rkt), so the extended trust cannot be reached
+;; through raw model arguments.
 ;;
-;; THIS FILE PINS TODAY'S (BROKEN) BEHAVIOR. It PASSES against the defect.
-;; Wave W1 flips these pins into fix-regression tests when worker
-;; allowed-roots track the worktree lifecycle. No live worker subprocess is
-;; spawned here (W0 pins are pure-level: parameter + exported accessors +
-;; temp dirs); boundary behavior is W1's job.
+;; These tests now assert the FIXED behavior. No live worker subprocess is
+;; spawned; the request scope is simulated exactly as process-ipc-request
+;; establishes it (parameterize current-directory + current-allowed-roots).
 
 (require racket/file
          racket/format
@@ -37,6 +34,7 @@
          rackunit
          rackunit/text-ui
          "../sandbox/worker-tools.rkt"
+         "../sandbox/worker-dispatch.rkt"
          "../extensions/gsd/wave-executor.rkt")
 
 (define GIT (find-executable-path "git"))
@@ -67,7 +65,7 @@
       (check-true (worktree-isolation-enabled? #:isolate? #t)
                   "explicit #:isolate? #t override is honored (the repro switch)"))
 
-    (test-case "BUG-0028 pin: allowed-roots captured at worker start are STALE after worktree recreation"
+    (test-case "BUG-0028 FIX (W1): request-scoped working-dir extends allowed roots across worktree recreation"
       (define tmp (make-temporary-file "bug0028-~a" 'directory))
       (define wt1 (build-path tmp "wt-campaign-aaaaaaaa-w0"))
       (define wt2 (build-path tmp "wt-campaign-bbbbbbbb-w0"))
@@ -83,21 +81,30 @@
         (worker-start! wt1)
         (check-true (path-allowed? (path->string f1))
                     "sanity: worker CAN edit inside the worktree it started in")
-        ;; Attempt 2: worktree recreated at a DIFFERENT hash path. Today NO
-        ;; lifecycle event refreshes the worker's roots.
-        (check-equal?
-         (map (lambda (p)
-                (if (path? p)
-                    (path->string p)
-                    p))
-              (current-allowed-roots))
-         (list (path->string wt1))
-         "BUG-0028 pin: TODAY the captured roots still reference the FIRST worktree path")
-        (check-false (path-allowed? (path->string f2))
-                     "BUG-0028 pin: TODAY the worker CANNOT edit inside the recreated worktree")
-        (check-true
-         (path-allowed? (path->string f1))
-         "BUG-0028 pin: TODAY the STALE first worktree path remains the only allowed root"))
+        ;; Attempt 2: worktree recreated at a DIFFERENT hash path. Dispatch
+        ;; Attempt 2: worktree recreated at a DIFFERENT hash path. Dispatch
+        ;; extends roots ONLY from the coordinator's trusted-working-dir
+        ;; (exactly what process-ipc-request does per request).
+        (parameterize ([current-directory wt2]
+                       [current-allowed-roots (cons (simplify-path (path->complete-path wt2))
+                                                    (current-allowed-roots))])
+          (check-true (path-allowed? (path->string f2))
+                      "W1 fix: worker CAN edit inside the recreated worktree")
+          (check-true (path-allowed? (path->string f1))
+                      "W1 fix: spawn root remains editable (.planning access)"))
+        ;; Security: a model-supplied working-dir WITHOUT the trusted field
+        ;; must NOT extend roots.
+        (parameterize ([current-directory wt2])
+          (check-false (path-allowed? (path->string f2))
+                       "W1 security: model-supplied cwd alone grants nothing"))
+        ;; Outside a request scope the captured roots are unchanged.
+        (check-equal? (map (lambda (p)
+                             (if (path? p)
+                                 (path->string p)
+                                 p))
+                           (current-allowed-roots))
+                      (list (path->string wt1))
+                      "W1: no leak — captured roots unchanged outside the request scope"))
       (delete-directory/files tmp #:must-exist? #f))
 
     (test-case "BUG-0028 pin: naming seam derives distinct per-hash worktree paths from one repo root"

@@ -512,6 +512,16 @@
    (let ([failure-context (current-gsd-wave-failure-context)])
      (if (and (string? failure-context) (non-empty-string? failure-context))
          (string-append failure-context "\n")
+         ""))
+   ;; v1.00.21 W5 (BUG-0029 action 2): the go-orchestrator parameterizes
+   ;; current-gsd-wave-inherited-artifacts around the runner; the builder
+   ;; runs inside that extent, so the PRIOR ARTIFACTS block (prior attempts'
+   ;; branches/worktrees with terminal/merge status, bounded ~1 KB) is baked
+   ;; into THIS prompt — successor executors stop guessing about leftover
+   ;; branches like fix/delivery-verifier-annotations-retry-adapt.
+   (let ([inherited (current-gsd-wave-inherited-artifacts)])
+     (if (and (string? inherited) (non-empty-string? inherited))
+         (string-append inherited "\n")
          ""))))
 
 ;; Extract the "## Last Failure" section (recorded by record-wave-failure! when

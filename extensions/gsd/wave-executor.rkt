@@ -49,7 +49,82 @@
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-status
-                  campaign-wave-attempt-count))
+                  campaign-wave-attempt-count
+                  ;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger types
+                  wave-artifact-ledger
+                  campaign-artifact-entry-attempt-id
+                  campaign-artifact-entry-branch
+                  campaign-artifact-entry-worktree-path
+                  campaign-artifact-entry-terminal-status
+                  campaign-artifact-entry-merge-status))
+
+;; ============================================================
+;; v1.00.21 W5 (BUG-0029 action 2): PRIOR ARTIFACTS prompt block.
+;; ============================================================
+
+;; Rendered PRIOR ARTIFACTS block (string) that the prompt layer injects
+;; into the wave executor prompt; #f (default) when the wave has no prior
+;; attempt artifacts. Same parameter plumbing shape as the #9515
+;; failure-context parameter: the orchestrator parameterizes around the
+;; runner; the prompt builder executes inside that extent.
+(define current-gsd-wave-inherited-artifacts (make-parameter #f))
+
+;; Byte budget for the PRIOR ARTIFACTS block — deliberately the same
+;; order of magnitude as the BUG-0024 prior-attempt context (~1 KB): a
+;; context block must inform, not consume the wave.
+(define PRIOR-ARTIFACTS-BLOCK-BUDGET 1024)
+
+;; entries → bounded markdown section, or #f for an empty ledger.
+;; Pure distillation (plus read-only directory-exists? probes) of a
+;; wave's attempt-artifact ledger: a successor executor sees prior
+;; attempts' branches/worktrees with terminal and merge status instead
+;; of rediscovering them by git archaeology.
+(define (inherited-artifacts-block entries)
+  (define rows
+    (for/list ([e (in-list (if (list? entries)
+                               entries
+                               '()))])
+      (define id (campaign-artifact-entry-attempt-id e))
+      (define dir (campaign-artifact-entry-worktree-path e))
+      (format "- attempt ~a: branch ~a [terminal:~a] [merge:~a] worktree ~a~a"
+              (if (> (string-length id) 10)
+                  (substring id 0 10)
+                  id)
+              (campaign-artifact-entry-branch e)
+              (campaign-artifact-entry-terminal-status e)
+              (campaign-artifact-entry-merge-status e)
+              dir
+              (if (and (non-empty-string? dir) (directory-exists? dir)) " (on disk)" " (gone)"))))
+  (cond
+    [(null? rows) #f]
+    [else
+     (define header
+       (string-append "=== PRIOR ARTIFACTS (earlier attempts of THIS wave) ===\n"
+                      "These branches/worktrees already exist from prior attempts. Do NOT\n"
+                      "recreate them and do NOT spend context rediscovering them by git\n"
+                      "archaeology; inspect prior work with git log/diff only if useful.\n"))
+     ;; Keep the NEWEST entries (most relevant to a successor executor)
+     ;; and elide the oldest beyond the byte budget.
+     (define footer "=== END PRIOR ARTIFACTS ===\n")
+     (define budget (- PRIOR-ARTIFACTS-BLOCK-BUDGET (string-length header) (string-length footer) 16))
+     (let loop ([kept '()]
+                [rest (reverse rows)]
+                [budget budget])
+       (cond
+         [(null? rest) (string-append header (string-join kept "\n") "\n" footer)]
+         [(<= (add1 (string-length (car rest))) budget)
+          (loop (cons (car rest) kept) (cdr rest) (- budget (add1 (string-length (car rest)))))]
+         [else
+          (string-append header
+                         (if (null? kept)
+                             ""
+                             (string-append (string-join kept "\n") "\n"))
+                         (format "(+~a earlier attempt(s) elided for brevity)\n" (length rest))
+                         footer)]))]))
+
+(provide current-gsd-wave-inherited-artifacts
+         inherited-artifacts-block
+         PRIOR-ARTIFACTS-BLOCK-BUDGET)
 
 (provide wave-status
          wave-status?

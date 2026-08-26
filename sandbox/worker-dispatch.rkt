@@ -12,6 +12,7 @@
 ;;   and returns an ipc-response with the request-id stamped in.
 
 (require racket/match
+         racket/path
          (only-in json string->jsexpr jsexpr->string)
          "ipc-protocol.rkt"
          "worker-tools.rkt")
@@ -21,16 +22,38 @@
 ;; Dispatch an ipc-request to the worker tool registry.
 ;; The working-dir field is honored (parameterized current-directory).
 ;; The request-id from the request is stamped into the response.
+;;
+;; BUG-0028 core fix (v1.00.19 W1): the request working-dir ALSO extends the
+;; request-scoped allowed roots. `current-allowed-roots` is captured once at
+;; worker spawn (sandbox/worker-tools.rkt) and has no lifecycle entry point;
+;; with worktree isolation ON each attempt creates a NEW worktree while the
+;; captured root still references the old one, so every edit was rejected
+;; ("path not allowed"). Since worker-dispatch parameterizes current-directory
+;; per request anyway, we extend the roots for the SAME dynamic extent: the
+;; effective roots become spawn-root + this request's coordinator-supplied
+;; working directory. Trust note: the scheduler injects working-directory from
+;; the execution context (coordinator-authoritative; see the authoritative-
+;; injection hardening in tools/scheduler-execution.rkt), never from raw
+;; model-controlled arguments alone.
 (define (process-ipc-request request)
   (define req-id (ipc-request-request-id request))
   (define tool-name (ipc-request-tool-name request))
   (define arguments (ipc-request-arguments request))
-  ;; Parameterize CWD so changes don't leak across requests
+  ;; Parameterize CWD so changes don't leak across requests; BUG-0028 (W1):
+  ;; extend allowed roots with the request wd for the same dynamic extent so
+  ;; they track the active attempt worktree without a refresh entry point.
+  ;; The COORDINATOR's trusted-working-dir extends roots; the model-visible
+  ;; working-dir (bash tool feature) is honored as cwd but NEVER adds roots.
   (define response
-    (let ([wd (ipc-request-working-dir request)])
+    (let ([wd (ipc-request-working-dir request)]
+          [twd (ipc-request-trusted-working-dir request)])
       (if wd
-          (parameterize ([current-directory wd])
-            (dispatch-tool tool-name arguments))
+          (let* ([roots+ (if twd
+                             (cons (simplify-path (path->complete-path twd)) (current-allowed-roots))
+                             (current-allowed-roots))])
+            (parameterize ([current-directory wd]
+                           [current-allowed-roots roots+])
+              (dispatch-tool tool-name arguments)))
           (dispatch-tool tool-name arguments))))
   ;; Stamp the request-id into the response
   (ipc-response req-id

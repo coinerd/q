@@ -81,7 +81,10 @@
                   commit-wave-checkpoint!
                   checkpoint-commit-message?
                   CHECKPOINT-COMMIT-PREFIX
-                  wave-checkpoint-commit-message)
+                  wave-checkpoint-commit-message
+                  ;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger
+                  inherited-artifacts-block
+                  current-gsd-wave-inherited-artifacts)
          (only-in "wave-docs.rkt" wave-slug plan-slug-map read-wave-doc)
          (only-in "../../runtime/iteration/step-executor.rkt" current-post-tool-result-hook)
          (only-in "../../agent/state.rkt" current-empty-response-nudge)
@@ -897,6 +900,225 @@
      (persist-campaign! base-dir rec)
      (log-info "record-wave-delivery!: wave ~a delivered on ~a @ ~a" wave-idx branch head-sha)]))
 
+;; ============================================================
+;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger + reclaim.
+;; Failed/killed attempts used to leave durable artifacts (delivery
+;; branches, per-attempt worktrees) that were never reconciled, so
+;; successor attempts burned context on git archaeology. Every attempt
+;; that creates a worktree now gets a ledger entry AT CREATION; terminal
+;; transitions and teardown update it; campaign end reports leftovers
+;; with an operator-approved reclaim offer. Nothing is deleted
+;; automatically — ever.
+;; ============================================================
+
+;; Normalize a git helper result to its stdout string (default-run-git
+;; returns a plain string in the simple paths and a git-result struct in
+;; others; both shapes occur across call sites).
+(define (git-out->string out)
+  (cond
+    [(string? out) out]
+    [(bytes? out) (bytes->string/utf-8 out #:error-char #\?)]
+    [else
+     (with-handlers ([exn:fail? (lambda (_) (format "~a" out))])
+       (git-result-stdout out))]))
+
+;; #t when the git helper result indicates exit success (strings — which
+;; only occur on the raising-free happy paths — count as success).
+(define (git-ok? out)
+  (with-handlers ([exn:fail? (lambda (_) #t)])
+    (<= (git-result-code out) 0)))
+
+;; Locally-determinable merge status of a terminal attempt branch:
+;;   'deleted  branch no longer exists (teardown removed it)
+;;   'merged   branch tip is an ancestor of origin/main
+;;   'unmerged branch exists but is not on origin/main yet
+;;   'unknown  git could not answer (never a failure path)
+(define (artifact-merge-status/local repo-root branch)
+  (define repo
+    (if (string? repo-root)
+        repo-root
+        (path->string repo-root)))
+  (with-handlers ([exn:fail? (lambda (_) 'unknown)])
+    (define sha
+      (with-handlers ([exn:fail? (lambda (_) "")])
+        (string-trim
+         (git-out->string
+          (default-run-git repo (list "rev-parse" "--verify" (string-append branch "^{commit}")))))))
+    (cond
+      [(not (non-empty-string? sha)) 'deleted]
+      [(let ([merged (with-handlers ([exn:fail? (lambda (_) #f)])
+                       (default-run-git repo
+                                        (list "merge-base" "--is-ancestor" branch "origin/main")))])
+         (and merged (git-ok? merged)))
+       'merged]
+      [else 'unmerged])))
+
+;; Append a creation entry for a freshly created attempt worktree: the
+;; worktree+branch pair is a durable artifact and is owned by the record
+;; from its first breath. Best-effort: bookkeeping never kills a campaign.
+(define (record-attempt-artifact! base-dir plan-id wave-idx attempt-id wt)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "record-attempt-artifact!: ~a" (exn-message e)))])
+    (define rec (load-campaign-record base-dir plan-id))
+    (define wave (and rec (find-wave rec wave-idx)))
+    (cond
+      [(not wave)
+       (log-warning "record-attempt-artifact!: wave ~a not found in campaign ~a" wave-idx plan-id)]
+      [else
+       (define wt-path (wave-worktree-path wt))
+       (define wt-path-str
+         (if (string? wt-path)
+             wt-path
+             (path->string wt-path)))
+       (define base-sha
+         (with-handlers ([exn:fail? (lambda (_) #f)])
+           (string-trim (git-out->string (default-run-git (wave-worktree-repo-root wt)
+                                                          (list "rev-parse"
+                                                                (wave-worktree-base-ref wt)))))))
+       (set-campaign-wave-artifact-ledger!
+        wave
+        (append (wave-artifact-ledger wave)
+                (list (make-campaign-artifact-entry attempt-id
+                                                    (wave-worktree-branch wt)
+                                                    wt-path-str
+                                                    (if (non-empty-string? base-sha) base-sha "")))))
+       (persist-campaign! base-dir rec)
+       (log-info "gsd: ledger — wave ~a attempt ~a created branch ~a (base ~a)"
+                 wave-idx
+                 (substring attempt-id 0 (min 10 (string-length attempt-id)))
+                 (wave-worktree-branch wt)
+                 (if (non-empty-string? base-sha) base-sha "?"))])))
+
+;; Mark the ledger entry of a finished attempt terminal. No-op when the
+;; attempt never created an artifact (shared-checkout fallback): an
+;; attempt that owns nothing has nothing to mark.
+(define (mark-attempt-artifact-terminal! base-dir
+                                         plan-id
+                                         wave-idx
+                                         attempt-id
+                                         terminal-status
+                                         #:merge-status [merge-status #f])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "mark-attempt-artifact-terminal!: ~a" (exn-message e)))])
+    (define rec (load-campaign-record base-dir plan-id))
+    (define wave (and rec (find-wave rec wave-idx)))
+    (when (and wave attempt-id)
+      (for ([entry (in-list (wave-artifact-ledger wave))])
+        (when (string=? (campaign-artifact-entry-attempt-id entry) attempt-id)
+          (set-campaign-artifact-entry-terminal-status! entry terminal-status)
+          (when merge-status
+            (set-campaign-artifact-entry-merge-status! entry merge-status))
+          (persist-campaign! base-dir rec)
+          (log-info "gsd: ledger — wave ~a attempt ~a terminal:~a~a"
+                    wave-idx
+                    (substring attempt-id 0 (min 10 (string-length attempt-id)))
+                    terminal-status
+                    (if merge-status
+                        (format " merge:~a" merge-status)
+                        "")))))))
+
+;; Record the best-effort teardown outcome of the final attempt's
+;; worktree (action 4): teardown failures are logged INTO the ledger,
+;; never silently skipped.
+(define (record-attempt-teardown! base-dir plan-id wave-idx attempt-id wt removed?)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "record-attempt-teardown!: ~a" (exn-message e)))])
+    (define rec (load-campaign-record base-dir plan-id))
+    (define wave (and rec (find-wave rec wave-idx)))
+    (when (and wave attempt-id)
+      (for ([entry (in-list (wave-artifact-ledger wave))])
+        (when (string=? (campaign-artifact-entry-attempt-id entry) attempt-id)
+          (set-campaign-artifact-entry-teardown-status! entry (if removed? 'removed 'left-on-disk))
+          (persist-campaign! base-dir rec)
+          (log-info "gsd: ledger — wave ~a attempt ~a teardown:~a"
+                    wave-idx
+                    (substring attempt-id 0 (min 10 (string-length attempt-id)))
+                    (if removed? 'removed 'left-on-disk)))))))
+
+;; v1.00.21 W5 (BUG-0029 action 3): end-of-campaign reclaim report.
+;; Enumerates NON-DELIVERY leftovers across the campaign — ledger entries
+;; whose worktree directory still exists on disk or whose branch still
+;; exists while the wave recorded no delivery on that branch — and prints
+;; an operator-visible summary with an explicit reclaim offer. NEVER
+;; deletes anything: reclamation is operator-approved only (/go gc or the
+;; printed command list).
+(define LEFTOVERS-REPORT-MAX-ENTRIES 20)
+(define (report-campaign-artifact-leftovers! base-dir plan-id #:repo-root repo-root)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "gsd: leftovers report failed: ~a" (exn-message e)))])
+    (define rec (load-campaign-record base-dir plan-id))
+    (define repo
+      (and repo-root
+           (if (string? repo-root)
+               repo-root
+               (path->string repo-root))))
+    (define leftovers
+      (for*/list ([wave (in-list (and rec (campaign-record-waves rec)))]
+                  [entry (in-list (wave-artifact-ledger wave))]
+                  #:when (not (and (string? (campaign-wave-delivery-branch wave))
+                                   (non-empty-string? (campaign-wave-delivery-branch wave))
+                                   (string=? (campaign-wave-delivery-branch wave)
+                                             (campaign-artifact-entry-branch entry)))))
+        (list wave entry)))
+    (define live
+      (for/list ([we (in-list leftovers)])
+        (define entry (cadr we))
+        (define dir-left?
+          (and (non-empty-string? (campaign-artifact-entry-worktree-path entry))
+               (directory-exists? (campaign-artifact-entry-worktree-path entry))))
+        (define branch-live?
+          (and repo
+               (not (eq? 'deleted
+                         (artifact-merge-status/local repo (campaign-artifact-entry-branch entry))))))
+        (and (or dir-left? branch-live?) (list (car we) entry dir-left? branch-live?))))
+    (define rows
+      (for/list ([r (in-list live)]
+                 #:when r)
+        r))
+    (cond
+      [(null? rows)
+       (log-info "gsd: campaign ~a — no leftover attempt artifacts (all reclaimed or delivered)"
+                 plan-id)]
+      [else
+       (define shown
+         (for/list ([r (in-list rows)]
+                    [i (in-naturals)]
+                    #:when (< i LEFTOVERS-REPORT-MAX-ENTRIES))
+           r))
+       (define commands
+         (string-join (for/list ([r (in-list shown)])
+                        (define entry (list-ref r 1))
+                        (string-append (if (list-ref r 2)
+                                           (format "  git -C ~a worktree remove --force ~a\n"
+                                                   repo
+                                                   (campaign-artifact-entry-worktree-path entry))
+                                           "")
+                                       (if (list-ref r 3)
+                                           (format "  git -C ~a branch -D ~a"
+                                                   repo
+                                                   (campaign-artifact-entry-branch entry))
+                                           "")))
+                      "\n"))
+       (define summary
+         (string-append (format "\n=== GSD CAMPAIGN ~a: LEFTOVER ATTEMPT ARTIFACTS (~a) ===\n"
+                                plan-id
+                                (length rows))
+                        "These artifacts were NOT delivered and are still on disk/in git.\n"
+                        "NOTHING has been deleted. To reclaim (operator-approved ONLY), run:\n"
+                        "  /go gc\n"
+                        "or manually:\n"
+                        commands
+                        (if (> (length rows) (length shown))
+                            (format "\n  (+~a more — see the campaign record ledger)\n"
+                                    (- (length rows) (length shown)))
+                            "\n")
+                        "=== END LEFTOVER ATTEMPT ARTIFACTS ===\n"))
+       (log-warning
+        "gsd: ~a leftover attempt artifact(s) after campaign ~a — reclaim offer printed (NO auto-delete)"
+        (length rows)
+        plan-id)
+       (displayln summary)])))
+
 ;; Delivered branches of a record — the spare-list handed to campaign-start
 ;; reclaim so crash recovery never destroys durable merge evidence (W7).
 (define (record-delivered-branches rec)
@@ -1113,12 +1335,20 @@
      ;; message once the bound is exhausted.
      (define infra-retry-state (box (cons (current-gsd-campaign-infra-retries) '())))
 
-     (define (run-once* no-change-retries-left wt-box keep-branch-box)
+     (define (run-once* no-change-retries-left wt-box keep-branch-box attempt-id-box)
        (set-campaign-fence-token! active fence)
        (begin-attempt! active wave-idx fence)
        (persist-campaign! base-dir active)
        (define started-attempt (campaign-wave-current-attempt (find-wave active wave-idx)))
        (define expected-id (campaign-attempt-id started-attempt))
+       (set-box! attempt-id-box expected-id)
+       ;; v1.00.21 W5 (BUG-0029 action 2): the PRIOR ARTIFACTS block is
+       ;; built from the ledger BEFORE this attempt adds its own entry —
+       ;; exactly the prior attempts' branches/worktrees, with terminal
+       ;; and merge status, distilled to ~1 KB by inherited-artifacts-block
+       ;; (same bounded-block shape as the BUG-0024 context).
+       (define inherited-artifact-text
+         (inherited-artifacts-block (wave-artifact-ledger (find-wave active wave-idx))))
        ;; BUG-0030 (action 4): before the attempt starts, warn LOUDLY about
        ;; uncommitted .rkt changes in the main checkout OUTSIDE the active
        ;; attempt lease/worktree — exactly what polluted PR #9529's metrics
@@ -1181,12 +1411,21 @@
        ;; interrupted (at-least-once). Mirrors the LLM provider-retry ceiling
        ;; (current-provider-retry-max-retries = 5).
        (define (run-with-timeout-retry retries-left)
-         (define result (coerce-run-result (run-one/watchdog wave-idx)))
-         (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
-             (begin
-               (log-info "wave ~a timed out; retrying (~a retries left)" wave-idx (sub1 retries-left))
-               (run-with-timeout-retry (sub1 retries-left)))
-             result))
+         ;; v1.00.21 W5 (BUG-0029 action 2): the PRIOR ARTIFACTS block rides
+         ;; the same prompt plumbing as current-gsd-wave-failure-context —
+         ;; the prompt builder runs inside this parameterize extent, so
+         ;; successor executors see prior attempts' artifacts without
+         ;; rediscovering them.
+         (parameterize ([current-gsd-wave-inherited-artifacts inherited-artifact-text])
+           (let retry-loop ([retries-left retries-left])
+             (define result (coerce-run-result (run-one/watchdog wave-idx)))
+             (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
+                 (begin
+                   (log-info "wave ~a timed out; retrying (~a retries left)"
+                             wave-idx
+                             (sub1 retries-left))
+                   (retry-loop (sub1 retries-left)))
+                 result))))
        ;; v1.00.17 W6 (#9512a): wave worktree isolation. When enabled the
        ;; executor session runs inside its own git worktree + campaign
        ;; branch: current-directory is parameterized to the worktree path
@@ -1220,6 +1459,16 @@
                  [(not wt) (run-thunk)]
                  [else
                   (set-box! wt-box wt)
+                  ;; v1.00.21 W5 (BUG-0029 action 1): the worktree+branch
+                  ;; pair is a DURABLE artifact — it enters the wave's
+                  ;; artifact ledger AT CREATION, owned by the record from
+                  ;; its first breath until terminal update / teardown /
+                  ;; reclaim.
+                  (record-attempt-artifact! base-dir
+                                            (campaign-plan-id active)
+                                            wave-idx
+                                            expected-id
+                                            wt)
                   (parameterize ([current-directory (wave-worktree-path wt)])
                     (run-thunk))]))))
        ;; W7 (#9512b): the worktree outlives the run thunk — its branch
@@ -1237,6 +1486,11 @@
        (define after-run (observe))
        (cond
          [(and after-run (campaign-record-cancellation after-run))
+          (mark-attempt-artifact-terminal! base-dir
+                                           (campaign-plan-id active)
+                                           wave-idx
+                                           expected-id
+                                           'cancelled)
           (interrupt-current! "campaign cancellation requested")]
          [(not (current-wave-for-attempt after-run wave-idx fence expected-id))
           (campaign-result 'wave-cancelled '() "stale runner result ignored")]
@@ -1252,6 +1506,11 @@
                   (set-campaign-wave-status! meta-wave 'pending)
                   (persist-campaign! base-dir after-run)
                   (mirror-status! 'pending))
+                (mark-attempt-artifact-terminal! base-dir
+                                                 (campaign-plan-id active)
+                                                 wave-idx
+                                                 expected-id
+                                                 'cancelled)
                 (campaign-result 'meta-fix (list wave-idx) "meta-fix wave reset")]
                [else
                 (define verifying (persist-current-status! 'verifying))
@@ -1350,6 +1609,21 @@
                                                                     done-wave))))
                                 (set-campaign-wave-attempt-context! done-wave "")
                                 (persist-campaign! base-dir done-rec)))
+                            ;; v1.00.21 W5 (BUG-0029 action 1): terminal
+                            ;; 'success + locally-determinable merge status
+                            ;; for the delivered branch — the ledger owns it
+                            ;; until merged/reclaimed.
+                            (mark-attempt-artifact-terminal!
+                             base-dir
+                             (campaign-plan-id active)
+                             wave-idx
+                             expected-id
+                             'success
+                             #:merge-status
+                             (and delivery-ctx
+                                  (artifact-merge-status/local
+                                   (branch-delivery-context-ref delivery-ctx 'repo-root)
+                                   (branch-delivery-context-ref delivery-ctx 'branch))))
                             (campaign-result 'wave-done (list wave-idx) "wave completed")]
                            [(failed)
                             (cond
@@ -1371,6 +1645,15 @@
                                 (sub1 no-change-retries-left))
                                (when (and wt (not (unbox keep-branch-box)))
                                  (cleanup-wave-worktree! wt))
+                               ;; v1.00.21 W5 (BUG-0029): the rejected
+                               ;; attempt is terminal; its branch was just
+                               ;; deleted by cleanup-wave-worktree!.
+                               (mark-attempt-artifact-terminal! base-dir
+                                                                (campaign-plan-id active)
+                                                                wave-idx
+                                                                expected-id
+                                                                'failure
+                                                                #:merge-status 'deleted)
                                (set-box! wt-box #f)
                                (define retry-rec (observe))
                                (define retry-wave
@@ -1387,8 +1670,19 @@
                                                       (no-change-target-files verifier-message))])
                                        (run-once* (sub1 no-change-retries-left)
                                                   wt-box
-                                                  keep-branch-box))))]
+                                                  keep-branch-box
+                                                  attempt-id-box))))]
                               [else
+                               (mark-attempt-artifact-terminal!
+                                base-dir
+                                (campaign-plan-id active)
+                                wave-idx
+                                expected-id
+                                'failure
+                                #:merge-status
+                                (and wt
+                                     (artifact-merge-status/local (wave-worktree-repo-root wt)
+                                                                  (wave-worktree-branch wt))))
                                (campaign-result 'wave-failed
                                                 '()
                                                 (if (string=? verifier-message "")
@@ -1398,6 +1692,16 @@
                             (campaign-result 'wave-cancelled '() "stale completion ignored")]
                            [else (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
             [(failed)
+             (mark-attempt-artifact-terminal!
+              base-dir
+              (campaign-plan-id active)
+              wave-idx
+              expected-id
+              'failure
+              #:merge-status (let ([w (unbox wt-box)])
+                               (and w
+                                    (artifact-merge-status/local (wave-worktree-repo-root w)
+                                                                 (wave-worktree-branch w)))))
              (if (persist-current-status! 'failed)
                  (begin
                    (apply-wave-status-projections! base-dir
@@ -1437,6 +1741,18 @@
                 wave-idx
                 (length (hash-ref dirty-capture 'edited-files '()))
                 (or (hash-ref dirty-capture 'dirty-sha #f) "none")))
+             ;; v1.00.21 W5 (BUG-0029): the dying attempt is TERMINAL
+             ;; ('interrupted) even though the WAVE stays re-attemptable —
+             ;; its ledger entry must not dangle open forever.
+             (mark-attempt-artifact-terminal!
+              base-dir
+              (campaign-plan-id active)
+              wave-idx
+              expected-id
+              'interrupted
+              #:merge-status (and dying-wt
+                                  (artifact-merge-status/local (wave-worktree-repo-root dying-wt)
+                                                               (wave-worktree-branch dying-wt))))
              (when infra-wave
                (define (roll-back-wave! w)
                  (set-campaign-wave-status! w 'pending)
@@ -1490,7 +1806,7 @@
                    (parameterize ([current-gsd-wave-failure-context
                                    (wave-attempt-context-block
                                     (and infra-wave (campaign-wave-attempt-context infra-wave)))])
-                     (run-once* no-change-retries-left wt-box keep-branch-box)))
+                     (run-once* no-change-retries-left wt-box keep-branch-box attempt-id-box)))
                  ;; Bound exhausted: fail closed with an aggregated message
                  ;; listing every failure timestamp (attempt not consumed —
                  ;; the durable wave stays pending and re-attemptable).
@@ -1505,7 +1821,13 @@
                    (string-join (for/list ([f (cdr (unbox infra-retry-state))])
                                   (format "attempt ~a at ~a" (car f) (cadr f)))
                                 "; "))))]
-            [(cancelled interrupted) (interrupt-current! (wave-execution-outcome-message run-result))]
+            [(cancelled interrupted)
+             (mark-attempt-artifact-terminal! base-dir
+                                              (campaign-plan-id active)
+                                              wave-idx
+                                              expected-id
+                                              'interrupted)
+             (interrupt-current! (wave-execution-outcome-message run-result))]
             ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
             ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
             ;; completion — the durable record says interrupted, so a restart
@@ -1515,12 +1837,27 @@
              ;; error/timeout stop the campaign) and never emit a completion —
              ;; the durable record says interrupted, so a restart re-attempts
              ;; the wave (at-least-once, exactly-once event).
+             (mark-attempt-artifact-terminal! base-dir
+                                              (campaign-plan-id active)
+                                              wave-idx
+                                              expected-id
+                                              'interrupted)
              (interrupt-current! (if (> timeout-retries 0)
                                      (format "~a after ~a retries"
                                              (wave-execution-outcome-message run-result)
                                              timeout-retries)
                                      (wave-execution-outcome-message run-result)))]
             [else
+             (mark-attempt-artifact-terminal!
+              base-dir
+              (campaign-plan-id active)
+              wave-idx
+              expected-id
+              'failure
+              #:merge-status (let ([w (unbox wt-box)])
+                               (and w
+                                    (artifact-merge-status/local (wave-worktree-repo-root w)
+                                                                 (wave-worktree-branch w)))))
              (if (persist-current-status! 'failed)
                  (begin
                    (apply-wave-status-projections! base-dir
@@ -1541,7 +1878,11 @@
      ;; this fires exactly once for the final attempt's worktree (or never,
      ;; when isolation is off / creation fell back to the shared checkout).
      (let ([wt-box (box #f)]
-           [keep-branch-box (box #f)])
+           [keep-branch-box (box #f)]
+           ;; v1.00.21 W5 (BUG-0029): ledger id of the CURRENT attempt —
+           ;; maintained across recursive re-entries so the dynamic-wind
+           ;; postlude can mark the final attempt's teardown outcome.
+           [attempt-id-box (box #f)])
        ;; BUG-0024 W3: each campaign-wave run starts with a FRESH infra-retry
        ;; budget so (a) a parameterized current-gsd-campaign-infra-retries
        ;; is honored (the module-level box captured its value at module load)
@@ -1550,7 +1891,7 @@
        (set-box! infra-retry-state (cons (current-gsd-campaign-infra-retries) '()))
        (dynamic-wind
         void
-        (lambda () (run-once* no-change-retries wt-box keep-branch-box))
+        (lambda () (run-once* no-change-retries wt-box keep-branch-box attempt-id-box))
         (lambda ()
           (define wt (unbox wt-box))
           (when wt
@@ -1632,49 +1973,57 @@
            (define wt-repo (find-repo-root base-dir))
            (when wt-repo
              (reclaim-orphaned-worktrees! wt-repo #:campaign-id plan-id)))
-         (let loop ([current authoritative]
-                    [completed '()])
-           (define next-idx (select-next-actionable-wave current))
-           (cond
-             [(campaign-record-cancellation current)
-              (campaign-result 'wave-cancelled (reverse completed) "campaign cancellation requested")]
-             [(not next-idx)
-              (campaign-result 'campaign-complete (reverse completed) "all waves done or deferred")]
-             [else
-              (define result
-                (run-campaign-wave base-dir
-                                   current
-                                   next-idx
-                                   #:runner runner
-                                   #:verifier verifier
-                                   #:meta-fix-predicate meta-fix-predicate
-                                   #:fence-token (add1 (campaign-fence-token current))
-                                   #:timeout-sec timeout-sec
-                                   #:timeout-retries (current-gsd-wave-timeout-retries)
-                                   #:isolate? isolate?))
-              (define observed (load-campaign-record base-dir plan-id))
-              (mirror-durable-statuses! rec observed)
-              (case (campaign-result-status result)
-                [(wave-done)
-                 (define refreshed (load-campaign-record base-dir plan-id))
-                 (if refreshed
-                     (loop refreshed (cons next-idx completed))
-                     (campaign-result 'error (reverse completed) "campaign record disappeared"))]
-                [(meta-fix)
-                 ;; Meta-fix: retry the same wave, attempt not consumed
-                 (define refreshed (load-campaign-record base-dir plan-id))
-                 (if refreshed
-                     (loop refreshed completed)
-                     (campaign-result 'error (reverse completed) "campaign record disappeared"))]
-                [(wave-failed wave-cancelled)
-                 ;; The runner timeout/cancellation boundary owns only its wave
-                 ;; thread. Do not stop the process-global gateway worker: it
-                 ;; may be serving an unrelated interactive or SDK session.
-                 (campaign-result (campaign-result-status result)
-                                  (reverse completed)
-                                  (campaign-result-message result))]
-                [else
-                 (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
+         (define final-result
+           (let loop ([current authoritative]
+                      [completed '()])
+             (define next-idx (select-next-actionable-wave current))
+             (cond
+               [(campaign-record-cancellation current)
+                (campaign-result 'wave-cancelled
+                                 (reverse completed)
+                                 "campaign cancellation requested")]
+               [(not next-idx)
+                (campaign-result 'campaign-complete (reverse completed) "all waves done or deferred")]
+               [else
+                (define result
+                  (run-campaign-wave base-dir
+                                     current
+                                     next-idx
+                                     #:runner runner
+                                     #:verifier verifier
+                                     #:meta-fix-predicate meta-fix-predicate
+                                     #:fence-token (add1 (campaign-fence-token current))
+                                     #:timeout-sec timeout-sec
+                                     #:timeout-retries (current-gsd-wave-timeout-retries)
+                                     #:isolate? isolate?))
+                (define observed (load-campaign-record base-dir plan-id))
+                (mirror-durable-statuses! rec observed)
+                (case (campaign-result-status result)
+                  [(wave-done)
+                   (define refreshed (load-campaign-record base-dir plan-id))
+                   (if refreshed
+                       (loop refreshed (cons next-idx completed))
+                       (campaign-result 'error (reverse completed) "campaign record disappeared"))]
+                  [(meta-fix)
+                   ;; Meta-fix: retry the same wave, attempt not consumed
+                   (define refreshed (load-campaign-record base-dir plan-id))
+                   (if refreshed
+                       (loop refreshed completed)
+                       (campaign-result 'error (reverse completed) "campaign record disappeared"))]
+                  [(wave-failed wave-cancelled)
+                   ;; The runner timeout/cancellation boundary owns only its wave
+                   ;; thread. Do not stop the process-global gateway worker: it
+                   ;; may be serving an unrelated interactive or SDK session.
+                   (campaign-result (campaign-result-status result)
+                                    (reverse completed)
+                                    (campaign-result-message result))]
+                  [else
+                   (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
+         ;; v1.00.21 W5 (BUG-0029 action 3): the campaign ended (success OR
+         ;; terminal failure) — report non-delivery leftover artifacts and
+         ;; offer operator-approved reclaim. NEVER auto-deletes.
+         (report-campaign-artifact-leftovers! base-dir plan-id #:repo-root (find-repo-root base-dir))
+         final-result)
        (lambda () (release-lease! lease)))))
 
 ;; ============================================================

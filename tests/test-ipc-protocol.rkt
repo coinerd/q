@@ -15,7 +15,7 @@
     ;; ── Struct construction ──
 
     (test-case "ipc-request construction and accessors"
-      (define req (ipc-request "req-1" "bash" (hasheq 'command "ls") 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "req-1" "bash" (hasheq 'command "ls") 5000 #f 'shell-exec 1))
       (check-equal? (ipc-request-request-id req) "req-1")
       (check-equal? (ipc-request-tool-name req) "bash")
       (check-equal? (ipc-request-capability req) 'shell-exec)
@@ -33,13 +33,13 @@
 
     (test-case "request round-trip: request → jsexpr → request equality"
       (define req
-        (ipc-request "test-123"
-                     "write"
-                     (hasheq 'path "/tmp/test" 'content "hello")
-                     10000
-                     "/workspace"
-                     'file-write
-                     1))
+        (make-ipc-request "test-123"
+                          "write"
+                          (hasheq 'path "/tmp/test" 'content "hello")
+                          10000
+                          "/workspace"
+                          'file-write
+                          1))
       (define jsexpr (ipc-request->jsexpr req))
       (define restored (jsexpr->ipc-request jsexpr))
       (check-not-false restored)
@@ -132,7 +132,7 @@
     ;; ── Schema version ──
 
     (test-case "schema version preserved through round-trip"
-      (define req (ipc-request "s1" "git" (hasheq) 1000 #f 'git-write 1))
+      (define req (make-ipc-request "s1" "git" (hasheq) 1000 #f 'git-write 1))
       (check-equal? (ipc-request-schema-version (jsexpr->ipc-request (ipc-request->jsexpr req)))
                     IPC-SCHEMA-VERSION)
       (define resp (ipc-response "s2" 'crashed (void) (hasheq) "boom" 1))
@@ -142,12 +142,12 @@
     ;; ── Size validation ──
 
     (test-case "ipc-request-too-large? returns #f for normal request"
-      (define req (ipc-request "small" "bash" (hasheq 'command "echo hi") 1000 #f 'shell-exec 1))
+      (define req (make-ipc-request "small" "bash" (hasheq 'command "echo hi") 1000 #f 'shell-exec 1))
       (check-false (ipc-request-too-large? req)))
 
     (test-case "ipc-request-too-large? returns #t for oversized request"
       (define big-string (make-string 2000000 #\x))
-      (define req (ipc-request "big" "bash" (hasheq 'command big-string) 1000 #f 'shell-exec 1))
+      (define req (make-ipc-request "big" "bash" (hasheq 'command big-string) 1000 #f 'shell-exec 1))
       (check-true (ipc-request-too-large? req)))))
 
 (run-tests suite)

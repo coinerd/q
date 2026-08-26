@@ -9,25 +9,21 @@
          racket/sandbox
          (only-in "../util/error/errors.rkt" with-logged-catch))
 
-(provide
- ;; Struct (transparent, no contract needed)
- eval-result
- eval-result?
- eval-result-value
- eval-result-output
- eval-result-error
- eval-result-elapsed-ms
- ;; Parameters
- current-sandbox-memory-limit
- current-sandbox-path-limit
- ;; Contracted
- (contract-out
-  [eval-in-sandbox
-   (->* (string?)
-        (#:timeout number?
-         #:language symbol?
-         #:allow-for-load (listof string?))
-        eval-result?)]))
+;; Struct (transparent, no contract needed)
+(provide eval-result
+         eval-result?
+         eval-result-value
+         eval-result-output
+         eval-result-error
+         eval-result-elapsed-ms
+         ;; Parameters
+         current-sandbox-memory-limit
+         current-sandbox-path-limit
+         ;; Contracted
+         (contract-out [eval-in-sandbox
+                        (->* (string?)
+                             (#:timeout number? #:language symbol? #:allow-for-load (listof string?))
+                             eval-result?)]))
 
 ;; --------------------------------------------------
 ;; Configurable limits (SEC-09)

@@ -454,7 +454,7 @@
 ;; ---------------------------------------------------------------------------
 
 (test-case "audit-ipc-request-construction"
-  (define req (ipc-request "req-1" "bash" (hasheq 'command "ls") 5000 "/tmp" 'any 1))
+  (define req (make-ipc-request "req-1" "bash" (hasheq 'command "ls") 5000 "/tmp" 'any 1))
   (check-true (ipc-request? req))
   (check-equal? (ipc-request-request-id req) "req-1")
   (check-equal? (ipc-request-tool-name req) "bash")
@@ -467,7 +467,7 @@
   (check-equal? (ipc-response-status resp) 'ok))
 
 (test-case "audit-ipc-request-round-trip"
-  (define req (ipc-request "req-1" "bash" (hasheq 'command "echo hello") 5000 "/tmp" 'any 1))
+  (define req (make-ipc-request "req-1" "bash" (hasheq 'command "echo hello") 5000 "/tmp" 'any 1))
   (define jsexpr (ipc-request->jsexpr req))
   (check-true (hash? jsexpr))
   (check-equal? (hash-ref jsexpr 'request-id) "req-1")
@@ -524,11 +524,11 @@
 (test-case "audit-ipc-request-too-large"
   ;; Create a request with large arguments
   (define big-args (hasheq 'data (make-string 2000000 #\x)))
-  (define req (ipc-request "req-big" "bash" big-args 5000 "/tmp" 'any 1))
+  (define req (make-ipc-request "req-big" "bash" big-args 5000 "/tmp" 'any 1))
   (check-true (ipc-request-too-large? req)))
 
 (test-case "audit-ipc-request-not-too-large"
-  (define req (ipc-request "req-small" "bash" (hasheq 'command "ls") 5000 "/tmp" 'any 1))
+  (define req (make-ipc-request "req-small" "bash" (hasheq 'command "ls") 5000 "/tmp" 'any 1))
   (check-false (ipc-request-too-large? req)))
 
 ;; ---------------------------------------------------------------------------

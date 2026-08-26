@@ -23,6 +23,7 @@
          (only-in "../util/security/cert-generator.rkt" generate-cert-set!)
          (only-in "../util/security/tls-contexts.rkt" make-server-ssl-context make-client-ssl-context)
          (only-in "../sandbox/ipc-protocol.rkt"
+                  make-ipc-request
                   ipc-request
                   ipc-response
                   ipc-response-request-id
@@ -125,7 +126,7 @@
       (define conn (start-remote-connection! "localhost" port client-ctx 5000))
       (check-true (remote-connection-alive? conn))
       (define req-id (generate-remote-request-id))
-      (define req (ipc-request req-id "echo" (hasheq 'msg "hello") 5000 #f 'execute-tools 1))
+      (define req (make-ipc-request req-id "echo" (hasheq 'msg "hello") 5000 #f 'execute-tools 1))
       (define resp (send-remote-request! conn req 5000))
       (check-equal? (ipc-response-request-id resp) req-id)
       (check-equal? (ipc-response-status resp) 'ok)
@@ -148,7 +149,7 @@
         (for/list ([i (in-range 5)])
           (thread (lambda ()
                     (define req-id (generate-remote-request-id))
-                    (define req (ipc-request req-id "echo" (hasheq) 5000 #f 'execute-tools 1))
+                    (define req (make-ipc-request req-id "echo" (hasheq) 5000 #f 'execute-tools 1))
                     (define resp (send-remote-request! conn req 5000))
                     (hash-set! results req-id (ipc-response-content resp))))))
       (for-each sync threads)
@@ -168,7 +169,7 @@
         (start-mock-server (lambda (req) (make-ok-response-jsexpr (hash-ref req 'request-id))) 2000))
       (define conn (start-remote-connection! "localhost" port client-ctx 5000))
       (define req-id (generate-remote-request-id))
-      (define req (ipc-request req-id "echo" (hasheq) 500 #f 'execute-tools 1)) ; 500ms timeout
+      (define req (make-ipc-request req-id "echo" (hasheq) 500 #f 'execute-tools 1)) ; 500ms timeout
       (define resp (send-remote-request! conn req 500))
       (check-equal? (ipc-response-status resp) 'timeout)
       (close-remote-connection! conn)
@@ -198,7 +199,7 @@
                     (loop)))))
       (define conn (start-remote-connection! "localhost" port client-ctx 5000))
       (define req-id (generate-remote-request-id))
-      (define req (ipc-request req-id "echo" (hasheq) 5000 #f 'execute-tools 1))
+      (define req (make-ipc-request req-id "echo" (hasheq) 5000 #f 'execute-tools 1))
       (define resp (send-remote-request! conn req 5000))
       ;; Should get error response with connection error message
       (check-equal? (ipc-response-status resp) 'error)
