@@ -131,7 +131,7 @@
       (check-equal? (parsed-gsd-command-canonical-name r) "/go")
       (check-equal? (parsed-gsd-command-args r) ""))
 
-    ;; ── v1.00.19 W3 (BUG-0031): /go allow-stale escape hatch ──
+    ;; ── W3 (BUG-0031): /go allow-stale escape hatch ──
     (test-case "allow-stale: /go allow-stale is accepted as a flag"
       (check-true (command-allow-stale? "allow-stale")))
 

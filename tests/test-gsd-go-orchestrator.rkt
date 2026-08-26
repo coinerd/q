@@ -748,9 +748,9 @@
       (check-true (string-contains? behind-msg "behind origin/main") behind-msg))
 
     (test-case "offline warning is emitted only when origin is unreachable"
-      (define w (freshness-offline-warning (fake-freshness "1.00.19" "1.00.19" #f #f #t)))
+      (define w (freshness-offline-warning (fake-freshness q-version q-version #f #f #t)))
       (check-true (and (string? w) (string-contains? w "origin/main unreachable")) w)
-      (check-false (freshness-offline-warning (fake-freshness "1.00.19" "1.00.19" "sha" #f #f))))
+      (check-false (freshness-offline-warning (fake-freshness q-version q-version "sha" #f #f))))
 
     (test-case "stale build is refused loudly at /go entry (runner never called)"
       (define dir (make-tmp-campaign-dir 1))
@@ -823,7 +823,7 @@
       (define result
         (freshness-suite/guarded dir
                                  rec
-                                 (fake-freshness "1.00.19" "1.00.19" #f #f #t)
+                                 (fake-freshness q-version q-version #f #f #t)
                                  (lambda ()
                                    (execute-campaign-request!
                                     request

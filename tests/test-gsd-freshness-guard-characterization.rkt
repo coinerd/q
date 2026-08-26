@@ -9,7 +9,7 @@
 ;; W3 POST-CHANGE PIN — BUG-0031 (flipped from the W0 characterization)
 ;;
 ;; W0 pinned the DEFECT: /go campaign records carried no build identity and
-;; no staleness-refusal existed on the /go entry path. W3 (v1.00.19) added:
+;; no staleness-refusal existed on the /go entry path. W3 added:
 ;;   1. build-version / main-head-sha / stale-override fields on the
 ;;      campaign-record struct, persisted in every record write;
 ;;   2. a version-freshness guard at /go entry ("restart required
@@ -19,7 +19,7 @@
 ;; This file now pins the FIXED behavior:
 ;;   - a record with identity set persists it (datum scan finds the keys);
 ;;   - the struct schema carries the three new fields (12 slots);
-;;   - legacy pre-v1.00.19 records (fields absent) deserialize with #f,
+;;   - legacy pre-campaign records (fields absent) deserialize with #f,
 ;;     never failing the load (record-schema evolution requirement);
 ;;   - the go-orchestrator source surface contains the guard concepts.
 ;; Pure-level pin: temp dirs + structs + source surface only; no live
@@ -130,11 +130,11 @@
       (check-false (campaign-record-stale-override rec))
       ;; Round-trip through the fail-closed repository proves the durable
       ;; schema both preserves the fields when set AND tolerates their
-      ;; absence (a pre-v1.00.19 in-flight record must never fail to load).
+      ;; absence (an in-flight record from before this change must never fail to load).
       (define tmp (make-temporary-file "bug31-rt-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
-                      ;; legacy-shaped record: fields unset (pre-v1.00.19)
+                      ;; legacy-shaped record: fields unset (legacy-shaped)
                       (persist-campaign! tmp rec)
                       (define back (load-campaign-record tmp (campaign-plan-id rec)))
                       (check-true (and (campaign-record? back) #t)

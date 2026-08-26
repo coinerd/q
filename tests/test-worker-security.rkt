@@ -182,7 +182,7 @@
       (define resp (execute-write (hash 'path "/tmp/worker-security-evil" 'content "hello")))
       (check-equal? (ipc-response-status resp) 'error))
 
-    ;; ── BUG-0028 S2 (v1.00.19 W2): denials are self-diagnosing ──
+    ;; ── BUG-0028 S2 (W2): denials are self-diagnosing ──
     ;; A denial must name the allowed roots in force at denial time so a
     ;; stale-roots outage is visible in the message itself, not via git
     ;; archaeology. Redaction is unchanged: only the configured roots are

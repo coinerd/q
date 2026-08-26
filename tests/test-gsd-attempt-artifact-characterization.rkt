@@ -118,7 +118,7 @@
                   "artifact-ledger is readable through the normalizing accessor"))
 
     (test-case "legacy waves without the ledger field load with an empty ledger"
-      ;; Pre-v1.00.19 records deserialize through the raw 5-field form; the
+      ;; Pre-campaign records deserialize through the raw 5-field form; the
       ;; #:auto sentinel must never leak and never fail the load.
       (define legacy (make-campaign-wave 0 "W0" 'pending 0 #f))
       (check-equal? (wave-artifact-ledger legacy) '())

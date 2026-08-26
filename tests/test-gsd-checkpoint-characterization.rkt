@@ -116,7 +116,7 @@
       ;; W4 DESIGN DECISION: dirty-state hand-off reuses the existing
       ;; attempt-context (BUG-0024 PRIOR ATTEMPT CONTEXT block) instead of
       ;; growing the struct (slot count stayed 9 through W4).
-      ;; W5 (v1.00.19, BUG-0029) later added exactly ONE slot: the attempt-
+      ;; W5 (BUG-0029) later added exactly ONE slot: the attempt-
       ;; artifact ledger. The count must now stay 10 — any further growth is a
       ;; schema-review event.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))

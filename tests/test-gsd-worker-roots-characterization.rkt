@@ -6,7 +6,7 @@
 
 ;; q/tests/test-gsd-worker-roots-characterization.rkt
 ;;
-;; WAVE W0 CHARACTERIZATION PIN — BUG-0028 — FLIPPED BY W1 (v1.00.19)
+;; WAVE W0 CHARACTERIZATION PIN — BUG-0028 — FLIPPED BY W1 (release wave)
 ;; (campaign: executor-infrastructure defects)
 ;;
 ;; BUG: With worktree isolation ON, per-attempt worktrees invalidate the
