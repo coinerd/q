@@ -2,7 +2,7 @@
 
 ;; tests/test-session-hygiene-characterization.rkt
 ;;
-;; CHARACTERIZATION — post-W3 (BUG-0038 flip; BUG-0033 half retained).
+;; CHARACTERIZATION — post-W5 (BUG-0038 flip by W3; BUG-0033 flip by W5).
 ;;
 ;; BUG-0038 (FLIPPED by W3): the tracked-file write seam
 ;; (extensions/racket-tooling-helpers.rkt:write-file-string!) now routes
@@ -20,9 +20,12 @@
 ;;     input => read-only until note-user-activity!.
 ;; These tests pin that behavior (all PASS now that W3 landed).
 ;;
-;; BUG-0033 (NOT yet fixed — different wave): the project-root test-runner
-;; shim <project-base>/scripts/run-tests.rkt still `(require "run-tests/...")`
-;; submodules that exist ONLY under q/. Its absence pins remain UNFLIPPED.
+;; BUG-0033 (FLIPPED by W5): there is now exactly ONE test runner —
+;; q/scripts/run-tests.rkt, invoked from the git root q/. The project-root
+;; scripts/run-tests.rkt shim was deleted from the workspace, all tracked
+;; tests resolve paths source-relatively (passes from any cwd; pinned by
+;; tests/test-cwd-independence.rkt), and docs/workflow-testing.md documents
+;; the canonical invocation.
 ;;
 ;; Pure-level: temp fake checkouts + source-surface scans; NO live
 ;; TUI/worker subprocess.
@@ -93,7 +96,7 @@
   (unbox captured))
 
 (define suite
-  (test-suite "BUG-0038 post-W3 + BUG-0033 pins: write-time staleness guard live; root test-runner shim still broken"
+  (test-suite "BUG-0038 post-W3 + BUG-0033 post-W5: write-time staleness guard live; one canonical cwd-independent test runner"
 
     ;; ------------------------------------------------------------
     ;; BUG-0038 FLIPPED — the tracked-file write path now refuses stale writes.
@@ -307,24 +310,35 @@
       (hy:reset-session-hygiene-state!))
 
     ;; ------------------------------------------------------------
-    ;; BUG-0033 — project-root test-runner shim still requires missing submodules.
-    ;; (NOT this wave's bug; pins retained until BUG-0033's wave flips them.)
+    ;; BUG-0033 FLIPPED (W5) — ONE canonical test runner, cwd-independent tests.
     ;; ------------------------------------------------------------
 
-    (test-case "root shim still requires run-tests submodules that do not exist at project root"
+    (test-case "no project-root test-runner shim exists; the only runner is q/scripts/run-tests.rkt"
       (define root-shim (base-file "scripts" "run-tests.rkt"))
-      (check-true (and root-shim (file-exists? root-shim))
-                  "precondition: duplicate root shim still exists today")
-      (define shim-src (file->string root-shim))
-      (check-true
-       (regexp-match? #rx"run-tests/classify[.]rkt" shim-src)
-       "root shim still (require \"run-tests/classify.rkt\") — BUG-0033's wave will repair the shim situation and flips this pin")
+      (check-false (and root-shim (file-exists? root-shim))
+                   "BUG-0033 fixed: workspace root shim deleted — any root facade must not come back")
       (define root-submodule-dir (base-file "scripts" "run-tests"))
       (check-false (and (directory-exists? root-submodule-dir) #t)
-                   "precondition: scripts/run-tests/ still absent at project root (shim cannot load)")
+                   "scripts/run-tests/ stays absent at project root (nothing may require it)")
       (define real-runner (repo-file "scripts" "run-tests.rkt"))
       (check-true (and real-runner (file-exists? real-runner))
-                  "precondition: the real runner lives under q/scripts/ and works"))))
+                  "the one canonical runner lives under q/scripts/ and works"))
+
+    (test-case "docs/workflow-testing.md documents the canonical runner invocation (cd q)"
+      (define doc (repo-file "docs" "workflow-testing.md"))
+      (check-true (file-exists? doc) "docs/workflow-testing.md exists")
+      (define doc-src (file->string doc))
+      (check-true (regexp-match? #rx"cd <project-base>/q && racket scripts/run-tests\\.rkt" doc-src)
+                  "docs state THE runner is q/scripts/run-tests.rkt invoked from q/")
+      (check-true (regexp-match? #rx"(?i:canonical)" doc-src)
+                  "docs call out the canonical entry point explicitly"))
+
+    (test-case "tracked tests resolve paths source-relatively (pinned by test-cwd-independence.rkt)"
+      (define spot (repo-file "tests" "test-ui-action-adapters.rkt"))
+      (check-true (file-exists? spot))
+      (define spot-src (file->string spot))
+      (check-false (regexp-match? #rx"current-directory[^)]*\"tests" spot-src)
+                   "no cwd-relative tests/ path resolution remains in the spot-checked file"))))
 
 (module+ main
   (exit (run-tests suite)))
