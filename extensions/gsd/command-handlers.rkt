@@ -475,6 +475,9 @@
   (string-append
    planning-implement-prompt
    file-contract
+   ;; BUG-0030 (action 1): checkpoint cadence contract so mid-wave infra
+   ;; stops leave committed, discoverable progress on the delivery branch.
+   (apply string-append (checkpoint-contract-lines))
    "# Runtime-Enforced Single-Wave Execution\n\n"
    (format "Execute ONLY wave W~a in this session. Do not start or inspect later waves.\n" wave-idx)
    "Return normally only after implementation and required verification complete.\n"
@@ -509,6 +512,16 @@
    (let ([failure-context (current-gsd-wave-failure-context)])
      (if (and (string? failure-context) (non-empty-string? failure-context))
          (string-append failure-context "\n")
+         ""))
+   ;; v1.00.21 W5 (BUG-0029 action 2): the go-orchestrator parameterizes
+   ;; current-gsd-wave-inherited-artifacts around the runner; the builder
+   ;; runs inside that extent, so the PRIOR ARTIFACTS block (prior attempts'
+   ;; branches/worktrees with terminal/merge status, bounded ~1 KB) is baked
+   ;; into THIS prompt — successor executors stop guessing about leftover
+   ;; branches like fix/delivery-verifier-annotations-retry-adapt.
+   (let ([inherited (current-gsd-wave-inherited-artifacts)])
+     (if (and (string? inherited) (non-empty-string? inherited))
+         (string-append inherited "\n")
          ""))))
 
 ;; Extract the "## Last Failure" section (recorded by record-wave-failure! when
@@ -590,7 +603,12 @@
                  (gsm-ctx-transition-to! gsd-ctx 'executing)
                  (build-single-wave-prompt base-dir plan wave-idx))
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
-               #:timeout-sec effective-timeout))
+               #:timeout-sec effective-timeout
+               ;; v1.00.19 W3 (BUG-0031): the trailing `allow-stale` token
+               ;; parsed out of /go <args> by command-parser.rkt flows onto
+               ;; the request; execute-campaign-request! then bypasses the
+               ;; version-freshness refusal and records stale-override: true.
+               #:allow-stale? (command-allow-stale? input-text)))
             (hook-amend (hasheq 'campaign-token
                                 (register-campaign-request! request)
                                 'new-session

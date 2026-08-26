@@ -73,7 +73,8 @@
           [broker-remote-host (-> q-settings? string?)]
           [broker-remote-port (-> q-settings? exact-positive-integer?)]
           [broker-cert-dir (-> q-settings? string?)]
-          [broker-capability-secret (-> q-settings? (or/c string? #f))]))
+          [broker-capability-secret (-> q-settings? (or/c string? #f))]
+          [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]))
 
 ;; Query
 ;; ============================================================
@@ -146,6 +147,23 @@
 ;; Defaults to #f (no warning).
 (define (warn-on-destructive? settings)
   (setting-ref settings 'warn-on-destructive #f))
+
+;; ============================================================
+;; GSD worktree isolation (v1.00.19 W2 — BUG-0028 S1)
+;; Config key: gsd.worktree-isolation (project or global config.json).
+;; Coerced strict boolean; absent key ⇒ #f (isolation stays OFF — the
+;; v1.00.17 BUG-0028 hotfix default is preserved until the W6 bake).
+;; Read by extensions/gsd/wave-executor.rkt via
+;; project-gsd-worktree-isolation — do NOT read this from more than one
+;; place (single wiring point at the executor composition root).
+;; ============================================================
+(define (gsd-worktree-isolation-enabled? settings)
+  ;; Coerce strict boolean, fail closed on junk: only #t / "true" enable.
+  (define raw (setting-ref* settings '(gsd worktree-isolation) #f))
+  (cond
+    [(boolean? raw) raw]
+    [(string? raw) (string-ci=? raw "true")]
+    [else #f]))
 
 ;; ============================================================
 ;; Security config loader (v0.25.2 — F3)

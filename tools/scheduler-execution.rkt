@@ -248,8 +248,18 @@
                (cond
                  [(and (current-execution-plane-enabled) (tool-dangerous? t) (tool-externalizable? t))
                   ;; H4: Route through gateway-bridge facade (consolidated IPC logic)
+                  ;; BUG-0028 (v1.00.19 W1): pass the exec-context wd on the
+                  ;; TRUSTED channel so worker allowed-roots track the active
+                  ;; attempt worktree; model-supplied 'working-directory keeps
+                  ;; plain cwd semantics and never extends roots.
                   (define resp
-                    (execute-tool-via-worker tc-name final-args (tool-required-capability t)))
+                    (execute-tool-via-worker
+                     tc-name
+                     final-args
+                     (tool-required-capability t)
+                     #:coordinator-wd
+                     (let ([cwd (and exec-ctx (exec-context-working-directory exec-ctx))])
+                       (and cwd (path->string cwd)))))
                   (ipc-response->tool-result resp)]
                  [else
                   ;; Existing in-process execution (unchanged)

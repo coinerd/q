@@ -75,7 +75,8 @@
     (test-case "send-request! receives ok response from echo worker"
       (define gw (start-mock-worker))
       (sleep 0.1) ; let worker start
-      (define req (ipc-request "test-rt-1" "bash" (hasheq 'command "echo hi") 5000 #f 'shell-exec 1))
+      (define req
+        (make-ipc-request "test-rt-1" "bash" (hasheq 'command "echo hi") 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (ipc-response-content resp) "bash")
@@ -84,7 +85,7 @@
     (test-case "send-request! preserves request-id in response"
       (define gw (start-mock-worker))
       (sleep 0.1)
-      (define req (ipc-request "preserve-id-xyz" "git" (hasheq) 5000 #f 'git-write 1))
+      (define req (make-ipc-request "preserve-id-xyz" "git" (hasheq) 5000 #f 'git-write 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-request-id resp) "preserve-id-xyz")
       (gateway-shutdown! gw))
@@ -93,7 +94,7 @@
       (define gw (start-mock-worker))
       (sleep 0.1)
       (define args (hasheq 'path "/tmp/test" 'content "hello"))
-      (define req (ipc-request "echo-args" "write" args 5000 #f 'file-write 1))
+      (define req (make-ipc-request "echo-args" "write" args 5000 #f 'file-write 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (ipc-response-details resp) args)
@@ -106,7 +107,7 @@
       (sleep 0.1)
       (for ([i (in-range 5)])
         (define req
-          (ipc-request (format "seq-~a" i) (format "tool-~a" i) (hasheq) 5000 #f 'read-only 1))
+          (make-ipc-request (format "seq-~a" i) (format "tool-~a" i) (hasheq) 5000 #f 'read-only 1))
         (define resp (send-request! gw req 5000))
         (check-equal? (ipc-response-status resp) 'ok)
         (check-equal? (ipc-response-content resp) (format "tool-~a" i)))
@@ -117,7 +118,7 @@
     (test-case "send-request! returns timeout response for slow worker"
       (define gw (start-mock-worker "slow"))
       (sleep 0.2)
-      (define req (ipc-request "timeout-test" "bash" (hasheq) 100 #f 'shell-exec 1))
+      (define req (make-ipc-request "timeout-test" "bash" (hasheq) 100 #f 'shell-exec 1))
       (define resp (send-request! gw req 100))
       (check-equal? (ipc-response-status resp) 'timeout)
       (gateway-shutdown! gw))
@@ -127,7 +128,7 @@
     (test-case "delay worker responds after wait"
       (define gw (start-mock-worker "delay:0.3"))
       (sleep 0.2)
-      (define req (ipc-request "delay-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "delay-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (ipc-response-content resp) "delayed-response")
@@ -138,7 +139,7 @@
     (test-case "gateway-stderr collects worker stderr output"
       (define gw (start-mock-worker "stderr"))
       (sleep 0.2)
-      (define req (ipc-request "stderr-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "stderr-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (sleep 0.1) ; allow stderr drain
@@ -153,7 +154,7 @@
       (define gw (start-mock-worker "crash"))
       (sleep 0.2)
       ;; First request will cause worker to crash
-      (define req (ipc-request "crash-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "crash-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (with-handlers ([exn:fail:gateway? (lambda (e)
                                            (check-true #t "correctly raised gateway error"))]
                       [exn:fail? (lambda (e)
@@ -172,7 +173,7 @@
       (sleep 0.2)
       (check-true (gateway-alive? gw2))
       ;; New worker should respond to requests
-      (define req (ipc-request "restart-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "restart-test" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw2 req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (gateway-shutdown! gw2))
@@ -202,7 +203,7 @@
       (define gw (start-mock-worker "real"))
       (sleep 0.1)
       (define req
-        (ipc-request "m6-real-1" "bash" (hasheq 'command "echo m6test") 5000 #f 'shell-exec 1))
+        (make-ipc-request "m6-real-1" "bash" (hasheq 'command "echo m6test") 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       ;; Real dispatch produces actual output, not just echo of tool-name
@@ -213,7 +214,7 @@
     (test-case "M6: real dispatch with missing command returns error"
       (define gw (start-mock-worker "real"))
       (sleep 0.1)
-      (define req (ipc-request "m6-real-2" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "m6-real-2" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'error)
       (gateway-shutdown! gw))))

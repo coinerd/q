@@ -117,6 +117,12 @@
           [campaign-record-provenance (-> campaign-record? (or/c #f string? symbol?))]
           [campaign-record-created-at (-> campaign-record? exact-integer?)]
           [campaign-record-updated-at (-> campaign-record? exact-integer?)]
+          [campaign-record-build-version (-> campaign-record? (or/c #f string?))]
+          [campaign-record-main-head-sha (-> campaign-record? (or/c #f string?))]
+          [campaign-record-stale-override (-> campaign-record? any/c)]
+          [set-campaign-record-build-version! (-> campaign-record? (or/c #f string?) void?)]
+          [set-campaign-record-main-head-sha! (-> campaign-record? (or/c #f string?) void?)]
+          [set-campaign-record-stale-override! (-> campaign-record? any/c void?)]
           [campaign-wave-index (-> campaign-wave? exact-nonnegative-integer?)]
           [campaign-wave-title (-> campaign-wave? string?)]
           [campaign-wave-status (-> campaign-wave? symbol?)]
@@ -131,6 +137,26 @@
           [set-campaign-wave-delivery-head-sha! (-> campaign-wave? string? void?)]
           [campaign-wave-attempt-context (-> campaign-wave? string?)]
           [set-campaign-wave-attempt-context! (-> campaign-wave? string? void?)]
+          ;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger.
+          [wave-artifact-ledger (-> campaign-wave? list?)]
+          [set-campaign-wave-artifact-ledger! (-> campaign-wave? list? void?)]
+          [make-campaign-artifact-entry
+           (-> (and/c string? (lambda (s) (positive? (string-length s))))
+               string?
+               string?
+               string?
+               campaign-artifact-entry?)]
+          [campaign-artifact-entry? (-> any/c boolean?)]
+          [campaign-artifact-entry-attempt-id (-> campaign-artifact-entry? string?)]
+          [campaign-artifact-entry-branch (-> campaign-artifact-entry? string?)]
+          [campaign-artifact-entry-worktree-path (-> campaign-artifact-entry? string?)]
+          [campaign-artifact-entry-base-sha (-> campaign-artifact-entry? string?)]
+          [campaign-artifact-entry-terminal-status (-> campaign-artifact-entry? symbol?)]
+          [campaign-artifact-entry-merge-status (-> campaign-artifact-entry? symbol?)]
+          [campaign-artifact-entry-teardown-status (-> campaign-artifact-entry? symbol?)]
+          [set-campaign-artifact-entry-terminal-status! (-> campaign-artifact-entry? symbol? void?)]
+          [set-campaign-artifact-entry-merge-status! (-> campaign-artifact-entry? symbol? void?)]
+          [set-campaign-artifact-entry-teardown-status! (-> campaign-artifact-entry? symbol? void?)]
           [campaign-attempt-id (-> campaign-attempt? string?)]
           [campaign-attempt-fence-token (-> campaign-attempt? (or/c #f exact-nonnegative-integer?))]
           [campaign-attempt-started-at (-> campaign-attempt? exact-integer?)]
@@ -157,11 +183,59 @@
   #:transparent
   #:constructor-name make-campaign-wave-descriptor)
 
+;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger entry. Every attempt
+;; that creates durable artifacts (delivery branch + per-wave worktree)
+;; gets one entry at attempt START; terminal transitions (success/failure/
+;; cancel/interrupt) update it; teardown results are noted at release.
+;; Base fields are set at construction; the trailing fields are mutated
+;; by the orchestrator lifecycle (never by deserialization directly).
+;; terminal-status : symbol — 'running (not yet terminal) or one of
+;;                   'success 'failed 'interrupted 'cancelled 'superseded
+;; merge-status    : symbol — 'undetermined or a locally-determined
+;;                   verdict ('merged-into-base / 'unmerged)
+;; teardown-status : symbol — 'pending, 'removed,
+;;                   'worktree-remove-failed, 'branch-delete-failed,
+;;                   'worktree-removed-branch-kept ...
+(struct campaign-artifact-entry
+        (attempt-id branch
+                    worktree-path
+                    base-sha
+                    [terminal-status #:auto]
+                    [merge-status #:auto]
+                    [teardown-status #:auto])
+  #:transparent
+  #:mutable
+  #:constructor-name raw-make-campaign-artifact-entry
+  #:auto-value 'running)
+
+;; Validated constructor — enforces the start-time invariants and the
+;; per-field defaults for the lifecycle fields.
+(define (make-campaign-artifact-entry attempt-id branch worktree-path base-sha)
+  (unless (and (string? attempt-id) (positive? (string-length attempt-id)))
+    (raise-argument-error 'make-campaign-artifact-entry "non-empty string" attempt-id))
+  (unless (string? branch)
+    (raise-argument-error 'make-campaign-artifact-entry "string?" branch))
+  (unless (string? worktree-path)
+    (raise-argument-error 'make-campaign-artifact-entry "string?" worktree-path))
+  (unless (string? base-sha)
+    (raise-argument-error 'make-campaign-artifact-entry "string?" base-sha))
+  (define e (raw-make-campaign-artifact-entry attempt-id branch worktree-path base-sha))
+  (set-campaign-artifact-entry-merge-status! e 'undetermined)
+  (set-campaign-artifact-entry-teardown-status! e 'pending)
+  e)
+
 ;; Mutable per-wave projection of the durable campaign record.
 ;; v1.00.17 W7 (#9512b): delivery-branch / delivery-head-sha record the
 ;; branch the wave's changes live on and the head SHA at approval time.
 ;; #:auto (default "") keeps the 5-arg constructor unchanged, so legacy
 ;; campaign records on disk remain loadable.
+;; v1.00.21 W5 (BUG-0029): artifact-ledger — the per-wave list of
+;; campaign-artifact-entry values (one per attempt that created durable
+;; artifacts). The struct-level #:auto-value is "" (a single shared
+;; default); ALL reads go through wave-artifact-ledger, which normalizes
+;; the sentinel to '(), so absent/legacy records behave exactly like an
+;; empty ledger. Serialization of pre-W5 records tolerates the missing
+;; 9th field (same tolerance rule as attempt-context / delivery fields).
 (struct campaign-wave
         (index title
                status
@@ -172,11 +246,20 @@
                ;; v1.00.18 (BUG-0024 W3): durable hand-off context captured
                ;; from the prior executor session when it died on an infra
                ;; failure ("" = none). Consumed by the next attempt's prompt.
-               [attempt-context #:auto])
+               [attempt-context #:auto]
+               [artifact-ledger #:auto])
   #:transparent
   #:mutable
   #:constructor-name make-campaign-wave
   #:auto-value "")
+
+;; Normalizing accessor: the sentinel default "" reads as '()' so callers
+;; never see the auto-value leak of the struct definition.
+(define (wave-artifact-ledger w)
+  (define ledger (campaign-wave-artifact-ledger w))
+  (if (list? ledger)
+      ledger
+      '()))
 
 ;; Validated constructor for public use — enforces domain constraints per §24.
 (define (make-campaign-wave* index title status attempt-count current-attempt)
@@ -200,10 +283,33 @@
 
 ;; Authoritative campaign record (D2).  plan-id == manifest hash.
 ;; #:mutable only for cancellation and fence-token (D5 restart safety).
+;; v1.00.19 W3 (BUG-0031): build identity is recorded at campaign start and
+;; rides the record through every wave report/evidence write (the record is
+;; the durable evidence store — each persist rewrites it wholesale).
+;;   build-version : exact (q-version) string of the RUNNING process — this
+;;                   is what actually produced the evidence, not what is on
+;;                   disk at analysis time.
+;;   main-head-sha : origin/main HEAD at campaign start (best-effort; #f
+;;                   outside a work tree / offline — must never fail a run).
+;;   stale-override: #f, or #t when the operator bypassed the freshness
+;;                   refusal with an explicit `allow-stale`.
+;; #:auto keeps the 8-arg constructor unchanged, so legacy campaign records
+;; on disk (and every existing caller) remain valid; pre-v1.00.19 records
+;; deserialize with #f identity (absent ≠ corrupt).
 (struct campaign-record
-        (plan-id manifest waves cancellation fence-token provenance created-at updated-at)
+        (plan-id manifest
+                 waves
+                 cancellation
+                 fence-token
+                 provenance
+                 created-at
+                 updated-at
+                 [build-version #:auto]
+                 [main-head-sha #:auto]
+                 [stale-override #:auto])
   #:transparent
   #:mutable
+  #:auto-value #f
   #:constructor-name make-campaign-record)
 
 ;; Raised when migration sources conflict (D3 fail-closed).

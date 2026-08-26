@@ -37,6 +37,7 @@
          racket/system
          racket/port
          "plan-types.rkt"
+         (only-in "../../runtime/settings-query.rkt" gsd-worktree-isolation-enabled?)
          "../gsd/wave-docs.rkt"
          (only-in "shared.rkt" extract-plan-title)
          (only-in "state-machine.rkt"
@@ -48,7 +49,82 @@
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-status
-                  campaign-wave-attempt-count))
+                  campaign-wave-attempt-count
+                  ;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger types
+                  wave-artifact-ledger
+                  campaign-artifact-entry-attempt-id
+                  campaign-artifact-entry-branch
+                  campaign-artifact-entry-worktree-path
+                  campaign-artifact-entry-terminal-status
+                  campaign-artifact-entry-merge-status))
+
+;; ============================================================
+;; v1.00.21 W5 (BUG-0029 action 2): PRIOR ARTIFACTS prompt block.
+;; ============================================================
+
+;; Rendered PRIOR ARTIFACTS block (string) that the prompt layer injects
+;; into the wave executor prompt; #f (default) when the wave has no prior
+;; attempt artifacts. Same parameter plumbing shape as the #9515
+;; failure-context parameter: the orchestrator parameterizes around the
+;; runner; the prompt builder executes inside that extent.
+(define current-gsd-wave-inherited-artifacts (make-parameter #f))
+
+;; Byte budget for the PRIOR ARTIFACTS block — deliberately the same
+;; order of magnitude as the BUG-0024 prior-attempt context (~1 KB): a
+;; context block must inform, not consume the wave.
+(define PRIOR-ARTIFACTS-BLOCK-BUDGET 1024)
+
+;; entries → bounded markdown section, or #f for an empty ledger.
+;; Pure distillation (plus read-only directory-exists? probes) of a
+;; wave's attempt-artifact ledger: a successor executor sees prior
+;; attempts' branches/worktrees with terminal and merge status instead
+;; of rediscovering them by git archaeology.
+(define (inherited-artifacts-block entries)
+  (define rows
+    (for/list ([e (in-list (if (list? entries)
+                               entries
+                               '()))])
+      (define id (campaign-artifact-entry-attempt-id e))
+      (define dir (campaign-artifact-entry-worktree-path e))
+      (format "- attempt ~a: branch ~a [terminal:~a] [merge:~a] worktree ~a~a"
+              (if (> (string-length id) 10)
+                  (substring id 0 10)
+                  id)
+              (campaign-artifact-entry-branch e)
+              (campaign-artifact-entry-terminal-status e)
+              (campaign-artifact-entry-merge-status e)
+              dir
+              (if (and (non-empty-string? dir) (directory-exists? dir)) " (on disk)" " (gone)"))))
+  (cond
+    [(null? rows) #f]
+    [else
+     (define header
+       (string-append "=== PRIOR ARTIFACTS (earlier attempts of THIS wave) ===\n"
+                      "These branches/worktrees already exist from prior attempts. Do NOT\n"
+                      "recreate them and do NOT spend context rediscovering them by git\n"
+                      "archaeology; inspect prior work with git log/diff only if useful.\n"))
+     ;; Keep the NEWEST entries (most relevant to a successor executor)
+     ;; and elide the oldest beyond the byte budget.
+     (define footer "=== END PRIOR ARTIFACTS ===\n")
+     (define budget (- PRIOR-ARTIFACTS-BLOCK-BUDGET (string-length header) (string-length footer) 16))
+     (let loop ([kept '()]
+                [rest (reverse rows)]
+                [budget budget])
+       (cond
+         [(null? rest) (string-append header (string-join kept "\n") "\n" footer)]
+         [(<= (add1 (string-length (car rest))) budget)
+          (loop (cons (car rest) kept) (cdr rest) (- budget (add1 (string-length (car rest)))))]
+         [else
+          (string-append header
+                         (if (null? kept)
+                             ""
+                             (string-append (string-join kept "\n") "\n"))
+                         (format "(+~a earlier attempt(s) elided for brevity)\n" (length rest))
+                         footer)]))]))
+
+(provide current-gsd-wave-inherited-artifacts
+         inherited-artifacts-block
+         PRIOR-ARTIFACTS-BLOCK-BUDGET)
 
 (provide wave-status
          wave-status?
@@ -95,6 +171,9 @@
          WORKTREE-DIRNAME-PREFIX
          current-gsd-worktree-isolation
          worktree-isolation-enabled?
+         resolve-worktree-isolation
+         apply-worktree-isolation-setting!
+         worktree-isolation-banner
          worktree-hash8
          wave-worktree-dirname
          wave-worktree-dir
@@ -117,7 +196,13 @@
          make-wave-worktree!
          cleanup-wave-worktree!
          release-wave-worktree!
-         reclaim-orphaned-worktrees!)
+         reclaim-orphaned-worktrees!
+         ;; v1.00.20 W4 (BUG-0030): mid-wave checkpoint commits
+         CHECKPOINT-COMMIT-PREFIX
+         wave-checkpoint-commit-message
+         checkpoint-commit-message?
+         commit-wave-checkpoint!
+         checkpoint-contract-lines)
 
 ;; ============================================================
 ;; Wave status struct
@@ -549,6 +634,46 @@
       (current-gsd-worktree-isolation)
       (and override #t)))
 
+;; BUG-0028 S1 (v1.00.19 W2): settings wiring. The gsd.worktree-isolation key
+;; is declared in the settings surface; resolve-worktree-isolation connects it
+;; to the runtime flag at the composition root (go-orchestrator
+;; run-campaign-wave, which calls apply-worktree-isolation-setting!).
+;;
+;; Precedence, highest first:
+;;   1. EXPLICIT #:isolate? argument ('auto = not given) — operator override,
+;;      honored in both directions (#t forces ON, #f forces OFF).
+;;   2. gsd.worktree-isolation project-settings key (settings may be #f when
+;;      no project settings could be loaded ⇒ key absent).
+;;   3. current-gsd-worktree-isolation parameter default (OFF — the BUG-0028
+;;      hotfix rollback stands until the W6 bake proves zero denials).
+(define (resolve-worktree-isolation settings #:isolate? (override 'auto))
+  (cond
+    [(not (eq? override 'auto)) (and override #t)]
+    [(and settings (gsd-worktree-isolation-enabled? settings)) #t]
+    [else (current-gsd-worktree-isolation)]))
+
+;; Composition-root application: resolve per the precedence above and leave
+;; the parameter consistent with the outcome so downstream
+;; worktree-isolation-enabled? (default 'auto) readers agree. Returns the
+;; effective flag.
+(define (apply-worktree-isolation-setting! settings #:isolate? (override 'auto))
+  (define effective (resolve-worktree-isolation settings #:isolate? override))
+  (current-gsd-worktree-isolation effective)
+  effective)
+
+;; BUG-0028 S2 (v1.00.19 W2): /doctor-style one-liner emitted at executor
+;; start when isolation is ON — active worktree + resolved allowed roots, so
+;; future staleness is visible immediately instead of via failed edits.
+;; Pure; callers log it.
+(define (worktree-isolation-banner worktree-path allowed-roots)
+  (define (->s p)
+    (if (string? p)
+        p
+        (path->string p)))
+  (format "gsd worktree isolation ON — active worktree: ~a; allowed roots: ~a"
+          (->s worktree-path)
+          (string-join (map ->s allowed-roots) ", ")))
+
 ;; ---- Pure naming ----------------------------------------------------------
 
 (define (->path p)
@@ -670,7 +795,13 @@
                              (git-result-code r)
                              (string-trim (git-result-stderr r)))
                      (current-continuation-marks))))
-  (wave-worktree repo dir branch base-ref (build-path base ".planning")))
+  ;; BUG-0028 S2 (v1.00.19 W2): executor-start diagnostic — active worktree +
+  ;; resolved allowed roots, one line, so staleness is visible immediately.
+  (define wt (wave-worktree repo dir branch base-ref (build-path base ".planning")))
+  (log-info (worktree-isolation-banner (wave-worktree-path wt)
+                                       (list (wave-worktree-path wt)
+                                             (wave-worktree-planning-dir wt))))
+  wt)
 
 ;; Best-effort, NEVER raises, never masks the terminal outcome: remove the
 ;; worktree, then delete the branch (order matters — branch -D refuses while
@@ -883,3 +1014,101 @@
        (if dir
            (cons (path->string dir) reclaimed)
            reclaimed)])))
+
+;; ============================================================
+;; Mid-wave checkpoint commits (v1.00.20 W4 — BUG-0030)
+;;
+;; Root cause: executor edits lived only as uncommitted working-tree
+;; state until wave completion, so any infra stop mid-wave (observed
+;; every 30-50 min during the v1.00.18 bake) stranded the work as
+;; unreviewed residue in whatever checkout the executor used. Contract
+;; change: the executor commits after EACH completed implementation step
+;; with green tests, to the delivery branch, with the deterministic
+;; `checkpoint: <step summary>` message.
+;;
+;; Checkpoints are NORMAL COMMITS: they carry recoverable progress, they
+;; do NOT trigger delivery verification (the coordinator still verifies
+;; the wave's FILES/TARGETS against the branch diff, never commit count),
+;; and they are NOT the wave completion signal.
+;; ============================================================
+
+(define CHECKPOINT-COMMIT-PREFIX "checkpoint: ")
+
+;; Pure: step summary → deterministic checkpoint commit message.
+(define (wave-checkpoint-commit-message step-summary)
+  (string-append CHECKPOINT-COMMIT-PREFIX (string-trim (if (string? step-summary) step-summary ""))))
+
+;; Pure: is this commit message a checkpoint commit? Distinguishes
+;; progress checkpoints (CHECKPOINT-COMMIT-PREFIX) from the final
+;; delivery commit ("feat(<hash8>/w<N>): ..."), so consumers can count
+;; checkpoints without confusing them with the delivery.
+(define (checkpoint-commit-message? message)
+  (and (string? message)
+       (>= (string-length message) (string-length CHECKPOINT-COMMIT-PREFIX))
+       (string-prefix? message CHECKPOINT-COMMIT-PREFIX)))
+
+;; Commit any uncommitted state in `dir` (the wave worktree/checkout the
+;; executor ran in) as a checkpoint commit: git add -A + git commit with
+;; a hermetic identity (no global git config required) and the
+;; deterministic checkpoint message. NEVER raises — a failed checkpoint
+;; must never kill the attempt that made the progress: git failures are
+;; logged and reported as #f. "Nothing to commit" is a successful no-op
+;; (#t): the contract fires after green steps, and a step that produced
+;; no diff has nothing to checkpoint.
+(define (commit-wave-checkpoint! dir step-summary #:run-git [run-git default-run-git])
+  (define dir-path (->path dir))
+  (define dir-str (path->string dir-path))
+  (define (safe-run args)
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "commit-wave-checkpoint!: git invocation failed: ~a"
+                                              (exn-message e))
+                                 (git-result 127 "" (exn-message e)))])
+      (run-git dir-path args)))
+  (cond
+    [(not (directory-exists? dir-path)) #f]
+    [else
+     (define r-status (safe-run (list "status" "--porcelain")))
+     (define clean?
+       (and (zero? (git-result-code r-status))
+            (string=? (string-trim (git-result-stdout r-status)) "")))
+     (cond
+       [clean? #t]
+       [else
+        (define r-add (safe-run (list "add" "-A")))
+        (unless (zero? (git-result-code r-add))
+          (log-warning "commit-wave-checkpoint!: git add -A failed in ~a: ~a"
+                       dir-str
+                       (string-trim (git-result-stderr r-add))))
+        (define r-commit
+          (safe-run (list "-c"
+                          "user.name=gsd-checkpoint"
+                          "-c"
+                          "user.email=checkpoint@gsd.local"
+                          "commit"
+                          "-m"
+                          (wave-checkpoint-commit-message step-summary))))
+        (cond
+          [(zero? (git-result-code r-commit)) #t]
+          [(regexp-match? #rx"nothing to commit"
+                          (string-append (git-result-stdout r-commit) (git-result-stderr r-commit)))
+           #t]
+          [else
+           (log-warning "commit-wave-checkpoint!: git commit failed in ~a: ~a"
+                        dir-str
+                        (string-trim (git-result-stderr r-commit)))
+           #f])])]))
+
+;; Pure: executor-contract lines embedded verbatim in the wave prompt
+;; environment block (command-handlers). Cadence is "after each completed
+;; implementation step with green tests" so an infra stop mid-wave always
+;; finds committed, discoverable progress on the delivery branch instead
+;; of working-tree residue.
+(define (checkpoint-contract-lines)
+  (list
+   "## Mid-Wave Checkpoint Contract (BUG-0030)\n"
+   "- After EACH completed implementation step with green tests, commit to the delivery branch:\n"
+   "  `git add -A && git commit -m \"checkpoint: <step summary>\"`\n"
+   "- Checkpoints are normal commits: they do NOT trigger delivery verification, do NOT mark the\n"
+   "  wave DONE, and never replace the final completion flow (run the wave's verify command, then return).\n"
+   "- Keep checkpointing even if you expect to finish the wave: an infra stop mid-wave must find\n"
+   "  committed progress, not uncommitted residue.\n\n"))

@@ -21,7 +21,7 @@
   (start-worker! "racket" (list "-tm" mock-path mode) #f))
 
 (define (mk-req [id #f] [tool "echo"])
-  (ipc-request (or id (generate-request-id)) tool (hasheq) 5000 #f 'any IPC-SCHEMA-VERSION))
+  (make-ipc-request (or id (generate-request-id)) tool (hasheq) 5000 #f 'any IPC-SCHEMA-VERSION))
 
 (define suite
   (test-suite "Gateway IPC Concurrent (v0.99.3 C1-C4)"

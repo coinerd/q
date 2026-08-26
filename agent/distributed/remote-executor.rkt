@@ -210,13 +210,13 @@
                                 (remote-executor-agent-id executor)
                                 (remote-executor-capability-secret executor)))
        (define req
-         (ipc-request req-id
-                      "__health__"
-                      (hasheq 'capability-token cap-token)
-                      5000
-                      #f
-                      'health-check
-                      IPC-SCHEMA-VERSION))
+         (make-ipc-request req-id
+                           "__health__"
+                           (hasheq 'capability-token cap-token)
+                           5000
+                           #f
+                           'health-check
+                           IPC-SCHEMA-VERSION))
        (define resp (send-remote-request! conn req 5000))
        (when (memq (ipc-response-status resp) '(timeout error))
          (log-remote-executor-warning "health check: server returned ~a"
@@ -326,7 +326,7 @@
                            (remote-executor-capability-secret executor)))
   (define enriched-args (hash-set arguments 'capability-token cap-token))
   (define req
-    (ipc-request req-id tool-name enriched-args timeout-ms #f capability IPC-SCHEMA-VERSION))
+    (make-ipc-request req-id tool-name enriched-args timeout-ms #f capability IPC-SCHEMA-VERSION))
   (with-retry executor req timeout-ms 0))
 
 ;; ── Retry Logic ─────────────────────────────────────────────────

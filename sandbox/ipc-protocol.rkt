@@ -19,6 +19,15 @@
 
 ;; ── Struct Definitions ──────────────────────────────────────────
 
+;; BUG-0028 core fix (v1.00.19 W1): `trusted-working-dir` carries the
+;; COORDINATOR's working directory (from the execution context) separately
+;; from the model-visible `working-dir`. The worker extends its request-scoped
+;; allowed roots ONLY from the trusted field, so a model-supplied
+;; 'working-directory argument keeps its plain cwd semantics (bash tool
+;; feature) but can never authorize new roots.
+;; Backward compatibility: the constructor below accepts the historical 7-arg
+;; positional form (trusted-working-dir defaults #f); serialization omits the
+;; key when #f and the parser defaults it to #f, so old↔new mixes work.
 (struct ipc-request
         (request-id ; string?
          tool-name ; string?
@@ -26,8 +35,31 @@
          timeout-ms ; exact-positive-integer?
          working-dir ; (or/c path-string? #f)
          capability ; symbol?
-         schema-version) ; exact-nonnegative-integer?
-  #:transparent)
+         schema-version ; exact-nonnegative-integer?
+         trusted-working-dir) ; (or/c path-string? #f)
+  #:transparent
+  #:constructor-name construct-ipc-request)
+
+;; Backward-compatible constructor: historical call sites use 7 positional
+;; args; the coordinator trust channel is an optional 8th argument. Bound to
+;; the name `ipc-request` so every pre-existing positional call site keeps
+;; working; `make-ipc-request` is an alias for new code.
+(define (make-ipc-request request-id
+                          tool-name
+                          arguments
+                          timeout-ms
+                          working-dir
+                          capability
+                          schema-version
+                          [trusted-working-dir #f])
+  (construct-ipc-request request-id
+                         tool-name
+                         arguments
+                         timeout-ms
+                         working-dir
+                         capability
+                         schema-version
+                         trusted-working-dir))
 
 (struct ipc-response
         (request-id ; string?
@@ -41,20 +73,27 @@
 ;; ── Serialization ───────────────────────────────────────────────
 
 (define (ipc-request->jsexpr req)
-  (hasheq 'request-id
-          (ipc-request-request-id req)
-          'tool-name
-          (ipc-request-tool-name req)
-          'arguments
-          (ipc-request-arguments req)
-          'timeout-ms
-          (ipc-request-timeout-ms req)
-          'working-dir
-          (ipc-request-working-dir req)
-          'capability
-          (symbol->string (ipc-request-capability req))
-          'schema-version
-          (ipc-request-schema-version req)))
+  (define base
+    (hasheq 'request-id
+            (ipc-request-request-id req)
+            'tool-name
+            (ipc-request-tool-name req)
+            'arguments
+            (ipc-request-arguments req)
+            'timeout-ms
+            (ipc-request-timeout-ms req)
+            'working-dir
+            (ipc-request-working-dir req)
+            'capability
+            (symbol->string (ipc-request-capability req))
+            'schema-version
+            (ipc-request-schema-version req)))
+  ;; Omit the trust channel when absent so old workers see an unchanged wire
+  ;; format; only add it when the coordinator supplied one.
+  (define twd (ipc-request-trusted-working-dir req))
+  (if twd
+      (hash-set base 'trusted-working-dir twd)
+      base))
 
 (define (jsexpr->ipc-request data)
   (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -64,25 +103,26 @@
                [arguments (hash-ref data 'arguments (hasheq))]
                [timeout-ms (hash-ref data 'timeout-ms IPC-DEFAULT-TIMEOUT-MS)]
                [working-dir (hash-ref data 'working-dir #f)]
+               [trusted-working-dir (hash-ref data 'trusted-working-dir #f)]
                [capability (hash-ref data 'capability "any")]
                [schema-version (hash-ref data 'schema-version IPC-SCHEMA-VERSION)])
            (and (string? request-id)
                 (string? tool-name)
                 (hash? arguments)
                 (positive-timeout? timeout-ms)
-                (ipc-request request-id
-                             tool-name
-                             arguments
-                             (if (exact-positive-integer? timeout-ms)
-                                 timeout-ms
-                                 (inexact->exact (floor timeout-ms)))
-                             working-dir
-                             (if (symbol? capability)
-                                 capability
-                                 (string->symbol capability))
-                             (if (exact-nonnegative-integer? schema-version)
-                                 schema-version
-                                 IPC-SCHEMA-VERSION)))))))
+                (make-ipc-request request-id
+                                  tool-name
+                                  arguments
+                                  (if (exact-positive-integer? timeout-ms)
+                                      timeout-ms
+                                      (inexact->exact (floor timeout-ms)))
+                                  working-dir
+                                  (if (symbol? capability)
+                                      capability
+                                      (string->symbol capability))
+                                  (if (exact-nonnegative-integer? schema-version)
+                                      schema-version
+                                      IPC-SCHEMA-VERSION)))))))
 
 (define (positive-timeout? v)
   (and (real? v) (positive? v)))
@@ -195,7 +235,8 @@
          IPC-MAX-RESPONSE-BYTES
          IPC-DEFAULT-TIMEOUT-MS)
 
-(provide ipc-request
+(provide make-ipc-request
+         ipc-request
          ipc-request?
          ipc-request-request-id
          ipc-request-tool-name
@@ -203,7 +244,8 @@
          ipc-request-timeout-ms
          ipc-request-working-dir
          ipc-request-capability
-         ipc-request-schema-version)
+         ipc-request-schema-version
+         ipc-request-trusted-working-dir)
 
 (provide ipc-response
          ipc-response?

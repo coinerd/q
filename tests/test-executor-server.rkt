@@ -30,7 +30,7 @@
                   ipc-response-content
                   ipc-response-error-message
                   ipc-request->jsexpr
-                  ipc-request
+                  make-ipc-request
                   IPC-SCHEMA-VERSION)
          "../sandbox/executor-server.rkt"
          "../sandbox/worker-dispatch.rkt")
@@ -264,13 +264,13 @@
 
     (test-case "process-ipc-request dispatches correctly"
       (define req
-        (ipc-request "w2-test"
-                     "bash"
-                     (hasheq 'command "echo w2-extraction-test")
-                     30000
-                     #f
-                     'execute-tools
-                     IPC-SCHEMA-VERSION))
+        (make-ipc-request "w2-test"
+                          "bash"
+                          (hasheq 'command "echo w2-extraction-test")
+                          30000
+                          #f
+                          'execute-tools
+                          IPC-SCHEMA-VERSION))
       (define resp (process-ipc-request req))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (ipc-response-request-id resp) "w2-test")
@@ -278,13 +278,13 @@
 
     (test-case "serialize-response produces valid JSON"
       (define req
-        (ipc-request "serial-test"
-                     "bash"
-                     (hasheq 'command "echo test")
-                     30000
-                     #f
-                     'execute-tools
-                     IPC-SCHEMA-VERSION))
+        (make-ipc-request "serial-test"
+                          "bash"
+                          (hasheq 'command "echo test")
+                          30000
+                          #f
+                          'execute-tools
+                          IPC-SCHEMA-VERSION))
       (define resp (process-ipc-request req))
       (define json-str (serialize-response resp))
       (check-not-false (string->jsexpr json-str) "output is valid JSON"))))

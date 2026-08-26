@@ -131,6 +131,38 @@
       (check-equal? (parsed-gsd-command-canonical-name r) "/go")
       (check-equal? (parsed-gsd-command-args r) ""))
 
+    ;; ── v1.00.19 W3 (BUG-0031): /go allow-stale escape hatch ──
+    (test-case "allow-stale: /go allow-stale is accepted as a flag"
+      (check-true (command-allow-stale? "allow-stale")))
+
+    (test-case "allow-stale: /go 3 allow-stale → wave intent 3 AND override #t"
+      ;; the trailing token is a flag, not the wave argument
+      (check-equal? (command-wave-intent "3 allow-stale") 3)
+      (check-true (command-allow-stale? "3 allow-stale")))
+
+    (test-case "allow-stale: combined with a timeout flag still parses"
+      (check-equal? (command-wave-intent "--wave-timeout=60 3 allow-stale") 3)
+      (check-true (command-allow-stale? "--wave-timeout=60 3 allow-stale")))
+
+    (test-case "allow-stale: rejected without the stale condition (exact token only)"
+      ;; no flag at all
+      (check-false (command-allow-stale? ""))
+      (check-false (command-allow-stale? "3"))
+      ;; near-misses must NOT count as an explicit operator decision
+      (check-false (command-allow-stale? "allow_stale"))
+      (check-false (command-allow-stale? "allowstale"))
+      (check-false (command-allow-stale? "-allow-stale"))
+      (check-false (command-allow-stale? "ALLOW-STALE"))
+      (check-false (command-allow-stale? "allow-stale-extra"))
+      ;; not trailing → still a flag member of the arg string, wave intent intact
+      (check-equal? (command-wave-intent "allow-stale 3") 3))
+
+    (test-case "allow-stale: /go parsing keeps wave-arg text intact"
+      (define r (parse-gsd-command "/go" "/go 3 allow-stale"))
+      (check-pred gsd-cmd-go? r)
+      (check-equal? (gsd-cmd-go-wave-arg r) "3 allow-stale")
+      (check-true (command-allow-stale? (gsd-cmd-go-wave-arg r))))
+
     ;; ── All parsed commands are also parsed-gsd-command? ──
     (test-case "subtypes satisfy parsed-gsd-command?"
       (for ([cmd

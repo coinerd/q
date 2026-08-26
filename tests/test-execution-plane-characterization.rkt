@@ -40,7 +40,7 @@
       (define gw (start-mock-worker))
       (check-true (gateway-alive? gw) "worker should be alive after start")
       (sleep 0.2) ; let worker initialize
-      (define req (ipc-request "ping-1" "ping" (hasheq) 5000 #f 'read-only 1))
+      (define req (make-ipc-request "ping-1" "ping" (hasheq) 5000 #f 'read-only 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (gateway-shutdown! gw))
@@ -49,7 +49,8 @@
     (test-case "send-request! round-trip returns ok status"
       (define gw (start-mock-worker))
       (sleep 0.1)
-      (define req (ipc-request "rt-1" "bash" (hasheq 'command "echo test") 5000 #f 'shell-exec 1))
+      (define req
+        (make-ipc-request "rt-1" "bash" (hasheq 'command "echo test") 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-equal? (ipc-response-content resp) "bash")
@@ -61,7 +62,7 @@
       (check-true (gateway-alive? gw) "alive after start")
       (sleep 0.1)
       ;; Verify it can handle a request while alive
-      (define req (ipc-request "life-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "life-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       ;; Shutdown
@@ -73,7 +74,7 @@
     (test-case "worker response preserves request-id"
       (define gw (start-mock-worker))
       (sleep 0.1)
-      (define req (ipc-request "my-unique-id-123" "git" (hasheq) 5000 #f 'git-write 1))
+      (define req (make-ipc-request "my-unique-id-123" "git" (hasheq) 5000 #f 'git-write 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-request-id resp) "my-unique-id-123")
       (check-equal? (ipc-response-status resp) 'ok)
@@ -89,7 +90,7 @@
       (sleep 0.2)
       (check-true (gateway-alive? gw2) "new worker is alive after restart")
       ;; New worker should respond
-      (define req (ipc-request "restart-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "restart-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw2 req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (gateway-shutdown! gw2))
@@ -100,7 +101,7 @@
       (sleep 0.1)
       (for ([i (in-range 5)])
         (define req
-          (ipc-request (format "seq-~a" i) (format "tool-~a" i) (hasheq) 5000 #f 'read-only 1))
+          (make-ipc-request (format "seq-~a" i) (format "tool-~a" i) (hasheq) 5000 #f 'read-only 1))
         (define resp (send-request! gw req 5000))
         (check-equal? (ipc-response-status resp) 'ok)
         (check-equal? (ipc-response-content resp) (format "tool-~a" i)))
@@ -111,7 +112,7 @@
       (define gw (start-mock-worker "real"))
       (sleep 0.1)
       (define req
-        (ipc-request "real-1" "bash" (hasheq 'command "echo chartest") 5000 #f 'shell-exec 1))
+        (make-ipc-request "real-1" "bash" (hasheq 'command "echo chartest") 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (check-true (string-contains? (ipc-response-content resp) "chartest"))
@@ -121,7 +122,7 @@
     (test-case "gateway-stderr collects worker stderr output"
       (define gw (start-mock-worker "stderr"))
       (sleep 0.2)
-      (define req (ipc-request "stderr-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
+      (define req (make-ipc-request "stderr-1" "bash" (hasheq) 5000 #f 'shell-exec 1))
       (define resp (send-request! gw req 5000))
       (check-equal? (ipc-response-status resp) 'ok)
       (sleep 0.1)
@@ -133,7 +134,7 @@
     (test-case "timeout response for slow worker"
       (define gw (start-mock-worker "slow"))
       (sleep 0.2)
-      (define req (ipc-request "timeout-1" "bash" (hasheq) 100 #f 'shell-exec 1))
+      (define req (make-ipc-request "timeout-1" "bash" (hasheq) 100 #f 'shell-exec 1))
       (define resp (send-request! gw req 100))
       (check-equal? (ipc-response-status resp) 'timeout)
       (gateway-shutdown! gw))))
