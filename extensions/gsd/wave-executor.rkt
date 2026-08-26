@@ -595,6 +595,8 @@
           '()
           'backstop-logged?
           #f
+          'diversity-withheld-logged?
+          #f
           'stall-reason
           #f
           'stall-repeats
@@ -631,6 +633,8 @@
             (hash-ref st 'soft-sent?)
             'backstop-logged?
             (hash-ref st 'backstop-logged?)
+            'diversity-withheld-logged?
+            (hash-ref st 'diversity-withheld-logged? #f)
             'stall-reason
             (hash-ref st 'stall-reason)
             'stall-repeats
@@ -694,6 +698,24 @@
           (values c s)
           (values best-count best-sig)))))
 
+;; Distinct-signature count of the window (hand-rolled: no racket/list).
+(define (window-distinct-count sigs)
+  (let loop ([xs sigs]
+             [seen '()])
+    (cond
+      [(null? xs) (length seen)]
+      [(member (car xs) seen) (loop (cdr xs) seen)]
+      [else (loop (cdr xs) (cons (car xs) seen))])))
+
+;; Is the window DIVERSE (healthy exploration)? A signature-cycling
+;; livelock rotates a handful of distinct calls to dodge the repetition
+;; limit; genuine deep analysis streams mostly-distinct calls. BUG-0037
+;; W3 live false-kill: a read-heavy wave legitimately crossed the 300-call
+;; backstop with an ever-changing window — the backstop must only kill
+;; CYCLING, not exploring.
+(define (window-diverse? sigs wsize)
+  (>= (window-distinct-count sigs) (max 2 (quotient wsize 3))))
+
 ;; Stateful watchdog over a single attempt/session. One soft injection per
 ;; session (not per call): the 'soft-stall? flag latches once tripped.
 ;; The host (go-orchestrator) observes tool batches through
@@ -720,8 +742,10 @@
 ;; Fold one batch of records into the watchdog and classify the outcome.
 ;;   'hard-stall — (a) one signature repeated ≥ hard-limit times within the
 ;;                 window (repetition livelock), or (b) the absolute backstop
-;;                 of mutation-free calls reached (signature-cycling
-;;                 livelock). Checked FIRST: an executor deep past every
+;;                 of mutation-free calls reached WITH a non-diverse window
+;;                 (signature-cycling livelock; a diverse window is healthy
+;;                 exploration and is never killed by the backstop).
+;;                 Checked FIRST: an executor deep past every
 ;;                 limit must fail, not be re-steered. The trip reason is
 ;;                 recorded in the snapshot ('stall-reason).
 ;;   'soft-stall — one signature repeated ≥ soft-limit times within the
@@ -748,6 +772,14 @@
   (define leader-tool (and leader-sig (car (string-split leader-sig "|"))))
   (define (commit! st)
     (set-box! (stall-watchdog-state wd) st))
+  (when (and backstop
+             (>= since backstop)
+             (window-diverse? (hash-ref st1 'window) wsize)
+             (not (hash-ref st1 'diversity-withheld-logged?)))
+    (log-info
+     "gsd mutation-stall watchdog: ~a mutation-free calls but window is diverse — exploration, not cycling; backstop withheld"
+     since)
+    (commit! (hash-set st1 'diversity-withheld-logged? #t)))
   (cond
     [(and hard wsize (>= max-repeat hard))
      (commit! (hash-set* st1
@@ -760,7 +792,10 @@
                          'stall-tool
                          leader-tool))
      'hard-stall]
-    [(and backstop (>= since backstop))
+    [(and backstop (>= since backstop) (not (window-diverse? (hash-ref st1 'window) wsize)))
+     ;; Backstop kills only signature-CYCLING (few distinct calls rotating
+     ;; past the repetition window). A diverse window means genuine
+     ;; exploration — keep watching, never kill. (BUG-0037 W3.)
      (commit! (hash-set* st1
                          'soft-sent?
                          #t

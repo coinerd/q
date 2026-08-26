@@ -111,7 +111,7 @@
           (cond
             [(>= i 300) #f]
             [else
-             (define r (stall-watchdog-observe! wd (list (read-call i))))
+             (define r (stall-watchdog-observe! wd (list (read-call (modulo i 3)))))
              (set! out (cons r out))
              (if (eq? r 'hard-stall)
                  #t
@@ -220,6 +220,21 @@
       (check-eq? (stall-watchdog-observe! wd (list (hasheq 'name 'bash) (read-call 100)))
                  'soft-stall
                  "identical-looking arguments-less records still steer"))
+
+    (test-case "LIVE REGRESSION: backstop never kills diverse exploration (BUG-0037 W3)"
+      ;; The W3 executor legitimately crossed 300 mutation-free DISTINCT
+      ;; reads scoping a read-heavy wave; the count-only backstop killed
+      ;; it mid-analysis. Diverse windows must withhold the backstop.
+      (define wd (make-stall-watchdog))
+      (define all-ok? #t)
+      (for ([i (in-range 500)])
+        (unless (eq? (stall-watchdog-observe! wd (list (read-call (+ 500 i)))) 'ok)
+          (set! all-ok? #f)))
+      (check-true all-ok? "500 distinct reads: always ok, forever")
+      (define snap (stall-watchdog-snapshot wd))
+      (check-false (hash-ref snap 'stall-reason))
+      (check-true (>= (hash-ref snap 'calls-since-mutation) 300)
+                  "well past the backstop and still alive"))
 
     (test-case "#f limits disable their channel; fully inert watchdog"
       (define wd-none (make-stall-watchdog #:soft-limit #f #:hard-limit #f #:backstop #f))
