@@ -66,7 +66,7 @@
                   tool-result-part-tool-call-id
                   tool-result-part-content
                   tool-result-part-is-error?)
-         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-id)
+         (only-in "../../util/tool/tool-types.rkt" tool-call-name tool-call-id tool-call-arguments)
          (only-in "../layer-adapters.rkt" permission-config?)
          (only-in "../tool-coordinator.rkt"
                   handle-tool-calls-pending/outcome
@@ -273,10 +273,14 @@
   ;; v0.99.84: Tool-result extraction delegated to Runtime via hook parameter.
   ;; The hook is set by the wiring layer to call maybe-auto-extract-tool-results!.
   ;; Agent Core constructs the extractable messages but does not own the extraction logic.
-  (define tcid->name
+  ;; BUG-0037 W2: carry the call ARGUMENTS through to the hook, not just
+  ;; the name — the stall watchdog signature is name+arguments, and
+  ;; arguments-less records collapsed every bash call into one signature
+  ;; ("bash|"), killing healthy executors at the repetition limit.
+  (define tcid->info
     (for/hash ([tc (in-list current-tool-calls)])
       (define tcid (tool-call-id tc))
-      (values (or tcid "") (tool-call-name tc))))
+      (values (or tcid "") (cons (tool-call-name tc) (tool-call-arguments tc)))))
   (define extractable-msgs
     (for/list ([m (in-list tool-result-msgs)])
       (define parts (message-content m))
@@ -284,7 +288,8 @@
         (for/or ([p (in-list parts)]
                  #:when (tool-result-part? p))
           (tool-result-part-tool-call-id p)))
-      (define tool-name (hash-ref tcid->name (or tcid "") "unknown"))
+      (define info (hash-ref tcid->info (or tcid "") (cons "unknown" #f)))
+      (define tool-name (car info))
       (define content-str
         (string-join (for/list ([p (in-list parts)]
                                 #:when (tool-result-part? p))
@@ -293,7 +298,7 @@
                            c
                            (format "~a" c)))
                      "\n"))
-      (hasheq 'content content-str 'name tool-name)))
+      (hasheq 'content content-str 'name tool-name 'arguments (cdr info))))
   ((current-post-tool-result-hook) extractable-msgs
                                    (loop-infra-session-id infra)
                                    (loop-infra-log-path infra))

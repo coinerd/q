@@ -177,6 +177,50 @@
       (check-false (memq 'soft-stall results)
                    "6 legit re-runs spread across other calls stay under even the steer line"))
 
+    (test-case "LIVE REGRESSION: distinct long commands sharing a cd-prefix never collapse"
+      ;; BUG-0037 W2 false-kill: the 64-char arg truncation made every
+      ;; `cd /home/user/src/q-agent/q && <cmd>` bash call the SAME
+      ;; signature; 15 diverse commands tripped hard-limit 15 as
+      ;; "repeating 'bash'". Full-fidelity signatures must keep them
+      ;; distinct.
+      (define wd (make-stall-watchdog))
+      (define prefix "cd /home/user/src/q-agent/q && ")
+      (for ([i (in-range 25)])
+        (check-eq? (stall-watchdog-observe!
+                    wd
+                    (list (hasheq 'name
+                                  'bash
+                                  'arguments
+                                  (hasheq 'command
+                                          (string-append prefix "echo output-" (number->string i))))))
+                   'ok))
+      (define snap (stall-watchdog-snapshot wd))
+      (check-false (hash-ref snap 'stall-reason) "25 prefix-sharing commands are NOT repetition"))
+
+    (test-case "LIVE REGRESSION: string-form arguments stay distinct per command"
+      ;; Provider fallback path: unparseable tool-call JSON leaves
+      ;; arguments as a raw string. Distinct strings must hash apart.
+      (define wd (make-stall-watchdog))
+      (for ([i (in-range 20)])
+        (check-eq?
+         (stall-watchdog-observe! wd (list (hasheq 'name 'bash 'arguments (format "{bad json ~a" i))))
+         'ok))
+      (check-false (hash-ref (stall-watchdog-snapshot wd) 'stall-reason)))
+
+    (test-case "missing arguments are a DOCUMENTED degenerate mode (upstream always sends them)"
+      ;; Hook-shape regression guard: records with NO arguments share the
+      ;; "" digest, so repeated arguments-less bash calls look identical.
+      ;; That is the pre-W2 false-kill mode; the fix lives upstream —
+      ;; step-executor now always provides 'arguments. The watchdog's
+      ;; defensive contract here: identical-looking calls DO trip (blind
+      ;; killing is safer than not watching at all).
+      (define wd (make-stall-watchdog))
+      (for ([i (in-range 7)])
+        (check-eq? (stall-watchdog-observe! wd (list (hasheq 'name 'bash) (read-call i))) 'ok))
+      (check-eq? (stall-watchdog-observe! wd (list (hasheq 'name 'bash) (read-call 100)))
+                 'soft-stall
+                 "identical-looking arguments-less records still steer"))
+
     (test-case "#f limits disable their channel; fully inert watchdog"
       (define wd-none (make-stall-watchdog #:soft-limit #f #:hard-limit #f #:backstop #f))
       (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
