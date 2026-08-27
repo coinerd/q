@@ -1,3 +1,86 @@
+## v1.00.21 — 2026-08-28
+
+Released 2026-08-28.
+
+> v1.00.21: GSD observability + release-race hardening — campaign
+> cost/budget tracking (BUG-0039), notification sinks (BUG-0040),
+> wave-doc lint at `/go` (BUG-0041), go-orchestrator decomposition
+> (BUG-0042), TUI error surface (BUG-0043), configurable stall
+> thresholds (BUG-0044), idempotent release publish (BUG-0045).
+> Campaign acceptance evidence:
+> `docs/reports/GSD-OBSERVABILITY-BAKE-v1.00.21.md`.
+
+### Features
+
+- **BUG-0044 — stall-watchdog thresholds are runtime-configurable.**
+  `gsd.watchdog.soft-limit`, `hard-limit`, `window`, `abs-backstop` in
+  the settings file re-tune the watchdog with no source edits; the
+  startup log emits the effective values (and their source) once per
+  wave; invalid values fall back to defaults (8/15/30/300), never crash.
+- **BUG-0043 — stall/error text renders in the transcript error
+  surface.** An injected stall kill produces exactly one `[SYS]
+  [ERROR]` transcript entry via a typed system-error event; the message
+  (prompt) surface stays clean; done-class outcomes are unaffected.
+- **BUG-0045 — release pipeline race hardened, publish idempotent.**
+  `release.yml` gains a concurrency group keyed on the tag ref; the
+  publish path re-verifies assets before declaring success and no-ops
+  on an already-published tag (verified no-op success instead of 422 +
+  untagged draft residue).
+- **BUG-0041 — wave docs linted at `/go` entry.** Missing
+  Files/Verify/Done sections (and non-canonical status headers) are
+  named violations; the verdict is stored as durable campaign evidence
+  and carried into the executor prompt; lint is advisory and never
+  blocks execution.
+- **BUG-0039 — campaign cost tracking + budget ceiling.** Usage
+  metadata lands in attempt/wave/campaign records (`usage-missing` when
+  absent, never zeros); `gsd.campaign.max-cost` (settings key) pauses
+  the campaign durably with a named reason; raising the ceiling resumes
+  cleanly.
+- **BUG-0040 — campaign notification sinks.** Opt-in sinks resolved
+  from settings emit campaign id, wave index, kind, reason, and spend
+  on wave-done/budget-pause/terminal transitions; a raising sink never
+  fails a transition; a misconfigured webhook warns once and is
+  skipped; silent by default outside tmux.
+- **BUG-0042 — go-orchestrator decomposed.** 2566→1460 lines and
+  91→23 top-level defines: stall-policy, infra-retry-policy,
+  freshness, attempt-artifacts, and campaign-budgets extracted into
+  their own modules; a baseline fixture + contract suite pin the file
+  under target (≤ 1500 lines).
+
+### Breaking / Behavior Changes
+
+- Stall thresholds are now read from settings (defaults unchanged:
+  8/15/30/300); editing source constants is no longer the tuning path.
+- `/go` records a wave-doc lint verdict in the campaign record and the
+  executor prompt.
+- A duplicate release run on an already-published tag now exits as a
+  verified no-op success instead of failing with 422.
+
+### Migration Notes
+
+- No config changes required. Optional new keys: `gsd.watchdog.*`
+  thresholds, `gsd.campaign.max-cost`, notification sink opt-ins.
+  Operators who tuned the watchdog by editing source should move to the
+  settings keys.
+
+### Testing
+
+- New suites: `test-stall-threshold-config.rkt` (12 tests),
+  `test-outcome-error-surface.rkt` (7), `test-release-workflow-contract.rkt`
+  (silent contract runner, exit 0), `test-wave-doc-lint.rkt` (9),
+  `test-campaign-cost-tracking.rkt` (4), `test-campaign-notifier.rkt`
+  (10); characterization suites across the decomposition stayed green;
+  fast suite fully green at the bake base (1147 files / 16615 tests at
+  the W6 checkpoint).
+
+### Operational / Release
+
+- Tag `v1.00.21` (annotated); artifacts via `release-core.yml` (tarball
+  + manifest); first release through the concurrency-grouped,
+  idempotent-publish pipeline it ships. Bugs INDEX: BUG-0039…BUG-0045
+  → fixed-in v1.00.21. After merge, restart q before any further `/go`
+  (v1.00.19 freshness guard).
+
 ## v1.00.20 — 2026-08-26
 
 Released 2026-08-26.
