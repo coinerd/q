@@ -66,6 +66,66 @@
                exact-nonnegative-integer?
                (or/c #f exact-nonnegative-integer?)
                void?)]
+          ;; v1.00.22 W5 (BUG-0039): usage accounting & budget ceilings
+          [usage-datum
+           (-> (or/c #f number?)
+               (or/c #f number?)
+               (or/c #f number?)
+               (or/c #f (and/c real? positive?))
+               any/c
+               usage-datum?)]
+          [usage-datum? (-> any/c boolean?)]
+          [usage-datum-input-tokens (-> usage-datum? (or/c #f number?))]
+          [usage-datum-output-tokens (-> usage-datum? (or/c #f number?))]
+          [usage-datum-total-tokens (-> usage-datum? (or/c #f number?))]
+          [usage-datum-cost-usd (-> usage-datum? (or/c #f (and/c real? positive?)))]
+          [usage-datum-estimated? (-> usage-datum? any/c)]
+          [usage-summary? (-> any/c boolean?)]
+          [usage-summary-input-tokens (-> usage-summary? (or/c #f number?))]
+          [usage-summary-output-tokens (-> usage-summary? (or/c #f number?))]
+          [usage-summary-total-tokens (-> usage-summary? (or/c #f number?))]
+          [usage-summary-cost-usd (-> usage-summary? (or/c #f real?))]
+          [usage-summary-attempts-with-usage (-> usage-summary? exact-nonnegative-integer?)]
+          [usage-summary-missing-attempts (-> usage-summary? exact-nonnegative-integer?)]
+          [stamp-wave-usage!
+           (-> campaign-record?
+               exact-nonnegative-integer?
+               (or/c #f usage-datum? 'usage-missing)
+               void?)]
+          [wave-usage-summary (-> campaign-wave? usage-summary?)]
+          [wave-usage-input-tokens (-> campaign-wave? (or/c #f number?))]
+          [wave-usage-output-tokens (-> campaign-wave? (or/c #f number?))]
+          [wave-usage-total-tokens (-> campaign-wave? (or/c #f number?))]
+          [wave-usage-cost-usd (-> campaign-wave? (or/c #f real?))]
+          [wave-usage-source (-> campaign-wave? symbol?)]
+          [wave-usage-missing-attempts (-> campaign-wave? exact-nonnegative-integer?)]
+          [campaign-usage-summary (-> campaign-record? usage-summary?)]
+          [campaign-budget-pause
+           (-> (or/c 'max-cost 'max-tokens)
+               real?
+               real?
+               string?
+               exact-integer?
+               campaign-budget-pause?)]
+          [campaign-budget-pause? (-> any/c boolean?)]
+          [campaign-budget-pause-kind (-> campaign-budget-pause? (or/c 'max-cost 'max-tokens))]
+          [campaign-budget-pause-ceiling (-> campaign-budget-pause? real?)]
+          [campaign-budget-pause-observed (-> campaign-budget-pause? real?)]
+          [campaign-budget-pause-message (-> campaign-budget-pause? string?)]
+          [campaign-budget-pause-timestamp (-> campaign-budget-pause? exact-integer?)]
+          [budget-pause-violation?
+           (-> campaign-record?
+               (or/c #f (and/c real? positive?))
+               (or/c #f exact-positive-integer?)
+               (or/c #f campaign-budget-pause?))]
+          [budget-pause-still-violated?
+           (-> campaign-budget-pause?
+               (or/c #f (and/c real? positive?))
+               (or/c #f exact-positive-integer?)
+               boolean?)]
+          [pause-campaign-for-budget! (-> campaign-record? campaign-budget-pause? void?)]
+          [clear-budget-pause! (-> campaign-record? void?)]
+          [campaign-record-budget-pause (-> campaign-record? (or/c #f campaign-budget-pause?))]
           [migrate-campaign! (-> path-string? campaign-record?)]
           [make-campaign-manifest
            (-> exact-nonnegative-integer?
@@ -247,7 +307,18 @@
                ;; from the prior executor session when it died on an infra
                ;; failure ("" = none). Consumed by the next attempt's prompt.
                [attempt-context #:auto]
-               [artifact-ledger #:auto])
+               [artifact-ledger #:auto]
+               ;; v1.00.22 W5 (BUG-0039): cumulative per-wave usage
+               ;; (sum over stamped attempts). The struct-level shared
+               ;; #:auto-value "" applies; ALL reads go through the
+               ;; wave-usage-* normalizing accessors below ("" → #f),
+               ;; mirroring the wave-artifact-ledger pattern.
+               [usage-input-tokens #:auto]
+               [usage-output-tokens #:auto]
+               [usage-total-tokens #:auto]
+               [usage-cost-usd #:auto]
+               [usage-source #:auto]
+               [usage-missing-attempts #:auto])
   #:transparent
   #:mutable
   #:constructor-name make-campaign-wave
@@ -274,7 +345,23 @@
   (make-campaign-wave index title status attempt-count current-attempt))
 
 ;; A single run attempt; fence-token guards stale results.
-(struct campaign-attempt (id fence-token started-at) #:transparent)
+;; v1.00.22 W5 (BUG-0039): per-attempt cost/token telemetry. Fields are
+;; stamped at attempt boundaries from loop-result usage metadata when
+;; present. usage-source : #f (unstamped) | 'provider | 'provider-estimated
+;; | 'usage-missing. When usage is absent the source is 'usage-missing and
+;; the token/cost fields stay #f — honest accounting, NEVER faked zeros.
+;; #:auto keeps the 3-arg constructor (and every existing caller) valid;
+;; legacy records deserialize with #f usage (absent ≠ zero).
+(struct campaign-attempt
+        (id fence-token
+            started-at
+            [input-tokens #:auto #:mutable]
+            [output-tokens #:auto #:mutable]
+            [total-tokens #:auto #:mutable]
+            [cost-usd #:auto #:mutable]
+            [usage-source #:auto #:mutable])
+  #:transparent
+  #:auto-value #f)
 
 ;; Durable cancellation request (D5).
 (struct campaign-cancellation (reason timestamp)
@@ -306,7 +393,12 @@
                  updated-at
                  [build-version #:auto]
                  [main-head-sha #:auto]
-                 [stale-override #:auto])
+                 [stale-override #:auto]
+                 ;; v1.00.22 W5 (BUG-0039): durable budget pause. Set when
+                 ;; cumulative spend crossed gsd.campaign.max-cost /
+                 ;; gsd.campaign.max-tokens; cleared when the operator raises
+                 ;; the ceiling and resumes. #f (default) = no pause.
+                 [budget-pause #:auto])
   #:transparent
   #:mutable
   #:auto-value #f
@@ -426,6 +518,215 @@
     (set-campaign-wave-current-attempt!
      w
      (campaign-attempt (format "attempt-~a" new-count) fence-token (current-seconds)))))
+
+;; ============================================================
+;; v1.00.22 W5 (BUG-0039): usage accounting & budget ceilings
+;; ============================================================
+
+;; A single usage observation extracted from loop-result metadata.
+;;   input/output/total-tokens : number or #f (#f = not reported)
+;;   cost-usd                  : positive real or #f (#f = unknown — the
+;;                               provider did not report a cost)
+;;   estimated?                : #t when tokens were locally estimated
+(struct usage-datum (input-tokens output-tokens total-tokens cost-usd estimated?) #:transparent)
+
+;; Aggregated spend for a wave or the whole campaign.
+;;   missing-attempts       : attempts that ended with usage-missing
+;;   attempts-with-usage    : attempts that reported real usage
+;;   cost-usd               : known-cost sum, or #f when ANY counted
+;;                            attempt had unknown cost (never fake zeros)
+(struct usage-summary
+        (input-tokens output-tokens total-tokens cost-usd attempts-with-usage missing-attempts)
+  #:transparent)
+
+;; Durable budget pause (see campaign-record budget-pause field).
+;;   kind     : 'max-cost | 'max-tokens
+;;   ceiling  : the crossed ceiling value
+;;   observed : the spend that crossed it
+;;   message  : operator-facing text naming the ceiling + how to raise it
+(struct campaign-budget-pause (kind ceiling observed message timestamp) #:transparent)
+
+;; Normalizing accessors: struct #:auto-value "" must never leak.
+(define (wave-usage-field w raw)
+  (and (number? raw) raw))
+
+(define (wave-usage-input-tokens w)
+  (wave-usage-field w (campaign-wave-usage-input-tokens w)))
+(define (wave-usage-output-tokens w)
+  (wave-usage-field w (campaign-wave-usage-output-tokens w)))
+(define (wave-usage-total-tokens w)
+  (wave-usage-field w (campaign-wave-usage-total-tokens w)))
+(define (wave-usage-cost-usd w)
+  (define c (campaign-wave-usage-cost-usd w))
+  (and (real? c) c))
+(define (wave-usage-source w)
+  (define s (campaign-wave-usage-source w))
+  (if (symbol? s) s 'none))
+(define (wave-usage-missing-attempts w)
+  (define n (campaign-wave-usage-missing-attempts w))
+  (if (exact-nonnegative-integer? n) n 0))
+
+(define (valid-token-value v)
+  (and (number? v) (exact-nonnegative-integer? v) v))
+(define (valid-cost-value v)
+  (and (real? v) (not (negative? v)) v))
+
+;; Stamp attempt + cumulative wave usage from one boundary observation.
+;;   usage = usage-datum  → real usage recorded (source 'provider or
+;;                          'provider-estimated when the datum is estimated)
+;;   usage = #f | 'usage-missing → the attempt is recorded usage-missing
+;;           with NO token/cost values (honest accounting: absent ≠ zero).
+;; The current attempt must exist (begin-attempt! ran). Mutates rec in
+;; place; the CALLER persists. Idempotence: stamping twice would double —
+;; the orchestrator stamps exactly once per attempt boundary.
+(define (stamp-wave-usage! rec wave-idx usage)
+  (for ([w (campaign-record-waves rec)]
+        #:when (= (campaign-wave-index w) wave-idx))
+    (define attempt (campaign-wave-current-attempt w))
+    (cond
+      [(not attempt) (void)]
+      [(usage-datum? usage)
+       (define src (if (usage-datum-estimated? usage) 'provider-estimated 'provider))
+       (set-campaign-attempt-input-tokens! attempt
+                                           (valid-token-value (usage-datum-input-tokens usage)))
+       (set-campaign-attempt-output-tokens! attempt
+                                            (valid-token-value (usage-datum-output-tokens usage)))
+       (set-campaign-attempt-total-tokens! attempt
+                                           (valid-token-value (usage-datum-total-tokens usage)))
+       (set-campaign-attempt-cost-usd! attempt (valid-cost-value (usage-datum-cost-usd usage)))
+       (set-campaign-attempt-usage-source! attempt src)
+       ;; cumulative wave totals: #f (unset) + n = n; #f (unknown) + n = #f
+       (define (accumulate old new)
+         (cond
+           [(not (number? old)) new]
+           [(not (number? new)) old]
+           [else (+ old new)]))
+       (define (accumulate-cost old new)
+         (cond
+           [(not (real? old)) (valid-cost-value new)]
+           [(valid-cost-value new) (+ old new)]
+           [else old]))
+       (set-campaign-wave-usage-input-tokens!
+        w
+        (accumulate (wave-usage-input-tokens w) (valid-token-value (usage-datum-input-tokens usage))))
+       (set-campaign-wave-usage-output-tokens!
+        w
+        (accumulate (wave-usage-output-tokens w)
+                    (valid-token-value (usage-datum-output-tokens usage))))
+       (set-campaign-wave-usage-total-tokens!
+        w
+        (accumulate (wave-usage-total-tokens w) (valid-token-value (usage-datum-total-tokens usage))))
+       (set-campaign-wave-usage-cost-usd!
+        w
+        (accumulate-cost (wave-usage-cost-usd w) (valid-cost-value (usage-datum-cost-usd usage))))
+       (set-campaign-wave-usage-source! w
+                                        (let ([prior (wave-usage-source w)])
+                                          (cond
+                                            [(or (eq? prior 'none) (not prior)) src]
+                                            [(eq? prior src) src]
+                                            [else 'mixed])))
+       (set-campaign-wave-usage-missing-attempts! w (wave-usage-missing-attempts w))]
+      [else
+       ;; usage absent → distinct usage-missing marker, never zeros
+       (set-campaign-attempt-usage-source! attempt 'usage-missing)
+       (set-campaign-wave-usage-missing-attempts! w (add1 (wave-usage-missing-attempts w)))
+       (when (eq? (wave-usage-source w) 'none)
+         (set-campaign-wave-usage-source! w 'usage-missing))]))
+  (set-campaign-record-updated-at! rec (current-seconds)))
+
+;; Per-wave spend summary.
+(define (wave-usage-summary w)
+  (define in (wave-usage-input-tokens w))
+  (define out (wave-usage-output-tokens w))
+  (define tot (wave-usage-total-tokens w))
+  (usage-summary in
+                 out
+                 tot
+                 (wave-usage-cost-usd w)
+                 (if (or in out tot) 1 0)
+                 (wave-usage-missing-attempts w)))
+
+;; Whole-campaign spend summary (sums over waves).
+(define (campaign-usage-summary rec)
+  (for/fold ([in 0]
+             [out 0]
+             [tot 0]
+             [cost-known 0.0]
+             [cost-fully-known? #t]
+             [with-usage 0]
+             [missing 0])
+            ([w (campaign-record-waves rec)])
+    (define s (wave-usage-summary w))
+    (values (+ in (or (usage-summary-input-tokens s) 0))
+            (+ out (or (usage-summary-output-tokens s) 0))
+            (+ tot (or (usage-summary-total-tokens s) 0))
+            (+ cost-known (or (usage-summary-cost-usd s) 0.0))
+            (and cost-fully-known? (real? (usage-summary-cost-usd s)))
+            (+ with-usage (usage-summary-attempts-with-usage s))
+            (+ missing (usage-summary-missing-attempts s)))))
+
+;; Operator-facing pause message: names the ceiling and how to raise it.
+(define (budget-pause-message kind ceiling observed)
+  (case kind
+    [(max-cost)
+     (format
+      "campaign paused: budget ceiling gsd.campaign.max-cost = $~a crossed (spent $~a so far). Raise gsd.campaign.max-cost in your project/user settings and resume with /go to continue — nothing is dropped."
+      (~r ceiling #:precision '(= 2))
+      (~r observed #:precision '(= 2)))]
+    [else
+     (format
+      "campaign paused: token ceiling gsd.campaign.max-tokens = ~a crossed (used ~a tokens so far). Raise gsd.campaign.max-tokens in your project/user settings and resume with /go to continue — nothing is dropped."
+      ceiling
+      observed)]))
+
+;; Pure ceiling check against the durable cumulative totals.
+;; Returns #f (within budget) or a campaign-budget-pause.
+;;   max-cost   : positive real or #f (disabled / unknown cost never trips)
+;;   max-tokens : positive integer or #f (disabled)
+(define (budget-pause-violation? rec max-cost max-tokens)
+  (define-values (in out tot cost-known cost-fully-known? with-usage missing)
+    (campaign-usage-summary rec))
+  (cond
+    [(and (real? max-cost)
+          (positive? max-cost)
+          cost-fully-known?
+          (real? cost-known)
+          (> cost-known max-cost))
+     (campaign-budget-pause 'max-cost
+                            max-cost
+                            cost-known
+                            (budget-pause-message 'max-cost max-cost cost-known)
+                            (current-seconds))]
+    [(and (exact-positive-integer? max-tokens) (> tot max-tokens))
+     (campaign-budget-pause 'max-tokens
+                            max-tokens
+                            tot
+                            (budget-pause-message 'max-tokens max-tokens tot)
+                            (current-seconds))]
+    [else #f]))
+
+;; Persist a budget pause on the record (durable — survives restarts).
+(define (pause-campaign-for-budget! rec pause)
+  (unless (campaign-budget-pause? pause)
+    (raise-argument-error 'pause-campaign-for-budget! "campaign-budget-pause?" pause))
+  (set-campaign-record-budget-pause! rec pause)
+  (set-campaign-record-updated-at! rec (current-seconds)))
+
+;; Is a previously-durable pause still in force under the CURRENT ceilings?
+;; Raising (or removing) the ceiling clears it; resume then continues.
+(define (budget-pause-still-violated? pause max-cost max-tokens)
+  (and
+   (campaign-budget-pause? pause)
+   (case (campaign-budget-pause-kind pause)
+     [(max-cost)
+      (and (real? max-cost) (positive? max-cost) (> (campaign-budget-pause-observed pause) max-cost))]
+     [else
+      (and (exact-positive-integer? max-tokens)
+           (> (campaign-budget-pause-observed pause) max-tokens))])))
+
+(define (clear-budget-pause! rec)
+  (set-campaign-record-budget-pause! rec #f)
+  (set-campaign-record-updated-at! rec (current-seconds)))
 
 ;; ============================================================
 ;; Initial migration truth (D3)
