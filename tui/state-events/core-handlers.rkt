@@ -377,6 +377,27 @@
                             (event-time evt)
                             (hash))))
 
+;; BUG-0043 (W2): non-'done wave-execution-outcomes from the go-orchestrator
+;; surface as typed error transcript entries (rendered by format-entry's
+;; 'system-error case as a distinct red [SYS] [ERROR] line). The payload
+;; carries the outcome kind + message verbatim, and this is the ONE copy of
+;; the outcome text — the conversation/message surface no longer repeats it.
+(define (handle-gsd-wave-outcome-error state evt)
+  (define payload (event-payload evt))
+  (define kind (hash-ref payload 'kind 'unknown))
+  (define message (hash-ref payload 'message ""))
+  (define wave-idx (hash-ref payload 'wave #f))
+  (define text
+    (cond
+      [(and (not (string=? message "")) wave-idx) (format "wave ~a [~a]: ~a" wave-idx kind message)]
+      [(not (string=? message "")) (format "[~a]: ~a" kind message)]
+      [else (format "wave outcome: ~a" kind)]))
+  (append-entry state
+                (make-entry 'system-error
+                            text
+                            (event-time evt)
+                            (hasheq 'outcome-error #t 'kind kind 'wave wave-idx))))
+
 (define (handle-gsd-plan-archived state evt)
   (define payload (event-payload evt))
   (define path (hash-ref payload 'path "?"))
@@ -516,6 +537,8 @@
 (register-event-reducer! "iteration.soft-warning" handle-iteration-soft-warning)
 (register-event-reducer! "exploration.progress" handle-exploration-progress)
 (register-event-reducer! "gsd.plan.archived" handle-gsd-plan-archived)
+;; BUG-0043 (W2): non-'done wave-execution-outcomes → [SYS] [ERROR] transcript entries.
+(register-event-reducer! "gsd.wave.outcome-error" handle-gsd-wave-outcome-error)
 (register-event-reducer! "context.mid-turn-over-budget" handle-context-mid-turn-over-budget)
 (register-event-reducer! "session.compact.started" handle-compaction-lifecycle)
 (register-event-reducer! "session.compact.completed" handle-compaction-lifecycle)

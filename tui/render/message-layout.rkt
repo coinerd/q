@@ -80,6 +80,13 @@
     [(assistant) (md-format-assistant raw-text width)]
     [(system)
      (list (styled-line (list (styled-segment (format "[SYS] ~a" raw-text) '(bright-black)))))]
+    ;; BUG-0043 (W2): campaign wave failures (stall kills, infra failures)
+    ;; render as a distinct red error line — visually separated from both
+    ;; assistant output and dim [SYS] notices. The text is the outcome
+    ;; message verbatim; the entry kind (not a marker string) carries the
+    ;; error semantics.
+    [(system-error)
+     (list (styled-line (list (styled-segment (format "[SYS] [ERROR] ~a" raw-text) '(bold red)))))]
     [(tool tool-result)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'name #f))
      (define renderer (and tool-name (lookup-custom-renderer-for-tool tool-name 'call)))

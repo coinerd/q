@@ -817,6 +817,18 @@
     (emit-gsd-event! 'gsd.campaign.infra-retry
                      (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs))))
 
+;; BUG-0043 (W2): a terminal wave-execution-outcome with kind != 'done must
+;; surface as a typed [SYS] [ERROR] transcript event — NOT as conversation/
+;; message-surface text. The TUI reducer (core-handlers.rkt) renders the
+;; payload's kind + message verbatim on the error surface. Best-effort: a bus
+;; failure must never break the campaign control flow.
+(define (emit-wave-outcome-error! wave-idx kind message)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "gsd: outcome-error event emission failed: ~a"
+                                            (exn-message e)))])
+    (emit-gsd-event! 'gsd.wave.outcome-error
+                     (hasheq 'wave wave-idx 'kind kind 'level "error" 'message (or message "")))))
+
 ;; "no wave target files changed: f1, f2" → '("f1" "f2"). The verifier
 ;; comma-space-joins the declared targets into its message; recover the list
 ;; so the retry prompt can name the files explicitly.
@@ -1789,6 +1801,9 @@
                             (campaign-result 'wave-cancelled '() "stale completion ignored")]
                            [else (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
             [(failed)
+             ;; BUG-0043 (W2): route the failure text to the typed error
+             ;; transcript surface; the conversation copy is gone.
+             (emit-wave-outcome-error! wave-idx outcome (wave-execution-outcome-message run-result))
              (mark-attempt-artifact-terminal!
               base-dir
               (campaign-plan-id active)
@@ -1907,17 +1922,23 @@
                  ;; Bound exhausted: fail closed with an aggregated message
                  ;; listing every failure timestamp (attempt not consumed —
                  ;; the durable wave stays pending and re-attemptable).
-                 (campaign-result
-                  'wave-cancelled
-                  '()
-                  (format
-                   (string-append "provider/network failure persisted after ~a automatic retries "
-                                  "(attempt not consumed); re-run /go when the provider is healthy. "
-                                  "Failures: ~a")
-                   (current-gsd-campaign-infra-retries)
-                   (string-join (for/list ([f (cdr (unbox infra-retry-state))])
-                                  (format "attempt ~a at ~a" (car f) (cadr f)))
-                                "; "))))]
+                 ;; BUG-0043 (W2): the terminal infra-failure text rides the
+                 ;; typed error transcript event.
+                 (begin
+                   (emit-wave-outcome-error! wave-idx
+                                             'infra-failed
+                                             (wave-execution-outcome-message run-result))
+                   (campaign-result
+                    'wave-cancelled
+                    '()
+                    (format (string-append
+                             "provider/network failure persisted after ~a automatic retries "
+                             "(attempt not consumed); re-run /go when the provider is healthy. "
+                             "Failures: ~a")
+                            (current-gsd-campaign-infra-retries)
+                            (string-join (for/list ([f (cdr (unbox infra-retry-state))])
+                                           (format "attempt ~a at ~a" (car f) (cadr f)))
+                                         "; ")))))]
             [(cancelled interrupted)
              (mark-attempt-artifact-terminal! base-dir
                                               (campaign-plan-id active)
@@ -1934,6 +1955,11 @@
              ;; error/timeout stop the campaign) and never emit a completion —
              ;; the durable record says interrupted, so a restart re-attempts
              ;; the wave (at-least-once, exactly-once event).
+             ;; BUG-0043 (W2): the stall/timeout text rides the typed error
+             ;; transcript event, not the conversation surface.
+             (emit-wave-outcome-error! wave-idx
+                                       'timed-out
+                                       (wave-execution-outcome-message run-result))
              (mark-attempt-artifact-terminal! base-dir
                                               (campaign-plan-id active)
                                               wave-idx
@@ -1945,6 +1971,9 @@
                                              timeout-retries)
                                      (wave-execution-outcome-message run-result)))]
             [else
+             ;; BUG-0043 (W2): unknown terminal outcome — same typed error
+             ;; transcript routing as the named failure branches.
+             (emit-wave-outcome-error! wave-idx outcome (wave-execution-outcome-message run-result))
              (mark-attempt-artifact-terminal!
               base-dir
               (campaign-plan-id active)
