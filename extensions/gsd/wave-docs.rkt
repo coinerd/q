@@ -72,7 +72,9 @@
           [missing-index-doc-paths (-> path-string? (listof wave-index-entry?) (listof string?))]
           [check-status-consistency (-> path-string? (listof status-divergence?))]
           [format-status-divergence-warning (-> status-divergence? string?)]
-          [resolve-status-precedence (-> string? string? string?)]))
+          [resolve-status-precedence (-> string? string? string?)]
+          [plan-format-deprecation-warnings (-> string? (listof string?))]
+          [plan-format-deprecation-warning-lines (-> path-string? (listof string?))]))
 
 ;; ============================================================
 ;; Constants
@@ -344,6 +346,62 @@
   (if doc
       (resolve-status-precedence (wave-index-entry-status e) (hash-ref doc 'status))
       (wave-index-entry-status e)))
+
+;; ============================================================
+;; Plan-format deprecation warnings (BUG-0035, W6)
+;; ============================================================
+
+;; Post-BUG-0023 both plan grammars remain first-class: the PLAN.md
+;; index (strict `- [Inbox] W0: Title → waves/W0-slug.md` rows, plus a
+;; relaxed status-less `- W0: Title` form) and the legacy INLINE
+;; `## Wave N:` sections. The index+status grammar is the one slated to
+;; survive; inline sections are on the removal path (docs/gsd-guide.md
+;; roadmap: removal targeted after v1.00.21). These warnings make the
+;; deprecated authoring forms LOUD without changing any behavior —
+;; loading and execution proceed exactly as today (non-fatal by
+;; design; BUG-0035).
+
+;; plan-format-deprecation-warnings : string? -> (listof string?)
+;; PURE. Given PLAN.md text, return one advisory warning per deprecated
+;; authoring form found:
+;;   * INLINE path — zero parsed index entries but at least one
+;;     `## Wave N:` section: exactly ONE warning naming the index
+;;     skeleton to migrate to.
+;;   * RELAXED rows — each status-less index row (`- W0: Title`, the
+;;     relaxed-index-line-rx form parse-plan-index itself accepts)
+;;     gets its own warning recommending the explicit `[Inbox]`
+;;     bracket. Strict rows start with '[' and cannot match that rx.
+;; The full index format (`- [Inbox] W0: Title → waves/W0-slug.md`)
+;; produces ZERO warnings. Never raises; callers print at will.
+(define (plan-format-deprecation-warnings md-text)
+  (define inline-warning
+    (if (and (null? (parse-plan-index md-text)) (> (count-inline-wave-sections md-text) 0))
+        (list
+         (string-append
+          "WARNING (deprecated plan format, BUG-0035): PLAN.md uses inline `## Wave N:` sections. "
+          "Inline sections are deprecated — removal targeted after v1.00.21. "
+          "Migrate to the PLAN.md index grammar, one row per wave: "
+          "- [Inbox] W0: Title → waves/W0-slug.md"))
+        '()))
+  (define relaxed-warnings
+    (for/list ([line (in-list (string-split md-text "\n"))]
+               #:when (regexp-match? relaxed-index-line-rx line))
+      (string-append "WARNING (deprecated index row, BUG-0035): `"
+                     (string-trim line)
+                     "` lacks a [Status] bracket. "
+                     "Add the explicit bracket, e.g. - [Inbox] W0: Title → waves/W0-slug.md")))
+  (append inline-warning relaxed-warnings))
+
+;; plan-format-deprecation-warning-lines : path-string? -> (listof string?)
+;; File-backed variant for command surfaces (/go, /gsd status): reads
+;; <base-dir>/.planning/PLAN.md and returns the deprecation warnings
+;; for its text. No plan file → no warnings (nothing loaded, nothing
+;; deprecated). Non-fatal: this never blocks a campaign.
+(define (plan-format-deprecation-warning-lines base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (if (not (file-exists? plan-path))
+      '()
+      (plan-format-deprecation-warnings (call-with-input-file plan-path port->string))))
 
 ;; ============================================================
 ;; PLAN.md index status update

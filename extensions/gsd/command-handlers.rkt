@@ -576,7 +576,7 @@
       text
       (string-append text "\n\n" (string-join warnings "\n"))))
 
-(define (prepare-go-campaign base-dir input-text plan validation divergence-warnings)
+(define (prepare-go-campaign base-dir input-text plan validation warnings)
   (with-handlers ([exn:fail:campaign-migration?
                    (lambda (e)
                      (hook-amend (hasheq 'text
@@ -634,7 +634,7 @@
                                 'text
                                 (append-divergence-warnings (format "Executing campaign from W~a..."
                                                                     next-wave)
-                                                            divergence-warnings))))])])))
+                                                            warnings))))])])))
 
 (define (handle-go-command base-dir input-text)
   ;; Report plan validation failures first. Repository identity becomes a hard
@@ -647,11 +647,14 @@
                              (format "/go blocked: no Git repository reachable from ~a." base-dir)))
          ;; BUG-0034 (W2): computed at /go validation time; advisory only —
          ;; divergences never block /go, they surface as named warnings.
+         ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
+         ;; relaxed status-less index rows) join the same advisory block.
          (prepare-go-campaign base-dir
                               input-text
                               plan
                               validation
-                              (status-divergence-warning-lines base-dir)))]))
+                              (append (status-divergence-warning-lines base-dir)
+                                      (plan-format-deprecation-warning-lines base-dir))))]))
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================
