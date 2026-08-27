@@ -26,7 +26,7 @@
 ;;   (3) these tests: auto-resume, bounded exhaustion, context hand-off,
 ;;       event observability, block formatting.
 ;;
-;; BUG-0037 W1 (v1.00.20): watchdog death during a wave with ZERO file
+;; BUG-0037 W1 (this release): watchdog death during a wave with ZERO file
 ;; mutations (exploration phase) is retryable infrastructure — the same
 ;; bounded auto-resume path as provider/network failures, with PRIOR
 ;; ATTEMPT CONTEXT and gsd.campaign.infra-retry events. Test (6) below

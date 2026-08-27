@@ -147,6 +147,6 @@ Use relative paths from the test file:
    `(current-load-relative-directory)` — never relative to
    `(current-directory)` (see Canonical Test-Runner Entry Point above)
 
-## Version 1.00.19
+## Version 1.00.20
 
-This documentation reflects v1.00.19.
+This documentation reflects v1.00.20.

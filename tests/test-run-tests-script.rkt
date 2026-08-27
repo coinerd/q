@@ -52,7 +52,7 @@
       (define content (file->string script-path))
       (check-not-false (string-contains? content "#lang racket/base")))
 
-    ;; BUG-0033 (v1.00.20 W5): the canonical runner is
+    ;; BUG-0033 (W5): the canonical runner is
     ;; q/scripts/run-tests.rkt; it must at least LOAD from an arbitrary
     ;; cwd (the wave-doc convention `cd <project-base>/q && racket
     ;; scripts/run-tests.rkt` additionally holds, but loading must not
@@ -63,7 +63,7 @@
           (system*/exit-code (find-executable-path "racket") (path->string script-path) "--help"))
         (check-equal? exit-code 0)))
 
-    ;; BUG-0033 (v1.00.20 W5): every tracked test file must be invocable
+    ;; BUG-0033 (W5): every tracked test file must be invocable
     ;; via `racket <file>` from ANY cwd (spot-check from the system temp
     ;; dir; broader battery in tests/test-cwd-independence.rkt).
     (test-case "tracked tests invocable from arbitrary cwd - spot-check (BUG-0033)"

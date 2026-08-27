@@ -166,7 +166,7 @@
    (define result (gui-apply-delta (ui-delta DELTA-UPDATE-MESSAGE '("id" "msg")) state))
    (check-eq? result state)))
 
-;; BUG-0033 (v1.00.20 W5): direct `racket <this-file>` invocation is a
+;; BUG-0033 (W5): direct `racket <this-file>` invocation is a
 ;; documented verify convention and must work from ANY cwd (all requires
 ;; are module-relative) and must EXIT NON-ZERO on failure.
 (module+ main

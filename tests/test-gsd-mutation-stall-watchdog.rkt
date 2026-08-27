@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; q/tests/test-gsd-mutation-stall-watchdog.rkt — GSD mutation-stall watchdog
-;; (#9513; v2 semantics per BUG-0037 / v1.00.20 W1)
+;; (#9513; v2 semantics per BUG-0037 / W1)
 ;;
 ;; v1.00.16 W3 attempt-2 made 92 read-only tool calls, never edited a file,
 ;; and nothing noticed until delivery verification (~40 min, ~$12). The v1
@@ -71,7 +71,7 @@
   (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
 (test-case "LIVE REGRESSION: repeated identical greps between reads never kill"
-  ;; v1.00.20 W2 attempt 1: killed at 4 calls for 3 identical greps.
+  ;; W2 attempt 1: killed at 4 calls for 3 identical greps.
   ;; Interleaved legitimate repetition must stay alive under 5/8.
   (define wd (make-stall-watchdog))
   (define (grep-call)
@@ -313,7 +313,7 @@
   (check-pred (lambda (s) (string-contains? (string-downcase s) "re-attempted")) msg))
 
 (test-case "stall-cause errors classify as RETRYABLE infra-failed (live-campaign regression)"
-  ;; v1.00.20 W2 attempt 1: the session layer converted the stall exn to a
+  ;; W2 attempt 1: the session layer converted the stall exn to a
   ;; loop-result 'error; the campaign then STOPPED instead of auto-retrying.
   (define r
     (prompt-run-result->outcome

@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; BUG-0037 v1.00.20 W1 — mutation-stall watchdog v2: a stall is
+;; BUG-0037 (W1) — mutation-stall watchdog v2: a stall is
 ;; REPETITION, not the mere absence of mutation.
 ;;
 ;;   * 70 DISTINCT reads → never trip (healthy exploration survives).
@@ -160,7 +160,7 @@
       (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
     (test-case "LIVE REGRESSION: repeated grep/test re-runs between reads stay alive"
-      ;; v1.00.20 W2 attempt 1 died at 4 calls: 3 identical greps tripped
+      ;; (W2) attempt 1 died at 4 calls: 3 identical greps tripped
       ;; hard-limit 3. Legitimate work repeats a call a handful of times
       ;; while working through results — that must NEVER kill.
       (define wd (make-stall-watchdog))

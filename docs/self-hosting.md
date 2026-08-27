@@ -131,6 +131,6 @@ is the primary self-hosting extension:
 (load-extension! ext-reg "path/to/extension.rkt" #:event-bus bus)
 ```
 
-## Version 1.00.19
+## Version 1.00.20
 
 This documentation reflects .00.17.
