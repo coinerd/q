@@ -3,6 +3,12 @@
 # F-15/W9 (#8773): Build exactly once, smoke before any publication,
 # draft then verify before promote, verify public after promote.
 #
+# BUG-0045 (v1.00.21 W3): duplicate tag-push triggers must converge, not
+# race — the draft job adopts an existing same-tag+commit draft, and
+# publish recognizes an already-published release, re-verifies its
+# assets, and succeeds as a no-op (see the caller release.yml
+# concurrency group that serializes same-tag runs).
+#
 # Caller must provide:
 #   - version: release version string (e.g., 0.99.52)
 #   - tag: git tag name (e.g., v0.99.52)
@@ -243,7 +249,7 @@ jobs:
           name: q-release-build-${{ inputs.version }}
           path: /tmp/release
 
-      - name: Create draft release
+      - name: Create or adopt draft release
         id: draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -251,22 +257,56 @@ jobs:
           VERSION="${{ inputs.version }}"
           TAG="${{ inputs.tag }}"
           COMMIT="${{ inputs.checkout-ref }}"
-          # Create draft release via API to capture ID directly.
-          # gh release create --draft uses an untagged-* placeholder, so
-          # releases/tags/$TAG lookup returns 404 for drafts.
-          RELEASE_NOTES=$(cat /tmp/release/release-notes.md)
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
-            --method POST \
-            -f tag_name="$TAG" \
-            -f target_commitish="$COMMIT" \
-            -f name="q v${VERSION}" \
-            --raw-field body="$RELEASE_NOTES" \
-            -F draft=true \
-            --jq .id)
-          echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
-          echo "Created draft release: ${RELEASE_ID}"
-          # Upload assets via API
           TARBALL="q-${VERSION}.tar.gz"
+
+          # BUG-0045 draft adoption: a cancelled twin run for this same
+          # tag (concurrency cancel-in-progress) may already have left a
+          # draft release for this exact tag+commit behind. Reuse it
+          # instead of creating a second draft that can never publish
+          # once the tag is claimed, and would strand an untagged draft
+          # for manual cleanup. Drafts are not addressable via
+          # releases/tags/$TAG (404 for drafts), so scan the release
+          # list for a draft matching tag_name + target_commitish.
+          RELEASE_ID=""
+          for page in 1 2 3 4 5; do
+            page_releases=$(gh api "repos/${{ github.repository }}/releases?per_page=100&page=${page}")
+            adopted_id=$(jq -r --arg tag "$TAG" --arg commit "$COMMIT" \
+              '.[] | select(.draft == true and .tag_name == $tag and .target_commitish == $commit) | .id' \
+              <<<"$page_releases" | head -n 1)
+            if [ -n "$adopted_id" ] && [ "$adopted_id" != "null" ]; then
+              RELEASE_ID="$adopted_id"
+              break
+            fi
+            [ "$(jq 'length' <<<"$page_releases")" -lt 100 ] && break
+          done
+
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Adopting existing draft release for ${TAG}@${COMMIT}: ${RELEASE_ID}"
+            # Same-named assets would 422 on upload; drop the adopted
+            # draft's stale copies first (the deterministic build makes
+            # the re-upload byte-identical, and verify-draft re-compares
+            # the uploaded bytes against the local artifact anyway).
+            adopted_release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
+            for asset_id in $(jq -r '.assets[].id' <<<"$adopted_release"); do
+              gh api --method DELETE "repos/${{ github.repository }}/releases/assets/$asset_id"
+            done
+          else
+            # Create draft release via API to capture ID directly.
+            # gh release create --draft uses an untagged-* placeholder, so
+            # releases/tags/$TAG lookup returns 404 for drafts.
+            RELEASE_NOTES=$(cat /tmp/release/release-notes.md)
+            RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
+              --method POST \
+              -f tag_name="$TAG" \
+              -f target_commitish="$COMMIT" \
+              -f name="q v${VERSION}" \
+              --raw-field body="$RELEASE_NOTES" \
+              -F draft=true \
+              --jq .id)
+            echo "Created draft release: ${RELEASE_ID}"
+          fi
+          echo "RELEASE_ID=${RELEASE_ID}" >> $GITHUB_OUTPUT
+          # Upload assets via API
           gh api --method POST \
             "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${TARBALL}" \
             -H 'Content-Type: application/gzip' \
@@ -364,7 +404,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-repair
     outputs:
-      release-id: ${{ needs.verify-draft.outputs.release-id }}
+      # BUG-0045: dynamic — the already-published no-op path outputs the
+      # live published release's ID so verify-public checks the real
+      # public release, not our (then deleted) redundant draft.
+      release-id: ${{ steps.publish.outputs.release-id }}
     permissions:
       contents: write
       actions: read
@@ -382,6 +425,7 @@ jobs:
           path: /tmp/release
 
       - name: Publish exact draft and verify transactionally
+        id: publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -398,6 +442,56 @@ jobs:
           tag_data=$(gh api "repos/${{ github.repository }}/git/tags/${TAG_OBJECT}")
           test "$(jq -r .object.type <<<"$tag_data")" = commit
           test "$(jq -r .object.sha <<<"$tag_data")" = "$EXPECTED_COMMIT"
+
+          # ── BUG-0045 publish idempotence ──
+          # A twin run for this same tag (a duplicate trigger that raced
+          # past the concurrency cancel, or one that resumed from the
+          # release-repair environment queue after this tag was already
+          # published) may already have published this exact release.
+          # PATCH draft=false on our draft would then 422 and paint a
+          # verified release red. Instead: recognize the published
+          # release, RE-VERIFY its assets (names present, byte-identical
+          # to the verified build, semantic bundle verification — never
+          # skip verification to "succeed"), clean up our now-unpublishable
+          # draft, and succeed as a no-op.
+          published=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" 2>/dev/null) || published=""
+          if [ -n "$published" ] && [ "$(jq -r .draft <<<"$published")" = false ]; then
+            test "$(jq -r .tag_name <<<"$published")" = "$TAG"
+            test "$(jq -r .target_commitish <<<"$published")" = "$EXPECTED_COMMIT"
+            PUB_RELEASE_ID=$(jq -r .id <<<"$published")
+            PUB_TARBALL_ID=$(jq -r --arg n "$TARBALL" '.assets[] | select(.name==$n) | .id' <<<"$published")
+            PUB_MANIFEST_ID=$(jq -r '.assets[] | select(.name=="release-manifest.json") | .id' <<<"$published")
+            if [ -z "$PUB_TARBALL_ID" ] || [ -z "$PUB_MANIFEST_ID" ]; then
+              echo "ERROR: already-published release ${PUB_RELEASE_ID} is missing required assets"
+              exit 1
+            fi
+            mkdir -p /tmp/already-public
+            gh api "repos/${{ github.repository }}/releases/assets/$PUB_TARBALL_ID" \
+              -H 'Accept: application/octet-stream' > "/tmp/already-public/$TARBALL"
+            gh api "repos/${{ github.repository }}/releases/assets/$PUB_MANIFEST_ID" \
+              -H 'Accept: application/octet-stream' > /tmp/already-public/release-manifest.json
+            cmp --silent "/tmp/release/$TARBALL" "/tmp/already-public/$TARBALL" || {
+              echo "ERROR: already-published tarball differs from verified build"; exit 1;
+            }
+            cmp --silent /tmp/release/release-manifest.json /tmp/already-public/release-manifest.json || {
+              echo "ERROR: already-published manifest differs from verified build"; exit 1;
+            }
+            racket scripts/verify-release-bundle.rkt \
+              --version "$VERSION" --tag "$TAG" --commit "$EXPECTED_COMMIT" --tag-object "$TAG_OBJECT" \
+              "/tmp/already-public/$TARBALL" /tmp/already-public/release-manifest.json
+            # Our draft can never publish now (the tag is claimed); it
+            # would strand as an untagged draft for manual cleanup.
+            # Remove it and hand the published release ID downstream so
+            # verify-public checks the real public release.
+            WINNING_RUN=$(gh api "repos/${{ github.repository }}/actions/runs?event=push&per_page=50" \
+              --jq ".workflow_runs[] | select(.head_branch == \"${TAG}\") | select(.id != ${GITHUB_RUN_ID}) | .id" \
+              2>/dev/null | head -n 1 || true)
+            echo "already published by run ${WINNING_RUN:-unknown} (release ${PUB_RELEASE_ID}); assets re-verified, publish is a no-op"
+            gh api --method DELETE "repos/${{ github.repository }}/releases/$RELEASE_ID" \
+              || echo "WARN: could not remove redundant draft ${RELEASE_ID} (manual cleanup may be needed)"
+            echo "release-id=${PUB_RELEASE_ID}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           release=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID")
           test "$(jq -r .tag_name <<<"$release")" = "$TAG"
@@ -444,6 +538,7 @@ jobs:
             --version "$VERSION" --tag "$TAG" --commit "$EXPECTED_COMMIT" --tag-object "$TAG_OBJECT" \
             "/tmp/immediate-public/$TARBALL" /tmp/immediate-public/release-manifest.json
           trap - ERR
+          echo "release-id=${RELEASE_ID}" >> $GITHUB_OUTPUT
           echo "Release published and immediately verified: ${TAG}"
 
   verify-public:

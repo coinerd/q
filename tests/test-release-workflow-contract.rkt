@@ -12,9 +12,10 @@
 ;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
 ;; - release-repair.yml defaults to dry-run and gates an explicit apply path
 ;;
-;; BUG-0045 characterization pin (v1.00.21 W0; FLIPPED by W3): TODAY the
-;; release workflows race on duplicate tag-pushes (no concurrency group,
-;; publish not idempotent against an already-published tag).
+;; BUG-0045 fix contract (v1.00.21 W0 pin; FLIPPED by W3): release
+;; runs serialize per tag (concurrency group with cancel-in-progress)
+;; and publish is idempotent against an already-published tag (draft
+;; adoption + re-verifying no-op success).
 ;;
 ;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7): TODAY
 ;; go-orchestrator.rkt matches the W0 baseline fixture exactly
@@ -361,36 +362,89 @@
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
 
 ;; ============================================================
-;; BUG-0045 characterization pins (v1.00.21 W0; FLIPPED by W3)
+;; BUG-0045 fix contract (v1.00.21 W3 — W0 pins flipped)
 ;;
-;; TODAY the release workflow races on duplicate tag-push triggers:
-;; no concurrency group serializes same-tag runs, and the publish
-;; script does not recognize "tag already published" as an idempotent
-;; success. Each pin below PASSES against today's red behavior; W3
-;; flips them once the concurrency group and idempotence check land.
+;; W3 serializes same-tag release runs: release.yml declares a
+;; concurrency group keyed on the pushed tag ref with
+;; cancel-in-progress, so a duplicate trigger cancels the older run
+;; instead of racing it. The release-core pipeline converges when a
+;; twin still runs: the draft job adopts an existing same-tag+commit
+;; draft, and publish recognizes an already-published release, strictly
+;; re-verifies its assets, and succeeds as a no-op.
 ;; ============================================================
 
-(test-case "BUG-0045 pin: release.yml has no concurrency group"
+(test-case "BUG-0045 fixed: release.yml serializes duplicate tag-push runs"
   (define content (read-release-yml))
-  (check-false (string-contains? content "concurrency:")
-               "TODAY duplicate tag-push runs both proceed (no group, no cancel-in-progress)"))
+  (check-true (string-contains? content "concurrency:")
+              "release.yml must declare a concurrency group")
+  (check-true (string-contains? content "group: release-${{ github.ref }}")
+              "the concurrency group must be keyed on the pushed tag ref")
+  (check-true (string-contains? content "cancel-in-progress: true")
+              "a duplicate trigger for the same tag must cancel the older run"))
 
-(test-case "BUG-0045 pin: release-core.yml has no concurrency group"
+(test-case "BUG-0045 fixed: draft job adopts an existing same-tag+commit draft"
   (define content (read-release-core-yml))
-  (check-false (string-contains? content "concurrency:")
-               "TODAY the reusable pipeline does not serialize same-tag runs"))
+  (define draft-job (bounded-section content "  draft:" "  verify-draft:"))
+  (check-true (string-contains? draft-job "Adopting existing draft release")
+              "the draft job must reuse an existing draft for the same tag+commit")
+  ;; the adoption lookup matches on BOTH the tag name and the exact commit
+  (check-true
+   (string-contains? draft-job
+                     "select(.draft == true and .tag_name == $tag and .target_commitish == $commit)")
+   "adoption must require a draft for the exact tag+commit, not just any draft")
+  ;; creation is conditional: a second -F draft=true POST only happens
+  ;; when no adoptable draft exists
+  (check-true (string-contains? draft-job "if [ -n \"$RELEASE_ID\" ]; then")
+              "draft creation must be gated on the adoption lookup result")
+  (check-true (string-contains? draft-job "-F draft=true")
+              "the fresh-creation path must still create a draft, not a public release")
+  ;; adopted same-named assets are replaced, never duplicated (upload
+  ;; of an existing asset name would 422)
+  (check-true
+   (string-contains? draft-job
+                     "--method DELETE \"repos/${{ github.repository }}/releases/assets/$asset_id\"")
+   "adopted draft's stale same-named assets must be dropped before re-upload"))
 
-(test-case "BUG-0045 pin: publish script has no already-published check"
+(test-case "BUG-0045 fixed: publish recognizes an already-published release and re-verifies before no-op"
   (define content (read-release-core-yml))
   (define publish-job (bounded-section content "  publish:" "  verify-public:"))
-  ;; no idempotent-success path recognizes an existing public release
-  (check-false (string-contains? publish-job "already published")
-               "TODAY publish never short-circuits to success for an already-published tag")
-  ;; the only pre-PATCH release-state check demands a draft: a re-run against
-  ;; an already-public release hits this assertion (or a 422) instead of
-  ;; succeeding idempotently.
-  (check-true (string-contains? publish-job "\"$(jq -r .draft <<<\"$release\")\" = true")
-              "TODAY publish assumes its draft is the only release for the tag"))
+  (define noop-branch (bounded-section publish-job "BUG-0045 publish idempotence" "release=$(gh api"))
+  ;; the idempotent-success branch exists and logs its verdict
+  (check-true (string-contains? noop-branch "already published by run")
+              "publish must log the already-published no-op verdict")
+  ;; it queries the live public release for the exact tag and commit
+  (check-true (string-contains? noop-branch "releases/tags/${TAG}")
+              "the check must query the live public release for the exact tag")
+  (check-true
+   (string-contains? noop-branch
+                     "test \"$(jq -r .target_commitish <<<\"$published\")\" = \"$EXPECTED_COMMIT\"")
+   "the already-published release must sit at the expected commit")
+  ;; it must NOT skip verification to "succeed": asset names present,
+  ;; byte-compared with the verified build, and semantically verified
+  (check-true (string-contains? noop-branch "select(.name==\"release-manifest.json\")")
+              "required asset names must be checked on the published release")
+  (check-true (string-contains? noop-branch "cmp --silent")
+              "already-published assets must be byte-compared with the verified build")
+  (check-true (string-contains? noop-branch "scripts/verify-release-bundle.rkt")
+              "already-published assets must pass semantic bundle verification")
+  ;; the redundant draft must not strand: it is removed and the
+  ;; real public release id is handed downstream
+  (check-true
+   (string-contains? noop-branch
+                     "--method DELETE \"repos/${{ github.repository }}/releases/$RELEASE_ID\"")
+   "the now-unpublishable duplicate draft must be cleaned up, not stranded")
+  (check-true (string-contains? noop-branch "release-id=${PUB_RELEASE_ID}")
+              "verify-public must receive the published release id, not the deleted draft's")
+  ;; the draft=true demand of the fresh path applies only AFTER the
+  ;; already-published branch has been excluded (ordering matters:
+  ;; a re-run against a published tag must take the no-op, not 422)
+  (define (first-pos hay needle)
+    (define m (regexp-match-positions (regexp (regexp-quote needle)) hay))
+    (and (pair? m) (caar m)))
+  (define noop-pos (first-pos publish-job "already published by run"))
+  (define fresh-draft-pos (first-pos publish-job "\"$(jq -r .draft <<<\"$release\")\" = true"))
+  (check-true (and (number? noop-pos) (number? fresh-draft-pos) (< noop-pos fresh-draft-pos))
+              "the fresh-path draft assertion must come after the already-published branch"))
 
 ;; ============================================================
 ;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7)
