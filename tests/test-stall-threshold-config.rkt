@@ -32,6 +32,7 @@
 (define-runtime-path go-orchestrator-src "../extensions/gsd/go-orchestrator.rkt")
 (define-runtime-path wave-executor-src "../extensions/gsd/wave-executor.rkt")
 (define-runtime-path settings-query-src "../runtime/settings-query.rkt")
+(define-runtime-path stall-policy-src "../extensions/gsd/stall-policy.rkt")
 
 ;; ── Synthetic settings file helper (BUG-0044 action 4) ─────────
 ;; Writes a config.json shaped like the real <proj>/.q/config.json and
@@ -141,12 +142,14 @@
 
     (test-case "settings (via the settings-query seam) are the source when keys are present"
       (define orch (file->string go-orchestrator-src))
+      (define sp (file->string stall-policy-src))
       (check-true (string-contains? orch "gsd-stall-soft-limit"))
       (check-true (string-contains? orch "gsd-stall-hard-limit"))
       (check-true (string-contains? orch "gsd-stall-window"))
       (check-true (string-contains? orch "gsd-stall-backstop"))
-      ;; keyword overrides win over settings ('unset → settings → default)
-      (check-true (string-contains? orch "if (eq? stall-soft-limit 'unset)")))
+      ;; keyword overrides win over settings ('unset → settings → default);
+      ;; W7 (BUG-0042): the composition math lives in stall-policy.rkt now
+      (check-true (string-contains? sp "if (eq? soft 'unset)")))
 
     (test-case "startup log line exposes the EFFECTIVE thresholds once per wave (action 3)"
       (define orch (file->string go-orchestrator-src))

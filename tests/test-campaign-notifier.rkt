@@ -31,6 +31,11 @@
 (define go-orchestrator-src
   (path->string (build-path (or (current-directory) ".") "extensions" "gsd" "go-orchestrator.rkt")))
 
+;; v1.00.21 W7 (BUG-0042): the stall-terminal hook site moved with the
+;; mutation-stall watchdog into the extracted stall-policy module.
+(define stall-policy-src
+  (path->string (build-path (or (current-directory) ".") "extensions" "gsd" "stall-policy.rkt")))
+
 (define (source-contains? needle [hay go-orchestrator-src])
   (call-with-input-file hay (lambda (in) (string-contains? (port->string in) needle))))
 
@@ -158,7 +163,8 @@
       ;; the terminal sites, incl. the W5 budget-pause kind.
       (check-true (source-contains? "notify-terminal-transition*!")
                   "orchestrator calls the fan-out helper")
-      (check-true (source-contains? "'stall-terminal") "stall site wired")
+      (check-true (source-contains? "'stall-terminal" stall-policy-src)
+                  "stall site wired (W7: lives in stall-policy.rkt)")
       (check-true (source-contains? "'budget-pause") "budget-pause site wired")
       (check-true (source-contains? "'campaign-complete") "completion wired")
       (check-true (source-contains? "'campaign-cancelled") "cancellation wired"))))

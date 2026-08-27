@@ -250,9 +250,12 @@
          (define orch-src (file->string (repo-file "extensions" "gsd" "go-orchestrator.rkt")))
          (check-true (regexp-match? #rx"report-campaign-artifact-leftovers!" orch-src)
                      "campaign end (success OR terminal failure) reports leftovers")
-         (check-true (regexp-match? #rx"NOTHING has been deleted" orch-src)
+         ;; W7 (BUG-0042): the leftovers report lives in attempt-artifacts.rkt now;
+         ;; go-orchestrator still calls it (checked above).
+         (define aa-src (file->string (repo-file "extensions" "gsd" "attempt-artifacts.rkt")))
+         (check-true (regexp-match? #rx"NOTHING has been deleted" aa-src)
                      "reclaim offer states explicitly that nothing was auto-deleted")
-         (check-false (regexp-match? #rx"git -C[^\"]*-D[^\"]*-f" orch-src)
+         (check-false (regexp-match? #rx"git -C[^\"]*-D[^\"]*-f" aa-src)
                       "no force-branch-delete hidden in the report path"))
        (λ ()
          (quiet-delete-dir wt-dir)

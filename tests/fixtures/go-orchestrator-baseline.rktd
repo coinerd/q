@@ -1,15 +1,18 @@
-;; BUG-0042 baseline fixture (v1.00.21 W0 characterization pin).
+;; BUG-0042 baseline fixture (v1.00.21 W0 characterization pin;
+;; FLIPPED by W7 — go-orchestrator decomposition, v1.00.22 W7).
 ;;
-;; Size of extensions/gsd/go-orchestrator.rkt as recorded at W0.
-;; tests/test-release-workflow-contract.rkt asserts the file MATCHES
-;; these numbers TODAY (characterization of the decomposition debt).
+;; Size of extensions/gsd/go-orchestrator.rkt as recorded POST-W7
+;; extraction (stall-policy.rkt, infra-retry-policy.rkt, freshness.rkt,
+;; attempt-artifacts.rkt, campaign-budgets.rkt).
+;; tests/test-release-workflow-contract.rkt asserts the file matches
+;; these numbers TODAY *and* stays below the W7 target (~1500 lines).
 ;;
 ;; Maintenance contract:
 ;;   - Any wave that legitimately grows go-orchestrator.rkt must
-;;     re-record this fixture in the same commit.
-;;   - W7 (go-orchestrator decomposition) flips the assertion from
-;;     "matches baseline" to "below target".
+;;     re-record this fixture in the same commit AND keep the file
+;;     below the W7 target (extract a module instead of growing).
 ((file . "extensions/gsd/go-orchestrator.rkt")
- (recorded-at . "v1.00.21 W0 characterization (BUG-0042); re-recorded BUG-0044 W1 (stall settings plumbing, +49 lines); re-recorded BUG-0043 W2 (wave-outcome error transcript routing, +36 lines); re-recorded BUG-0039 W5 (campaign cost/token stamping + budget ceilings, +177 lines, +8 defines; pin re-record +3 lines); re-recorded BUG-0040 W6 (terminal-transition notification hook, +86 lines, +1 define)")
- (line-count . 2566)
- (top-level-define-count . 91))
+ (recorded-at . "v1.00.22 W7 post-extraction pin (BUG-0042); supersedes the v1.00.21 W0 baseline (2566 lines / 91 defines at flip time)")
+ (line-count . 1486)
+ (top-level-define-count . 23)
+ (w7-target-max-lines . 1500))

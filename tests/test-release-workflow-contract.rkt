@@ -447,13 +447,16 @@
               "the fresh-path draft assertion must come after the already-published branch"))
 
 ;; ============================================================
-;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7)
+;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7 v1.00.22)
 ;;
-;; TODAY go-orchestrator.rkt matches the W0 baseline fixture exactly
-;; (2222 lines / 81 top-level defines — the decomposition debt as
-;; recorded at W0). Any wave that legitimately grows the file must
-;; re-record tests/fixtures/go-orchestrator-baseline.rktd in the same
-;; commit; W7 flips this from "matches baseline" to "below target".
+;; The W0 pin recorded the decomposition debt (2566 lines / 91 defines);
+;; W7 extracted stall-policy, infra-retry-policy, freshness,
+;; attempt-artifacts, and campaign-budgets from go-orchestrator. TODAY
+;; the file matches the recorded POST-EXTRACTION counts AND stays below
+;; the W7 target (~1500 lines). Any wave that legitimately grows the
+;; file must re-record tests/fixtures/go-orchestrator-baseline.rktd in
+;; the same commit and keep it under the target — extract a module
+;; instead of growing the orchestrator.
 ;; ============================================================
 
 (define-runtime-path go-orchestrator-path "../extensions/gsd/go-orchestrator.rkt")
@@ -465,12 +468,18 @@
 (define (go-orchestrator-top-level-define-count)
   (length (regexp-match* #px"(?m:^\\(define)" (file->string go-orchestrator-path))))
 
-(test-case "BUG-0042 pin: go-orchestrator.rkt matches the W0 baseline fixture"
+(test-case "BUG-0042 pin (W7 flip): go-orchestrator matches post-extraction counts AND stays under target"
   (define fixture (call-with-input-file go-orchestrator-baseline-path read))
   (check-equal? (dict-ref fixture 'file) "extensions/gsd/go-orchestrator.rkt")
   (check-equal? (go-orchestrator-line-count)
                 (dict-ref fixture 'line-count)
-                "TODAY the line count matches the W0 baseline exactly")
+                "TODAY the line count matches the post-extraction record exactly")
   (check-equal? (go-orchestrator-top-level-define-count)
                 (dict-ref fixture 'top-level-define-count)
-                "TODAY the top-level define count matches the W0 baseline exactly"))
+                "TODAY the top-level define count matches the post-extraction record exactly")
+  (check-true
+   (< (go-orchestrator-line-count) (dict-ref fixture 'w7-target-max-lines))
+   (format
+    "W7 target: go-orchestrator.rkt (~a lines) must stay below ~a lines — extract a module instead of growing it"
+    (go-orchestrator-line-count)
+    (dict-ref fixture 'w7-target-max-lines))))
