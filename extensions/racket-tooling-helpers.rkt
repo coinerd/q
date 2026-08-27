@@ -10,7 +10,11 @@
          racket/port
          racket/string
          racket/file
-         racket/list)
+         racket/list
+         ;; BUG-0038 (v1.00.20 W3): write-time staleness guard at the
+         ;; tracked-file write seam. write-file-string! is THE choke point
+         ;; for rewrite/formatting edits of working-tree files.
+         (only-in "../runtime/session/tracked-write-hygiene.rkt" assert-fresh-tracked-write!))
 
 ;; Raco command helpers
 (provide (contract-out [run-raco
@@ -109,6 +113,10 @@
   (call-with-input-file path port->string))
 
 (define (write-file-string! path content)
+  ;; BUG-0038 (v1.00.20 W3): refuse tracked-file writes from a stale process
+  ;; (running q-version ≠ on-disk util/version.rkt) and from an idle-demoted
+  ;; session. Paths outside the q checkout pass through untouched.
+  (assert-fresh-tracked-write! path)
   (call-with-output-file path (lambda (out) (display content out)) #:exists 'replace))
 
 (define (backup-file path)

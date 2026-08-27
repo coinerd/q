@@ -10,34 +10,39 @@
 ;; This is the release gate for v0.94.8.
 
 (require rackunit
-         rackunit/text-ui)
+         rackunit/text-ui
+         racket/runtime-path)
+
+;; BUG-0033 (W5): resolve test files from THIS file's location so the suite
+;; passes from ANY cwd — CWD-relative "tests/..." strings pass only when
+;; invoked from the repo root (or by accident, e.g. stale /tmp/tests residue).
+(define-runtime-path here ".")
+(define repo-root (simplify-path (build-path here "..")))
 
 ;; Count tests across all UI/GUI test files
 (define ui-test-files
-  '("tests/test-ui-action-adapters.rkt"
-    "tests/test-ui-action-parity.rkt"
-    "tests/test-ui-actions.rkt"
-    "tests/test-ui-command-registry.rkt"
-    "tests/test-ui-delta.rkt"
-    "tests/test-ui-dispatch.rkt"
-    "tests/test-ui-import-safety.rkt"
-    "tests/test-ui-reducer.rkt"
-    "tests/test-ui-render-hooks.rkt"
-    "tests/test-ui-surface-actions.rkt"
-    "tests/test-ui-surface-characterization.rkt"
-    "tests/test-ui-surface-null-safety.rkt"
-    "tests/test-ui-theme-layout.rkt"
-    "tests/test-ui-widget-descriptor.rkt"
-    "tests/test-w4-widget-schema.rkt"
-    "tests/test-w7-integration-gates.rkt"
-    "tests/test-gui-lifecycle-hooks.rkt"
-    "tests/test-gui-lifecycle-hooks-w3.rkt"))
+  (map (lambda (rel) (build-path repo-root rel))
+       '("tests/test-ui-action-adapters.rkt" "tests/test-ui-action-parity.rkt"
+                                             "tests/test-ui-actions.rkt"
+                                             "tests/test-ui-command-registry.rkt"
+                                             "tests/test-ui-delta.rkt"
+                                             "tests/test-ui-dispatch.rkt"
+                                             "tests/test-ui-import-safety.rkt"
+                                             "tests/test-ui-reducer.rkt"
+                                             "tests/test-ui-render-hooks.rkt"
+                                             "tests/test-ui-surface-actions.rkt"
+                                             "tests/test-ui-surface-characterization.rkt"
+                                             "tests/test-ui-surface-null-safety.rkt"
+                                             "tests/test-ui-theme-layout.rkt"
+                                             "tests/test-ui-widget-descriptor.rkt"
+                                             "tests/test-w4-widget-schema.rkt"
+                                             "tests/test-w7-integration-gates.rkt"
+                                             "tests/test-gui-lifecycle-hooks.rkt"
+                                             "tests/test-gui-lifecycle-hooks-w3.rkt")))
 
-(define-test-suite
- test-w9-regression
-
- (test-case "W9.3: All UI test files exist"
-   (for ([f (in-list ui-test-files)])
-     (check-true (file-exists? f) (format "~a missing" f)))))
+(define-test-suite test-w9-regression
+                   (test-case "W9.3: All UI test files exist"
+                     (for ([f (in-list ui-test-files)])
+                       (check-true (file-exists? f) (format "~a missing" f)))))
 
 (run-tests test-w9-regression)

@@ -128,3 +128,33 @@
       (with-handlers ([exn:fail? (lambda (e) #f)])
         (dynamic-require test-hooks-path 'dispatch-hooks)))
     (check-not-false dispatch-fn "dynamic-require via runtime-path should work from any cwd")))
+
+;; ============================================================
+;; Test 7: BUG-0033 — tracked test files invocable from an
+;; arbitrary cwd (subprocess spot-check from the system temp dir).
+;; The wave-doc convention is `cd <project-base>/q && racket
+;; tests/<name>.rkt`; each of these spot-checks additionally proves
+;; `racket <project-base>/q/tests/<name>.rkt` passes from ANY cwd.
+;; Spot-checked files must not include this file itself (recursion).
+;; ============================================================
+
+(define racket-exe (find-executable-path "racket"))
+
+(define (spot-check-from-tmp test-file)
+  (parameterize ([current-directory (find-system-path 'temp-dir)])
+    (system*/exit-code racket-exe (path->string (build-path this-module-dir test-file)))))
+
+(test-case "BUG-0033: test-ui-action-adapters.rkt passes from /tmp"
+  (check-equal? (spot-check-from-tmp "test-ui-action-adapters.rkt")
+                0
+                "must be invocable from an arbitrary cwd"))
+
+(test-case "BUG-0033: test-w9-ui-regression.rkt passes from /tmp"
+  (check-equal? (spot-check-from-tmp "test-w9-ui-regression.rkt")
+                0
+                "must be invocable from an arbitrary cwd"))
+
+(test-case "BUG-0033: test-audit-script.rkt passes from /tmp"
+  (check-equal? (spot-check-from-tmp "test-audit-script.rkt")
+                0
+                "must be invocable from an arbitrary cwd"))

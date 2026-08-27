@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; q/tests/test-gsd-mutation-stall-watchdog.rkt — GSD mutation-stall watchdog
-;; (#9513; v2 semantics per BUG-0037 / v1.00.20 W1)
+;; (#9513; v2 semantics per BUG-0037 / W1)
 ;;
 ;; v1.00.16 W3 attempt-2 made 92 read-only tool calls, never edited a file,
 ;; and nothing noticed until delivery verification (~40 min, ~$12). The v1
@@ -71,7 +71,7 @@
   (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
 (test-case "LIVE REGRESSION: repeated identical greps between reads never kill"
-  ;; v1.00.20 W2 attempt 1: killed at 4 calls for 3 identical greps.
+  ;; W2 attempt 1: killed at 4 calls for 3 identical greps.
   ;; Interleaved legitimate repetition must stay alive under 5/8.
   (define wd (make-stall-watchdog))
   (define (grep-call)
@@ -171,14 +171,30 @@
   (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
 
 (test-case "backstop kills signature-cycling livelocks at 300"
+  ;; W3 semantics: the backstop fires only when the window is NON-diverse
+  ;; — a true cycling livelock rotates a few signatures forever.
   (define wd (make-stall-watchdog #:window #f))
   (let loop ([i 0])
-    (define r (stall-watchdog-observe! wd (reads 1 i)))
+    (define r (stall-watchdog-observe! wd (reads 1 (modulo i 3))))
     (unless (or (eq? r 'hard-stall) (>= i 299))
       (loop (add1 i))))
   (define snap (stall-watchdog-snapshot wd))
   (check-eq? (hash-ref snap 'calls-since-mutation) 300)
   (check-eq? (hash-ref snap 'stall-reason) 'backstop))
+
+(test-case "backstop NEVER kills diverse exploration (BUG-0037 W3 live false-kill)"
+  ;; The W3 executor legitimately crossed 300 mutation-free distinct
+  ;; reads while scoping a read-heavy wave — killed by the count-only
+  ;; backstop. A diverse window must withhold the backstop forever.
+  (define wd (make-stall-watchdog))
+  (define all-ok? #t)
+  (for ([i (in-range 500)])
+    (unless (eq? (stall-watchdog-observe! wd (reads 1 (* 3 i))) 'ok)
+      (set! all-ok? #f)))
+  (check-true all-ok? "500 distinct reads: always ok")
+  (define snap (stall-watchdog-snapshot wd))
+  (check-false (hash-ref snap 'stall-reason) "no stall reason ever set")
+  (check-true (>= (hash-ref snap 'calls-since-mutation) 300) "well past the backstop, still alive"))
 
 (test-case "an edit between observations resets the counter and the window"
   (define wd (make-stall-watchdog))
@@ -239,11 +255,11 @@
   ;; Steered once, then identical repeats continue harmlessly...
   (for ([i (in-range 50)])
     (check-eq? (stall-watchdog-observe! wd (same-reads 1)) 'ok))
-  ;; ...but the ABSOLUTE backstop still terminates a livelock eventually.
+  ;; ...but the ABSOLUTE backstop still terminates a CYCLING livelock.
   (let loop ([i 0]
              [r 'ok])
-    (unless (or (eq? r 'hard-stall) (>= i 300))
-      (loop (add1 i) (stall-watchdog-observe! wd (reads 1 (+ 900 i))))))
+    (unless (or (eq? r 'hard-stall) (>= i 350))
+      (loop (add1 i) (stall-watchdog-observe! wd (reads 1 (+ 950 (modulo i 3)))))))
   (check-eq? (hash-ref (stall-watchdog-snapshot wd) 'stall-reason) 'backstop))
 
 (test-case "all channels #f make the watchdog fully inert"
@@ -297,7 +313,7 @@
   (check-pred (lambda (s) (string-contains? (string-downcase s) "re-attempted")) msg))
 
 (test-case "stall-cause errors classify as RETRYABLE infra-failed (live-campaign regression)"
-  ;; v1.00.20 W2 attempt 1: the session layer converted the stall exn to a
+  ;; W2 attempt 1: the session layer converted the stall exn to a
   ;; loop-result 'error; the campaign then STOPPED instead of auto-retrying.
   (define r
     (prompt-run-result->outcome

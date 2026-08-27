@@ -243,8 +243,13 @@
       ;; build. Never set in production code paths.
       ;; +1 — current-gsd-wave-inherited-artifacts (wave-executor, TURN_LOCAL):
       ;; BUG-0029 W5 inherited-artifacts prompt block.
+      ;; +5 — BUG-0038 W3 tracked-write hygiene (tracked-write-hygiene.rkt):
+      ;; current-allow-stale-tracked-writes / current-q-pid-dir /
+      ;; current-tracked-write-repo-root / current-tracked-write-running-version
+      ;; (CONFIGURATION, test/set seams) and current-tracked-write-override-observer
+      ;; (SERVICE_HANDLE, loud-logging observer seam for the staleness guard).
       (check-equal? (length inventory-entries)
-                    214
+                    219
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

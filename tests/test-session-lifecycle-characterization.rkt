@@ -376,3 +376,80 @@
     (define id (hash-ref finding 'id))
     (check-true (string-contains? report (symbol->string id)))
     (check-true (string-contains? report (hash-ref finding 'follow-up)))))
+;; ============================================================
+;; W3 wiring characterization (BUG-0038): TUI startup concurrency
+;; check + idle demotion, both routed through the shared
+;; tracked-file write seam (runtime/session/tracked-write-hygiene.rkt).
+;; ============================================================
+
+(require rackunit/text-ui
+         racket/path
+         (prefix-in hy: "../runtime/session/tracked-write-hygiene.rkt"))
+
+(define tui-init-source (build-path root "tui" "tui-init.rkt"))
+(define tui-loop-source (build-path root "tui" "tui-render-loop.rkt"))
+(define mutation-source (build-path root "runtime" "session" "session-mutation.rkt"))
+
+(define (first-index s sub)
+  (define m (regexp-match-positions (regexp-quote sub) s))
+  (and m (caar m)))
+
+(define (check-source-contains src needle)
+  (check-true (string-contains? src needle) (format "source must wire ~a" needle)))
+
+(define w3-suite
+  (test-suite "W3: TUI concurrency + idle-demotion wiring through the shared write seam"
+
+    (test-case "W3-1: TUI init wires registration, one-shot concurrency warning, and cleanup"
+      (check-true (file-exists? tui-init-source))
+      (define src (file->string tui-init-source))
+      (for ([needle '("register-q-process!" "concurrent-writer-warning-once!"
+                                            "unregister-q-process!"
+                                            "settings-idle-demote-hours"
+                                            "set-idle-demote-hours!")])
+        (check-source-contains src needle))
+      (check-true (< (first-index src "register-q-process!")
+                     (first-index src "concurrent-writer-warning-once!"))
+                  "register before warning (self must not be counted as foreign)"))
+
+    (test-case "W3-2: TUI loop drives idle demotion and renews activity on real input"
+      (check-true (file-exists? tui-loop-source))
+      (define src (file->string tui-loop-source))
+      (check-source-contains src "maybe-idle-demote!")
+      (check-source-contains src "note-user-activity!")
+      (for ([event-needle '("'key" "'paste" "decode-mouse-message")])
+        (check-source-contains src event-needle)))
+
+    (test-case "W3-3: session-mutation re-exports the shared tracked-write guard seam"
+      (check-true (file-exists? mutation-source))
+      (for ([sym '(assert-fresh-tracked-write! current-allow-stale-tracked-writes
+                                               concurrent-writer-warning-once!
+                                               register-q-process!
+                                               note-user-activity!
+                                               maybe-idle-demote!
+                                               session-idle-readonly?)])
+        (check-not-false
+         (with-handlers ([exn:fail? (lambda (_) #f)])
+           (dynamic-require mutation-source sym))
+         (format "session-mutation must provide ~a (shared seam for session run modes)" sym))))
+
+    (test-case "W3-4: concurrency lifecycle behaves as the TUI uses it"
+      (define pid-dir (make-temporary-file "w3-pids~a" 'directory))
+      (dynamic-wind
+       (lambda () #f)
+       (lambda ()
+         (parameterize ([hy:current-q-pid-dir pid-dir])
+           (hy:reset-concurrent-writer-warning!)
+           (check-false (hy:concurrent-writer-warning-once!) "sole session => no warning")
+           (hy:register-q-process!)
+           (call-with-output-file (build-path pid-dir "1.pid")
+                                  (lambda (out) (displayln "0 stale /elsewhere" out))
+                                  #:exists 'replace)
+           (check-equal? (hy:concurrent-q-processes) '(1))
+           (check-not-false (hy:concurrent-writer-warning-once!) "second live session announced")
+           (check-false (hy:concurrent-writer-warning-once!) "announced exactly once")
+           (hy:unregister-q-process!)))
+       (lambda () (delete-directory/files pid-dir #:must-exist? #f))))))
+
+(module+ main
+  (exit (run-tests w3-suite)))

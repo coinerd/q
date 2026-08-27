@@ -17,7 +17,13 @@
                   evolution-result?
                   evolution-result-evicted-conclusions
                   evolution-result-archived-entries)
-         (only-in "../context-assembly/task-conclusion.rkt" task-conclusion-id))
+         (only-in "../context-assembly/task-conclusion.rkt" task-conclusion-id)
+         ;; BUG-0038 (v1.00.20 W3): shared tracked-file write seam — the
+         ;; write-time staleness/idle guard re-exported here so session code
+         ;; has one hygiene surface. See tracked-write-hygiene.rkt.
+         "tracked-write-hygiene.rkt")
+
+(provide (all-from-out "tracked-write-hygiene.rkt"))
 
 (define-logger q-session-mutation)
 

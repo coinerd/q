@@ -1,3 +1,52 @@
+## v1.00.20 — 2026-08-26
+
+Released 2026-08-26.
+
+> v1.00.20: GSD workflow reliability bake — seven campaign acceptance
+> gates demonstrated live (BUG-0033…BUG-0038), then shipped. The wave-7
+> integration bake proved each fix end-to-end on a real campaign and
+> recorded its evidence in `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md`.
+
+### Features
+
+- **BUG-0033 — exploration budgets do not kill legitimate wide reads.**
+  The exploration loop detector is repetition-shaped (identical
+  tool-call pairs), not read-count-shaped; a wave whose executor
+  legitimately reads >70 distinct files completes without watchdog
+  death (drill (a) of the v1.00.20 bake report).
+- **BUG-0034 — repetition loops trip detection and auto-resume.** An
+  injected identical-call loop trips the steering detector AND the
+  campaign auto-resumes via infra-retry once the attempt context is
+  re-fed (drill (b)); `test-gsd-campaign-infra-retry.rkt` 25/25.
+- **BUG-0035 — plan/wave divergence warns before work starts.** A
+  doctored `PLAN.md`/wave-doc mismatch warns at `/go` and `/gsd`
+  (drill (c)); `test-gsd-plan-diff.rkt` 2/2.
+- **BUG-0036 — stale writers cannot revert tracked files.** A process
+  running an older loaded version refuses a tracked-file write and its
+  denial names the PID to exit (drill (d));
+  `test-session-hygiene-characterization.rkt` 13/13.
+- **BUG-0037 — killed campaigns reconcile at /reset.** An orphaned
+  killed-campaign record reconciles at `/reset`; listing shows it and
+  explicit prune removes it (drill (e)); campaign lifecycle/repository
+  suites green.
+- **BUG-0038 — divergence surface is advisory and cheap.** Deprecation
+  pins in status suites flipped to the v1.00.20 surface (W6), so
+  `/gsd` status stays advisory, not fatal.
+
+### Fixed
+
+- Release prep: `q-version` + `info.rkt` bumped to 1.00.20 via
+  `scripts/sync-version.rkt --write`; version literals purged from
+  tests; README metrics re-synced (`metrics --sync-all`).
+
+### Removed
+
+- (none)
+
+### Deprecated
+
+- (none)
+
 ## v1.00.19 — 2026-08-26
 
 Released 2026-08-26.

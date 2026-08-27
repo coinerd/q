@@ -14,7 +14,8 @@
 ;; Refs: FIT-04
 
 (require racket/port
-         racket/string)
+         racket/string
+         racket/runtime-path)
 
 (provide extract-requires
          require-spec->paths
@@ -136,13 +137,11 @@
 ;; File system helpers
 ;; ============================================================
 
-;; When run via raco test from q/, Q_DIR is '.'; when run from project root,
-;; Q_DIR should be 'q/'. Default to the parent of the tests/ directory.
-(define q-dir
-  (simplify-path
-   (string->path (or (getenv "Q_DIR")
-                     ;; If running from q/tests/ (typical raco test), go up to q/
-                     (if (and (directory-exists? "..") (file-exists? "../main.rkt")) ".." ".")))))
+;; BUG-0033: resolve the repo root relative to THIS FILE (tests/helpers/)
+;; so arch tests pass from any cwd. Q_DIR remains an explicit override for
+;; CI environments that relocate the checkout.
+(define-runtime-path repo-root/default "../..")
+(define q-dir (simplify-path (string->path (or (getenv "Q_DIR") (path->string repo-root/default)))))
 
 (define (rkt-files-in dir)
   (if (directory-exists? (build-path q-dir dir))

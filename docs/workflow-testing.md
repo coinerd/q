@@ -1,8 +1,30 @@
-<!-- verified-against: 1.00.19 -->
+<!-- verified-against: 1.00.20 -->
 # Workflow Testing Guide
 
 This guide covers q's workflow-level integration tests that verify
 complete agent behaviors end-to-end.
+
+## Canonical Test-Runner Entry Point (BUG-0033)
+
+There is exactly ONE test runner: `q/scripts/run-tests.rkt`. The git
+root is the `q/` directory, and the runner is invoked from there:
+
+```
+cd <project-base>/q && racket scripts/run-tests.rkt --suite fast
+```
+
+- There is NO project-root-level `scripts/run-tests.rkt` in the repo
+  (the repo is rooted at `q/`). A root-level shim seen in a workspace
+  checkout is workspace residue, not a tracked entry point — invoke the
+  runner from `q/` instead.
+- Individual test files are invoked the same way:
+  `cd <project-base>/q && racket tests/<name>.rkt`
+- Tracked tests must NOT depend on the invocation directory: they
+  resolve files via `define-runtime-path` / `(current-load-relative-directory)`
+  so `racket <project-base>/q/tests/<name>.rkt` passes from ANY cwd.
+  This invariant is pinned by `tests/test-cwd-independence.rkt`
+  (subprocess spot-checks from the system temp directory) and by the
+  runner self-test family in `tests/test-run-tests-script.rkt`.
 
 ## Test Structure
 
@@ -121,7 +143,10 @@ Use relative paths from the test file:
 3. Always check `workflow-result?` before accessing fields
 4. Use `(check-true ...)` for boolean assertions
 5. Keep tests independent — no shared mutable state between test-cases
+6. Resolve every file path via `define-runtime-path` /
+   `(current-load-relative-directory)` — never relative to
+   `(current-directory)` (see Canonical Test-Runner Entry Point above)
 
-## Version 1.00.19
+## Version 1.00.20
 
-This documentation reflects .00.17.
+This documentation reflects v1.00.20.

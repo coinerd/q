@@ -25,6 +25,13 @@
 ;;       #9515 prompt plumbing, no parallel state); success clears it.
 ;;   (3) these tests: auto-resume, bounded exhaustion, context hand-off,
 ;;       event observability, block formatting.
+;;
+;; BUG-0037 W1 (this release): watchdog death during a wave with ZERO file
+;; mutations (exploration phase) is retryable infrastructure — the same
+;; bounded auto-resume path as provider/network failures, with PRIOR
+;; ATTEMPT CONTEXT and gsd.campaign.infra-retry events. Test (6) below
+;; pins the campaign-level contract: a stall kill must never surface as
+;; a terminal campaign stop.
 
 (require rackunit
          racket/file
@@ -32,7 +39,8 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
                   campaign-result-status
-                  campaign-result-message)
+                  campaign-result-message
+                  stall-hard-failure-message)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   campaign-record-waves
                   campaign-wave-index
@@ -290,3 +298,71 @@
   (check-true (string-contains? block "connection reset"))
   ;; The block instructs resume, not restart — the hand-off's whole point.
   (check-true (string-contains? block "do NOT restart")))
+
+;; ============================================================
+;; (6) BUG-0037 W1: exploration-phase stall death is retryable
+;; ============================================================
+
+;; A watchdog kill arrives at run-campaign-wave as the classified
+;; 'infra-failed outcome built from stall-hard-failure-message (both the
+;; gsd-stall-exn handler and prompt-run-result->outcome's stall-prefix
+;; clause produce this exact shape). This pins the CAMPAIGN contract:
+;; the kill consumes no attempt, emits gsd.campaign.infra-retry, hands
+;; the re-attempt the stall's PRIOR ATTEMPT CONTEXT, and the wave
+;; completes — a stall kill must never surface as a terminal stop.
+(test-case "BUG-0037: stall kill during zero-mutation exploration auto-resumes the campaign"
+  (define dir (make-campaign-base))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (load-or-migrate dir))
+     (define runs (box 0))
+     (define contexts '())
+     ;; The canonical watchdog kill message (exactly what the live
+     ;; classification produces for a repeated-read livelock).
+     (define stall-msg
+       (stall-hard-failure-message 15
+                                   15
+                                   '("q/extensions/gsd/wave-executor.rkt")
+                                   "read"
+                                   '(read read grep)))
+     (check-true (string-prefix? stall-msg "mutation-stall watchdog:")
+                 "fixture must be the canonical stall kill message")
+     (define events-box (box '()))
+     (set-gsd-event-bus! (lambda args (set-box! events-box (cons args (unbox events-box)))))
+     (define result
+       (parameterize ([current-gsd-campaign-infra-retries 2]
+                      [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+         (run-campaign-wave
+          dir
+          rec
+          0
+          #:runner (lambda (idx)
+                     (set-box! runs (add1 (unbox runs)))
+                     (set! contexts (append contexts (list (current-gsd-wave-failure-context))))
+                     (if (= (unbox runs) 1)
+                         (wave-execution-outcome 'infra-failed stall-msg)
+                         'ok))
+          #:verifier (lambda (_) #t))))
+     ;; The campaign CONTINUED past the stall kill and completed the wave.
+     (check-eq? (campaign-result-status result) 'wave-done)
+     (check-equal? (unbox runs) 2 "1 stall-killed run + 1 automatic re-attempt")
+     ;; Retry observability: exactly one gsd.campaign.infra-retry event.
+     (define infra-events
+       (filter (lambda (e) (regexp-match #rx"infra-retry" (format "~a" e))) (unbox events-box)))
+     (check-equal? (length infra-events) 1)
+     ;; The re-attempt resumed from the stall's PRIOR ATTEMPT CONTEXT —
+     ;; not from a blank prompt re-exploring from zero.
+     (check-true (string? (cadr contexts)) "re-attempt must see a rendered context block")
+     (check-true (string-contains? (cadr contexts) "PRIOR ATTEMPT CONTEXT"))
+     (check-true (string-contains? (cadr contexts) "mutation-stall watchdog"))
+     (check-true (string-contains? (cadr contexts) "do NOT restart"))
+     ;; Durable record: done, retryable death consumed no attempt,
+     ;; success cleared the hand-off context.
+     (define after (load-or-migrate dir))
+     (check-eq? (wave-status* after 0) 'done)
+     (check-equal? (wave-attempt-count* after 0) 1)
+     (check-equal? (wave-attempt-context* after 0) ""))
+   (lambda ()
+     (set-gsd-event-bus! void)
+     (cleanup-tmp dir))))

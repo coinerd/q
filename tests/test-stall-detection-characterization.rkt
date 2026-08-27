@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; BUG-0037 v1.00.20 W1 — mutation-stall watchdog v2: a stall is
+;; BUG-0037 (W1) — mutation-stall watchdog v2: a stall is
 ;; REPETITION, not the mere absence of mutation.
 ;;
 ;;   * 70 DISTINCT reads → never trip (healthy exploration survives).
@@ -13,6 +13,9 @@
 
 (require rackunit
          (only-in rackunit/text-ui run-tests)
+         racket/file
+         racket/list
+         racket/string
          (only-in "../extensions/gsd/wave-executor.rkt"
                   make-stall-watchdog
                   stall-watchdog-observe!
@@ -21,7 +24,11 @@
                   STALL-HARD-LIMIT-DEFAULT
                   STALL-REPETITION-WINDOW-DEFAULT
                   STALL-BACKSTOP-LIMIT-DEFAULT
-                  tool-call-signature))
+                  tool-call-signature)
+         (only-in "../extensions/gsd/wave-docs.rkt"
+                  parse-plan-index
+                  plan-format-deprecation-warnings
+                  plan-format-deprecation-warning-lines))
 
 ;; A read of a DISTINCT path per index (distinct signatures).
 (define (read-call [i 0])
@@ -111,7 +118,7 @@
           (cond
             [(>= i 300) #f]
             [else
-             (define r (stall-watchdog-observe! wd (list (read-call i))))
+             (define r (stall-watchdog-observe! wd (list (read-call (modulo i 3)))))
              (set! out (cons r out))
              (if (eq? r 'hard-stall)
                  #t
@@ -153,7 +160,7 @@
       (check-equal? STALL-BACKSTOP-LIMIT-DEFAULT 300))
 
     (test-case "LIVE REGRESSION: repeated grep/test re-runs between reads stay alive"
-      ;; v1.00.20 W2 attempt 1 died at 4 calls: 3 identical greps tripped
+      ;; (W2) attempt 1 died at 4 calls: 3 identical greps tripped
       ;; hard-limit 3. Legitimate work repeats a call a handful of times
       ;; while working through results — that must NEVER kill.
       (define wd (make-stall-watchdog))
@@ -221,6 +228,21 @@
                  'soft-stall
                  "identical-looking arguments-less records still steer"))
 
+    (test-case "LIVE REGRESSION: backstop never kills diverse exploration (BUG-0037 W3)"
+      ;; The W3 executor legitimately crossed 300 mutation-free DISTINCT
+      ;; reads scoping a read-heavy wave; the count-only backstop killed
+      ;; it mid-analysis. Diverse windows must withhold the backstop.
+      (define wd (make-stall-watchdog))
+      (define all-ok? #t)
+      (for ([i (in-range 500)])
+        (unless (eq? (stall-watchdog-observe! wd (list (read-call (+ 500 i)))) 'ok)
+          (set! all-ok? #f)))
+      (check-true all-ok? "500 distinct reads: always ok, forever")
+      (define snap (stall-watchdog-snapshot wd))
+      (check-false (hash-ref snap 'stall-reason))
+      (check-true (>= (hash-ref snap 'calls-since-mutation) 300)
+                  "well past the backstop and still alive"))
+
     (test-case "#f limits disable their channel; fully inert watchdog"
       (define wd-none (make-stall-watchdog #:soft-limit #f #:hard-limit #f #:backstop #f))
       (check-eq? (stall-watchdog-observe! wd-none (list (same-read))) 'ok)
@@ -245,7 +267,76 @@
       ;; A batch that crosses the hard limit inside itself: hard.
       (define wd2 (make-stall-watchdog))
       (stall-watchdog-observe! wd2 (list (same-read)))
-      (check-eq? (stall-watchdog-observe! wd2 (same-reads-batch 14)) 'hard-stall))))
+      (check-eq? (stall-watchdog-observe! wd2 (same-reads-batch 14)) 'hard-stall))
+
+    ;; ============================================================
+    ;; BUG-0035 (W6) — plan-format deprecation warnings. FLIPPED here
+    ;; from the W0 pin ("no deprecation signal exists"): the inline
+    ;; `## Wave N:` grammar and relaxed status-less index rows now warn.
+    ;; NON-FATAL by design (campaign gate #6): parsing and loading are
+    ;; byte-identical to the pre-warning behavior — only advisory text
+    ;; is added.
+    ;; ============================================================
+
+    (test-case "BUG-0035: inline-only plan yields exactly ONE warning naming the index skeleton"
+      (define inline-plan
+        "# Campaign\n\n## Wave 0: Fix the bug\n\nRoot cause: ms vs s.\n\n## Wave 1: Harden retry\n\nFiles: retry.rkt\n")
+      (define ws (plan-format-deprecation-warnings inline-plan))
+      (check-equal? (length ws) 1)
+      (define w (first ws))
+      (check-true (string-contains? w "BUG-0035"))
+      (check-true (string-contains? w "deprecated") "names the deprecated form")
+      (check-true (string-contains? w "- [Inbox] W0: Title → waves/W0-slug.md")
+                  "names the index skeleton to migrate to")
+      ;; NON-FATAL: the inline path still parses zero index entries and
+      ;; the warning never alters the parse result.
+      (check-equal? (parse-plan-index inline-plan) '()))
+
+    (test-case "BUG-0035: each relaxed status-less row gets its own [Inbox] advisory"
+      (define relaxed-plan
+        "## Waves\n\n- W0: Fix the bug → waves/W0-fix.md\n- W1: Harden retry → waves/W1-retry.md\n")
+      (define ws (plan-format-deprecation-warnings relaxed-plan))
+      (check-equal? (length ws) 2 "one warning per relaxed row")
+      (for ([w (in-list ws)])
+        (check-true (string-contains? w "BUG-0035"))
+        (check-true (string-contains? w "[Inbox]") "recommends the explicit status bracket")
+        (check-true (string-contains? w "[Status]") "names what the row is missing"))
+      ;; NON-FATAL: relaxed rows still parse (the accepted legacy form).
+      (check-equal? (length (parse-plan-index relaxed-plan)) 2))
+
+    (test-case "BUG-0035: full index format yields ZERO warnings and loads unchanged"
+      (define strict-plan
+        "## Waves\n\n- [Inbox] W0: Fix the bug → waves/W0-fix-the-bug.md\n- [Inbox] W1: Harden the retry path → waves/W1-harden-retry.md\n")
+      (check-equal? (plan-format-deprecation-warnings strict-plan) '())
+      (check-equal? (length (parse-plan-index strict-plan)) 2)
+      ;; Hybrid: strict index present means the index path wins — the
+      ;; legacy inline section below it neither warns nor is parsed.
+      (define hybrid-plan (string-append strict-plan "\n## Wave 2: Stray inline\n\nbody\n"))
+      (check-equal? (plan-format-deprecation-warnings hybrid-plan) '())
+      (check-equal? (length (parse-plan-index hybrid-plan)) 2))
+
+    (test-case "BUG-0035: file-backed warning-lines read .planning/PLAN.md; absent plan is silent"
+      (define tmp (make-temporary-file "bug0035-~a" 'directory))
+      (dynamic-wind
+       (lambda () (make-directory* (build-path tmp ".planning")))
+       (lambda ()
+         (define plan-path (build-path tmp ".planning" "PLAN.md"))
+         ;; Absent plan file → no warnings (nothing loaded, nothing deprecated).
+         (check-equal? (plan-format-deprecation-warning-lines tmp) '())
+         ;; Relaxed plan on disk → file-backed variant surfaces the advisory.
+         (call-with-output-file plan-path
+                                (lambda (out)
+                                  (display "## Waves\n\n- W0: On disk → waves/W0.md\n" out)))
+         (define ws (plan-format-deprecation-warning-lines tmp))
+         (check-equal? (length ws) 1)
+         (check-true (string-contains? (first ws) "[Inbox]"))
+         ;; Strict plan on disk → silent.
+         (call-with-output-file plan-path
+                                #:exists 'truncate
+                                (lambda (out)
+                                  (display "## Waves\n\n- [Inbox] W0: Strict → waves/W0.md\n" out)))
+         (check-equal? (plan-format-deprecation-warning-lines tmp) '()))
+       (lambda () (delete-directory/files tmp))))))
 
 (module+ main
   (exit (run-tests suite)))

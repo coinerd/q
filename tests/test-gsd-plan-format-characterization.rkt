@@ -2,7 +2,7 @@
 
 ;; tests/test-gsd-plan-format-characterization.rkt — GSD plan-format
 ;; characterization pins (GSD plan-format campaign; BUG-0023,
-;; BUG-0025).
+;; BUG-0025, BUG-0035).
 ;;
 ;; W0 pinned CURRENT behavior so later waves flip explicit reviewed pins:
 ;;   - BUG-0025 pin (clean-file-path kept "[NEW]" annotations) — FLIPPED
@@ -10,6 +10,10 @@
 ;;   - BUG-0023 pins — FLIPPED by W2: strict index validation raises
 ;;     naming the expected wave-doc path (no more silent empty waves);
 ;;     zero-waves /go rejection reports BOTH accepted formats.
+;;   - BUG-0035 pins — FLIPPED by W6: loading via the legacy inline
+;;     `## Wave N:` path now emits a deprecation warning naming the
+;;     index skeleton; relaxed status-less rows (`- W0: Title`) warn
+;;     too; full index format stays warning-free and non-fatal.
 ;;
 ;; Table-format plans still parse to 0 index entries (parser unchanged —
 ;; the fix is diagnostics, not format tolerance).
@@ -35,7 +39,9 @@
                   parse-plan-index
                   count-inline-wave-sections
                   wave-index-entry-idx
-                  wave-index-entry-slug)
+                  wave-index-entry-slug
+                  plan-format-deprecation-warnings
+                  plan-format-deprecation-warning-lines)
          (only-in "../extensions/gsd/wave-executor.rkt" load-plan-from-index))
 
 ;; errors containing needle — for asserting actionable diagnostics
@@ -315,6 +321,98 @@ Second.
                       (check-equal? (gsd-wave-files (plan-wave-ref plan 0)) '("q/from-index.rkt"))
                       (check-equal? (gsd-wave-files (plan-wave-ref plan 1)) '("q/from-w1.rkt")))
                     (lambda () (rm-tmp-planning tmp))))
+
+    ;; ============================================================
+    ;; BUG-0035 (W6): plan-format deprecation warnings — non-fatal
+    ;; ============================================================
+
+    (test-case "inline-only plan produces exactly one deprecation warning naming the index skeleton (BUG-0035, W6)"
+      (define inline-plan
+        "# Plan: Inline Only
+
+## Wave 0: Inline Title
+
+- File: q/foo.rkt
+
+## Wave 1: Inline Second
+
+- File: q/bar.rkt
+")
+      (define warnings (plan-format-deprecation-warnings inline-plan))
+      ;; EXACTLY one warning for the whole inline load (not one per section).
+      (check-equal? (length warnings) 1)
+      (define w (car warnings))
+      (check-true (string-contains? w "deprecat") "warning must say deprecated")
+      (check-true (string-contains? w "BUG-0035"))
+      (check-true (string-contains? w "`## Wave N:`") "must name the inline grammar")
+      ;; The actionable nudge: the full index skeleton, verbatim.
+      (check-true (string-contains? w "- [Inbox] W0: Title → waves/W0-slug.md")
+                  "must name the index skeleton to migrate to")
+      (check-true (string-contains? w "v1.00.21") "must carry the removal-target version"))
+
+    (test-case "relaxed status-less index row produces a warning recommending the [Inbox] bracket (BUG-0035, W6)"
+      (define relaxed-plan "# Plan: Relaxed
+
+## Waves
+
+- W0: no bracket → waves/W0-no-bracket.md
+")
+      (define warnings (plan-format-deprecation-warnings relaxed-plan))
+      (check-equal? (length warnings) 1)
+      (define w (car warnings))
+      (check-true (string-contains? w "deprecat"))
+      (check-true (string-contains? w "BUG-0035"))
+      (check-true (string-contains? w "- W0: no bracket") "must quote the offending row")
+      (check-true (string-contains? w "[Inbox]") "must recommend the explicit bracket"))
+
+    (test-case "each relaxed row gets its own warning; strict rows never warn (BUG-0035, W6)"
+      (define mixed-plan
+        "# Plan: Mixed
+
+## Waves
+
+- [Inbox] W0: strict → waves/W0-strict.md
+- W1: relaxed → waves/W1-relaxed.md
+- W2: also relaxed → waves/W2-also-relaxed.md
+")
+      (define warnings (plan-format-deprecation-warnings mixed-plan))
+      (check-equal? (length warnings) 2)
+      (check-true (string-contains? (car warnings) "- W1: relaxed"))
+      (check-true (string-contains? (cadr warnings) "- W2: also relaxed")))
+
+    (test-case "full index format produces ZERO deprecation warnings (BUG-0035, W6)"
+      (check-equal? (plan-format-deprecation-warnings index-format-plan) '()))
+
+    (test-case "hybrid plan (strict index present) loads via index and warns zero (BUG-0035, W6)"
+      (define plan-text
+        "# Plan: Hybrid
+
+## Waves
+
+- [Inbox] W0: idxslug → waves/W0-idxslug.md
+
+## Wave 0: inline section that must NOT win
+")
+      (check-equal? (plan-format-deprecation-warnings plan-text) '()))
+
+    (test-case "file-backed warning-lines: reads PLAN.md; missing plan file is silent (BUG-0035, W6)"
+      (define plan-text "# Plan: Relaxed
+
+- W0: no bracket → waves/W0-no-bracket.md
+")
+      (define tmp (make-tmp-planning plan-text '()))
+      (dynamic-wind void
+                    (lambda ()
+                      (define warnings (plan-format-deprecation-warning-lines tmp))
+                      (check-equal? (length warnings) 1)
+                      (check-true (string-contains? (car warnings) "[Inbox]")))
+                    (lambda () (rm-tmp-planning tmp)))
+      ;; Nothing loaded, nothing deprecated: no .planning tree → no warnings,
+      ;; never an error (non-fatal by design).
+      (define nowhere (make-temporary-file "gsd-nowhere-~a" 'directory))
+      (dynamic-wind void
+                    (lambda () (check-equal? (plan-format-deprecation-warning-lines nowhere) '()))
+                    (lambda () (delete-directory/files nowhere))))
 
     ;; ============================================================
     ;; run

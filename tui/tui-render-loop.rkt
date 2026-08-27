@@ -65,7 +65,12 @@
          (only-in "../tui/context.rkt" tui-ctx-set-layout-breakpoints!)
          (only-in "../ui-core/composer-layout.rkt" compute-composer-layout composer-layout-row-count)
          (only-in "../ui-core/feature-flags.rkt" tui-multiline-composer-enabled)
-         (only-in "../tui/char-width.rkt" string-visible-width))
+         (only-in "../tui/char-width.rkt" string-visible-width)
+         ;; BUG-0038 (v1.00.20 W3): idle demotion — long-idle TUIs stop
+         ;; writing tracked files until the user interacts again.
+         (only-in "../runtime/session/tracked-write-hygiene.rkt"
+                  note-user-activity!
+                  maybe-idle-demote!))
 
 (define (tui-output-port)
   (or (current-guarded-real-output-port) (current-output-port)))
@@ -474,6 +479,11 @@
     ;; Does NOT cancel goal threads (W3 fix).
     (apply-busy-watchdog! ctx (current-inexact-milliseconds) (current-busy-watchdog-ms))
 
+    ;; BUG-0038 (v1.00.20 W3): idle demotion check — once the configured
+    ;; `session.idle-demote-hours` pass without user input, log a staleness
+    ;; notice and refuse auto-writes until note-user-activity! re-arms.
+    (maybe-idle-demote!)
+
     ;; Poll for terminal resize only on a coarse fallback interval. Resize
     ;; messages remain immediate; this path exists for terminals/test stubs
     ;; that do not deliver tsizemsg/SIGWINCH events.
@@ -506,6 +516,11 @@
       (define msg (next-message ctx #:timeout 0.05))
 
       (when msg
+        ;; BUG-0038 (v1.00.20 W3): genuine user input (key/paste/mouse —
+        ;; resize/redraw are environment noise, not interaction) re-arms
+        ;; auto-write paths after an idle demotion.
+        (when (and (pair? msg) (memq (car msg) '(key paste mouse)))
+          (note-user-activity!))
         (define result (process-tui-message! ctx msg))
         (when (eq? result 'resize)
           ;; Reset before querying dimensions so resize events are immediate
