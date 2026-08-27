@@ -11,6 +11,14 @@
 ;; - release.yml triggers the build-once pipeline through release-core.yml
 ;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
 ;; - release-repair.yml defaults to dry-run and gates an explicit apply path
+;;
+;; BUG-0045 characterization pin (v1.00.21 W0; FLIPPED by W3): TODAY the
+;; release workflows race on duplicate tag-pushes (no concurrency group,
+;; publish not idempotent against an already-published tag).
+;;
+;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7): TODAY
+;; go-orchestrator.rkt matches the W0 baseline fixture exactly
+;; (characterization of the decomposition debt).
 
 (require rackunit
          racket/file
@@ -351,3 +359,64 @@
   (for ([line (in-list lines)]
         [i (in-naturals 1)])
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
+
+;; ============================================================
+;; BUG-0045 characterization pins (v1.00.21 W0; FLIPPED by W3)
+;;
+;; TODAY the release workflow races on duplicate tag-push triggers:
+;; no concurrency group serializes same-tag runs, and the publish
+;; script does not recognize "tag already published" as an idempotent
+;; success. Each pin below PASSES against today's red behavior; W3
+;; flips them once the concurrency group and idempotence check land.
+;; ============================================================
+
+(test-case "BUG-0045 pin: release.yml has no concurrency group"
+  (define content (read-release-yml))
+  (check-false (string-contains? content "concurrency:")
+               "TODAY duplicate tag-push runs both proceed (no group, no cancel-in-progress)"))
+
+(test-case "BUG-0045 pin: release-core.yml has no concurrency group"
+  (define content (read-release-core-yml))
+  (check-false (string-contains? content "concurrency:")
+               "TODAY the reusable pipeline does not serialize same-tag runs"))
+
+(test-case "BUG-0045 pin: publish script has no already-published check"
+  (define content (read-release-core-yml))
+  (define publish-job (bounded-section content "  publish:" "  verify-public:"))
+  ;; no idempotent-success path recognizes an existing public release
+  (check-false (string-contains? publish-job "already published")
+               "TODAY publish never short-circuits to success for an already-published tag")
+  ;; the only pre-PATCH release-state check demands a draft: a re-run against
+  ;; an already-public release hits this assertion (or a 422) instead of
+  ;; succeeding idempotently.
+  (check-true (string-contains? publish-job "\"$(jq -r .draft <<<\"$release\")\" = true")
+              "TODAY publish assumes its draft is the only release for the tag"))
+
+;; ============================================================
+;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7)
+;;
+;; TODAY go-orchestrator.rkt matches the W0 baseline fixture exactly
+;; (2222 lines / 81 top-level defines — the decomposition debt as
+;; recorded at W0). Any wave that legitimately grows the file must
+;; re-record tests/fixtures/go-orchestrator-baseline.rktd in the same
+;; commit; W7 flips this from "matches baseline" to "below target".
+;; ============================================================
+
+(define-runtime-path go-orchestrator-path "../extensions/gsd/go-orchestrator.rkt")
+(define-runtime-path go-orchestrator-baseline-path "fixtures/go-orchestrator-baseline.rktd")
+
+(define (go-orchestrator-line-count)
+  (length (regexp-match* #rx"\n" (file->string go-orchestrator-path))))
+
+(define (go-orchestrator-top-level-define-count)
+  (length (regexp-match* #px"(?m:^\\(define)" (file->string go-orchestrator-path))))
+
+(test-case "BUG-0042 pin: go-orchestrator.rkt matches the W0 baseline fixture"
+  (define fixture (call-with-input-file go-orchestrator-baseline-path read))
+  (check-equal? (dict-ref fixture 'file) "extensions/gsd/go-orchestrator.rkt")
+  (check-equal? (go-orchestrator-line-count)
+                (dict-ref fixture 'line-count)
+                "TODAY the line count matches the W0 baseline exactly")
+  (check-equal? (go-orchestrator-top-level-define-count)
+                (dict-ref fixture 'top-level-define-count)
+                "TODAY the top-level define count matches the W0 baseline exactly"))
