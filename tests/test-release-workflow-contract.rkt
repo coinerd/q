@@ -11,6 +11,15 @@
 ;; - release.yml triggers the build-once pipeline through release-core.yml
 ;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
 ;; - release-repair.yml defaults to dry-run and gates an explicit apply path
+;;
+;; BUG-0045 fix contract (this release W0 pin; FLIPPED by W3): release
+;; runs serialize per tag (concurrency group with cancel-in-progress)
+;; and publish is idempotent against an already-published tag (draft
+;; adoption + re-verifying no-op success).
+;;
+;; BUG-0042 characterization pin (this release W0; FLIPPED by W7): TODAY
+;; go-orchestrator.rkt matches the W0 baseline fixture exactly
+;; (characterization of the decomposition debt).
 
 (require rackunit
          racket/file
@@ -351,3 +360,126 @@
   (for ([line (in-list lines)]
         [i (in-naturals 1)])
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
+
+;; ============================================================
+;; BUG-0045 fix contract (this release W3 — W0 pins flipped)
+;;
+;; W3 serializes same-tag release runs: release.yml declares a
+;; concurrency group keyed on the pushed tag ref with
+;; cancel-in-progress, so a duplicate trigger cancels the older run
+;; instead of racing it. The release-core pipeline converges when a
+;; twin still runs: the draft job adopts an existing same-tag+commit
+;; draft, and publish recognizes an already-published release, strictly
+;; re-verifies its assets, and succeeds as a no-op.
+;; ============================================================
+
+(test-case "BUG-0045 fixed: release.yml serializes duplicate tag-push runs"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "concurrency:")
+              "release.yml must declare a concurrency group")
+  (check-true (string-contains? content "group: release-${{ github.ref }}")
+              "the concurrency group must be keyed on the pushed tag ref")
+  (check-true (string-contains? content "cancel-in-progress: true")
+              "a duplicate trigger for the same tag must cancel the older run"))
+
+(test-case "BUG-0045 fixed: draft job adopts an existing same-tag+commit draft"
+  (define content (read-release-core-yml))
+  (define draft-job (bounded-section content "  draft:" "  verify-draft:"))
+  (check-true (string-contains? draft-job "Adopting existing draft release")
+              "the draft job must reuse an existing draft for the same tag+commit")
+  ;; the adoption lookup matches on BOTH the tag name and the exact commit
+  (check-true
+   (string-contains? draft-job
+                     "select(.draft == true and .tag_name == $tag and .target_commitish == $commit)")
+   "adoption must require a draft for the exact tag+commit, not just any draft")
+  ;; creation is conditional: a second -F draft=true POST only happens
+  ;; when no adoptable draft exists
+  (check-true (string-contains? draft-job "if [ -n \"$RELEASE_ID\" ]; then")
+              "draft creation must be gated on the adoption lookup result")
+  (check-true (string-contains? draft-job "-F draft=true")
+              "the fresh-creation path must still create a draft, not a public release")
+  ;; adopted same-named assets are replaced, never duplicated (upload
+  ;; of an existing asset name would 422)
+  (check-true
+   (string-contains? draft-job
+                     "--method DELETE \"repos/${{ github.repository }}/releases/assets/$asset_id\"")
+   "adopted draft's stale same-named assets must be dropped before re-upload"))
+
+(test-case "BUG-0045 fixed: publish recognizes an already-published release and re-verifies before no-op"
+  (define content (read-release-core-yml))
+  (define publish-job (bounded-section content "  publish:" "  verify-public:"))
+  (define noop-branch (bounded-section publish-job "BUG-0045 publish idempotence" "release=$(gh api"))
+  ;; the idempotent-success branch exists and logs its verdict
+  (check-true (string-contains? noop-branch "already published by run")
+              "publish must log the already-published no-op verdict")
+  ;; it queries the live public release for the exact tag and commit
+  (check-true (string-contains? noop-branch "releases/tags/${TAG}")
+              "the check must query the live public release for the exact tag")
+  (check-true
+   (string-contains? noop-branch
+                     "test \"$(jq -r .target_commitish <<<\"$published\")\" = \"$EXPECTED_COMMIT\"")
+   "the already-published release must sit at the expected commit")
+  ;; it must NOT skip verification to "succeed": asset names present,
+  ;; byte-compared with the verified build, and semantically verified
+  (check-true (string-contains? noop-branch "select(.name==\"release-manifest.json\")")
+              "required asset names must be checked on the published release")
+  (check-true (string-contains? noop-branch "cmp --silent")
+              "already-published assets must be byte-compared with the verified build")
+  (check-true (string-contains? noop-branch "scripts/verify-release-bundle.rkt")
+              "already-published assets must pass semantic bundle verification")
+  ;; the redundant draft must not strand: it is removed and the
+  ;; real public release id is handed downstream
+  (check-true
+   (string-contains? noop-branch
+                     "--method DELETE \"repos/${{ github.repository }}/releases/$RELEASE_ID\"")
+   "the now-unpublishable duplicate draft must be cleaned up, not stranded")
+  (check-true (string-contains? noop-branch "release-id=${PUB_RELEASE_ID}")
+              "verify-public must receive the published release id, not the deleted draft's")
+  ;; the draft=true demand of the fresh path applies only AFTER the
+  ;; already-published branch has been excluded (ordering matters:
+  ;; a re-run against a published tag must take the no-op, not 422)
+  (define (first-pos hay needle)
+    (define m (regexp-match-positions (regexp (regexp-quote needle)) hay))
+    (and (pair? m) (caar m)))
+  (define noop-pos (first-pos publish-job "already published by run"))
+  (define fresh-draft-pos (first-pos publish-job "\"$(jq -r .draft <<<\"$release\")\" = true"))
+  (check-true (and (number? noop-pos) (number? fresh-draft-pos) (< noop-pos fresh-draft-pos))
+              "the fresh-path draft assertion must come after the already-published branch"))
+
+;; ============================================================
+;; BUG-0042 characterization pin (this release W0; FLIPPED by W7 next release)
+;;
+;; The W0 pin recorded the decomposition debt (2566 lines / 91 defines);
+;; W7 extracted stall-policy, infra-retry-policy, freshness,
+;; attempt-artifacts, and campaign-budgets from go-orchestrator. TODAY
+;; the file matches the recorded POST-EXTRACTION counts AND stays below
+;; the W7 target (~1500 lines). Any wave that legitimately grows the
+;; file must re-record tests/fixtures/go-orchestrator-baseline.rktd in
+;; the same commit and keep it under the target — extract a module
+;; instead of growing the orchestrator.
+;; ============================================================
+
+(define-runtime-path go-orchestrator-path "../extensions/gsd/go-orchestrator.rkt")
+(define-runtime-path go-orchestrator-baseline-path "fixtures/go-orchestrator-baseline.rktd")
+
+(define (go-orchestrator-line-count)
+  (length (regexp-match* #rx"\n" (file->string go-orchestrator-path))))
+
+(define (go-orchestrator-top-level-define-count)
+  (length (regexp-match* #px"(?m:^\\(define)" (file->string go-orchestrator-path))))
+
+(test-case "BUG-0042 pin (W7 flip): go-orchestrator matches post-extraction counts AND stays under target"
+  (define fixture (call-with-input-file go-orchestrator-baseline-path read))
+  (check-equal? (dict-ref fixture 'file) "extensions/gsd/go-orchestrator.rkt")
+  (check-equal? (go-orchestrator-line-count)
+                (dict-ref fixture 'line-count)
+                "TODAY the line count matches the post-extraction record exactly")
+  (check-equal? (go-orchestrator-top-level-define-count)
+                (dict-ref fixture 'top-level-define-count)
+                "TODAY the top-level define count matches the post-extraction record exactly")
+  (check-true
+   (< (go-orchestrator-line-count) (dict-ref fixture 'w7-target-max-lines))
+   (format
+    "W7 target: go-orchestrator.rkt (~a lines) must stay below ~a lines — extract a module instead of growing it"
+    (go-orchestrator-line-count)
+    (dict-ref fixture 'w7-target-max-lines))))

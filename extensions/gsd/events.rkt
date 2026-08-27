@@ -51,7 +51,19 @@
                          gsd.verification.escalated
                          ;; v1.00.18 (BUG-0024 W3): automatic campaign-level
                          ;; infra retry (payload: wave idx, attempt, delay).
-                         gsd.campaign.infra-retry))
+                         gsd.campaign.infra-retry
+                         ;; BUG-0043 (W2): non-'done wave-execution-outcomes
+                         ;; (stall kills, infra failures) surface as typed
+                         ;; error events on the transcript — payload carries
+                         ;; wave idx, outcome kind, message (verbatim), and
+                         ;; level "error" — instead of conversation text.
+                         gsd.wave.outcome-error
+                         ;; BUG-0040 (W6): a terminal transition dispatched
+                         ;; to configured notification sinks (payload: kind,
+                         ;; wave, reason, spend, sink names attempted).
+                         ;; Emitted only when at least one sink is
+                         ;; configured — the silent default emits nothing.
+                         gsd.campaign.notified))
 
 ;; ============================================================
 ;; Correlation ID parameter

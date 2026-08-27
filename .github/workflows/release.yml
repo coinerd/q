@@ -8,6 +8,19 @@ on:
     tags:
       - 'v*'
 
+# BUG-0045: a tag pushed twice (or a re-fired duplicate push event)
+# starts two Release runs off the same ref within seconds. Without
+# serialization both runs build, draft, and try to publish, and the
+# loser's undraft PATCH fails with HTTP 422 once the winner has bound
+# the tag — leaving a red run and an untagged draft for manual cleanup
+# (v1.00.20: runs 33037947829 / 33038023671 ~90 s apart). Keying the
+# group on the pushed tag ref serializes runs per tag (runs for
+# different tags stay independent), and cancel-in-progress makes a
+# duplicate trigger cancel the older run instead of racing it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

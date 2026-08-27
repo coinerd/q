@@ -59,10 +59,12 @@
                      [setting-memory-injection-budget setting-memory-injection-budget]
                      [setting-memory-backend setting-memory-backend]
                      [setting-memory-auto-extraction-enabled? setting-memory-auto-extraction-enabled?]
-                     [setting-memory-auto-extraction-min-confidence setting-memory-auto-extraction-min-confidence]
+                     [setting-memory-auto-extraction-min-confidence
+                      setting-memory-auto-extraction-min-confidence]
                      [setting-memory-user-scope-enabled? setting-memory-user-scope-enabled?]
                      [setting-memory-auto-reflection-enabled? setting-memory-auto-reflection-enabled?]
-                     [setting-memory-auto-reflection-min-items setting-memory-auto-reflection-min-items]
+                     [setting-memory-auto-reflection-min-items
+                      setting-memory-auto-reflection-min-items]
                      [setting-reflection-prompt-enabled? setting-reflection-prompt-enabled?]
                      [setting-auto-distillation-enabled? setting-auto-distillation-enabled?]
                      [execution-plane-enabled? execution-plane-enabled?]
@@ -84,7 +86,12 @@
                      [broker-remote-host broker-remote-host]
                      [broker-remote-port broker-remote-port]
                      [broker-cert-dir broker-cert-dir]
-                     [broker-capability-secret broker-capability-secret])
+                     [broker-capability-secret broker-capability-secret]
+                     [gsd-worktree-isolation-enabled? gsd-worktree-isolation-enabled?]
+                     [gsd-stall-soft-limit gsd-stall-soft-limit]
+                     [gsd-stall-hard-limit gsd-stall-hard-limit]
+                     [gsd-stall-window gsd-stall-window]
+                     [gsd-stall-backstop gsd-stall-backstop])
          sandbox-enabled?
          sandbox-timeout
          sandbox-memory-limit

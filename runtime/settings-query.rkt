@@ -10,6 +10,7 @@
          racket/contract
          racket/hash
          racket/file
+         racket/string
          racket/runtime-path
          "../util/config-paths.rkt")
 
@@ -74,7 +75,34 @@
           [broker-remote-port (-> q-settings? exact-positive-integer?)]
           [broker-cert-dir (-> q-settings? string?)]
           [broker-capability-secret (-> q-settings? (or/c string? #f))]
-          [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]))
+          [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]
+          [gsd-stall-soft-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-campaign-max-cost (-> (or/c q-settings? #f) (or/c (and/c real? positive?) #f))]
+          [gsd-campaign-max-tokens (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-notify-desktop-command (-> (or/c q-settings? #f) (or/c string? #f))]
+          [gsd-notify-webhook-url (-> (or/c q-settings? #f) (or/c string? #f))]))
+
+;; ============================================================
+;; GSD stall-threshold defaults (v1.00.21 W1 — BUG-0044)
+;;
+;; Canonical source of the four watchdog thresholds. The runtime layer
+;; owns config defaults; extensions/gsd/wave-executor.rkt re-exports
+;; these under the STALL-*-DEFAULT names for its callers, so there is
+;; exactly ONE place that defines 8/15/30/300.
+;; ============================================================
+
+(define STALL-SOFT-LIMIT-DEFAULT 8)
+(define STALL-HARD-LIMIT-DEFAULT 15)
+(define STALL-REPETITION-WINDOW-DEFAULT 30)
+(define STALL-BACKSTOP-LIMIT-DEFAULT 300)
+
+(provide STALL-SOFT-LIMIT-DEFAULT
+         STALL-HARD-LIMIT-DEFAULT
+         STALL-REPETITION-WINDOW-DEFAULT
+         STALL-BACKSTOP-LIMIT-DEFAULT)
 
 ;; Query
 ;; ============================================================
@@ -164,6 +192,127 @@
     [(boolean? raw) raw]
     [(string? raw) (string-ci=? raw "true")]
     [else #f]))
+
+;; ============================================================
+;; GSD stall-threshold settings (v1.00.21 W1 — BUG-0044)
+;; Config keys: gsd.stall.soft-limit, gsd.stall.hard-limit,
+;;              gsd.stall.window, gsd.stall.backstop
+;;
+;; Semantics per key (shared helper below):
+;;   absent (or settings #f — nothing could be loaded)
+;;                      → default (8/15/30/300)
+;;   exact positive int → that value
+;;   #f                 → #f (limit disabled; the watchdog treats
+;;                          window #f as "use the default window")
+;;   anything else      → default + a warning. A typo'd settings file
+;;                        must NEVER crash a campaign mid-wave.
+;; ============================================================
+
+(define (stall-threshold-value key-path settings default)
+  (cond
+    [(not settings) default]
+    [else
+     (define raw (setting-ref* settings key-path default))
+     (cond
+       [(eq? raw #f) #f]
+       [(exact-positive-integer? raw) raw]
+       [else
+        (log-warning "gsd.stall: key ~a has invalid value ~s — using default ~a"
+                     (string-join (map symbol->string key-path) ".")
+                     raw
+                     default)
+        default])]))
+
+(define (gsd-stall-soft-limit settings)
+  (stall-threshold-value '(gsd stall soft-limit) settings STALL-SOFT-LIMIT-DEFAULT))
+
+(define (gsd-stall-hard-limit settings)
+  (stall-threshold-value '(gsd stall hard-limit) settings STALL-HARD-LIMIT-DEFAULT))
+
+(define (gsd-stall-window settings)
+  (stall-threshold-value '(gsd stall window) settings STALL-REPETITION-WINDOW-DEFAULT))
+
+(define (gsd-stall-backstop settings)
+  (stall-threshold-value '(gsd stall backstop) settings STALL-BACKSTOP-LIMIT-DEFAULT))
+
+;; ============================================================
+;; GSD campaign budget ceilings (v1.00.22 W5 — BUG-0039)
+;; Config keys: gsd.campaign.max-cost (positive real, USD),
+;;              gsd.campaign.max-tokens (positive integer)
+;; Absent key / #f settings → #f (ceiling disabled — the campaign
+;; runs unbounded, exactly as before W5). A typo'd value logs a
+;; warning and resolves to #f (disabled): a malformed settings file
+;; must never crash or silently shrink a campaign. Strings are
+;; coerced to numbers so hand-edited JSON keeps working.
+;; Read by extensions/gsd/go-orchestrator.rkt at attempt boundaries
+;; (budget-pause-violation?) — single wiring point.
+;; ============================================================
+(define (gsd-campaign-max-cost settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings '(gsd campaign max-cost) #f))
+     (define (valid? v)
+       (and (real? v) (positive? v)))
+     (cond
+       [(eq? raw #f) #f]
+       [(valid? raw) raw]
+       [(string? raw)
+        (define n (string->number raw))
+        (if (valid? n) n #f)]
+       [else
+        (log-warning "gsd.campaign.max-cost: invalid value ~s — treating as disabled" raw)
+        #f])]))
+
+(define (gsd-campaign-max-tokens settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings '(gsd campaign max-tokens) #f))
+     (cond
+       [(eq? raw #f) #f]
+       [(exact-positive-integer? raw) raw]
+       [(and (real? raw) (positive? raw)) (inexact->exact (floor raw))]
+       [(string? raw)
+        (define n (string->number raw))
+        (cond
+          [(exact-positive-integer? n) n]
+          [(and (real? n) (positive? n)) (inexact->exact (floor n))]
+          [else #f])]
+       [else
+        (log-warning "gsd.campaign.max-tokens: invalid value ~s — treating as disabled" raw)
+        #f])]))
+
+;; ============================================================
+;; GSD campaign notification sinks (v1.00.22 W6 — BUG-0040)
+;; Config keys: gsd.notify.desktop-command (shell command template;
+;;              placeholders {message} {kind} {campaign} {wave}),
+;;              gsd.notify.webhook-url (HTTP POST target for a small
+;;              JSON payload).
+;; Absent key / #f settings / junk value → #f (sink disabled) with a
+;; ONE-TIME warning for junk: unknown or misconfigured sinks warn and
+;; are skipped, never crash a campaign. The tmux sink needs no key
+;; (active automatically under $TMUX); desktop/webhook are strictly
+;; opt-in. Read by extensions/gsd/notify.rkt
+;; (gsd-notify-sinks-from-settings) — single wiring point.
+;; ============================================================
+(define (gsd-notify-string-setting settings key-path what)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings key-path #f))
+     (cond
+       [(eq? raw #f) #f]
+       [(and (string? raw) (positive? (string-length (string-trim raw)))) (string-trim raw)]
+       [else
+        (log-warning "gsd.notify.~a: invalid value ~s — sink disabled" what raw)
+        #f])]))
+
+(define (gsd-notify-desktop-command settings)
+  (gsd-notify-string-setting settings '(gsd notify desktop-command) 'desktop-command))
+
+(define (gsd-notify-webhook-url settings)
+  (gsd-notify-string-setting settings '(gsd notify webhook-url) 'webhook-url))
 
 ;; ============================================================
 ;; Security config loader (v0.25.2 — F3)

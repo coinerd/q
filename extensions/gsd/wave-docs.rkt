@@ -21,6 +21,7 @@
          racket/format
          racket/string
          racket/file
+         racket/list
          racket/path
          racket/port
          (only-in "shared.rkt" slugify)
@@ -48,6 +49,19 @@
          status-divergence-doc-status
          status-divergence-plan-path
          status-divergence-doc-path
+         ;; BUG-0041 (W4): one wave-doc lint violation
+         wave-doc-violation
+         wave-doc-violation?
+         wave-doc-violation-wave-idx
+         wave-doc-violation-doc-path
+         wave-doc-violation-section
+         ;; BUG-0041 (W4): index-arrow ↔ doc-slug mismatch
+         slug-mismatch
+         slug-mismatch?
+         slug-mismatch-wave-idx
+         slug-mismatch-arrow-slug
+         slug-mismatch-disk-slug
+         slug-mismatch-doc-path
          ;; Functions (contracted)
          (contract-out
           [wave-doc-path (-> path-string? exact-nonnegative-integer? string? path?)]
@@ -74,7 +88,17 @@
           [format-status-divergence-warning (-> status-divergence? string?)]
           [resolve-status-precedence (-> string? string? string?)]
           [plan-format-deprecation-warnings (-> string? (listof string?))]
-          [plan-format-deprecation-warning-lines (-> path-string? (listof string?))]))
+          [plan-format-deprecation-warning-lines (-> path-string? (listof string?))]
+          ;; BUG-0041 (W4): wave-doc lint at /go entry with recorded verdicts
+          [lint-wave-doc (-> hash? (listof wave-doc-violation?))]
+          [lint-campaign-wave-docs (-> path-string? (listof wave-doc-violation?))]
+          [wave-doc-lint-warning-lines (-> path-string? (listof string?))]
+          [format-wave-doc-lint-warning
+           (-> exact-nonnegative-integer? string? (listof wave-doc-violation?) string?)]
+          [check-slug-consistency (-> path-string? (listof slug-mismatch?))]
+          [format-slug-mismatch-warning (-> slug-mismatch? string?)]
+          [slug-mismatch-warning-lines (-> path-string? (listof string?))]
+          [store-wave-doc-lint-verdict! (-> path-string? string? boolean?)]))
 
 ;; ============================================================
 ;; Constants
@@ -139,6 +163,11 @@
           slug
           'status
           status
+          ;; BUG-0041 (W4): raw header presence (vs the "Inbox" default that
+          ;; extract-status substitutes when the header is absent) so
+          ;; lint-wave-doc can distinguish "no header" from "header: Inbox".
+          'status-header?
+          (and (regexp-match? wave-header-rx text) #t)
           'content
           content
           'path
@@ -402,6 +431,273 @@
   (if (not (file-exists? plan-path))
       '()
       (plan-format-deprecation-warnings (call-with-input-file plan-path port->string))))
+
+;; ============================================================
+;; Wave-doc lint at /go entry (BUG-0041, W4)
+;; ============================================================
+
+;; /go validates the PLAN.md index but never the wave docs' CONTENT. The
+;; executor contract relies on conventions — `## Files` with `- File:`
+;; lines (the stall-steering target extractor parses exactly that shape),
+;; `## Verify`, `## Done`, and the canonical managed status header — yet
+;; a doc missing any of these loaded cleanly and the gap surfaced
+;; mid-wave as degraded steering, guessed verify commands, and
+;; unfalsifiable done criteria. The lint below makes that degradation
+;; explicit AT /go ENTRY, as named warnings (never blocks) plus a
+;; durable per-campaign verdict recorded at campaign-record creation.
+
+;; Mirrors the stall-steering target extractor's file-line shape in
+;; go-orchestrator.rkt (wave-file-line-rx): `- File: <path>` bullets.
+(define wave-doc-file-line-rx #px"^[-*] *File:[ \t]+([^ \t\n]+)")
+(define wave-doc-section-heading-rx #px"^## ")
+
+;; One missing-or-invalid executor-contract section of one wave doc.
+;;   wave-idx : wave index from the PLAN.md row
+;;   doc-path : display path of the wave doc (relative to project root)
+;;   section  : one of 'status-header 'files 'verify 'done
+(struct wave-doc-violation (wave-idx doc-path section) #:transparent)
+
+;; wave-doc-section-body : string? string? -> (listof string?)
+;; PURE. Body lines of the `## <name>` section (heading line matched by
+;; `^## <name>\b`, so `## Files` matches but `## Files-legacy` does not),
+;; up to the next `## ` heading. '() when the section is absent.
+(define (wave-doc-section-body content name)
+  ;; NOTE: Racket `\b` is a backspace escape, not a word boundary —
+  ;; anchor canonical headings at end-of-line instead.
+  (define heading-rx (regexp (string-append "^## +" (regexp-quote name) " *$")))
+  (let loop ([lines (string-split content "\n")]
+             [mode 'seeking])
+    (cond
+      [(null? lines) '()]
+      [(eq? mode 'seeking)
+       (loop (cdr lines) (if (regexp-match? heading-rx (car lines)) 'body 'seeking))]
+      [else
+       (if (regexp-match? wave-doc-section-heading-rx (car lines))
+           '()
+           (cons (car lines) (loop (cdr lines) 'body)))])))
+
+;; wave-doc-section-nonempty? : string? string? -> boolean?
+;; Section exists and has at least one non-blank body line.
+(define (wave-doc-section-nonempty? content name)
+  (ormap (lambda (l) (not (string=? (string-trim l) ""))) (wave-doc-section-body content name)))
+
+;; recognized-status? : (or/c string? symbol?) -> boolean?
+;; #t iff the status is in the STATUS-CONSIDERED-EQUAL vocabulary (i.e.
+;; status->symbol found a real group, not the 'pending fallback).
+(define (recognized-status? s)
+  (define up
+    (string-upcase (string-trim (if (symbol? s)
+                                    (symbol->string s)
+                                    s))))
+  (for/or ([group (in-list STATUS-CONSIDERED-EQUAL)])
+    (and (member up (cdr group)) #t)))
+
+;; lint-wave-doc : hash? -> (listof wave-doc-violation?)
+;; PURE. Lints ONE parsed wave doc (the hash read-wave-doc /
+;; parse-wave-doc-from-string return) against the executor contract.
+;; Violations, in a deterministic order:
+;;   status-header — managed header (`# Wave N\nStatus: ...`) absent or
+;;                   its value not a canonical status word
+;;   files         — `## Files` section missing or with no `- File:`
+;;                   line. Required for EVERY wave doc — no category
+;;                   exemption: even pure-analysis waves create
+;;                   test/report files, and the stall-steering target
+;;                   extractor parses exactly this shape.
+;;   verify        — `## Verify` missing or empty (no non-blank line)
+;;   done          — `## Done` missing or empty
+;; Hashes without the 'status-header? key (pre-BUG-0041 producers) are
+;; treated as header-present: the lint never faults old records it
+;; cannot inspect.
+(define (lint-wave-doc doc)
+  (define idx (hash-ref doc 'index 0))
+  (define path-display
+    (or (hash-ref doc 'path #f)
+        (format ".planning/waves/W~a-~a.md" idx (hash-ref doc 'slug "unknown"))))
+  (define content (hash-ref doc 'content ""))
+  (define status (hash-ref doc 'status "Inbox"))
+  (append (if (and (hash-ref doc 'status-header? #t) (recognized-status? status))
+              '()
+              (list (wave-doc-violation idx path-display 'status-header)))
+          (if (ormap (lambda (l) (regexp-match? wave-doc-file-line-rx l))
+                     (wave-doc-section-body content "Files"))
+              '()
+              (list (wave-doc-violation idx path-display 'files)))
+          (if (wave-doc-section-nonempty? content "Verify")
+              '()
+              (list (wave-doc-violation idx path-display 'verify)))
+          (if (wave-doc-section-nonempty? content "Done")
+              '()
+              (list (wave-doc-violation idx path-display 'done)))))
+
+;; lint-campaign-wave-docs : path-string? -> (listof wave-doc-violation?)
+;; File-backed lint of every wave doc the PLAN.md index references. Docs
+;; missing on disk are BUG-0023 strict-validation territory (/go errors
+;; before lint), never lint violations.
+(define (lint-campaign-wave-docs base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (if (not (file-exists? plan-path))
+      '()
+      (append* (for/list ([e (in-list (parse-plan-index (call-with-input-file plan-path
+                                                                              port->string)))])
+                 (define idx (wave-index-entry-idx e))
+                 (define doc
+                   (and (wave-exists? base-dir idx (wave-index-entry-slug e))
+                        (read-wave-doc base-dir idx (wave-index-entry-slug e))))
+                 (if doc
+                     (lint-wave-doc doc)
+                     '())))))
+
+;; Human label for each violation section, named verbatim in warnings.
+(define WAVE-DOC-LINT-SECTION-LABELS
+  (list (list 'status-header "`# Wave N` + canonical `Status:` header")
+        (list 'files "`## Files` with at least one `- File:` line")
+        (list 'verify "non-empty `## Verify`")
+        (list 'done "non-empty `## Done`")))
+
+;; format-wave-doc-lint-warning :
+;;   exact-nonnegative-integer? string? (listof wave-doc-violation?) -> string?
+;; ONE named warning for ONE doc listing every missing-or-invalid section
+;; (BUG-0041 action: one named warning per doc at /go entry).
+(define (format-wave-doc-lint-warning wave-idx doc-path violations)
+  (define section-names
+    (string-join (for/list ([v (in-list violations)])
+                   (cond
+                     [(assoc (wave-doc-violation-section v) WAVE-DOC-LINT-SECTION-LABELS)
+                      =>
+                      cadr]
+                     [else (format "~a" (wave-doc-violation-section v))]))
+                 "; "))
+  (format (string-append "WARNING (wave-doc lint, BUG-0041): W~a (~a) — missing or invalid: ~a. "
+                         "The executor contract depends on these sections; fix the doc so "
+                         "steering, verification and done criteria are falsifiable.")
+          wave-idx
+          doc-path
+          section-names))
+
+;; wave-doc-lint-warning-lines : path-string? -> (listof string?)
+;; One NAMED warning PER DOC for the whole campaign; advisory only —
+;; lint NEVER blocks /go (missing sections degrade, they do not reject).
+(define (wave-doc-lint-warning-lines base-dir)
+  (for/list ([group (in-list (group-by (lambda (v)
+                                         (list (wave-doc-violation-wave-idx v)
+                                               (wave-doc-violation-doc-path v)))
+                                       (lint-campaign-wave-docs base-dir)))])
+    (format-wave-doc-lint-warning (wave-doc-violation-wave-idx (car group))
+                                  (wave-doc-violation-doc-path (car group))
+                                  group)))
+
+;; store-wave-doc-lint-verdict! : path-string? string? -> boolean?
+;; Durable campaign evidence (BUG-0041): the lint verdict recorded at
+;; campaign-record creation lands in the campaign's evidence directory
+;; as .planning/campaigns/<plan-id>/lint-verdict.rktd — the verdict of
+;; EVERY referenced wave doc (clean docs included: a recorded PASS is
+;; evidence too), write-once so later /go runs never rewrite the
+;; verdict the campaign started under. Best-effort: any failure logs at
+;; debug level and returns #f; storing evidence must never block /go.
+(define (store-wave-doc-lint-verdict! base-dir plan-id)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-debug "gsd: store-wave-doc-lint-verdict! failed for ~a: ~a"
+                                          plan-id
+                                          (exn-message e))
+                               #f)])
+    (define dest (build-path base-dir ".planning" "campaigns" plan-id "lint-verdict.rktd"))
+    (cond
+      [(file-exists? dest) #f]
+      [else
+       (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+       (define entries
+         (if (file-exists? plan-path)
+             (parse-plan-index (call-with-input-file plan-path port->string))
+             '()))
+       (define verdict
+         (list 'wave-doc-lint-verdict
+               (list 'recorded-at (current-seconds))
+               (for/list ([e (in-list entries)])
+                 (define idx (wave-index-entry-idx e))
+                 (define doc
+                   (and (wave-exists? base-dir idx (wave-index-entry-slug e))
+                        (read-wave-doc base-dir idx (wave-index-entry-slug e))))
+                 (list 'wave
+                       idx
+                       'doc-path
+                       (index-entry-doc-display-path e)
+                       'violations
+                       (if doc
+                           (map wave-doc-violation-section (lint-wave-doc doc))
+                           '(missing-doc))))))
+       (make-directory* (path-only dest))
+       (call-with-output-file dest
+                              (lambda (out)
+                                (write verdict out)
+                                (newline out))
+                              #:exists 'error)
+       #t])))
+
+;; One index-arrow ↔ doc-slug disagreement for one wave (BUG-0041).
+;; The wave doc's identity is stated TWICE: the PLAN.md arrow target
+;; (`waves/W<n>-<slug>.md`) and the doc's on-disk filename. A W<n>-*.md
+;; file whose slug differs from the arrow slug means the index points at
+;; a stale path — reported through the BUG-0034 consistency surface so
+;; there is a SINGLE divergence surface, not two.
+;;   arrow-slug : slug derived from the PLAN.md row (arrow or title)
+;;   disk-slug  : slug of the W<n>-*.md file actually on disk
+;;   doc-path   : display path of that on-disk file
+(struct slug-mismatch (wave-idx arrow-slug disk-slug doc-path) #:transparent)
+
+;; wave-doc-filename-slug : exact-nonnegative-integer? path? -> (or/c string? #f)
+;; Slug encoded in a `W<n>-<slug>.md` filename; #f when the shape differs.
+(define (wave-doc-filename-slug idx filename)
+  (define s (path->string filename))
+  (define prefix (format "W~a-" idx))
+  (and (string-prefix? s prefix)
+       (string-suffix? s ".md")
+       (> (string-length s) (+ (string-length prefix) 3))
+       (substring s (string-length prefix) (- (string-length s) 3))))
+
+;; check-slug-consistency : path-string? -> (listof slug-mismatch?)
+;; PURE read path: for every PLAN.md index row, flags any on-disk
+;; W<n>-*.md wave doc whose filename slug differs from the row's slug.
+;; (The arrow-target file itself missing is BUG-0023 strict-validation
+;; territory.) Never writes; callers turn mismatches into warnings.
+(define (check-slug-consistency base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (if (not (file-exists? plan-path))
+      '()
+      (append*
+       (for/list ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))])
+         (define idx (wave-index-entry-idx e))
+         (define idx-prefix-rx (regexp (format "^W~a-" idx)))
+         (define waves-dir (build-path base-dir ".planning" "waves"))
+         (for/list ([f (in-list (if (directory-exists? waves-dir)
+                                    (sort (directory-list waves-dir) path<?)
+                                    '()))]
+                    #:when (regexp-match? idx-prefix-rx (path->string f))
+                    #:do [(define disk-slug (wave-doc-filename-slug idx f))]
+                    #:when (and disk-slug (not (string=? disk-slug (wave-index-entry-slug e)))))
+           (slug-mismatch idx
+                          (wave-index-entry-slug e)
+                          disk-slug
+                          (format ".planning/waves/~a" (path->string f))))))))
+
+;; format-slug-mismatch-warning : slug-mismatch? -> string?
+;; One named, user-visible warning per mismatch (BUG-0041): names BOTH
+;; spellings of the wave's identity so a human can align them. Advisory
+;; only — never blocks /go by itself.
+(define (format-slug-mismatch-warning m)
+  (format (string-append "WARNING (slug mismatch, BUG-0041): W~a — PLAN.md targets "
+                         "waves/W~a-~a.md but a wave doc exists on disk as ~a. "
+                         "Align the arrow target with the doc filename (reported via the "
+                         "status-consistency surface; single divergence surface).")
+          (slug-mismatch-wave-idx m)
+          (slug-mismatch-wave-idx m)
+          (slug-mismatch-arrow-slug m)
+          (slug-mismatch-doc-path m)))
+
+;; slug-mismatch-warning-lines : path-string? -> (listof string?)
+;; File-backed variant for the /go and /gsd advisory surfaces.
+(define (slug-mismatch-warning-lines base-dir)
+  (for/list ([m (in-list (check-slug-consistency base-dir))])
+    (format-slug-mismatch-warning m)))
 
 ;; ============================================================
 ;; PLAN.md index status update

@@ -8,6 +8,7 @@
 (require racket/contract
          racket/match
          racket/string
+         racket/format
          racket/set
          json
          "../define-extension.rkt"
@@ -472,6 +473,20 @@
                        "")
           "\n"))))
   (define last-failure (extract-last-failure wave-details))
+  ;; BUG-0041 (W4): bake the wave-doc lint verdict into the executor prompt
+  ;; so degradation is explicit up front (missing Files/Verify/Done sections,
+  ;; non-canonical status header) instead of being discovered mid-wave as
+  ;; degraded steering and guessed verify commands.
+  (define lint-verdict
+    (if (not wave-doc)
+        ""
+        (let ([violations (lint-wave-doc wave-doc)])
+          (if (null? violations)
+              ""
+              (string-append
+               "\n## Wave-doc lint verdict (BUG-0041)\n"
+               (format-wave-doc-lint-warning wave-idx (hash-ref wave-doc 'path "") violations)
+               "\n")))))
   (string-append
    planning-implement-prompt
    file-contract
@@ -501,6 +516,7 @@
         "before signalling completion.\n\n")
        "")
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
+   lint-verdict
    (if (string=? state-content "")
        ""
        (format "\n## Current State\n~a\n" state-content))
@@ -583,6 +599,10 @@
                                          (format "Campaign migration failed closed: ~a"
                                                  (exn-message e)))))])
     (define rec (load-or-migrate-campaign! base-dir))
+    ;; BUG-0041 (W4): record the lint verdict as durable campaign evidence at
+    ;; creation (write-once .planning/campaigns/<plan-id>/lint-verdict.rktd;
+    ;; best-effort — evidence storage must never block /go).
+    (store-wave-doc-lint-verdict! base-dir (campaign-plan-id rec))
     (define next-wave (select-next-actionable-wave rec))
     (define requested (requested-wave-index input-text))
     (cond
@@ -649,12 +669,20 @@
          ;; divergences never block /go, they surface as named warnings.
          ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
          ;; relaxed status-less index rows) join the same advisory block.
+         ;; BUG-0041 (W4): wave-doc lint verdict joins the same advisory
+         ;; block — WARN, never block; the durable copy is recorded on the
+         ;; campaign record path by prepare-go-campaign below. Arrow-target
+         ;; ↔ doc-slug mismatches ride the v1.00.20 W2 consistency checker
+         ;; (slug-mismatch-warning-lines, same module as the status check):
+         ;; one divergence surface, no parallel reporting mechanism.
          (prepare-go-campaign base-dir
                               input-text
                               plan
                               validation
                               (append (status-divergence-warning-lines base-dir)
-                                      (plan-format-deprecation-warning-lines base-dir))))]))
+                                      (plan-format-deprecation-warning-lines base-dir)
+                                      (slug-mismatch-warning-lines base-dir)
+                                      (wave-doc-lint-warning-lines base-dir))))]))
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================
@@ -663,18 +691,44 @@
   (define mode (gsd-mode))
   (define tw (gsm-ctx-total-waves (current-gsd-ctx)))
   (define cw (gsm-ctx-completed-waves (current-gsd-ctx)))
+  (define base-dir (or (current-pinned-dir) (current-directory)))
+  ;; BUG-0039 (W5): /gsd shows spent-so-far per wave and campaign total,
+  ;; read from the durable record (honest accounting: waves without usage
+  ;; metadata are named usage-missing, never faked as zero).
+  (define spend-lines
+    (with-handlers ([exn:fail? (lambda (e) '())])
+      (define rec (load-or-migrate-campaign! base-dir))
+      (define wave-line
+        (lambda (w)
+          (define s (wave-usage-summary w))
+          (cond
+            [(positive? (usage-summary-missing-attempts s))
+             (format "W~a: usage-missing (~a attempt(s) no usage metadata)"
+                     (campaign-wave-index w)
+                     (usage-summary-missing-attempts s))]
+            [(and (usage-summary-cost-usd s) (usage-summary-total-tokens s))
+             (format "W~a: $~a (~a tokens)"
+                     (campaign-wave-index w)
+                     (~r (usage-summary-cost-usd s) #:precision '(= 2))
+                     (usage-summary-total-tokens s))]
+            [else (format "W~a: no usage yet" (campaign-wave-index w))])))
+      (define total (campaign-usage-summary rec))
+      (append (list "Spend:")
+              (map wave-line (campaign-record-waves rec))
+              (list (format "Total: $~a (~a tokens)"
+                            (~r (or (usage-summary-cost-usd total) 0) #:precision '(= 2))
+                            (or (usage-summary-total-tokens total) 0))))))
   (define parts
-    (list (format "Mode: ~a" (or mode "inactive"))
-          (if (> tw 0)
-              (format "Waves: ~a/~a complete" (set-count cw) tw)
-              "Waves: not set")))
-  ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences
-  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
+    (append (list (format "Mode: ~a" (or mode "inactive"))
+                  (if (> tw 0)
+                      (format "Waves: ~a/~a complete" (set-count cw) tw)
+                      "Waves: not set"))
+            spend-lines))
+  ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
   ;; status block. Advisory only, never blocks anything.
   ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
   ;; relaxed status-less index rows) join the same advisory block, matching
   ;; the /go surface (docs/gsd-guide.md: both warn since v1.00.21).
-  (define base-dir (or (current-pinned-dir) (current-directory)))
   (define advisory-lines
     (if (not base-dir)
         '()

@@ -42,7 +42,15 @@
          racket/system
          racket/port
          "plan-types.rkt"
-         (only-in "../../runtime/settings-query.rkt" gsd-worktree-isolation-enabled?)
+         (only-in "../../runtime/settings-query.rkt"
+                  gsd-worktree-isolation-enabled?
+                  ;; v1.00.21 W1 (BUG-0044): canonical stall thresholds
+                  ;; live in settings-query.rkt; re-exported here so
+                  ;; existing STALL-*-DEFAULT importers keep working.
+                  STALL-SOFT-LIMIT-DEFAULT
+                  STALL-HARD-LIMIT-DEFAULT
+                  STALL-REPETITION-WINDOW-DEFAULT
+                  STALL-BACKSTOP-LIMIT-DEFAULT)
          "../gsd/wave-docs.rkt"
          (only-in "shared.rkt" extract-plan-title)
          (only-in "state-machine.rkt"
@@ -495,11 +503,9 @@
 ;; file A" and "read of file B" are different signatures while "read of
 ;; file A" 3× in a row is one signature 3×.
 ;; ============================================================
-
-(define STALL-SOFT-LIMIT-DEFAULT 8)
-(define STALL-HARD-LIMIT-DEFAULT 15)
-(define STALL-REPETITION-WINDOW-DEFAULT 30)
-(define STALL-BACKSTOP-LIMIT-DEFAULT 300)
+;; The four STALL-*-DEFAULT constants are defined in
+;; runtime/settings-query.rkt (canonical source, BUG-0044 W1) and
+;; re-exported from this module; see the require above.
 
 ;; A limit is either disabled (#f) or a positive integer.
 (define (stall-limit? v)

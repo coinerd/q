@@ -6,7 +6,7 @@
 
 ;; tests/test-gsd-attempt-artifact-characterization.rkt — BUG-0029 W5.
 ;;
-;; FLIPPED PIN (v1.00.21 W5): this file originally characterized the BUG as
+;; FLIPPED PIN (this release W5): this file originally characterized the BUG as
 ;; the deliberate absence of attempt-artifact ownership — campaign-wave had
 ;; no ledger field, neither the orchestrator nor the executor could build an
 ;; inherited-artifacts prompt block, and nothing reconciled the durable
@@ -110,9 +110,11 @@
 
 (define w5-pure-suite
   (test-suite "BUG-0029 W5 fixed pin: ledger + inherited-artifacts block exist"
-    (test-case "campaign-wave struct HAS the artifact-ledger field (10 slots)"
+    (test-case "campaign-wave struct HAS the artifact-ledger field (16 slots)"
+      ;; 10 slots through BUG-0029 W5; this release W5 (BUG-0039) added six
+      ;; cost/token tracking slots → 16.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
-      (check-equal? (vector-length (struct->vector w)) 10)
+      (check-equal? (vector-length (struct->vector w)) 16)
       (check-pred list?
                   (wave-artifact-ledger w)
                   "artifact-ledger is readable through the normalizing accessor"))
@@ -248,9 +250,12 @@
          (define orch-src (file->string (repo-file "extensions" "gsd" "go-orchestrator.rkt")))
          (check-true (regexp-match? #rx"report-campaign-artifact-leftovers!" orch-src)
                      "campaign end (success OR terminal failure) reports leftovers")
-         (check-true (regexp-match? #rx"NOTHING has been deleted" orch-src)
+         ;; W7 (BUG-0042): the leftovers report lives in attempt-artifacts.rkt now;
+         ;; go-orchestrator still calls it (checked above).
+         (define aa-src (file->string (repo-file "extensions" "gsd" "attempt-artifacts.rkt")))
+         (check-true (regexp-match? #rx"NOTHING has been deleted" aa-src)
                      "reclaim offer states explicitly that nothing was auto-deleted")
-         (check-false (regexp-match? #rx"git -C[^\"]*-D[^\"]*-f" orch-src)
+         (check-false (regexp-match? #rx"git -C[^\"]*-D[^\"]*-f" aa-src)
                       "no force-branch-delete hidden in the report path"))
        (λ ()
          (quiet-delete-dir wt-dir)

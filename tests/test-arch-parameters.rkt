@@ -248,8 +248,11 @@
       ;; current-tracked-write-repo-root / current-tracked-write-running-version
       ;; (CONFIGURATION, test/set seams) and current-tracked-write-override-observer
       ;; (SERVICE_HANDLE, loud-logging observer seam for the staleness guard).
+      ;; +1 — BUG-0040 W6 campaign notifier (extensions/gsd/notify.rkt):
+      ;; current-gsd-notify-sinks (SERVICE_HANDLE) — sink registry seam;
+      ;; tests inject fake sinks; production default reads settings once.
       (check-equal? (length inventory-entries)
-                    219
+                    221
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

@@ -21,6 +21,18 @@
    ;; pure planning (8)
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
    (make-entry "wave-status.rkt" 'pure-planning '() '() '())
+   (make-entry "stall-policy.rkt"
+               'transition-logic
+               '(parameterize make-param
+                  )
+               '()
+               '("racket/string" "policy"))
+   (make-entry "infra-retry-policy.rkt"
+               'transition-logic
+               '(path-ops)
+               '()
+               '("racket/string" "../../util/loop-result" "policy"))
+   (make-entry "freshness.rkt" 'transition-logic '(fs-read make-param) '() '("racket/string"))
    (make-entry "command-types.rkt" 'compatibility-facade '() '() '())
    (make-entry "command-parser.rkt"
                'command-parsing
@@ -86,12 +98,17 @@
                                "campaign-state"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(git make-param mkdir path-ops parameterize fs-read)
+               '(git make-param mkdir path-ops parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
                                  "campaign-state"
                                  "campaign-repository"
+                                 "stall-policy"
+                                 "infra-retry-policy"
+                                 "freshness"
+                                 "attempt-artifacts"
+                                 "campaign-budgets"
                                  "wave-completion"
                                  "wave-runner-port"
                                  "wave-docs"
@@ -102,6 +119,25 @@
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
                                  "plan-context-builder"))
+   ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
+   (make-entry "attempt-artifacts.rkt"
+               'persistence
+               '(path-ops)
+               '()
+               '("racket/string" "campaign-state"
+                                 "campaign-repository"
+                                 "wave-executor"
+                                 "delivery-verifier"
+                                 "stall-policy"))
+   (make-entry "campaign-budgets.rkt"
+               'campaign-state
+               '(make-param)
+               '("current-campaign-usage-observation")
+               '("util/loop-result" "campaign-state"
+                                    "campaign-repository"
+                                    "notify"
+                                    "runtime/settings"
+                                    "runtime/settings-query"))
    (make-entry "wave-completion.rkt"
                'campaign-state
                '(fs-read fs-write fs-rename mkdir)
@@ -127,6 +163,19 @@
                                  "plan-types"
                                  "wave-docs"
                                  "plan-context-builder"))
+   ;; BUG-0040 W6: terminal-transition notification sink adapter
+   ;; (tmux/bell default + opt-in desktop-command/webhook sinks).
+   (make-entry "notify.rkt"
+               'external-ports
+               '(subprocess parameterize make-param)
+               '(current-gsd-notify-sinks)
+               '("racket/contract" "racket/format"
+                                   "json"
+                                   "racket/match"
+                                   "racket/string"
+                                   "racket/system"
+                                   "settings-query"
+                                   "events"))
    ;; transition logic (7)
    (make-entry "policy.rkt"
                'transition-logic
@@ -265,7 +314,7 @@
                                    "session-state"))
    (make-entry "wave-docs.rkt"
                'persistence
-               '(fs-read fs-write mkdir path-ops)
+               '(fs-read fs-write mkdir dir-list path-ops)
                '()
                '("racket/file" "racket/path"
                                "racket/format"

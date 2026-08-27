@@ -67,12 +67,13 @@
  ("extensions/gsd/delivery-verifier.rkt" (current-gsd-delivery-verify-command . SERVICE_HANDLE)
                                          (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
                                          (current-gsd-delivery-branch-context . SERVICE_HANDLE))
- ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE)
-                                       (current-gsd-stall-steerer . SERVICE_HANDLE)
-                                       ;; test seam: overrides the version-freshness
-                                       ;; probe (running version vs checkout) so tests
-                                       ;; can simulate a stale build; never set in prod
-                                       (current-gsd-freshness-check . OTHER_REVIEWED))
+ ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
+ ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
+ ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
+ ("extensions/gsd/freshness.rkt"
+    ;; test seam: overrides the version-freshness probe (running version vs
+    ;; checkout) so tests can simulate a stale build; never set in prod
+    (current-gsd-freshness-check . OTHER_REVIEWED))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)
@@ -84,6 +85,7 @@
  ("extensions/gsd/wave-executor.rkt" (current-gsd-worktree-isolation . CONFIGURATION)
                                      ;; BUG-0029 W5: per-request inherited-artifacts block
                                      (current-gsd-wave-inherited-artifacts . TURN_LOCAL))
+ ("extensions/gsd/notify.rkt" (current-gsd-notify-sinks . SERVICE_HANDLE))
  ("extensions/gsd/session-state.rkt" (current-gsd-session-id . SERVICE_HANDLE)
                                      (current-gsd-ctx . SERVICE_HANDLE))
  ("extensions/gsd/state-machine.rkt" (gsd-max-rework-iterations . CONFIGURATION)
