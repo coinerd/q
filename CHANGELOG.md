@@ -33,19 +33,59 @@ Released 2026-08-26.
   pins in status suites flipped to the v1.00.20 surface (W6), so
   `/gsd` status stays advisory, not fatal.
 
-### Fixed
+### Bug Fixes
 
 - Release prep: `q-version` + `info.rkt` bumped to 1.00.20 via
   `scripts/sync-version.rkt --write`; version literals purged from
   tests; README metrics re-synced (`metrics --sync-all`).
 
-### Removed
+### Reports
 
-- (none)
+- Bake evidence for all seven gates was gathered live on this campaign;
+  see `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md` (drill
+  setups, captured outputs, suite numbers, gate verdicts).
 
-### Deprecated
+### Breaking / Behavior Changes
 
-- (none)
+- A running q process whose loaded build predates the checkout can no
+  longer write tracked files: the write is refused with a denial naming
+  the stale PID, both version numbers, and the override parameter
+  (BUG-0036, drill (d)).
+- Mutation-stall watchdog v3 (BUG-0037): kills only signature-cycling
+  (diverse-window exploration stays alive); repetition limits raised to
+  8/15/30/300; stall deaths are retryable infra stops, not terminal
+  wave failures.
+- `/go` and `/gsd` now warn on `PLAN.md`/wave-doc file divergence
+  before any wave is dispatched (advisory, not fatal; BUG-0035,
+  drill (c)).
+- `/reset` reconciles orphaned killed-campaign records: they are listed
+  explicitly and pruned only on request (BUG-0037, drill (e)).
+
+### Migration Notes
+
+- Long-running TUI sessions must restart q after upgrading: the
+  v1.00.19+ freshness guard at `/go` refuses stale builds (`allow-stale`
+  overrides with a recorded flag).
+- Tooling that legitimately must write tracked files from a stale
+  process parameterizes `current-allow-stale-tracked-writes` to `#t`.
+- Campaign records from older builds remain loadable; new fields are
+  absent-safe.
+
+### Testing
+
+- Fast suite 1141/1141 files, 0 failures at the release candidate
+  (checkpoint 1d7c2576); pre-commit 18/18; release-dry-run clean.
+- Bake drills (live, this campaign): infra-retry 25/25, plan-diff 2/2,
+  session-hygiene 13/13, campaign-repository 25/25; campaign
+  lifecycle/state suites exit 0 — evidence recorded in the bake report.
+
+### Operational / Release
+
+- Tag `v1.00.20` (annotated); tarball + manifest published by the
+  Release workflow; gate evidence recorded at the release SHA per
+  tag-publish policy; bugs INDEX updated to fixed-in-v1.00.20.
+- After merging a campaign, restart q before the next `/go` — the
+  freshness guard will refuse an older running build.
 
 ## v1.00.19 — 2026-08-26
 
