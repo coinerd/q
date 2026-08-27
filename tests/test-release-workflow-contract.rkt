@@ -12,12 +12,12 @@
 ;; - release-core.yml builds→smokes→drafts→verifies→publishes→verifies
 ;; - release-repair.yml defaults to dry-run and gates an explicit apply path
 ;;
-;; BUG-0045 fix contract (v1.00.21 W0 pin; FLIPPED by W3): release
+;; BUG-0045 fix contract (this release W0 pin; FLIPPED by W3): release
 ;; runs serialize per tag (concurrency group with cancel-in-progress)
 ;; and publish is idempotent against an already-published tag (draft
 ;; adoption + re-verifying no-op success).
 ;;
-;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7): TODAY
+;; BUG-0042 characterization pin (this release W0; FLIPPED by W7): TODAY
 ;; go-orchestrator.rkt matches the W0 baseline fixture exactly
 ;; (characterization of the decomposition debt).
 
@@ -362,7 +362,7 @@
     (check-false (string-contains? line "\t") (format "tab found at line ~a" i))))
 
 ;; ============================================================
-;; BUG-0045 fix contract (v1.00.21 W3 — W0 pins flipped)
+;; BUG-0045 fix contract (this release W3 — W0 pins flipped)
 ;;
 ;; W3 serializes same-tag release runs: release.yml declares a
 ;; concurrency group keyed on the pushed tag ref with
@@ -447,7 +447,7 @@
               "the fresh-path draft assertion must come after the already-published branch"))
 
 ;; ============================================================
-;; BUG-0042 characterization pin (v1.00.21 W0; FLIPPED by W7 v1.00.22)
+;; BUG-0042 characterization pin (this release W0; FLIPPED by W7 next release)
 ;;
 ;; The W0 pin recorded the decomposition debt (2566 lines / 91 defines);
 ;; W7 extracted stall-policy, infra-retry-policy, freshness,

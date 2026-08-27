@@ -415,7 +415,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v1.00.21** — Features — GSD observability bake: configurable stall thresholds, transcript error surface, idempotent release publish, wave-doc lint, campaign budgets + notifications, go-orchestrator decomposition
+**v1.00.21** — Features
 
 **v1.00.20** — Features
 

@@ -4,7 +4,7 @@
 ;; @speed fast
 ;; @boundary pure
 ;; tests/test-stall-threshold-config.rkt
-;; BUG-0044 settings-key pin (v1.00.21 W1; FLIPPED from W0).
+;; BUG-0044 settings-key pin (campaign W1; FLIPPED from W0).
 ;;
 ;; The stall watchdog thresholds are SETTINGS-DRIVEN:
 ;;   gsd.stall.soft-limit / gsd.stall.hard-limit / gsd.stall.window /

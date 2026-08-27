@@ -1,6 +1,6 @@
-## v1.00.21 — 2026-08-28
+## v1.00.21 — 2026-08-27
 
-Released 2026-08-28.
+Released 2026-08-27.
 
 > v1.00.21: GSD observability + release-race hardening — campaign
 > cost/budget tracking (BUG-0039), notification sinks (BUG-0040),

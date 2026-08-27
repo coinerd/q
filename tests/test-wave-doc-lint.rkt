@@ -4,7 +4,7 @@
 ;; @speed fast
 ;; @boundary pure
 ;; tests/test-wave-doc-lint.rkt
-;; BUG-0041 (v1.00.21 W4): wave-doc lint at /go entry with recorded
+;; BUG-0041 (campaign W4): wave-doc lint at /go entry with recorded
 ;; verdicts. W0 pinned the ABSENCE of the seam; this suite verifies the
 ;; FLIP: lint-wave-doc names missing sections, /go warns per doc,
 ;; the verdict is durable campaign evidence, and slug mismatches ride

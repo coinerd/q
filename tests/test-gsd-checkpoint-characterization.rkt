@@ -117,7 +117,7 @@
       ;; attempt-context (BUG-0024 PRIOR ATTEMPT CONTEXT block) instead of
       ;; growing the struct (slot count stayed 9 through W4).
       ;; W5 (BUG-0029) added exactly ONE slot: the attempt-artifact
-      ;; ledger. v1.00.21 W5 (BUG-0039) then added SIX cost/token slots
+      ;; ledger. this release W5 (BUG-0039) then added SIX cost/token slots
       ;; (in/out/total tokens, cost-usd, usage-complete?, budget-trips).
       ;; The count is now 16 — further growth is a schema-review event.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))

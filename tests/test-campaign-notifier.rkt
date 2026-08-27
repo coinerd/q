@@ -4,7 +4,7 @@
 ;; @speed fast
 ;; @boundary pure
 ;; tests/test-campaign-notifier.rkt
-;; BUG-0040 (v1.00.21 W6): the W0 characterization pin FLIPPED.
+;; BUG-0040 (this release W6): the W0 characterization pin FLIPPED.
 ;;
 ;; W0 pinned the absent surface (no notifier sink, no gsd.notify.*
 ;; keys, no module). W6 delivered the terminal-transition notifier:
@@ -31,7 +31,7 @@
 (define go-orchestrator-src
   (path->string (build-path (or (current-directory) ".") "extensions" "gsd" "go-orchestrator.rkt")))
 
-;; v1.00.21 W7 (BUG-0042): the stall-terminal hook site moved with the
+;; this release W7 (BUG-0042): the stall-terminal hook site moved with the
 ;; mutation-stall watchdog into the extracted stall-policy module.
 (define stall-policy-src
   (path->string (build-path (or (current-directory) ".") "extensions" "gsd" "stall-policy.rkt")))

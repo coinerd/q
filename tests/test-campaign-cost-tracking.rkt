@@ -4,7 +4,7 @@
 ;; @speed fast
 ;; @boundary pure
 ;; tests/test-campaign-cost-tracking.rkt
-;; BUG-0039 characterization pin (v1.00.21 W0) — FLIPPED by W5 (v1.00.22).
+;; BUG-0039 characterization pin (this release W0) — FLIPPED by W5 (next release).
 ;;
 ;; The W0 pin asserted cost tracking existed nowhere. W5 landed it:
 ;;   - attempt transitions stamp token/cost fields from loop-result

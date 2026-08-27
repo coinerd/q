@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; tests/test-gsd-infra-retry-policy.rkt — BUG-0042 (v1.00.21 W7)
+;; tests/test-gsd-infra-retry-policy.rkt — BUG-0042 (this release W7)
 ;;
 ;; CHARACTERIZATION tests for the infra-retry policy seam (infra failure
 ;; classification, outcome routing, retry backoff sequence, prior-attempt
