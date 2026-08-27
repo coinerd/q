@@ -83,16 +83,40 @@ Show current GSD status: mode, wave progress, and valid next commands.
 
 ## Plan Format
 
-Plans are Markdown files in `.planning/PLAN.md`. Each wave has:
+Plans are Markdown files in `.planning/PLAN.md`. The supported grammar is the
+**plan index**: an index section at the top of `PLAN.md` with one row per wave
+(explicit status bracket required), plus one wave doc per row under
+`.planning/waves/`:
 
 ```markdown
-## Wave 0: Fix the bug
+## Waves
 
+- [Inbox] W0: Fix the bug → waves/W0-fix-the-bug.md
+- [Inbox] W1: Harden the retry path → waves/W1-harden-retry.md
+```
+
+Each wave doc (`waves/W0-....md`) contains the wave body:
+
+```markdown
 **Root cause:** The timeout handler uses milliseconds instead of seconds.
 
 **Files:** `auth.rkt`, `auth-test.rkt`
 **Verify:** `raco test tests/test-auth.rkt`
 ```
+
+### Deprecation: inline plan format (BUG-0035)
+
+The legacy **inline** grammar — `## Wave N:` sections written directly in
+`PLAN.md` — is deprecated. Status-less relaxed index rows (`- W0: Title`
+without a `[Status]` bracket) are deprecated alongside it.
+
+- Since v1.00.21, `/go` and `/gsd status` emit one-line non-fatal deprecation
+  warnings when a plan uses inline sections or relaxed rows. Loading and
+  execution are unaffected; the warnings name the index skeleton to migrate to.
+- **Roadmap:** index+status (`- [Inbox] W0: Title → waves/W0-slug.md`) becomes
+  the single supported grammar; inline-format removal is targeted after
+  v1.00.21. The removal itself is out of scope for the deprecation change —
+  new plans should simply be authored in the index format.
 
 ### Validation Rules
 

@@ -671,12 +671,16 @@
   ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences
   ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
   ;; status block. Advisory only, never blocks anything.
+  ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
+  ;; relaxed status-less index rows) join the same advisory block, matching
+  ;; the /go surface (docs/gsd-guide.md: both warn since v1.00.21).
   (define base-dir (or (current-pinned-dir) (current-directory)))
-  (define divergence-lines
+  (define advisory-lines
     (if (not base-dir)
         '()
-        (status-divergence-warning-lines base-dir)))
-  (hook-amend (hasheq 'text (append-divergence-warnings (string-join parts "\n") divergence-lines))))
+        (append (status-divergence-warning-lines base-dir)
+                (plan-format-deprecation-warning-lines base-dir))))
+  (hook-amend (hasheq 'text (append-divergence-warnings (string-join parts "\n") advisory-lines))))
 
 ;; ============================================================
 ;; Artifact display and /plan <text> handler
