@@ -10,6 +10,6 @@
 ;;   - W7 (go-orchestrator decomposition) flips the assertion from
 ;;     "matches baseline" to "below target".
 ((file . "extensions/gsd/go-orchestrator.rkt")
- (recorded-at . "v1.00.21 W0 characterization (BUG-0042)")
- (line-count . 2222)
+ (recorded-at . "v1.00.21 W0 characterization (BUG-0042); re-recorded BUG-0044 W1 (stall settings plumbing, +49 lines)")
+ (line-count . 2271)
  (top-level-define-count . 81))
