@@ -147,8 +147,10 @@
      (define msg
        (cond
          [(eq? error-type 'circuit-breaker)
+          ;; BUG-0022 D2: generic wording — health-gate denials surface on the
+          ;; circuit-breaker channel too, not just held-request stalls.
           (format
-           "[circuit-breaker: provider held without responding; stopping auto-retry. Type /retry to resubmit.]")]
+           "[circuit-breaker: provider unhealthy or held without responding; stopping auto-retry. Type /retry to resubmit.]")]
          [else
           (define type-label (retry-error-type-label error-type))
           (if type-label

@@ -202,10 +202,19 @@
        ;; Emit existing auto-retry.start event for TUI display
        (emit-retry-event! 0 0 0 (exn-message original-exn) 'circuit-breaker))
      ;; v0.99.82 W2 NR-3: Provider health gate.
+     ;; BUG-0022 W2B: the health gate must not count a turn's own retries
+     ;; against itself — recording every same-turn failure tripped the 3/60s
+     ;; threshold after exactly 2 retries (min(max-retries, threshold-1)),
+     ;; truncating the configured 5-retry budget. Only the turn-INITIAL failure
+     ;; (attempt 0) feeds the window; same-turn retries stay bounded by
+     ;; max-retries, per-type budgets, cumulative ceiling, and the held/stall/
+     ;; silent-overflow breakers. A genuinely sick provider still trips the
+     ;; gate on the NEXT turn's initial failure (cross-turn counting).
      #:health-check-proc
      (if health
          (lambda (exn attempt)
-           (record-failure! health)
+           (when (= attempt 0)
+             (record-failure! health))
            (define healthy?
              (provider-healthy? health #:window-secs health-window #:threshold health-threshold))
            (unless healthy?
@@ -218,8 +227,14 @@
                                           health-window
                                           'threshold
                                           health-threshold
+                                          'attempt
+                                          attempt
                                           'decision
-                                          'unhealthy)))
+                                          'unhealthy))
+             ;; BUG-0022 D2: gate denials must be VISIBLE — surface them on the
+             ;; same channel as the other circuit breakers so the early stop
+             ;; is explained in the transcript, not only in trace.jsonl.
+             (emit-retry-event! 0 0 0 (exn-message exn) 'circuit-breaker))
            healthy?)
          #f)
      ;; On success, clear recovery data and record health.

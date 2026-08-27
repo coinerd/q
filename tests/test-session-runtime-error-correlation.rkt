@@ -49,7 +49,9 @@
                   (check-pred string? prompt-turn-id)
                   (check-equal? (event-turn-id (first errors)) prompt-turn-id)
                   (check-equal? (event-turn-id (second prompt-events)) prompt-turn-id)
-                  (check-equal? (hash-ref (event-payload (first errors)) 'retries-attempted) 2)
-                  (check-equal? (cdr (assq 'fail-count (_stats))) 3)
+                  ;; BUG-0022 W2B: retries-attempted was 2 (old buggy truncation);
+                  ;; the fixed health gate allows the full 5-retry budget.
+                  (check-equal? (hash-ref (event-payload (first errors)) 'retries-attempted) 5)
+                  (check-equal? (cdr (assq 'fail-count (_stats))) 6)
                   (check-equal? (hash-ref (event-payload (second prompt-events)) 'reason) "error"))
                 (lambda () (delete-directory/files tmpdir #:must-exist? #f))))
