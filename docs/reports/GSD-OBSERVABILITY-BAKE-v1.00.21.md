@@ -198,12 +198,23 @@ Release per `docs/releasing.md`: bump-version → sync-version
 (`scripts/sync-version.rkt --write`) → CHANGELOG entry with the four
 mandatory sections and bug-number mapping checked against
 `.planning/bugs/INDEX.md` (registry authoritative; all seven campaign
-bugs are `planned v1.00.21 W1…W7` rows) → version literals purged from
+bugs verified against the registry rows) → version literals purged from
 tests → `metrics --sync-all` + README status → pre-commit 18/18 → fast
 suite green → PR (squash) → gate evidence at FINAL SHA in a clean
 worktree → preflight 7/7 → annotated tag `v1.00.21` → push → release
 pipeline (concurrency-grouped, idempotent publish) → publication
 verified. Bugs INDEX updated to `fixed-in v1.00.21`.
+
+Final bake evidence at the delivery SHA:
+
+- `racket scripts/run-tests.rkt --suite fast` → **PASS, 1149 files /
+  1149 pass / 0 fail** (RUN-SUMMARY runner-version=1.00.21).
+- `racket scripts/pre-commit.rkt` → **18/18 checks passed**.
+- `racket scripts/release-dry-run.rkt` → **6/6 checks passed**
+  (version-match, tag-format, changelog-entry, release-notes,
+  manifest, arch-integrity) at canonical version 1.00.21.
+- `.planning/bugs/INDEX.md` — BUG-0039…BUG-0045 rows now read
+  `fixed v1.00.21`; header counts updated (Open 5, Fixed/validated 23).
 
 ### Operational reminder (this campaign's own TUI)
 
