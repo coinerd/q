@@ -2522,6 +2522,7 @@
          lookup-campaign-request
          no-change-rejection?
          no-change-target-files
+         build-wave-attempt-context
          execute-campaign-token!
          ;; v1.00.19 W3 (BUG-0031): version-freshness guard + build identity
          campaign-freshness
@@ -2548,6 +2549,8 @@
          current-gsd-stall-steerer
          stall-steering-message
          stall-hard-failure-message
+         stall-cause-message?
+         wave-failure-notification-kind
          wave-doc-target-files
          wrap-run-one-with-stall-watchdog
          ;; v1.00.17 W7 (#9512b): branch-based delivery bookkeeping
