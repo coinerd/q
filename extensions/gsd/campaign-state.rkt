@@ -31,6 +31,7 @@
          racket/path
          racket/list
          racket/format
+         racket/match
          racket/contract
          (only-in "wave-docs.rkt"
                   parse-plan-index
@@ -125,6 +126,11 @@
                boolean?)]
           [pause-campaign-for-budget! (-> campaign-record? campaign-budget-pause? void?)]
           [clear-budget-pause! (-> campaign-record? void?)]
+          [set-campaign-record-budget-pause!
+           (-> campaign-record? (or/c #f campaign-budget-pause?) void?)]
+          ;; v1.00.22 W5 (BUG-0039): serializer-side restore (campaign-repository
+          ;; loads persisted usage accounting back into the fresh record).
+          [restore-wave-usage! (-> campaign-wave? any/c any/c void?)]
           [campaign-record-budget-pause (-> campaign-record? (or/c #f campaign-budget-pause?))]
           [migrate-campaign! (-> path-string? campaign-record?)]
           [make-campaign-manifest
@@ -220,6 +226,19 @@
           [campaign-attempt-id (-> campaign-attempt? string?)]
           [campaign-attempt-fence-token (-> campaign-attempt? (or/c #f exact-nonnegative-integer?))]
           [campaign-attempt-started-at (-> campaign-attempt? exact-integer?)]
+          [campaign-attempt-input-tokens (-> campaign-attempt? (or/c #f number?))]
+          [campaign-attempt-output-tokens (-> campaign-attempt? (or/c #f number?))]
+          [campaign-attempt-total-tokens (-> campaign-attempt? (or/c #f number?))]
+          [campaign-attempt-cost-usd (-> campaign-attempt? (or/c #f (and/c real? positive?)))]
+          [campaign-attempt-usage-source
+           (-> campaign-attempt? (or/c #f 'provider 'provider-estimated 'usage-missing))]
+          [set-campaign-attempt-input-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
+          [set-campaign-attempt-output-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
+          [set-campaign-attempt-total-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
+          [set-campaign-attempt-cost-usd!
+           (-> campaign-attempt? (or/c #f (and/c real? positive?)) void?)]
+          [set-campaign-attempt-usage-source!
+           (-> campaign-attempt? (or/c #f 'provider 'provider-estimated 'usage-missing) void?)]
           [campaign-manifest-schema-version (-> campaign-manifest? exact-nonnegative-integer?)]
           [campaign-manifest-title (-> campaign-manifest? string?)]
           [campaign-manifest-dependencies (-> campaign-manifest? (listof string?))]
@@ -727,6 +746,35 @@
 (define (clear-budget-pause! rec)
   (set-campaign-record-budget-pause! rec #f)
   (set-campaign-record-updated-at! rec (current-seconds)))
+
+;; v1.00.22 W5 (BUG-0039): restore persisted usage accounting into a freshly
+;; loaded wave (called ONLY by campaign-repository's datum->wave). Tolerant of
+;; any shape: malformed data loads as absent accounting, never a load failure
+;; — the same tolerance rule as the artifact ledger and attempt-context
+;; evolutions. attempt-usage: 5-list (in out tot cost source); wave-usage:
+;; 6-list (in out tot cost source missing-attempts).
+(define (restore-wave-usage! w attempt-usage wave-usage)
+  (define (restore-number v)
+    (and (real? v) (not (negative? v)) v))
+  (define attempt (campaign-wave-current-attempt w))
+  (when (and attempt (list? attempt-usage) (= (length attempt-usage) 5))
+    (match-define (list in out tot cost source) attempt-usage)
+    (set-campaign-attempt-input-tokens! attempt (restore-number in))
+    (set-campaign-attempt-output-tokens! attempt (restore-number out))
+    (set-campaign-attempt-total-tokens! attempt (restore-number tot))
+    (set-campaign-attempt-cost-usd! attempt (restore-number cost))
+    (when (symbol? source)
+      (set-campaign-attempt-usage-source! attempt source)))
+  (when (and (list? wave-usage) (= (length wave-usage) 6))
+    (match-define (list win wout wtot wcost wsource wmissing) wave-usage)
+    (set-campaign-wave-usage-input-tokens! w (restore-number win))
+    (set-campaign-wave-usage-output-tokens! w (restore-number wout))
+    (set-campaign-wave-usage-total-tokens! w (restore-number wtot))
+    (set-campaign-wave-usage-cost-usd! w (restore-number wcost))
+    (when (symbol? wsource)
+      (set-campaign-wave-usage-source! w wsource))
+    (when (exact-nonnegative-integer? wmissing)
+      (set-campaign-wave-usage-missing-attempts! w wmissing))))
 
 ;; ============================================================
 ;; Initial migration truth (D3)

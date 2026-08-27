@@ -203,7 +203,17 @@
         (campaign-record-updated-at rec)
         (campaign-record-build-version rec)
         (campaign-record-main-head-sha rec)
-        (campaign-record-stale-override rec)))
+        (campaign-record-stale-override rec)
+        ;; v1.00.22 W5 (BUG-0039): 12th field is the durable budget pause
+        ;; (7-list) or #f. Crossing gsd.campaign.max-cost / .max-tokens
+        ;; persists here; raising the ceiling + resuming clears it.
+        (and (campaign-record-budget-pause rec)
+             (list 'budget-pause
+                   (campaign-budget-pause-kind (campaign-record-budget-pause rec))
+                   (campaign-budget-pause-ceiling (campaign-record-budget-pause rec))
+                   (campaign-budget-pause-observed (campaign-record-budget-pause rec))
+                   (campaign-budget-pause-message (campaign-record-budget-pause rec))
+                   (campaign-budget-pause-timestamp (campaign-record-budget-pause rec))))))
 
 (define (manifest->datum m)
   (list 'manifest
@@ -241,7 +251,25 @@
                 (campaign-artifact-entry-base-sha e)
                 (campaign-artifact-entry-terminal-status e)
                 (campaign-artifact-entry-merge-status e)
-                (campaign-artifact-entry-teardown-status e)))))
+                (campaign-artifact-entry-teardown-status e)))
+        ;; v1.00.22 W5 (BUG-0039): fields 10–11 are the usage accounting —
+        ;; current-attempt observation (5-list | #f) and the wave's
+        ;; cumulative summary (6-list). Honest accounting: attempts with
+        ;; absent provider metadata carry 'usage-missing as the source and
+        ;; count in the wave's missing-attempts tally — never fake zeros.
+        (let ([a (campaign-wave-current-attempt w)])
+          (and a
+               (list (campaign-attempt-input-tokens a)
+                     (campaign-attempt-output-tokens a)
+                     (campaign-attempt-total-tokens a)
+                     (campaign-attempt-cost-usd a)
+                     (campaign-attempt-usage-source a))))
+        (list (wave-usage-input-tokens w)
+              (wave-usage-output-tokens w)
+              (wave-usage-total-tokens w)
+              (wave-usage-cost-usd w)
+              (wave-usage-source w)
+              (wave-usage-missing-attempts w))))
 
 (define (datum->manifest d)
   (match d
@@ -262,6 +290,27 @@
     ;; Record-schema evolution: pre-W5 (8/7/5-field) records lack the field
     ;; and load with an EMPTY ledger — never a load failure (same tolerance
     ;; rule as attempt-context / delivery provenance in W3/W7).
+    ;; v1.00.22 W5 (BUG-0039): 11-field form adds usage accounting
+    ;; (fields 10–11: current-attempt usage 5-list | #f, wave cumulative
+    ;; 6-list). Legacy 9/8/7/5-field records load usage-neutral — source
+    ;; 'none, zero missing-attempts (distinct from 'usage-missing, which is
+    ;; reserved for live attempts whose provider metadata was genuinely
+    ;; absent). Same tolerance rule as the ledger evolution above.
+    [(list idx
+           title
+           status
+           acct
+           attempt
+           branch
+           head-sha
+           attempt-context
+           ledger
+           attempt-usage
+           wave-usage)
+     (define w
+       (datum->wave (list idx title status acct attempt branch head-sha attempt-context ledger)))
+     (restore-wave-usage! w attempt-usage wave-usage)
+     w]
     [(list idx title status acct attempt branch head-sha attempt-context ledger)
      (define w (datum->wave (list idx title status acct attempt branch head-sha attempt-context)))
      (set-campaign-wave-artifact-ledger! w
@@ -328,6 +377,48 @@
 
 (define (datum->record d)
   (match d
+    ;; v1.00.22 W5 (BUG-0039): 13-element form carries the durable budget
+    ;; pause (7-list or #f). Legacy forms load with #f (no pause recorded),
+    ;; never a load failure — the same tolerance rule as the ledger and
+    ;; build-identity evolutions.
+    [(list 'campaign-record
+           pid
+           m
+           waves
+           cancellation
+           fence
+           prov
+           created
+           updated
+           build-version
+           main-head-sha
+           stale-override
+           budget-pause)
+     (define rec
+       (datum->record (list 'campaign-record
+                            pid
+                            m
+                            waves
+                            cancellation
+                            fence
+                            prov
+                            created
+                            updated
+                            build-version
+                            main-head-sha
+                            stale-override)))
+     (set-campaign-record-budget-pause!
+      rec
+      (match budget-pause
+        [(list 'budget-pause kind ceiling observed message timestamp)
+         (and (symbol? kind)
+              (real? ceiling)
+              (real? observed)
+              (string? message)
+              (exact-integer? timestamp)
+              (campaign-budget-pause kind ceiling observed message timestamp))]
+        [_ #f]))
+     rec]
     ;; v1.00.19 W3 (BUG-0031): 11-field form carries the build identity.
     [(list 'campaign-record
            pid

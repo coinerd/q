@@ -79,7 +79,9 @@
           [gsd-stall-soft-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
-          [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]))
+          [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-campaign-max-cost (-> (or/c q-settings? #f) (or/c (and/c real? positive?) #f))]
+          [gsd-campaign-max-tokens (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]))
 
 ;; ============================================================
 ;; GSD stall-threshold defaults (v1.00.21 W1 — BUG-0044)
@@ -230,6 +232,54 @@
 
 (define (gsd-stall-backstop settings)
   (stall-threshold-value '(gsd stall backstop) settings STALL-BACKSTOP-LIMIT-DEFAULT))
+
+;; ============================================================
+;; GSD campaign budget ceilings (v1.00.22 W5 — BUG-0039)
+;; Config keys: gsd.campaign.max-cost (positive real, USD),
+;;              gsd.campaign.max-tokens (positive integer)
+;; Absent key / #f settings → #f (ceiling disabled — the campaign
+;; runs unbounded, exactly as before W5). A typo'd value logs a
+;; warning and resolves to #f (disabled): a malformed settings file
+;; must never crash or silently shrink a campaign. Strings are
+;; coerced to numbers so hand-edited JSON keeps working.
+;; Read by extensions/gsd/go-orchestrator.rkt at attempt boundaries
+;; (budget-pause-violation?) — single wiring point.
+;; ============================================================
+(define (gsd-campaign-max-cost settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings '(gsd campaign max-cost) #f))
+     (define (valid? v)
+       (and (real? v) (positive? v)))
+     (cond
+       [(eq? raw #f) #f]
+       [(valid? raw) raw]
+       [(string? raw)
+        (define n (string->number raw))
+        (if (valid? n) n #f)]
+       [else
+        (log-warning "gsd.campaign.max-cost: invalid value ~s — treating as disabled" raw)
+        #f])]))
+
+(define (gsd-campaign-max-tokens settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings '(gsd campaign max-tokens) #f))
+     (cond
+       [(eq? raw #f) #f]
+       [(exact-positive-integer? raw) raw]
+       [(and (real? raw) (positive? raw)) (inexact->exact (floor raw))]
+       [(string? raw)
+        (define n (string->number raw))
+        (cond
+          [(exact-positive-integer? n) n]
+          [(and (real? n) (positive? n)) (inexact->exact (floor n))]
+          [else #f])]
+       [else
+        (log-warning "gsd.campaign.max-tokens: invalid value ~s — treating as disabled" raw)
+        #f])]))
 
 ;; ============================================================
 ;; Security config loader (v0.25.2 — F3)
