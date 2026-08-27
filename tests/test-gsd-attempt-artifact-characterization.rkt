@@ -6,7 +6,7 @@
 
 ;; tests/test-gsd-attempt-artifact-characterization.rkt — BUG-0029 W5.
 ;;
-;; FLIPPED PIN (v1.00.21 W5): this file originally characterized the BUG as
+;; FLIPPED PIN (this release W5): this file originally characterized the BUG as
 ;; the deliberate absence of attempt-artifact ownership — campaign-wave had
 ;; no ledger field, neither the orchestrator nor the executor could build an
 ;; inherited-artifacts prompt block, and nothing reconciled the durable
@@ -111,7 +111,7 @@
 (define w5-pure-suite
   (test-suite "BUG-0029 W5 fixed pin: ledger + inherited-artifacts block exist"
     (test-case "campaign-wave struct HAS the artifact-ledger field (16 slots)"
-      ;; 10 slots through BUG-0029 W5; v1.00.21 W5 (BUG-0039) added six
+      ;; 10 slots through BUG-0029 W5; this release W5 (BUG-0039) added six
       ;; cost/token tracking slots → 16.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
       (check-equal? (vector-length (struct->vector w)) 16)

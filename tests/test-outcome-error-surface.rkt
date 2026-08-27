@@ -4,7 +4,7 @@
 ;; @speed fast
 ;; @boundary pure
 ;; tests/test-outcome-error-surface.rkt
-;; BUG-0043 fix verification (v1.00.21 W2; flips the W0 pin).
+;; BUG-0043 fix verification (this release W2; flips the W0 pin).
 ;;
 ;; A wave-execution-outcome with kind != 'done now surfaces as a typed
 ;; [SYS] [ERROR] transcript event on the TUI error surface (exactly one

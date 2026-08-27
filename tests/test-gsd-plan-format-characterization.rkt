@@ -27,6 +27,7 @@
          racket/string
          rackunit
          rackunit/text-ui
+         (only-in "../util/version.rkt" q-version)
          (only-in "../extensions/gsd/plan-types-parser.rkt" clean-file-path)
          (only-in "../extensions/gsd/plan-types.rkt"
                   gsd-plan
@@ -348,7 +349,8 @@ Second.
       ;; The actionable nudge: the full index skeleton, verbatim.
       (check-true (string-contains? w "- [Inbox] W0: Title → waves/W0-slug.md")
                   "must name the index skeleton to migrate to")
-      (check-true (string-contains? w "v1.00.21") "must carry the removal-target version"))
+      (check-true (string-contains? w (format "v~a" q-version))
+                  "must carry the removal-target version"))
 
     (test-case "relaxed status-less index row produces a warning recommending the [Inbox] bracket (BUG-0035, W6)"
       (define relaxed-plan "# Plan: Relaxed

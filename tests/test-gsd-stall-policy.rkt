@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; q/tests/test-gsd-stall-policy.rkt — characterization tests for the
-;; stall-policy seam (BUG-0042, v1.00.22 W7).
+;; stall-policy seam (BUG-0042, next release W7).
 ;;
 ;; W7 extracts stall messages + classification predicates from
 ;; go-orchestrator.rkt VERBATIM. These tests pin the CURRENT outputs
