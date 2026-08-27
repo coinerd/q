@@ -8,7 +8,7 @@
 ;; verdicts. W0 pinned the ABSENCE of the seam; this suite verifies the
 ;; FLIP: lint-wave-doc names missing sections, /go warns per doc,
 ;; the verdict is durable campaign evidence, and slug mismatches ride
-;; the v1.00.20 W2 consistency surface.
+;; the prior release's W2 consistency surface.
 
 (require rackunit
          rackunit/text-ui

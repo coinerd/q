@@ -698,13 +698,16 @@
 (define (budget-pause-message kind ceiling observed)
   (case kind
     [(max-cost)
-     (format
-      "campaign paused: budget ceiling gsd.campaign.max-cost = $~a crossed (spent $~a so far). Raise gsd.campaign.max-cost in your project/user settings and resume with /go to continue — nothing is dropped."
-      (~r ceiling #:precision '(= 2))
-      (~r observed #:precision '(= 2)))]
+     (format (string-append "campaign paused: budget ceiling gsd.campaign.max-cost = $~a crossed "
+                            "(spent $~a so far). Raise gsd.campaign.max-cost in your project/user "
+                            "settings and resume with /go to continue — nothing is dropped.")
+             (~r ceiling #:precision '(= 2))
+             (~r observed #:precision '(= 2)))]
     [else
      (format
-      "campaign paused: token ceiling gsd.campaign.max-tokens = ~a crossed (used ~a tokens so far). Raise gsd.campaign.max-tokens in your project/user settings and resume with /go to continue — nothing is dropped."
+      (string-append "campaign paused: token ceiling gsd.campaign.max-tokens = ~a crossed "
+                     "(used ~a tokens so far). Raise gsd.campaign.max-tokens in your "
+                     "project/user settings and resume with /go to continue — nothing is dropped.")
       ceiling
       observed)]))
 
