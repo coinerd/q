@@ -472,6 +472,20 @@
                        "")
           "\n"))))
   (define last-failure (extract-last-failure wave-details))
+  ;; BUG-0041 (W4): bake the wave-doc lint verdict into the executor prompt
+  ;; so degradation is explicit up front (missing Files/Verify/Done sections,
+  ;; non-canonical status header) instead of being discovered mid-wave as
+  ;; degraded steering and guessed verify commands.
+  (define lint-verdict
+    (if (not wave-doc)
+        ""
+        (let ([violations (lint-wave-doc wave-doc)])
+          (if (null? violations)
+              ""
+              (string-append
+               "\n## Wave-doc lint verdict (BUG-0041)\n"
+               (format-wave-doc-lint-warning wave-idx (hash-ref wave-doc 'path "") violations)
+               "\n")))))
   (string-append
    planning-implement-prompt
    file-contract
@@ -501,6 +515,7 @@
         "before signalling completion.\n\n")
        "")
    (format "## Wave W~a\n~a\n" wave-idx wave-details)
+   lint-verdict
    (if (string=? state-content "")
        ""
        (format "\n## Current State\n~a\n" state-content))
@@ -583,6 +598,10 @@
                                          (format "Campaign migration failed closed: ~a"
                                                  (exn-message e)))))])
     (define rec (load-or-migrate-campaign! base-dir))
+    ;; BUG-0041 (W4): record the lint verdict as durable campaign evidence at
+    ;; creation (write-once .planning/campaigns/<plan-id>/lint-verdict.rktd;
+    ;; best-effort — evidence storage must never block /go).
+    (store-wave-doc-lint-verdict! base-dir (campaign-plan-id rec))
     (define next-wave (select-next-actionable-wave rec))
     (define requested (requested-wave-index input-text))
     (cond
@@ -649,12 +668,16 @@
          ;; divergences never block /go, they surface as named warnings.
          ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
          ;; relaxed status-less index rows) join the same advisory block.
+         ;; BUG-0041 (W4): wave-doc lint verdict joins the same advisory
+         ;; block — WARN, never block; the durable copy is recorded on the
+         ;; campaign record path by prepare-go-campaign below.
          (prepare-go-campaign base-dir
                               input-text
                               plan
                               validation
                               (append (status-divergence-warning-lines base-dir)
-                                      (plan-format-deprecation-warning-lines base-dir))))]))
+                                      (plan-format-deprecation-warning-lines base-dir)
+                                      (wave-doc-lint-warning-lines base-dir))))]))
 ;; ============================================================
 ;; /gsd status handler
 ;; ============================================================
