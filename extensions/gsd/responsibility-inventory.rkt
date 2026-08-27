@@ -265,7 +265,7 @@
                                    "session-state"))
    (make-entry "wave-docs.rkt"
                'persistence
-               '(fs-read fs-write mkdir path-ops)
+               '(fs-read fs-write mkdir dir-list path-ops)
                '()
                '("racket/file" "racket/path"
                                "racket/format"
