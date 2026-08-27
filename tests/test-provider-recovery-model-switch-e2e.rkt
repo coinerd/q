@@ -73,13 +73,13 @@
   (define events (box '()))
   (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list evt)))))
   (define-values (failing-provider stats)
-    (make-failure-provider #:failure-mode 'rate-limit #:fail-times 3))
+    (make-failure-provider #:failure-mode 'rate-limit #:fail-times 6))
   (define provider
     (make-provider (lambda () "model-capturing")
                    (lambda () (hasheq 'streaming #t))
                    (lambda (_req) (error 'unexpected-non-stream-request))
                    (lambda (req)
-                     (if (< (cdr (assq 'fail-count (stats))) 3)
+                     (if (< (cdr (assq 'fail-count (stats))) 6)
                          (provider-stream failing-provider req)
                          (list (make-stream-chunk "Recovered response" #f #f #f)
                                (make-stream-chunk #f #f (hasheq 'total-tokens 1) #t))))))
@@ -101,7 +101,11 @@
      ;; does not replay session.started into an already initialized state.
      (set-box! events '())
      (parameterize ([current-random-source (lambda () 0.0)])
-       (run-prompt! sess "trigger rate limit"))
+       ;; BUG-0022 W2B: fail-times was 3 to exhaust the old (buggy) 2-retry
+       ;; budget; the fixed 5-retry budget needs fail-times > 1+max-retries = 6
+       ;; for the same exhaustion scenario. Sleeps scaled to 0 for speed.
+       (parameterize ([current-auto-retry-sleep-scale 0.0])
+         (run-prompt! sess "trigger rate limit")))
 
      (define first-events (unbox events))
      (define first-prompts (filter prompt-event? first-events))
@@ -116,7 +120,7 @@
      (check-equal? (map event-ev correlated-events)
                    '("turn.started" "runtime.error" "turn.completed"))
      (check-equal? (map event-turn-id correlated-events) (make-list 3 first-turn-id))
-     (check-equal? (cdr (assq 'fail-count (stats))) 3)
+     (check-equal? (cdr (assq 'fail-count (stats))) 6)
 
      (define recovered-state
        (simulate-events (initial-ui-state #:session-id (session-id sess) #:model-name "failed-model")
@@ -149,7 +153,8 @@
      ;; The new provider points to localhost:1 which will fail to connect,
      ;; but the error should NOT be a 429 rate-limit error.
      (with-handlers ([exn:fail? (lambda (_e) (void))])
-       (run-prompt! sess "continue after switch"))
+       (parameterize ([current-auto-retry-sleep-scale 0.0])
+         (run-prompt! sess "continue after switch")))
      (define second-events (unbox events))
      ;; The second prompt should NOT produce the same rate-limit error
      ;; because the provider was switched. It may produce a different error

@@ -101,6 +101,9 @@
                   (close-input-port stdout-in)
                   (close-input-port stderr-in)
                   (close-output-port stdin-out)
+                  ;; stdout EOF does not imply the process finished — wait for
+                  ;; exit status (subprocess-status returns 'running otherwise).
+                  (subprocess-wait sp)
                   (define exit-code (subprocess-status sp))
                   ;; Lint may have errors (exit 1) but should not crash (exit 2)
                   (check-true (<= exit-code 1))

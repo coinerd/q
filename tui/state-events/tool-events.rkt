@@ -148,7 +148,7 @@
        (cond
          [(eq? error-type 'circuit-breaker)
           (format
-           "[circuit-breaker: provider held without responding; stopping auto-retry. Type /retry to resubmit.]")]
+           "[circuit-breaker: provider unhealthy or held without responding; stopping auto-retry. Type /retry to resubmit.]")] ;; BUG-0022 D2: generic wording — health-gate denials surface here too, not just held requests
          [else
           (define type-label (retry-error-type-label error-type))
           (if type-label

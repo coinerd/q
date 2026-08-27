@@ -176,9 +176,10 @@
                                       #:health-failure-threshold 3)
             #f))
         (check-pred retry-exhausted? exn)
-        (check-eq? (retry-exhausted-attempts exn)
-                   2
-                   "KNOWN BUG (BUG-0022): budget truncated to 2 retries today; W2B flips this")))
+        (check-eq?
+         (retry-exhausted-attempts exn)
+         5
+         "BUG-0022 W2B (fixed): full 5-retry budget reachable; health gate no longer counts same-turn retries")))
 
     (test-case "retry plumbing pins"
       (contains? retry-src "with-auto-retry")
