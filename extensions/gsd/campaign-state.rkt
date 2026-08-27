@@ -665,8 +665,9 @@
                  (if (or in out tot) 1 0)
                  (wave-usage-missing-attempts w)))
 
-;; Whole-campaign spend summary (sums over waves).
-(define (campaign-usage-summary rec)
+;; Whole-campaign spend summary (sums over waves). Internal 7-value
+;; fold: in out tot cost-known cost-fully-known? with-usage missing.
+(define (campaign-usage-fold rec)
   (for/fold ([in 0]
              [out 0]
              [tot 0]
@@ -683,6 +684,15 @@
             (and cost-fully-known? (real? (usage-summary-cost-usd s)))
             (+ with-usage (usage-summary-attempts-with-usage s))
             (+ missing (usage-summary-missing-attempts s)))))
+
+;; Contract-facing summary: a single usage-summary struct. Cost is #f
+;; when nothing real was ever observed (absent ≠ zero); tokens are the
+;; known-sum (0 honestly means "no usage seen", paired with
+;; missing-attempts).
+(define (campaign-usage-summary rec)
+  (define-values (in out tot cost-known cost-fully-known? with-usage missing)
+    (campaign-usage-fold rec))
+  (usage-summary in out tot (if (> cost-known 0) cost-known #f) with-usage missing))
 
 ;; Operator-facing pause message: names the ceiling and how to raise it.
 (define (budget-pause-message kind ceiling observed)
@@ -704,7 +714,7 @@
 ;;   max-tokens : positive integer or #f (disabled)
 (define (budget-pause-violation? rec max-cost max-tokens)
   (define-values (in out tot cost-known cost-fully-known? with-usage missing)
-    (campaign-usage-summary rec))
+    (campaign-usage-fold rec))
   (cond
     [(and (real? max-cost)
           (positive? max-cost)

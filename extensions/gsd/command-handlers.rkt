@@ -8,6 +8,7 @@
 (require racket/contract
          racket/match
          racket/string
+         racket/format
          racket/set
          json
          "../define-extension.rkt"
@@ -690,18 +691,44 @@
   (define mode (gsd-mode))
   (define tw (gsm-ctx-total-waves (current-gsd-ctx)))
   (define cw (gsm-ctx-completed-waves (current-gsd-ctx)))
+  (define base-dir (or (current-pinned-dir) (current-directory)))
+  ;; BUG-0039 (W5): /gsd shows spent-so-far per wave and campaign total,
+  ;; read from the durable record (honest accounting: waves without usage
+  ;; metadata are named usage-missing, never faked as zero).
+  (define spend-lines
+    (with-handlers ([exn:fail? (lambda (e) '())])
+      (define rec (load-or-migrate-campaign! base-dir))
+      (define wave-line
+        (lambda (w)
+          (define s (wave-usage-summary w))
+          (cond
+            [(positive? (usage-summary-missing-attempts s))
+             (format "W~a: usage-missing (~a attempt(s) no usage metadata)"
+                     (campaign-wave-index w)
+                     (usage-summary-missing-attempts s))]
+            [(and (usage-summary-cost-usd s) (usage-summary-total-tokens s))
+             (format "W~a: $~a (~a tokens)"
+                     (campaign-wave-index w)
+                     (~r (usage-summary-cost-usd s) #:precision '(= 2))
+                     (usage-summary-total-tokens s))]
+            [else (format "W~a: no usage yet" (campaign-wave-index w))])))
+      (define total (campaign-usage-summary rec))
+      (append (list "Spend:")
+              (map wave-line (campaign-record-waves rec))
+              (list (format "Total: $~a (~a tokens)"
+                            (~r (or (usage-summary-cost-usd total) 0) #:precision '(= 2))
+                            (or (usage-summary-total-tokens total) 0))))))
   (define parts
-    (list (format "Mode: ~a" (or mode "inactive"))
-          (if (> tw 0)
-              (format "Waves: ~a/~a complete" (set-count cw) tw)
-              "Waves: not set")))
-  ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences
-  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
+    (append (list (format "Mode: ~a" (or mode "inactive"))
+                  (if (> tw 0)
+                      (format "Waves: ~a/~a complete" (set-count cw) tw)
+                      "Waves: not set"))
+            spend-lines))
+  ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
   ;; status block. Advisory only, never blocks anything.
   ;; BUG-0035 (W6): plan-format deprecation warnings (inline sections /
   ;; relaxed status-less index rows) join the same advisory block, matching
   ;; the /go surface (docs/gsd-guide.md: both warn since v1.00.21).
-  (define base-dir (or (current-pinned-dir) (current-directory)))
   (define advisory-lines
     (if (not base-dir)
         '()

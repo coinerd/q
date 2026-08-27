@@ -68,6 +68,7 @@
                                          (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
                                          (current-gsd-delivery-branch-context . SERVICE_HANDLE))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE)
+                                       (current-campaign-usage-observation . TURN_LOCAL)
                                        (current-gsd-stall-steerer . SERVICE_HANDLE)
                                        ;; test seam: overrides the version-freshness
                                        ;; probe (running version vs checkout) so tests

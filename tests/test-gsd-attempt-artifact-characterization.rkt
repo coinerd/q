@@ -110,9 +110,11 @@
 
 (define w5-pure-suite
   (test-suite "BUG-0029 W5 fixed pin: ledger + inherited-artifacts block exist"
-    (test-case "campaign-wave struct HAS the artifact-ledger field (10 slots)"
+    (test-case "campaign-wave struct HAS the artifact-ledger field (16 slots)"
+      ;; 10 slots through BUG-0029 W5; v1.00.21 W5 (BUG-0039) added six
+      ;; cost/token tracking slots → 16.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
-      (check-equal? (vector-length (struct->vector w)) 10)
+      (check-equal? (vector-length (struct->vector w)) 16)
       (check-pred list?
                   (wave-artifact-ledger w)
                   "artifact-ledger is readable through the normalizing accessor"))

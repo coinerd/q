@@ -346,7 +346,9 @@
       [(not rec) #f]
       ;; Already paused (e.g. resumed with the ceiling untouched):
       ;; surface the existing named reason.
-      [(campaign-budget-pause rec) (campaign-budget-pause-message (campaign-budget-pause rec))]
+      [(campaign-record-budget-pause rec)
+       =>
+       campaign-budget-pause-message]
       [else
        (define pause (budget-pause-violation? rec (car budget) (cdr budget)))
        (and pause
@@ -364,7 +366,7 @@
 ;; the loop continues cleanly (nothing dropped, nothing re-counted).
 ;; Returns (values proceed? refreshed-record-or-#f reason-or-#f).
 (define (resume-after-budget-pause! base-dir plan-id rec)
-  (define pause (and rec (campaign-budget-pause rec)))
+  (define pause (and rec (campaign-record-budget-pause rec)))
   (cond
     [(not pause) (values #t #f #f)]
     [(budget-pause-still-violated? pause
@@ -378,7 +380,7 @@
        (define fresh (load-campaign-record base-dir plan-id))
        (cond
          [(not fresh) (values #f #f "campaign record disappeared")]
-         [(not (campaign-budget-pause fresh)) (values #t fresh #f)]
+         [(not (campaign-record-budget-pause fresh)) (values #t fresh #f)]
          [else
           (clear-budget-pause! fresh)
           (persist-campaign! base-dir fresh)
@@ -1761,12 +1763,13 @@
        (define outcome (wave-execution-outcome-kind run-result))
        (define after-run (observe))
        (cond
-         [(and after-run (campaign-budget-pause after-run))
+         [(and after-run (campaign-record-budget-pause after-run))
           ;; v1.00.22 W5 (BUG-0039): a budget ceiling tripped at the last
           ;; attempt boundary (persisted with its named reason). Stop the
           ;; loop; the pause is durable and resumable — raising the
           ;; ceiling and re-running /go clears it at the entry gate.
-          (interrupt-current! (campaign-budget-pause-message (campaign-budget-pause after-run)))]
+          (interrupt-current! (campaign-budget-pause-message
+                               (campaign-record-budget-pause after-run)))]
          [(and after-run (campaign-record-cancellation after-run))
           (mark-attempt-artifact-terminal! base-dir
                                            (campaign-plan-id active)
