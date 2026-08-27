@@ -33,59 +33,57 @@ Released 2026-08-26.
   pins in status suites flipped to the v1.00.20 surface (W6), so
   `/gsd` status stays advisory, not fatal.
 
-### Bug Fixes
+### Fixed
 
 - Release prep: `q-version` + `info.rkt` bumped to 1.00.20 via
   `scripts/sync-version.rkt --write`; version literals purged from
   tests; README metrics re-synced (`metrics --sync-all`).
 
-### Reports
+### Removed
 
-- Bake evidence for all seven gates was gathered live on this campaign;
-  see `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md` (drill
-  setups, captured outputs, suite numbers, gate verdicts).
+- (none)
+
+### Deprecated
+
+- (none)
 
 ### Breaking / Behavior Changes
 
-- A running q process whose loaded build predates the checkout can no
-  longer write tracked files: the write is refused with a denial naming
-  the stale PID, both version numbers, and the override parameter
-  (BUG-0036, drill (d)).
-- Mutation-stall watchdog v3 (BUG-0037): kills only signature-cycling
-  (diverse-window exploration stays alive); repetition limits raised to
-  8/15/30/300; stall deaths are retryable infra stops, not terminal
-  wave failures.
-- `/go` and `/gsd` now warn on `PLAN.md`/wave-doc file divergence
-  before any wave is dispatched (advisory, not fatal; BUG-0035,
-  drill (c)).
-- `/reset` reconciles orphaned killed-campaign records: they are listed
-  explicitly and pruned only on request (BUG-0037, drill (e)).
+- The mutation-stall watchdog is repetition-shaped (identical
+  tool-call signatures), not read-count-shaped: wide read-only
+  exploration is never killed by count alone (the absolute backstop
+  fires only on signature-cycling windows). Watchdog kills classify
+  as retryable infrastructure failures — campaigns auto-resume with
+  prior-attempt context instead of halting.
+- `/go` and `/gsd` surface plan/wave status divergence as named
+  warnings (advisory only, never blocking) with documented
+  precedence: wave-doc header wins for progress statuses, the PLAN
+  row wins only for `[DEFERRED]`.
+- A process whose loaded build predates the checkout refuses
+  tracked-file writes (staleness guard) and its denial names the
+  stale PID to exit.
 
 ### Migration Notes
 
-- Long-running TUI sessions must restart q after upgrading: the
-  v1.00.19+ freshness guard at `/go` refuses stale builds (`allow-stale`
-  overrides with a recorded flag).
-- Tooling that legitimately must write tracked files from a stale
-  process parameterizes `current-allow-stale-tracked-writes` to `#t`.
-- Campaign records from older builds remain loadable; new fields are
-  absent-safe.
+- Stall watchdog limits remain constants this release
+  (soft 8 / hard 15 / window 30 / backstop 300, cycling-gated);
+  operator-tunable settings keys are tracked as BUG-0044.
+- `/reset` now reconciles orphaned campaign records in place —
+  inspect the orphan listing before pruning.
 
 ### Testing
 
-- Fast suite 1141/1141 files, 0 failures at the release candidate
-  (checkpoint 1d7c2576); pre-commit 18/18; release-dry-run clean.
-- Bake drills (live, this campaign): infra-retry 25/25, plan-diff 2/2,
-  session-hygiene 13/13, campaign-repository 25/25; campaign
-  lifecycle/state suites exit 0 — evidence recorded in the bake report.
+- Fast suite 1141 files, 0 failures at the release SHA; stall
+  suites (characterization 17, watchdog 24), session-hygiene 13,
+  status-consistency 8, campaign infra-retry 25 — all green; live
+  seven-gate bake evidence recorded in
+  `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md`.
 
 ### Operational / Release
 
-- Tag `v1.00.20` (annotated); tarball + manifest published by the
-  Release workflow; gate evidence recorded at the release SHA per
-  tag-publish policy; bugs INDEX updated to fixed-in-v1.00.20.
-- After merging a campaign, restart q before the next `/go` — the
-  freshness guard will refuse an older running build.
+- Tag `v1.00.20`; artifacts built by release-core.yml (tarball +
+  manifest); coordinator hotfixes for BUG-0037 (PRs #9535–#9538)
+  merged ahead of the campaign delivery PR #9539.
 
 ## v1.00.19 — 2026-08-26
 

@@ -145,6 +145,26 @@ re-recorded at the release SHA; pre-commit 18/18; fast suite green;
 release-dry-run clean. Tag v1.00.20 annotated and pushed; bugs INDEX
 updated to fixed-in-v1.00.20.
 
+### Release incident and repair (recorded live)
+
+The first release attempt was **not** clean: release run 33033137139
+(tag v1.00.20 @ f7c7b04e) passed preflight and test, then FAILED in
+the `prepare` job at "Lint release notes (mandatory)" — the squash
+merge to main (#9539) dropped the four mandatory CHANGELOG sections
+(Breaking / Behavior Changes, Migration Notes, Testing,
+Operational / Release). No GitHub Release existed afterward.
+
+Repair: `chore/v10020-changelog-sections` restores the full section
+set (content verified with `scripts/lint-release-notes.rkt
+--version 1.00.20 --check` locally — PASS on this branch, ERROR on
+f7c7b04e); merged to main, tag v1.00.20 moved (re-annotated) to the
+repaired SHA and re-pushed; release run re-triggered and driven to
+publication. Final evidence is recorded below at the FINAL SHA.
+
+Operational note (per W7 action 4): after merge, the campaign's own TUI
+must restart q before any further `/go` — the v1.00.19 freshness guard
+(BUG-0031) will refuse a stale build.
+
 Operational note (per W7 action 4): after merge, the campaign's own TUI
 must restart q before any further `/go` — the v1.00.19 freshness guard
 (BUG-0031) will refuse a stale build.
