@@ -208,21 +208,22 @@
                     (wave-index-entry-status inbox)
                     "status-less relaxed row seeds as INBOX with zero warning today"))
 
-    (test-case "BUG-0035: inline-only plan detected by inline counter, invisible to index parser, no deprecation"
+    (test-case "BUG-0035 flip: inline-only plan detected by inline counter, deprecation surface now EXISTS"
       (define inline-plan
         (string-append "# Plan\n\n"
                        "## Wave 0: Inline Title\n\nFiles: q/foo.rkt\n\n"
                        "## Wave 1: Inline Second\n\nFiles: q/bar.rkt\n\n"))
-      ;; The index parser sees NO index rows for an inline-only plan...
+      ;; The index parser still sees NO index rows for an inline-only plan
+      ;; (the warning is advisory: non-fatal per campaign gate #6).
       (check-equal? (parse-plan-index inline-plan)
                     '()
                     "inline-only plan yields zero index entries (falls to inline grammar)")
       ;; ...while the inline sections ARE there (the fallback would engage).
       (check-true (= (count-inline-wave-sections inline-plan) 2) "2 inline wave sections counted")
-      ;; And no deprecation surface exists anywhere in the GSD plan modules.
-      (check-false
-       (deprecation-symbol-present?)
-       "no deprecation warning exists for the inline grammar today; BUG-0035's wave adds one and flips this pin"))))
+      ;; And the deprecation surface EXISTS since W6 (this pin flipped from
+      ;; its W0 check-false form: "no deprecation warning exists today").
+      (check-true (deprecation-symbol-present?)
+                  "BUG-0035 W6: deprecation warnings exist for the inline/relaxed grammars"))))
 
 ;; ------------------------------------------------------------
 ;; Source-surface absence scans (absent-seam markers)
