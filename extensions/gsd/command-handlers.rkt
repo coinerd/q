@@ -670,13 +670,17 @@
          ;; relaxed status-less index rows) join the same advisory block.
          ;; BUG-0041 (W4): wave-doc lint verdict joins the same advisory
          ;; block — WARN, never block; the durable copy is recorded on the
-         ;; campaign record path by prepare-go-campaign below.
+         ;; campaign record path by prepare-go-campaign below. Arrow-target
+         ;; ↔ doc-slug mismatches ride the v1.00.20 W2 consistency checker
+         ;; (slug-mismatch-warning-lines, same module as the status check):
+         ;; one divergence surface, no parallel reporting mechanism.
          (prepare-go-campaign base-dir
                               input-text
                               plan
                               validation
                               (append (status-divergence-warning-lines base-dir)
                                       (plan-format-deprecation-warning-lines base-dir)
+                                      (slug-mismatch-warning-lines base-dir)
                                       (wave-doc-lint-warning-lines base-dir))))]))
 ;; ============================================================
 ;; /gsd status handler
