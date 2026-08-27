@@ -10,6 +10,7 @@
          racket/contract
          racket/hash
          racket/file
+         racket/string
          racket/runtime-path
          "../util/config-paths.rkt")
 
@@ -74,7 +75,30 @@
           [broker-remote-port (-> q-settings? exact-positive-integer?)]
           [broker-cert-dir (-> q-settings? string?)]
           [broker-capability-secret (-> q-settings? (or/c string? #f))]
-          [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]))
+          [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]
+          [gsd-stall-soft-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]))
+
+;; ============================================================
+;; GSD stall-threshold defaults (v1.00.21 W1 — BUG-0044)
+;;
+;; Canonical source of the four watchdog thresholds. The runtime layer
+;; owns config defaults; extensions/gsd/wave-executor.rkt re-exports
+;; these under the STALL-*-DEFAULT names for its callers, so there is
+;; exactly ONE place that defines 8/15/30/300.
+;; ============================================================
+
+(define STALL-SOFT-LIMIT-DEFAULT 8)
+(define STALL-HARD-LIMIT-DEFAULT 15)
+(define STALL-REPETITION-WINDOW-DEFAULT 30)
+(define STALL-BACKSTOP-LIMIT-DEFAULT 300)
+
+(provide STALL-SOFT-LIMIT-DEFAULT
+         STALL-HARD-LIMIT-DEFAULT
+         STALL-REPETITION-WINDOW-DEFAULT
+         STALL-BACKSTOP-LIMIT-DEFAULT)
 
 ;; Query
 ;; ============================================================
@@ -164,6 +188,48 @@
     [(boolean? raw) raw]
     [(string? raw) (string-ci=? raw "true")]
     [else #f]))
+
+;; ============================================================
+;; GSD stall-threshold settings (v1.00.21 W1 — BUG-0044)
+;; Config keys: gsd.stall.soft-limit, gsd.stall.hard-limit,
+;;              gsd.stall.window, gsd.stall.backstop
+;;
+;; Semantics per key (shared helper below):
+;;   absent (or settings #f — nothing could be loaded)
+;;                      → default (8/15/30/300)
+;;   exact positive int → that value
+;;   #f                 → #f (limit disabled; the watchdog treats
+;;                          window #f as "use the default window")
+;;   anything else      → default + a warning. A typo'd settings file
+;;                        must NEVER crash a campaign mid-wave.
+;; ============================================================
+
+(define (stall-threshold-value key-path settings default)
+  (cond
+    [(not settings) default]
+    [else
+     (define raw (setting-ref* settings key-path default))
+     (cond
+       [(eq? raw #f) #f]
+       [(exact-positive-integer? raw) raw]
+       [else
+        (log-warning "gsd.stall: key ~a has invalid value ~s — using default ~a"
+                     (string-join (map symbol->string key-path) ".")
+                     raw
+                     default)
+        default])]))
+
+(define (gsd-stall-soft-limit settings)
+  (stall-threshold-value '(gsd stall soft-limit) settings STALL-SOFT-LIMIT-DEFAULT))
+
+(define (gsd-stall-hard-limit settings)
+  (stall-threshold-value '(gsd stall hard-limit) settings STALL-HARD-LIMIT-DEFAULT))
+
+(define (gsd-stall-window settings)
+  (stall-threshold-value '(gsd stall window) settings STALL-REPETITION-WINDOW-DEFAULT))
+
+(define (gsd-stall-backstop settings)
+  (stall-threshold-value '(gsd stall backstop) settings STALL-BACKSTOP-LIMIT-DEFAULT))
 
 ;; ============================================================
 ;; Security config loader (v0.25.2 — F3)

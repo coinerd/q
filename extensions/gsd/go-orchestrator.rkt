@@ -48,8 +48,6 @@
                   executor-reanchor-prompt)
          (only-in "events.rkt" emit-gsd-event!)
          (only-in "wave-executor.rkt"
-                  STALL-SOFT-LIMIT-DEFAULT
-                  STALL-HARD-LIMIT-DEFAULT
                   stall-limit?
                   make-stall-watchdog
                   stall-watchdog-observe!
@@ -1347,9 +1345,15 @@
                            #:no-change-retries
                            [no-change-retries (current-gsd-wave-no-change-retries)]
                            ;; v1.00.18 W5 (#9513): mutation-stall watchdog.
-                           ;; #f disables each limit.
-                           #:stall-soft-limit [stall-soft-limit STALL-SOFT-LIMIT-DEFAULT]
-                           #:stall-hard-limit [stall-hard-limit STALL-HARD-LIMIT-DEFAULT]
+                           ;; v1.00.21 W1 (BUG-0044): keywords are now
+                           ;; overrides on top of the gsd.stall.* settings
+                           ;; keys; 'unset = not given (defer to settings,
+                           ;; then to the 8/15/30/300 defaults). #f disables
+                           ;; a limit.
+                           #:stall-soft-limit [stall-soft-limit 'unset]
+                           #:stall-hard-limit [stall-hard-limit 'unset]
+                           #:stall-window [stall-window 'unset]
+                           #:stall-backstop [stall-backstop 'unset]
                            ;; v1.00.17 W6 (#9512a): wave worktree isolation
                            ;; (gsd.worktree-isolation; #t forces isolation,
                            ;; #f forces it off — overrides the flag for tests).
@@ -1366,6 +1370,37 @@
   (define isolate?
     (apply-worktree-isolation-setting! (load-project-settings-silently base-dir)
                                        #:isolate? isolate-arg))
+  ;; v1.00.21 W1 (BUG-0044): stall-threshold composition root. The
+  ;; settings layer is the source when a gsd.stall.* key is present;
+  ;; keyword overrides win; absent both → the 8/15/30/300 defaults.
+  ;; Each accessor already warns-and-defaults on invalid values, so a
+  ;; typo'd settings file can never crash a campaign mid-wave.
+  (define effective-stall-soft-limit
+    (if (eq? stall-soft-limit 'unset)
+        (or (gsd-stall-soft-limit (load-project-settings-silently base-dir)) STALL-SOFT-LIMIT-DEFAULT)
+        stall-soft-limit))
+  (define effective-stall-hard-limit
+    (if (eq? stall-hard-limit 'unset)
+        (or (gsd-stall-hard-limit (load-project-settings-silently base-dir)) STALL-HARD-LIMIT-DEFAULT)
+        stall-hard-limit))
+  (define effective-stall-window
+    (if (eq? stall-window 'unset)
+        (or (gsd-stall-window (load-project-settings-silently base-dir))
+            STALL-REPETITION-WINDOW-DEFAULT)
+        stall-window))
+  (define effective-stall-backstop
+    (if (eq? stall-backstop 'unset)
+        (or (gsd-stall-backstop (load-project-settings-silently base-dir))
+            STALL-BACKSTOP-LIMIT-DEFAULT)
+        stall-backstop))
+  ;; Startup visibility (BUG-0044 action 3): operators see the EFFECTIVE
+  ;; thresholds in the wave log without reading source.
+  (log-info "wave ~a: effective stall thresholds soft=~a hard=~a window=~a backstop=~a"
+            (campaign-plan-id rec)
+            effective-stall-soft-limit
+            effective-stall-hard-limit
+            effective-stall-window
+            effective-stall-backstop)
   ;; Reload before beginning so an old request token cannot overwrite a newer
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
@@ -1453,16 +1488,19 @@
        ;; ("begin the first edit now") once per session, hard limit
        ;; terminates the attempt 'failed with an explicit stall cause.
        (define run-one/watchdog
-         (if (and (not stall-soft-limit) (not stall-hard-limit))
+         (if (and (not effective-stall-soft-limit) (not effective-stall-hard-limit))
              run-one
-             (wrap-run-one-with-stall-watchdog run-one
-                                               (make-stall-watchdog #:soft-limit stall-soft-limit
-                                                                    #:hard-limit stall-hard-limit)
-                                               base-dir
-                                               active
-                                               wave-idx
-                                               stall-soft-limit
-                                               stall-hard-limit)))
+             (wrap-run-one-with-stall-watchdog
+              run-one
+              (make-stall-watchdog #:soft-limit effective-stall-soft-limit
+                                   #:hard-limit effective-stall-hard-limit
+                                   #:window effective-stall-window
+                                   #:backstop effective-stall-backstop)
+              base-dir
+              active
+              wave-idx
+              effective-stall-soft-limit
+              effective-stall-hard-limit)))
        ;; BUG-0017 follow-up: retry a wave whose run exceeds the per-wave budget
        ;; (timed-out) with a FRESH session (each run-one invocation re-enters the
        ;; runner port, which the TUI/GUI factory maps to a new session). The
@@ -1962,7 +2000,18 @@
                   (release-wave-worktree! wt)
                   (cleanup-wave-worktree! wt)))))))]))
 
-(require (only-in "../../runtime/settings.rkt" load-settings))
+(require (only-in "../../runtime/settings.rkt" load-settings)
+         (only-in "../../runtime/settings-query.rkt"
+                  gsd-stall-soft-limit
+                  gsd-stall-hard-limit
+                  gsd-stall-window
+                  gsd-stall-backstop
+                  ;; v1.00.21 W1 (BUG-0044): canonical defaults for the
+                  ;; settings-absent fallback (8/15/30/300).
+                  STALL-SOFT-LIMIT-DEFAULT
+                  STALL-HARD-LIMIT-DEFAULT
+                  STALL-REPETITION-WINDOW-DEFAULT
+                  STALL-BACKSTOP-LIMIT-DEFAULT))
 
 ;; BUG-0028 S1 (v1.00.19 W2): best-effort project-settings load for the
 ;; gsd.worktree-isolation wiring at the composition root. NEVER raises —

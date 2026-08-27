@@ -146,6 +146,50 @@ idle → exploring → plan-written → executing → verifying → idle
 | executing | Blocks planning-write | Blocks planning-write |
 | verifying | Blocks edit/write/bash | Blocks edit/write/bash + planning-write |
 
+## Configuration
+
+Stall-threshold tuning is a settings edit, not a PR cycle (BUG-0044).
+The stall watchdog that guards each wave's run against mutation stalls
+reads its thresholds from the project/global settings file
+(`.q/config.json`), keyed under `gsd.stall`:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `gsd.stall.soft-limit` | 8 | Repeated identical tool calls before a soft re-anchor steering is injected |
+| `gsd.stall.hard-limit` | 15 | Repeated identical tool calls before the attempt is failed with an explicit stall cause |
+| `gsd.stall.window` | 30 | Lookback window (in tool calls) over which repetition is counted |
+| `gsd.stall.backstop` | 300 | Absolute tool-call cap before the attempt is failed, regardless of repetition |
+
+Example:
+
+```json
+{
+  "gsd": {
+    "stall": {
+      "soft-limit": 3,
+      "hard-limit": 6,
+      "window": 20,
+      "backstop": 200
+    }
+  }
+}
+```
+
+Semantics:
+
+- **Keys absent** → the defaults above (8/15/30/300).
+- **Invalid values** (non-positive integers) → silently fall back to the
+  defaults with a warning; a typo'd settings file can never crash a
+  campaign mid-wave.
+- **`#f` disables** a limit (e.g. `"soft-limit": null` disables the
+  soft re-anchor).
+- **Keyword overrides** on `run-campaign-wave`
+  (`#:stall-soft-limit`, `#:stall-hard-limit`, `#:stall-window`,
+  `#:stall-backstop`) always win over settings.
+- The **effective** thresholds (after override resolution) are logged
+  once per wave startup, so operators can see what is active without
+  reading source.
+
 ## Tips
 
 1. **Write detailed plans** — the more context in each wave, the better the execution
