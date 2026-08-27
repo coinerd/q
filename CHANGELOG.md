@@ -47,6 +47,44 @@ Released 2026-08-26.
 
 - (none)
 
+### Breaking / Behavior Changes
+
+- The mutation-stall watchdog is repetition-shaped (identical
+  tool-call signatures), not read-count-shaped: wide read-only
+  exploration is never killed by count alone (the absolute backstop
+  fires only on signature-cycling windows). Watchdog kills classify
+  as retryable infrastructure failures — campaigns auto-resume with
+  prior-attempt context instead of halting.
+- `/go` and `/gsd` surface plan/wave status divergence as named
+  warnings (advisory only, never blocking) with documented
+  precedence: wave-doc header wins for progress statuses, the PLAN
+  row wins only for `[DEFERRED]`.
+- A process whose loaded build predates the checkout refuses
+  tracked-file writes (staleness guard) and its denial names the
+  stale PID to exit.
+
+### Migration Notes
+
+- Stall watchdog limits remain constants this release
+  (soft 8 / hard 15 / window 30 / backstop 300, cycling-gated);
+  operator-tunable settings keys are tracked as BUG-0044.
+- `/reset` now reconciles orphaned campaign records in place —
+  inspect the orphan listing before pruning.
+
+### Testing
+
+- Fast suite 1141 files, 0 failures at the release SHA; stall
+  suites (characterization 17, watchdog 24), session-hygiene 13,
+  status-consistency 8, campaign infra-retry 25 — all green; live
+  seven-gate bake evidence recorded in
+  `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md`.
+
+### Operational / Release
+
+- Tag `v1.00.20`; artifacts built by release-core.yml (tarball +
+  manifest); coordinator hotfixes for BUG-0037 (PRs #9535–#9538)
+  merged ahead of the campaign delivery PR #9539.
+
 ## v1.00.19 — 2026-08-26
 
 Released 2026-08-26.
