@@ -57,7 +57,13 @@
                          ;; error events on the transcript — payload carries
                          ;; wave idx, outcome kind, message (verbatim), and
                          ;; level "error" — instead of conversation text.
-                         gsd.wave.outcome-error))
+                         gsd.wave.outcome-error
+                         ;; BUG-0040 (W6): a terminal transition dispatched
+                         ;; to configured notification sinks (payload: kind,
+                         ;; wave, reason, spend, sink names attempted).
+                         ;; Emitted only when at least one sink is
+                         ;; configured — the silent default emits nothing.
+                         gsd.campaign.notified))
 
 ;; ============================================================
 ;; Correlation ID parameter

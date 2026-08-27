@@ -81,7 +81,9 @@
           [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-campaign-max-cost (-> (or/c q-settings? #f) (or/c (and/c real? positive?) #f))]
-          [gsd-campaign-max-tokens (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]))
+          [gsd-campaign-max-tokens (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-notify-desktop-command (-> (or/c q-settings? #f) (or/c string? #f))]
+          [gsd-notify-webhook-url (-> (or/c q-settings? #f) (or/c string? #f))]))
 
 ;; ============================================================
 ;; GSD stall-threshold defaults (v1.00.21 W1 — BUG-0044)
@@ -280,6 +282,37 @@
        [else
         (log-warning "gsd.campaign.max-tokens: invalid value ~s — treating as disabled" raw)
         #f])]))
+
+;; ============================================================
+;; GSD campaign notification sinks (v1.00.22 W6 — BUG-0040)
+;; Config keys: gsd.notify.desktop-command (shell command template;
+;;              placeholders {message} {kind} {campaign} {wave}),
+;;              gsd.notify.webhook-url (HTTP POST target for a small
+;;              JSON payload).
+;; Absent key / #f settings / junk value → #f (sink disabled) with a
+;; ONE-TIME warning for junk: unknown or misconfigured sinks warn and
+;; are skipped, never crash a campaign. The tmux sink needs no key
+;; (active automatically under $TMUX); desktop/webhook are strictly
+;; opt-in. Read by extensions/gsd/notify.rkt
+;; (gsd-notify-sinks-from-settings) — single wiring point.
+;; ============================================================
+(define (gsd-notify-string-setting settings key-path what)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings key-path #f))
+     (cond
+       [(eq? raw #f) #f]
+       [(and (string? raw) (positive? (string-length (string-trim raw)))) (string-trim raw)]
+       [else
+        (log-warning "gsd.notify.~a: invalid value ~s — sink disabled" what raw)
+        #f])]))
+
+(define (gsd-notify-desktop-command settings)
+  (gsd-notify-string-setting settings '(gsd notify desktop-command) 'desktop-command))
+
+(define (gsd-notify-webhook-url settings)
+  (gsd-notify-string-setting settings '(gsd notify webhook-url) 'webhook-url))
 
 ;; ============================================================
 ;; Security config loader (v0.25.2 — F3)

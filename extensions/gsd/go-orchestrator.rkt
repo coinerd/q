@@ -47,6 +47,15 @@
                   wave-attempt-context-block
                   executor-reanchor-prompt)
          (only-in "events.rkt" emit-gsd-event!)
+         ;; v1.00.22 W6 (BUG-0040): terminal-transition notification
+         ;; surface (tmux/desktop/webhook sinks; best-effort, never
+         ;; affects the campaign).
+         (only-in "notify.rkt"
+                  current-gsd-notify-sinks
+                  gsd-notify-sinks-from-settings
+                  make-gsd-notification
+                  notify-terminal-transition!
+                  notify-terminal-transition*!)
          (only-in "wave-executor.rkt"
                   stall-limit?
                   make-stall-watchdog
@@ -358,6 +367,13 @@
               (log-info "campaign ~a paused by budget ceiling (~a)"
                         plan-id
                         (campaign-budget-pause-kind pause))
+              (notify-terminal-transition*!
+               plan-id
+               #f
+               'budget-pause
+               #:reason (campaign-budget-pause-message pause)
+               #:spend (let ([observed (campaign-budget-pause-observed pause)])
+                         (and (pair? observed) (number? (car observed)) (car observed))))
               (campaign-budget-pause-message pause)))])))
 
 ;; Durable resume gate for run-campaign!'s loop: a paused campaign stays
@@ -1502,6 +1518,12 @@
        (equal? (campaign-attempt-id attempt) attempt-id)
        wave))
 
+;; v1.00.22 W6 (BUG-0040): map a runner failure message to the terminal
+;; notification kind — a stall-watchdog kill is its own surface kind so a
+;; detached operator can tell "broken" from "hung".
+(define (wave-failure-notification-kind message)
+  (if (and (string? message) (stall-cause-message? message)) 'stall-terminal 'wave-failed))
+
 (define (run-campaign-wave base-dir
                            rec
                            wave-idx
@@ -1768,6 +1790,14 @@
           ;; attempt boundary (persisted with its named reason). Stop the
           ;; loop; the pause is durable and resumable — raising the
           ;; ceiling and re-running /go clears it at the entry gate.
+          (notify-terminal-transition*!
+           (campaign-plan-id active)
+           wave-idx
+           'budget-pause
+           #:reason (campaign-budget-pause-message (campaign-record-budget-pause after-run))
+           #:spend (let ([pause (campaign-record-budget-pause after-run)])
+                     (define observed (and pause (campaign-budget-pause-observed pause)))
+                     (and (pair? observed) (number? (car observed)) (car observed))))
           (interrupt-current! (campaign-budget-pause-message
                                (campaign-record-budget-pause after-run)))]
          [(and after-run (campaign-record-cancellation after-run))
@@ -1776,6 +1806,10 @@
                                            wave-idx
                                            expected-id
                                            'cancelled)
+          (notify-terminal-transition*! (campaign-plan-id active)
+                                        wave-idx
+                                        'campaign-cancelled
+                                        #:reason "campaign cancellation requested")
           (interrupt-current! "campaign cancellation requested")]
          [(not (current-wave-for-attempt after-run wave-idx fence expected-id))
           (campaign-result 'wave-cancelled '() "stale runner result ignored")]
@@ -1909,6 +1943,10 @@
                                   (artifact-merge-status/local
                                    (branch-delivery-context-ref delivery-ctx 'repo-root)
                                    (branch-delivery-context-ref delivery-ctx 'branch))))
+                            (notify-terminal-transition*! (campaign-plan-id active)
+                                                          wave-idx
+                                                          'wave-done
+                                                          #:reason "wave completed")
                             (campaign-result 'wave-done (list wave-idx) "wave completed")]
                            [(failed)
                             (cond
@@ -1968,6 +2006,13 @@
                                 (and wt
                                      (artifact-merge-status/local (wave-worktree-repo-root wt)
                                                                   (wave-worktree-branch wt))))
+                               (notify-terminal-transition*! (campaign-plan-id active)
+                                                             wave-idx
+                                                             'wave-failed
+                                                             #:reason
+                                                             (if (string=? verifier-message "")
+                                                                 "verifier rejected"
+                                                                 verifier-message))
                                (campaign-result 'wave-failed
                                                 '()
                                                 (if (string=? verifier-message "")
@@ -1975,7 +2020,12 @@
                                                     verifier-message))])]
                            [(stale-attempt invalid-state)
                             (campaign-result 'wave-cancelled '() "stale completion ignored")]
-                           [else (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
+                           [else
+                            (notify-terminal-transition*! (campaign-plan-id active)
+                                                          wave-idx
+                                                          'wave-failed
+                                                          #:reason "unexpected completion state")
+                            (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
             [(failed)
              ;; BUG-0043 (W2): route the failure text to the typed error
              ;; transcript surface; the conversation copy is gone.
@@ -1996,6 +2046,11 @@
                                                    wave-idx
                                                    STATUS-FAILED
                                                    (lambda (idx) (wave-slug base-dir idx)))
+                   (notify-terminal-transition*!
+                    (campaign-plan-id active)
+                    wave-idx
+                    (wave-failure-notification-kind (wave-execution-outcome-message run-result))
+                    #:reason (wave-execution-outcome-message run-result))
                    (campaign-result 'wave-failed '() "runner error"))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
             ;; D8 (#9357) + BUG-0024 W3: transient provider/network/SSE
@@ -2166,6 +2221,11 @@
                                                    wave-idx
                                                    STATUS-FAILED
                                                    (lambda (idx) (wave-slug base-dir idx)))
+                   (notify-terminal-transition*!
+                    (campaign-plan-id active)
+                    wave-idx
+                    (wave-failure-notification-kind (wave-execution-outcome-message run-result))
+                    #:reason (wave-execution-outcome-message run-result))
                    (campaign-result 'wave-failed '() "unknown runner outcome"))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))])]))
      ;; W7 (#9512b): run-once* receives fresh boxes; the worktree outlives
@@ -2247,10 +2307,24 @@
                        #:isolate? [isolate-arg 'auto])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
-  (define isolate?
-    (apply-worktree-isolation-setting! (load-project-settings-silently base-dir)
-                                       #:isolate? isolate-arg))
+  (define project-settings (load-project-settings-silently base-dir))
+  (define isolate? (apply-worktree-isolation-setting! project-settings #:isolate? isolate-arg))
   (define plan-id (campaign-plan-id rec))
+  ;; v1.00.22 W6 (BUG-0040): resolve the notification sinks ONCE from
+  ;; project settings (gsd.notify.* keys; silent default outside tmux
+  ;; with no keys — then the fan-out below is a no-op). Wave-level
+  ;; sites inside run-campaign-wave read the parameterized list; the
+  ;; campaign-level helper closes over the resolved list.
+  (define notify-sinks
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "gsd-notify: sink resolution failed: ~a"
+                                              (exn-message e))
+                                 '())])
+      (gsd-notify-sinks-from-settings project-settings)))
+  (define (notify-campaign-terminal! kind wave-idx reason)
+    (with-handlers ([exn:fail? void])
+      (notify-terminal-transition! notify-sinks
+                                   (make-gsd-notification plan-id wave-idx kind #:reason reason))))
   ;; D4 (#9351): pass the owning session id so the lease file names its
   ;; holder instead of the opaque "unknown" observed in incident 81f9be4b.
   (define lease (acquire-lease base-dir plan-id #:session-id lease-owner))
@@ -2296,23 +2370,35 @@
              (define next-idx (select-next-actionable-wave current))
              (cond
                [(campaign-record-cancellation current)
+                (notify-terminal-transition*! (campaign-plan-id current)
+                                              #f
+                                              'campaign-cancelled
+                                              #:reason "campaign cancellation requested")
                 (campaign-result 'wave-cancelled
                                  (reverse completed)
                                  "campaign cancellation requested")]
                [(not next-idx)
+                (notify-terminal-transition*! (campaign-plan-id current)
+                                              #f
+                                              'campaign-complete
+                                              #:reason "all waves done or deferred")
                 (campaign-result 'campaign-complete (reverse completed) "all waves done or deferred")]
                [else
                 (define result
-                  (run-campaign-wave base-dir
-                                     current
-                                     next-idx
-                                     #:runner runner
-                                     #:verifier verifier
-                                     #:meta-fix-predicate meta-fix-predicate
-                                     #:fence-token (add1 (campaign-fence-token current))
-                                     #:timeout-sec timeout-sec
-                                     #:timeout-retries (current-gsd-wave-timeout-retries)
-                                     #:isolate? isolate?))
+                  ;; v1.00.22 W6 (BUG-0040): wave-level terminal sites
+                  ;; (done/failed/stall/budget-pause) inside
+                  ;; run-campaign-wave emit through these sinks.
+                  (parameterize ([current-gsd-notify-sinks notify-sinks])
+                    (run-campaign-wave base-dir
+                                       current
+                                       next-idx
+                                       #:runner runner
+                                       #:verifier verifier
+                                       #:meta-fix-predicate meta-fix-predicate
+                                       #:fence-token (add1 (campaign-fence-token current))
+                                       #:timeout-sec timeout-sec
+                                       #:timeout-retries (current-gsd-wave-timeout-retries)
+                                       #:isolate? isolate?)))
                 (define observed (load-campaign-record base-dir plan-id))
                 (mirror-durable-statuses! rec observed)
                 (case (campaign-result-status result)
