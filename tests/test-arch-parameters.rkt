@@ -249,7 +249,7 @@
       ;; (CONFIGURATION, test/set seams) and current-tracked-write-override-observer
       ;; (SERVICE_HANDLE, loud-logging observer seam for the staleness guard).
       (check-equal? (length inventory-entries)
-                    219
+                    220
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
