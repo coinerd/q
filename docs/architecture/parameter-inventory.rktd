@@ -85,6 +85,7 @@
  ("extensions/gsd/wave-executor.rkt" (current-gsd-worktree-isolation . CONFIGURATION)
                                      ;; BUG-0029 W5: per-request inherited-artifacts block
                                      (current-gsd-wave-inherited-artifacts . TURN_LOCAL))
+ ("extensions/gsd/notify.rkt" (current-gsd-notify-sinks . SERVICE_HANDLE))
  ("extensions/gsd/session-state.rkt" (current-gsd-session-id . SERVICE_HANDLE)
                                      (current-gsd-ctx . SERVICE_HANDLE))
  ("extensions/gsd/state-machine.rkt" (gsd-max-rework-iterations . CONFIGURATION)

@@ -127,6 +127,19 @@
                                  "plan-types"
                                  "wave-docs"
                                  "plan-context-builder"))
+   ;; BUG-0040 W6: terminal-transition notification sink adapter
+   ;; (tmux/bell default + opt-in desktop-command/webhook sinks).
+   (make-entry "notify.rkt"
+               'external-ports
+               '(subprocess parameterize make-param)
+               '(current-gsd-notify-sinks)
+               '("racket/contract" "racket/format"
+                                   "json"
+                                   "racket/match"
+                                   "racket/string"
+                                   "racket/system"
+                                   "settings-query"
+                                   "events"))
    ;; transition logic (7)
    (make-entry "policy.rkt"
                'transition-logic
