@@ -12,7 +12,8 @@
 ;;     re-record this fixture in the same commit AND keep the file
 ;;     below the W7 target (extract a module instead of growing).
 ((file . "extensions/gsd/go-orchestrator.rkt")
- (recorded-at . "v1.00.22 W7 post-extraction pin (BUG-0042); supersedes the v1.00.21 W0 baseline (2566 lines / 91 defines at flip time)")
- (line-count . 1486)
+ (recorded-at
+  . "v1.00.22 W7 post-extraction pin (BUG-0042); supersedes the v1.00.21 W0 baseline (2566 lines / 91 defines at flip time)")
+ (line-count . 1460)
  (top-level-define-count . 23)
  (w7-target-max-lines . 1500))
