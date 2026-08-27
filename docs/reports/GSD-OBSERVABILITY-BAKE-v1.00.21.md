@@ -201,7 +201,7 @@ mandatory sections and bug-number mapping checked against
 bugs verified against the registry rows) → version literals purged from
 tests → `metrics --sync-all` + README status → pre-commit 18/18 → fast
 suite green → PR (squash) → gate evidence at FINAL SHA in a clean
-worktree → preflight 7/7 → annotated tag `v1.00.21` → push → release
+worktree → preflight invariants → annotated tag `v1.00.21` → push → release
 pipeline (concurrency-grouped, idempotent publish) → publication
 verified. Bugs INDEX updated to `fixed-in v1.00.21`.
 
@@ -213,6 +213,13 @@ Final bake evidence at the delivery SHA:
 - `racket scripts/release-dry-run.rkt` → **6/6 checks passed**
   (version-match, tag-format, changelog-entry, release-notes,
   manifest, arch-integrity) at canonical version 1.00.21.
+- `racket scripts/release-preflight.rkt v1.00.21` → **all invariants
+  hold** (tag-exists, tag-object-type, tag-version-consistency,
+  manifest dry-run); with `--readiness` the registry/milestone
+  readiness stage also holds (no fixes gated for v1.00.21 — the INDEX
+  rows are `fixed v1.00.21`, not pending targets).
+- Annotated tag `v1.00.21` created at the delivery SHA and pushed to
+  `origin` together with the delivery branch.
 - `.planning/bugs/INDEX.md` — BUG-0039…BUG-0045 rows now read
   `fixed v1.00.21`; header counts updated (Open 5, Fixed/validated 23).
 
