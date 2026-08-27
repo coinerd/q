@@ -11,5 +11,5 @@
 ;;     "matches baseline" to "below target".
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at . "v1.00.21 W0 characterization (BUG-0042); re-recorded BUG-0044 W1 (stall settings plumbing, +49 lines); re-recorded BUG-0043 W2 (wave-outcome error transcript routing, +36 lines)")
- (line-count . 2307)
+ (line-count . 2300)
  (top-level-define-count . 82))
