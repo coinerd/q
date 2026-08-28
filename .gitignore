@@ -80,4 +80,3 @@ q/build/q
 # an intentional discovery test case and must be versioned.
 !tests/metadata-discovery/fixture/tests/compiled/
 !tests/metadata-discovery/fixture/tests/compiled/**
-tmp/
