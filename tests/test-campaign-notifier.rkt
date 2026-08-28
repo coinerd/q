@@ -104,6 +104,9 @@
       (define scratch "tmp/notify-desktop-test.out")
       (with-handlers ([exn:fail? void])
         (delete-file scratch))
+      ;; Fresh checkouts have no repo-local tmp/ (gitignored) — the
+      ;; sink's `echo >> scratch` needs the parent dir to exist.
+      (make-directory* "tmp")
       (define cmd-sink
         (gsd-notify-sinks-from-settings
          (q-settings (hash)
