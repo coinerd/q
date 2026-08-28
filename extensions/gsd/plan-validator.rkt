@@ -11,17 +11,34 @@
 
 ;; BUG-0023 (W2): actionable zero-waves diagnostic. Rejections previously
 ;; collapsed to the single unactionable "Plan has no waves". This companion
-;; error reports BOTH accepted formats with a skeleton example, so authors
+;; error names the accepted plan format with a skeleton example, so authors
 ;; can fix the plan shape immediately. Kept as a SEPARATE error string so
 ;; existing assertions on "Plan has no waves" keep matching.
+;; v1.00.22 (W1, BUG-0023 residual enforcement): the inline `## Wave N:`
+;; format is no longer an accepted form at /go — an inline-only plan is
+;; rejected earlier with inline-format-rejection-diagnostic — so this
+;; diagnostic names only the canonical index grammar.
 (: no-waves-format-diagnostic : String)
 (define no-waves-format-diagnostic
   (string-append
    "found 0 index entries (`- [Inbox] W0: Title → waves/W0-slug.md`) and 0 inline `## Wave N:` sections — "
-   "expected one of:\n"
+   "expected:\n"
    "  - Index format in .planning/PLAN.md: `- [Inbox] W0: Title → waves/W0-title-slug.md` "
-   "(the target wave doc .planning/waves/W0-title-slug.md must exist)\n"
-   "  - Inline format in .planning/PLAN.md: `## Wave 0: Title` sections (parsed only when no index entries exist)"))
+   "(the target wave doc .planning/waves/W0-title-slug.md must exist)"))
+
+;; BUG-0023 residual enforcement (v1.00.22 W1): the inline `## Wave N:`
+;; fallback is no longer ACCEPTED at /go. BUG-0035 (v1.00.20 W6) named the
+;; canonical format in an advisory deprecation warning with removal
+;; targeted after v1.00.21; this executes that removal as a named error.
+;; An inline-only PLAN.md (zero index rows, ≥ 1 inline wave section) is
+;; rejected at /go with this message, which names the canonical
+;; `- [Inbox] W0: Title → waves/W0-slug.md` index format.
+(: inline-format-rejection-diagnostic : String)
+(define inline-format-rejection-diagnostic
+  (string-append
+   "PLAN.md uses inline `## Wave N:` sections — this format was deprecated (BUG-0035) "
+   "and is no longer accepted at /go. Migrate to the PLAN.md index grammar, "
+   "one row per wave: - [Inbox] W0: Title → waves/W0-slug.md"))
 
 (: validate-plan-strict : gsd-plan -> validation-result)
 (define (validate-plan-strict plan)
@@ -153,4 +170,6 @@
 (provide validate-plan-strict
          format-validation-report
          valid-plan->go?
-         validate-normalized-plan)
+         validate-normalized-plan
+         no-waves-format-diagnostic
+         inline-format-rejection-diagnostic)

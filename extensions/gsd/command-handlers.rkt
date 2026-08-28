@@ -90,7 +90,12 @@
           [handle-gsd-status (-> hook-result?)]
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
-           (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))])
+           (-> (or/c parsed-gsd-command? #f) string? (or/c path-string? #f) (values symbol? any/c))]
+          ;; BUG-0023 residual (v1.00.22 W1): exported so the inline-format
+          ;; enforcement test can pin the /go precedence seam directly.
+          [validate-plan-for-go
+           (-> path-string? (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?)
+                                  (list/c 'error string?)))])
          extract-task-summary
          extract-last-failure)
 
@@ -262,51 +267,67 @@
     [#f (list 'error "No PLAN found in .planning/. Use /plan <task> to create one.")]
     [_
      (define plan-from-index (load-plan-from-index base-dir))
-     (define plan
-       (or plan-from-index
-           (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
-     (events:ctx-emit-gsd-event! (current-gsd-ctx)
-                                 'gsd.plan.parsed
-                                 (make-gsd-plan-parsed-event #:session-id (current-gsd-session-id)
-                                                             #:turn-id 0
-                                                             #:wave-count
-                                                             (length (gsd-plan-waves plan))))
-     (define norm-result (normalize-plan plan))
-     (match norm-result
-       [(? string?)
-        (list 'error
-              (string-append "Plan normalization failed:\n"
-                             norm-result
-                             "\n\nFix the plan before using /go."))]
-       [_
+     ;; BUG-0023 residual enforcement (v1.00.22 W1): the inline
+     ;; `## Wave N:` fallback is no longer ACCEPTED at /go. When the
+     ;; index parse yields nothing and only inline wave sections
+     ;; exist, REJECT with a named error naming the canonical
+     ;; `- [Inbox] W0: Title → waves/W0-slug.md` format (the BUG-0035
+     ;; advisory warning's removal roadmap, executed). /go must not
+     ;; start a campaign from an inline-only plan.
+     (cond
+       [(and (not plan-from-index)
+             (positive? (count-inline-wave-sections plan-content)))
+        (list 'error inline-format-rejection-diagnostic)]
+       [else
+        (define plan
+          (or plan-from-index
+              ;; Zero-wave path (no index rows, no inline sections) still
+              ;; flows into normalization/validation below, which rejects
+              ;; it with the actionable no-waves diagnostic.
+              (let ([waves (parse-waves-from-markdown plan-content)])
+                (gsd-plan waves "" '() '()))))
         (events:ctx-emit-gsd-event! (current-gsd-ctx)
-                                    'gsd.plan.normalized
-                                    (make-gsd-plan-normalized-event
-                                     #:session-id (current-gsd-session-id)
-                                     #:turn-id 0
-                                     #:wave-count (length (gsd-normalized-plan-waves norm-result))))
-        (define validation (validate-normalized-plan norm-result))
-        (define validated-plan? (gsd-validated-plan? validation))
-        (events:ctx-emit-gsd-event! (current-gsd-ctx)
-                                    'gsd.plan.validated
-                                    (make-gsd-plan-validated-event
-                                     #:session-id (current-gsd-session-id)
-                                     #:turn-id 0
-                                     #:wave-count 0
-                                     #:valid? validated-plan?
-                                     #:error-count (if validated-plan?
-                                                       0
-                                                       (length (validation-errors validation)))
-                                     #:warning-count (if validated-plan?
-                                                         0
-                                                         (length (validation-warnings validation)))))
-        (match validated-plan?
-          [#f
+                                    'gsd.plan.parsed
+                                    (make-gsd-plan-parsed-event #:session-id (current-gsd-session-id)
+                                                                #:turn-id 0
+                                                                #:wave-count
+                                                                (length (gsd-plan-waves plan))))
+        (define norm-result (normalize-plan plan))
+        (match norm-result
+          [(? string?)
            (list 'error
-                 (string-append "Plan validation failed:\n"
-                                (format-validation-report validation)
+                 (string-append "Plan normalization failed:\n"
+                                norm-result
                                 "\n\nFix the plan before using /go."))]
-          [_ (list 'ok plan norm-result validation)])])]))
+          [_
+           (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                       'gsd.plan.normalized
+                                       (make-gsd-plan-normalized-event
+                                        #:session-id (current-gsd-session-id)
+                                        #:turn-id 0
+                                        #:wave-count (length (gsd-normalized-plan-waves norm-result))))
+           (define validation (validate-normalized-plan norm-result))
+           (define validated-plan? (gsd-validated-plan? validation))
+           (events:ctx-emit-gsd-event! (current-gsd-ctx)
+                                       'gsd.plan.validated
+                                       (make-gsd-plan-validated-event
+                                        #:session-id (current-gsd-session-id)
+                                        #:turn-id 0
+                                        #:wave-count 0
+                                        #:valid? validated-plan?
+                                        #:error-count (if validated-plan?
+                                                          0
+                                                          (length (validation-errors validation)))
+                                        #:warning-count (if validated-plan?
+                                                            0
+                                                            (length (validation-warnings validation)))))
+           (match validated-plan?
+             [#f
+              (list 'error
+                    (string-append "Plan validation failed:\n"
+                                   (format-validation-report validation)
+                                   "\n\nFix the plan before using /go."))]
+             [_ (list 'ok plan norm-result validation)])])])]))
 
 ;; launch-wave-executor : gsd-validated-plan? gsd-plan? path? -> (or/c (list/c 'ok any/c (listof exact-nonnegative-integer?)) (list/c 'error string?))
 ;; Configure state machine and create wave executor inside a transaction.
