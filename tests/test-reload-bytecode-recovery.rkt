@@ -21,8 +21,12 @@
          (file "../extensions/loader.rkt")
          (file "../extensions/api.rkt"))
 
+;; path->complete-path: `find-system-path 'run-file` echoes the invocation
+;; spelling — `racket tests/x.rkt` from the git root yields a RELATIVE
+;; run-file, which would collapse repo-root to "." and break the temp
+;; extension's absolute api.rkt require below.
 (define repo-root
-  (simplify-path (build-path (find-system-path 'run-file) 'up 'up)))
+  (simplify-path (build-path (path->complete-path (find-system-path 'run-file)) 'up 'up)))
 
 (define loader-source
   (file->string (build-path repo-root "extensions" "loader.rkt")))
@@ -74,9 +78,10 @@
 
   (define registry (make-extension-registry))
 
-  ;; Initial load of v1.
+  ;; Initial load of v1. reload-extensions! takes DIRECTORY paths (it
+  ;; discovers .rkt files inside each), so pass the temp dir.
   (write-ext! "v1")
-  (define reloaded-1 (reload-extensions! registry (list ext-path)))
+  (define reloaded-1 (reload-extensions! registry (list (path->string tmp-dir))))
   (check-pred (lambda (names) (member "reload-stale" names)) reloaded-1
               "initial reload reports the extension loaded")
 
@@ -87,7 +92,7 @@
   ;; /reload reports the extension as successfully reloaded despite the
   ;; changed source and despite having no purge/recompile step: the
   ;; reload result carries no staleness information at all.
-  (define reloaded-2 (reload-extensions! registry (list ext-path)))
+  (define reloaded-2 (reload-extensions! registry (list (path->string tmp-dir))))
   (check-pred (lambda (names) (member "reload-stale" names)) reloaded-2
               "changed-source extension is REPORTED as reloaded (BUG-0047: no recompile verification)")
 
