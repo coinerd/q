@@ -1,78 +1,136 @@
 #lang racket
 
-;;; test-changelog-bug-ref-lint.rkt — W0 characterization pin for
-;;; BUG-0049: `lint-release-notes` performs NO cross-check between
-;;; `BUG-NNNN` tokens cited in a CHANGELOG entry and the bug registry
-;;; (.planning/bugs/). A changelog entry citing a completely
-;;; non-existent bug (BUG-9999) still passes the lint with zero
-;;; errors.
-;;;
-;;; Flip owner: W5 (changelog bug-ref lint). When W5 adds the
-;;; registry cross-check, this pin must be flipped into a
-;;; fix-regression test asserting the phantom BUG-9999 reference is
-;;; REPORTED as an error.
+;; @speed fast
+;; @suite default
+;; @boundary unit
+
+;;; test-changelog-bug-ref-lint.rkt — W5 flip of the W0 BUG-0049 pin.
+;; W0 pinned the gap: BUG-NNNN tokens in CHANGELOG entries were never
+;;; resolved against the bug registry (.planning/bugs/INDEX.md), so
+;;; scrambled or fabricated ids passed the release lint silently.
+;;; W5 closes BUG-0049: the linter now cross-checks every token in the
+;;; version block. This suite pins the NEW behavior:
+;;;   1. the cross-check seam exists in the linter source;
+;;;   2. a CHANGELOG citing a BUG id that is not in the registry fails;
+;;;   3. a bug claimed fixed whose registry status is not done fails;
+;;;   4. a severity that disagrees with the registry fails;
+;;;   5. a registry-consistent CHANGELOG passes with zero errors.
 
 (require rackunit
          racket/file
          racket/path
          racket/string
-         (file "../scripts/lint-release-notes.rkt"))
+         "../scripts/lint-release-notes.rkt")
 
-;; Module-path repo-root: robust under `raco test -t` (run-tests.rkt
-;; invocation), where find-system-path 'run-file names the raco
-;; executable rather than this test file.
-(define repo-root
+;; Where this test file (and the linter) live. -------------------------------
+
+(define module-dir
   (simplify-path
-   (build-path
-    (simplify-path
-     (resolved-module-path-name
-      (variable-reference->resolved-module-path (#%variable-reference))))
-    'up 'up)))
+   (path-only
+    (resolved-module-path-name
+     (variable-reference->resolved-module-path (#%variable-reference))))))
 
-;; --- Pin 1 (source level): the lint implementation has no registry
-;;; cross-check seam today — the linter source never references the
-;;; bug registry directory.
 (define linter-source
-  (file->string (build-path repo-root "scripts" "lint-release-notes.rkt")))
+  (file->string (build-path module-dir 'up "scripts" "lint-release-notes.rkt")))
 
-(check-false
- (regexp-match? #px"(?i:bugs/|registry|BUG-\\{?0?\\}?)" linter-source)
- "lint-release-notes.rkt contains no bug-registry cross-check (absent seam)")
+;; Pin 1 (flipped in W5): the registry cross-check seam exists. ---------------
 
-;; --- Pin 2 (behavioral): a fully-compliant v9.9.9 entry that cites a
-;;; nonexistent BUG-9999 token passes the lint with zero errors.
-(define tmp-dir (make-temporary-file "bug0049-tmp~a" 'directory))
-(define changelog-path (build-path tmp-dir "CHANGELOG.md"))
+(test-case "BUG-0049 fixed: linter resolves BUG tokens against the registry"
+  (check-true (and (regexp-match? #px"(?i:bugs/INDEX\\.md)" linter-source)
+                   (regexp-match? #px"validate-bug-refs" linter-source))
+              "BUG-0049: lint-release-notes must cross-check BUG-NNNN tokens against .planning/bugs/INDEX.md"))
 
-(define (cleanup!)
-  (with-handlers ([exn:fail? void])
-    (delete-directory/files tmp-dir)))
+;; Fixture registry + compliant changelog scaffolding. ------------------------
 
-(with-handlers ([exn:fail? (lambda (e) (cleanup!) (raise e))])
+(define scratch-dir (make-temporary-file "bug0049-w5-pin~a" 'directory))
+(define fixture-index (build-path scratch-dir "INDEX.md"))
 
-  (call-with-output-file #:exists 'truncate
-    changelog-path
-    (lambda (out)
-      (display
-       (string-append
-        "# Changelog\n\n"
-        "## v9.9.9\n\n"
-        "### User-Visible Changes\n"
-        "- Fixed the frobnicator reported in BUG-9999 (registry-phantom id).\n\n"
-        "### Breaking / Behavior Changes\n"
-        "- None.\n\n"
-        "### Migration Notes\n"
-        "- None required.\n\n"
-        "### Testing\n"
-        "- racket tests/test-changelog-bug-ref-lint.rkt\n\n"
-        "### Operational / Release\n"
-        "- Tag v9.9.9.\n")
-       out)))
+(with-output-to-file fixture-index
+  (lambda ()
+    (displayln "# Fixture Bug Registry (BUG-0049 W5 pin)")
+    (displayln "")
+    (displayln "| ID | Reported | Title | Component | Severity | Status | Fixed in | File |")
+    (displayln "|----|----------|-------|-----------|----------|--------|----------|------|")
+    (displayln "| BUG-0101 | 2026-08-28 | pin fixture: still open | test | medium | reported | — | [BUG-0101.md](BUG-0101.md) |")
+    (displayln "| BUG-0102 | 2026-08-28 | pin fixture: long fixed | test | high | fixed v9.9.8 | v9.9.8 | [BUG-0102.md](BUG-0102.md) |")
+    (displayln "| BUG-0103 | 2026-08-28 | pin fixture: partially landed | test | low | partial: half landed v9.9.7 | — | [BUG-0103.md](BUG-0103.md) |")
+    (displayln "| BUG-0104 | 2026-08-28 | pin fixture: planned work | test | medium | planned v9.9.9 | — | [BUG-0104.md](BUG-0104.md) |")))
 
-  (define errors (lint-changelog changelog-path "9.9.9"))
-  (check-equal? errors '()
-                "BUG-9999 (nonexistent in the registry) passes lint-changelog — no cross-check exists")
+(define (write-fixture-changelog name user-visible-line)
+  (define p (build-path scratch-dir name))
+  (display-to-file
+   (string-join
+    (list "## 9.9.9" ""
+          "### User-Visible Changes"
+          user-visible-line
+          "" "### Breaking / Behavior Changes" "none"
+          "" "### Migration Notes" "none"
+           "" "### Testing" "- registry cross-check suite (changelog bug-ref pin)"
+          "" "### Operational / Release" "- fixture only")
+    "\n")
+   p
+   #:exists 'truncate)
+  p)
 
-  (cleanup!))
+(define (lint-fixture name user-visible-line)
+  (define cl (write-fixture-changelog name user-visible-line))
+  (parameterize ([bug-registry-path fixture-index])
+    (lint-changelog cl "9.9.9")))
 
-(displayln "PASS test-changelog-bug-ref-lint (BUG-0049 pin: phantom BUG-9999 reference accepted)")
+;; Pins 2-5 (flipped in W5): the cross-check flags bad references. -------------
+
+(test-case "unknown BUG id in a CHANGELOG entry is a named lint error"
+  (define errors (lint-fixture "unknown.md"
+                               "- Fixed the frobnicator; BUG-9999 is not in any registry."))
+  (check-true (and (pair? errors)
+                   (ormap (lambda (e)
+                            (and (string-contains? e "BUG-9999")
+                                 (string-contains? (string-downcase e) "unknown")))
+                          errors))
+              (format "expected unknown-bug-id error, got: ~a" errors)))
+
+(test-case "claimed fixed vs registry-reported contradiction is flagged"
+  (define errors (lint-fixture "status-open.md"
+                               "- Fixed the stream hang reported in BUG-0101."))
+  (check-true (and (pair? errors)
+                   (ormap (lambda (e)
+                            (and (string-contains? e "BUG-0101")
+                                 (string-contains? (string-downcase e) "status contradiction")))
+                          errors))
+              (format "expected status-contradiction error, got: ~a" errors)))
+
+(test-case "claimed fixed vs registry-partial contradiction is flagged"
+  (define errors (lint-fixture "status-partial.md"
+                               "- Resolved the half-landed work from BUG-0103."))
+  (check-true (and (pair? errors)
+                   (ormap (lambda (e)
+                            (and (string-contains? e "BUG-0103")
+                                 (string-contains? (string-downcase e) "status contradiction")))
+                          errors))
+              (format "expected status-contradiction error, got: ~a" errors)))
+
+(test-case "severity mismatch against the registry is flagged"
+  (define errors (lint-fixture "sev-mismatch.md"
+                               "- Hardened the transport: critical BUG-0104 no longer stalls."))
+  (check-true (and (pair? errors)
+                   (ormap (lambda (e)
+                            (and (string-contains? e "BUG-0104")
+                                 (string-contains? (string-downcase e) "severity mismatch")))
+                          errors))
+              (format "expected severity-mismatch error, got: ~a" errors)))
+
+(test-case "registry-consistent CHANGELOG entry passes with zero errors"
+  (define errors (lint-fixture "clean.md"
+                               "- Fixed the pooled-body corruption (BUG-0102); regression suite green."))
+  (check-equal? errors '() (format "expected clean pass, got: ~a" errors)))
+
+(test-case "consistent parenthetical severity passes"
+  (define errors (lint-fixture "sev-ok.md"
+                               "- Hardened the transport for BUG-0102 (high) connections."))
+  (check-equal? errors '() (format "expected clean pass, got: ~a" errors)))
+
+;; Cleanup. --------------------------------------------------------------------
+
+(delete-directory/files scratch-dir)
+
+(displayln "All BUG-0049 changelog bug-ref lint pin tests passed (W5 flip).")
