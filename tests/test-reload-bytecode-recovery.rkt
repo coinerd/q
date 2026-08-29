@@ -35,8 +35,17 @@
 ;; spelling — `racket tests/x.rkt` from the git root yields a RELATIVE
 ;; run-file, which would collapse repo-root to "." and break the temp
 ;; extension's absolute api.rkt require below.
+;; Module-path repo-root: robust under both direct `racket` invocation
+;; and `raco test -t` (how scripts/run-tests.rkt runs test files), where
+;; find-system-path 'run-file names the raco executable and would break
+;; the temp extension's absolute api.rkt require below.
 (define repo-root
-  (simplify-path (build-path (path->complete-path (find-system-path 'run-file)) 'up 'up)))
+  (simplify-path
+   (build-path
+    (simplify-path
+     (resolved-module-path-name
+      (variable-reference->resolved-module-path (#%variable-reference))))
+    'up 'up)))
 
 (define loader-source
   (file->string (build-path repo-root "extensions" "loader.rkt")))

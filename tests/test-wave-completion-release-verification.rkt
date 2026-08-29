@@ -20,8 +20,16 @@
          racket/file
          racket/path)
 
+;; Module-path repo-root: robust under `raco test -t` (run-tests.rkt
+;; invocation), where find-system-path 'run-file names the raco
+;; executable rather than this test file.
 (define repo-root
-  (simplify-path (build-path (find-system-path 'run-file) 'up 'up)))
+  (simplify-path
+   (build-path
+    (simplify-path
+     (resolved-module-path-name
+      (variable-reference->resolved-module-path (#%variable-reference))))
+    'up 'up)))
 
 ;; The completion path: delivery verification + wave completion +
 ;;; orchestration.

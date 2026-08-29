@@ -13,8 +13,19 @@
          racket/system
          racket/port)
 
+;; Resolve this file's own module path instead of find-system-path
+;; 'run-file: under `raco test -t` (how scripts/run-tests.rkt invokes
+;; test files) run-file names the raco executable, not this test, so
+;; 'up 'up collapses to a bogus repo-root and every repo-relative
+;; lookup fails. The module path is stable across racket / raco test /
+;; grouped dynamic-require invocation.
 (define repo-root
-  (simplify-path (build-path (find-system-path 'run-file) 'up 'up)))
+  (simplify-path
+   (build-path
+    (simplify-path
+     (resolved-module-path-name
+      (variable-reference->resolved-module-path (#%variable-reference))))
+    'up 'up)))
 
 (define scripts-dir (build-path repo-root "scripts"))
 (define cli (build-path scripts-dir "validate-plan.rkt"))
