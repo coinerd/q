@@ -43,6 +43,9 @@
           [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
           [get-extension-name-from-path (-> path-string? string?)]
           [reload-extensions! (-> extension-registry? (listof path-string?) (listof string?))]
+          [reload-extensions!/report
+           (-> extension-registry? (listof path-string?) hash?)]
+          [purge-compiled-dirs! (-> path-string? (listof path?))]
           [discover-extension-files
            (-> (listof path-string?) (listof (cons/c string? path-string?)))]))
 
@@ -325,7 +328,7 @@
       base))
 
 ;; ============================================================
-;; Hot reload (#1146)
+;; Hot reload (#1146) + stale-bytecode recovery (BUG-0047, W3)
 ;; ============================================================
 
 ;; discover-extension-files : (listof path-string?) -> (listof (cons/c string? path?))
@@ -339,35 +342,205 @@
               #:when (regexp-match? #rx"\\.rkt$" (path->string f)))
     (cons (path->string (path-replace-suffix (file-name-from-path f) #"")) f)))
 
-;; reload-extensions! : extension-registry? (listof path-string?) -> (listof string?)
-;; Full hot-reload: unload ALL loaded extensions, then re-discover and
-;; re-load from the given directory paths.
-;; 1. Unload every currently loaded extension
-;; 2. Discover all .rkt files in extension-paths
-;; 3. Load each one; log errors but continue with others
-;; 4. Return list of names successfully loaded
-(define (reload-extensions! registry extension-paths)
-  ;; 1. Unload all current extensions
+;; Root of the q source tree this loader lives in
+;; (q/extensions/loader.rkt -> two levels up). The wide bytecode purge on
+;; the recovery path is scoped from here.
+(define q-source-root
+  (simplify-path
+   (build-path (resolved-module-path-name
+                (variable-reference->resolved-module-path
+                 (#%variable-reference)))
+               'up 'up)))
+
+;; Roots whose `compiled/` bytecode caches are purged when a load fails
+;; with a stale-linklet error. Parameterized so tests can point recovery
+;; at a sandbox instead of the live q tree. #f -> (list q-source-root).
+(define current-reload-bytecode-roots (make-parameter #f))
+
+(define (compiled-dir? p)
+  (and (directory-exists? p)
+       (equal? "compiled" (path->string (file-name-from-path p)))))
+
+;; purge-compiled-dirs! : path-string? -> (listof path?)
+;; Delete every `compiled/` bytecode cache directory under `root` so the
+;; next load recompiles from source (BUG-0047). Never descends into a
+;; compiled/ dir itself; deletion failures are logged and skipped
+;; (read-only trees simply keep their stale bytecode and the reload
+;; reports the failure honestly).
+(define (purge-compiled-dirs! root)
+  (define purged '())
+  (define (walk! dir)
+    (for ([p (in-list (directory-list dir #:build? #t))])
+      (cond
+        [(compiled-dir? p)
+         (with-handlers
+             ([exn:fail?
+               (lambda (e)
+                 (log-warning "purge-compiled-dirs!: cannot delete ~a: ~a"
+                              (path->string p) (exn-message e)))])
+           (delete-directory/files p)
+           (set! purged (cons p purged))
+           (log-info "purge-compiled-dirs!: purged stale bytecode cache ~a"
+                     (path->string p)))]
+        [(directory-exists? p) (walk! p)])))
+  (when (directory-exists? root) (walk! root))
+  (reverse purged))
+
+;; Messages raised by the module manager when compiled bytecode (.zo
+;; linklets) is stale or incompatible — e.g. after merging source
+;; changes while the process (and its compiled/ caches) keeps running:
+;;   instantiate-linklet: mismatch; reference to a variable that is not
+;;   exported ... / bad bytecode / corrupt .zo / cannot re-declare ...
+(define stale-bytecode-rx
+  #rx"(?i:linklet|bytecode|\\.zo|not exported|cannot re-declare|corrupt|module mismatch)")
+
+(define (stale-bytecode-error? e)
+  (and (exn:fail? e)
+       (regexp-match? stale-bytecode-rx (exn-message e))))
+
+;; Path of THIS loader module's directory (q/extensions/), used to
+;; derive the shared-module attach list below.
+(define this-file-dir
+  (simplify-path
+   (path-only (resolved-module-path-name
+               (variable-reference->resolved-module-path
+                (#%variable-reference))))))
+
+;; shared-file-modules : -> (listof path?)
+;; File modules that must be ATTACHED into a fresh namespace (instead of
+;; re-instantiated from source) so their structs keep identity with the
+;; running namespace: everything under q/extensions/ plus the util
+;; modules extensions depend on. Computed at call time — new extension
+;; tree files are covered without editing a hardcoded list. Collected
+;; modules (racket, rackunit, ...) are NOT attached: the fresh namespace
+;; re-instantiates them from installed bytecode (no identity contract
+;; crosses those).
+(define (shared-file-modules)
+  (define util-rels
+    '("../util/event/event.rkt" "../util/event/event-bus.rkt"
+      "../util/json/checksum.rkt" "../util/version.rkt"
+      "../util/hook-types.rkt"))
+  (append
+   (for/list ([p (in-directory this-file-dir)]
+              #:when (regexp-match? #rx"\\.rkt$" (path->string p)))
+     (simplify-path p))
+   (for/list ([rel (in-list util-rels)])
+     (simplify-path (build-path this-file-dir rel)))))
+
+;; load-extension-fresh : path-string? -> any/c
+;; Load `the-extension` from `path` in a FRESH namespace with every
+;; shared file module (see shared-file-modules) attached, so the
+;; extension module is recompiled/re-instantiated from the CURRENT
+;; source instead of the namespace-cached instance (BUG-0047: the old
+;; reload path returned the cached linklet and reported a false success).
+;; Attaching preserves struct identity for shared modules (e.g. api.rkt),
+;; so the freshly loaded `the-extension` satisfies the running
+;; namespace's `extension?`.
+(define (load-extension-fresh path)
+  (define mod-path
+    (simplify-path (resolve-path (path->complete-path path))))
+  (define src-ns (current-namespace))
+  (define fresh-ns (make-base-namespace))
+  (for ([abs (in-list (shared-file-modules))])
+    ;; Skip modules not instantiated in the running namespace (test
+    ;; contexts): dynamic-require in the fresh namespace then loads them
+    ;; from source — same behavior as the old attach-with-handler pattern
+    ;; in agent/registry.rkt.
+    (with-handlers ([exn:fail? void])
+      (namespace-attach-module src-ns (list 'file (path->string abs)) fresh-ns)))
+  (parameterize ([current-namespace fresh-ns])
+    (dynamic-require (list 'file (path->string mod-path)) 'the-extension)))
+
+;; reload-extensions!/report : extension-registry? (listof path-string?) -> hash?
+;; Full hot-reload with stale-bytecode recovery and HONEST reporting
+;; (BUG-0047 W3). Returns a hash:
+;;   'loaded    — names successfully loaded (and registered)
+;;   'failed    — (cons name message) for every extension that could NOT
+;;                be loaded (nothing is silently dropped)
+;;   'recovered — names that loaded only after a stale-bytecode purge +
+;;                recompile retry
+;;   'purged    — compiled/ cache dirs deleted along the way
+(define (reload-extensions!/report registry extension-paths)
+  ;; 1. Unload all current extensions.
   (define existing-names (map extension-name (list-extensions registry)))
   (for ([name (in-list existing-names)])
-    (with-handlers ([exn:fail? (lambda (e)
-                                 (log-warning
-                                  (format "Failed to unregister ~a: ~a" name (exn-message e))))])
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-warning "reload: failed to unregister ~a: ~a"
+                                    name (exn-message e)))])
       (unregister-extension! registry name)))
-  ;; 2. Discover and load all extensions
+  ;; 2. Purge stale bytecode caches under the extension roots so every
+  ;; extension module is recompiled from CURRENT source. Extension trees
+  ;; are small; deterministic freshness beats timestamp guessing after
+  ;; merges.
+  (define purged (append-map purge-compiled-dirs! extension-paths))
+  ;; 3. Discover and load all extensions - one fresh namespace per
+  ;; module, with stale-linklet recovery (purge shared-tree caches once,
+  ;; retry from source) and named failures otherwise.
   (define discovered (discover-extension-files extension-paths))
   (define loaded '())
+  (define failed '())
+  (define recovered '())
+  (define wide-purged? #f)
+  (define (try-load path)
+    ;; -> (list result message recovered?)
+    (define first-result
+      (with-handlers ([exn:fail? (lambda (e) e)])
+        (load-extension-fresh path)))
+    (cond
+      [(not (exn:fail? first-result)) (list first-result #f #f)]
+      [(not (stale-bytecode-error? first-result))
+       (list #f (exn-message first-result) #f)]
+      [else
+       ;; Stale/incompatible bytecode: purge the shared-tree caches once,
+       ;; then retry from source. If the retry also fails we report the
+       ;; failure by name (never a false success).
+       (let* ([roots (or (current-reload-bytecode-roots)
+                         (list q-source-root))]
+              [_ (unless wide-purged?
+                   (set! wide-purged? #t)
+                   (set! purged
+                         (append purged (append-map purge-compiled-dirs! roots)))
+                   (log-info
+                    "reload: stale-linklet error, purged bytecode caches under ~a, retrying from source"
+                    (string-join (map path->string roots) ", ")))]
+              [retry (with-handlers ([exn:fail? (lambda (e) e)])
+                       (load-extension-fresh path))])
+         (if (exn:fail? retry)
+             (list #f (exn-message retry) #f)
+             (list retry #f #t)))]))
   (for ([pair (in-list discovered)])
     (define name (car pair))
     (define path (cdr pair))
-    (with-handlers
-        ([exn:fail? (lambda (e) (log-warning (format "Failed to load ~a: ~a" name (exn-message e))))])
-      (define ext
-        (dynamic-require (simplify-path (resolve-path (path->complete-path path))) 'the-extension))
-      (when (extension? ext)
-        (register-extension! registry ext)
-        (set! loaded (cons name loaded)))))
-  (reverse loaded))
+    (define outcome (try-load path))
+    (define result (list-ref outcome 0))
+    (define message (list-ref outcome 1))
+    (define recovered? (list-ref outcome 2))
+    (cond
+      [(and result (extension? result))
+       (register-extension! registry result)
+       (set! loaded (cons name loaded))
+       (when recovered? (set! recovered (cons name recovered)))]
+      [else
+       (define msg
+         (or message
+             (and result
+                  (format "loaded value is not an extension?: ~v" result))
+             "load failed"))
+       (log-warning "reload: FAILED to load ~a: ~a" name msg)
+       (set! failed (cons (cons name msg) failed))]))
+  (hasheq 'loaded (reverse loaded)
+          'failed (reverse failed)
+          'recovered (reverse recovered)
+          'purged purged))
+
+;; reload-extensions! : extension-registry? (listof path-string?) -> (listof string?)
+;; Backward-compatible wrapper: returns just the names successfully
+;; loaded. Callers that need honest failure reporting (e.g. the /reload
+;; TUI command) use reload-extensions!/report.
+(define (reload-extensions! registry extension-paths)
+  (hash-ref (reload-extensions!/report registry extension-paths) 'loaded))
+
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Version comparison helpers
