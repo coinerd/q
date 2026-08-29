@@ -261,31 +261,21 @@
 
 ;; validate-plan-for-go : path? -> (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?) (list/c 'error string?))
 ;; Load, normalize, and validate the plan. Returns 'ok with validated data or 'error with message.
+;; v1.00.21 W4 (BUG-0048): every reject DECISION is delegated to the
+;; shared kernel validate-plan-artifacts (wave-executor.rkt), which
+;; scripts/validate-plan.rkt also calls — one source of truth, so the
+;; standalone CLI and /go cannot diverge.
 (define (validate-plan-for-go base-dir)
   (define plan-content (read-planning-artifact base-dir "PLAN"))
   (match plan-content
     [#f (list 'error "No PLAN found in .planning/. Use /plan <task> to create one.")]
     [_
-     (define plan-from-index (load-plan-from-index base-dir))
-     ;; BUG-0023 residual enforcement (v1.00.22 W1): the inline
-     ;; `## Wave N:` fallback is no longer ACCEPTED at /go. When the
-     ;; index parse yields nothing and only inline wave sections
-     ;; exist, REJECT with a named error naming the canonical
-     ;; `- [Inbox] W0: Title → waves/W0-slug.md` format (the BUG-0035
-     ;; advisory warning's removal roadmap, executed). /go must not
-     ;; start a campaign from an inline-only plan.
+     (define kernel (validate-plan-artifacts base-dir))
      (cond
-       [(and (not plan-from-index)
-             (positive? (count-inline-wave-sections plan-content)))
-        (list 'error inline-format-rejection-diagnostic)]
+       [(not (hash-ref kernel 'ok?))
+        (list 'error (hash-ref kernel 'error-message))]
        [else
-        (define plan
-          (or plan-from-index
-              ;; Zero-wave path (no index rows, no inline sections) still
-              ;; flows into normalization/validation below, which rejects
-              ;; it with the actionable no-waves diagnostic.
-              (let ([waves (parse-waves-from-markdown plan-content)])
-                (gsd-plan waves "" '() '()))))
+        (define plan (hash-ref kernel 'plan))
         (events:ctx-emit-gsd-event! (current-gsd-ctx)
                                     'gsd.plan.parsed
                                     (make-gsd-plan-parsed-event #:session-id (current-gsd-session-id)
