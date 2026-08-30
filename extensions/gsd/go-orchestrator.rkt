@@ -41,7 +41,8 @@
                   current-gsd-wave-failure-context
                   current-gsd-max-consecutive-tool-calls
                   current-gsd-campaign-infra-retries
-                  current-gsd-campaign-infra-retry-delay)
+                  current-gsd-campaign-infra-retry-delay
+                  current-gsd-release-check)
          (only-in "prompts.rkt"
                   wave-failure-context-block
                   wave-attempt-context-block
@@ -765,13 +766,20 @@
                          (campaign-result 'wave-cancelled '() "stale verifier result ignored")]
                         [else
                          (define result
-                           (try-complete-wave! base-dir
-                                               after-verifier
-                                               wave-idx
-                                               #:verifier-approve? approved?
-                                               #:verifier-message verifier-message
-                                               #:expected-attempt-id expected-id
-                                               #:expected-fence-token fence))
+                           (try-complete-wave!
+                            base-dir
+                            after-verifier
+                            wave-idx
+                            #:verifier-approve? approved?
+                            #:verifier-message verifier-message
+                            #:expected-attempt-id expected-id
+                            #:expected-fence-token fence
+                            ;; BUG-0051 (W6): release waves are
+                            ;; gated on the configured external
+                            ;; release check (policy parameter),
+                            ;; returning #f for non-release waves.
+                            #:release-check (and (current-gsd-release-check)
+                                                 (lambda () ((current-gsd-release-check) wave-idx)))))
                          (define completion-status (completion-result-status result))
                          (when (memq completion-status '(done failed))
                            (mirror-status! completion-status))

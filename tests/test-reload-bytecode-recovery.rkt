@@ -41,23 +41,22 @@
 ;; the temp extension's absolute api.rkt require below.
 (define repo-root
   (simplify-path
-   (build-path
-    (simplify-path
-     (resolved-module-path-name
-      (variable-reference->resolved-module-path (#%variable-reference))))
-    'up 'up)))
+   (build-path (simplify-path (resolved-module-path-name (variable-reference->resolved-module-path
+                                                          (#%variable-reference))))
+               'up
+               'up)))
 
-(define loader-source
-  (file->string (build-path repo-root "extensions" "loader.rkt")))
+(define loader-source (file->string (build-path repo-root "extensions" "loader.rkt")))
 
 ;; --- Pin (a) FLIPPED: the bytecode purge seam now EXISTS. The W0 pin
 ;; asserted its absence; W3 added purge-compiled-dirs! and wired it into
 ;; reload-extensions!/report.
 (check-true
- (ormap (lambda (line)
-          (regexp-match? #px"(?i:(delete|remove|purge).{0,80}compiled|compiled.{0,80}(delete|remove|purge))"
-                         line))
-        (string-split loader-source "\n"))
+ (ormap
+  (lambda (line)
+    (regexp-match? #px"(?i:(delete|remove|purge).{0,80}compiled|compiled.{0,80}(delete|remove|purge))"
+                   line))
+  (string-split loader-source "\n"))
  "extensions/loader.rkt contains the bytecode/compiled purge step (absent seam in W0, present since W3)")
 
 (check-not-false (regexp-match? #rx"purge-compiled-dirs!" loader-source)
@@ -90,7 +89,9 @@
               [result ((car handlers) #f (hasheq 'probe #t))])
          (hash-ref (hook-result-payload result) 'marker #f))))
 
-(with-handlers ([exn:fail? (lambda (e) (cleanup!) (raise e))])
+(with-handlers ([exn:fail? (lambda (e)
+                             (cleanup!)
+                             (raise e))])
 
   (define ext-path (build-path tmp-dir "reload-stale.rkt"))
 
@@ -100,21 +101,28 @@
   (define api-path (path->string (build-path repo-root "extensions" "api.rkt")))
 
   (define (write-ext! marker #:broken? [broken? #f])
-    (call-with-output-file #:exists 'truncate
-      ext-path
-      (lambda (out)
-        (fprintf out "#lang racket\n")
-        (unless broken? (fprintf out "(require (file ~s))\n" api-path))
-        (unless broken? (fprintf out "(provide the-extension)\n"))
-        (fprintf out "(define marker ~s)\n" marker)
-        (if broken?
-            (fprintf out "(define the-extension (extension oops unclosed\n")
-            (begin
-              (fprintf out "(module+ proxy (provide marker))\n")
-              (fprintf out
-                       "(require (file ~s))\n" (path->string (build-path repo-root "util" "hook-types.rkt")))
-              (fprintf out
-                       "(define the-extension (extension \"reload-stale\" \"1.0.0\" \"1.0.0\" (hasheq 'startup (list (lambda (ctx payload) (hook-result 'continue (hash-set payload 'marker marker)))))))\n"))))))
+    (call-with-output-file
+     #:exists 'truncate
+     ext-path
+     (lambda (out)
+       (fprintf out "#lang racket\n")
+       (unless broken?
+         (fprintf out "(require (file ~s))\n" api-path))
+       (unless broken?
+         (fprintf out "(provide the-extension)\n"))
+       (fprintf out "(define marker ~s)\n" marker)
+       (if broken?
+           (fprintf out "(define the-extension (extension oops unclosed\n")
+           (begin
+             (fprintf out "(module+ proxy (provide marker))\n")
+             (fprintf out
+                      "(require (file ~s))\n"
+                      (path->string (build-path repo-root "util" "hook-types.rkt")))
+             (fprintf out
+                      (string-append
+                       "(define the-extension (extension \"reload-stale\" \"1.0.0\" \"1.0.0\" "
+                       "(hasheq 'startup (list (lambda (ctx payload) "
+                       "(hook-result 'continue (hash-set payload 'marker marker)))))))\n")))))))
 
   (define registry (make-extension-registry))
 
@@ -123,23 +131,26 @@
   ;; dispatch — no TUI restart, no manual purge.
   (write-ext! "v1")
   (define report-1 (reload-extensions!/report registry (list (path->string tmp-dir))))
-  (check-equal? (hash-ref report-1 'loaded) '("reload-stale")
+  (check-equal? (hash-ref report-1 'loaded)
+                '("reload-stale")
                 "initial reload reports the extension loaded")
-  (check-equal? (hash-ref report-1 'failed) '()
-                "initial reload has no failures")
-  (check-equal? (startup-marker registry "reload-stale") "v1"
+  (check-equal? (hash-ref report-1 'failed) '() "initial reload has no failures")
+  (check-equal? (startup-marker registry "reload-stale")
+                "v1"
                 "initial registry dispatch observes marker v1")
 
   ;; Source rewritten underneath the loaded module — the stale-linklet
   ;; condition.
   (write-ext! "v2")
   (define report-2 (reload-extensions!/report registry (list (path->string tmp-dir))))
-  (check-equal? (hash-ref report-2 'loaded) '("reload-stale")
+  (check-equal? (hash-ref report-2 'loaded)
+                '("reload-stale")
                 "changed-source reload reports the extension loaded")
-  (check-equal? (hash-ref report-2 'failed) '()
-                "changed-source reload reports no failures")
-  (check-equal? (startup-marker registry "reload-stale") "v2"
-                "RECOVERED: registry dispatch observes marker v2 — the new instance, not the cached linklet (BUG-0047 fixed)")
+  (check-equal? (hash-ref report-2 'failed) '() "changed-source reload reports no failures")
+  (check-equal?
+   (startup-marker registry "reload-stale")
+   "v2"
+   "RECOVERED: registry dispatch observes marker v2 — the new instance, not the cached linklet (BUG-0047 fixed)")
 
   ;; --- (c) PURGE+RETRY: a corrupt/stale .zo planted for the extension
   ;; must not leave the registry broken. The reload path purges
@@ -148,14 +159,15 @@
   (define compiled-dir (build-path tmp-dir "compiled"))
   (make-directory* compiled-dir)
   (with-output-to-file (build-path compiled-dir "reload-stale_rkt.zo")
-    (lambda () (display "not-a-valid-bytecode-file")))
+                       (lambda () (display "not-a-valid-bytecode-file")))
   (write-ext! "v3")
   (define report-3 (reload-extensions!/report registry (list (path->string tmp-dir))))
-  (check-equal? (hash-ref report-3 'loaded) '("reload-stale")
+  (check-equal? (hash-ref report-3 'loaded)
+                '("reload-stale")
                 "corrupt-zo reload still ends with the extension loaded")
-  (check-equal? (hash-ref report-3 'failed) '()
-                "corrupt-zo reload reports no failures")
-  (check-equal? (startup-marker registry "reload-stale") "v3"
+  (check-equal? (hash-ref report-3 'failed) '() "corrupt-zo reload reports no failures")
+  (check-equal? (startup-marker registry "reload-stale")
+                "v3"
                 "corrupt-zo reload recovered from CURRENT source (marker v3)")
   (check-not-false (member compiled-dir (hash-ref report-3 'purged))
                    "planted compiled/ cache was purged during reload")
@@ -165,16 +177,16 @@
   ;; for an extension it could not load.
   (write-ext! "v4" #:broken? #t)
   (define report-4 (reload-extensions!/report registry (list (path->string tmp-dir))))
-  (check-equal? (hash-ref report-4 'loaded) '()
+  (check-equal? (hash-ref report-4 'loaded)
+                '()
                 "broken extension is NOT reported as loaded (no false success)")
   (define failures-4 (hash-ref report-4 'failed))
-  (check-equal? (length failures-4) 1
-                "exactly one named failure is reported")
+  (check-equal? (length failures-4) 1 "exactly one named failure is reported")
   (define failure-4 (car failures-4))
   (check-equal? (car failure-4) "reload-stale" "failure names the extension")
-  (check-true (non-empty-string? (cdr failure-4))
-              "failure carries a non-empty message")
-  (check-equal? (handlers-for-point registry 'startup) '()
+  (check-true (non-empty-string? (cdr failure-4)) "failure carries a non-empty message")
+  (check-equal? (handlers-for-point registry 'startup)
+                '()
                 "broken extension is not registered (registry stays clean)")
 
   ;; Backward-compatible wrapper still returns just the loaded names.
@@ -182,9 +194,13 @@
   (check-equal? (reload-extensions! registry (list (path->string tmp-dir)))
                 '("reload-stale")
                 "reload-extensions! wrapper returns loaded names")
-  (check-equal? (startup-marker registry "reload-stale") "v5"
+  (check-equal? (startup-marker registry "reload-stale")
+                "v5"
                 "final registry dispatch observes marker v5")
 
   (cleanup!))
 
-(displayln "PASS test-reload-bytecode-recovery (BUG-0047 fixed: purge seam present; stale-linklet recovered in-process; corrupt-zo purged; broken extension fails honestly)")
+(displayln
+ (string-append
+  "PASS test-reload-bytecode-recovery (BUG-0047 fixed: purge seam present; "
+  "stale-linklet recovered in-process; corrupt-zo purged; broken extension fails honestly)"))

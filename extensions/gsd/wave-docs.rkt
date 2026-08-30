@@ -50,15 +50,15 @@
          wave-index-entry-slug
          wave-index-entry-status
          ;; BUG-0034 (W2): one dual-source status divergence
-          status-divergence
-          status-divergence?
-          status-divergence-wave-idx
-          status-divergence-plan-status
-          status-divergence-doc-status
-          status-divergence-plan-path
-          status-divergence-doc-path
-          ;; BUG-0050 (W2): 'index-vs-doc-header | 'body-vs-header
-          status-divergence-kind
+         status-divergence
+         status-divergence?
+         status-divergence-wave-idx
+         status-divergence-plan-status
+         status-divergence-doc-status
+         status-divergence-plan-path
+         status-divergence-doc-path
+         ;; BUG-0050 (W2): 'index-vs-doc-header | 'body-vs-header
+         status-divergence-kind
          ;; BUG-0041 (W4): one wave-doc lint violation
          wave-doc-violation
          wave-doc-violation?
@@ -166,11 +166,10 @@
 ;; a body `Status:` line. Prose lines that merely mention `Status:`
 ;; (mid-line, backticked) are untouched.
 (define (strip-body-status-lines content)
-  (string-join
-   (for/list ([line (in-list (string-split content "\n"))]
-              #:unless (regexp-match? body-status-line-rx line))
-     line)
-   "\n"))
+  (string-join (for/list ([line (in-list (string-split content "\n"))]
+                          #:unless (regexp-match? body-status-line-rx line))
+                 line)
+               "\n"))
 
 ;; body-status-line : string? -> (or/c string? #f)
 ;; PURE (BUG-0050, W2). The raw value of the FIRST line-anchored
@@ -332,8 +331,7 @@
 ;;                 'body-vs-header     — BUG-0050 second `Status:` line
 ;;                                     in the doc body (any value: the
 ;;                                     header is the single marker)
-(struct status-divergence (wave-idx plan-status doc-status plan-path doc-path kind)
-  #:transparent)
+(struct status-divergence (wave-idx plan-status doc-status plan-path doc-path kind) #:transparent)
 
 ;; status->symbol : (or/c string? symbol?) -> symbol?
 ;; Canonical comparison key. Mirrors campaign-state.rkt's
@@ -391,29 +389,28 @@
            (define row-status (wave-index-entry-status e))
            (define header-status (hash-ref doc 'status))
            (define doc-display (index-entry-doc-display-path e))
-           (append
-            divs
-            ;; BUG-0034: PLAN.md index row vs wave-doc header.
-            (if (not (eq? (status->symbol row-status) (status->symbol header-status)))
-                (list (status-divergence idx
-                                         row-status
-                                         header-status
-                                         ".planning/PLAN.md"
-                                         doc-display
-                                         'index-vs-doc-header))
-                '())
-            ;; BUG-0050: a second `Status:` line in the doc body. The
-            ;; machine header (authoritative) rides plan-status; the
-            ;; stale body line value rides doc-status.
-            (let ([body (body-status-line (hash-ref doc 'content))])
-              (if body
-                  (list (status-divergence idx
-                                           header-status
-                                           body
-                                           ".planning/PLAN.md"
-                                           doc-display
-                                           'body-vs-header))
-                  '())))]))))
+           (append divs
+                   ;; BUG-0034: PLAN.md index row vs wave-doc header.
+                   (if (not (eq? (status->symbol row-status) (status->symbol header-status)))
+                       (list (status-divergence idx
+                                                row-status
+                                                header-status
+                                                ".planning/PLAN.md"
+                                                doc-display
+                                                'index-vs-doc-header))
+                       '())
+                   ;; BUG-0050: a second `Status:` line in the doc body. The
+                   ;; machine header (authoritative) rides plan-status; the
+                   ;; stale body line value rides doc-status.
+                   (let ([body (body-status-line (hash-ref doc 'content))])
+                     (if body
+                         (list (status-divergence idx
+                                                  header-status
+                                                  body
+                                                  ".planning/PLAN.md"
+                                                  doc-display
+                                                  'body-vs-header))
+                         '())))]))))
 
 ;; format-status-divergence-warning : status-divergence? -> string?
 ;; One named, user-visible warning per divergent wave (BUG-0034): names
@@ -424,15 +421,16 @@
 (define (format-status-divergence-warning d)
   (case (status-divergence-kind d)
     [(body-vs-header)
-     (format (string-append "WARNING (duplicate Status line, BUG-0050): W~a — ~a declares TWO statuses: "
-                            "machine header '~a' (authoritative) and a body `Status:` line '~a' "
-                            "(stale authored-template residue no writer updates). "
-                            "The header is the single sanctioned marker; remove the body line "
-                            "(write-wave-doc! sanitizes it on rewrite).")
-             (status-divergence-wave-idx d)
-             (status-divergence-doc-path d)
-             (status-divergence-plan-status d)
-             (status-divergence-doc-status d))]
+     (format
+      (string-append "WARNING (duplicate Status line, BUG-0050): W~a — ~a declares TWO statuses: "
+                     "machine header '~a' (authoritative) and a body `Status:` line '~a' "
+                     "(stale authored-template residue no writer updates). "
+                     "The header is the single sanctioned marker; remove the body line "
+                     "(write-wave-doc! sanitizes it on rewrite).")
+      (status-divergence-wave-idx d)
+      (status-divergence-doc-path d)
+      (status-divergence-plan-status d)
+      (status-divergence-doc-status d))]
     [else
      (format (string-append "WARNING (status divergence, BUG-0034): W~a — PLAN.md row says [~a] "
                             "but wave doc header says '~a' (~a vs ~a). "
@@ -614,8 +612,8 @@
   (define content (hash-ref doc 'content ""))
   (define status (hash-ref doc 'status "Inbox"))
   (append (if (and (hash-ref doc 'status-header? #t) (recognized-status? status))
-               '()
-               (list (wave-doc-violation idx path-display 'status-header)))
+              '()
+              (list (wave-doc-violation idx path-display 'status-header)))
           ;; BUG-0050: exactly ONE sanctioned `Status:` line (the machine
           ;; header). A body `Status:` line is flagged whatever its value.
           (if (body-status-line content)
@@ -652,11 +650,14 @@
 
 ;; Human label for each violation section, named verbatim in warnings.
 (define WAVE-DOC-LINT-SECTION-LABELS
-  (list (list 'status-header "`# Wave N` + canonical `Status:` header")
-        (list 'duplicate-status "exactly one `Status:` line (BUG-0050: a second `Status:` line in the doc body — remove it; the machine header is the single marker)")
-        (list 'files "`## Files` with at least one `- File:` line")
-        (list 'verify "non-empty `## Verify`")
-        (list 'done "non-empty `## Done`")))
+  (list
+   (list 'status-header "`# Wave N` + canonical `Status:` header")
+   (list
+    'duplicate-status
+    "exactly one `Status:` line (BUG-0050: a second `Status:` line in the doc body — remove it; the machine header is the single marker)")
+   (list 'files "`## Files` with at least one `- File:` line")
+   (list 'verify "non-empty `## Verify`")
+   (list 'done "non-empty `## Done`")))
 
 ;; format-wave-doc-lint-warning :
 ;;   exact-nonnegative-integer? string? (listof wave-doc-violation?) -> string?

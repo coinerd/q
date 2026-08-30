@@ -69,7 +69,8 @@
 
 (define gsd-external-domains '(filesystem git github clock process event))
 
-(define gsd-github-command-kinds '(issue-create issue-close board-set-field pr-merge release-create))
+(define gsd-github-command-kinds
+  '(issue-create issue-close board-set-field pr-merge release-create release-view))
 
 (struct gsd-github-command (kind correlation-id params expected-sha)
   #:transparent
@@ -78,7 +79,7 @@
     (unless (memq kind gsd-github-command-kinds)
       (raise-arguments-error
        name
-       "invalid github command kind (expected issue-create|issue-close|board-set-field|pr-merge|release-create)"
+       "invalid github command kind (expected issue-create|issue-close|board-set-field|pr-merge|release-create|release-view)"
        "kind"
        kind))
     (unless (and (string? correlation-id) (positive? (string-length correlation-id)))

@@ -26,6 +26,7 @@
          current-gsd-campaign-infra-retry-delay
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
+         current-gsd-release-check
          gsd-session-iteration-budget)
 
 ;; ============================================================
@@ -139,6 +140,13 @@
 ;; parameter because the runner port callback executes in the campaign
 ;; thread's dynamic extent.
 (define current-gsd-wave-failure-context (make-parameter #f))
+;; v1.00.22 W6 (BUG-0051): release-wave external gate. When non-#f, a function
+;; (wave-idx -> (or/c #f string?)) returning #f when the wave's GitHub Release
+;; object is verified, or a failure-reason string when the release is missing/
+;; draft/unverifiable. The completion path consults it before persisting DONE
+;; for a release wave (see wave-completion.rkt try-complete-wave! #:release-check).
+;; Default #f = no release gate configured (non-release waves unaffected).
+(define current-gsd-release-check (make-parameter #f))
 ;; v1.00.03 user finding: the old 50-iteration wave budget made the derived
 ;; hard limit only 80 (resolve-max-iterations-hard = max(iter*8/5, 80)), so a
 ;; real implementation wave was policy-cancelled at iteration 80 mid-work

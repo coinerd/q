@@ -115,15 +115,14 @@
 (define bug-registry-path (make-parameter #f))
 
 (define script-dir
-  (simplify-path
-   (path-only
-    (resolved-module-path-name
-     (variable-reference->resolved-module-path (#%variable-reference))))))
+  (simplify-path (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                        (#%variable-reference))))))
 
 (define (resolve-bug-registry)
   (cond
     [(bug-registry-path)
-     => (lambda (p) (and (file-exists? p) (simplify-path p)))]
+     =>
+     (lambda (p) (and (file-exists? p) (simplify-path p)))]
     [else
      (define candidates
        (list (build-path script-dir 'up ".planning" "bugs" "INDEX.md")
@@ -164,18 +163,17 @@
     ;; string-split drops empty fields, so cells = (id reported title component severity status fixed-in file ...)
     (define id (and (pair? cells) (car cells)))
     (when (and id (regexp-match? #px"^BUG-\\d{4}$" id))
-      (hash-set! registry id
-                 (bug-entry id
-                            (ormap parse-severity-cell (cdr cells))
-                            (ormap parse-status-cell (cdr cells))))))
+      (hash-set!
+       registry
+       id
+       (bug-entry id (ormap parse-severity-cell (cdr cells)) (ormap parse-status-cell (cdr cells))))))
   registry)
 
 (define bug-token-rx #px"BUG-\\d{4}")
 
 ;; Registry statuses that contradict a changelog claim that a bug is fixed.
 (define not-fixed-heads
-  '("reported" "triaged" "in-progress" "partial" "open" "planned"
-    "deferred" "duplicate" "wontfix"))
+  '("reported" "triaged" "in-progress" "partial" "open" "planned" "deferred" "duplicate" "wontfix"))
 
 ;; A changelog line claims the bug is fixed/resolved/closed.
 (define fix-claim-rx
@@ -185,22 +183,26 @@
 ;; "BUG-0102 (severity: critical)". Returns the level or #f.
 (define (claimed-severity-for tok line)
   (define before
-    (regexp-match (regexp (format "(?i:(critical|high|medium|low)[ \\t]+~a)"
-                                  (regexp-quote tok)))
+    (regexp-match (regexp (format "(?i:(critical|high|medium|low)[ \\t]+~a)" (regexp-quote tok)))
                   line))
   (define after
-    (regexp-match (regexp (format "(?i:~a[ \\t]*\\([ \\t]*(severity[ \\t]*:?[ \\t]*)?(critical|high|medium|low)\\))"
-                                  (regexp-quote tok)))
-                  line))
-  (cond [before (string-downcase (cadr before))]
-        [(and after (caddr after)) (string-downcase (caddr after))]
-        [else #f]))
+    (regexp-match
+     (regexp
+      (format "(?i:~a[ \\t]*\\([ \\t]*(severity[ \\t]*:?[ \\t]*)?(critical|high|medium|low)\\))"
+              (regexp-quote tok)))
+     line))
+  (cond
+    [before (string-downcase (cadr before))]
+    [(and after (caddr after)) (string-downcase (caddr after))]
+    [else #f]))
 
 (define (check-bug-token tok line entry registry-path)
   (cond
     [(not entry)
-     (format "bug-registry: unknown bug reference — ~a is not in ~a. Register the bug or correct the id."
-             tok registry-path)]
+     (format
+      "bug-registry: unknown bug reference — ~a is not in ~a. Register the bug or correct the id."
+      tok
+      registry-path)]
     [else
      (define contradicted-status
        (and (regexp-match? fix-claim-rx line)
@@ -214,11 +216,19 @@
             (not (string=? claimed-sev (bug-entry-severity entry)))))
      (cond
        [contradicted-status
-        (format "bug-registry: status contradiction — changelog claims ~a is fixed but the registry status is '~a' (~a). Close the bug in the registry or correct the entry."
-                tok contradicted-status registry-path)]
+        (format (string-append "bug-registry: status contradiction — changelog claims ~a is fixed "
+                               "but the registry status is '~a' (~a). Close the bug in the registry "
+                               "or correct the entry.")
+                tok
+                contradicted-status
+                registry-path)]
        [sev-mismatch?
-        (format "bug-registry: severity mismatch — changelog calls ~a '~a' but the registry says '~a' (~a). Align changelog and registry."
-                tok claimed-sev (bug-entry-severity entry) registry-path)]
+        (format
+         "bug-registry: severity mismatch — changelog calls ~a '~a' but the registry says '~a' (~a). Align changelog and registry."
+         tok
+         claimed-sev
+         (bug-entry-severity entry)
+         registry-path)]
        [else #f])]))
 
 ;; Cross-check every BUG-NNNN token in a version block against the bug
@@ -246,8 +256,7 @@
   (define block (extract-version-block text version))
   (cond
     [(not block) (list (format "Version '~a' not found in ~a" version changelog-path))]
-    [else (append (validate-release-notes block)
-                  (validate-bug-refs block))]))
+    [else (append (validate-release-notes block) (validate-bug-refs block))]))
 
 ;; CLI -----------------------------------------------------------------------
 
@@ -300,9 +309,9 @@
 
 ;; Provide public API for testing
 (provide lint-changelog
-          extract-version-block
-          validate-release-notes
-          required-section-patterns
-          validate-bug-refs
-          bug-registry-path
-          parse-bug-registry)
+         extract-version-block
+         validate-release-notes
+         required-section-patterns
+         validate-bug-refs
+         bug-registry-path
+         parse-bug-registry)

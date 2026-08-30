@@ -74,13 +74,30 @@
 ;; Try to complete a wave. The verifier must approve before DONE is persisted.
 ;; On rejection, the wave is marked 'failed — DONE is never written.
 ;; On approval, DONE is persisted + outbox event appended atomically.
+;;
+;; BUG-0051 (W6): a release wave additionally requires an external GitHub
+;; Release-object check. `release-check` (when provided) is a thunk returning
+;; #f when the release is verified or a failure-reason string when not. When it
+;; returns a reason, completion FAILS with "release not verified: …" — a
+;; release wave can never be marked DONE without a verified Release object
+;; (closing the v1.00.21 false-completion class).
 (define (try-complete-wave! base-dir
                             rec
                             wave-idx
                             #:verifier-approve? approve?
                             #:verifier-message [verifier-message ""]
                             #:expected-attempt-id expected-attempt-id
-                            #:expected-fence-token expected-fence-token)
+                            #:expected-fence-token expected-fence-token
+                            #:release-check [release-check #f])
+  ;; Resolve the release gate ONCE (before any mutation): a string means the
+  ;; release is not verified (that string is the failure reason); #f/void means
+  ;; either no release check configured or the release verified cleanly.
+  (define release-reason
+    (and release-check
+         (let ([r (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+                    (release-check))])
+           (and (string? r) (positive? (string-length (string-trim r))) r))))
+  (define release-gate-ok? (not release-reason))
   ;; Completion is a durable compare-and-set boundary. Never trust only the
   ;; caller's in-memory record: reload the authoritative projection and require
   ;; the exact VERIFYING attempt/fence that the verifier observed.
@@ -121,6 +138,24 @@
      ;; wave doc so the follow-up wave run sees why the previous attempt
      ;; failed and can adapt instead of repeating the same mistake.
      (record-wave-failure! base-dir wave-idx (lambda (idx) (wave-slug base-dir idx)) verifier-message)
+     (completion-result 'failed #f)]
+    ;; BUG-0051: a release wave whose GitHub Release object is missing/draft
+    ;; fails completion with a named reason — the verifier approved the code
+    ;; delivery, but the release was never published.
+    [(not release-gate-ok?)
+     (define release-failure-message (format "release not verified: ~a" release-reason))
+     (set-campaign-wave-status! wave 'failed)
+     (persist-campaign! base-dir durable)
+     (when caller-wave
+       (set-campaign-wave-status! caller-wave 'failed))
+     (apply-wave-status-projections! base-dir
+                                     wave-idx
+                                     STATUS-FAILED
+                                     (lambda (idx) (wave-slug base-dir idx)))
+     (record-wave-failure! base-dir
+                           wave-idx
+                           (lambda (idx) (wave-slug base-dir idx))
+                           release-failure-message)
      (completion-result 'failed #f)]
     [else
      (set-campaign-wave-status! wave 'done)

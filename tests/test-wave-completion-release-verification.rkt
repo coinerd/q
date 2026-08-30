@@ -1,20 +1,14 @@
 #lang racket
 
-;;; test-wave-completion-release-verification.rkt — W0 characterization
-;;; pin for BUG-0051: wave completion for a release wave checks only
-;;; GIT-LOCAL facts (tag exists, main pushed). No GitHub Release-object
-;;; check exists anywhere in the completion path — a wave can be marked
-;;; DONE (and a release "complete") while no GitHub Release was ever
-;;; published, exactly the v1.00.21 false-completion incident.
+;;; test-wave-completion-release-verification.rkt — W6 characterization
+;;; pin for BUG-0051: wave completion for a release wave MUST verify the
+;;; GitHub Release object before persisting DONE.
 ;;;
-;;; Absent-seam marker (v1.00.19 freshness-pin precedent): we pin the
-;;; source-level absence of any Release-object verification in the
-;;; three completion-path modules.
-;;;
-;;; Flip owner: W6 (release verification gate). When W6 adds a GitHub
-;;; Release-object check to the completion path, this pin must be
-;;; flipped to assert the check exists (and fails completion when the
-;;; Release object is missing).
+;;; Flipped by W6 (release verification gate): the v1.00.2x false-completion
+;;; incident (wave marked DONE while no GitHub Release ever existed) is
+;;; closed. The pin now asserts the check EXISTS in the completion path and
+;;; that a release wave whose Release object is missing/draft FAILS
+;;; completion with a named "release not verified: …" reason.
 
 (require rackunit
          racket/file
@@ -25,35 +19,159 @@
 ;; executable rather than this test file.
 (define repo-root
   (simplify-path
-   (build-path
-    (simplify-path
-     (resolved-module-path-name
-      (variable-reference->resolved-module-path (#%variable-reference))))
-    'up 'up)))
+   (build-path (simplify-path (resolved-module-path-name (variable-reference->resolved-module-path
+                                                          (#%variable-reference))))
+               'up
+               'up)))
 
-;; The completion path: delivery verification + wave completion +
-;;; orchestration.
-(define completion-modules
-  (list "extensions/gsd/delivery-verifier.rkt"
-        "extensions/gsd/wave-completion.rkt"
-        "extensions/gsd/go-orchestrator.rkt"))
+(define (src-of rel)
+  (file->string (build-path repo-root rel)))
 
-;; A GitHub Release-object check would look like a gh CLI release
-;;; query, a REST releases endpoint, or a release-fetch call.
-(define github-release-rx
-  #px"(?i:gh\\s+(release|run)|api\\.github\\.com|/releases|releases/latest|release-view|list-releases)")
+;; ============================================================
+;; 1. The completion path contains a real GitHub Release-object check
+;; ============================================================
 
-(for ([module (in-list completion-modules)])
-  (define src (file->string (build-path repo-root module)))
-  (check-false
-   (regexp-match? github-release-rx src)
-   (format "~a contains no GitHub Release-object check (absent seam)" module)))
+;; wave-completion.rkt: the #:release-check gate + named failure reason.
+(define wave-completion-src (src-of "extensions/gsd/wave-completion.rkt"))
+(check-true (regexp-match? #rx"release-check" wave-completion-src)
+            "wave-completion.rkt exposes a #:release-check gate")
+(check-true (regexp-match? #rx"release not verified:" wave-completion-src)
+            "wave-completion.rkt names the failure reason 'release not verified:'")
 
-;; And the completion path DOES contain the git-local facts it relies
-;;; on instead: comparing against origin/main.
-(check-not-false
- (regexp-match? #rx"origin/main"
-                (file->string (build-path repo-root "extensions/gsd/delivery-verifier.rkt")))
- "completion path relies on git-local facts (origin/main) — no remote Release verification")
+;; github-port.rkt: a release-view command (read-only Release-object query)
+;; plus a make-release-check builder wired to find-release-by-tag.
+(define github-port-src (src-of "extensions/gsd/github-port.rkt"))
+(check-true (regexp-match? #rx"release-view" github-port-src)
+            "github-port.rkt supports a release-view (Release-object query) command")
+(check-true (regexp-match? #rx"make-release-check" github-port-src)
+            "github-port.rkt provides make-release-check")
+(check-true (regexp-match? #rx"find-release-by-tag" github-port-src)
+            "github-port.rkt queries the Release object by tag")
 
-(displayln "PASS test-wave-completion-release-verification (BUG-0051 pin: no GitHub Release-object check in completion path)")
+;; go-orchestrator.rkt: the campaign completion path threads the configured
+;; release check into try-complete-wave!.
+(define orchestrator-src (src-of "extensions/gsd/go-orchestrator.rkt"))
+(check-true (regexp-match? #rx"current-gsd-release-check" orchestrator-src)
+            "go-orchestrator.rkt reads current-gsd-release-check (policy parameter)")
+(check-true (regexp-match? #rx"#:release-check" orchestrator-src)
+            "go-orchestrator.rkt passes #:release-check into try-complete-wave!")
+
+;; policy.rkt: the release-check policy parameter exists.
+(define policy-src (src-of "extensions/gsd/policy.rkt"))
+(check-true (regexp-match? #rx"current-gsd-release-check" policy-src)
+            "policy.rkt defines current-gsd-release-check")
+
+;; ============================================================
+;; 2. Behavior: a release wave whose Release object is absent FAILS
+;; ============================================================
+
+(require (only-in "../extensions/gsd/campaign-state.rkt"
+                  campaign-plan-id
+                  campaign-record-waves
+                  campaign-wave-index
+                  campaign-wave-status
+                  campaign-wave-current-attempt
+                  campaign-attempt-id
+                  campaign-attempt-fence-token
+                  set-campaign-fence-token!
+                  begin-attempt!
+                  set-campaign-wave-status!
+                  migrate-campaign!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" load-campaign-record persist-campaign!)
+         (only-in "../extensions/gsd/wave-completion.rkt"
+                  try-complete-wave!
+                  completion-result-status))
+
+(define (make-release-campaign-dir)
+  (define dir (make-temporary-file "w6-release-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file
+   (build-path dir ".planning" "PLAN.md")
+   (lambda (out)
+     (display
+      "# Plan: W6 release verification\n\n## Waves\n\n- [Verifying] W0: Release wave → waves/W0-release.md\n"
+      out))
+   #:exists 'truncate)
+  (call-with-output-file (build-path dir ".planning" "waves" "W0-release.md")
+                         (lambda (out)
+                           (display "# Wave 0\nStatus: Verifying\n\n# Wave 0: Release wave\n" out))
+                         #:exists 'truncate)
+  dir)
+
+(define (release-campaign-in-verifying dir)
+  (define rec (migrate-campaign! dir))
+  (set-campaign-fence-token! rec 1)
+  (begin-attempt! rec 0 1)
+  (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
+  (persist-campaign! dir rec)
+  rec)
+
+(define (release-attempt rec)
+  (campaign-wave-current-attempt (car (campaign-record-waves rec))))
+
+(define (cleanup-tmp dir)
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "release wave with missing Release object fails completion with named reason"
+  (define dir (make-release-campaign-dir))
+  (define rec (release-campaign-in-verifying dir))
+  (define attempt (release-attempt rec))
+  (define result
+    (try-complete-wave! dir
+                        rec
+                        0
+                        #:verifier-approve? #t
+                        #:verifier-message "delivery verified"
+                        #:expected-attempt-id (campaign-attempt-id attempt)
+                        #:expected-fence-token (campaign-attempt-fence-token attempt)
+                        #:release-check (lambda () "no GitHub Release object for tag v1.00.22")))
+  (check-eq? (completion-result-status result)
+             'failed
+             "completion FAILS when the Release object is absent")
+  (check-eq? (campaign-wave-status (car (campaign-record-waves
+                                         (load-campaign-record dir (campaign-plan-id rec)))))
+             'failed
+             "durable wave status is failed")
+  (define doc-text
+    (call-with-input-file (build-path dir ".planning" "waves" "W0-release.md") port->string))
+  (check-true (regexp-match? #rx"release not verified:" doc-text)
+              "wave doc records the named release-not-verified reason")
+  (cleanup-tmp dir))
+
+(test-case "release wave with verified Release object completes"
+  (define dir (make-release-campaign-dir))
+  (define rec (release-campaign-in-verifying dir))
+  (define attempt (release-attempt rec))
+  (define result
+    (try-complete-wave! dir
+                        rec
+                        0
+                        #:verifier-approve? #t
+                        #:verifier-message "delivery verified"
+                        #:expected-attempt-id (campaign-attempt-id attempt)
+                        #:expected-fence-token (campaign-attempt-fence-token attempt)
+                        #:release-check (lambda () #f)))
+  (check-eq? (completion-result-status result)
+             'done
+             "completion succeeds when the Release object is verified")
+  (cleanup-tmp dir))
+
+(test-case "non-release wave without a release check is unaffected"
+  (define dir (make-release-campaign-dir))
+  (define rec (release-campaign-in-verifying dir))
+  (define attempt (release-attempt rec))
+  (define result
+    (try-complete-wave! dir
+                        rec
+                        0
+                        #:verifier-approve? #t
+                        #:verifier-message "delivery verified"
+                        #:expected-attempt-id (campaign-attempt-id attempt)
+                        #:expected-fence-token (campaign-attempt-fence-token attempt)))
+  (check-eq? (completion-result-status result)
+             'done
+             "no release gate when #:release-check is not provided")
+  (cleanup-tmp dir))
+
+(displayln
+ "PASS test-wave-completion-release-verification (BUG-0051 pin flipped: release-wave completion requires a verified GitHub Release object)")
