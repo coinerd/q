@@ -194,6 +194,18 @@ jobs:
           prepared-artifact-name: prepared-env-fast
           prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
+      # W1 telemetry contract: normalize the prepared-environment outcome
+      # into machine-readable state for the test runner (runner.rkt reads
+      # Q_PREPARED_ENV_STATE / Q_PREPARED_ENV_RESTORE_MS /
+      # Q_PREPARED_ENV_FALLBACK_MS when present; local runs report
+      # 'unavailable' — never an invented 'restored').
+      - name: Export prepared-environment telemetry contract
+        shell: bash
+        run: |
+          echo "Q_PREPARED_ENV_STATE=${{ steps.setup.outputs.prepared-env-state }}" >> "$GITHUB_ENV"
+          echo "Q_PREPARED_ENV_RESTORE_MS=${{ steps.setup.outputs.prepared-env-restore-ms }}" >> "$GITHUB_ENV"
+          echo "Q_PREPARED_ENV_FALLBACK_MS=${{ steps.setup.outputs.prepared-env-fallback-ms }}" >> "$GITHUB_ENV"
+
       - name: Clear stale bytecode
         if: steps.setup.outputs.prepared-env-result != 'success'
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true

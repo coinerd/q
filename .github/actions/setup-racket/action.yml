@@ -37,6 +37,29 @@ outputs:
       the full path and flagged the fallback), or 'skipped' (prepared
       path not requested for this call site).
     value: ${{ steps.prepared-env.outcome }}
+  prepared-env-state:
+    description: >-
+      Normalized prepared-environment state for the W1 telemetry
+      contract: 'restored' (manifest-verified restore), 'rebuilt'
+      (restore failed or not requested and the full path ran), or
+      'unavailable' (prepared path not in play; matches the runner's
+      local-run default).
+    value: >-
+      ${{ steps.prepared-env.outcome == 'success' && 'restored' ||
+          steps.prepared-env.outcome == 'failure' && 'rebuilt' ||
+          'unavailable' }}
+  prepared-env-restore-ms:
+    description: >-
+      Wall-clock milliseconds spent downloading and materializing the
+      prepared environment when the guarded restore ran (success or
+      failure); empty otherwise.
+    value: ${{ steps.prepared-env.outputs.restore-ms }}
+  prepared-env-fallback-ms:
+    description: >-
+      Wall-clock milliseconds spent on the full install+compile fallback
+      path when the guarded restore did not succeed; empty when the
+      prepared path skipped the full path (restore succeeded).
+    value: ${{ steps.setup-compile.outputs.setup-duration-s != '' && (steps.setup-compile.outputs.setup-duration-s * 1000) || '' }}
 runs:
   using: 'composite'
   steps:
@@ -148,6 +171,7 @@ runs:
     # every q collection without rebuilding documentation.
     # ------------------------------------------------------------------
     - name: Link q and compile package-visible modules
+      id: setup-compile
       if: steps.prepared-env.outcome != 'success'
       shell: bash
       run: |
@@ -241,6 +265,7 @@ runs:
 
         racket -e '(require quickcheck fmt) (displayln "Racket package store health check passed")'
         duration=$(( $(date +%s) - setup_started ))
+        echo "setup-duration-s=$duration" >> "$GITHUB_OUTPUT"
         {
           echo "## Racket package setup"
           echo "- Cache hit: \`${{ steps.racket-addon-cache.outputs.cache-hit }}\`"

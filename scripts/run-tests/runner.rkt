@@ -497,9 +497,16 @@
 ;; Local runs never invent `restored` — the default is `unavailable` with
 ;; 'null restore/fallback timings.
 (define (prepared-environment-state)
-  (define raw-result (getenv "Q_PREPARED_ENV_RESULT"))
+  (define raw-result (getenv "Q_PREPARED_ENV_STATE"))
+  ;; Backward-compatible alias for any older CI call site that exported
+  ;; the same normalized vocabulary under the pre-W1 name.
+  (define legacy-result (getenv "Q_PREPARED_ENV_RESULT"))
   (define result
-    (if (and raw-result (member raw-result '("restored" "rebuilt"))) raw-result "unavailable"))
+    (if (and raw-result (member raw-result '("restored" "rebuilt")))
+        raw-result
+        (if (and legacy-result (member legacy-result '("restored" "rebuilt")))
+            legacy-result
+            "unavailable")))
   (define (env-ms name)
     (define v (getenv name))
     (if (and v (regexp-match? #px"^[0-9]+$" v))
@@ -508,9 +515,9 @@
   (hasheq 'result
           result
           'restore_ms
-          (if (string=? result "restored")
-              (env-ms "Q_PREPARED_ENV_RESTORE_MS")
-              'null)
+          ;; Known whenever the guarded restore step ran (success or
+          ;; failure); 'null when the prepared path was not in play.
+          (env-ms "Q_PREPARED_ENV_RESTORE_MS")
           'fallback_ms
           (if (string=? result "rebuilt")
               (env-ms "Q_PREPARED_ENV_FALLBACK_MS")
