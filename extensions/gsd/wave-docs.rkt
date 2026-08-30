@@ -167,10 +167,19 @@
 ;; a body `Status:` line. Prose lines that merely mention `Status:`
 ;; (mid-line, backticked) are untouched.
 (define (strip-body-status-lines content)
-  (string-join (for/list ([line (in-list (string-split content "\n"))]
-                          #:unless (regexp-match? body-status-line-rx line))
-                 line)
-               "\n"))
+  ;; Preserve the original trailing newline (string-split + string-join is
+  ;; lossy: it drops the final "\n", which broke byte-identical wave-doc
+  ;; writes against the legacy writer — test-projection-kernel "shell:
+  ;; byte-identical" regression).
+  (define trailing-newline? (and (positive? (string-length content)) (string-suffix? content "\n")))
+  (define stripped
+    (string-join (for/list ([line (in-list (string-split content "\n"))]
+                            #:unless (regexp-match? body-status-line-rx line))
+                   line)
+                 "\n"))
+  (if trailing-newline?
+      (string-append stripped "\n")
+      stripped))
 
 ;; body-status-line : string? -> (or/c string? #f)
 ;; PURE (BUG-0050, W2). The raw value of the FIRST line-anchored

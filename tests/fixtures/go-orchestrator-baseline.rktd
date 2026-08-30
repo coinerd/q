@@ -13,7 +13,7 @@
 ;;     below the W7 target (extract a module instead of growing).
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
-  . "next release W7 post-extraction pin (BUG-0042); supersedes the this release W0 baseline (2566 lines / 91 defines at flip time)")
- (line-count . 1460)
+  . "next release W7 post-extraction pin (BUG-0042); supersedes the this release W0 baseline (2566 lines / 91 defines at flip time); re-recorded v1.00.22 W6 after BUG-0051 release-check wiring (1460 -> 1468 lines, still 23 defines)")
+ (line-count . 1468)
  (top-level-define-count . 23)
  (w7-target-max-lines . 1500))
