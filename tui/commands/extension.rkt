@@ -172,19 +172,57 @@
         (define entry (make-entry 'system "[no extension directories found]" 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
-       [else
-        (define loaded-names (reload-extensions! ext-reg ext-paths))
-        (define n (length loaded-names))
-        (define msg
-          (if (zero? n)
-              "[reload complete: no extensions loaded]"
+        [else
+         ;; BUG-0047 (W3): honest reload. Use reload-extensions!/report so
+         ;; stale bytecode is purged + recompiled in-process and failures
+         ;; are reported BY NAME — never "~a extensions reloaded" while
+         ;; the registry is actually broken.
+         (define report (reload-extensions!/report ext-reg ext-paths))
+         (define loaded-names (hash-ref report 'loaded))
+         (define failed (hash-ref report 'failed))
+         (define recovered-names (hash-ref report 'recovered))
+         (define purged-dirs (hash-ref report 'purged))
+         (define n (length loaded-names))
+         (define total (+ n (length failed)))
+         (define main-msg
+           (cond
+             [(and (zero? n) (null? failed))
+              "[reload complete: no extensions loaded]"]
+             [(null? failed)
               (format "[reload complete: ~a extension~a reloaded (~a)]"
                       n
                       (if (= n 1) "" "s")
-                      (string-join loaded-names ", "))))
-        (define entry (make-entry 'system msg 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        'continue])]))
+                      (string-join loaded-names ", "))]
+             [(zero? n)
+              (format "[reload FAILED: 0 of ~a extension~a loaded]" total (if (= total 1) "" "s"))]
+             [else
+              (format "[reload PARTIAL: ~a of ~a extensions loaded; ~a FAILED]" n total (length failed))]))
+         (define follow-up-entries
+           (append
+            (if (null? recovered-names)
+                '()
+                (list (make-entry 'system
+                                  (format "  Recovered after stale-bytecode purge: ~a"
+                                          (string-join recovered-names ", "))
+                                  0 (hash))))
+            (if (null? purged-dirs)
+                '()
+                (list (make-entry 'system
+                                  (format "  Purged ~a stale bytecode cache dir~a (recompiled from source)"
+                                          (length purged-dirs)
+                                          (if (= 1 (length purged-dirs)) "" "s"))
+                                  0 (hash))))
+            (for/list ([f (in-list failed)])
+              (make-entry 'error
+                          (format "  Failed: ~a: ~a" (car f) (cdr f))
+                          0 (hash)))))
+         (define new-state
+           (for/fold ([s state])
+                     ([e (in-list (cons (make-entry 'system main-msg 0 (hash))
+                                        follow-up-entries))])
+             (add-transcript-entry s e)))
+         (set-box! (cmd-ctx-state-box cctx) new-state)
+         'continue])]))
 
 ;; ============================================================
 ;; /deactivate command

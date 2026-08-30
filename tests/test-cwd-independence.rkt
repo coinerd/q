@@ -3,6 +3,12 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @timeout 600
+;; Rationale: the BUG-0033 spot-checks spawn three full racket subprocess
+;; test runs (test-ui-action-adapters, test-w9-ui-regression,
+;; test-audit-script). Cold-cache and under parallel-suite load these
+;; exceed the 120s default per-file timeout and abort the fast suite
+;; with a spurious timeout (observed in the v1.00.20 W0 campaign).
 
 ;; BOUNDARY: unit
 ;; Tests for CWD-independent module loading patterns (v0.99.38 W2)

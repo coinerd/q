@@ -28,6 +28,7 @@
 
 (provide make-github-port
          make-dry-run-github-port
+         make-release-check
          make-inert-github-adapter
          make-github-adapter
          github-adapter
@@ -247,6 +248,25 @@
                 (assert-release-sha! params expected-sha)
                 (define id ((guarded (github-adapter-create-release! adapter) token) params))
                 (gsd-github-command-result correlation-id kind id #f #f "created")]
+               [(release-view)
+                ;; Read-only query: does a release object exist for this tag?
+                ;; Returns the external-id (release object marker / id) when the
+                ;; adapter can see a release, #f when none is published. Used by
+                ;; release-wave completion (BUG-0051) to fail closed when a
+                ;; release wave would otherwise be marked DONE with no GitHub
+                ;; Release object ever published.
+                (define tag (hash-ref params 'tag #f))
+                (define found
+                  (and tag ((guarded (github-adapter-find-release-by-tag adapter) token) tag)))
+                (gsd-github-command-result
+                 correlation-id
+                 kind
+                 found
+                 #f
+                 #f
+                 (if found
+                     "release object exists"
+                     "release not verified: no GitHub Release object for tag"))]
                [else (error 'github-port "unhandled command kind: ~s" kind)])))
        (note-done! correlation-id result)
        result]))
@@ -256,3 +276,34 @@
 ;; ever invoked. Live GitHub requires an explicit approved smoke.
 (define (make-dry-run-github-port)
   (make-github-port (make-inert-github-adapter) #:dry-run? #t))
+
+;; ============================================================
+;; Release-wave verification (BUG-0051, v1.00.22 W6)
+;; ============================================================
+
+;; Build a release-check thunk for one release tag against a github port.
+;; Returns a function `(-> (or/c #f string?))` suitable for
+;; try-complete-wave! #:release-check: #f when the GitHub Release object
+;; exists (non-draft, per the adapter), or a failure-reason string when the
+;; release is missing/unverifiable.
+;;
+;; The port must be the LIVE port (dry-run #f) for a real gate; a dry-run
+;; port returns "dry-run: no external effect" as its note, which this helper
+;; treats as NOT verified — a release wave can never be silently accepted on
+;; a dry-run port (fail-closed).
+(define (make-release-check github-port tag)
+  (unless (gsd-github-port? github-port)
+    (raise-argument-error 'make-release-check "gsd-github-port?" github-port))
+  (lambda ()
+    (define result
+      ((gsd-github-port-execute github-port)
+       (gsd-github-command (quote release-view)
+                           (format "release-check-~a-~a" tag (random 1000000))
+                           (hash 'tag tag)
+                           #f)))
+    (define id (gsd-github-command-result-external-id result))
+    (define dry? (gsd-github-command-result-dry-run? result))
+    (cond
+      [dry? "release check ran on a dry-run port — cannot verify GitHub Release object"]
+      [(not id) (format "no GitHub Release object for tag ~a" tag)]
+      [else #f])))

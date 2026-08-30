@@ -1,3 +1,74 @@
+## v1.00.22 — 2026-08-30
+
+Released 2026-08-30.
+
+> v1.00.22: GSD surface-hygiene & tooling follow-ups — canonical plan
+> format enforced at `/go` (BUG-0023 residual), single authoritative
+> wave-doc Status line (BUG-0050), `/reload` bytecode purge + in-process
+> recovery (BUG-0047), standalone plan validator (BUG-0048), changelog
+> `BUG-XXXX` resolution against the bug registry (BUG-0049), and
+> release-wave completion requiring a verified GitHub Release object
+> (BUG-0051). Campaign acceptance evidence:
+> `docs/reports/GSD-SURFACE-TOOLING-BAKE-v1.00.22.md`.
+
+### Features
+
+- **BUG-0023 (residual) — `/go` rejects inline-only plans with a named
+  canonical-format error.** An inline `## Wave N` plan (no index rows) is
+  rejected at `/go` with a named diagnostic naming the canonical index
+  grammar; the canonical plan loads silently. `test-gsd-planning.rkt` 95/95.
+- **BUG-0050 — single authoritative wave-doc Status line.** Wave docs now
+  carry exactly one machine `Status:` header; the body template line is
+  stripped on write, a body-vs-header divergence is detected by the
+  consistency checker, and a duplicate-status lint flags stray copies.
+  44 affected historical wave docs were sanitized in-campaign.
+- **BUG-0047 — `/reload` recovers from stale extension bytecode.** The
+  reload path purges stale `compiled/` directories (wide purge-retry) and
+  reloads extensions in fresh namespaces in-process, with honest per-name
+  failure reporting (never "n extensions reloaded" while broken).
+- **BUG-0048 — standalone plan validator.** `scripts/validate-plan.rkt`
+  runs the exact `/go` plan-validation kernel from the CLI: exits 0 with
+  "plan is /go-ready", names every error/warning, and shares one kernel
+  with `/go` (no drift between authoring and execution checks).
+- **BUG-0049 — changelog `BUG-XXXX` references resolved against the bug
+  registry.** `lint-release-notes` resolves every `BUG-XXXX` in the
+  CHANGELOG against `.planning/bugs/INDEX.md`: unknown IDs and
+  status/severity contradictions are named errors, so a scrambled
+  drill→bug mapping can no longer ship silently.
+- **BUG-0051 — release-wave completion requires a verified GitHub Release
+  object.** Wave completion for a release wave now gates DONE on an
+  external `releases/tags/<version>` check (release-view command + adapter
+  `find-release-by-tag`): a missing/draft Release fails completion with
+  "release not verified: …", closing the v1.00.2x false-completion class.
+
+### Breaking / Behavior Changes
+
+- `/go` rejects inline-only plans (BUG-0023 residual enforcement); a plan
+  with inline `## Wave N` sections and no index rows must be converted to
+  the canonical index format first.
+
+### Migration Notes
+
+- Wave docs with a stale second `Status:` line are auto-sanitized by
+  `write-wave-doc!`; the consistency checker flags any that remain.
+
+### Testing
+
+- Pin tests flipped in-campaign: `test-gsd-plan-format-characterization.rkt`
+  (22), `test-inline-format-deprecation.rkt` (8),
+  `test-single-wave-doc-status.rkt`, `test-reload-bytecode-recovery.rkt`,
+  `test-standalone-plan-validator.rkt`, `test-changelog-bug-ref-lint.rkt`,
+  and `test-wave-completion-release-verification.rkt` (4) all green.
+- Full fast suite run per-wave; the campaign's remaining reds at mid-campaign
+  were the not-yet-flipped W6/W7 pins (red-by-design) plus known cold-cache
+  flakes — each re-ran green solo.
+
+### Operational / Release
+
+- Version stamped `1.00.22`; PR #9544 merged; tag `v1.00.22`;
+  GitHub Release published (assets: `q-1.00.22.tar.gz` +
+  `release-manifest.json`). Milestone #867 closed (8/8 waves).
+
 ## v1.00.21 — 2026-08-27
 
 Released 2026-08-27.
@@ -851,141 +922,4 @@ Released 2026-08-20.
 
 ## [Unreleased]
 
-> v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE — merged via PR #9370 (main `76ae7946`).
-> TUI/GUI event-order parity (W5/W6), BUG-0015 TUI dedup fix, per-wave budget
-> 3600 s + configurable, delivery verifier, edit-limit sandbox 2000.
-
-### Bug Fixes
-
-- **TUI tool-call dedup dropped consecutive same-name calls (BUG-0015).** The `/go` TUI
-  transcript omitted `read` tool calls when several used the same tool name back-to-back:
-  `recent-tool-start?`/`recent-tool-end?` in `tui/state-events/helpers.rkt` keyed dedup on
-  tool **name** within a 10-entry window, so the 2nd+ same-name call was treated as a
-  duplicate and never appended. Dedup now keys on tool-call identity (`tool-call-id` for
-  starts, `result-key` for ends, name-only fallback for legacy payloads). Tests: +4 cases
-  in `test-tool-dedup.rkt`, updated concurrent-tool contract in `test-streaming-transitions.rkt`.
-- **Edit-limit sandbox default raised 500 → 2000.** The sandbox `execute-edit` path still used
-  `DEFAULT-MAX-OLD-TEXT-LEN` 500 while the main-process GSD edit-limit was 2000, so valid
-  large edits (e.g. 1039-char old-text) failed through the sandbox. Aligned `edit-contract.rkt`,
-  `core-tools.rkt` registration text, `prompts.rkt` executor rule, and `editing-rules.md`.
-
-### Features
-
-- **Configurable per-wave campaign budget (default 3600 s).** `/go --wave-timeout=SECONDS`
-  flag > `~/.q/config.json` `wave-timeout-seconds` > default 3600 (was 1800). The resolved
-  value is carried on `campaign-request` (`timeout-sec`) so it applies even though the
-  campaign runs in a separate thread. Retry ceiling stays capped at 900 s.
-- **Delivery verifier for GSD waves.** `extensions/gsd/delivery-verifier.rkt` approves a wave
-  when its listed files exist, are committed, and pass the wave's scoped verify command —
-  unblocks `/go` wave approval that previously fail-closed to `#f`.
-
-### Testing
-
-- **Cross-frontend event-order matrix (W6).** `tests/ux-frontend-event-order-test.rkt` drives
-  the production TUI registry reducers and `make-gui-event-subscriber` through a 7-scenario
-  event-order matrix (normal, reversed terminal orders, interleaved thinking deltas,
-  duplicate completions, thinking-only turn, cancellation and runtime error mid-thinking),
-  asserting identical artifact bodies/ids/lifecycle across both frontends (38 tests).
-- **Single disclosure toggle resolution path (W5).** Unified Ctrl+O fallback with
-  `dispatch-keymap-action`; TUI visual Up/Down composer navigation (W4) refinements.
-- TUI suite green: 88 files / 1,362 tests; full CI green on PR #9370.
-
-## 1.00.06
-
-> TDD plan reassessment closure: full-regression evidence-path repair (#9384),
-> DEEP-9 semver assertion fix, macOS platform budget revision, metadata-lint
-> enforcement decision (W0–W3); first clean full-regression run + governance
-> closure (W4). Merged via PR #9400.
-
-Released 2026-08-20.
-
-### Bug Fixes
-
-- **Full-regression evidence path repaired (#9384).** The `full-regression.yml`
-  workflow dropped the six per-shard Linux records (`results-shard-0..5.json`)
-  from run-summary inputs and `summarize` never published `run-summary.json`,
-  so evidence for the L4 contract could not be recorded. `full-regression.yml`
-  now globs and uploads `results-shard-*.json` as named workflow inputs; the
-  `summarize` job always publishes `run-summary.json`; the macOS platform job
-  runs the suite and uploads usable evidence within a revised timeout budget
-  (setup-timeout raised so the platform job no longer dies during setup).
-- **DEEP-9 stale semantic-version assertion fixed.** `tests/test-self-hosting-deep.rkt`
-  asserted the literal version `1.00.05`, breaking on any bump; it now asserts
-  a semver floor (`>= 1.0.0`) so the self-hosting gate stays green across
-  releases. Confirmed green at 1.00.06.
-
-### Testing
-
-- **Metadata-lint enforcement decision enacted (W3).** `scripts/lint-all.rkt`
-  metadata checks are now blocking in CI (removed from the non-blocking tier);
-  a metadata-lint failure fails the `lint` job instead of warn-only.
-- **First clean full-regression run (definitive `pass`).** All six Linux shard
-  records present in run-summary inputs, `run-summary.json` published with
-  `status: pass`, green `workflows-suite`, and a macOS platform job that
-  executed the suite and uploaded usable evidence. Recorded in
-  `docs/reports/test-regression-log.md`.
-
-### Governance
-
-- **Governance reconciliation.** #9384 closed citing remediation PRs and the
-  clean run; #9348 closed as superseded by the canonical
-  `docs/TDD-TEST-STRATEGY-PLAN.md` on main (v1.00.06). Plan governance figures
-  now match the generated manifest (95 entries / 92 modules).
-
-### Breaking / Behavior Changes
-
-- None. The metadata-lint enforcement (W3) makes previously warn-only CI
-  metadata checks blocking, which is a deliberate tightening of the release
-  gate rather than a runtime behavior change.
-
-### Migration Notes
-
-- None required.
-
-### Operational / Release
-
-- Version stamped `1.00.06`; wave PR #9400 merged to main.
-
-## 1.00.05
-
-Released 2026-08-20.
-
-### Bug Fixes
-
-- **kimi-for-coding W0/W1/W2 integration.** Fixed three critical issues
-  discovered during the v1.00.05 campaign: (1) thinking surfacing in W0 — the
-  anthropic adapter now streams `reasoning_content` deltas to the transcript;
-  (2) W1 timeout fix — `kimi-for-coding` model now has `request: 900`,
-  `sse-read: 300` in `~/.q/config.json`; (3) W2 retry=5 for campaign — the
-  `execute-campaign-request!` function now scales retries to 5 for campaign
-  sessions only. PRs #9392, #9393, #9394 merged; verified in release workflow.
-
-### Testing
-
-- **kimi-provider smoke tests.** `tests/test-provider-smoke.rkt` validates
-  streaming, tool calls, and reasoning_content for kimi-for-coding.
-- **Retry scaling verification.** `test-retry-iteration.rkt` confirms campaign
-  retry ceiling (5) vs interactive default (2).
-- **Version expectations hardened.** `check-version-expectations.rkt` now
-  catches hardcoded version literals in test comments (BUG-0009); all 10
-  affected test files updated.
-
-### Features
-
-- **kimi-for-coding provider.** New `kimi-coding` provider in `provider.rkt`
-  with base URL `https://api.kimi.com/coding`, model `kimi-for-coding`.
-
-### Breaking / Behavior Changes
-
-- **Provider config format changed.** `timeouts.models.kimi-for-coding` object
-  required in `~/.q/config.json` for timeout overrides.
-
-### Migration Notes
-
-- Update `~/.q/config.json` with `kimi-for-coding` timeouts.
-
-### Operational / Release
-
-- Version stamped `1.00.05`; PR #9398 merged; tag `v1.00.05` (`f6d6a8a3`);
-  GitHub Release published (assets: `q-1.00.05.tar.gz` 4383639 bytes +
-  `release-manifest.json`). Milestone #884 closed (3/3 issues).
+(empty)

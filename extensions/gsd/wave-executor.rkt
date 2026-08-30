@@ -42,6 +42,13 @@
          racket/system
          racket/port
          "plan-types.rkt"
+         ;; v1.00.21 W4 (BUG-0048): the shared validation kernel below
+         ;; runs the SAME strict lint /go runs, so the standalone CLI
+         ;; (scripts/validate-plan.rkt) and /go cannot diverge.
+         (only-in "plan-validator.rkt"
+                  validate-plan-strict
+                  no-waves-format-diagnostic
+                  inline-format-rejection-diagnostic)
          (only-in "../../runtime/settings-query.rkt"
                   gsd-worktree-isolation-enabled?
                   ;; v1.00.21 W1 (BUG-0044): canonical stall thresholds
@@ -150,6 +157,18 @@
          make-wave-executor-from-validated
          make-wave-executor-from-campaign
          load-plan-from-index
+         ;; v1.00.21 W4 (BUG-0048): shared plan-validation kernel — used
+         ;; by /go (validate-plan-for-go) AND scripts/validate-plan.rkt.
+         plan-validation-finding
+         plan-validation-finding?
+         plan-validation-finding-wave-idx
+         plan-validation-finding-kind
+         plan-validation-finding-message
+         plan-validation-error-findings
+         declared-file-path
+         file-attribution-findings
+         validate-plan-artifacts
+         format-plan-validation-findings
          wave-start!
          wave-complete!
          wave-fail!
@@ -468,6 +487,147 @@
 
 (define (extract-verify-from-content content)
   (hash-ref (parse-wave-content content) 'verify ""))
+
+;; ============================================================
+;; v1.00.21 W4 (BUG-0048): shared plan-validation kernel
+;; ============================================================
+;; Single source of truth for every check /go runs before a campaign —
+;; PLAN.md index parsing, strict wave-doc existence (BUG-0023),
+;; Files/Verify/Done wave-doc lint (BUG-0041), status consistency, and
+;; the mechanical file-attribution sanity check — so the standalone CLI
+;; (scripts/validate-plan.rkt) and the /go path (validate-plan-for-go)
+;; CANNOT diverge: both delegate to validate-plan-artifacts.
+
+;; One named finding. wave-idx is #f for plan-global findings and the
+;; wave index (exact integer) for per-wave findings.
+(struct plan-validation-finding (wave-idx kind message) #:transparent)
+
+(define (plan-validation-error-findings findings)
+  (filter (lambda (f) (eq? (plan-validation-finding-kind f) 'error)) findings))
+
+;; Authors annotate declared-new files with trailing bracketed notes
+;; ("- File: q/scripts/x.rkt [MISSING]"). The annotation is metadata
+;; for humans; the probe target is the bare path.
+(define declared-file-annotation-rx #px"\\s*\\[[^]]*\\]\\s*$")
+
+(define (declared-file-path raw)
+  (string-trim (regexp-replace declared-file-annotation-rx
+                               (if (path? raw) (path->string raw) (format "~a" raw))
+                               "")))
+
+;; Mechanical file-attribution sanity check (BUG-0048 action 3): every
+;; declared `- File:` path that does not exist under the project base is
+;; either a file this wave will create (fine) or a MISATTRIBUTED path —
+;; the exact class of error the v1.00.21 plan review caught twice by
+;; hand. Advisory ('attribution) only: it never blocks, but it names
+;; the wave and both the declared and resolved path.
+(define (file-attribution-findings base-dir plan)
+  (for*/list ([w (in-list (gsd-plan-waves plan))]
+              [f (in-list (gsd-wave-files w))]
+              #:when (non-empty-string? (declared-file-path f))
+              #:unless (file-exists? (simplify-path
+                                      (path->complete-path (declared-file-path f) base-dir)
+                                      #f)))
+    (define rel (declared-file-path f))
+    (plan-validation-finding
+     (gsd-wave-index w)
+     'attribution
+     (format "W~a: declared file \"~a\" does not exist under ~a (resolved: ~a) — new file this wave will create, or a misattributed path?"
+             (gsd-wave-index w)
+             rel
+             base-dir
+             (simplify-path (path->complete-path rel base-dir) #f)))))
+
+;; validate-plan-artifacts : path-string? [path-string?] -> hash?
+;; Returns:
+;;   'ok?          — no 'error finding (mirrors valid-plan->go?)
+;;   'error-message — #f or the joined error text (the EXACT text /go
+;;                    shows when it rejects the same plan)
+;;   'plan         — the loaded gsd-plan on success, #f otherwise
+;;   'findings     — every named finding, plan-global (wave-idx #f) and
+;;                   per-wave (wave-idx N): 'error | 'warning | 'attribution
+;; Kernel decision order matches /go: no PLAN → inline-only rejection
+;; (BUG-0023 residual) → zero-waves diagnostic → BUG-0023 strict
+;; missing-doc error → strict lint → wave-doc lint (advisory) →
+;; file-attribution warnings (advisory).
+(define (validate-plan-artifacts base-dir [plan-path (build-path base-dir ".planning" "PLAN.md")])
+  (cond
+    [(not (file-exists? plan-path))
+     (define msg "No PLAN found in .planning/. Use /plan <task> to create one.")
+     (hasheq 'ok? #f
+             'error-message msg
+             'plan #f
+             'findings (list (plan-validation-finding #f 'error msg)))]
+    [else
+     (define text (call-with-input-file plan-path port->string))
+     (define plan-or-exn
+       (with-handlers ([exn:fail? (lambda (e) e)])
+         (load-plan-from-index base-dir)))
+     (cond
+       [(exn? plan-or-exn)
+        (define msg (exn-message plan-or-exn))
+        (hasheq 'ok? #f
+                'error-message msg
+                'plan #f
+                'findings (list (plan-validation-finding #f 'error msg)))]
+       [(not plan-or-exn)
+        (define msg
+          (if (positive? (count-inline-wave-sections text))
+              inline-format-rejection-diagnostic
+              (string-append "Plan has no waves\n" no-waves-format-diagnostic)))
+        (hasheq 'ok? #f
+                'error-message msg
+                'plan #f
+                'findings (list (plan-validation-finding #f 'error msg)))]
+       [else
+        (define strict (validate-plan-strict plan-or-exn))
+        (define lint-lines (wave-doc-lint-warning-lines base-dir))
+        (define findings
+          (append
+           (for/list ([e (in-list (validation-errors strict))])
+             (plan-validation-finding #f 'error e))
+           (for/list ([w (in-list (validation-warnings strict))])
+             (plan-validation-finding #f 'warning w))
+           (for/list ([l (in-list lint-lines)])
+             (plan-validation-finding #f 'warning l))
+           (file-attribution-findings base-dir plan-or-exn)))
+        (define errors (plan-validation-error-findings findings))
+        (hasheq 'ok? (null? errors)
+                'error-message (and (pair? errors)
+                                    (string-join
+                                     (map plan-validation-finding-message errors)
+                                     "\n"))
+                'plan plan-or-exn
+                'findings findings)])]))
+
+;; format-plan-validation-findings : hash? -> string?
+;; Human-facing rendering for the standalone CLI: result line, one line
+;; per finding labelled by kind, wave named wherever known.
+(define (format-plan-validation-findings result)
+  (define findings (hash-ref result 'findings '()))
+  (define errors (plan-validation-error-findings findings))
+  (define warnings (filter (lambda (f)
+                             (memq (plan-validation-finding-kind f) '(warning attribution)))
+                           findings))
+  (define (label f)
+    (case (plan-validation-finding-kind f)
+      [(error) "ERROR"]
+      [(attribution) "ATTRIBUTION-WARN"]
+      [else "WARN"]))
+  (string-append
+   (if (hash-ref result 'ok?)
+       (format "OK: plan is /go-ready (~a error(s), ~a warning(s))"
+               (length errors) (length warnings))
+       (format "FAILED: ~a error(s), ~a warning(s)" (length errors) (length warnings)))
+   (if (null? findings)
+       ""
+       (string-append
+        "\n"
+        (string-join
+         (for/list ([f (in-list findings)])
+           (format "  [~a] ~a" (label f) (plan-validation-finding-message f)))
+         "\n")))))
+
 ;; v0.31.5 W0: pure function placeholder
 
 ;; ============================================================

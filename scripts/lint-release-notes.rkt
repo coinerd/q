@@ -2,9 +2,14 @@
 
 ;;; lint-release-notes.rkt — CI tool that validates release notes follow
 ;;; the required template for a given version entry in a changelog.
+;;; Additionally (BUG-0049): every BUG-NNNN token in the entry is
+;;; cross-checked against the bug registry (.planning/bugs/) — unknown
+;;; ids, status contradictions (cited as fixed while the registry still
+;;; says open/planned/partial), and severity mismatches are errors.
 
 (require racket/string
          racket/file
+         racket/path
          racket/port)
 
 ;; ---------------------------------------------------------------------------
@@ -96,6 +101,153 @@
   (reverse errors))
 
 ;; ---------------------------------------------------------------------------
+;; Bug registry cross-check (BUG-0049)
+;; ---------------------------------------------------------------------------
+
+;; The authoritative bug registry lives at .planning/bugs/INDEX.md
+;; (normally one level above the git root, i.e. at the project base).
+;; Auto-discovery covers both layouts (registry inside the repo root or at
+;; the project base); tests override the location via the
+;; bug-registry-path parameter. When no registry can be located the
+;; cross-check is skipped: it requires the planning tree, and CI checkouts
+;; without it must not fail on its absence.
+
+(define bug-registry-path (make-parameter #f))
+
+(define script-dir
+  (simplify-path (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                        (#%variable-reference))))))
+
+(define (resolve-bug-registry)
+  (cond
+    [(bug-registry-path)
+     =>
+     (lambda (p) (and (file-exists? p) (simplify-path p)))]
+    [else
+     (define candidates
+       (list (build-path script-dir 'up ".planning" "bugs" "INDEX.md")
+             (build-path script-dir 'up 'up ".planning" "bugs" "INDEX.md")))
+     (for/or ([c (in-list candidates)]
+              #:when (file-exists? c))
+       (simplify-path c))]))
+
+(struct bug-entry (id severity status-head) #:transparent)
+
+(define severity-levels '("critical" "high" "medium" "low"))
+
+(define status-head-rx
+  #px"^(reported|triaged|in-progress|fixed|validated|closed|wontfix|duplicate|deferred|partial|open|planned)(?![a-z])")
+
+;; Recognize a table cell that *is* a status (its first word is a status
+;; head): "reported", "planned v1.00.22 W5", "fixed v1.00.15 (#9506)",
+;; "partial: half landed", ... Returns the canonical head word or #f.
+(define (parse-status-cell cell)
+  (define m (regexp-match status-head-rx (string-downcase (string-trim cell))))
+  (and m (cadr m)))
+
+;; Recognize a table cell that is exactly a severity level.
+(define (parse-severity-cell cell)
+  (define s (string-downcase (string-trim cell)))
+  (and (member s severity-levels) s))
+
+;; Rows look like:
+;;   | BUG-0049 | 2026-08-27 | Title | component | low | planned v1.00.22 W5 | — | [file] |
+;; Column alignment is NOT guaranteed across the registry history (status
+;; and "Fixed in" sometimes share one cell, file links repeat, ...), so
+;; severity/status are recognized by cell shape rather than by position.
+(define (parse-bug-registry text)
+  (define registry (make-hash))
+  (for ([line (in-list (string-split text "\n"))]
+        #:when (regexp-match? #px"^\\s*\\|\\s*BUG-\\d{4}\\s*\\|" line))
+    (define cells (map string-trim (string-split line "|")))
+    ;; string-split drops empty fields, so cells = (id reported title component severity status fixed-in file ...)
+    (define id (and (pair? cells) (car cells)))
+    (when (and id (regexp-match? #px"^BUG-\\d{4}$" id))
+      (hash-set!
+       registry
+       id
+       (bug-entry id (ormap parse-severity-cell (cdr cells)) (ormap parse-status-cell (cdr cells))))))
+  registry)
+
+(define bug-token-rx #px"BUG-\\d{4}")
+
+;; Registry statuses that contradict a changelog claim that a bug is fixed.
+(define not-fixed-heads
+  '("reported" "triaged" "in-progress" "partial" "open" "planned" "deferred" "duplicate" "wontfix"))
+
+;; A changelog line claims the bug is fixed/resolved/closed.
+(define fix-claim-rx
+  #px"(?i:\\b(?:fix|fixes|fixed|fixing|resolve|resolves|resolved|resolving|close|closes|closed|closing)\\b)")
+
+;; Severity the changelog attributes to a token: "critical BUG-0102" or
+;; "BUG-0102 (severity: critical)". Returns the level or #f.
+(define (claimed-severity-for tok line)
+  (define before
+    (regexp-match (regexp (format "(?i:(critical|high|medium|low)[ \\t]+~a)" (regexp-quote tok)))
+                  line))
+  (define after
+    (regexp-match
+     (regexp
+      (format "(?i:~a[ \\t]*\\([ \\t]*(severity[ \\t]*:?[ \\t]*)?(critical|high|medium|low)\\))"
+              (regexp-quote tok)))
+     line))
+  (cond
+    [before (string-downcase (cadr before))]
+    [(and after (caddr after)) (string-downcase (caddr after))]
+    [else #f]))
+
+(define (check-bug-token tok line entry registry-path)
+  (cond
+    [(not entry)
+     (format
+      "bug-registry: unknown bug reference — ~a is not in ~a. Register the bug or correct the id."
+      tok
+      registry-path)]
+    [else
+     (define contradicted-status
+       (and (regexp-match? fix-claim-rx line)
+            (bug-entry-status-head entry)
+            (member (bug-entry-status-head entry) not-fixed-heads)
+            (bug-entry-status-head entry)))
+     (define claimed-sev (claimed-severity-for tok line))
+     (define sev-mismatch?
+       (and claimed-sev
+            (bug-entry-severity entry)
+            (not (string=? claimed-sev (bug-entry-severity entry)))))
+     (cond
+       [contradicted-status
+        (format (string-append "bug-registry: status contradiction — changelog claims ~a is fixed "
+                               "but the registry status is '~a' (~a). Close the bug in the registry "
+                               "or correct the entry.")
+                tok
+                contradicted-status
+                registry-path)]
+       [sev-mismatch?
+        (format
+         "bug-registry: severity mismatch — changelog calls ~a '~a' but the registry says '~a' (~a). Align changelog and registry."
+         tok
+         claimed-sev
+         (bug-entry-severity entry)
+         registry-path)]
+       [else #f])]))
+
+;; Cross-check every BUG-NNNN token in a version block against the bug
+;; registry: unknown ids, status contradictions (claimed fixed while the
+;; registry says open/planned/partial/...), and severity mismatches are
+;; named errors. Returns '() when no registry is locatable.
+(define (validate-bug-refs block)
+  (define registry-path (resolve-bug-registry))
+  (cond
+    [(not registry-path) '()]
+    [else
+     (define registry (parse-bug-registry (file->string registry-path)))
+     (define errors
+       (for*/list ([line (in-list (string-split block "\n"))]
+                   [tok (in-list (remove-duplicates (regexp-match* bug-token-rx line) string=?))])
+         (check-bug-token tok line (hash-ref registry tok #f) registry-path)))
+     (remove-duplicates (filter values errors))]))
+
+;; ---------------------------------------------------------------------------
 ;; Main entry points (for programmatic use and CLI)
 ;; ---------------------------------------------------------------------------
 
@@ -104,7 +256,7 @@
   (define block (extract-version-block text version))
   (cond
     [(not block) (list (format "Version '~a' not found in ~a" version changelog-path))]
-    [else (validate-release-notes block)]))
+    [else (append (validate-release-notes block) (validate-bug-refs block))]))
 
 ;; CLI -----------------------------------------------------------------------
 
@@ -159,4 +311,7 @@
 (provide lint-changelog
          extract-version-block
          validate-release-notes
-         required-section-patterns)
+         required-section-patterns
+         validate-bug-refs
+         bug-registry-path
+         parse-bug-registry)

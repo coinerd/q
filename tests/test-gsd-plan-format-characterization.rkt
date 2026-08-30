@@ -274,8 +274,11 @@ Do the thing.
                   "must skeleton the index format")
       (check-true (string-contains? (car diag) "0 inline `## Wave N:` sections")
                   "must report the inline-format count")
-      (check-true (string-contains? (car diag) "`## Wave 0: Title`")
-                  "must skeleton the inline format"))
+      ;; v1.00.2x W1 (BUG-0023 residual): inline `## Wave N:` sections are no
+      ;; longer an accepted form, so the actionable diagnostic names ONLY the
+      ;; canonical index grammar — it must not advertise an inline skeleton.
+      (check-false (string-contains? (car diag) "`## Wave 0: Title`")
+                   "must not skeleton the rejected inline format"))
 
     (test-case "parser-provenance counts: hybrid and inline-only texts (BUG-0023, W2)"
       (check-equal? (count-inline-wave-sections index-format-plan) 0)
