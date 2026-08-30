@@ -64,7 +64,8 @@
                       _failure-history
                       _generate-covers-manifest?
                       _shard-plan
-                      _durations)
+                      _durations
+                      _ordering)
         (parse-args '("--mode" "in-process" "--suite" "unit-fast")))
       (check-equal? mode 'in-process)
       (check-equal? suite 'unit-fast)
@@ -92,7 +93,8 @@
                       _failure-history2
                       _generate-covers-manifest2?
                       _shard-plan2
-                      _durations2)
+                      _durations2
+                      _ordering2)
         (parse-args '()))
       (check-equal? default-mode 'auto))
 

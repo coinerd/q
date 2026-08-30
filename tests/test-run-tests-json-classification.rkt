@@ -100,7 +100,8 @@
                       _failure-history
                       _generate-covers-manifest?
                       _shard-plan
-                      _durations)
+                      _durations
+                      _ordering)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 
