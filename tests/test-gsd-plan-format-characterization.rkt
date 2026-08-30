@@ -274,7 +274,7 @@ Do the thing.
                   "must skeleton the index format")
       (check-true (string-contains? (car diag) "0 inline `## Wave N:` sections")
                   "must report the inline-format count")
-      ;; v1.00.22 W1 (BUG-0023 residual): inline `## Wave N:` sections are no
+      ;; v1.00.2x W1 (BUG-0023 residual): inline `## Wave N:` sections are no
       ;; longer an accepted form, so the actionable diagnostic names ONLY the
       ;; canonical index grammar — it must not advertise an inline skeleton.
       (check-false (string-contains? (car diag) "`## Wave 0: Title`")

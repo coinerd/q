@@ -127,7 +127,7 @@
                             #:verifier-message "delivery verified"
                             #:expected-attempt-id (campaign-attempt-id attempt)
                             #:expected-fence-token (campaign-attempt-fence-token attempt)
-                            #:release-check (lambda () "no GitHub Release object for tag v1.00.22")))
+                            #:release-check (lambda () "no GitHub Release object for tag v1.00.2x")))
       (check-eq? (completion-result-status result)
                  'failed
                  "completion FAILS when the Release object is absent")

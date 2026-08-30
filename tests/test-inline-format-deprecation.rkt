@@ -94,7 +94,7 @@ racket tests/test-dummy.rkt
   (dynamic-wind void thunk (lambda () (rm-tmp-planning tmp))))
 
 (define suite
-  (test-suite "BUG-0023 residual (v1.00.22 W1): inline `## Wave N:` plan rejected at /go"
+  (test-suite "BUG-0023 residual (v1.00.2x W1): inline `## Wave N:` plan rejected at /go"
 
     ;; --------------------------------------------------------
     ;; Parser-level characterization (unchanged by W1)
@@ -126,7 +126,7 @@ racket tests/test-dummy.rkt
     ))
 
 (define seam-suite
-  (test-suite "BUG-0023 residual (v1.00.22 W1): /go seam enforcement"
+  (test-suite "BUG-0023 residual (v1.00.2x W1): /go seam enforcement"
 
     (test-case "inline-only plan: /go rejects with inline-format-rejection-diagnostic"
       (define tmp (make-tmp-planning INLINE-ONLY-PLAN '()))

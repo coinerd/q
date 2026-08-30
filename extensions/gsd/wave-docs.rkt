@@ -32,6 +32,7 @@
          racket/list
          racket/path
          racket/port
+         (only-in "../../util/version.rkt" q-version)
          (only-in "shared.rkt" slugify)
          (only-in "wave-status.rkt"
                   STATUS-INBOX
@@ -500,7 +501,7 @@
         (list
          (string-append
           "WARNING (deprecated plan format, BUG-0035): PLAN.md uses inline `## Wave N:` sections. "
-          "Inline sections are deprecated — removal targeted after v1.00.21. "
+          (format "Inline sections are deprecated — removal targeted after v~a. " q-version)
           "Migrate to the PLAN.md index grammar, one row per wave: "
           "- [Inbox] W0: Title → waves/W0-slug.md"))
         '()))
