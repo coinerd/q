@@ -49,7 +49,8 @@
          run-summary->jsexpr
          format-run-summary-record
          print-run-summary-record
-         test-result->ledger-jsexpr)
+         test-result->ledger-jsexpr
+         validate-run-summary-json)
 
 (define (format-duration ms)
   (define total-secs (/ ms 1000.0))
@@ -385,7 +386,11 @@
            ;; W2 FIX: result paths for metadata-missing files are stored as
            ;; strings (not path? objects); path->string on them raises a
            ;; contract violation, aborting JSON output (wave W2 blocker).
-           (hash-ref actual-modes (if (path? p) (path->string p) p) #f))))
+           (hash-ref actual-modes
+                     (if (path? p)
+                         (path->string p)
+                         p)
+                     #f))))
   (define payload
     (hasheq 'suite
             (symbol->string suite)
@@ -448,6 +453,126 @@
         payload))
   (make-parent-directory* path)
   (call-with-output-file path #:exists 'truncate/replace (lambda (out) (write-json payload* out))))
+
+;; W1 action 4: run-summary JSON fixture validation.
+;;
+;; Old-schema artifacts (pre-W1) lack the scheduler / prepared-environment /
+;; timing telemetry entirely; they must still validate (no problems).
+;; New-schema artifacts add the W1 `extra.scheduler` object and the
+;; `extra.prepared_environment` object; every scheduler key is optional
+;; (missing optional telemetry is tolerated). Required top-level and
+;; per-file result fields must be present and well-typed — malformed
+;; required result fields produce descriptive problems.
+;;
+;; Returns a list of problem strings; the empty list means the artifact is
+;; valid. Never raises.
+(define (validate-run-summary-json js)
+  (define problems '())
+  (define (problem msg)
+    (set! problems (cons msg problems)))
+  (define (string-field? v)
+    (string? v))
+  (define (number-field? v)
+    (and (number? v) (real? v)))
+  (define (check-type field v pred what)
+    (unless (pred v)
+      (problem (format "~a: expected ~a, got ~s" field what v))))
+  ;; Required top-level fields (shared by old and new schema).
+  (for ([f '("runner_version" "suite" "profile" "execution_mode")])
+    (unless (hash-has-key? js f)
+      (problem (format "missing required field ~a" f)))
+    (when (hash-has-key? js f)
+      (check-type f (hash-ref js f) string-field? "a string")))
+  (for ([f '("file_count" "pass" "fail" "timeout" "skip" "wall_clock_seconds")])
+    (unless (hash-has-key? js f)
+      (problem (format "missing required field ~a" f)))
+    (when (hash-has-key? js f)
+      (check-type f (hash-ref js f) number-field? "a number")))
+  (unless (hash-has-key? js 'shard)
+    (problem "missing required field shard"))
+  (when (hash-has-key? js 'shard)
+    (define sh (hash-ref js 'shard))
+    (cond
+      [(null? sh) (void)]
+      [(hash? sh)
+       (for ([f '("index" "total")])
+         (unless (hash-has-key? sh f)
+           (problem (format "shard: missing ~a" f)))
+         (when (hash-has-key? sh f)
+           (check-type f (hash-ref sh f) number-field? "a number")))]
+      [else (problem (format "shard: expected null or object, got ~s" sh))]))
+  (unless (hash-has-key? js 'metadata_completeness)
+    (problem "missing required field metadata_completeness"))
+  (when (hash-has-key? js 'metadata_completeness)
+    (define mc (hash-ref js 'metadata_completeness))
+    (cond
+      [(hash? mc)
+       (for ([f '("explicit" "heuristic" "missing")])
+         (unless (hash-has-key? mc f)
+           (problem (format "metadata_completeness: missing ~a" f)))
+         (when (hash-has-key? mc f)
+           (check-type f (hash-ref mc f) number-field? "a number")))]
+      [else (problem (format "metadata_completeness: expected object, got ~s" mc))]))
+  ;; Required per-file result fields.
+  (unless (hash-has-key? js 'files)
+    (problem "missing required field files"))
+  (when (hash-has-key? js 'files)
+    (define files (hash-ref js 'files))
+    (unless (list? files)
+      (problem (format "files: expected list, got ~s" files)))
+    (when (list? files)
+      (for ([f (in-list files)]
+            [i (in-naturals)])
+        (cond
+          [(not (hash? f)) (problem (format "files[~a]: expected object, got ~s" i f))]
+          [else
+           (for ([rf '("path" "category" "exit_code" "passed" "failed" "total")])
+             (unless (hash-has-key? f rf)
+               (problem (format "files[~a]: missing required result field ~a" i rf)))
+             (when (hash-has-key? f rf)
+               (check-type rf
+                           (hash-ref f rf)
+                           (if (member rf '("path" "category")) string-field? number-field?)
+                           (if (member rf '("path" "category")) "a string" "a number"))))]))))
+  ;; Optional W1 telemetry: `extra` may be absent entirely; when present,
+  ;; `scheduler` and `prepared_environment` may be absent or partially
+  ;; populated — missing optional telemetry is never a problem. If the
+  ;; scheduler object IS present, every field inside it must be well-typed.
+  (when (hash-has-key? js 'extra)
+    (define extra (hash-ref js 'extra))
+    (when (hash? extra)
+      (when (hash-has-key? extra 'scheduler)
+        (define sched (hash-ref extra 'scheduler))
+        (if (hash? sched)
+            (for ([(k v) (in-hash sched)])
+              (cond
+                [(equal? k "scheduler_mode")
+                 (unless (string-field? v)
+                   (problem (format "extra.scheduler.scheduler_mode: expected string, got ~s" v)))]
+                [else
+                 (unless (number-field? v)
+                   (problem (format "extra.scheduler.~a: expected number, got ~s" k v)))]))
+            (problem (format "extra.scheduler: expected object, got ~s" sched))))
+      (when (hash-has-key? extra 'prepared_environment)
+        (define pe (hash-ref extra 'prepared_environment))
+        (cond
+          [(not (hash? pe))
+           (problem (format "extra.prepared_environment: expected object, got ~s" pe))]
+          [else
+           (define result (hash-ref pe 'result #f))
+           (unless (member result '("restored" "rebuilt" "unavailable"))
+             (problem
+              (format
+               "extra.prepared_environment.result: expected restored/rebuilt/unavailable, got ~s"
+               result)))
+           (for ([f '("restore_ms" "fallback_ms")])
+             (when (hash-has-key? pe f)
+               (define v (hash-ref pe f))
+               (unless (or (null? v) (number-field? v))
+                 (problem (format "extra.prepared_environment.~a: expected number or null, got ~s"
+                                  f
+                                  v)))))]))))
+  (reverse problems))
 
 (define (print-ledger-summary ledger results)
   (define summary (summarize-ledger-results ledger results))

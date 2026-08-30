@@ -76,6 +76,8 @@
          make-run-all-telemetry
          compute-scheduler-telemetry
          prepared-environment-state
+         partition-scheduler-fields
+         mark-execution-mode!
          main)
 
 ;; ── W0 fast-gate budget instrumentation (schema-additive) ─────────────
@@ -407,6 +409,7 @@
 ;; batches: (listof (cons file-count duration-ms)) in EXECUTION order.
 ;; workers: concurrency of this partition (1 for the serial partition, jobs
 ;; for the parallel partition). All durations are integer milliseconds.
+;; Returns #f when batches is empty (callers default to zeros).
 ;;   queue_wait_ms   — cumulative wall time files spend waiting for earlier
 ;;                     batches of the same partition to finish before their
 ;;                     own batch starts (offset × batch file count, summed).
@@ -415,26 +418,28 @@
 ;;   worker_idle_ms  — partition pool capacity (partition wall ms × workers)
 ;;                     minus worker_busy_ms; 0 for the serial partition.
 (define (partition-scheduler-fields batches workers)
-  (define offsets
-    (let loop ([bs batches]
-               [offset 0]
-               [acc '()])
-      (if (null? bs)
-          (reverse acc)
-          (loop (cdr bs) (+ offset (cdar bs)) (cons offset acc)))))
-  (define partition-ms (for/sum ([b (in-list batches)]) (cdr b)))
-  (define queue-wait-ms (for/sum ([b (in-list batches)] [o (in-list offsets)]) (* o (car b))))
-  (define worker-busy-ms
-    (for/sum ([b (in-list batches)]) (exact-round (* (cdr b) (min 1.0 (/ (car b) (max 1 workers)))))))
-  (define worker-idle-ms (max 0 (- (* partition-ms workers) worker-busy-ms)))
-  (hasheq 'queue_wait_ms
-          (exact-round queue-wait-ms)
-          'worker_busy_ms
-          (exact-round worker-busy-ms)
-          'worker_idle_ms
-          (exact-round worker-idle-ms)
-          'partition_ms
-          (exact-round partition-ms)))
+  (if (null? batches)
+      #f
+      (let* ([offsets (let loop ([bs batches]
+                                 [offset 0]
+                                 [acc '()])
+                        (if (null? bs)
+                            (reverse acc)
+                            (loop (cdr bs) (+ offset (cdar bs)) (cons offset acc))))]
+             [partition-ms (for/sum ([b (in-list batches)]) (cdr b))]
+             [queue-wait-ms (for/sum ([b (in-list batches)] [o (in-list offsets)]) (* o (car b)))]
+             [worker-busy-ms (for/sum ([b (in-list batches)])
+                                      (exact-round (* (cdr b)
+                                                      (min 1.0 (/ (car b) (max 1 workers))))))]
+             [worker-idle-ms (max 0 (- (* partition-ms workers) worker-busy-ms))])
+        (hasheq 'queue_wait_ms
+                (exact-round queue-wait-ms)
+                'worker_busy_ms
+                (exact-round worker-busy-ms)
+                'worker_idle_ms
+                (exact-round worker-idle-ms)
+                'partition_ms
+                (exact-round partition-ms)))))
 
 ;; Merge the serial + parallel partition telemetry into the versioned W1
 ;; scheduler object (values are numbers / 'null; reporting adds the
@@ -462,7 +467,9 @@
                'grouped-in-process))
      ran-results))
   (define subprocess-count (- (length ran-results) grouped-count))
-  (hasheq 'scheduler_mode
+  (hasheq 'schema_version
+          1
+          'scheduler_mode
           "batch"
           'worker_count
           worker-count
