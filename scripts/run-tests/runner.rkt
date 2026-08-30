@@ -56,19 +56,29 @@
                   print-shard-plan-report
                   load-duration-snapshot
                   shard-plan-mode)
+         (only-in "scheduler-order.rkt"
+                  default-ordering
+                  current-max-age-seconds
+                  prepare-ordering
+                  order-files
+                  ordering-record
+                  ordering-record-mode
+                  ordering-record-requested
+                  ordering-record-fallback-reason
+                  ordering-record->jsexpr)
          (only-in "gate-evidence.rkt" record-gate-evidence!)
          (only-in "inventory.rkt" print-inventory compute-inventory-hash)
          (only-in "overhead.rkt" print-overhead-diagnostics)
          (only-in "impact.rkt"
-                  run-impact-selection!
-                  print-impact-explain
-                  selection->jsexpr
-                  write-covers-manifest!
-                  load-failure-history
-                  make-prioritize-ctx
-                  prioritize-partition
-                  partition-entries->jsexpr
-                  embed-impact-in-results!))
+                   run-impact-selection!
+                   print-impact-explain
+                   selection->jsexpr
+                   write-covers-manifest!
+                   load-failure-history
+                   make-prioritize-ctx
+                   prioritize-partition
+                   partition-entries->jsexpr
+                   embed-impact-in-results!))
 
 (provide run-single-file
          run-all-files
@@ -716,7 +726,10 @@
                         #:first-batch-ms-box [first-batch-ms-box #f]
                         #:serial-telemetry [serial-telemetry #f]
                         #:parallel-telemetry [parallel-telemetry #f]
-                        #:scheduler [scheduler 'batch])
+                        #:scheduler [scheduler 'batch]
+                        #:ordering [ordering default-ordering]
+                        #:ordering-record [ordering-record #f]
+                        #:duration-source [duration-source #f])
   (define t0 (current-inexact-milliseconds))
   (define exec-start-ms (hash-ref phases 'execution_start_ms #f))
   (define selection-end-ms (hash-ref phases 'selection_end_ms #f))
@@ -740,11 +753,31 @@
             profile
             (length skipped-files)
             (if (= (length skipped-files) 1) "" "s")))
+  ;; W3: deterministic file ordering — a SEPARATE contract from scheduler
+  ;; selection.  `order-files` is a pure permutation of `runnable-files`, so
+  ;; it can never add/remove a file, change the inventory digest, or cross
+  ;; the serial/parallel partition; final result order is re-established by
+  ;; the result sort keyed on suite-file position below.  FIFO (the default)
+  ;; preserves deterministic input order; LPT sorts by retained per-file
+  ;; duration (descending, stable repository-path tie-breaks) and falls back
+  ;; to FIFO with a named reason when duration evidence is unusable.
+  (define effective-ordering (or ordering default-ordering))
+  (define ordering-rec
+    (or ordering-record
+        (prepare-ordering runnable-files effective-ordering
+                          (current-max-age-seconds) duration-source)))
+  (define ordered-runnable (order-files runnable-files ordering-rec))
+  (when (or (not (eq? (ordering-record-mode ordering-rec) effective-ordering))
+            (not (eq? effective-ordering 'fifo)))
+    (printf ";; run-tests: ordering=~a requested=~a fallback=~a~n"
+            (ordering-record-mode ordering-rec)
+            (ordering-record-requested ordering-rec)
+            (or (ordering-record-fallback-reason ordering-rec) "none")))
   (define-values (serial-files parallel-files)
     (if (> jobs 1)
-        (values (filter mutating-file? runnable-files)
-                (filter (lambda (f) (not (mutating-file? f))) runnable-files))
-        (values '() runnable-files)))
+        (values (filter mutating-file? ordered-runnable)
+                (filter (lambda (f) (not (mutating-file? f))) ordered-runnable))
+        (values '() ordered-runnable)))
   (when (pair? serial-files)
     (printf ";; run-tests: serializing ~a mutation-sensitive file~a before parallel batches~n"
             (length serial-files)
@@ -836,6 +869,9 @@
         m
         'scheduler
         (compute-scheduler-telemetry serial-tel parallel-tel jobs results #:scheduler scheduler))
+       ;; W3: ordering evidence — mode (fifo|lpt), snapshot checksum/status,
+       ;; freshness decision, and named fallback reason, exactly as decided.
+       (hash-set! m 'ordering (ordering-record->jsexpr ordering-rec))
        (hash-set! m 'prepared_environment (prepared-environment-state))
        m)
      #:actual-modes actual-mode-hash))
@@ -917,7 +953,8 @@
                   failure-history
                   generate-covers-manifest?
                   shard-plan
-                  durations)
+                  durations
+                  ordering)
     (parse-args (vector->list filtered-args)))
   (validate-args! jobs
                   sequential?
@@ -943,7 +980,8 @@
                   failure-history
                   generate-covers-manifest?
                   shard-plan
-                  durations)
+                  durations
+                  ordering)
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -1150,7 +1188,7 @@
   (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
   (printf
-   ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a scheduler=~a~n"
+   ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a scheduler=~a ordering=~a~n"
    suite-label
    n-files
    jobs
@@ -1158,7 +1196,8 @@
    repeat
    mode
    profile
-   scheduler)
+   scheduler
+   (or ordering default-ordering))
   (newline)
   (when (> repeat 1)
     (printf ";; run-tests: running suite ~a time~a for confidence gate~n"
@@ -1208,9 +1247,11 @@
                       json-out
                       ledger
                       profile
-                      #:shard (and (> shard-total 1) (cons shard-index shard-total))
-                      #:phases phases
-                      #:scheduler scheduler))
+                       #:shard (and (> shard-total 1) (cons shard-index shard-total))
+                       #:phases phases
+                       #:scheduler scheduler
+                       #:ordering ordering
+                       #:duration-source durations))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (emit-impact-evidence!)

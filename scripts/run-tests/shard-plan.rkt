@@ -54,6 +54,7 @@
          print-shard-plan-report
          write-plan-json!
          load-duration-snapshot
+         artifact-json-files
          inventory-preserved?
          activation-recommendation)
 
@@ -94,15 +95,16 @@
 ;; the MAXIMUM observed duration wins (conservative — a slower re-run must not
 ;; under-estimate a shard).
 (define (artifact-json-files path-string)
+  (define src (if (path? path-string) (path->string path-string) path-string))
   (cond
-    [(not path-string) '()]
-    [(directory-exists? path-string)
+    [(not src) '()]
+    [(directory-exists? src)
      (map path->string
           (sort (filter (lambda (p) (and (file-exists? p) (equal? (path-get-extension p) #".json")))
-                        (directory-list (string->path path-string) #:build? #t))
+                        (directory-list (string->path src) #:build? #t))
                 string<?
                 #:key path->string))]
-    [(file-exists? path-string) (list (simple-form-path (string->path path-string)))]
+    [(file-exists? src) (list (simple-form-path (string->path src)))]
     [else '()]))
 
 (define (entry-duration entry)

@@ -9,14 +9,19 @@
 (require racket/match
          racket/string
          (only-in racket/future processor-count)
-         (only-in "profiles.rkt" known-profiles))
+         (only-in "profiles.rkt" known-profiles)
+         (only-in "scheduler-order.rkt"
+                  known-orderings
+                  default-ordering))
 
 (provide usage
          parse-args
          validate-args!
          known-suites
          known-modes
-         known-schedulers)
+         known-schedulers
+         known-orderings
+         default-ordering)
 
 (define (usage)
   (displayln "Usage: racket scripts/run-tests.rkt [OPTIONS] [TEST-FILES ...]")
@@ -28,6 +33,10 @@
   (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
   (displayln "  --scheduler <name>  Scheduler: batch (default, fixed-batch barrier) or")
   (displayln "                    queue (bounded work-conserving worker pool)")
+  (displayln "  --ordering <name>  File ordering: fifo (default, deterministic input order)")
+  (displayln "                    or lpt (longest-processing-time-first using --durations)")
+  (displayln "                    evidence; falls back to fifo with a named reason when")
+  (displayln "                    duration evidence is missing/stale/malformed/wrong-inventory)")
   (displayln "  --suite <name>    Run test suite: all/broad (default all), fast,")
   (displayln "                    unit-fast, slow, tui, smoke, release-smoke,")
   (displayln "                    security, arch, runtime, extensions, workflows, platform")
@@ -122,7 +131,8 @@
              [failure-history #f]
              [generate-covers-manifest? #f]
              [shard-plan #f]
-             [durations #f])
+             [durations #f]
+             [ordering #f])
     (define (continue rest
                       #:jobs [jobs* jobs]
                       #:sequential? [sequential?* sequential?]
@@ -149,7 +159,8 @@
                       #:generate-covers-manifest?
                       [generate-covers-manifest?* generate-covers-manifest?]
                       #:shard-plan [shard-plan* shard-plan]
-                      #:durations [durations* durations])
+                      #:durations [durations* durations]
+                      #:ordering [ordering* ordering])
       (loop rest
             jobs*
             sequential?*
@@ -175,7 +186,8 @@
             failure-history*
             generate-covers-manifest?*
             shard-plan*
-            durations*))
+            durations*
+            ordering*))
     (match rest
       ['()
        (values jobs
@@ -202,7 +214,8 @@
                failure-history
                generate-covers-manifest?
                shard-plan
-               durations)]
+               durations
+               ordering)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
@@ -236,12 +249,25 @@
       [(list "--generate-covers-manifest" rest ...) (continue rest #:generate-covers-manifest? #t)]
       [(list "--shard-plan" mode* rest ...) (continue rest #:shard-plan mode*)]
       [(list "--durations" path rest ...) (continue rest #:durations path)]
+      [(list "--ordering" name rest ...)
+       (define ord (string->symbol name))
+       (unless (memq ord known-orderings)
+         (eprintf "run-tests: invalid --ordering value ~s (valid: ~a)~n"
+                  name
+                  (string-join (map symbol->string known-orderings) ", "))
+         (usage)
+         (exit 2))
+       (continue rest #:ordering ord)]
       [(list "--shard-plan" rest ...)
        (eprintf "run-tests: --shard-plan requires a mode (report|active)~n")
        (usage)
        (exit 2)]
       [(list "--durations" rest ...)
        (eprintf "run-tests: --durations requires a path~n")
+       (usage)
+       (exit 2)]
+      [(list "--ordering" rest ...)
+       (eprintf "run-tests: --ordering requires a mode (fifo|lpt)~n")
        (usage)
        (exit 2)]
       [(list flag rest ...)
@@ -275,7 +301,8 @@
                         failure-history
                         generate-covers-manifest?
                         shard-plan
-                        durations)
+                        durations
+                        ordering)
   (unless (memq suite known-suites)
     (raise-user-error 'run-tests
                       "unknown suite: ~a (valid: ~a)"
@@ -322,6 +349,15 @@
     (raise-user-error 'run-tests "unknown --shard-plan mode: ~a (valid: report, active)" shard-plan))
   (when (and durations (not (string? durations)))
     (raise-user-error 'run-tests "--durations must be a path string, got: ~a" durations))
+  (when (and ordering (not (memq ordering known-orderings)))
+    (raise-user-error 'run-tests
+                      "unknown ordering: ~a (valid: ~a)"
+                      ordering
+                      (string-join (map symbol->string known-orderings) ", ")))
+  ;; NOTE: `--ordering lpt` WITHOUT --durations is legal.  Missing duration
+  ;; evidence is a named fallback (missing-snapshot → FIFO) at ordering
+  ;; preparation time, never a hard CLI error — "fail safely to
+  ;; deterministic FIFO" is part of the ordering contract (v1.00.23 W3).
   (values jobs
           sequential?
           timeout
@@ -345,4 +381,5 @@
           failure-history
           generate-covers-manifest?
           shard-plan
-          durations))
+          durations
+          ordering))
