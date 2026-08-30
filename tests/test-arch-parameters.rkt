@@ -251,8 +251,14 @@
       ;; +1 — BUG-0040 W6 campaign notifier (extensions/gsd/notify.rkt):
       ;; current-gsd-notify-sinks (SERVICE_HANDLE) — sink registry seam;
       ;; tests inject fake sinks; production default reads settings once.
+      ;; +1 — BUG-0047 W3 /reload bytecode-recovery
+      ;; (extensions/loader.rkt): current-reload-bytecode-roots
+      ;; (CONFIGURATION, purge-seam roots seam).
+      ;; +1 — BUG-0051 W6 release-wave completion
+      ;; (extensions/gsd/policy.rkt): current-gsd-release-check
+      ;; (CONFIGURATION, external release gate seam).
       (check-equal? (length inventory-entries)
-                    221
+                    223
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

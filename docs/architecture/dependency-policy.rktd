@@ -406,4 +406,8 @@
       ("extensions/gsd/wave-executor.rkt"
        (risk
         . "GSD wave executor: prompt assembly with inlined reference material (BUG-0023), checkpoint-commit contract + dirty-state hand-off capture (BUG-0030); score 20780")
+       (owner . "extensions"))
+      ("extensions/loader.rkt"
+       (risk
+        . "Extension discovery/reload with wide compiled/ purge + in-process fresh-namespace reload (BUG-0047, v1.00.22 W3); grew with bytecode-recovery seam; score 59920")
        (owner . "extensions"))))))
