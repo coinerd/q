@@ -5,7 +5,7 @@
 
 ;; BOUNDARY: unit
 ;; tests/test-runner-scheduler-characterization.rkt
-;; v1.00.23 W0 — characterize the v1.00.22 scheduler CONTRACT WITHOUT
+;; v1.00.23 W0 — characterize the CURRENT scheduler CONTRACT WITHOUT
 ;; changing any runner behavior. W2 flips the pinned seams.
 ;;
 ;; Pins:
@@ -244,7 +244,7 @@
                0)
          (list "syntax.rkt" "#lang racket/base\n(define ( \n" 'COMPILE_FAILURE 1 0 0 0)
          (list "modload.rkt"
-               "#lang racket/base\n(require does-not-exist-coll/x)\n"
+               "#lang racket/base\n(require definitely/missing/w0-char/fixture)\n"
                'MODULE_LOAD_FAILURE
                1
                0
