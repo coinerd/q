@@ -73,6 +73,9 @@
 (provide run-single-file
          run-all-files
          run-suite-once
+         make-run-all-telemetry
+         compute-scheduler-telemetry
+         prepared-environment-state
          main)
 
 ;; ── W0 fast-gate budget instrumentation (schema-additive) ─────────────
@@ -230,9 +233,7 @@
 ;; q/docs/TEST_CONVENTIONS.md (schema contract) and audited per file in
 ;; q/docs/reports/unit-fast-eligibility-v1.00.16.md.
 (define (mutates-true? raw)
-  (and raw
-       (not (member (string-downcase (string-trim raw))
-                    '("" "none" "false" "no" "0" "off")))))
+  (and raw (not (member (string-downcase (string-trim raw)) '("" "none" "false" "no" "0" "off")))))
 
 (define (grouped-eligible? path)
   (define rp (resolve-test-path path))
@@ -332,7 +333,13 @@
                        jobs
                        timeout
                        #:mode [mode 'subprocess]
-                       #:first-batch-ms-box [first-batch-ms-box #f])
+                       #:first-batch-ms-box [first-batch-ms-box #f]
+                       #:telemetry [telemetry #f])
+  ;; W1: `telemetry` is a mutable hash (see make-run-all-telemetry) that this
+  ;; call fills with per-partition scheduler evidence: `batches` (list of
+  ;; (file-count . duration-ms) pairs, reversed append order — callers must
+  ;; reverse), `gc_count`, and `gc_pause_ms`. Passing #f keeps the pre-W1
+  ;; behavior byte-identical (no timing reads, no hash writes).
   (define batch-t0 (current-inexact-milliseconds))
   (define results (box '()))
   (define results-lock (make-semaphore 1))
@@ -341,9 +348,15 @@
   (define batch-size jobs)
   (define batches (split-list files batch-size))
   (define gc-counter 0)
+  (define gc-pause-ms 0)
   (define total-batches (length batches))
+  (when telemetry
+    (hash-set! telemetry 'batches '())
+    (hash-set! telemetry 'gc_count 0)
+    (hash-set! telemetry 'gc_pause_ms 0))
   (for ([batch (in-list batches)]
         [batch-idx (in-naturals)])
+    (define batch-start (current-inexact-milliseconds))
     (define batch-threads
       (for/list ([f (in-list batch)])
         (thread (lambda ()
@@ -359,15 +372,149 @@
     (for-each thread-wait batch-threads)
     (when (and first-batch-ms-box (= batch-idx 0))
       (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) batch-t0))))
+    (when telemetry
+      (hash-set! telemetry
+                 'batches
+                 (cons (cons (length batch)
+                             (exact-round (- (current-inexact-milliseconds) batch-start)))
+                       (hash-ref telemetry 'batches))))
     (set! gc-counter (add1 gc-counter))
     (when (or (= 0 (modulo gc-counter 5)) (= gc-counter total-batches))
-      (collect-garbage 'major)))
+      (define gc-start (current-inexact-milliseconds))
+      (collect-garbage 'major)
+      (set! gc-pause-ms (+ gc-pause-ms (- (current-inexact-milliseconds) gc-start)))))
+  (when telemetry
+    (hash-set! telemetry 'gc_count gc-counter)
+    (hash-set! telemetry 'gc_pause_ms (exact-round gc-pause-ms)))
   (newline)
   (define file-order
     (for/hash ([f (in-list files)]
                [i (in-naturals)])
       (values f i)))
   (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
+
+;; W1: per-partition scheduler telemetry (schema-additive, see
+;; docs/TEST_CONVENTIONS.md "Runner scheduler telemetry (W1)").
+;; make-run-all-telemetry returns a fresh mutable hash run-all-files fills.
+(define (make-run-all-telemetry)
+  (define h (make-hasheq))
+  (hash-set! h 'batches '())
+  (hash-set! h 'gc_count 0)
+  (hash-set! h 'gc_pause_ms 0)
+  h)
+
+;; Aggregate one partition's raw batch telemetry into scheduler metrics.
+;; batches: (listof (cons file-count duration-ms)) in EXECUTION order.
+;; workers: concurrency of this partition (1 for the serial partition, jobs
+;; for the parallel partition). All durations are integer milliseconds.
+;;   queue_wait_ms   — cumulative wall time files spend waiting for earlier
+;;                     batches of the same partition to finish before their
+;;                     own batch starts (offset × batch file count, summed).
+;;   worker_busy_ms  — per-batch wall duration scaled by the fraction of the
+;;                     worker pool the batch occupies (files / workers, cap 1).
+;;   worker_idle_ms  — partition pool capacity (partition wall ms × workers)
+;;                     minus worker_busy_ms; 0 for the serial partition.
+(define (partition-scheduler-fields batches workers)
+  (define offsets
+    (let loop ([bs batches]
+               [offset 0]
+               [acc '()])
+      (if (null? bs)
+          (reverse acc)
+          (loop (cdr bs) (+ offset (cdar bs)) (cons offset acc)))))
+  (define partition-ms (for/sum ([b (in-list batches)]) (cdr b)))
+  (define queue-wait-ms (for/sum ([b (in-list batches)] [o (in-list offsets)]) (* o (car b))))
+  (define worker-busy-ms
+    (for/sum ([b (in-list batches)]) (exact-round (* (cdr b) (min 1.0 (/ (car b) (max 1 workers)))))))
+  (define worker-idle-ms (max 0 (- (* partition-ms workers) worker-busy-ms)))
+  (hasheq 'queue_wait_ms
+          (exact-round queue-wait-ms)
+          'worker_busy_ms
+          (exact-round worker-busy-ms)
+          'worker_idle_ms
+          (exact-round worker-idle-ms)
+          'partition_ms
+          (exact-round partition-ms)))
+
+;; Merge the serial + parallel partition telemetry into the versioned W1
+;; scheduler object (values are numbers / 'null; reporting adds the
+;; schema_version field). `results` supplies the ACTUAL per-file execution
+;; modes so the subprocess/grouped counts reflect what happened, not what was
+;; requested.
+(define (compute-scheduler-telemetry serial-tel parallel-tel worker-count results)
+  (define serial-batches (reverse (hash-ref serial-tel 'batches '())))
+  (define parallel-batches (reverse (hash-ref parallel-tel 'batches '())))
+  (define serial-fields (and (pair? serial-batches) (partition-scheduler-fields serial-batches 1)))
+  (define parallel-fields
+    (and (pair? parallel-batches) (partition-scheduler-fields parallel-batches worker-count)))
+  (define (sum key fields)
+    (for/sum ([f (in-list (filter values fields))]) (hash-ref f key 0)))
+  (define ran-results
+    (filter (lambda (r) (not (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))) results))
+  (define grouped-count
+    (count
+     (lambda (r)
+       (equal? (hash-ref execution-modes
+                         (path->string (simplify-path (if (path? (test-file-result-path r))
+                                                          (test-file-result-path r)
+                                                          (string->path (test-file-result-path r)))))
+                         'subprocess)
+               'grouped-in-process))
+     ran-results))
+  (define subprocess-count (- (length ran-results) grouped-count))
+  (hasheq 'scheduler_mode
+          "batch"
+          'worker_count
+          worker-count
+          'queue_wait_ms
+          (sum 'queue_wait_ms (list serial-fields parallel-fields))
+          'worker_busy_ms
+          (sum 'worker_busy_ms (list serial-fields parallel-fields))
+          'worker_idle_ms
+          (sum 'worker_idle_ms (list serial-fields parallel-fields))
+          'serial_partition_ms
+          (if serial-fields
+              (hash-ref serial-fields 'partition_ms)
+              0)
+          'parallel_partition_ms
+          (if parallel-fields
+              (hash-ref parallel-fields 'partition_ms)
+              0)
+          'process_start_count
+          subprocess-count
+          'subprocess_count
+          subprocess-count
+          'grouped_in_process_count
+          grouped-count
+          'gc_count
+          (+ (hash-ref serial-tel 'gc_count 0) (hash-ref parallel-tel 'gc_count 0))
+          'gc_pause_ms
+          (+ (hash-ref serial-tel 'gc_pause_ms 0) (hash-ref parallel-tel 'gc_pause_ms 0))))
+
+;; W1 action 3: prepared-environment CI evidence, passed through an explicit
+;; environment/input contract (the CI workflow exports these after the
+;; guarded restore; see .github/actions/setup-racket/action.yml + ci.yml).
+;; Local runs never invent `restored` — the default is `unavailable` with
+;; 'null restore/fallback timings.
+(define (prepared-environment-state)
+  (define raw-result (getenv "Q_PREPARED_ENV_RESULT"))
+  (define result
+    (if (and raw-result (member raw-result '("restored" "rebuilt"))) raw-result "unavailable"))
+  (define (env-ms name)
+    (define v (getenv name))
+    (if (and v (regexp-match? #px"^[0-9]+$" v))
+        (string->number v)
+        'null))
+  (hasheq 'result
+          result
+          'restore_ms
+          (if (string=? result "restored")
+              (env-ms "Q_PREPARED_ENV_RESTORE_MS")
+              'null)
+          'fallback_ms
+          (if (string=? result "rebuilt")
+              (env-ms "Q_PREPARED_ENV_FALLBACK_MS")
+              'null)))
 
 (define (effective-mode requested-mode suite-label)
   (cond
@@ -397,10 +544,20 @@
                         profile
                         #:shard [shard #f]
                         #:phases [phases (hasheq)]
-                        #:first-batch-ms-box [first-batch-ms-box #f])
+                        #:first-batch-ms-box [first-batch-ms-box #f]
+                        #:serial-telemetry [serial-telemetry #f]
+                        #:parallel-telemetry [parallel-telemetry #f])
   (define t0 (current-inexact-milliseconds))
   (define exec-start-ms (hash-ref phases 'execution_start_ms #f))
   (define selection-end-ms (hash-ref phases 'selection_end_ms #f))
+  ;; W1: separate first-batch boxes per partition so the serial and parallel
+  ;; calls can never overwrite each other. The legacy `first_batch_ms` field
+  ;; keeps the first partition that ran; each partition also gets an
+  ;; unambiguous field (serial_first_batch_ms / parallel_first_batch_ms).
+  (define serial-first-batch-ms-box (box #f))
+  (define parallel-first-batch-ms-box (box #f))
+  (define serial-tel (or serial-telemetry (make-run-all-telemetry)))
+  (define parallel-tel (or parallel-telemetry (make-run-all-telemetry)))
   (define-values (skipped-files runnable-files)
     (partition (lambda (f)
                  (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
@@ -424,7 +581,12 @@
             (if (= (length serial-files) 1) "" "s")))
   (define serial-results
     (if (pair? serial-files)
-        (run-all-files serial-files 1 timeout-ms #:mode mode #:first-batch-ms-box first-batch-ms-box)
+        (run-all-files serial-files
+                       1
+                       timeout-ms
+                       #:mode mode
+                       #:first-batch-ms-box serial-first-batch-ms-box
+                       #:telemetry serial-tel)
         '()))
   (when (pair? serial-files)
     (restore-repo-surfaces! base-dir))
@@ -434,7 +596,8 @@
                        jobs
                        timeout-ms
                        #:mode mode
-                       #:first-batch-ms-box first-batch-ms-box)
+                       #:first-batch-ms-box parallel-first-batch-ms-box
+                       #:telemetry parallel-tel)
         '()))
   (define file-order
     (for/hash ([f (in-list suite-files)]
@@ -468,28 +631,39 @@
                             #:elapsed-ms total-elapsed
                             #:runner-version runner-version)
   (when json-out
-    (write-json-results! json-out
-                         results
-                         #:suite (string->symbol suite-label)
-                         #:mode mode
-                         #:elapsed-ms total-elapsed
-                         #:ledger ledger
-                         #:profile profile
-                         #:shard shard
-                         #:runner-version runner-version
-                         #:extra
-                         (and (or exec-start-ms selection-end-ms)
-                              (let ([m (make-hasheq)])
-                                (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
-                                (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
-                                (when exec-start-ms
-                                  (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
-                                (when selection-end-ms
-                                  (hash-set! m 'selection_end_ms (exact-round selection-end-ms)))
-                                (when (and first-batch-ms-box (unbox first-batch-ms-box))
-                                  (hash-set! m 'first_batch_ms (unbox first-batch-ms-box)))
-                                m))
-                         #:actual-modes actual-mode-hash))
+    (write-json-results!
+     json-out
+     results
+     #:suite (string->symbol suite-label)
+     #:mode mode
+     #:elapsed-ms total-elapsed
+     #:ledger ledger
+     #:profile profile
+     #:shard shard
+     #:runner-version runner-version
+     #:extra
+     (let ([m (make-hasheq)])
+       (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
+       (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
+       (when exec-start-ms
+         (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
+       (when selection-end-ms
+         (hash-set! m 'selection_end_ms (exact-round selection-end-ms)))
+       (when (unbox serial-first-batch-ms-box)
+         (hash-set! m 'serial_first_batch_ms (unbox serial-first-batch-ms-box)))
+       (when (unbox parallel-first-batch-ms-box)
+         (hash-set! m 'parallel_first_batch_ms (unbox parallel-first-batch-ms-box)))
+       (when (or (unbox serial-first-batch-ms-box) (unbox parallel-first-batch-ms-box))
+         ;; Legacy field: first partition that actually ran.
+         (hash-set! m
+                    'first_batch_ms
+                    (if (unbox serial-first-batch-ms-box)
+                        (unbox serial-first-batch-ms-box)
+                        (unbox parallel-first-batch-ms-box))))
+       (hash-set! m 'scheduler (compute-scheduler-telemetry serial-tel parallel-tel jobs results))
+       (hash-set! m 'prepared_environment (prepared-environment-state))
+       m)
+     #:actual-modes actual-mode-hash))
   (when ledger
     (print-ledger-summary ledger results))
   (save-failure-logs results #:profile profile #:mode mode)
@@ -817,7 +991,6 @@
   (define phases (make-hasheq))
   (hash-set! phases 'selection_end_ms (current-inexact-milliseconds))
   (hash-set! phases 'execution_start_ms (current-inexact-milliseconds))
-  (define first-batch-ms-box (box #f))
   ;; W5/W6 post-run evidence: embed selection + prioritization + changed
   ;; files into the results JSON, and surface the FIRST failing selected
   ;; test (with its selection and priority reason) on prioritized runs.
@@ -857,8 +1030,7 @@
                       ledger
                       profile
                       #:shard (and (> shard-total 1) (cons shard-index shard-total))
-                      #:phases phases
-                      #:first-batch-ms-box first-batch-ms-box))
+                      #:phases phases))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (emit-impact-evidence!)
