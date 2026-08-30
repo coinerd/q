@@ -5,23 +5,24 @@
 
 ;; BOUNDARY: unit
 ;; tests/test-runner-scheduler-characterization.rkt
-;; v1.00.23 W0 — characterize the CURRENT scheduler CONTRACT WITHOUT
-;; changing any runner behavior. W2 flips the pinned seams.
+;; v1.00.23 W2 — characterize the scheduler contract. W2 flipped the W0 pins:
+;; `--scheduler batch|queue` now exists (batch default; queue work-conserving).
 ;;
 ;; Pins:
-;;  1. fixed-batch barrier: with jobs=2 the third file cannot start until
-;;     BOTH files of the first batch finish (marker-synchronized, bounded).
+;;  1. work-conserving queue: with jobs=2 the third file starts when either
+;;     initial worker frees, before an unrelated long file completes; batch
+;;     mode still reproduces the fixed-batch barrier (rollback path).
 ;;  2. result order == input file order (never completion order).
 ;;  3. per-file timeout: file-timeout kills the subprocess -> exit 2 / TIMEOUT;
 ;;     the meta @timeout directive (seconds) is honored.
 ;;  4. status characters: "." exit 0, "T" exit 2 (timeout), "S" SKIPPED_BY_PROFILE,
 ;;     "F" any other failure (runner.rkt:353-358).
 ;;  5. exception/result classification matrix (parse.rkt classify-test-result).
-;;  6. serial/parallel ownership seam (runner.rkt:412-414): mutation-sensitive
-;;     files run alone and FIRST, then the parallel batch; results still sort
-;;     by input order.
-;;  7. absent --scheduler CLI seam: the option is rejected today; W2 flips
-;;     this pin by adding the option.
+;;  6. serial/parallel ownership seam (runner.rkt:724-754): mutation-sensitive
+;;     files run alone and FIRST, then the parallel partition, under both batch
+;;     and queue schedulers; results still sort by input order.
+;;  7. --scheduler CLI seam: batch and queue are accepted; invalid values exit 2
+;;     with a named diagnostic; --help advertises the option.
 
 (require rackunit
          rackunit/text-ui
@@ -137,30 +138,43 @@
 (define suite
   (test-suite "test-runner-scheduler-characterization"
 
-    (test-case "fixed-batch barrier: jobs=2, third file waits for BOTH first-batch files"
-      (define dir (make-temporary-file "w0-barrier-~a" 'directory))
+    (test-case "W2 work-conserving queue vs fixed-batch rollback: jobs=2, third file starts when a worker frees"
+      (define dir (make-temporary-file "w2-barrier-~a" 'directory))
       (define slow (write-fixture! dir "batch-slow.rkt" fixture-slow))
       (define quick (write-fixture! dir "batch-quick.rkt" fixture-quick))
       (define probe (write-fixture! dir "batch-probe.rkt" fixture-probe))
-      (define quick-done (unique-tmp-path "w0-sched-quick-done"))
-      (define slow-done (unique-tmp-path "w0-sched-slow-done"))
-      (define probe-out (unique-tmp-path "w0-sched-probe-out"))
-      (putenv "W0_SCHED_QUICK_DONE" quick-done)
-      (putenv "W0_SCHED_SLOW_DONE" slow-done)
-      (putenv "W0_SCHED_PROBE_OUT" probe-out)
-      (define results (run-all-files (list slow quick probe) 2 #f))
-      (putenv "W0_SCHED_QUICK_DONE" "")
-      (putenv "W0_SCHED_SLOW_DONE" "")
-      (putenv "W0_SCHED_PROBE_OUT" "")
-      (check-equal? (map classify-test-result results)
+      (define (run-once scheduler)
+        (define quick-done (unique-tmp-path "w2-sched-quick-done"))
+        (define slow-done (unique-tmp-path "w2-sched-slow-done"))
+        (define probe-out (unique-tmp-path "w2-sched-probe-out"))
+        (putenv "W0_SCHED_QUICK_DONE" quick-done)
+        (putenv "W0_SCHED_SLOW_DONE" slow-done)
+        (putenv "W0_SCHED_PROBE_OUT" probe-out)
+        (define results (run-all-files (list slow quick probe) 2 #f #:scheduler scheduler))
+        (putenv "W0_SCHED_QUICK_DONE" "")
+        (putenv "W0_SCHED_SLOW_DONE" "")
+        (putenv "W0_SCHED_PROBE_OUT" "")
+        (values results quick-done slow-done probe-out))
+      (define-values (queue-results q-quick q-slow q-probe) (run-once 'queue))
+      (check-equal? (map classify-test-result queue-results)
                     (list 'ZERO_PARSED 'ZERO_PARSED 'ZERO_PARSED)
-                    "all three fixtures exit 0 with zero parsed tests")
-      (check-true (file-exists? quick-done) "first-batch quick file completed")
-      (check-true (file-exists? slow-done) "first-batch slow file completed")
+                    "queue mode: all three fixtures exit 0 with zero parsed tests")
+      (check-true (file-exists? q-quick) "queue mode: first-batch quick file completed")
+      (check-true (file-exists? q-slow) "queue mode: first-batch slow file completed")
       (check-equal?
-       (file->string probe-out)
+       (file->string q-probe)
+       "early"
+       "queue mode: probe starts when an initial worker frees, before the long file completes (work-conserving)")
+      (define-values (batch-results b-quick b-slow b-probe) (run-once 'batch))
+      (check-equal? (map classify-test-result batch-results)
+                    (list 'ZERO_PARSED 'ZERO_PARSED 'ZERO_PARSED)
+                    "batch mode: all three fixtures exit 0 with zero parsed tests")
+      (check-true (file-exists? b-quick) "batch mode: first-batch quick file completed")
+      (check-true (file-exists? b-slow) "batch mode: first-batch slow file completed")
+      (check-equal?
+       (file->string b-probe)
        "after-full-batch"
-       "batch-2 probe started only after BOTH first-batch files finished (fixed-batch barrier)")
+       "batch mode: probe waits for BOTH first-batch files (rollback path reproduces old scheduling)")
       (delete-dir/safe dir))
 
     (test-case "result order equals input file order, never completion order"
@@ -261,57 +275,66 @@
         (check-equal? (test-file-result-total r) total (format "~a total" name)))
       (delete-dir/safe dir))
 
-    (test-case "serial/parallel ownership seam: mutation-sensitive files run first (runner.rkt:412-414)"
-      (define dir (make-temporary-file "w0-seam-~a" 'directory))
+    (test-case "serial/parallel ownership seam holds under batch AND queue schedulers (runner.rkt:731-761)"
+      (define dir (make-temporary-file "w2-seam-~a" 'directory))
       (define serial-a (write-fixture! dir "serial-a.rkt" fixture-serial))
       (define par-b (write-fixture! dir "par-b.rkt" fixture-par))
       (define par-c (write-fixture! dir "par-c.rkt" fixture-par))
-      (define serial-marker (unique-tmp-path "w0-sched-serial-marker"))
-      (define par-out (unique-tmp-path "w0-sched-par-out"))
-      (putenv "W0_SCHED_SERIAL_MARKER" serial-marker)
-      (putenv "W0_SCHED_PAR_OUT" par-out)
-      (define-values (exit-code run-results)
-        (run-suite-once (list serial-a par-b par-c)
-                        2 ; jobs
-                        #f ; timeout-ms (default 120s per file)
-                        #f ; strict?
-                        "w0-scheduler-characterization"
-                        1
-                        1 ; repeat-num / repeat-total
-                        'subprocess
-                        #f ; json-out
-                        #f ; ledger
-                        'fast ; profile
-                        #:shard #f
-                        #:phases (hasheq)))
-      (putenv "W0_SCHED_SERIAL_MARKER" "")
-      (putenv "W0_SCHED_PAR_OUT" "")
-      (check-true (file-exists? serial-marker) "serial-phase file completed")
-      (check-true
-       (regexp-match? #rx"after-serial" (file->string par-out))
-       "parallel files observed the serial phase's completion -> serial runs before parallel")
-      (check-false (regexp-match? #rx"before-serial" (file->string par-out))
-                   "no parallel file started before the serial phase finished")
-      (check-equal? (map test-file-result-path run-results)
-                    (list serial-a par-b par-c)
-                    "run-suite-once results sorted by input order")
+      (for ([scheduler (in-list '(batch queue))])
+        (define serial-marker (unique-tmp-path "w2-sched-serial-marker"))
+        (define par-out (unique-tmp-path "w2-sched-par-out"))
+        (putenv "W0_SCHED_SERIAL_MARKER" serial-marker)
+        (putenv "W0_SCHED_PAR_OUT" par-out)
+        (define-values (exit-code run-results)
+          (run-suite-once (list serial-a par-b par-c)
+                          2 ; jobs
+                          #f ; timeout-ms (default 120s per file)
+                          #f ; strict?
+                          "w2-scheduler-characterization"
+                          1
+                          1 ; repeat-num / repeat-total
+                          'subprocess
+                          #f ; json-out
+                          #f ; ledger
+                          'local ; profile
+                          #:shard #f
+                          #:phases (hasheq)
+                          #:scheduler scheduler))
+        (putenv "W0_SCHED_SERIAL_MARKER" "")
+        (putenv "W0_SCHED_PAR_OUT" "")
+        (check-true (file-exists? serial-marker) (format "~a: serial-phase file completed" scheduler))
+        (check-true
+         (regexp-match? #rx"after-serial" (file->string par-out))
+         (format
+          "~a: parallel files observed the serial phase's completion -> serial runs before parallel"
+          scheduler))
+        (check-false (regexp-match? #rx"before-serial" (file->string par-out))
+                     (format "~a: no parallel file started before the serial phase finished"
+                             scheduler))
+        (check-equal? (map test-file-result-path run-results)
+                      (list serial-a par-b par-c)
+                      (format "~a: run-suite-once results sorted by input order" scheduler)))
       (delete-dir/safe dir))
 
-    (test-case "absent --scheduler CLI seam (W2 flips this pin)"
-      (define dir (make-temporary-file "w0-cli-~a" 'directory))
-      (write-fixture! dir "solo.rkt" "#lang racket/base\n(define x 1)\n")
-      (define res (run/capture (format "racket ~a ~a --scheduler batch" (find-runner) dir)))
-      (check-false (= (cdr res) 0) "today --scheduler is rejected (nonzero exit)")
-      (check-true (or (regexp-match? #rx"--scheduler" (car res))
-                      (or (regexp-match? #rx"unrecognized" (string-foldcase (car res)))
-                          (regexp-match? #rx"unknown option" (string-foldcase (car res)))
-                          (regexp-match? #rx"unexpected" (string-foldcase (car res)))
-                          (regexp-match? #rx"not found" (string-foldcase (car res)))))
-                  (format "error output names the option; got: ~a" (car res)))
+    (test-case "--scheduler CLI seam: batch and queue accepted, invalid exits 2 with a named diagnostic"
+      (define dir (make-temporary-file "w2-cli-~a" 'directory))
+      (define solo
+        (write-fixture! dir
+                        "solo.rkt"
+                        "#lang racket/base\n(require rackunit)\n(module+ test (check-equal? 1 1))\n"))
+      (define batch-res (run/capture (format "racket ~a ~a --scheduler batch" (find-runner) solo)))
+      (check-equal? (cdr batch-res) 0 "--scheduler batch is accepted (exit 0)")
+      (define queue-res (run/capture (format "racket ~a ~a --scheduler queue" (find-runner) solo)))
+      (check-equal? (cdr queue-res) 0 "--scheduler queue is accepted (exit 0)")
+      (define invalid-res (run/capture (format "racket ~a ~a --scheduler bogus" (find-runner) solo)))
+      (check-equal? (cdr invalid-res) 2 "invalid --scheduler value exits 2")
+      (check-true (regexp-match? #rx"--scheduler" (car invalid-res))
+                  (format "invalid --scheduler diagnostic names the option; got: ~a"
+                          (car invalid-res)))
       (define help-res (run/capture (format "racket ~a --help" (find-runner))))
       (check-equal? (cdr help-res) 0 "--help exits 0")
-      (check-false (regexp-match? #rx"--scheduler" (car help-res))
-                   "no scheduler option is advertised in --help today")
+      (check-true (regexp-match? #rx"--scheduler" (car help-res))
+                  "--help advertises the --scheduler option")
       (delete-dir/safe dir))))
 
 (module+ main

@@ -15,7 +15,8 @@
          parse-args
          validate-args!
          known-suites
-         known-modes)
+         known-modes
+         known-schedulers)
 
 (define (usage)
   (displayln "Usage: racket scripts/run-tests.rkt [OPTIONS] [TEST-FILES ...]")
@@ -25,6 +26,8 @@
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
   (displayln "  --mode <name>     Execution mode: auto (default), subprocess, in-process, grouped")
+  (displayln "  --scheduler <name>  Scheduler: batch (default, fixed-batch barrier) or")
+  (displayln "                    queue (bounded work-conserving worker pool)")
   (displayln "  --suite <name>    Run test suite: all/broad (default all), fast,")
   (displayln "                    unit-fast, slow, tui, smoke, release-smoke,")
   (displayln "                    security, arch, runtime, extensions, workflows, platform")
@@ -91,6 +94,7 @@
         workflows
         platform))
 (define known-modes '(auto subprocess in-process grouped))
+(define known-schedulers '(batch queue))
 
 (define (parse-args args)
   (let loop ([rest args]
@@ -105,6 +109,7 @@
              [inventory? #f]
              [diagnose-overhead? #f]
              [mode 'auto]
+             [scheduler 'batch]
              [json-out #f]
              [ledger #f]
              [profile 'local]
@@ -130,6 +135,7 @@
                       #:inventory? [inventory?* inventory?]
                       #:diagnose-overhead? [diagnose-overhead?* diagnose-overhead?]
                       #:mode [mode* mode]
+                      #:scheduler [scheduler* scheduler]
                       #:json-out [json-out* json-out]
                       #:ledger [ledger* ledger]
                       #:profile [profile* profile]
@@ -156,6 +162,7 @@
             inventory?*
             diagnose-overhead?*
             mode*
+            scheduler*
             json-out*
             ledger*
             profile*
@@ -182,6 +189,7 @@
                inventory?
                diagnose-overhead?
                mode
+               scheduler
                json-out
                ledger
                profile
@@ -203,6 +211,13 @@
       [(list "--sequential" rest ...) (continue rest #:jobs 1 #:sequential? #t)]
       [(list "--timeout" secs rest ...) (continue rest #:timeout (string->number secs))]
       [(list "--mode" name rest ...) (continue rest #:mode (string->symbol name))]
+      [(list "--scheduler" name rest ...)
+       (define sch (string->symbol name))
+       (unless (memq sch known-schedulers)
+         (eprintf "run-tests: invalid --scheduler value ~s (valid: batch, queue)~n" name)
+         (usage)
+         (exit 2))
+       (continue rest #:scheduler sch)]
       [(list "--suite" name rest ...) (continue rest #:suite (string->symbol name))]
       [(list "--repeat" n rest ...) (continue rest #:repeat (string->number n))]
       [(list "--record-gate-evidence" rest ...) (continue rest #:record-gate? #t)]
@@ -247,6 +262,7 @@
                         inventory?
                         diagnose-overhead?
                         mode
+                        scheduler
                         json-out
                         ledger
                         profile
@@ -271,6 +287,11 @@
     (raise-user-error 'run-tests "--repeat must be a positive integer, got: ~a" repeat))
   (when (and timeout (or (not (number? timeout)) (<= timeout 0)))
     (raise-user-error 'run-tests "--timeout must be a positive number, got: ~a" timeout))
+  (unless (memq scheduler known-schedulers)
+    (raise-user-error 'run-tests
+                      "unknown scheduler: ~a (valid: ~a)"
+                      scheduler
+                      (string-join (map symbol->string known-schedulers) ", ")))
   (unless (memq mode known-modes)
     (raise-user-error 'run-tests
                       "unknown mode: ~a (valid: ~a)"
@@ -311,6 +332,7 @@
           record-gate?
           inventory?
           mode
+          scheduler
           json-out
           ledger
           profile

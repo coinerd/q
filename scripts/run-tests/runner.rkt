@@ -72,6 +72,7 @@
 
 (provide run-single-file
          run-all-files
+         run-all-files/queue
          run-suite-once
          make-run-all-telemetry
          compute-scheduler-telemetry
@@ -336,7 +337,35 @@
                        timeout
                        #:mode [mode 'subprocess]
                        #:first-batch-ms-box [first-batch-ms-box #f]
-                       #:telemetry [telemetry #f])
+                       #:telemetry [telemetry #f]
+                       #:scheduler [scheduler 'batch])
+  ;; W2: `scheduler` selects the execution strategy for this partition.
+  ;;   'batch — W1 fixed-batch barrier (default, rollback-safe).
+  ;;   'queue — bounded work-conserving worker pool (see
+  ;;            run-all-files/queue for the GC policy).
+  (if (eq? scheduler 'queue)
+      (run-all-files/queue files
+                           jobs
+                           timeout
+                           #:mode mode
+                           #:first-batch-ms-box first-batch-ms-box
+                           #:telemetry telemetry)
+      (run-all-files/batch files
+                           jobs
+                           timeout
+                           #:mode mode
+                           #:first-batch-ms-box first-batch-ms-box
+                           #:telemetry telemetry)))
+
+;; W1 fixed-batch barrier scheduler. When called without #:scheduler this is
+;; byte-identical to the pre-W2 implementation, so `batch` remains the
+;; default and the rollback path is executable.
+(define (run-all-files/batch files
+                             jobs
+                             timeout
+                             #:mode [mode 'subprocess]
+                             #:first-batch-ms-box [first-batch-ms-box #f]
+                             #:telemetry [telemetry #f])
   ;; W1: `telemetry` is a mutable hash (see make-run-all-telemetry) that this
   ;; call fills with per-partition scheduler evidence: `batches` (list of
   ;; (file-count . duration-ms) pairs, reversed append order — callers must
@@ -395,6 +424,128 @@
       (values f i)))
   (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
 
+;; W2: queue-mode scheduler — a bounded, work-conserving worker pool.
+;;
+;; Concurrency: exactly `jobs` long-lived worker threads are created for the
+;; partition (min 1). Each worker pulls the next file from a shared work
+;; channel the instant it finishes the previous one; no thread is created
+;; per test file. When the channel is exhausted each worker receives a stop
+;; sentinel and exits, so fewer files than workers and empty input stay
+;; bounded (idle workers just exit).
+;;
+;; Failure isolation: a per-file exception (e.g. an unreadable path or an
+;; internal runner error) is caught inside the worker and recorded as a
+;; failing result, so one bad file can never kill the pool, deadlock the
+;; coordinator, or discard the other files' results.
+;;
+;; GC policy (deterministic and telemetry-visible): the coordinator — this
+;; thread, the only one that touches the GC counters — performs a major GC
+;; after every 5th file completion and once more when the partition drains,
+;; mirroring batch mode's every-5th-batch-plus-last schedule. Workers never
+;; race the GC counter. `gc_count` / `gc_pause_ms` are reported exactly like
+;; batch mode; per-file durations are recorded as (1 . duration-ms)
+;; "batches" in completion order (reversed consing, callers reverse) so the
+;; W1 partition-scheduler fields remain well-defined.
+(define (run-all-files/queue files
+                             jobs
+                             timeout
+                             #:mode [mode 'subprocess]
+                             #:first-batch-ms-box [first-batch-ms-box #f]
+                             #:telemetry [telemetry #f])
+  (define t0 (current-inexact-milliseconds))
+  (define total (length files))
+  (define worker-count (max 1 (if (exact-nonnegative-integer? jobs) jobs 1)))
+  (define results (box '()))
+  (define results-lock (make-semaphore 1))
+  (define (add-result! r)
+    (call-with-semaphore results-lock (lambda () (set-box! results (cons r (unbox results))))))
+  (when telemetry
+    (hash-set! telemetry 'batches '())
+    (hash-set! telemetry 'gc_count 0)
+    (hash-set! telemetry 'gc_pause_ms 0))
+  (cond
+    [(zero? total)
+     ;; Empty partition: no workers, no GC, bounded trivially.
+     (newline)
+     (when first-batch-ms-box
+       (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) t0))))
+     '()]
+    [else
+     (define work-ch (make-channel))
+     (define done-ch (make-channel))
+     (define stop-sentinel (list 'stop))
+     (define workers
+       (for/list ([i (in-range worker-count)])
+         (thread
+          (lambda ()
+            (let loop ()
+              (define item (channel-get work-ch))
+              (unless (eq? item stop-sentinel)
+                (with-handlers ([exn:fail? (lambda (e)
+                                             ;; Failure isolation: never kill the worker, never
+                                             ;; hang the coordinator, never discard the result.
+                                             (add-result! (test-file-result item 1 #"" #"" 0 0 0 0))
+                                             (channel-put done-ch 0))]
+                                [exn:break? (lambda (e)
+                                              ;; Cancellation bound: a break inside a worker is
+                                              ;; converted to a recorded failure + done signal so
+                                              ;; the coordinator can never wait on a dead worker.
+                                              (add-result! (test-file-result item 1 #"" #"" 0 0 0 0))
+                                              (channel-put done-ch 0))])
+                  (define t-file (current-inexact-milliseconds))
+                  (define result (run-single-file item #:timeout (or timeout 120000) #:mode mode))
+                  (define file-dur (exact-round (- (current-inexact-milliseconds) t-file)))
+                  (define exit-code (test-file-result-exit-code result))
+                  (cond
+                    [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
+                    [(= exit-code 0) (display ".")]
+                    [(= exit-code 2) (display "T")]
+                    [else (display "F")])
+                  (flush-output)
+                  (add-result! result)
+                  (channel-put done-ch file-dur))
+                (loop)))))))
+     ;; Work-conserving distribution over unbuffered channels: the
+     ;; coordinator hands out a new item exactly when a worker reports a
+     ;; completion, so at most `worker-count` items are ever in flight and
+     ;; no unbuffered put can deadlock (every put has a receiver waiting).
+     (for ([i (in-range (min worker-count total))])
+       (channel-put work-ch (list-ref files i)))
+     (define sent (min worker-count total))
+     ;; Coordinator: consume completions, refill work as workers free up,
+     ;; run the deterministic GC schedule, record telemetry, then join the
+     ;; workers (all stopped by now).
+     (define gc-counter 0)
+     (define gc-pause-ms 0)
+     (define batches-seen '())
+     (for ([i (in-range total)])
+       (define file-dur (sync done-ch))
+       (when (< sent total)
+         (channel-put work-ch (list-ref files sent))
+         (set! sent (add1 sent)))
+       (when (and first-batch-ms-box (not (unbox first-batch-ms-box)))
+         (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) t0))))
+       (set! batches-seen (cons (cons 1 (max 0 file-dur)) batches-seen))
+       (set! gc-counter (add1 gc-counter))
+       (when (or (= 0 (modulo gc-counter 5)) (= gc-counter total))
+         (define gc-start (current-inexact-milliseconds))
+         (collect-garbage 'major)
+         (set! gc-pause-ms (+ gc-pause-ms (- (current-inexact-milliseconds) gc-start)))))
+     ;; All `total` items are done; every worker is blocked on work-ch.
+     (for ([i (in-range worker-count)])
+       (channel-put work-ch stop-sentinel))
+     (for-each thread-wait workers)
+     (when telemetry
+       (hash-set! telemetry 'batches batches-seen)
+       (hash-set! telemetry 'gc_count gc-counter)
+       (hash-set! telemetry 'gc_pause_ms (exact-round gc-pause-ms)))
+     (newline)
+     (define file-order
+       (for/hash ([f (in-list files)]
+                  [i (in-naturals)])
+         (values f i)))
+     (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0)))]))
+
 ;; W1: per-partition scheduler telemetry (schema-additive, see
 ;; docs/TEST_CONVENTIONS.md "Runner scheduler telemetry (W1)").
 ;; make-run-all-telemetry returns a fresh mutable hash run-all-files fills.
@@ -446,7 +597,11 @@
 ;; schema_version field). `results` supplies the ACTUAL per-file execution
 ;; modes so the subprocess/grouped counts reflect what happened, not what was
 ;; requested.
-(define (compute-scheduler-telemetry serial-tel parallel-tel worker-count results)
+(define (compute-scheduler-telemetry serial-tel
+                                     parallel-tel
+                                     worker-count
+                                     results
+                                     #:scheduler [scheduler 'batch])
   (define serial-batches (reverse (hash-ref serial-tel 'batches '())))
   (define parallel-batches (reverse (hash-ref parallel-tel 'batches '())))
   (define serial-fields (and (pair? serial-batches) (partition-scheduler-fields serial-batches 1)))
@@ -470,7 +625,7 @@
   (hasheq 'schema_version
           1
           'scheduler_mode
-          "batch"
+          (symbol->string scheduler)
           'worker_count
           worker-count
           'queue_wait_ms
@@ -560,7 +715,8 @@
                         #:phases [phases (hasheq)]
                         #:first-batch-ms-box [first-batch-ms-box #f]
                         #:serial-telemetry [serial-telemetry #f]
-                        #:parallel-telemetry [parallel-telemetry #f])
+                        #:parallel-telemetry [parallel-telemetry #f]
+                        #:scheduler [scheduler 'batch])
   (define t0 (current-inexact-milliseconds))
   (define exec-start-ms (hash-ref phases 'execution_start_ms #f))
   (define selection-end-ms (hash-ref phases 'selection_end_ms #f))
@@ -600,7 +756,8 @@
                        timeout-ms
                        #:mode mode
                        #:first-batch-ms-box serial-first-batch-ms-box
-                       #:telemetry serial-tel)
+                       #:telemetry serial-tel
+                       #:scheduler scheduler)
         '()))
   (when (pair? serial-files)
     (restore-repo-surfaces! base-dir))
@@ -611,7 +768,8 @@
                        timeout-ms
                        #:mode mode
                        #:first-batch-ms-box parallel-first-batch-ms-box
-                       #:telemetry parallel-tel)
+                       #:telemetry parallel-tel
+                       #:scheduler scheduler)
         '()))
   (define file-order
     (for/hash ([f (in-list suite-files)]
@@ -674,7 +832,10 @@
                     (if (unbox serial-first-batch-ms-box)
                         (unbox serial-first-batch-ms-box)
                         (unbox parallel-first-batch-ms-box))))
-       (hash-set! m 'scheduler (compute-scheduler-telemetry serial-tel parallel-tel jobs results))
+       (hash-set!
+        m
+        'scheduler
+        (compute-scheduler-telemetry serial-tel parallel-tel jobs results #:scheduler scheduler))
        (hash-set! m 'prepared_environment (prepared-environment-state))
        m)
      #:actual-modes actual-mode-hash))
@@ -743,6 +904,7 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
+                  scheduler
                   json-out
                   ledger-path
                   profile
@@ -768,6 +930,7 @@
                   inventory?
                   diagnose-overhead?
                   requested-mode
+                  scheduler
                   json-out
                   ledger-path
                   profile
@@ -986,14 +1149,16 @@
   (define mode (effective-mode requested-mode suite-label))
   (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
-  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a~n"
-          suite-label
-          n-files
-          jobs
-          sequential?
-          repeat
-          mode
-          profile)
+  (printf
+   ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a scheduler=~a~n"
+   suite-label
+   n-files
+   jobs
+   sequential?
+   repeat
+   mode
+   profile
+   scheduler)
   (newline)
   (when (> repeat 1)
     (printf ";; run-tests: running suite ~a time~a for confidence gate~n"
@@ -1044,7 +1209,8 @@
                       ledger
                       profile
                       #:shard (and (> shard-total 1) (cons shard-index shard-total))
-                      #:phases phases))
+                      #:phases phases
+                      #:scheduler scheduler))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (emit-impact-evidence!)
