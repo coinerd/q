@@ -78,19 +78,57 @@
 ;; ---------------------------------------------------------------------------
 
 (define fixture-slow
-  "#lang racket/base\n(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n(sleep 1.1)\n(call-with-output-file slow-done #:exists 'append (lambda (o) (display \"done\" o)))\n")
+  (string-append "#lang racket/base\n"
+                 "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
+                 "(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n"
+                 "(sleep 1.1)\n"
+                 "(call-with-output-file slow-done\n"
+                 "  #:exists 'append\n"
+                 "  (lambda (o) (display \"done\" o)))\n"))
 
 (define fixture-quick
-  "#lang racket/base\n(define quick-done (getenv \"W0_SCHED_QUICK_DONE\"))\n(unless quick-done (error \"W0_SCHED_QUICK_DONE unset\"))\n(call-with-output-file quick-done #:exists 'append (lambda (o) (display \"done\" o)))\n")
+  (string-append "#lang racket/base\n"
+                 "(define quick-done (getenv \"W0_SCHED_QUICK_DONE\"))\n"
+                 "(unless quick-done (error \"W0_SCHED_QUICK_DONE unset\"))\n"
+                 "(call-with-output-file quick-done\n"
+                 "  #:exists 'append\n"
+                 "  (lambda (o) (display \"done\" o)))\n"))
 
 (define fixture-probe
-  "#lang racket/base\n(define quick-done (getenv \"W0_SCHED_QUICK_DONE\"))\n(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n(define probe-out (getenv \"W0_SCHED_PROBE_OUT\"))\n(unless (and quick-done slow-done probe-out) (error \"W0 probe env unset\"))\n(define probe-content (if (and (file-exists? quick-done) (file-exists? slow-done)) \"after-full-batch\" \"early\"))\n(call-with-output-file probe-out #:exists 'replace (lambda (o) (display probe-content o)))\n")
+  (string-append "#lang racket/base\n"
+                 "(define quick-done (getenv \"W0_SCHED_QUICK_DONE\"))\n"
+                 "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
+                 "(define probe-out (getenv \"W0_SCHED_PROBE_OUT\"))\n"
+                 "(unless (and quick-done slow-done probe-out)\n"
+                 "  (error \"W0 probe env unset\"))\n"
+                 "(define probe-content\n"
+                 "  (if (and (file-exists? quick-done) (file-exists? slow-done))\n"
+                 "      \"after-full-batch\"\n"
+                 "      \"early\"))\n"
+                 "(call-with-output-file probe-out\n"
+                 "  #:exists 'replace\n"
+                 "  (lambda (o) (display probe-content o)))\n"))
 
 (define fixture-serial
-  "#lang racket/base\n;; @isolation process\n(define serial-marker (getenv \"W0_SCHED_SERIAL_MARKER\"))\n(unless serial-marker (error \"W0_SCHED_SERIAL_MARKER unset\"))\n(call-with-output-file serial-marker #:exists 'append (lambda (o) (display \"serial-done\" o)))\n")
+  (string-append "#lang racket/base\n"
+                 ";; @isolation process\n"
+                 "(define serial-marker (getenv \"W0_SCHED_SERIAL_MARKER\"))\n"
+                 "(unless serial-marker (error \"W0_SCHED_SERIAL_MARKER unset\"))\n"
+                 "(call-with-output-file serial-marker\n"
+                 "  #:exists 'append\n"
+                 "  (lambda (o) (display \"serial-done\" o)))\n"))
 
 (define fixture-par
-  "#lang racket/base\n(define serial-marker (getenv \"W0_SCHED_SERIAL_MARKER\"))\n(define par-out (getenv \"W0_SCHED_PAR_OUT\"))\n(unless (and serial-marker par-out) (error \"W0 par env unset\"))\n(define par-content (if (file-exists? serial-marker) \"after-serial\" \"before-serial\"))\n(call-with-output-file par-out #:exists 'append (lambda (o) (display par-content o)))\n")
+  (string-append "#lang racket/base\n"
+                 "(define serial-marker (getenv \"W0_SCHED_SERIAL_MARKER\"))\n"
+                 "(define par-out (getenv \"W0_SCHED_PAR_OUT\"))\n"
+                 "(unless (and serial-marker par-out)\n"
+                 "  (error \"W0 par env unset\"))\n"
+                 "(define par-content\n"
+                 "  (if (file-exists? serial-marker) \"after-serial\" \"before-serial\"))\n"
+                 "(call-with-output-file par-out\n"
+                 "  #:exists 'append\n"
+                 "  (lambda (o) (display par-content o)))\n"))
 
 ;; ---------------------------------------------------------------------------
 ;; Tests
