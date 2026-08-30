@@ -121,6 +121,7 @@
                                       _inventory?
                                       _diagnose?
                                       _mode
+                                      _scheduler
                                       _json-out
                                       ledger
                                       _profile

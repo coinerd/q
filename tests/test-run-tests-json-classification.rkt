@@ -87,6 +87,7 @@
                       _inventory?
                       _diagnose?
                       _mode
+                      _scheduler
                       json-out
                       _ledger
                       _profile

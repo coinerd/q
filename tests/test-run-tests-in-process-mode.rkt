@@ -51,6 +51,7 @@
                       inventory?
                       diagnose?
                       mode
+                      scheduler
                       json-out
                       ledger
                       _profile
@@ -78,6 +79,7 @@
                       _inventory?
                       _diagnose?
                       default-mode
+                      _default-scheduler
                       _json-out
                       _ledger
                       _default-profile
