@@ -303,6 +303,42 @@ Cleanup is guaranteed via `dynamic-wind`.
   #:on-status (make-on-status cap))
 ```
 
+## Run-Summary JSON Telemetry
+
+The runner retains a versioned `scheduler` object in each run-summary JSON
+(additive; historical artifacts without it remain readable). Field contract:
+
+- **Units:** every `*_ms` field is milliseconds, measured with
+  `current-inexact-milliseconds` (wall clock, process-local). `worker_count`
+  is the number of parallel workers in the scheduler run.
+- **Nullability:** optional telemetry fields are omitted entirely (never `null`)
+  when they cannot be measured. Required result fields (`status`, `verdict`,
+  `exit_code`, `duration_ms`, `inventory_hash`) must always be present and
+  well-typed; malformed required fields are a hard error.
+- **Aggregation formulas:**
+  - `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms` are file-count-derived
+    aggregates (per-file waits/busy/idle summed over scheduled files).
+  - `serial_partition_ms` and `parallel_partition_ms` are distinct fields; the
+    legacy `first_batch_*` fields are retained for compatibility and reflect
+    whichever partition ran last, never shared mutable state between the serial
+    and parallel calls.
+  - `process_start_count` is the total start count; `subprocess_count` /
+    `grouped_count` break it down by actual start kind.
+  - `gc_count` counts GC runs and `gc_pause_ms` the cumulative pause, read from
+    the process statistics available at summary time.
+  - `scheduler_mode` is `"batch"` until queue scheduling exists.
+- **Runner execution vs workflow elapsed time:** runner fields (`queue_wait_ms`,
+  `worker_busy_ms`, `worker_idle_ms`, partition times, total `duration_ms`)
+  measure only the test-runner process on the machine that executed it. CI
+  workflow elapsed time (job wall time, queueing, provisioning, checkout,
+  setup) is a different quantity and is never folded into runner telemetry.
+- **Prepared-environment state:** the summary includes a `prepared_environment`
+  object with `state` ∈ `restored` | `rebuilt` | `unavailable`, plus
+  `restore_ms` / `fallback_ms` where known. The value comes exclusively from
+  the explicit environment contract (`ENV_SETUP_STATE`,
+  `ENV_SETUP_RESTORE_MS`, `ENV_SETUP_FALLBACK_MS`) populated by CI; local runs
+  without those variables report `unavailable` — they never invent `restored`.
+
 ## Gate Evidence
 
 The runner writes gate evidence to `.gate-evidence/<suite>.json`:

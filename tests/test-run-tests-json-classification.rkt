@@ -205,9 +205,14 @@
 
 (test-case "W1 fixture: malformed required result fields produce problems"
   (define malformed-artifact
-    (read-json
-     (open-input-string
-      "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\",\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},\"files\":[{\"path\":\"tests/example.rkt\",\"category\":42,\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}]}")))
+    (read-json (open-input-string
+                (string-append
+                 "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
+                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":42,\"exit_code\":0,"
+                 "\"passed\":1,\"failed\":0,\"total\":1}]}"))))
   (define problems (validate-run-summary-json malformed-artifact))
   (check-true (pair? problems))
   (check-true (ormap (lambda (p) (regexp-match "files\\[0\\].category: expected a string" p))
