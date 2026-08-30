@@ -1,0 +1,25 @@
+#| Wave 2 validation — v1.00.23 Test Design & CI Runtime series.
+   Schema: gsd-wave-gate.rkt validate-wave-evidence (schema-version 2).
+   Records the W2 red-first demonstration, focused-test results, and
+   required-check results at the reviewed implementation SHA. |#
+#hash((status . "current")
+      (milestone . 888)
+      (wave . "W2")
+      (issue . 9547)
+      (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w2-delivery")
+      (implementation-sha . "ceb91e9221dc0e28a5c074024a1354d9f0b04eb7")
+      (content-digest . "7f24616abf36a791510b476b84e66545f6cfd7cd45b071b34cb4531cd81348c1")
+      (red-first . #hash((command . "racket tests/test-runner-work-queue.rkt")
+                         (failure . "queue-mode work-conservation pin failed before runner.rkt implemented the bounded worker pool: a third short file did not start when an initial worker became free (fixed-batch barrier still gated start); batch-mode barrier pin continued to pass, proving the rollback path was preserved during the red phase.")))
+      (focused-tests . #hash((result . "passed")
+                             (count . 22)
+                             (suites . "test-runner-scheduler-characterization (3), test-runner-work-queue (14), test-run-tests-script (5)")))
+      (format-compile . #hash((result . "passed")
+                              (detail . "raco fmt check + raco make on the changed and new test files")))
+      (lint . #hash((result . "passed")
+                    (detail . "scripts/test-lint.rkt clean on the changed and new test files")))
+      (fast . #hash((result . "passed")
+                    (detail . "scripts/run-tests.rkt --suite fast --scheduler batch and --scheduler queue")))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w2.rktd")
+      (remaining-items . ())
+      (planning-sync . "current"))

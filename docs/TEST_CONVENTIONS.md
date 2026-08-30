@@ -326,7 +326,11 @@ The runner retains a versioned `scheduler` object in each run-summary JSON
     `grouped_count` break it down by actual start kind.
   - `gc_count` counts GC runs and `gc_pause_ms` the cumulative pause, read from
     the process statistics available at summary time.
-  - `scheduler_mode` is `"batch"` until queue scheduling exists.
+  - `scheduler_mode` is `"batch"` (the default) or `"queue"`; queue mode is
+    the bounded, work-conserving worker pool introduced in W2 (exactly `jobs`
+    long-lived workers; GC every 5th file completion plus a final major GC,
+    run only by the coordinator so no worker ever races the GC counter).
+    `worker_count` equals `jobs` in queue mode and the batch width in batch mode.
 - **Runner execution vs workflow elapsed time:** runner fields (`queue_wait_ms`,
   `worker_busy_ms`, `worker_idle_ms`, partition times, total `duration_ms`)
   measure only the test-runner process on the machine that executed it. CI
