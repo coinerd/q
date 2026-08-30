@@ -20,13 +20,14 @@
 
 (test-case "ALL-STATUSES completeness"
   (check-equal? (length ALL-STATUSES) 5)
-  (for ([s ALL-STATUSES]) (check-true (wave-status-string? s))))
+  (for ([s ALL-STATUSES])
+    (check-true (wave-status-string? s))))
 
 (test-case "wave-status-string?"
   (check-true (wave-status-string? "DONE"))
   (check-true (wave-status-string? "Inbox"))
-  (check-false (wave-status-string? "done"))       ; case-sensitive recognition
-  (check-false (wave-status-string? "completed"))  ; plan-types vocabulary is NOT canonical here
+  (check-false (wave-status-string? "done")) ; case-sensitive recognition
+  (check-false (wave-status-string? "completed")) ; plan-types vocabulary is NOT canonical here
   (check-false (wave-status-string? 'done))
   (check-false (wave-status-string? 42)))
 
@@ -36,7 +37,7 @@
   (check-true (terminal-status? "DEFERRED"))
   (check-true (terminal-status? "deferred"))
   (check-false (terminal-status? "In-Progress"))
-  (check-false (terminal-status? "FAILED"))        ; FAILED is NOT terminal — retryable
+  (check-false (terminal-status? "FAILED")) ; FAILED is NOT terminal — retryable
   (check-false (terminal-status? "Inbox")))
 
 (test-case "done-or-deferred? aliases terminal-status?"
@@ -54,7 +55,7 @@
 (test-case "normalize-status! canonicalizes case variants"
   (check-equal? (normalize-status! "done") STATUS-DONE)
   (check-equal? (normalize-status! "Done") STATUS-DONE)
-  (check-equal? (normalize-status! "IN-BOX") #f)   ; hyphenation matters
+  (check-equal? (normalize-status! "IN-BOX") #f) ; hyphenation matters
   (check-equal? (normalize-status! "Inbox") STATUS-INBOX)
   (check-equal? (normalize-status! "in-progress") STATUS-IN-PROGRESS)
   (check-equal? (normalize-status! "IN-PROGRESS") STATUS-IN-PROGRESS)
