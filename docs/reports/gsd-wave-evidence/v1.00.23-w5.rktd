@@ -78,3 +78,5 @@ Proves:
 - 0 files in this wave exceed the 20 000 B threshold (longest is the test file at ~24 KB; flagged here per W4 rule).
 - No semantic-gate substitutions.
 - No canonical-batch claim until the cohort closes in W6.
+
+; Follow-up PR validation: wave W5 evidence isolated for canonical governance checking.
