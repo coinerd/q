@@ -159,3 +159,38 @@ or trusting a timing sample whose reliability attempts were dropped.
 | Evidence-integrity disagreement | Block release and preserve all lanes | Immediate | Trusting a green summary from a red workflow |
 | Racket cache-integrity failure | Fail closed and retain setup diagnostics | Immediate | Prefix fallback or bypassing the dependency lock |
 | Cohort activation disagreement | Reproduce report via `--check`, inspect attempts | Before milestone activation | Accepting a non-reproducible cohort report |
+| Shadow-scheduler evidence disagreement | Re-run same-SHA shadow, preserve queue + batch outputs, fall back to `batch` default | Before any later activation claim | Promoting shadow output to required status or substituting it for a semantic gate |
+
+## Shadow-scheduler evidence disagreement (v1.00.23)
+
+The shadow workflow `.github/workflows/test-scheduler-shadow.yml` is an
+opt-in, **non-required** generator of future queue evidence. It is wired so
+the **default** scheduler is `batch`: a workflow run resolves
+`TEST_RUNNER_SCHEDULER` and only enables `queue` mode when the value is the
+literal string `queue`. Unset, empty, or any other value → `batch`. The
+`tests/test-scheduler-shadow-workflow.rkt` governance suite enforces:
+
+1. `scripts/required-pr-checks.policy` is unchanged and contains no `shadow`
+   entry; the three semantic gates (`lint`, `test-aggregate`, `test-platform`)
+   remain required.
+2. `.github/workflows/ci.yml` does not register the shadow workflow as a
+   required check and does not depend on its output.
+3. The shadow workflow's `concurrency` group and `permissions` block are
+   pinned so it cannot be promoted to a PR-required job by accidental edit.
+
+If shadow evidence disagrees with canonical batch evidence on a same-SHA
+re-run, the response is:
+
+1. **Preserve** both JSON outputs (queue + batch) and the run URL of the
+   disagreeing shadow run.
+2. **Fall back** to the canonical `batch` evidence: the shadow workflow never
+   substitutes for a semantic gate.
+3. **Rollback** the scheduler default is a one-line edit (`env` block sets
+   `TEST_RUNNER_SCHEDULER: batch` explicitly); no branch protection, no
+   policy file, and no PR-required check set is touched.
+4. The disagreement is recorded in `test-regression-log.md` and reviewed
+   before any later wave that may compare shadow vs. canonical batch
+   reliability.
+
+This event is the canonical rollback story for the shadow plumbing before
+later activation.
