@@ -1,10 +1,28 @@
 ## v1.00.23 — 2026-08-31
 
-Release readiness: canonical C0 cohort tooling and scheduler-shadow foundation.
+Released 2026-08-31.
+
+### Features
 
 - Added reproducible canonical C0 cohort evidence with 20 validated CI pull-request head SHAs and byte-identical report regeneration.
 - Preserved batch as the default scheduler; queue and shadow execution remain explicit and non-required.
-- Recorded honest W6 release-readiness evidence; no 2x performance claim is made.
+
+### Breaking / Behavior Changes
+
+- None. Batch remains the default scheduler and queue is opt-in only.
+
+### Migration Notes
+
+- No migration is required. Existing invocations retain batch behavior.
+
+### Testing
+
+- Canonical C0 contains 20 successful CI pull-request head SHAs with complete fast-lane and metadata artifacts; cohort report regeneration passes byte-identically.
+- CI, governance, release dry-run, and focused scheduler/cohort checks passed.
+
+### Operational / Release
+
+- Shadow scheduling remains non-required and no 2x performance claim is made. Full local fast-suite timeout remains documented as an inconclusive local gate.
 
 ## v1.00.22 — 2026-08-30
 
