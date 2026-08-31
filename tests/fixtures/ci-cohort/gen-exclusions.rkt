@@ -2,7 +2,8 @@
 ;; Fixture generator: 15 SHAs + 5 named exclusions = 20 total (valid).
 (require json
          racket/format
-         racket/list)
+         racket/list
+         (only-in "../../../util/version.rkt" q-version))
 
 (define (make-sha i)
   (define sha-str
@@ -78,9 +79,9 @@
             (format "SHA excluded for ~a" (list-ref exclusion-reasons i)))))
 (define manifest
   (hasheq 'cohort-id
-          "v1.00.23-cohort-exclusions"
+          (format "v~a-cohort-exclusions" q-version)
           'milestone
-          "v1.00.23"
+          (format "v~a" q-version)
           'schema-version
           1
           'expected-count
