@@ -8,7 +8,7 @@
       (issue . 9547)
       (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w2-delivery")
       (implementation-sha . "ceb91e9221dc0e28a5c074024a1354d9f0b04eb7")
-      (content-digest . "7f24616abf36a791510b476b84e66545f6cfd7cd45b071b34cb4531cd81348c1")
+      (content-digest . "ccb6f6ad15251caec615a1c327fc410bf2a9d7c14d9857b2fb122774bd2a0326")
       (red-first . #hash((command . "racket tests/test-runner-work-queue.rkt")
                          (failure . "queue-mode work-conservation pin failed before runner.rkt implemented the bounded worker pool: a third short file did not start when an initial worker became free (fixed-batch barrier still gated start); batch-mode barrier pin continued to pass, proving the rollback path was preserved during the red phase.")))
       (focused-tests . #hash((result . "passed")
