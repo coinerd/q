@@ -5,7 +5,7 @@
 
 ;; BOUNDARY: unit
 ;; tests/test-ci-runtime-contract.rkt
-;; v1.00.23 W0 — pin today's .github/workflows/ci.yml runtime contract
+;; Pin today's .github/workflows/ci.yml runtime contract
 ;; WITHOUT changing any workflow behavior. W1/W2/W3 flip the pinned seams.
 ;;
 ;; Pins (all read from the live .github/workflows/ci.yml at repo root):

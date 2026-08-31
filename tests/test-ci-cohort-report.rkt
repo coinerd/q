@@ -20,6 +20,7 @@
          racket/path
          racket/runtime-path
          json
+         (only-in "../util/version.rkt" q-version)
          "../scripts/run-tests/cohort-report.rkt")
 
 (define-runtime-path here ".")
@@ -105,7 +106,7 @@
   (hasheq 'cohort-id
           cid
           'milestone
-          "v1.00.23"
+          (format "v~a" q-version)
           'schema-version
           1
           'expected-count
