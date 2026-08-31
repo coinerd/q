@@ -59,7 +59,7 @@ outputs:
       Wall-clock milliseconds spent on the full install+compile fallback
       path when the guarded restore did not succeed; empty when the
       prepared path skipped the full path (restore succeeded).
-    value: ${{ steps.setup-compile.outputs.setup-duration-s != '' && (steps.setup-compile.outputs.setup-duration-s * 1000) || '' }}
+    value: ${{ steps.setup-duration.outputs.fallback-ms }}
 runs:
   using: 'composite'
   steps:
@@ -273,3 +273,16 @@ runs:
           echo "- Package-visible setup: ${duration}s"
         } >> "$GITHUB_STEP_SUMMARY"
         echo "=== Package setup completed successfully ==="
+
+    - name: Calculate prepared-environment fallback duration
+      id: setup-duration
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        seconds="${{ steps.setup-compile.outputs.setup-duration-s }}"
+        if [ -n "$seconds" ]; then
+          echo "fallback-ms=$((seconds * 1000))" >> "$GITHUB_OUTPUT"
+        else
+          echo "fallback-ms=" >> "$GITHUB_OUTPUT"
+        fi
