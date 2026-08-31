@@ -4,7 +4,7 @@
 #hash((reviewer . "automated (delivery reviewer)")
       (verdict . "APPROVED")
       (reviewed-sha . "ceb91e9221dc0e28a5c074024a1354d9f0b04eb7")
-      (content-digest . "7f24616abf36a791510b476b84e66545f6cfd7cd45b071b34cb4531cd81348c1")
+      (content-digest . "ccb6f6ad15251caec615a1c327fc410bf2a9d7c14d9857b2fb122774bd2a0326")
       (timestamp . "2026-08-30")
       (scope . "W2: reversible work-conserving queue scheduling (v1.00.23)")
       (report . "Review of the W2 delivery branch against the wave doc actions:
