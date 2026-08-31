@@ -15,7 +15,7 @@
       (issue . 9547)
       (status . "ready-for-merge")
       (implementation-sha . "89910aeedb0342a1d1a40cbcb492a3c183a93eea")
-      (content-digest . "f939772adef17798f316544058a3730a6f3d98ed0fd878522a92a40fbbef54fb")
+      (content-digest . "41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df")
       (required-checks . ("lint" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
       (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w0.rktd")
       (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.23-w0.rktd"))
