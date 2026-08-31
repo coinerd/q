@@ -681,3 +681,26 @@ No target was massaged: the achieved ratio, the remaining attributed cost, and
 the named next lever are recorded above exactly as measured; per-file runner
 JSON artifacts were not retained (authenticated download), so no per-file
 numbers appear in the v1.00.16 report.
+
+## v1.00.23 W4 — reproducible 20-PR cohort evidence tooling (2026-09-22)
+
+W4 closes the evidence-closure roadmap package by turning expiring workflow
+artifacts into a deterministic, reviewable activation record. The cohort
+reporter (`scripts/run-tests/cohort-report.rkt`) is a pure function of on-disk
+inputs — no network or database is queried at report time — so an activation
+reviewer can reproduce a cohort byte-for-byte after GitHub's seven-day
+artifact retention expires.
+
+| Field | Value |
+|---|---|
+| Cohort size | 20 consecutive eligible unique PR head SHAs (canonical) |
+| Timing sample | exactly one final successful attempt per SHA; failed/cancelled/rerun attempts retained as reliability evidence |
+| Exclusions | named mechanical only (`missing-lane-artifact`, `incompatible-scheduler`, `incompatible-config`, `inventory-mismatch`, `artifact-corrupt`, `artifact-expired`, `non-unique-sha`) |
+| Rejected cohorts | duplicate SHAs, missing lane artifacts, incompatible scheduler/config, inventory mismatch, silently truncated (<20 without matching exclusions) |
+| Statistics | linear-interpolation percentile estimator; p50/p95, file/inventory digest, pass/fail/timeout/skip/zero-test counts, flakes, parallel-only failures, prepared-env outcomes, queue telemetry, runner-minute cost |
+| Regeneration | `cohort-report.rkt --manifest <cohort.json> --out-json <stored> --check` exits 0 on byte-identical reproduction |
+| Raw inputs | bounded, named by milestone/cohort under `artifacts/ci-baseline/`; retention/schema contract in `artifacts/ci-baseline/README.md` |
+| Tests | `tests/test-ci-cohort-report.rkt` — exactly-20, fewer-than-20, duplicate SHA, failed-then-passed rerun, exclusion, missing/corrupt artifact, inventory mismatch, percentile edges, deterministic output |
+
+Triage hook: see **Event 7 — Cohort activation disagreement** in
+`docs/operations/test-regression-triage.md`.

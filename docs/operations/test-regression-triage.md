@@ -124,6 +124,30 @@ Racket dependency lock does not verify, or the package health probe fails.
    dispatch. Both must retain all-lane L4 evidence; the warm run must report an
    exact cache hit before any timeout reduction is considered.
 
+## Event 7 — Cohort activation disagreement
+
+When a milestone cohort report (`scripts/run-tests/cohort-report.rkt`)
+disagrees with a red full-suite run on a SHA in the cohort (e.g., the cohort
+timing sample reports success but a full regression later fails, or an
+exclusion hides a real regression):
+
+1. Reproduce the cohort report from the retained manifest:
+   `racket scripts/run-tests/cohort-report.rkt --manifest
+   artifacts/ci-baseline/cohort-<milestone>-<n>.json --out-json <stored> --check`
+   — must exit 0 (byte-identical regeneration).
+2. Inspect the SHA's attempts: confirm the single `timing-sample: true`
+   attempt is the final success and that reliability attempts (failure/
+   cancelled/rerun) are retained, not silently dropped.
+3. Verify every exclusion uses a **named mechanical** reason and that
+   cohort size + exclusions sum to the `expected-count` (no silently
+   truncated cohort).
+4. If a real regression was masked by a mechanical exclusion, block the
+   milestone activation and open a regression issue with the cohort manifest
+   and the cohort report JSON as artifacts.
+
+**Prohibited:** accepting a cohort report without reproducing it via `--check`,
+or trusting a timing sample whose reliability attempts were dropped.
+
 ## Quick reference
 
 | Event | First action | Deadline | Prohibited |
@@ -134,3 +158,4 @@ Racket dependency lock does not verify, or the package health probe fails.
 | Missing scheduled run | Fresh manual dispatch | Before release | Proceeding on stale evidence |
 | Evidence-integrity disagreement | Block release and preserve all lanes | Immediate | Trusting a green summary from a red workflow |
 | Racket cache-integrity failure | Fail closed and retain setup diagnostics | Immediate | Prefix fallback or bypassing the dependency lock |
+| Cohort activation disagreement | Reproduce report via `--check`, inspect attempts | Before milestone activation | Accepting a non-reproducible cohort report |

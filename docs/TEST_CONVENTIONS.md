@@ -351,6 +351,37 @@ The runner writes gate evidence to `.gate-evidence/<suite>.json`:
 racket scripts/run-tests.rkt --suite smoke --record-gate
 ```
 
+## Cohort Evidence (milestone activation)
+
+For milestone activation, a **cohort** of 20 consecutive eligible unique PR
+head SHAs is turned into a deterministic, reviewable activation record via
+`scripts/run-tests/cohort-report.rkt`. This complements per-suite gate
+evidence with cross-PR statistical reliability/timing evidence.
+
+- **One final successful timing sample per SHA** is the timing datum;
+  failed/cancelled/rerun attempts are retained as reliability evidence (flakes,
+  parallel-only failures), never silently dropped.
+- **Named mechanical exclusions only** — no free-text rejection is accepted.
+  Exclusions must use: `missing-lane-artifact`, `incompatible-scheduler`,
+  `incompatible-config`, `inventory-mismatch`, `artifact-corrupt`,
+  `artifact-expired`, `non-unique-sha`.
+- **Rejected cohorts**: duplicate SHAs, missing lane artifacts, incompatible
+  scheduler/config snapshots, inventory mismatches, silently truncated cohorts
+  (fewer than 20 without matching exclusions).
+- **Percentiles** use the adopted linear-interpolation estimator; p50/p95,
+  file/inventory digest, pass/fail/timeout/skip/zero-test counts, flakes,
+  parallel-only failures, prepared-env outcomes, queue telemetry, and
+  runner-minute cost are all reported.
+- **Byte-identical regeneration** (`--check`) reproduces a report from the
+  retained manifest after GitHub's seven-day artifact retention expires.
+- **No external database/service dependency** — pure function of on-disk
+  inputs; retention contract in `artifacts/ci-baseline/README.md`.
+
+Synthetic fixtures live under `tests/fixtures/ci-cohort/` and
+`tests/test-ci-cohort-report.rkt` exercises the exactly-20, fewer-than-20,
+duplicate SHA, failed-then-passed rerun, exclusion, missing/corrupt artifact,
+inventory mismatch, percentile edges, and deterministic-output invariants.
+
 ## Output Bounds
 
 - Test output is truncated at 64KB with head+tail preservation
