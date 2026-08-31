@@ -1,5 +1,5 @@
 #hash((status . "current") (milestone . 888) (wave . "W5") (issue . 9547) (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w5-delivery")
-      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "PLACEHOLDER")
+      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "f18864349859b34ba858d3986662d487e18275bb5003063540cafba9cad535cc")
       (red-first . #hash((command . "racket tests/test-scheduler-shadow-workflow.rkt") (failure . "C0 with fewer than 20 canonical SHAs must remain pending; modernization preserves this honest blocker.")))
       (focused-tests . #hash((result . "passed") (count . 1) (suites . "test-scheduler-shadow-workflow")))
       (format-compile . #hash((result . "passed") (detail . "schema-2 evidence artifacts parse as Racket data")))
