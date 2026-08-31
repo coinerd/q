@@ -8,7 +8,7 @@
       (issue . 9547)
       (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w0-delivery")
       (implementation-sha . "89910aeedb0342a1d1a40cbcb492a3c183a93eea")
-      (content-digest . "c9ea0823495c26c3bb46d30c96ab5dbd330261429c315a88c00d6bcf44015e99")
+      (content-digest . "41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df")
       (red-first . #hash((command . "racket tests/test-runner-scheduler-characterization.rkt")
                          (failure . "red behavior pinned: with jobs=2 a third short file must not begin until both files in the first fixed batch finish; the fixture records temp-dir start/completion markers and bounded synchronization rather than wall-clock assertions")))
       (focused-tests . #hash((result . "passed")

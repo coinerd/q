@@ -4,7 +4,7 @@
 #hash((reviewer . "automated (delivery reviewer)")
       (verdict . "APPROVED")
       (reviewed-sha . "89910aeedb0342a1d1a40cbcb492a3c183a93eea")
-      (content-digest . "c9ea0823495c26c3bb46d30c96ab5dbd330261429c315a88c00d6bcf44015e99")
+      (content-digest . "41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df")
       (timestamp . "2026-08-30")
       (scope . "W0: scheduler/CI-runtime characterization + evidence provenance (v1.00.23)")
       (report . "Review of the W0 delivery branch (campaign/7537743a.../w0-delivery) against the wave doc actions:
