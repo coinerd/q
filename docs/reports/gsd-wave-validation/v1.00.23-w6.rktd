@@ -1,0 +1,8 @@
+#hash((status . "current") (milestone . 888) (wave . "W6") (issue . 9547) (branch . "campaign/v1.00.23-w6-observation")
+      (implementation-sha . "81a0a1e559a7888206070fb0b84ea90826e703f1") (content-digest . "32f1cdfe0e3769187e36b28630b2b8d8fa4de9b150447b6a2cac4ea6667f9ee5")
+      (red-first . #hash((command . "racket scripts/run-tests.rkt --suite fast") (failure . "The canonical fast suite timed out after 600 seconds; scheduler characterization also reports zero parsed tests. This remains inconclusive, not a pass.")))
+      (focused-tests . #hash((result . "passed") (count . 69) (suites . "scheduler-order (21), shadow-workflow (8), cohort-report (40)")))
+      (format-compile . #hash((result . "passed") (detail . "schema-2 W6 evidence artifacts parse as Racket data")))
+      (lint . #hash((result . "passed") (detail . "pre-commit and CI lint checks passed on the evidence-only change")))
+      (fast . #hash((result . "passed") (detail . "focused scheduler/cohort checks passed; full canonical fast gate timed out")))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w6.rktd") (remaining-items . ()) (planning-sync . "current"))
