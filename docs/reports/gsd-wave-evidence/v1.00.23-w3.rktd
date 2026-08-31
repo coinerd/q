@@ -22,3 +22,5 @@
    "q/tests/test-runner-scheduler-order.rkt"
    "q/tests/test-run-tests-shard-plan.rkt"
    "q/docs/TEST_CONVENTIONS.md")))
+
+; Follow-up PR validation: wave W3 evidence isolated for canonical governance checking.
