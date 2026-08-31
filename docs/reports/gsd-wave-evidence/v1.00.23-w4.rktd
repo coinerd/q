@@ -29,3 +29,5 @@
    "q/docs/operations/test-regression-triage.md"
    "q/docs/reports/test-regression-log.md"
    "q/docs/reports/gsd-wave-evidence/v1.00.23-w4.rktd")))
+
+; Follow-up PR validation: wave W4 evidence isolated for canonical governance checking.
