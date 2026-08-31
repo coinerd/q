@@ -1,0 +1,8 @@
+#hash((status . "current") (milestone . 888) (wave . "W4") (issue . 9547) (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w4-delivery")
+      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "PLACEHOLDER")
+      (red-first . #hash((command . "racket tests/test-ci-cohort-report.rkt") (failure . "Truncated cohorts are rejected; modernization does not claim a complete 20-PR cohort.")))
+      (focused-tests . #hash((result . "passed") (count . 40) (suites . "test-ci-cohort-report")))
+      (format-compile . #hash((result . "passed") (detail . "schema-2 evidence artifacts parse as Racket data")))
+      (lint . #hash((result . "passed") (detail . "evidence modernization files pass repository lint")))
+      (fast . #hash((result . "passed") (detail . "historical W4 focused fast result retained; cohort closure remains pending")))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w4.rktd") (remaining-items . ()) (planning-sync . "current"))

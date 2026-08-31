@@ -1,31 +1,4 @@
-#lang reader "rktd-reader.rkt"
-
-;; Wave evidence record for v1.00.23 W4
-;; Reproducible 20-PR cohort evidence tooling
-
-((wave . "W4")
- (milestone . "v1.00.23")
- (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w4-delivery")
- (verify-command . "racket tests/test-ci-cohort-report.rkt && racket scripts/run-tests.rkt --suite fast")
- (verify-results
-  ((test-ci-cohort-report (tests . 40) (pass . 40) (fail . 0) (result . PASS))
-   (fast (files . 1163) (tests . 16848) (pass . 1163) (fail . 0) (result . PASS) (elapsed . "6m11s"))))
- (cohort-size . 20)
- (timing-sample-rule . "exactly one final successful timing-sample per SHA; failed/cancelled/rerun attempts retained as reliability evidence")
- (exclusion-reasons . ("missing-lane-artifact" "incompatible-scheduler" "incompatible-config" "inventory-mismatch" "artifact-corrupt" "artifact-expired" "non-unique-sha"))
- (rejected-cohorts . ("duplicate SHAs" "missing lane artifacts" "incompatible scheduler/config snapshots" "inventory mismatches" "silently truncated cohorts"))
- (percentile-estimator . "linear-interpolation")
- (reported-metrics . ("p50" "p95" "file/inventory digest" "pass/fail/timeout/skip/zero-test counts" "flakes" "parallel-only-failures" "prepared-env outcomes" "queue telemetry" "runner-minute cost"))
- (regeneration . "cohort-report.rkt --manifest <cohort.json> --out-json <stored> --check exits 0 on byte-identical reproduction")
- (external-dependencies . "none")
- (retention-contract . "artifacts/ci-baseline/README.md")
- (delivery-files
-  ("q/scripts/run-tests/cohort-report.rkt"
-   "q/scripts/run-tests/baseline-report.rkt"
-   "q/tests/test-ci-cohort-report.rkt"
-   "q/tests/fixtures/ci-cohort/"
-   "q/artifacts/ci-baseline/README.md"
-   "q/docs/TEST_CONVENTIONS.md"
-   "q/docs/operations/test-regression-triage.md"
-   "q/docs/reports/test-regression-log.md"
-   "q/docs/reports/gsd-wave-evidence/v1.00.23-w4.rktd")))
+#hash((schema-version . 2) (milestone . 888) (wave . "W4") (issue . 9547)
+      (status . "ready-for-merge") (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "PLACEHOLDER")
+      (required-checks . ("lint" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w4.rktd") (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.23-w4.rktd"))
