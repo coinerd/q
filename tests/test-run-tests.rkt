@@ -450,7 +450,8 @@
                   failure-history
                   generate-covers-manifest?
                   _shard-plan
-                  _durations)
+                  _durations
+                  _ordering)
     (parse '("--repeat" "3")))
   (check-equal? repeat 3)
   (check-false record-gate?))
@@ -480,7 +481,8 @@
                   failure-history
                   generate-covers-manifest?
                   _shard-plan
-                  _durations)
+                  _durations
+                  _ordering)
     (parse '()))
   (check-equal? repeat 1)
   (check-false record-gate?))
@@ -510,7 +512,8 @@
                   failure-history
                   generate-covers-manifest?
                   _shard-plan
-                  _durations)
+                  _durations
+                  _ordering)
     (parse '("--suite" "smoke" "--repeat" "2")))
   (check-equal? suite 'smoke)
   (check-equal? repeat 2)
@@ -545,7 +548,8 @@
                   failure-history
                   generate-covers-manifest?
                   _shard-plan
-                  _durations)
+                  _durations
+                  _ordering)
     (parse '("--record-gate-evidence")))
   (check-true record-gate?))
 
@@ -574,7 +578,8 @@
                   failure-history
                   generate-covers-manifest?
                   _shard-plan
-                  _durations)
+                  _durations
+                  _ordering)
     (parse '()))
   (check-false record-gate?))
 

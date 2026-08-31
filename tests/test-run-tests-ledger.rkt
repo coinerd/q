@@ -121,6 +121,7 @@
                                       _inventory?
                                       _diagnose?
                                       _mode
+                                      _scheduler
                                       _json-out
                                       ledger
                                       _profile
@@ -133,7 +134,8 @@
                                       _failure-history
                                       _generate-covers-manifest?
                                       _shard-plan
-                                      _durations)
+                                      _durations
+                                      _ordering)
                         (parse-args (list "--ledger" (path->string ledger-copy))))
                       (check-equal? ledger (path->string ledger-copy)))
                     (lambda () (delete-file/safe ledger-copy))))

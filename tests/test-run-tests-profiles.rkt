@@ -59,6 +59,7 @@
                       _inventory?
                       _diagnose?
                       _mode
+                      _scheduler
                       _json
                       _ledger
                       profile
@@ -71,7 +72,8 @@
                       _failure-history
                       _generate-covers-manifest?
                       _shard-plan
-                      _durations)
+                      _durations
+                      _ordering)
         (parse-args '("--profile" "vps")))
       (check-equal? profile 'vps))
 

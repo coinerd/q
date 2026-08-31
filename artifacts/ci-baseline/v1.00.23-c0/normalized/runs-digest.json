@@ -1,0 +1,10 @@
+{
+  "milestone": "v1.00.23",
+  "cohort-id": "v1.00.23-c0",
+  "kind": "normalized-input",
+  "source": "artifacts/ci-baseline/runs-ci-main.json",
+  "total-runs": 583,
+  "unique-shas": 15,
+  "event-distribution": {"push": 583},
+  "note": "Retained runs file contains only push events (no pull_request events). C0 cohort cannot close from this snapshot; W5 remains in observation. W6 must observe canonical main-CI runs until 20 PR head SHAs accumulate."
+}

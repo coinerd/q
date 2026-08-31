@@ -303,6 +303,46 @@ Cleanup is guaranteed via `dynamic-wind`.
   #:on-status (make-on-status cap))
 ```
 
+## Run-Summary JSON Telemetry
+
+The runner retains a versioned `scheduler` object in each run-summary JSON
+(additive; historical artifacts without it remain readable). Field contract:
+
+- **Units:** every `*_ms` field is milliseconds, measured with
+  `current-inexact-milliseconds` (wall clock, process-local). `worker_count`
+  is the number of parallel workers in the scheduler run.
+- **Nullability:** optional telemetry fields are omitted entirely (never `null`)
+  when they cannot be measured. Required result fields (`status`, `verdict`,
+  `exit_code`, `duration_ms`, `inventory_hash`) must always be present and
+  well-typed; malformed required fields are a hard error.
+- **Aggregation formulas:**
+  - `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms` are file-count-derived
+    aggregates (per-file waits/busy/idle summed over scheduled files).
+  - `serial_partition_ms` and `parallel_partition_ms` are distinct fields; the
+    legacy `first_batch_*` fields are retained for compatibility and reflect
+    whichever partition ran last, never shared mutable state between the serial
+    and parallel calls.
+  - `process_start_count` is the total start count; `subprocess_count` /
+    `grouped_count` break it down by actual start kind.
+  - `gc_count` counts GC runs and `gc_pause_ms` the cumulative pause, read from
+    the process statistics available at summary time.
+  - `scheduler_mode` is `"batch"` (the default) or `"queue"`; queue mode is
+    the bounded, work-conserving worker pool introduced in W2 (exactly `jobs`
+    long-lived workers; GC every 5th file completion plus a final major GC,
+    run only by the coordinator so no worker ever races the GC counter).
+    `worker_count` equals `jobs` in queue mode and the batch width in batch mode.
+- **Runner execution vs workflow elapsed time:** runner fields (`queue_wait_ms`,
+  `worker_busy_ms`, `worker_idle_ms`, partition times, total `duration_ms`)
+  measure only the test-runner process on the machine that executed it. CI
+  workflow elapsed time (job wall time, queueing, provisioning, checkout,
+  setup) is a different quantity and is never folded into runner telemetry.
+- **Prepared-environment state:** the summary includes a `prepared_environment`
+  object with `state` ∈ `restored` | `rebuilt` | `unavailable`, plus
+  `restore_ms` / `fallback_ms` where known. The value comes exclusively from
+  the explicit environment contract (`ENV_SETUP_STATE`,
+  `ENV_SETUP_RESTORE_MS`, `ENV_SETUP_FALLBACK_MS`) populated by CI; local runs
+  without those variables report `unavailable` — they never invent `restored`.
+
 ## Gate Evidence
 
 The runner writes gate evidence to `.gate-evidence/<suite>.json`:
@@ -310,6 +350,37 @@ The runner writes gate evidence to `.gate-evidence/<suite>.json`:
 ```bash
 racket scripts/run-tests.rkt --suite smoke --record-gate
 ```
+
+## Cohort Evidence (milestone activation)
+
+For milestone activation, a **cohort** of 20 consecutive eligible unique PR
+head SHAs is turned into a deterministic, reviewable activation record via
+`scripts/run-tests/cohort-report.rkt`. This complements per-suite gate
+evidence with cross-PR statistical reliability/timing evidence.
+
+- **One final successful timing sample per SHA** is the timing datum;
+  failed/cancelled/rerun attempts are retained as reliability evidence (flakes,
+  parallel-only failures), never silently dropped.
+- **Named mechanical exclusions only** — no free-text rejection is accepted.
+  Exclusions must use: `missing-lane-artifact`, `incompatible-scheduler`,
+  `incompatible-config`, `inventory-mismatch`, `artifact-corrupt`,
+  `artifact-expired`, `non-unique-sha`.
+- **Rejected cohorts**: duplicate SHAs, missing lane artifacts, incompatible
+  scheduler/config snapshots, inventory mismatches, silently truncated cohorts
+  (fewer than 20 without matching exclusions).
+- **Percentiles** use the adopted linear-interpolation estimator; p50/p95,
+  file/inventory digest, pass/fail/timeout/skip/zero-test counts, flakes,
+  parallel-only failures, prepared-env outcomes, queue telemetry, and
+  runner-minute cost are all reported.
+- **Byte-identical regeneration** (`--check`) reproduces a report from the
+  retained manifest after GitHub's seven-day artifact retention expires.
+- **No external database/service dependency** — pure function of on-disk
+  inputs; retention contract in `artifacts/ci-baseline/README.md`.
+
+Synthetic fixtures live under `tests/fixtures/ci-cohort/` and
+`tests/test-ci-cohort-report.rkt` exercises the exactly-20, fewer-than-20,
+duplicate SHA, failed-then-passed rerun, exclusion, missing/corrupt artifact,
+inventory mismatch, percentile edges, and deterministic-output invariants.
 
 ## Output Bounds
 

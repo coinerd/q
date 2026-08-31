@@ -124,6 +124,30 @@ Racket dependency lock does not verify, or the package health probe fails.
    dispatch. Both must retain all-lane L4 evidence; the warm run must report an
    exact cache hit before any timeout reduction is considered.
 
+## Event 7 — Cohort activation disagreement
+
+When a milestone cohort report (`scripts/run-tests/cohort-report.rkt`)
+disagrees with a red full-suite run on a SHA in the cohort (e.g., the cohort
+timing sample reports success but a full regression later fails, or an
+exclusion hides a real regression):
+
+1. Reproduce the cohort report from the retained manifest:
+   `racket scripts/run-tests/cohort-report.rkt --manifest
+   artifacts/ci-baseline/cohort-<milestone>-<n>.json --out-json <stored> --check`
+   — must exit 0 (byte-identical regeneration).
+2. Inspect the SHA's attempts: confirm the single `timing-sample: true`
+   attempt is the final success and that reliability attempts (failure/
+   cancelled/rerun) are retained, not silently dropped.
+3. Verify every exclusion uses a **named mechanical** reason and that
+   cohort size + exclusions sum to the `expected-count` (no silently
+   truncated cohort).
+4. If a real regression was masked by a mechanical exclusion, block the
+   milestone activation and open a regression issue with the cohort manifest
+   and the cohort report JSON as artifacts.
+
+**Prohibited:** accepting a cohort report without reproducing it via `--check`,
+or trusting a timing sample whose reliability attempts were dropped.
+
 ## Quick reference
 
 | Event | First action | Deadline | Prohibited |
@@ -134,3 +158,39 @@ Racket dependency lock does not verify, or the package health probe fails.
 | Missing scheduled run | Fresh manual dispatch | Before release | Proceeding on stale evidence |
 | Evidence-integrity disagreement | Block release and preserve all lanes | Immediate | Trusting a green summary from a red workflow |
 | Racket cache-integrity failure | Fail closed and retain setup diagnostics | Immediate | Prefix fallback or bypassing the dependency lock |
+| Cohort activation disagreement | Reproduce report via `--check`, inspect attempts | Before milestone activation | Accepting a non-reproducible cohort report |
+| Shadow-scheduler evidence disagreement | Re-run same-SHA shadow, preserve queue + batch outputs, fall back to `batch` default | Before any later activation claim | Promoting shadow output to required status or substituting it for a semantic gate |
+
+## Shadow-scheduler evidence disagreement (v1.00.23)
+
+The shadow workflow `.github/workflows/test-scheduler-shadow.yml` is an
+opt-in, **non-required** generator of future queue evidence. It is wired so
+the **default** scheduler is `batch`: a workflow run resolves
+`TEST_RUNNER_SCHEDULER` and only enables `queue` mode when the value is the
+literal string `queue`. Unset, empty, or any other value → `batch`. The
+`tests/test-scheduler-shadow-workflow.rkt` governance suite enforces:
+
+1. `scripts/required-pr-checks.policy` is unchanged and contains no `shadow`
+   entry; the three semantic gates (`lint`, `test-aggregate`, `test-platform`)
+   remain required.
+2. `.github/workflows/ci.yml` does not register the shadow workflow as a
+   required check and does not depend on its output.
+3. The shadow workflow's `concurrency` group and `permissions` block are
+   pinned so it cannot be promoted to a PR-required job by accidental edit.
+
+If shadow evidence disagrees with canonical batch evidence on a same-SHA
+re-run, the response is:
+
+1. **Preserve** both JSON outputs (queue + batch) and the run URL of the
+   disagreeing shadow run.
+2. **Fall back** to the canonical `batch` evidence: the shadow workflow never
+   substitutes for a semantic gate.
+3. **Rollback** the scheduler default is a one-line edit (`env` block sets
+   `TEST_RUNNER_SCHEDULER: batch` explicitly); no branch protection, no
+   policy file, and no PR-required check set is touched.
+4. The disagreement is recorded in `test-regression-log.md` and reviewed
+   before any later wave that may compare shadow vs. canonical batch
+   reliability.
+
+This event is the canonical rollback story for the shadow plumbing before
+later activation.

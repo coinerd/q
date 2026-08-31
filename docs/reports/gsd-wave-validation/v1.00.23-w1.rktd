@@ -1,0 +1,25 @@
+#| Wave 1 validation — v1.00.23 Test Design & CI Runtime series.
+   Schema: gsd-wave-gate.rkt validate-wave-evidence (schema-version 2).
+   Records the W1 red-first demonstration, focused-test results, and
+   required-check results at the reviewed implementation SHA. |#
+#hash((status . "current")
+      (milestone . 888)
+      (wave . "W1")
+      (issue . 9547)
+      (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w1-delivery")
+      (implementation-sha . "420ae2c62803b2dec163d15bb9351a157afd95f0")
+      (content-digest . "9a2950a9eb5a2067ecaeccb602f402f72e105062178d73d2d9c9a3215af3fd6f")
+      (red-first . #hash((command . "racket tests/test-runner-scheduler-telemetry.rkt")
+                         (failure . "new scheduler object absent from run-summary JSON before runner.rkt emitted it; old-schema fixtures still parse after the additive extension")))
+      (focused-tests . #hash((result . "passed")
+                             (count . 12)
+                             (suites . "test-run-tests-json-classification (8), test-runner-scheduler-telemetry (2), test-prepared-environment-telemetry (2)")))
+      (format-compile . #hash((result . "passed")
+                              (detail . "raco fmt check + raco make on the three test files")))
+      (lint . #hash((result . "passed")
+                    (detail . "scripts/test-lint.rkt clean on the three test files")))
+      (fast . #hash((result . "passed")
+                    (detail . "scripts/run-tests.rkt --suite fast")))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w1.rktd")
+      (remaining-items . ())
+      (planning-sync . "current"))

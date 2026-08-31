@@ -1,0 +1,28 @@
+{
+  "cohort-id": "v1.00.23-c0",
+  "milestone": "v1.00.23",
+  "schema-version": 1,
+  "expected-count": 20,
+  "shas": [],
+  "exclusions": [],
+  "cohort-status": "pending",
+  "cohort-status-reason": "20 eligible PR head SHAs from canonical main-CI batch not yet available. C0 cannot close on W5; W5 closes in observation only.",
+  "schema-conformance": {
+    "expected-count": 20,
+    "shas-count": 0,
+    "exclusions-count": 0,
+    "sum": 0,
+    "sum-matches-expected-count": false,
+    "all-exclusions-use-named-mechanical-reason": true,
+    "no-free-text-rejections": true
+  },
+  "evidence-sources": {
+    "runs-file": "artifacts/ci-baseline/runs-ci-main.json (583 runs, all event=push, no pull_request events retained)",
+    "workflows-snapshot": "artifacts/ci-baseline/workflows.json",
+    "selected-l3": "artifacts/ci-baseline/selected-l3.txt",
+    "report": "docs/reports/TEST-RUNTIME-C0-v1.00.23.md",
+    "log-entry": "docs/reports/test-regression-log.md (Run W5-c0-observation)"
+  },
+  "regeneration-command": "racket scripts/run-tests/cohort-report.rkt --manifest artifacts/ci-baseline/v1.00.23-c0/cohort.json --out-json <stored.json> --check",
+  "non-promotion-rule": "This manifest does NOT promote shadow to canonical, does NOT manufacture SHAs, does NOT shorten the cohort. W6 must observe canonical main-CI until expected-count==20 are eligible."
+}

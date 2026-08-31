@@ -1,0 +1,25 @@
+#| Wave 0 validation — v1.00.23 Test Design & CI Runtime series.
+   Schema: gsd-wave-gate.rkt validate-wave-evidence (schema-version 2).
+   Records the W0 red-first demonstration, focused-test results, and
+   required-check results at the reviewed implementation SHA. |#
+#hash((status . "current")
+      (milestone . 888)
+      (wave . "W0")
+      (issue . 9547)
+      (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w0-delivery")
+      (implementation-sha . "89910aeedb0342a1d1a40cbcb492a3c183a93eea")
+      (content-digest . "c9ea0823495c26c3bb46d30c96ab5dbd330261429c315a88c00d6bcf44015e99")
+      (red-first . #hash((command . "racket tests/test-runner-scheduler-characterization.rkt")
+                         (failure . "red behavior pinned: with jobs=2 a third short file must not begin until both files in the first fixed batch finish; the fixture records temp-dir start/completion markers and bounded synchronization rather than wall-clock assertions")))
+      (focused-tests . #hash((result . "passed")
+                             (count . 12)
+                             (suites . "test-runner-scheduler-characterization (8), test-ci-runtime-contract (4)")))
+      (format-compile . #hash((result . "passed")
+                              (detail . "raco fmt check + raco make on the two new test files")))
+      (lint . #hash((result . "passed")
+                    (detail . "scripts/test-lint.rkt clean on the two new test files")))
+      (fast . #hash((result . "passed")
+                    (detail . "scripts/run-tests.rkt --suite fast")))
+      (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w0.rktd")
+      (remaining-items . ())
+      (planning-sync . "current"))

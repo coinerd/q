@@ -1,0 +1,164 @@
+name: Test scheduler shadow
+
+# W5: Separate manual/reusable shadow workflow for controlled scheduler
+# evidence.  This workflow is OFF by default; it runs only on explicit
+# workflow_dispatch and is NEVER a pull-request required check in v1.00.23.
+#
+# Purpose: produce future queue/batch comparison evidence without changing
+# the required CI lane set or branch protection.  It uploads JSON results
+# in the same schema as the required fast gate so cohort tooling can
+# ingest shadow samples consistently.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+        type: string
+      scheduler:
+        description: 'Scheduler mode to run (batch or queue)'
+        required: false
+        default: ''
+        type: string
+      shard-count:
+        description: 'Shard count (default 3, same as required gate)'
+        required: false
+        default: '3'
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to check out (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+        type: string
+      scheduler:
+        description: 'Scheduler mode to run (batch or queue)'
+        required: false
+        default: ''
+        type: string
+      shard-count:
+        description: 'Shard count (default 3, same as required gate)'
+        required: false
+        default: '3'
+        type: string
+# Do not cancel required-CI runs; also avoid cancelling other shadow runs on
+# different refs.
+concurrency:
+  group: scheduler-shadow-${{ github.ref }}-${{ inputs.ref || 'main' }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
+
+jobs:
+  shadow-run:
+    name: shadow (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shard-count == '4' && '[0, 1, 2, 3]' || inputs.shard-count == '6' && '[0, 1, 2, 3, 4, 5]' || inputs.shard-count == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
+    steps:
+      - name: Resolve scheduler mode
+        id: resolve
+        run: |
+          # Repository variable TEST_RUNNER_SCHEDULER governs the default.
+          # Explicit dispatch input overrides the variable.
+          # Unset/unknown values resolve to batch; queue requires explicit 'queue'.
+          SCHEDULER="${{ inputs.scheduler }}"
+          if [ -z "$SCHEDULER" ]; then
+            SCHEDULER="${{ vars.TEST_RUNNER_SCHEDULER }}"
+          fi
+          case "$SCHEDULER" in
+            queue) SCHEDULER=queue ;;
+            *) SCHEDULER=batch ;;
+          esac
+          echo "scheduler=$SCHEDULER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-shadow-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-shadow-
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run shadow fast shard
+        id: run
+        env:
+          STRICT_TEST_RUNNER: 1
+        run: |
+          SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
+          echo ";; shadow scheduler = $SCHEDULER" | tee -a shadow-output.log
+          racket scripts/run-tests.rkt \
+            --suite fast --jobs 4 \
+            --scheduler "$SCHEDULER" \
+            --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
+            --json-out shadow-results.json \
+            2>&1 | tee -a shadow-output.log
+
+      - name: Record cohort metadata
+        if: always()
+        run: |
+          SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
+          SHA=$(git rev-parse HEAD)
+          REF=$(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)
+          cat > shadow-cohort-meta.json <<EOF
+          {
+            "ref": "${{ inputs.ref || 'main' }}",
+            "resolved_ref": "$REF",
+            "sha": "$SHA",
+            "scheduler": "$SCHEDULER",
+            "ordering": "fifo",
+            "shard_index": ${{ matrix.shard }},
+            "shard_total": ${{ strategy.job-total }},
+            "workers": 4,
+            "prepared_env_state": "${{ steps.setup-racket.outputs.prepared-env-state || 'unavailable' }}",
+            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}"
+          }
+          EOF
+
+      - name: Upload shadow output log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shadow-output-${{ github.run_id }}-${{ matrix.shard }}
+          path: shadow-output.log
+          retention-days: 7
+
+      - name: Upload shadow results JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shadow-results-${{ github.run_id }}-${{ matrix.shard }}
+          path: shadow-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload shadow cohort metadata
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shadow-cohort-meta-${{ github.run_id }}-${{ matrix.shard }}
+          path: shadow-cohort-meta.json
+          if-no-files-found: ignore
+          retention-days: 7
