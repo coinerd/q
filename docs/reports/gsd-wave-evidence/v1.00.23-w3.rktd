@@ -1,6 +1,6 @@
 #hash((schema-version . 2) (milestone . 888) (wave . "W3") (issue . 9547)
       (status . "ready-for-merge") (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d")
-      (content-digest . "PLACEHOLDER")
+      (content-digest . "803dc28f69fcd05a1a9591bd64b44b6713efcfaf4bddeb1e418869d0ccdf76e5")
       (required-checks . ("lint" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
       (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w3.rktd")
       (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.23-w3.rktd"))

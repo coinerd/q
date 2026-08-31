@@ -1,6 +1,6 @@
 #hash((status . "current") (milestone . 888) (wave . "W3") (issue . 9547)
       (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w3-delivery")
-      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "PLACEHOLDER")
+      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "803dc28f69fcd05a1a9591bd64b44b6713efcfaf4bddeb1e418869d0ccdf76e5")
       (red-first . #hash((command . "racket tests/test-runner-scheduler-order.rkt") (failure . "Legacy W3 record supplied deterministic ordering characterization; modernization does not claim a new red run.")))
       (focused-tests . #hash((result . "passed") (count . 21) (suites . "test-runner-scheduler-order")))
       (format-compile . #hash((result . "passed") (detail . "schema-2 evidence artifacts parse as Racket data")))
