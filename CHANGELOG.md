@@ -1,3 +1,11 @@
+## v1.00.23 — 2026-08-31
+
+Release readiness: canonical C0 cohort tooling and scheduler-shadow foundation.
+
+- Added reproducible canonical C0 cohort evidence with 20 validated CI pull-request head SHAs and byte-identical report regeneration.
+- Preserved batch as the default scheduler; queue and shadow execution remain explicit and non-required.
+- Recorded honest W6 release-readiness evidence; no 2x performance claim is made.
+
 ## v1.00.22 — 2026-08-30
 
 Released 2026-08-30.
