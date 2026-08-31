@@ -4,7 +4,7 @@
 #hash((reviewer . "automated (delivery reviewer)")
       (verdict . "APPROVED")
       (reviewed-sha . "420ae2c62803b2dec163d15bb9351a157afd95f0")
-      (content-digest . "9a2950a9eb5a2067ecaeccb602f402f72e105062178d73d2d9c9a3215af3fd6f")
+      (content-digest . "3c825833a6377d48e724f22fd73de945c95958c187fa75406da18a01aa913b0e")
       (timestamp . "2026-08-30")
       (scope . "W1: additive scheduler + prepared-environment telemetry (v1.00.23)")
       (report . "Review of the W1 delivery branch (campaign/7537743a.../w1-delivery) against the wave doc actions:
