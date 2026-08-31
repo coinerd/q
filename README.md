@@ -297,7 +297,7 @@ q/
 | Test files | 1417 |
 | Source modules | 855 |
 | Source lines | 165572 |
-| Test lines | 254685 |
+| Test lines | 254651 |
 | Test assertions | 38925 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -417,7 +417,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v1.00.23** — 2026-08-31
+**v1.00.23** — Features
 
 **v1.00.22** — Features
 
