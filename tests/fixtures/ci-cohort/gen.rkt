@@ -2,7 +2,8 @@
 ;; Fixture generator for ci-cohort tests — run once to produce valid-20.json
 (require json
          racket/format
-         racket/list)
+         racket/list
+         (only-in "../../../util/version.rkt" q-version))
 
 (define (make-sha i)
   (define sha-str
@@ -65,9 +66,9 @@
     (make-sha i)))
 (define manifest
   (hasheq 'cohort-id
-          "v1.00.23-cohort-1"
+          (format "v~a-cohort-1" q-version)
           'milestone
-          "v1.00.23"
+          (format "v~a" q-version)
           'schema-version
           1
           'expected-count
