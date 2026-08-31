@@ -5,7 +5,7 @@
 
 ;; BOUNDARY: unit
 ;; tests/test-runner-work-queue.rkt
-;; v1.00.23 W2 — queue-mode invariants behind `--scheduler queue`.
+;; Current scheduler release — queue-mode invariants behind `--scheduler queue`.
 ;;
 ;; Focused queue-scheduler contract (runner.rkt run-all-files/queue):
 ;;  1. batch and queue select the same file set and produce the same

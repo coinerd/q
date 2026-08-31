@@ -5,7 +5,7 @@
 
 ;; BOUNDARY: unit
 ;; tests/test-runner-scheduler-characterization.rkt
-;; v1.00.23 W2 — characterize the scheduler contract. W2 flipped the W0 pins:
+;; Current scheduler release — characterize the scheduler contract. W2 flipped the W0 pins:
 ;; `--scheduler batch|queue` now exists (batch default; queue work-conserving).
 ;;
 ;; Pins:
