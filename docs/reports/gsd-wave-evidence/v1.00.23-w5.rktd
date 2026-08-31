@@ -8,7 +8,7 @@ Provide a controlled way to produce future queue evidence without changing requi
 ## Status: PARTIAL — Shadow plumbing landed, governance test passes, C0 remains in observation (20 eligible PR head SHAs not available from local retention).
 
 ## Step 1 — Shadow workflow file created (q/.github/workflows/test-scheduler-shadow.yml)
-- Manual/reusable `workflow_dispatch` + `workflow_call` only.
+- Manual/reusable `workflow_call` + `workflow_dispatch` only.
 - NOT a required check. `ci.yml` is unchanged.
 - Repository variable `TEST_RUNNER_SCHEDULER` controls `batch` (default) or `queue` (explicit).
 - Same fast inventory under the chosen scheduler; uploads JSON with ref/SHA, scheduler/order, workers, shard topology, duration, prepared-env state, inventory digest, artifact checksums.

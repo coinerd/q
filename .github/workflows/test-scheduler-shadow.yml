@@ -10,6 +10,23 @@ name: Test scheduler shadow
 # ingest shadow samples consistently.
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+        type: string
+      scheduler:
+        description: 'Scheduler mode to run (batch or queue)'
+        required: false
+        default: ''
+        type: string
+      shard-count:
+        description: 'Shard count (default 3, same as required gate)'
+        required: false
+        default: '3'
+        type: string
   workflow_dispatch:
     inputs:
       ref:
@@ -27,11 +44,10 @@ on:
         required: false
         default: '3'
         type: string
-
 # Do not cancel required-CI runs; also avoid cancelling other shadow runs on
 # different refs.
 concurrency:
-  group: scheduler-shadow-${{ github.ref }}-${{ github.event.inputs.ref || 'main' }}
+  group: scheduler-shadow-${{ github.ref }}-${{ inputs.ref || 'main' }}
   cancel-in-progress: false
 
 env:
@@ -40,12 +56,12 @@ env:
 
 jobs:
   shadow-run:
-    name: shadow (${{ github.event.inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }})
+    name: shadow (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(github.event.inputs.shard-count == '4' && '[0, 1, 2, 3]' || github.event.inputs.shard-count == '6' && '[0, 1, 2, 3, 4, 5]' || github.event.inputs.shard-count == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
+        shard: ${{ fromJSON(inputs.shard-count == '4' && '[0, 1, 2, 3]' || inputs.shard-count == '6' && '[0, 1, 2, 3, 4, 5]' || inputs.shard-count == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
     steps:
       - name: Resolve scheduler mode
         id: resolve
@@ -53,7 +69,7 @@ jobs:
           # Repository variable TEST_RUNNER_SCHEDULER governs the default.
           # Explicit dispatch input overrides the variable.
           # Unset/unknown values resolve to batch; queue requires explicit 'queue'.
-          SCHEDULER="${{ github.event.inputs.scheduler }}"
+          SCHEDULER="${{ inputs.scheduler }}"
           if [ -z "$SCHEDULER" ]; then
             SCHEDULER="${{ vars.TEST_RUNNER_SCHEDULER }}"
           fi
@@ -65,7 +81,7 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ inputs.ref || 'main' }}
 
       - name: Cache Racket packages
         uses: actions/cache@v6
@@ -106,7 +122,7 @@ jobs:
           REF=$(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)
           cat > shadow-cohort-meta.json <<EOF
           {
-            "ref": "${{ github.event.inputs.ref || 'main' }}",
+            "ref": "${{ inputs.ref || 'main' }}",
             "resolved_ref": "$REF",
             "sha": "$SHA",
             "scheduler": "$SCHEDULER",
@@ -114,7 +130,7 @@ jobs:
             "shard_index": ${{ matrix.shard }},
             "shard_total": ${{ strategy.job-total }},
             "workers": 4,
-            "prepared_env_state": "${{ steps.setup.outputs.prepared-env-state || 'unavailable' }}",
+            "prepared_env_state": "${{ steps.setup-racket.outputs.prepared-env-state || 'unavailable' }}",
             "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
             "run_id": "${{ github.run_id }}",
             "run_attempt": "${{ github.run_attempt }}"

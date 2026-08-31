@@ -100,10 +100,10 @@
     (test-case "shadow workflow file exists"
       (check-true (file-exists? shadow-wf-path)))
 
-    (test-case "shadow workflow exposes only workflow_dispatch"
+    (test-case "shadow workflow exposes reusable and manual triggers"
       (define keys (extract-on-trigger-keys shadow-src))
-      (check-equal? (length keys) 1)
-      (check-equal? keys '(workflow_dispatch)))
+      (check-equal? (length keys) 2)
+      (check-equal? keys '(workflow_call workflow_dispatch)))
 
     (test-case "shadow workflow has no pull_request trigger"
       (define keys (extract-on-trigger-keys shadow-src))
