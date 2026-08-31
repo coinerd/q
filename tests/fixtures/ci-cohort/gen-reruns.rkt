@@ -3,7 +3,8 @@
 ;; SHAs 0, 5, 10, 15 each have one failed attempt before the timing sample.
 (require json
          racket/format
-         racket/list)
+         racket/list
+         (only-in "../../../util/version.rkt" q-version))
 
 (define (make-sha i)
   (define sha-str
@@ -86,9 +87,9 @@
     (make-sha i)))
 (define manifest
   (hasheq 'cohort-id
-          "v1.00.23-cohort-reruns"
+          (format "v~a-cohort-reruns" q-version)
           'milestone
-          "v1.00.23"
+          (format "v~a" q-version)
           'schema-version
           1
           'expected-count

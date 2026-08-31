@@ -1,5 +1,5 @@
 #hash((status . "current") (milestone . 888) (wave . "W6") (issue . 9547) (branch . "campaign/v1.00.23-w6-c0-close")
-      (implementation-sha . "81a0a1e559a7888206070fb0b84ea90826e703f1") (content-digest . "2eaedcbed8de9334d996bb42f75dffaaffb7818990a389504c363782b84e1254")
+      (implementation-sha . "81a0a1e559a7888206070fb0b84ea90826e703f1") (content-digest . "6e575c9e98155bc44c6a392dd05a1182a68f4fceef08aed712553904da7f2e0d")
       (red-first . #hash((command . "racket scripts/run-tests/cohort-report.rkt --manifest artifacts/ci-baseline/v1.00.23-c0/cohort.json --out-json artifacts/ci-baseline/v1.00.23-c0/report.json --out-md artifacts/ci-baseline/v1.00.23-c0/report.md --check") (failure . "The former empty manifest was rejected as silently truncated; the closed 20-SHA manifest now regenerates successfully.")))
       (focused-tests . #hash((result . "passed") (count . 69) (suites . "scheduler-order (21), shadow-workflow (8), cohort-report (40)")))
       (format-compile . #hash((result . "passed") (detail . "schema-2 evidence and cohort artifacts parse successfully")))
