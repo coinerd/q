@@ -8,7 +8,7 @@
       (issue . 9547)
       (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w1-delivery")
       (implementation-sha . "420ae2c62803b2dec163d15bb9351a157afd95f0")
-      (content-digest . "9a2950a9eb5a2067ecaeccb602f402f72e105062178d73d2d9c9a3215af3fd6f")
+      (content-digest . "3c825833a6377d48e724f22fd73de945c95958c187fa75406da18a01aa913b0e")
       (red-first . #hash((command . "racket tests/test-runner-scheduler-telemetry.rkt")
                          (failure . "new scheduler object absent from run-summary JSON before runner.rkt emitted it; old-schema fixtures still parse after the additive extension")))
       (focused-tests . #hash((result . "passed")
