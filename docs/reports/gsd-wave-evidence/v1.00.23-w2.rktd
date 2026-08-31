@@ -33,3 +33,5 @@
       (required-checks . ("lint" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
       (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.23-w2.rktd")
       (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.23-w2.rktd"))
+
+; Follow-up PR validation: wave W2 evidence isolated for canonical governance checking.
