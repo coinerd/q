@@ -1,5 +1,5 @@
 #hash((status . "current") (milestone . 888) (wave . "W4") (issue . 9547) (branch . "campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w4-delivery")
-      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "PLACEHOLDER")
+      (implementation-sha . "4efcbdc4ea592f3ee4762290d2a444cb450da49d") (content-digest . "b16ab68698a0317a10c9aca6ad487bfc28a68ce68885fd117d683a12ee7d0f3e")
       (red-first . #hash((command . "racket tests/test-ci-cohort-report.rkt") (failure . "Truncated cohorts are rejected; modernization does not claim a complete 20-PR cohort.")))
       (focused-tests . #hash((result . "passed") (count . 40) (suites . "test-ci-cohort-report")))
       (format-compile . #hash((result . "passed") (detail . "schema-2 evidence artifacts parse as Racket data")))
