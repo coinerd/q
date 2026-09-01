@@ -762,4 +762,9 @@
 
    (delete-directory/files dir #:must-exist? #f)))
 
-(run-tests test-agent-session-basic-suite)
+(module+ main
+  ;; W2 v1.00.24: top-level `run-tests` returned whatever exit code the module
+  ;; loader decided (0 even on rackunit failures). Propagate the failure count
+  ;; so the wave verify chain actually gates on this suite.
+  (define exit-code (run-tests test-agent-session-basic-suite))
+  (exit (if (zero? exit-code) 0 1)))
