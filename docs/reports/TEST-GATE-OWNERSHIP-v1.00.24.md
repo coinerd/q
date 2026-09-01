@@ -5,7 +5,7 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`27875b436ffd3f3e3b217f83cdcd4fc5ae57dbd0f5bd266df979e109e0a1c26a`
+`bba6d69a4e7ab25322a653ad078406a3492da90f85ce6e10eb71fc3b55833bd5`
 
 ## Gate membership (deterministic repository walk)
 
@@ -16,12 +16,14 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
 | unit-fast | 943 | 310c6ce693c0028d1b55f35d5716b429324df3c5f9b069e6ccf1d32a4b471b43 |
-| slow/L4 | 107 | d47250622fa08dc1f70239b9aacaf4d6748587dda800a9abb52ec4da57e06b22 |
+| slow/L4 | 108 | b8bd32798ccd794a37cd60eafeee944abe6b993133614a3b4d3faa1b94d2872f |
 
 ## Behavior ownership (frozen v1.00.24 W0 candidate rows)
 
 | Behavior | Source tier | Destination tier | Members | Owner | Status | Wave | Rationale |
 |---|---|---|---|---|---|---|---|
+| RETRY-LOGICAL-SEMANTICS-FAST | fast | fast | tests/test-partial-result-preservation.rkt<br>tests/test-agent-session-basic.rkt | agent-session | retained-in-place | W2 | W2 re-tier: unit/component retry assertions run under with-deterministic-retries (sleep-scale 0.0 seam) and assert the LOGICAL retry semantics — computed per-attempt delays via auto-retry.start events, attempt counts, continuation-prompt injection, retry-exhausted payload, and total-retry-delay-ms — identical to the production scale-1.0 computation, while paying no real production backoff. Production current-auto-retry-sleep-scale default (1.0) is unchanged; the seam is test-scoped only. |
+| RETRY-REAL-TIMER-CANARY | slow/L4 | slow/L4 | tests/test-auto-retry-timer-canary.rkt | agent-session | re-tiered | W2 | W2 re-tier: the real (wall-clock) auto-retry sleep path is owned by exactly one bounded slow/L4 integration canary. The logical retry behavior moved out of the pre-W2 fast files into the deterministic fast row above; source-gate slow/L4 records classifier reality (the canary carries @speed slow), matching the W1 convention of declaring source gates per the classifier rather than tier intent. The canary uses a deliberately tiny nonzero delay with a generous bounded assertion window so it proves the sleep is actually connected — distinguishing too-early from timeout — without depending on exact scheduler timing or ever paying production-sized seconds. This is the sole executable destination for real-timer retry integration coverage. |
 | CWD-INVOCATION-AUDIT-CANARY | fast | fast | tests/test-cwd-independence.rkt | test-runtime | retained-in-place | W1 | W1 re-tier: the three recursive fast subprocess spot-checks (full nested test runs) were removed; the fast canary is now the minimal absolute-path probe invocation in tests/test-cwd-independence.rkt. Real audit-script CWD behavior is owned by tests/test-audit-script.rkt in slow/L4, which invokes the absolute audit script from an arbitrary cwd without self-recursion. |
 | PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN | fast | fast | tests/test-agent-session.rkt<br>tests/test-turn-retry.rkt<br>tests/test-iteration-retry.rkt | agent-session | retained-in-place | W0 | Retry-chain partial-result semantics stay in fast unit coverage this milestone. |
 | GSD-WAVE-TIMEOUT-CANCELLATION | fast | fast | tests/test-goal-runner-timeout.rkt<br>tests/test-run-tests-timeout-cleanup.rkt | gsd-delivery | retained-in-place | W0 | Timeout/cancellation unit tests are fast-classified (suite default/runtime); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality (the classifier, not tier intent, selects these files). |
@@ -35,6 +37,9 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 | Behavior | File | Suite | Speed | Boundary | Mutates | Isolation | Requires | Timeout |
 |---|---|---|---|---|---|---|---|---|
+| RETRY-LOGICAL-SEMANTICS-FAST | tests/test-partial-result-preservation.rkt | default | fast | unit | #f | #f |  | #f |
+| RETRY-LOGICAL-SEMANTICS-FAST | tests/test-agent-session-basic.rkt | runtime | fast | integration | #f | #f |  | #f |
+| RETRY-REAL-TIMER-CANARY | tests/test-auto-retry-timer-canary.rkt | default | slow | integration | #f | #f |  | #f |
 | CWD-INVOCATION-AUDIT-CANARY | tests/test-cwd-independence.rkt | default | fast | unit | #f | #f |  | #f |
 | PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN | tests/test-agent-session.rkt | runtime | fast | unit | #f | #f |  | #f |
 | PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN | tests/test-turn-retry.rkt | default | fast | unit | #f | #f |  | #f |

@@ -650,6 +650,25 @@
 ;; reports drift instead of silently accepting moves.
 (define v124-behavior-table
   (list
+   (hasheq 'behavior-id "RETRY-LOGICAL-SEMANTICS-FAST"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-partial-result-preservation.rkt"
+                      "tests/test-agent-session-basic.rkt")
+           'owner "agent-session"
+           'status "retained-in-place"
+           'wave "W2"
+           'rationale
+           "W2 re-tier: unit/component retry assertions run under with-deterministic-retries (sleep-scale 0.0 seam) and assert the LOGICAL retry semantics — computed per-attempt delays via auto-retry.start events, attempt counts, continuation-prompt injection, retry-exhausted payload, and total-retry-delay-ms — identical to the production scale-1.0 computation, while paying no real production backoff. Production current-auto-retry-sleep-scale default (1.0) is unchanged; the seam is test-scoped only.")
+   (hasheq 'behavior-id "RETRY-REAL-TIMER-CANARY"
+           'source-gate "slow/L4"
+           'destination-gate "slow/L4"
+           'members '("tests/test-auto-retry-timer-canary.rkt")
+           'owner "agent-session"
+           'status "re-tiered"
+           'wave "W2"
+           'rationale
+           "W2 re-tier: the real (wall-clock) auto-retry sleep path is owned by exactly one bounded slow/L4 integration canary. The logical retry behavior moved out of the pre-W2 fast files into the deterministic fast row above; source-gate slow/L4 records classifier reality (the canary carries @speed slow), matching the W1 convention of declaring source gates per the classifier rather than tier intent. The canary uses a deliberately tiny nonzero delay with a generous bounded assertion window so it proves the sleep is actually connected — distinguishing too-early from timeout — without depending on exact scheduler timing or ever paying production-sized seconds. This is the sole executable destination for real-timer retry integration coverage.")
    (hasheq 'behavior-id "CWD-INVOCATION-AUDIT-CANARY"
            'source-gate "fast"
            'destination-gate "fast"
