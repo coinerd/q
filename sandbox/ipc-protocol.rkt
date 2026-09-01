@@ -176,11 +176,49 @@
 
 ;; ── Convenience Constructors ────────────────────────────────────
 
-(define (make-error-response request-id [message "unknown error"])
-  (ipc-response (or request-id "") 'error (void) (hasheq) message IPC-SCHEMA-VERSION))
+(define (make-error-response request-id [message "unknown error"]
+                             #:details [extra-details #f]
+                             #:error-class [error-class #f])
+  ;; WP3.5 (BUG-0056): structured outcome classes. error-class is attached in
+  ;; details so every execution-plane failure is distinguishable without
+  ;; parsing message strings. Detail values are jsexpr-safe (symbols allowed).
+  (define base (if (and (hash? extra-details) (not (hash-empty? extra-details)))
+                   extra-details
+                   (hasheq)))
+  (define details (if error-class (hash-set base 'error-class error-class) base))
+  (ipc-response (or request-id "") 'error (void) details message IPC-SCHEMA-VERSION))
 
-(define (make-timeout-response request-id)
-  (ipc-response (or request-id "") 'timeout (void) (hasheq) "request timed out" IPC-SCHEMA-VERSION))
+(define (make-timeout-response request-id
+                               [message "request timed out"]
+                               #:details [extra-details #f])
+  (define base (hasheq 'error-class 'command-timeout))
+  (define details (if (and (hash? extra-details) (not (hash-empty? extra-details)))
+                      (for/fold ([acc base])
+                                ([k (in-hash-keys extra-details)])
+                        (hash-set acc k (hash-ref extra-details k)))
+                      base))
+  (ipc-response (or request-id "") 'timeout (void) details message IPC-SCHEMA-VERSION))
+
+;; WP3.5 (BUG-0056): structured worker-busy rejection. Carries owner metadata
+;; (owner tool/request id and busy elapsed time — never command bodies) so a
+;; caller can distinguish contention from a broken shell.
+(define (make-busy-response request-id
+                            #:requested-tool requested-tool
+                            #:owner-tool owner-tool
+                            #:owner-request-id owner-request-id
+                            #:busy-elapsed-ms busy-elapsed-ms
+                            [message #f])
+  (define default-msg
+    (format "worker busy: request held by another caller (tool '~a', request ~a, ~a ms elapsed); it will not be preempted — retry after it completes"
+            owner-tool owner-request-id busy-elapsed-ms))
+  (ipc-response (or request-id "") 'error (void)
+                (hasheq 'error-class 'worker-busy
+                        'requested-tool requested-tool
+                        'owner-tool owner-tool
+                        'owner-request-id owner-request-id
+                        'busy-elapsed-ms busy-elapsed-ms)
+                (or message default-msg)
+                IPC-SCHEMA-VERSION))
 
 ;; ── Size Validation ─────────────────────────────────────────────
 
@@ -260,6 +298,20 @@
                        [jsexpr->ipc-request (-> any/c (or/c ipc-request? #f))]
                        [ipc-response->jsexpr (-> ipc-response? hash?)]
                        [jsexpr->ipc-response (-> any/c (or/c ipc-response? #f))]
-                       [make-error-response (->* ((or/c string? #f)) (string?) ipc-response?)]
-                       [make-timeout-response (-> (or/c string? #f) ipc-response?)]
+                       [make-error-response
+                        (->* ((or/c string? #f))
+                             (string?
+                              #:details (or/c hash? #f)
+                              #:error-class (or/c symbol? #f))
+                             ipc-response?)]
+                       [make-timeout-response
+                        (->* ((or/c string? #f)) (string? #:details (or/c hash? #f)) ipc-response?)]
+                       [make-busy-response
+                        (->* ((or/c string? #f)
+                              #:requested-tool string?
+                              #:owner-tool string?
+                              #:owner-request-id string?
+                              #:busy-elapsed-ms real?)
+                             (string?)
+                             ipc-response?)]
                        [ipc-request-too-large? (-> ipc-request? boolean?)]))
