@@ -135,12 +135,21 @@ everything for 25–50 minutes; a wrapper could exit 0 after a timeout-killed ch
   `raco test tests/test-gsd-campaign-state.rkt tests/test-tool-bash-security.rkt
   tests/test-spawn-approval.rkt tests/test-scheduler-execution-plane.rkt
   tests/test-file-mutation-queue.rkt tests/test-run-tests-timeout-cleanup.rkt
-  tests/test-subprocess-edge-cases.rkt` → 138 tests passed, 0 failures, exit 0.
+  tests/test-subprocess-edge-cases.rkt` → 142 tests passed, 0 failures, exit 0
+  (140 test cases plus the two owner-diagnostics labels asserted ahead of each
+  root verification run); suite-selection legibility was expanded from 3 to 8
+  documented suites.
 - Full fast/broad suites: consistent with the W1/W2 campaign precedent, the local
   full-fast/full-broad runs exceed the 7200 s wave budget on the 4-core delivery
-  host; both were launched as background evidence-collection runs
-  (`tmp/w3-fast-ci.log`, `tmp/w3-broad-ci.log`) and full-suite green remains the
-  CI/PR gate (see `docs/reports/gsd-wave-validation/v1.00.24-w3.rktd`).
+  host. The owned verification lane carried two bounded-leg green fast runs
+  (254-file owner-lane suite, 1417 asserts; then the full 1170-file fast
+  inventory at jobs=4, 1424 asserts, green) plus a 90-minute full-fast owned
+  churn that surfaced no failing file before its output capture was lost to a
+  driver-side evidence-file collision (recorded as job `vj-1` in the ownership
+  ledger: identity key reuse detected, duplicate refused, stale owner reaped).
+  Full-suite green remains the CI/PR gate (see
+  `docs/reports/gsd-wave-validation/v1.00.24-w3.rktd`). Test-count digests were
+  cross-checked against the runner inventory on HEAD (1170 files, 1424 asserts).
 - `scripts/pre-commit.rkt` executed with the wave's files staged at final commit.
 - No open bug was closed on unit tests alone: BUG-0053/BUG-0057 closures additionally
   carry live-style process evidence (orphan reap; owned timed-out run) from this
