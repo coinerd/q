@@ -242,11 +242,13 @@
   (define racket-path (find-executable-path "racket"))
   (define target (path->string (build-path base-dir file)))
   (define started (current-inexact-milliseconds))
-  (define stdout-p (open-output-nowhere))
+  (define stdout-p (open-output-file "/dev/null" #:exists 'append))
   (define status
-    (with-handlers ([exn:fail? (lambda (_) "fail")])
-      (define proc
-        (subprocess stdout-p #f (current-error-port) racket-path target))
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (eprintf "hotspot-spawn-exn: ~a\n" (exn-message e))
+                                 "fail")])
+        (define-values (proc _sub-stdin _sub-stdout _sub-stderr)
+          (subprocess stdout-p #f (current-error-port) racket-path target))
       (define ready (sync/timeout timeout-s proc))
       (cond
         [ready
@@ -255,6 +257,7 @@
         [else
          (with-handlers ([exn:fail? void]) (subprocess-kill proc #t))
          "timeout"])))
+  (close-output-port stdout-p)
   (hasheq 'file file
           'status status
           'duration_ms (inexact->exact (floor (- (current-inexact-milliseconds) started)))))
