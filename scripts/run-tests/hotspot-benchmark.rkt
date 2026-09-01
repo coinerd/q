@@ -50,7 +50,19 @@
                    (string-ref "0123456789abcdef" (remainder b 16))))))
 
 (define (hb-base-dir)
-  (simplify-path (build-path (path-only (path->complete-path (find-system-path 'run-file))) "..")))
+  ;; Repo-root detection: walk up from the run-file directory until we find
+  ;; the q checkout root (a directory containing both scripts/ and tests/).
+  ;; The original single-parent walk assumed the entry point lived directly
+  ;; in scripts/ and mis-resolved for scripts/run-tests/ entry points.
+  (let loop ([dir (path-only (path->complete-path (find-system-path 'run-file)))])
+    (cond
+      [(not dir) (current-directory)]
+      [(and (directory-exists? (build-path dir "scripts"))
+            (directory-exists? (build-path dir "tests")))
+       (path->string (simplify-path dir))]
+      [else
+       (define up (simplify-path (build-path dir 'up)))
+       (if (equal? up dir) (path->string dir) (loop up))])))
 
 (define (hb-q-sha)
   (with-handlers ([exn:fail? (lambda (_) "unknown")])
@@ -149,7 +161,21 @@
 (define (hb-missing errors where field got)
   (if got errors (cons (format "~a: missing required field ~a" where field) errors)))
 
-(define (hotspot-manifest-errors m)
+;; Manifests are parsed with string->jsexpr, which yields SYMBOL hash keys,
+;; while this validator (and the canonical writer) use STRING keys. Normalize
+;; recursively so --check validates the on-disk artifact rather than failing
+;; every field lookup on key type alone.
+(define (hb-string-keyed v)
+  (cond
+    [(hash? v)
+     (for/hash ([(k val) (in-hash v)])
+       (values (if (symbol? k) (symbol->string k) k)
+               (hb-string-keyed val)))]
+    [(list? v) (map hb-string-keyed v)]
+    [else v]))
+
+(define (hotspot-manifest-errors m0)
+  (define m (if (hash? m0) (hb-string-keyed m0) m0))
   (define errors '())
   (unless (hash? m)
     (error 'hotspot-manifest-errors "manifest must be a hash table"))
@@ -401,3 +427,8 @@
       (exit (if (null? errors) 0 1))]
     [else
      (error 'hotspot-benchmark "required: --manifest PATH (add --check to verify)")]))
+
+(module+ main
+  (run-hotspot-benchmark-main
+   (vector->list (current-command-line-arguments))
+   #:program "hotspot-benchmark"))
