@@ -28,7 +28,16 @@
          compute-inventory-hash
          run-metadata-quality-report
          run-unit-fast-audit
-         run-ownership-map)
+         run-ownership-map
+         gate-membership
+         v124-behavior-table
+         gate-ownership-rows
+         gate-ownership-errors
+         gate-ownership-markdown
+         gate-ownership-json
+         gate-ownership-ledger-text
+         selected-paths-digest
+         run-gate-ownership-map)
 
 (define (classify-exclusion-reason f)
   (cond
@@ -613,16 +622,372 @@
   (printf ";; json report written to ~a~n" json-path)
   (hasheq 'areas (length records) 'gaps (length gaps)))
 
+;; ============================================================
+;; v1.00.24 W0 cross-gate ownership map
+;; ============================================================
+;; Freezes, for the eight v1.00.24 candidate behaviors, where each
+;; behavior's evidence lives today (source tier == destination tier;
+;; retained-in-place for W0) and validates that declared membership
+;; matches what the actual suite classifiers select. Deterministic;
+;; missing evidence is reported, never imputed.
+
+(require "sha256.rkt")
+
+(define v124-gate-names
+  '("fast" "platform" "security" "workflows" "unit-fast" "slow/L4"))
+
+;; Gate name -> sorted list of selected test files (repository walk).
+(define (gate-membership)
+  (hasheq "fast" (collect-test-files 'fast)
+          "platform" (collect-test-files 'platform)
+          "security" (collect-test-files 'security)
+          "workflows" (collect-test-files 'workflows)
+          "unit-fast" (collect-test-files 'unit-fast)
+          "slow/L4" (collect-test-files 'slow)))
+
+;; Frozen v1.00.24 W0 candidate behavior table. Members are real test
+;; files at freeze time; `--check` re-derives gate membership and
+;; reports drift instead of silently accepting moves.
+(define v124-behavior-table
+  (list
+   (hasheq 'behavior-id "CWD-INVOCATION-AUDIT-CANARY"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-cwd-independence.rkt")
+           'owner "test-runtime"
+           'status "retained-in-place"
+           'wave "W1"
+           'rationale
+           "W1 re-tier: the three recursive fast subprocess spot-checks (full nested test runs) were removed; the fast canary is now the minimal absolute-path probe invocation in tests/test-cwd-independence.rkt. Real audit-script CWD behavior is owned by tests/test-audit-script.rkt in slow/L4, which invokes the absolute audit script from an arbitrary cwd without self-recursion.")
+   (hasheq 'behavior-id "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-agent-session.rkt"
+                      "tests/test-turn-retry.rkt"
+                      "tests/test-iteration-retry.rkt")
+           'owner "agent-session"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Retry-chain partial-result semantics stay in fast unit coverage this milestone.")
+   (hasheq 'behavior-id "GSD-WAVE-TIMEOUT-CANCELLATION"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-goal-runner-timeout.rkt"
+                      "tests/test-run-tests-timeout-cleanup.rkt")
+           'owner "gsd-delivery"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Timeout/cancellation unit tests are fast-classified (suite default/runtime); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality (the classifier, not tier intent, selects these files).")
+   (hasheq 'behavior-id "RUNNER-REPOSITORY-DISCOVERY"
+           'source-gate "slow/L4"
+           'destination-gate "slow/L4"
+           'members '("tests/test-run-tests.rkt")
+           'owner "test-runtime"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Runner repository-discovery behavior is exercised by the slow/L4 runner test (W1 gate correction: the live walker is slow-classified). The metadata-discovery driver tests/test-run-tests-metadata-discovery.rkt is @not-test frozen fixture input selected by no executable gate and was dropped from membership in W1.")
+   (hasheq 'behavior-id "GOLDEN-SESSION-LIFECYCLE"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-golden-flows.rkt"
+                      "tests/test-session-lifecycle-characterization.rkt")
+           'owner "agent-session"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Golden lifecycle characterizations remain the accountable fast-tier destination.")
+   (hasheq 'behavior-id "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/ci/verify-lock-selection-test.rkt")
+           'owner "gsd-delivery"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Lock-selection verifier sandbox test is fast-classified (suite ci, no slow tags); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality.")
+   (hasheq 'behavior-id "GSD-WAVE-WORKTREE-SANDBOXES"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-gsd-wave-worktree.rkt")
+           'owner "gsd-delivery"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Wave worktree sandbox test has no explicit metadata tags and is selected by the fast classifier default; W1 corrected the gate declaration from slow/L4 to fast to match classifier reality.")
+   (hasheq 'behavior-id "GROUPED-MODE-CHARACTERIZATION"
+           'source-gate "fast"
+           'destination-gate "fast"
+           'members '("tests/test-run-tests-in-process-mode.rkt"
+                      "tests/test-execution-plane-characterization.rkt")
+           'owner "test-runtime"
+           'status "retained-in-place"
+           'wave "W0"
+           'rationale
+           "Grouped in-process execution characterization stays hermetic and fast-tier owned.")))
+
+;; Rows actually owned by this milestone (frozen table).
+(define (gate-ownership-rows [memberships (gate-membership)])
+  v124-behavior-table)
+
+;; Pure validator: declared table vs a membership hash
+;; (gate-name -> list of files). Reports:
+;;  - duplicate behavior IDs
+;;  - members selected by no gate at all (missing destination)
+;;  - members not selected by the declared source tier (membership drift)
+;;  - rows with no member selected by the declared destination tier
+(define (gate-ownership-errors rows [memberships (gate-membership)])
+  (define errors '())
+  (define seen (make-hash))
+  (for ([r (in-list rows)])
+    (define id (hash-ref r 'behavior-id))
+    (when (hash-ref seen id #f)
+      (set! errors (cons (format "~a: duplicate behavior ID" id) errors)))
+    (hash-set! seen id #t))
+  (for ([r (in-list rows)])
+    (define id (hash-ref r 'behavior-id))
+    (define src (hash-ref r 'source-gate))
+    (define dest (hash-ref r 'destination-gate))
+    (define members (hash-ref r 'members '()))
+    (define (gate-has? g f) (and (member f (hash-ref memberships g '())) #t))
+    (for ([m (in-list members)])
+      (unless (for/or ([g (in-list v124-gate-names)]) (gate-has? g m))
+        (set! errors
+              (cons (format "~a: missing destination: member ~a is selected by no gate" id m)
+                    errors)))
+      (unless (gate-has? src m)
+        (set! errors
+              (cons (format "~a: membership drift: member ~a is not selected by source gate ~a" id m src)
+                    errors))))
+    (unless (for/or ([m (in-list members)]) (gate-has? dest m))
+      (set! errors
+            (cons (format "~a: destination not selected: no member is selected by destination gate ~a"
+                          id dest)
+                  errors))))
+  (reverse errors))
+
+(define (gate-ownership-markdown rows
+                                 [gate-stats (v124-gate-stats (gate-membership))]
+                                 [selected-digest
+                                  (selected-paths-digest
+                                   (remove-duplicates
+                                    (append-map (lambda (g)
+                                                  (hash-ref (gate-membership) g '()))
+                                                v124-gate-names)))]
+                                 [members-meta (v124-members-meta rows)])
+  (string-append
+   "# TEST-GATE-OWNERSHIP v1.00.24 (generated — do not edit)\n\n"
+   "Generated by `scripts/run-tests/inventory.rkt --gate-ownership-map` (W0).\n"
+   "W0 retains every candidate behavior in its source tier (retained-in-place).\n\n"
+   "## Selected-path digest (union of all gates)\n\n`"
+   selected-digest
+   "`\n\n"
+   "## Gate membership (deterministic repository walk)\n\n"
+   "| Gate | Selected files | Selected-path digest |\n"
+   "|---|---|---|\n"
+   (apply string-append
+          (for/list ([s (in-list gate-stats)])
+            (format "| ~a | ~a | ~a |\n"
+                    (hash-ref s 'gate)
+                    (hash-ref s 'count)
+                    (hash-ref s 'digest))))
+   "\n"
+   "## Behavior ownership (frozen v1.00.24 W0 candidate rows)\n\n"
+   "| Behavior | Source tier | Destination tier | Members | Owner | Status | Wave | Rationale |\n"
+   "|---|---|---|---|---|---|---|---|\n"
+   (apply string-append
+          (for/list ([r (in-list rows)])
+            (format "| ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a |\n"
+                    (hash-ref r 'behavior-id)
+                    (hash-ref r 'source-gate)
+                    (hash-ref r 'destination-gate)
+                    (string-join (hash-ref r 'members) "<br>")
+                    (hash-ref r 'owner)
+                    (hash-ref r 'status)
+                    (hash-ref r 'wave)
+                    (hash-ref r 'rationale))))
+   "\n"
+   "## Metadata boundary and declared side effects (per member)\n\n"
+   "| Behavior | File | Suite | Speed | Boundary | Mutates | Isolation | Requires | Timeout |\n"
+   "|---|---|---|---|---|---|---|---|---|\n"
+   (apply string-append
+          (for/list ([bm (in-list members-meta)]
+                     [r (in-list rows)])
+            (apply string-append
+                   (for/list ([m (in-list (hash-ref bm 'members))])
+                     (format "| ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a |\n"
+                             (hash-ref r 'behavior-id)
+                             (hash-ref m 'file)
+                             (hash-ref m 'suite)
+                             (hash-ref m 'speed)
+                             (hash-ref m 'boundary)
+                             (hash-ref m 'mutates)
+                             (hash-ref m 'isolation)
+                             (hash-ref m 'requires)
+                             (hash-ref m 'timeout))))))))
+
+(define (gate-ownership-json rows
+                             [gate-stats (v124-gate-stats (gate-membership))]
+                             [selected-digest
+                              (selected-paths-digest
+                               (remove-duplicates
+                                (append-map (lambda (g)
+                                              (hash-ref (gate-membership) g '()))
+                                            v124-gate-names)))]
+                             [members-meta (v124-members-meta rows)])
+  (define payload
+    (hasheq 'generator
+            "inventory.rkt --gate-ownership-map"
+            'milestone
+            "v1.00.24"
+            'wave
+            "W0"
+            'selected_paths_digest
+            selected-digest
+            'gates
+            (for/list ([s (in-list gate-stats)])
+              (for/hash ([(k v) (in-hash s)])
+                (values (symbol->string k) v)))
+            'behaviors
+            (for/list ([r (in-list rows)])
+              (for/hash ([(k v) (in-hash r)])
+                (values (symbol->string k)
+                        (if (list? v) (list->vector v) v))))
+            'members_meta
+            (for/list ([bm (in-list members-meta)])
+              (hasheq "behavior_id" (hash-ref bm 'behavior-id)
+                      "members"
+                      (list->vector
+                       (for/list ([m (in-list (hash-ref bm 'members))])
+                         (for/hash ([(k v) (in-hash m)])
+                           (values (symbol->string k) v))))))))
+  (with-output-to-string (lambda () (write-json payload))))
+
+(define (gate-ownership-ledger-text rows)
+  (string-append
+   ";; TEST-RETIER-LEDGER v1.00.24 — W0 retained-in-place snapshot\n"
+   ";; Readable Racket datum: (gate-ownership-ledger (<row> ...)).\n"
+   (with-output-to-string (lambda () (write (list 'gate-ownership-ledger rows))))
+   "\n"))
+
+;; Canonical digest over the sorted, de-duplicated selected paths.
+(define (selected-paths-digest paths)
+  (define canonical (string-join (remove-duplicates (sort paths string<?)) "\n"))
+  (bytes->hex-string (sha256 (string->bytes/utf-8 canonical))))
+
+(define (v124-report-paths)
+  (values (build-path base-dir "docs" "reports" "TEST-GATE-OWNERSHIP-v1.00.24.md")
+          (build-path base-dir "docs" "reports" "TEST-GATE-OWNERSHIP-v1.00.24.json")
+          (build-path base-dir "docs" "reports" "TEST-RETIER-LEDGER-v1.00.24.rktd")))
+
+(define (v124-meta-str v)
+  (cond
+    [(list? v) (string-join (map (lambda (x) (format "~a" x)) v) ",")]
+    [(vector? v) (string-join (map (lambda (x) (format "~a" x)) (vector->list v)) ",")]
+    [else (format "~a" v)]))
+
+(define (v124-member-meta f)
+  (define m (with-handlers ([exn:fail? (lambda (_) (hash))])
+              (get-file-metadata f)))
+  (hasheq 'file f
+          'suite (v124-meta-str (hash-ref m 'suite 'unset))
+          'speed (v124-meta-str (hash-ref m 'speed 'unset))
+          'boundary (v124-meta-str (hash-ref m 'boundary '()))
+          'mutates (v124-meta-str (hash-ref m 'mutates #f))
+          'isolation (v124-meta-str (hash-ref m 'isolation 'unset))
+          'requires (v124-meta-str (hash-ref m 'requires '()))
+          'timeout (v124-meta-str (hash-ref m 'timeout 'unset))))
+
+;; Enumerate, per behavior, the metadata boundary and declared side effects
+;; of every member file (read from test metadata; no collection change).
+(define (v124-members-meta rows)
+  (for/list ([r (in-list rows)])
+    (hasheq 'behavior-id (hash-ref r 'behavior-id)
+            'members (map v124-member-meta (hash-ref r 'members '())))))
+
+;; Per-gate membership counts + selected-path digests (deterministic walk).
+(define (v124-gate-stats membership)
+  (for/list ([g (in-list v124-gate-names)])
+    (define fs (sort (remove-duplicates (hash-ref membership g '())) string<?))
+    (hasheq 'gate g 'count (length fs) 'digest (selected-paths-digest fs))))
+
+(define (run-gate-ownership-map #:md-out [md-out #f]
+                                #:json-out [json-out #f]
+                                #:ledger-out [ledger-out #f]
+                                #:check? [check? #f])
+  (define rows (gate-ownership-rows))
+  (define membership (gate-membership))
+  (define errors (gate-ownership-errors rows membership))
+  (define gate-stats (v124-gate-stats membership))
+  (define selected-digest
+    (selected-paths-digest
+     (remove-duplicates
+      (append-map (lambda (g) (hash-ref membership g '())) v124-gate-names))))
+  (define members-meta (v124-members-meta rows))
+  (define-values (default-md default-json default-ledger) (v124-report-paths))
+  (define md-path (or md-out default-md))
+  (define json-path (or json-out default-json))
+  (define ledger-path (or ledger-out default-ledger))
+  (define md-bytes (string->bytes/utf-8
+                    (gate-ownership-markdown rows gate-stats selected-digest members-meta)))
+  (define json-bytes (string->bytes/utf-8
+                      (gate-ownership-json rows gate-stats selected-digest members-meta)))
+  (define ledger-bytes (string->bytes/utf-8 (gate-ownership-ledger-text rows)))
+  (printf ";; TEST-GATE-OWNERSHIP MAP (v1.00.24 W0)~n")
+  (printf ";; ═════════════════════════════════════════~n")
+  (for ([r (in-list rows)])
+    (printf ";; ~a: ~a -> ~a (~a member(s), owner ~a)~n"
+            (hash-ref r 'behavior-id)
+            (hash-ref r 'source-gate)
+            (hash-ref r 'destination-gate)
+            (length (hash-ref r 'members))
+            (hash-ref r 'owner)))
+  (printf ";; behaviors: ~a, validation errors: ~a~n" (length rows) (length errors))
+  (for ([e (in-list errors)]) (printf ";; ERROR: ~a~n" e))
+  (define check-errors
+    (if (not check?)
+        '()
+        (for/list ([pair (in-list (list (cons md-path md-bytes)
+                                        (cons json-path json-bytes)
+                                        (cons ledger-path ledger-bytes)))]
+                   #:when (let ([on-disk (with-handlers ([exn:fail? (lambda (_) #f)])
+                                           (file->bytes (car pair)))])
+                            (or (not on-disk)
+                                (not (equal? on-disk (cdr pair))))))
+          (format "~a: byte drift (or missing) vs regeneration" (car pair)))))
+  (when check?
+    (for ([e (in-list check-errors)]) (printf ";; CHECK: ~a~n" e)))
+  (unless check?
+    (for ([pair (in-list (list (cons md-path md-bytes)
+                               (cons json-path json-bytes)
+                               (cons ledger-path ledger-bytes)))])
+      (ensure-parent-dir! (car pair))
+      (call-with-output-file (car pair)
+        (lambda (out) (write-bytes (cdr pair) out))
+        #:exists 'truncate/replace)
+      (printf ";; wrote ~a~n" (car pair))))
+  (hasheq 'behaviors (length rows)
+          'errors errors
+          'check-errors check-errors
+          'md md-path 'json json-path 'ledger ledger-path))
+
 (define (inventory-usage)
   (displayln "usage: racket scripts/run-tests/inventory.rkt MODE [--json-out PATH] [--md-out PATH]")
   (displayln "  MODE is one of:")
   (displayln "    --metadata-quality   metadata tag quality report (missing/invalid/explicit)")
   (displayln "    --unit-fast-audit    unit-fast grouped-execution eligibility audit")
-  (displayln "    --ownership-map      production-area test ownership map (md + json)"))
+  (displayln "    --ownership-map      production-area test ownership map (md + json)")
+  (displayln "    --gate-ownership-map v1.00.24 W0 behavior ownership map + retier ledger")
+  (displayln "      [--ledger PATH]    retier ledger output path (default docs/reports)")
+  (displayln "      [--check]          verify existing artifacts byte-identically, no rewrite"))
 
 (define (inventory-main argv)
   (define json-out #f)
   (define md-out #f)
+  (define ledger-out #f)
+  (define check? #f)
   (define mode #f)
   (let loop ([rest argv])
     (match rest
@@ -639,6 +1004,15 @@
       [(list "--ownership-map" rest ...)
        (set! mode 'ownership-map)
        (loop rest)]
+      [(list "--gate-ownership-map" rest ...)
+       (set! mode 'gate-ownership-map)
+       (loop rest)]
+      [(list "--ledger" p rest ...)
+       (set! ledger-out p)
+       (loop rest)]
+      [(list "--check" rest ...)
+       (set! check? #t)
+       (loop rest)]
       [(list "--json-out" p rest ...)
        (set! json-out p)
        (loop rest)]
@@ -653,6 +1027,15 @@
     [(metadata-quality) (run-metadata-quality-report #:json-out json-out)]
     [(unit-fast-audit) (run-unit-fast-audit #:json-out json-out)]
     [(ownership-map) (run-ownership-map #:md-out md-out #:json-out json-out)]
+    [(gate-ownership-map)
+     (define result (run-gate-ownership-map #:md-out md-out
+                                            #:json-out json-out
+                                            #:ledger-out ledger-out
+                                            #:check? check?))
+     (exit (if (or (pair? (hash-ref result 'errors '()))
+                   (pair? (hash-ref result 'check-errors '())))
+               1
+               0))]
     [else
      (inventory-usage)
      (exit 2)]))
