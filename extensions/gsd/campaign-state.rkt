@@ -39,7 +39,12 @@
                   wave-index-entry-title
                   wave-index-entry-slug
                   wave-index-entry-status)
-         (only-in "../../util/json/checksum.rkt" sha256-string))
+         (only-in "../../util/json/checksum.rkt" sha256-string)
+          (only-in "plan-snapshot.rkt"
+                   seed-and-bind-plan-snapshot!
+                   load-snapshot-manifest
+                   snapshot-drift?
+                   restore-plan-from-snapshot!))
 
 ;; ============================================================
 ;; Public API with contracts (§24)
@@ -417,7 +422,14 @@
                  ;; cumulative spend crossed gsd.campaign.max-cost /
                  ;; gsd.campaign.max-tokens; cleared when the operator raises
                  ;; the ceiling and resumes. #f (default) = no pause.
-                 [budget-pause #:auto])
+                 [budget-pause #:auto]
+                 ;; v1.00.24 W3 (BUG-0052): immutable plan snapshot binding.
+                 ;; plan-snapshot-path is the campaign-local snapshot directory;
+                 ;; plan-snapshot-digest is the SHA-256 of the snapshot manifest
+                 ;; written atomically at seed time. #f (default) = legacy record
+                 ;; created before snapshot binding (absent ≠ corrupt).
+                 [plan-snapshot-path #:auto]
+                 [plan-snapshot-digest #:auto])
   #:transparent
   #:mutable
   #:auto-value #f
@@ -828,7 +840,13 @@
   (define p (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
   (if (file-exists? p)
       (sha256-string (strip-wave-doc-status (call-with-input-file p port->string)))
-      (sha256-string "")))
+      ;; BUG-0052: a missing wave document is a hard migration failure.
+      ;; The empty-content SHA-256 must never stand in for absence.
+      (raise
+       (exn:fail:campaign-migration
+        (format "wave doc missing: .planning/waves/W~a-~a.md is referenced by the plan index but does not exist; campaign creation refused"
+                idx slug)
+        (current-continuation-marks)))))
 
 ;; v0.99.90 W5 (#9236): the manifest hash (plan-id) must be STABLE across
 ;; projection updates. Wave docs carry a mutable "Status:" header that the
@@ -876,6 +894,22 @@
                         (current-seconds)
                         (current-seconds)))
 
+;; BUG-0052: after any successful seed, atomically capture the immutable
+;; plan snapshot and bind it into the record so resume can reconstruct the
+;; exact plan/wave instructions even if live .planning mutates later.
+;; Snapshot failure aborts migration — no durable running state is written
+;; without a bound snapshot.
+(define (seed-and-bind-snapshot! base-dir plan-text provenance)
+  (define record (seed-record base-dir plan-text provenance))
+  ;; Plan-less migration sources (legacy STATE.md-only repositories) have no
+  ;; plan to snapshot: leave the binding fields #f (absent ≠ corrupt).
+  (when (non-empty-string? plan-text)
+    (let-values ([(snap-path snap-digest)
+                  (seed-and-bind-plan-snapshot! base-dir (campaign-record-plan-id record))])
+      (set-campaign-record-plan-snapshot-path! record snap-path)
+      (set-campaign-record-plan-snapshot-digest! record snap-digest)))
+  record)
+
 (define (migrate-campaign! base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (define state-path (build-path base-dir ".planning" "STATE.md"))
@@ -888,13 +922,13 @@
      (define plan-rows* (plan-rows plan-text))
      (define state-rows* (state-rows state-text))
      (cond
-       [(equal? plan-rows* state-rows*) (seed-record base-dir plan-text 'plan-and-state)]
+       [(equal? plan-rows* state-rows*) (seed-and-bind-snapshot! base-dir plan-text 'plan-and-state)]
        ;; F-6: If wave identities differ (different titles or counts), this is a
        ;; new campaign. Auto-resolve by re-seeding from PLAN.md rather than
        ;; failing closed. This prevents /go from crashing after /plan rewrites
        ;; PLAN.md with a new campaign while STATE.md still has the old one.
        [(not (equal? (plan-wave-identities plan-text) (state-wave-identities state-text)))
-        (seed-record base-dir plan-text 'plan-and-state)]
+        (seed-and-bind-snapshot! base-dir plan-text 'plan-and-state)]
        ;; Same wave identities but different statuses — potential corruption.
        ;; Keep fail-closed for safety (D3 invariant).
        [else
@@ -902,8 +936,8 @@
          (exn:fail:campaign-migration
           (format "PLAN.md and STATE.md disagree on wave statuses: ~a vs ~a" plan-rows* state-rows*)
           (current-continuation-marks)))])]
-    [plan-present? (seed-record base-dir (call-with-input-file plan-path port->string) 'plan)]
-    [state-present? (seed-record base-dir "" 'state)]
+    [plan-present? (seed-and-bind-snapshot! base-dir (call-with-input-file plan-path port->string) 'plan)]
+    [state-present? (seed-and-bind-snapshot! base-dir "" 'state)]
     [else
      (raise (exn:fail:campaign-migration
              "no durable plan source: neither .planning/PLAN.md nor .planning/STATE.md exists"
