@@ -659,7 +659,11 @@
            'status "retained-in-place"
            'wave "W2"
            'rationale
-           "W2 re-tier: unit/component retry assertions run under with-deterministic-retries (sleep-scale 0.0 seam) and assert the LOGICAL retry semantics — computed per-attempt delays via auto-retry.start events, attempt counts, continuation-prompt injection, retry-exhausted payload, and total-retry-delay-ms — identical to the production scale-1.0 computation, while paying no real production backoff. Production current-auto-retry-sleep-scale default (1.0) is unchanged; the seam is test-scoped only.")
+           (string-append
+            "W2 re-tier: unit/component retry assertions run under with-deterministic-retries (sleep-scale 0.0 seam) and assert the LOGICAL retry "
+            "semantics — computed per-attempt delays via auto-retry.start events, attempt counts, continuation-prompt injection, retry-exhausted "
+            "payload, and total-retry-delay-ms — identical to the production scale-1.0 computation, while paying no real production backoff. "
+            "Production current-auto-retry-sleep-scale default (1.0) is unchanged; the seam is test-scoped only."))
    (hasheq 'behavior-id "RETRY-REAL-TIMER-CANARY"
            'source-gate "slow/L4"
            'destination-gate "slow/L4"
@@ -668,7 +672,13 @@
            'status "re-tiered"
            'wave "W2"
            'rationale
-           "W2 re-tier: the real (wall-clock) auto-retry sleep path is owned by exactly one bounded slow/L4 integration canary. The logical retry behavior moved out of the pre-W2 fast files into the deterministic fast row above; source-gate slow/L4 records classifier reality (the canary carries @speed slow), matching the W1 convention of declaring source gates per the classifier rather than tier intent. The canary uses a deliberately tiny nonzero delay with a generous bounded assertion window so it proves the sleep is actually connected — distinguishing too-early from timeout — without depending on exact scheduler timing or ever paying production-sized seconds. This is the sole executable destination for real-timer retry integration coverage.")
+           (string-append
+            "W2 re-tier: the real (wall-clock) auto-retry sleep path is owned by exactly one bounded slow/L4 integration canary. The logical retry "
+            "behavior moved out of the pre-W2 fast files into the deterministic fast row above; source-gate slow/L4 records classifier reality (the "
+            "canary carries @speed slow), matching the W1 convention of declaring source gates per the classifier rather than tier intent. The "
+            "canary uses a deliberately tiny nonzero delay with a generous bounded assertion window so it proves the sleep is actually connected — "
+            "distinguishing too-early from timeout — without depending on exact scheduler timing or ever paying production-sized seconds. This is "
+            "the sole executable destination for real-timer retry integration coverage."))
    (hasheq 'behavior-id "CWD-INVOCATION-AUDIT-CANARY"
            'source-gate "fast"
            'destination-gate "fast"
@@ -677,7 +687,10 @@
            'status "retained-in-place"
            'wave "W1"
            'rationale
-           "W1 re-tier: the three recursive fast subprocess spot-checks (full nested test runs) were removed; the fast canary is now the minimal absolute-path probe invocation in tests/test-cwd-independence.rkt. Real audit-script CWD behavior is owned by tests/test-audit-script.rkt in slow/L4, which invokes the absolute audit script from an arbitrary cwd without self-recursion.")
+           (string-append
+            "W1 re-tier: the three recursive fast subprocess spot-checks (full nested test runs) were removed; the fast canary is now the minimal "
+            "absolute-path probe invocation in tests/test-cwd-independence.rkt. Real audit-script CWD behavior is owned by "
+            "tests/test-audit-script.rkt in slow/L4, which invokes the absolute audit script from an arbitrary cwd without self-recursion."))
    (hasheq 'behavior-id "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
            'source-gate "fast"
            'destination-gate "fast"
@@ -698,7 +711,9 @@
            'status "retained-in-place"
            'wave "W0"
            'rationale
-           "Timeout/cancellation unit tests are fast-classified (suite default/runtime); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality (the classifier, not tier intent, selects these files).")
+           (string-append
+            "Timeout/cancellation unit tests are fast-classified (suite default/runtime); W1 corrected the gate declaration from slow/L4 to fast to "
+            "match classifier reality (the classifier, not tier intent, selects these files)."))
    (hasheq 'behavior-id "RUNNER-REPOSITORY-DISCOVERY"
            'source-gate "slow/L4"
            'destination-gate "slow/L4"
@@ -707,7 +722,10 @@
            'status "retained-in-place"
            'wave "W0"
            'rationale
-           "Runner repository-discovery behavior is exercised by the slow/L4 runner test (W1 gate correction: the live walker is slow-classified). The metadata-discovery driver tests/test-run-tests-metadata-discovery.rkt is @not-test frozen fixture input selected by no executable gate and was dropped from membership in W1.")
+           (string-append
+            "Runner repository-discovery behavior is exercised by the slow/L4 runner test (W1 gate correction: the live walker is slow-classified). "
+            "The metadata-discovery driver tests/test-run-tests-metadata-discovery.rkt is @not-test frozen fixture input selected by no executable "
+            "gate and was dropped from membership in W1."))
    (hasheq 'behavior-id "GOLDEN-SESSION-LIFECYCLE"
            'source-gate "fast"
            'destination-gate "fast"
@@ -726,7 +744,9 @@
            'status "retained-in-place"
            'wave "W0"
            'rationale
-           "Lock-selection verifier sandbox test is fast-classified (suite ci, no slow tags); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality.")
+           (string-append
+            "Lock-selection verifier sandbox test is fast-classified (suite ci, no slow tags); W1 corrected the gate declaration from slow/L4 to "
+            "fast to match classifier reality."))
    (hasheq 'behavior-id "GSD-WAVE-WORKTREE-SANDBOXES"
            'source-gate "fast"
            'destination-gate "fast"
@@ -735,7 +755,9 @@
            'status "retained-in-place"
            'wave "W0"
            'rationale
-           "Wave worktree sandbox test has no explicit metadata tags and is selected by the fast classifier default; W1 corrected the gate declaration from slow/L4 to fast to match classifier reality.")
+           (string-append
+            "Wave worktree sandbox test has no explicit metadata tags and is selected by the fast classifier default; W1 corrected the gate "
+            "declaration from slow/L4 to fast to match classifier reality."))
    (hasheq 'behavior-id "GROUPED-MODE-CHARACTERIZATION"
            'source-gate "fast"
            'destination-gate "fast"
