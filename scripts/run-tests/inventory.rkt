@@ -849,20 +849,19 @@
             'gates
             (for/list ([s (in-list gate-stats)])
               (for/hash ([(k v) (in-hash s)])
-                (values (symbol->string k) v)))
+                (values k v)))
             'behaviors
             (for/list ([r (in-list rows)])
               (for/hash ([(k v) (in-hash r)])
-                (values (symbol->string k)
-                        (if (list? v) (list->vector v) v))))
+                (values k v)))
             'members_meta
             (for/list ([bm (in-list members-meta)])
-              (hasheq "behavior_id" (hash-ref bm 'behavior-id)
-                      "members"
-                      (list->vector
-                       (for/list ([m (in-list (hash-ref bm 'members))])
-                         (for/hash ([(k v) (in-hash m)])
-                           (values (symbol->string k) v))))))))
+              (hasheq 'behavior_id (hash-ref bm 'behavior-id)
+                      'members
+                      (for/list ([m (in-list (hash-ref bm 'members))])
+                        (for/hash ([(k v) (in-hash m)])
+                          (values k v))))))
+    )
   (with-output-to-string (lambda () (write-json payload))))
 
 (define (gate-ownership-ledger-text rows)

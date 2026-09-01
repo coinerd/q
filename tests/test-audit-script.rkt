@@ -44,6 +44,42 @@
   (define-values (output stderr exit-code) (run-audit-args "--json"))
   output)
 
+;; RA-4 W1: real audit CWD-safety ownership lives HERE (slow/L4), not in
+;; the fast test-cwd-independence.rkt. The fast test owns only the minimal
+;; probe; this helper runs the absolute audit script with the launcher's
+;; cwd parked in an isolated system temp directory (arbitrary CWD). The
+;; audit subprocess itself gets the repo root as cwd — production contract:
+;; Q-DIR resolves from the audit process's cwd and must NOT be changed
+;; here. No nested suite execution and no duplication of the full
+;; assertion set above — just exit status and the key output contract.
+(define (run-audit-with-launcher-cwd cwd . args)
+  ;; Launcher contract: the CALLER parks in an arbitrary cwd (`cwd`), then
+  ;; invokes the audit by absolute path. Racket subprocesses inherit the
+  ;; parameterized current-directory, and the audit's production contract
+  ;; (scripts/audit-project.rkt Q-DIR) resolves the repo root from the audit
+  ;; process's own cwd — so the CHILD is parameterized to q-dir while the
+  ;; launcher sits at `cwd`. This mirrors CI invocations by absolute path
+  ;; with the repo root as the command's working directory.
+  (define caller-cwd (current-directory))
+  (current-directory cwd)
+  (define-values (sp out in err)
+    (parameterize ([current-directory q-dir])
+      (apply subprocess #f #f #f (find-executable-path "racket")
+             (path->string audit-script) args)))
+  (current-directory caller-cwd)
+  (define output (port->string out))
+  (define stderr-output (port->string err))
+  (close-input-port out)
+  (close-input-port err)
+  (close-output-port in)
+  (subprocess-wait sp)
+  (values output stderr-output (subprocess-status sp)))
+
+;; Audit subprocess with an arbitrary cwd (only safe for cwd-independent
+;; flags like --help, which print usage and exit before any crawl).
+(define (run-audit-from-arbitrary-cwd . args)
+  (apply run-audit-with-launcher-cwd (find-system-path 'temp-dir) args))
+
 (define audit-tests
   (test-suite "Audit Script Tests"
 
@@ -115,6 +151,20 @@
       (define m (regexp-match #rx"total.*?([0-9]+)" output))
       (check-not-false m)
       (when m
-        (check-true (> (string->number (cadr m)) 0))))))
+        (check-true (> (string->number (cadr m)) 0))))
+
+    ;; --- RA-4 W1: audit is invocable from an arbitrary cwd (real behavior) ---
+
+    (test-case "RA-4 W1: audit --stdout real contract with launcher cwd at system temp dir"
+      (define-values (out err exit-code)
+        (run-audit-with-launcher-cwd (find-system-path 'temp-dir) "--stdout"))
+      (check-equal? exit-code 0 "audit must exit 0 with the launcher parked in a temp dir")
+      (check-true (string-contains? out "# Q Project Audit Report"))
+      (check-true (regexp-match? #rx"Total modules.*: [0-9]+" out)))
+
+    (test-case "RA-4 W1: audit --help is CWD-safe from an arbitrary cwd"
+      (define-values (out err exit-code) (run-audit-from-arbitrary-cwd "--help"))
+      (check-equal? exit-code 0)
+      (check-true (string-contains? out "Usage:")))))
 
 (run-tests audit-tests)
