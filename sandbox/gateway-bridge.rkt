@@ -149,12 +149,21 @@
              'trace-id
              trace-id)]
     [(timeout)
+     ;; WP3.5 (BUG-0056): preserve the structured outcome class so a shell
+     ;; command timeout (command-timeout) is distinguishable from a gateway
+     ;; queue timeout (gateway-timeout).
      (hasheq 'status
              'error
              'role
              'tool-gateway
              'error
              'timeout
+             'error-class
+             (or (and (hash? (ipc-response-details resp))
+                      (hash-ref (ipc-response-details resp) 'error-class #f))
+                 'gateway-timeout)
+             'details
+             (ipc-response-details resp)
              'error-message
              (or (ipc-response-error-message resp) "request timed out")
              'trace-id
@@ -166,6 +175,8 @@
              'tool-gateway
              'error
              'crashed
+             'error-class
+             'worker-crashed
              'error-message
              (or (ipc-response-error-message resp) "worker crashed")
              'trace-id
@@ -176,6 +187,9 @@
              'error
              'role
              'tool-gateway
+             'error-class
+             (and (hash? (ipc-response-details resp))
+                  (hash-ref (ipc-response-details resp) 'error-class #f))
              'error-message
              (or (ipc-response-error-message resp) "unknown error")
              'details

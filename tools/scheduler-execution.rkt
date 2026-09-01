@@ -137,15 +137,40 @@
   (define err-msg (ipc-response-error-message resp))
   (case status
     [(ok) (make-success-result (or content "ok") details)]
-    [(timeout) (make-error-result (format "tool execution timed out: ~a" (or err-msg "")))]
+    [(timeout)
+     ;; WP3.5 (BUG-0056): distinguish a real shell command timeout from a
+     ;; gateway queue timeout that cancelled the request before it ever ran.
+     (define class
+       (and details (hash? details) (hash-ref details 'error-class #f)))
+     (make-error-result
+      (format "tool execution timed out: ~a~a"
+              (or err-msg "")
+              (case class
+                [(gateway-timeout)
+                 " (gateway-timeout — cancelled before execution; the command never started)"]
+                [(command-timeout) " (command-timeout)"]
+                [else ""])))]
     [(crashed) (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
     ;; F-2 (v0.99.26): Tool ran but returned non-zero exit (e.g., bash syntax error).
     ;; Show stderr and exit code so the agent can diagnose the failure.
     [(error)
-     (define stderr (and details (hash? details) (hash-ref details 'stderr #f)))
-     (define exit-code (and details (hash? details) (hash-ref details 'exit-code #f)))
-     (make-error-result
-      (format "command failed (exit ~a): ~a" (or exit-code "?") (or stderr err-msg "unknown")))]
+     (define class (and details (hash? details) (hash-ref details 'error-class #f)))
+     (cond
+       ;; WP3.5 (BUG-0056): a busy worker is not a broken shell. Surface owner
+       ;; metadata only (no command bodies) so the caller can retry or wait.
+       [(eq? class 'worker-busy)
+        (make-error-result
+         (format "worker-busy: execution plane is busy running another session's request (owner-tool ~a, owner-request ~a, busy ~a ms)"
+                 (hash-ref details 'owner-tool "unknown")
+                 (hash-ref details 'owner-request-id "unknown")
+                 (hash-ref details 'busy-elapsed-ms "?")))]
+       [(eq? class 'worker-crashed)
+        (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
+       [else
+        (define stderr (and details (hash? details) (hash-ref details 'stderr #f)))
+        (define exit-code (and details (hash? details) (hash-ref details 'exit-code #f)))
+        (make-error-result
+         (format "command failed (exit ~a): ~a" (or exit-code "?") (or stderr err-msg "unknown")))])]
     [else (make-error-result (format "execution plane error: ~a" (or err-msg "unknown")))]))
 
 ;; ============================================================

@@ -551,14 +551,17 @@
      (cond
        ;; Client timeout
        [(not result)
-        (define cancel-result (cancel-queued-request! gw req-id))
-        (cond
-          ;; Still queued → removed before dispatch: it can never execute now.
-          [(eq? cancel-result 'cancelled)
-           (unregister-pending-request! gw req-id)
-           (make-timeout-response req-id
-                                  #:details (hasheq 'cancelled-before-exec #t)
-                                  "request timed out while queued — cancelled before execution (never sent to worker)")]
+         (define cancel-result (cancel-queued-request! gw req-id))
+         (cond
+           ;; Still queued → removed before dispatch: it can never execute now.
+           [(eq? cancel-result 'cancelled)
+            (unregister-pending-request! gw req-id)
+            ;; WP3.5 (BUG-0056): truthful class — this request never reached the
+            ;; worker, so it is a gateway/queue timeout, NOT a command timeout.
+            (make-timeout-response req-id
+                                   #:details (hasheq 'cancelled-before-exec #t
+                                                     'error-class 'gateway-timeout)
+                                   "request timed out while queued — cancelled before execution (never sent to worker)")]
           ;; Already dispatched → keep correlation so the late response is
           ;; routed to the dispatcher and discarded, never misattributed.
           [else
