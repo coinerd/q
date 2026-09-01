@@ -14,13 +14,17 @@
          "../tools/builtins/spawn-subagent.rkt"
          "../tools/builtins/spawn-execution-plan.rkt"
          "../tools/tool.rkt"
+         (only-in "../tools/permission-gate.rkt"
+                  make-permissive-permission-config
+                  make-default-permission-config)
          "../llm/provider.rkt"
          "../llm/model.rkt"
          (only-in "../runtime/approval/broker.rkt"
                   make-approval-channel
                   set-approval-channel!
                   clear-approval-channel!
-                  approval-decide!))
+                  approval-decide!
+                  call-with-approval-grant))
 
 ;; ── Helpers ──
 
@@ -33,7 +37,10 @@
    (hasheq 'task task 'effective-capabilities caps)
    (hasheq 'task-preview (redacted-approval-preview task) 'capabilities caps)))
 
-(define (make-counting-context sends #:publisher [publisher #f])
+(define (make-counting-context sends
+                               #:publisher [publisher #f]
+                               #:permission-config [permission-config
+                                                    (make-default-permission-config)])
   (define provider
     (make-provider
      (lambda () "counting-mock")
@@ -46,6 +53,7 @@
                             'stop))
      (lambda (_request) (error 'counting-mock "streaming not expected"))))
   (make-exec-context #:event-publisher publisher
+                     #:permission-config permission-config
                      #:runtime-settings (hasheq 'provider provider 'model "counting-mock")))
 
 (define suite
@@ -228,6 +236,71 @@
       (define cfg (make-cfg #:task "safe task" #:capabilities '(read-only)))
       (define result (run-subagent-with-config cfg #f))
       (check-true (tool-result? result))
-      (check-false (tool-result-is-error? result)))))
+      (check-false (tool-result-is-error? result)))
+
+    ;; ── BUG-0055: spawn approval obeys resolved permission precedence ──
+
+    (test-case "permissive resolved policy auto-grants dangerous spawn without broker"
+      (clear-approval-channel!)
+      (define events-received '())
+      (define plan (make-direct-plan '(shell-exec) "auto task"))
+      (define ctx (make-exec-context
+                   #:permission-config (make-permissive-permission-config)
+                   #:event-publisher (lambda (type payload)
+                                       (set! events-received
+                                             (cons (cons type payload) events-received)))))
+      (define grant (request-spawn-approval plan ctx))
+      (check-not-false grant)
+      (define event-types (map car events-received))
+      (check-not-false (member "mas.spawn-approval-auto-granted" event-types))
+      (check-false (member "mas.spawn-approval-requested" event-types))
+      (define audit (cdr (assoc "mas.spawn-approval-auto-granted" events-received)))
+      (check-equal? (hash-ref audit 'commitment-digest) (spawn-execution-plan-digest plan))
+      (check-equal? (hash-ref audit 'policy-source) "permission-config:permissive")
+      (check-equal? (hash-ref audit 'capabilities) '(shell-exec))
+      ;; one-use grant: execution happens exactly once, replay is refused
+      (define executions (box 0))
+      (check-not-false (call-with-approval-grant grant (spawn-execution-plan-digest plan)
+                                                 (lambda () (set-box! executions 1))))
+      (check-false (call-with-approval-grant grant (spawn-execution-plan-digest plan)
+                                             (lambda () (set-box! executions 2))))
+      (check-equal? (unbox executions) 1))
+
+    (test-case "permissive auto-approve runs dangerous headless spawn end-to-end"
+      (clear-approval-channel!)
+      (define sends (box 0))
+      (define events '())
+      (define ctx (make-counting-context
+                   sends
+                   #:permission-config (make-permissive-permission-config)
+                   #:publisher (lambda (type payload)
+                                 (set! events (cons type events)))))
+      (parameterize ([current-spawn-timestamps (box '())])
+        (define result
+          (run-subagent-with-config (make-cfg #:task "auto approved" #:capabilities '(shell-exec))
+                                    ctx))
+        (check-false (tool-result-is-error? result))
+        (check-equal? (unbox sends) 1)
+        (check-false (member "mas.spawn-approval-requested" events))
+        (check-not-false (member "mas.spawn-approval-auto-granted" events))))
+
+    (test-case "strict resolved policy still denies dangerous headless spawn (no broker)"
+      (clear-approval-channel!)
+      (define sends (box 0))
+      (define events '())
+      (define ctx (make-counting-context
+                   sends
+                   #:permission-config (make-default-permission-config)
+                   #:publisher (lambda (type payload)
+                                 (set! events (cons type events)))))
+      (parameterize ([current-spawn-timestamps (box '())])
+        (define result
+          (run-subagent-with-config (make-cfg #:task "strict deny" #:capabilities '(shell-exec))
+                                    ctx))
+        (check-true (tool-result-is-error? result))
+        (check-equal? (hash-ref (tool-result-details result) 'terminal-status) "denied")
+        (check-equal? (unbox sends) 0)
+        (check-not-false (member "mas.spawn-approval-terminal" events))
+        (check-false (member "mas.spawn-approval-auto-granted" events))))))
 
 (run-tests suite)

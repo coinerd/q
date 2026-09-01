@@ -6,11 +6,13 @@
 
 (require "../../tools/tool.rkt"
          "spawn-execution-plan.rkt"
+         "../../runtime/permission/permission-gate.rkt"
          (only-in "../../runtime/approval/broker.rkt"
                   current-approval-channel
                   register-approval-request-for-channel!
                   approval-await-grant
-                  cancel-approval-request!))
+                  cancel-approval-request!
+                  make-policy-approval-grant))
 
 (provide request-spawn-approval
          request-batch-spawn-approval)
@@ -19,6 +21,13 @@
   (when publisher
     (with-handlers ([exn:fail? (lambda (_) (void))])
       (publisher event-type payload))))
+
+;; Map the permission gate's source symbol to its audit-event string form.
+;; "permission-config:<mode>" names the resolved policy origin of the grant.
+(define (policy-source-string source)
+  (case source
+    [(policy-mode-permissive) "permission-config:permissive"]
+    [else (string-append "permission-config:" (symbol->string source))]))
 
 (define (request-plan-approval plan exec-ctx)
   (unless (spawn-execution-plan? plan)
@@ -36,7 +45,25 @@
                presentation-digest
                'plan-kind
                (symbol->string (spawn-execution-plan-kind plan))))
+  ;; BUG-0055 (v1.00.24 W3): resolve spawn permission policy from the
+  ;; execution context's resolved permission config.  Permissive policy
+  ;; (--auto-approve) auto-grants the dangerous spawn with an audit event;
+  ;; strict/interactive modes and explicit needs-approval pinning keep the
+  ;; existing interactive/denied paths.  `digest` may be #f only for plans
+  ;; built without a commitment; those never auto-grant.
+  (define permission-config
+    (and exec-ctx (exec-context-permission-config exec-ctx)))
+  (define-values (policy-eligible? policy-source)
+    (spawn-permission-auto-grant permission-config
+                                 (list "spawn-subagent" "spawn-subagents")))
   (cond
+    [(and policy-eligible? digest)
+     (publish-safely publisher
+                     "mas.spawn-approval-auto-granted"
+                     (hash-set base-payload
+                               'policy-source
+                               (policy-source-string policy-source)))
+     (make-policy-approval-grant digest)]
     [(not channel)
      (publish-safely publisher
                      "mas.spawn-approval-terminal"
