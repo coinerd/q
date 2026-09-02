@@ -24,20 +24,21 @@
 ;; Frozen v1.00.24 candidate behavior table
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the eight mandated candidate IDs"
+(test-case "behavior table freezes exactly the ten mandated candidate IDs"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 8)
-  (check-equal?
-   (sort ids string<?)
-   (sort (list "CWD-INVOCATION-AUDIT-CANARY"
-               "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
-               "GSD-WAVE-TIMEOUT-CANCELLATION"
-               "RUNNER-REPOSITORY-DISCOVERY"
-               "GOLDEN-SESSION-LIFECYCLE"
-               "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
-               "GSD-WAVE-WORKTREE-SANDBOXES"
-               "GROUPED-MODE-CHARACTERIZATION")
-         string<?)))
+  (check-equal? (length ids) 10)
+  (check-equal? (sort ids string<?)
+                (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
+                            "RETRY-REAL-TIMER-CANARY"
+                            "CWD-INVOCATION-AUDIT-CANARY"
+                            "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
+                            "GSD-WAVE-TIMEOUT-CANCELLATION"
+                            "RUNNER-REPOSITORY-DISCOVERY"
+                            "GOLDEN-SESSION-LIFECYCLE"
+                            "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
+                            "GSD-WAVE-WORKTREE-SANDBOXES"
+                            "GROUPED-MODE-CHARACTERIZATION")
+                      string<?)))
 
 (test-case "every behavior row carries complete frozen ownership data"
   (for ([row (in-list inv:v124-behavior-table)])
@@ -46,7 +47,8 @@
     (check-true (string<? "" (hash-ref row 'destination-gate "")) (format "~a: destination-gate" id))
     (check-true (pair? (hash-ref row 'members '())) (format "~a: members" id))
     (check-true (string<? "" (hash-ref row 'owner "")) (format "~a: owner" id))
-    (check-equal? (hash-ref row 'status) "retained-in-place" (format "~a: status" id))
+    (check-not-false (member (hash-ref row 'status) '("retained-in-place" "re-tiered"))
+                     (format "~a: status" id))
     (check-true (string<? "" (hash-ref row 'wave "")) (format "~a: wave" id))
     (check-true (string<? "" (hash-ref row 'rationale "")) (format "~a: rationale" id))))
 
@@ -62,50 +64,60 @@
 
 (define (synthetic-memberships #:fast [fast '("tests/synthetic-one.rkt" "tests/synthetic-two.rkt")]
                                #:l4 [l4 '("tests/synthetic-l4.rkt")])
-  (hasheq "fast" fast "platform" '() "security" '() "workflows" '()
-          "unit-fast" '() "slow/L4" l4))
+  (hasheq "fast" fast "platform" '() "security" '() "workflows" '() "unit-fast" '() "slow/L4" l4))
 
 (define (synthetic-row #:id [id "SYNTH-BEHAVIOR"]
                        #:source [src "fast"]
                        #:destination [dest src]
                        #:members [members '("tests/synthetic-one.rkt" "tests/synthetic-two.rkt")])
-  (hasheq 'behavior-id id
-          'source-gate src
-          'destination-gate dest
-          'members members
-          'owner "test-design"
-          'status "retained-in-place"
-          'wave "W1"
-          'rationale "synthetic row for validator tests"))
+  (hasheq 'behavior-id
+          id
+          'source-gate
+          src
+          'destination-gate
+          dest
+          'members
+          members
+          'owner
+          "test-design"
+          'status
+          "retained-in-place"
+          'wave
+          "W1"
+          'rationale
+          "synthetic row for validator tests"))
 
 (test-case "consistent table + membership yields no errors"
-  (check-equal? (inv:gate-ownership-errors (list (synthetic-row))
-                                           (synthetic-memberships))
-                '()))
+  (check-equal? (inv:gate-ownership-errors (list (synthetic-row)) (synthetic-memberships)) '()))
 
 (test-case "duplicate behavior ID is an error"
-  (define errors (inv:gate-ownership-errors (list (synthetic-row) (synthetic-row))
-                                            (synthetic-memberships)))
-  (check-true (for/or ([e (in-list errors)]) (string-contains? e "duplicate behavior ID"))
+  (define errors
+    (inv:gate-ownership-errors (list (synthetic-row) (synthetic-row)) (synthetic-memberships)))
+  (check-true (for/or ([e (in-list errors)])
+                (string-contains? e "duplicate behavior ID"))
               (format "expected duplicate ID error, got: ~a" errors)))
 
 (test-case "member missing from every gate is a missing-destination error"
-  (define errors (inv:gate-ownership-errors (list (synthetic-row))
-                                            (synthetic-memberships #:fast '("tests/synthetic-two.rkt"))))
-  (check-true (for/or ([e (in-list errors)]) (string-contains? e "missing destination"))
+  (define errors
+    (inv:gate-ownership-errors (list (synthetic-row))
+                               (synthetic-memberships #:fast '("tests/synthetic-two.rkt"))))
+  (check-true (for/or ([e (in-list errors)])
+                (string-contains? e "missing destination"))
               (format "expected missing destination error, got: ~a" errors)))
 
 (test-case "undeclared membership drift is an error"
   ;; declared row says both members live in fast; synthetic membership lost one
-  (define errors (inv:gate-ownership-errors (list (synthetic-row #:source "fast"))
-                                            (synthetic-memberships
-                                             #:fast '("tests/synthetic-one.rkt"))))
-  (check-true (for/or ([e (in-list errors)]) (string-contains? e "membership drift"))
+  (define errors
+    (inv:gate-ownership-errors (list (synthetic-row #:source "fast"))
+                               (synthetic-memberships #:fast '("tests/synthetic-one.rkt"))))
+  (check-true (for/or ([e (in-list errors)])
+                (string-contains? e "membership drift"))
               (format "expected membership drift error, got: ~a" errors)))
 
 (test-case "destination not selected by its declared tier is an error"
-  (define errors (inv:gate-ownership-errors (list (synthetic-row #:destination "slow/L4"))
-                                            (synthetic-memberships)))
+  (define errors
+    (inv:gate-ownership-errors (list (synthetic-row #:destination "slow/L4"))
+                               (synthetic-memberships)))
   (check-true (for/or ([e (in-list errors)])
                 (string-contains? e "destination not selected"))
               (format "expected destination-not-selected error, got: ~a" errors)))

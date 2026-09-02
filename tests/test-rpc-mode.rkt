@@ -23,9 +23,9 @@
          racket/port
          racket/string
          json
-         "../../q/util/message/protocol-types.rkt"
-         "../../q/util/event/event-bus.rkt"
-         "../../q/interfaces/rpc-mode.rkt")
+         "../util/message/protocol-types.rkt"
+         "../util/event/event-bus.rkt"
+         "../interfaces/rpc-mode.rkt")
 
 ;; ============================================================
 ;; 1. parse-rpc-request

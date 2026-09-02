@@ -19,6 +19,7 @@
          racket/list
          racket/match
          racket/system
+         racket/runtime-path
          json)
 (require (only-in "../util/error/error-helpers.rkt" with-safe-fallback))
 
@@ -26,10 +27,11 @@
 
 (define TOP-N 20)
 (define CI-WARN-THRESHOLD 5000)
+(define-runtime-path SCRIPT-DIR ".")
 (define Q-DIR
   (simplify-path (if (getenv "Q_DIR")
                      (string->path (getenv "Q_DIR"))
-                     (build-path (current-directory) ".." "q"))))
+                     (build-path SCRIPT-DIR 'up))))
 
 ;; ── Change frequency via git ──
 

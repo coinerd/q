@@ -260,11 +260,11 @@
       ;; command-handlers launches the wave-executor session with the
       ;; re-anchor prompt installed as the empty-response nudge, so a
       ;; reasoning-only turn retries as the implementation executor.
-      (contains? (src (build-path "q" "extensions" "gsd" "command-handlers.rkt"))
+      (contains? (src (build-path "extensions" "gsd" "command-handlers.rkt"))
                  "[current-empty-response-nudge reanchor]")
       ;; step-executor consumes the parameter: the nudge is role-anchored
       ;; when set, generic otherwise (interactive sessions unaffected).
-      (contains? (src (build-path "q" "runtime" "iteration" "step-executor.rkt"))
+      (contains? (src (build-path "runtime" "iteration" "step-executor.rkt"))
                  "(current-empty-response-nudge)")
       ;; prompts.rkt declares the pure constructor.
       (contains? prompts-src "(define (executor-reanchor-prompt"))

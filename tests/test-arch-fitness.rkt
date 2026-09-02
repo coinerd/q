@@ -113,10 +113,10 @@
         "Runtime boundary exceptions (~a) exceed policy maximum (~a). Update dependency-policy.rktd or refactor."
         (length runtime-exceptions)
         max-runtime-exc))
-      ;; Only the intentional adapter facade may retain static upward imports.
-      ;; Other exceptions (for example, lazy dynamic loading) must not expand this list.
+      ;; The adapter facade and BUG-0055's permission-policy facade are the
+      ;; reviewed static upward imports; any further growth is a failure.
       (check-equal? still-importing
-                    '("layer-adapters.rkt")
+                    '("layer-adapters.rkt" "permission/permission-gate.rkt")
                     (format "Unexpected runtime static upward imports: ~a" still-importing))
       (check-true (<= (length still-importing) max-runtime-exc)
                   (format "More than ~a runtime files importing from tools/extensions: ~a"

@@ -20,9 +20,9 @@
          rackunit/text-ui
          racket/port
          json
-         "../../q/util/message/protocol-types.rkt"
-         "../../q/util/event/event-bus.rkt"
-         "../../q/interfaces/json-mode.rkt")
+         "../util/message/protocol-types.rkt"
+         "../util/event/event-bus.rkt"
+         "../interfaces/json-mode.rkt")
 
 ;; ============================================================
 ;; Test suite definition

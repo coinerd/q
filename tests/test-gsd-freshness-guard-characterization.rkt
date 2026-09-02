@@ -122,10 +122,11 @@
       ;; struct->vector length pins the exact field set:
       ;; #(struct:campaign-record plan-id manifest waves cancellation
       ;;   fence-token provenance created-at updated-at build-version
-      ;;   main-head-sha stale-override cumulative-usage) => 13 slots
-      ;;   (BUG-0039 W5 added the trailing cumulative-usage field).
+      ;;   main-head-sha stale-override budget-pause snapshot-path
+      ;;   snapshot-digest) => 15 slots. BUG-0052 added the two immutable
+      ;;   plan-snapshot binding fields.
       (define rec (make-pin-record))
-      (check-equal? (vector-length (struct->vector rec)) 13)
+      (check-equal? (vector-length (struct->vector rec)) 15)
       ;; #:auto fields default to #f on the legacy 8-arg constructor.
       (check-false (campaign-record-build-version rec))
       (check-false (campaign-record-main-head-sha rec))
