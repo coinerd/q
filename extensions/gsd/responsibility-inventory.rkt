@@ -331,8 +331,22 @@
     '("racket/match" "util/error" "agent/event-structs/base" "agent/event-emitter" "session-state"))
    (make-entry "event-structs.rkt" 'event-projection '() '() '("util/event/event-macro"))
    ;; v0.99.90 W0 external-domain ports (3) + W3 executor port (1) + W4 github port (1)
-   (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
-   (make-entry "wave-runner-port.rkt" 'external-ports '() '() '("racket/contract"))
+  (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
+  (make-entry "wave-runner-port.rkt" 'external-ports '() '() '("racket/contract"))
+  ;; v1.00.24 W3 (BUG-0052): immutable plan snapshots
+  (make-entry "plan-snapshot.rkt"
+              'persistence
+              '(fs-read fs-write fs-rename fs-delete mkdir dir-list sha256 path-ops)
+              '()
+              '("racket/file" "racket/format" "racket/match" "racket/path"
+                "racket/port" "racket/string" "../../util/json/checksum"))
+  ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
+  (make-entry "verification-job.rkt"
+              'external-ports
+              '(fs-read sha256 subprocess)
+              '()
+              '("racket/contract" "racket/file" "racket/format" "racket/match"
+                "racket/string" "racket/system" "../../util/json/checksum"))
    (make-entry "github-port.rkt"
                'external-ports
                '()
