@@ -142,7 +142,7 @@
                       (define back (load-campaign-record tmp (campaign-plan-id rec)))
                       (check-true (and (campaign-record? back) #t)
                                   "legacy record without identity fields failed to load")
-                      (check-equal? (vector-length (struct->vector back)) 13)
+                      (check-equal? (vector-length (struct->vector back)) 15)
                       (check-false (campaign-record-build-version back)
                                    "legacy record must deserialize missing build-version as #f")
                       (check-false (campaign-record-main-head-sha back)
