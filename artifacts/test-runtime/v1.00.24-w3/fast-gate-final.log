@@ -1,0 +1,9 @@
+;; run-tests: suite=fast files=1169 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 10 mutation-sensitive files before parallel batches
+....user break
+  context...:
+   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:373:0: run-all-files/batch
+   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:713:0: run-suite-once
+   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:930:0: main
+   body of "/home/user/src/q-agent/q/scripts/run-tests/runner.rkt"
