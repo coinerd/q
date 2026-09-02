@@ -17,6 +17,7 @@
          rackunit/text-ui
          racket/file
          racket/path
+         racket/string
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-manifest
                   make-campaign-wave-descriptor
@@ -35,6 +36,9 @@
                   set-campaign-fence-token!
                   begin-attempt!
                   select-next-actionable-wave
+                  wave-failure-reason
+                  attempt-failure-reason
+                  stamp-wave-failure!
                   migrate-campaign!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/wave-completion.rkt"
@@ -59,10 +63,10 @@
                          #:exists 'truncate)
   ;; BUG-0052: every referenced wave doc must exist for campaign creation.
   (for ([i (in-range n-waves)])
-    (call-with-output-file (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
-                           (lambda (out)
-                             (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
-                           #:exists 'truncate))
+    (call-with-output-file
+     (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
+     (lambda (out) (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
+     #:exists 'truncate))
   dir)
 
 (define (load-or-migrate dir)
@@ -231,6 +235,110 @@
       (check-false (eq? (wave-status* rec 0) 'done) "doc existence does not infer completion"))))
 
 ;; ============================================================
+;; v1.00.24 W3 (verification-truth): durable failure reason on completion
+;; ============================================================
+
+(define failure-reason-suite
+  (test-suite "durable failure reason on completion"
+    (test-case "verifier rejection persists the verifier message durably"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #f
+                            #:verifier-message "no wave target files changed: src/foo.rkt"
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)))
+      (check-eq? (completion-result-status result) 'failed)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-equal? (wave-failure-reason (wave* loaded 0))
+                    "no wave target files changed: src/foo.rkt")
+      (check-equal? (attempt-failure-reason (campaign-wave-current-attempt (wave* loaded 0)))
+                    "no wave target files changed: src/foo.rkt")
+      (cleanup-tmp dir))
+
+    (test-case "blank verifier message gets an honest named fallback reason"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #f
+                            #:verifier-message ""
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)))
+      (check-eq? (completion-result-status result) 'failed)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (define reason (wave-failure-reason (wave* loaded 0)))
+      (check-true (and (string? reason)
+                       (positive? (string-length reason))
+                       (string-contains? reason "verifier rejected"))
+                  (format "blank verdicts never persist as blank: ~s" reason))
+      (cleanup-tmp dir))
+
+    (test-case "release-gate failure persists the release reason durably"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)
+                            #:release-check (lambda () "no GitHub Release for v1.2.3")))
+      (check-eq? (completion-result-status result) 'failed)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-true (string-contains? (wave-failure-reason (wave* loaded 0)) "release not verified"))
+      (cleanup-tmp dir))
+
+    (test-case "approval clears a previously stamped failure reason"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (stamp-wave-failure! (wave* rec 0) "stale prior failure")
+      (persist-campaign! dir rec)
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)))
+      (check-eq? (completion-result-status result) 'done)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-equal? (wave-failure-reason (wave* loaded 0))
+                    ""
+                    "a completed wave carries no failure reason")
+      (check-false (attempt-failure-reason (campaign-wave-current-attempt (wave* loaded 0))))
+      (cleanup-tmp dir))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -239,6 +347,7 @@
     verifier-first-suite
     skip-suite
     outbox-suite
-    no-heuristic-suite))
+    no-heuristic-suite
+    failure-reason-suite))
 
 (void (run-tests all-tests))

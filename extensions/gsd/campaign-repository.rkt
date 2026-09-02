@@ -147,6 +147,11 @@
     ;; v1.00.18 (BUG-0024 W3): infra-retry hand-off context ("" = none).
     (unless (string? (campaign-wave-attempt-context w))
       (corrupt! "attempt-context must be a string"))
+    ;; v1.00.24 W3 (verification-truth): durable failure reason
+    ;; ("" = none recorded; non-string is corruption — it can only be
+    ;; produced programmatically, loads restore strings only).
+    (unless (string? (campaign-wave-failure-reason w))
+      (corrupt! "failure-reason must be a string"))
     ;; v1.00.21 W5 (BUG-0029): artifact ledger — validated per entry.
     (for ([e (in-list (wave-artifact-ledger w))])
       (unless (campaign-artifact-entry? e)
@@ -176,7 +181,12 @@
       (unless (or (not afence) (exact-nonnegative-integer? afence))
         (corrupt! "attempt fence token must be a non-negative integer"))
       (unless (exact-integer? (campaign-attempt-started-at attempt))
-        (corrupt! "attempt started-at must be an integer"))))
+        (corrupt! "attempt started-at must be an integer"))
+      ;; v1.00.24 W3 (verification-truth): per-attempt failure reason
+      ;; (#f = none recorded).
+      (unless (or (not (campaign-attempt-failure-reason attempt))
+                  (string? (campaign-attempt-failure-reason attempt)))
+        (corrupt! "attempt failure-reason must be a string or #f"))))
   (void))
 
 ;; ============================================================
@@ -269,7 +279,14 @@
               (wave-usage-total-tokens w)
               (wave-usage-cost-usd w)
               (wave-usage-source w)
-              (wave-usage-missing-attempts w))))
+              (wave-usage-missing-attempts w))
+        ;; v1.00.24 W3 (verification-truth): 12th field is the durable
+        ;; failure-reason pair — (list wave-reason attempt-reason) for the
+        ;; wave and its current attempt ("" / #f = none recorded). Legacy
+        ;; 11/9/8/7/5-field records load with none (absent ≠ corrupt).
+        (list (wave-failure-reason w)
+              (and (campaign-wave-current-attempt w)
+                   (attempt-failure-reason (campaign-wave-current-attempt w))))))
 
 (define (datum->manifest d)
   (match d
@@ -286,6 +303,36 @@
 
 (define (datum->wave d)
   (match d
+    ;; v1.00.24 W3 (verification-truth): 12-field form adds the durable
+    ;; failure-reason pair (fields 12: (list wave-reason attempt-reason)).
+    ;; Legacy 11/9/8/7/5-field records load with no reason (absent ≠
+    ;; corrupt) — the same tolerance rule as every wave-field evolution.
+    [(list idx
+           title
+           status
+           acct
+           attempt
+           branch
+           head-sha
+           attempt-context
+           ledger
+           attempt-usage
+           wave-usage
+           failure-reason)
+     (define w
+       (datum->wave (list idx
+                          title
+                          status
+                          acct
+                          attempt
+                          branch
+                          head-sha
+                          attempt-context
+                          ledger
+                          attempt-usage
+                          wave-usage)))
+     (restore-wave-failure! w failure-reason)
+     w]
     ;; v1.00.21 W5 (BUG-0029): 9-field form carries the artifact ledger.
     ;; Record-schema evolution: pre-W5 (8/7/5-field) records lack the field
     ;; and load with an EMPTY ledger — never a load failure (same tolerance
@@ -356,6 +403,22 @@
                          (and attempt
                               (match attempt
                                 [(list aid fence started) (campaign-attempt aid fence started)])))]))
+
+;; v1.00.24 W3 (verification-truth): restore the durable failure-reason pair
+;; written by wave->datum. A 2-list restores both the wave-level and the
+;; current-attempt-level reason; a bare string restores the wave level only;
+;; any other shape loads as absent (advisory tolerance, same rule as the
+;; ledger/usage evolutions — never a load failure for old campaigns).
+(define (restore-wave-failure! w failure-reason)
+  (define attempt (campaign-wave-current-attempt w))
+  (match failure-reason
+    [(list wr ar)
+     (when (string? wr)
+       (set-campaign-wave-failure-reason! w wr))
+     (when (and attempt (string? ar))
+       (set-campaign-attempt-failure-reason! attempt ar))]
+    [(? string? wr) (set-campaign-wave-failure-reason! w wr)]
+    [_ (void)]))
 
 ;; v1.00.21 W5 (BUG-0029): ledger entries deserialize with full tolerance —
 ;; a 4-field (start-time only) entry loads with lifecycle defaults, and any

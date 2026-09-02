@@ -43,7 +43,10 @@
                   campaign-record-main-head-sha
                   campaign-record-stale-override
                   set-campaign-record-build-version!
-                  set-campaign-record-stale-override!)
+                  set-campaign-record-stale-override!
+                  campaign-wave-current-attempt
+                  wave-failure-reason
+                  attempt-failure-reason)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
@@ -73,11 +76,13 @@
                   find-git-root
                   git-available?)
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
+         (only-in "../extensions/gsd/delivery-verifier.rkt" delivery-verification)
          (only-in "../util/loop-result.rkt" make-loop-result)
          (only-in "../util/version.rkt" q-version)
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-wave-timeout-seconds
-                  current-gsd-wave-timeout-retries))
+                  current-gsd-wave-timeout-retries
+                  current-gsd-wave-failure-context))
 
 ;; ============================================================
 ;; Helpers
@@ -95,10 +100,10 @@
   ;; BUG-0052: campaign creation refuses when a referenced wave doc is
   ;; missing, so fixtures must provide every referenced wave document.
   (for ([i (in-range n-waves)])
-    (call-with-output-file (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
-                           (lambda (out)
-                             (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
-                           #:exists 'truncate))
+    (call-with-output-file
+     (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
+     (lambda (out) (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
+     #:exists 'truncate))
   dir)
 
 (define (load-or-migrate dir)
@@ -111,6 +116,11 @@
   (for/first ([w (campaign-record-waves rec)]
               #:when (= (campaign-wave-index w) idx))
     (campaign-wave-status w)))
+
+(define (wave-of rec idx)
+  (for/first ([w (campaign-record-waves rec)]
+              #:when (= (campaign-wave-index w) idx))
+    w))
 
 ;; ============================================================
 ;; Test suites
@@ -903,6 +913,133 @@
                     (lambda () (delete-directory/files tmp))))))
 
 ;; ============================================================
+;; v1.00.24 W3 (verification-truth): durable failure-reason repair
+;; ============================================================
+
+(define failure-reason-suite
+  (test-suite "durable failure reason (verification-truth)"
+
+    (test-case "runner failure message is the durable + reported reason (not 'runner error')"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:runner (lambda (_)
+                                      (wave-execution-outcome 'failed "provider 500 after 5 retries"))
+                           #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-equal? (campaign-result-message result)
+                    "provider 500 after 5 retries"
+                    "generic 'runner error' text is replaced by the outcome message")
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-eq? (wave-status* loaded 0) 'failed)
+      (check-equal? (wave-failure-reason (wave-of loaded 0)) "provider 500 after 5 retries")
+      (check-equal? (attempt-failure-reason (campaign-wave-current-attempt (wave-of loaded 0)))
+                    "provider 500 after 5 retries")
+      (cleanup-tmp dir))
+
+    (test-case "durable runner reason is injected into a restart retry"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (run-campaign-wave dir
+                         rec
+                         0
+                         #:runner (lambda (_) (wave-execution-outcome 'failed "compile exploded"))
+                         #:verifier (lambda (_) #t))
+      (define retry-rec (load-campaign-record dir (campaign-plan-id rec)))
+      (define captured (box #f))
+      (run-campaign-wave dir
+                         retry-rec
+                         0
+                         #:runner (lambda (_)
+                                    (set-box! captured (current-gsd-wave-failure-context))
+                                    (wave-execution-outcome 'failed "retry stopped"))
+                         #:verifier (lambda (_) #t))
+      (check-true (string? (unbox captured)))
+      (check-true (string-contains? (unbox captured) "compile exploded")
+                  "a fresh retry receives the prior durable terminal reason")
+      (cleanup-tmp dir))
+
+    (test-case "blank runner failure message gets an honest kind-named fallback"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:runner (lambda (_) (wave-execution-outcome 'failed ""))
+                           #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-true (positive? (string-length (campaign-result-message result)))
+                  "blank outcome messages never surface as blank campaign results")
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-equal? (wave-failure-reason (wave-of loaded 0)) (campaign-result-message result))
+      (cleanup-tmp dir))
+
+    (test-case "timeout persists the interruption reason durably"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:runner (lambda (_)
+                                      (wave-execution-outcome 'timed-out "wave exceeded 60s budget"))
+                           #:verifier (lambda (_) #t)
+                           #:timeout-retries 0))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-eq? (wave-status* loaded 0) 'interrupted)
+      (check-equal? (wave-failure-reason (wave-of loaded 0)) "wave exceeded 60s budget")
+      (cleanup-tmp dir))
+
+    (test-case "interrupted runner outcome persists its reason durably"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:runner (lambda (_)
+                                      (wave-execution-outcome 'interrupted "shutdown mid-wave"))
+                           #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-eq? (wave-status* loaded 0) 'interrupted)
+      (check-equal? (wave-failure-reason (wave-of loaded 0)) "shutdown mid-wave")
+      (cleanup-tmp dir))
+
+    (test-case "verifier rejection persists the verdict durably (through the wave runner)"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           0
+                           #:runner (lambda (_) 'ok)
+                           #:verifier
+                           (lambda (_)
+                             (delivery-verification #f '() "delivery failed: annotations missing"))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (check-equal? (wave-failure-reason (wave-of loaded 0)) "delivery failed: annotations missing")
+      (cleanup-tmp dir))
+
+    (test-case "blank verifier verdict gets an honest named fallback reason"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #f)))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (define reason (wave-failure-reason (wave-of loaded 0)))
+      (check-true (and (string? reason) (string-contains? reason "verifier rejected"))
+                  (format "fallback reason names the rejection: ~s" reason))
+      (cleanup-tmp dir))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -914,6 +1051,7 @@
     go-n-suite
     request-suite
     git-root-suite
-    freshness-guard-suite))
+    freshness-guard-suite
+    failure-reason-suite))
 
 (void (run-tests all-tests))

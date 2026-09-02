@@ -18,18 +18,44 @@
 
 (provide record-gate-evidence!
          validate-gate-evidence!
+         gate-evidence-refusal
          strict-sha-valid?)
 
 ;; F-15 strict validation: full 40-hex-char SHA required
 (define (strict-sha-valid? sha)
   (and (string? sha) (= (string-length sha) 40) (regexp-match? #px"^[0-9a-f]{40}$" sha)))
 
+;; v1.00.24 W3 truthful shard policy: gate evidence always represents a FULL
+;; suite run. A sharded run (shard-total > 1) covers only part of the suite,
+;; so its evidence would be partial and could be mistaken for (or overwrite)
+;; a full-suite PASS. The minimum truthful behavior is to REFUSE recording
+;; entirely rather than retain partial evidence. Returns #f when recording is
+;; allowed for this shard configuration, otherwise a human-readable reason.
+(define (gate-evidence-refusal shard-index shard-total)
+  (cond
+    [(not (and (integer? shard-total) (> shard-total 0)))
+     (format "--shard-total must be a positive integer; got ~a" shard-total)]
+    [(not (and (integer? shard-index) (>= shard-index 0) (< shard-index shard-total)))
+     (format "--shard-index must be an integer in [0, ~a); got ~a" shard-total shard-index)]
+    [(> shard-total 1)
+     (format
+      "--record-gate-evidence is refused for sharded runs (shard ~a of ~a): a shard produces only partial results and must never overwrite or emit full-suite PASS evidence"
+      shard-index
+      shard-total)]
+    [else #f]))
+
 ;; F-15: Validate recorded evidence hash against strict requirements.
 ;; Rejects unknown/empty version, short/missing SHA, stale/future timestamp,
 ;; non-zero failed/timed-out counts, zero test count.
+;; v1.00.24 W3 (fail closed): also rejects evidence without valid EXPLICIT
+;; shard identity (pre-migration evidence cannot prove it covers a full
+;; suite) and any partial shard evidence (shard-total > 1), which is never
+;; valid full-suite gate evidence.
 (define (validate-gate-evidence! evidence-hash)
   (define ver (hash-ref evidence-hash 'version #f))
   (define sha (hash-ref evidence-hash 'git-sha #f))
+  (define shard-index (hash-ref evidence-hash 'shard-index #f))
+  (define shard-total (hash-ref evidence-hash 'shard-total #f))
   (define pass-c (hash-ref evidence-hash 'passed 0))
   (define fail-c (hash-ref evidence-hash 'failed -1))
   (define timeout-c (hash-ref evidence-hash 'timed-out -1))
@@ -45,6 +71,23 @@
      (raise-user-error 'validate-gate-evidence! "git SHA is unknown")]
     [(not (strict-sha-valid? sha))
      (raise-user-error 'validate-gate-evidence! "SHA must be full 40 hex chars; got ~a" sha)]
+    [(not (and (integer? shard-total)
+               (> shard-total 0)
+               (integer? shard-index)
+               (>= shard-index 0)
+               (< shard-index shard-total)))
+     (raise-user-error
+      'validate-gate-evidence!
+      (string-append
+       "evidence lacks valid explicit shard identity (shard-index/shard-total; got ~a/~a); "
+       "pre-migration evidence is rejected — fail closed, regenerate with the current runner")
+      shard-index
+      shard-total)]
+    [(> shard-total 1)
+     (raise-user-error 'validate-gate-evidence!
+                       "evidence is a partial shard (~a of ~a), never valid full-suite gate evidence"
+                       shard-index
+                       shard-total)]
     [(not (and (integer? parsed) (positive? parsed)))
      (raise-user-error 'validate-gate-evidence! "parsed test count must be positive; got ~a" parsed)]
     [(and (integer? fail-c) (positive? fail-c))
@@ -88,6 +131,8 @@
                       (format "~s" t)
                       (format "~a" t))))
           (cons "repeat" (format "~a" (hash-ref h 'repeat)))
+          (cons "shard_index" (format "~a" (hash-ref h 'shard-index)))
+          (cons "shard_total" (format "~a" (hash-ref h 'shard-total)))
           (cons "selected_file_count" (format "~a" (hash-ref h 'selected-file-count)))
           (cons "parsed_test_count" (format "~a" (hash-ref h 'parsed-test-count)))
           (cons "passed" (format "~a" (hash-ref h 'passed)))
@@ -102,6 +147,16 @@
     (display (format "\"~a\": ~a" (car p) (cdr p)) out))
   (displayln "}" out))
 
+;; v1.00.24 W3 truthful recording contract:
+;;  - sharded runs (shard-total > 1) are REFUSED via gate-evidence-refusal:
+;;    a shard covers only part of the suite and must never overwrite or emit
+;;    evidence that claims to be a full suite;
+;;  - results must account for every selected file (#:file-count), so an
+;;    interrupted run (partial results / missing RUN-SUMMARY) can never be
+;;    recorded as a PASS;
+;;  - the effective args and the explicit shard identity (shard-index,
+;;    shard-total) are recorded so unsharded and sharded configurations stay
+;;    distinguishable in the evidence itself.
 (define (record-gate-evidence! suite-label
                                #:results [results '()]
                                #:args [args '()]
@@ -109,9 +164,21 @@
                                #:timeout [timeout #f]
                                #:repeat [repeat 1]
                                #:file-count [file-count 0]
-                               #:inventory-hash [inv-hash "n/a"])
+                               #:inventory-hash [inv-hash "n/a"]
+                               #:shard-index [shard-index 0]
+                               #:shard-total [shard-total 1])
+  (define refusal (gate-evidence-refusal shard-index shard-total))
+  (when refusal
+    (raise-user-error 'run-tests "cannot record gate evidence: ~a" refusal))
   (unless (pair? results)
     (raise-user-error 'run-tests "cannot record gate evidence: no results"))
+  (unless (= (length results) file-count)
+    (raise-user-error
+     'run-tests
+     (string-append "cannot record gate evidence: incomplete run — results cover ~a of ~a selected "
+                    "files (interrupted or missing RUN-SUMMARY); refusing to record PASS evidence")
+     (length results)
+     file-count))
   (define total-parsed (for/sum ([r (in-list results)]) (test-file-result-total r)))
   (when (zero? total-parsed)
     (raise-user-error 'run-tests "cannot record gate evidence: zero parsed tests"))
@@ -151,6 +218,10 @@
           (or timeout "none")
           'repeat
           repeat
+          'shard-index
+          shard-index
+          'shard-total
+          shard-total
           'selected-file-count
           file-count
           'parsed-test-count

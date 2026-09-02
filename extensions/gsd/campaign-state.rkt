@@ -40,11 +40,11 @@
                   wave-index-entry-slug
                   wave-index-entry-status)
          (only-in "../../util/json/checksum.rkt" sha256-string)
-          (only-in "plan-snapshot.rkt"
-                   seed-and-bind-plan-snapshot!
-                   load-snapshot-manifest
-                   snapshot-drift?
-                   restore-plan-from-snapshot!))
+         (only-in "plan-snapshot.rkt"
+                  seed-and-bind-plan-snapshot!
+                  load-snapshot-manifest
+                  snapshot-drift?
+                  restore-plan-from-snapshot!))
 
 ;; ============================================================
 ;; Public API with contracts (§24)
@@ -208,6 +208,20 @@
           [set-campaign-wave-delivery-head-sha! (-> campaign-wave? string? void?)]
           [campaign-wave-attempt-context (-> campaign-wave? string?)]
           [set-campaign-wave-attempt-context! (-> campaign-wave? string? void?)]
+          ;; v1.00.24 W3 (verification-truth): durable wave/attempt failure
+          ;; reason. Why the current (or most recent) attempt failed, recorded
+          ;; BEFORE status persist/projection/notification so the durable
+          ;; record never carries FAILED/INTERRUPTED without its actionable
+          ;; reason. Retry-prompt consumers read it via wave-failure-reason /
+          ;; attempt-failure-reason on the loaded campaign record.
+          [wave-failure-reason (-> campaign-wave? string?)]
+          [campaign-wave-failure-reason (-> campaign-wave? any/c)]
+          [set-campaign-wave-failure-reason! (-> campaign-wave? string? void?)]
+          [attempt-failure-reason (-> campaign-attempt? (or/c #f string?))]
+          [campaign-attempt-failure-reason (-> campaign-attempt? any/c)]
+          [set-campaign-attempt-failure-reason! (-> campaign-attempt? (or/c #f string?) void?)]
+          [stamp-wave-failure! (-> campaign-wave? (or/c #f string?) void?)]
+          [clear-wave-failure! (-> campaign-wave? void?)]
           ;; v1.00.21 W5 (BUG-0029): attempt-artifact ledger.
           [wave-artifact-ledger (-> campaign-wave? list?)]
           [set-campaign-wave-artifact-ledger! (-> campaign-wave? list? void?)]
@@ -342,7 +356,15 @@
                [usage-total-tokens #:auto]
                [usage-cost-usd #:auto]
                [usage-source #:auto]
-               [usage-missing-attempts #:auto])
+               [usage-missing-attempts #:auto]
+               ;; v1.00.24 W3 (verification-truth): durable failure reason —
+               ;; the actionable why for the wave's most recent
+               ;; failed/interrupted attempt ("" = none recorded). Struct-level
+               ;; shared #:auto-value "" applies; ALL reads go through the
+               ;; normalizing accessor wave-failure-reason below (mirroring
+               ;; the wave-artifact-ledger / wave-usage-* pattern). Legacy
+               ;; records deserialize with "" (absent ≠ corrupt).
+               [failure-reason #:auto])
   #:transparent
   #:mutable
   #:constructor-name make-campaign-wave
@@ -376,6 +398,9 @@
 ;; the token/cost fields stay #f — honest accounting, NEVER faked zeros.
 ;; #:auto keeps the 3-arg constructor (and every existing caller) valid;
 ;; legacy records deserialize with #f usage (absent ≠ zero).
+;; v1.00.24 W3 (verification-truth): per-attempt failure reason (#f = none
+;; recorded) stamped alongside the wave-level reason at failure time so
+;; per-attempt attribution survives in the durable record.
 (struct campaign-attempt
         (id fence-token
             started-at
@@ -383,7 +408,8 @@
             [output-tokens #:auto #:mutable]
             [total-tokens #:auto #:mutable]
             [cost-usd #:auto #:mutable]
-            [usage-source #:auto #:mutable])
+            [usage-source #:auto #:mutable]
+            [failure-reason #:auto #:mutable])
   #:transparent
   #:auto-value #f)
 
@@ -802,6 +828,40 @@
       (set-campaign-wave-usage-missing-attempts! w wmissing))))
 
 ;; ============================================================
+;; v1.00.24 W3 (verification-truth): durable failure-reason stamping
+;; ============================================================
+
+;; Normalizing accessors: struct #:auto-value ""/#f must never leak a
+;; non-string (hand-corrupted records load as absent, never a crash).
+(define (wave-failure-reason w)
+  (define r (campaign-wave-failure-reason w))
+  (if (string? r) r ""))
+
+(define (attempt-failure-reason a)
+  (define r (campaign-attempt-failure-reason a))
+  (if (string? r) r #f))
+
+;; Stamp the actionable failure reason onto a wave AND its current attempt
+;; (per-attempt attribution). Blank/non-string reasons are IGNORED — the
+;; durable record never gains an actionable-looking blank; callers own the
+;; honest fallback text. Stamped BEFORE the status persist so projections,
+;; notifications, and the retry prompt all see the reason.
+(define (stamp-wave-failure! w reason)
+  (define attempt (campaign-wave-current-attempt w))
+  (when (and (string? reason) (positive? (string-length (string-trim reason))))
+    (set-campaign-wave-failure-reason! w reason)
+    (when attempt
+      (set-campaign-attempt-failure-reason! attempt reason))))
+
+;; Clear on success: a completed wave carries no failure reason (same
+;; lifecycle rule as the BUG-0024 attempt-context hand-off).
+(define (clear-wave-failure! w)
+  (set-campaign-wave-failure-reason! w "")
+  (define attempt (campaign-wave-current-attempt w))
+  (when attempt
+    (set-campaign-attempt-failure-reason! attempt #f)))
+
+;; ============================================================
 ;; Initial migration truth (D3)
 ;; ============================================================
 
@@ -844,8 +904,10 @@
       ;; The empty-content SHA-256 must never stand in for absence.
       (raise
        (exn:fail:campaign-migration
-        (format "wave doc missing: .planning/waves/W~a-~a.md is referenced by the plan index but does not exist; campaign creation refused"
-                idx slug)
+        (format
+         "wave doc missing: .planning/waves/W~a-~a.md is referenced by the plan index but does not exist; campaign creation refused"
+         idx
+         slug)
         (current-continuation-marks)))))
 
 ;; v0.99.90 W5 (#9236): the manifest hash (plan-id) must be STABLE across
@@ -936,7 +998,8 @@
          (exn:fail:campaign-migration
           (format "PLAN.md and STATE.md disagree on wave statuses: ~a vs ~a" plan-rows* state-rows*)
           (current-continuation-marks)))])]
-    [plan-present? (seed-and-bind-snapshot! base-dir (call-with-input-file plan-path port->string) 'plan)]
+    [plan-present?
+     (seed-and-bind-snapshot! base-dir (call-with-input-file plan-path port->string) 'plan)]
     [state-present? (seed-and-bind-snapshot! base-dir "" 'state)]
     [else
      (raise (exn:fail:campaign-migration

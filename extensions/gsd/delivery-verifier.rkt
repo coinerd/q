@@ -13,7 +13,14 @@
 ;;   2. current branch matches the wave's expected feature/issue-<N>-wave
 ;;      (issue number resolved from .planning/STATE.md wave table);
 ;;   3. at least one wave target file changed vs HEAD (or untracked-new);
-;;   4. a bounded verify command exits 0 (compile gate by default).
+;;   4. the wave's DECLARED verify command exits 0 — executed through the
+;;      process-wide owned-singleton verification registry (composition-root
+;;      + verification-job), never a raw unowned subprocess. Precedence:
+;;      explicit override parameter (tests) > wave-declared command > the
+;;      derived compile gate, which runs ONLY as a separately described
+;;      fallback for genuinely EMPTY verify declarations. Only a reaped
+;;      'completed job with exit 0 approves; 'failed, 'timed-out (exit 124),
+;;      'cancelled and 'orphan-recovered are failures.
 ;;
 ;; v1.00.17 W7 (#9512b) — branch-based delivery: when the coordinator binds
 ;; `current-gsd-delivery-branch-context` (worktree isolation ON), checks 2–4
@@ -34,7 +41,9 @@
          racket/set
          racket/string
          racket/system
+         "composition-root.rkt"
          "plan-types.rkt"
+         "verification-job.rkt"
          "wave-docs.rkt"
          (only-in "plan-context-builder.rkt" find-git-root-dir))
 
@@ -68,8 +77,10 @@
 ;; Policy knobs
 ;; ============================================================
 
-;; Optional override for the verify command. When #f, a compile gate is
-;; derived from the wave's target files. Used by tests to force failure.
+;; Optional override for the verify command (tests: fail-forcing / pinning).
+;; When #f, the wave's DECLARED verify command runs (see
+;; declared-wave-verify); the derived compile gate is only a fallback for
+;; genuinely empty declarations.
 (define current-gsd-delivery-verify-command
   (make-parameter
    #f
@@ -79,10 +90,13 @@
        [(string? v) v]
        [else (raise-argument-error 'current-gsd-delivery-verify-command "(or/c #f string?)" v)]))))
 
-;; Bounded runtime for the verify command (seconds).
+;; Bounded runtime for the verify command (seconds). Default 14400 s (4 h):
+;; declared wave gates (full fast/broad suites) legitimately run for hours,
+;; and the deadline is still BOUNDED so a wedged gate can never hang the
+;; coordinator forever. Tests tighten it per call.
 (define current-gsd-delivery-verify-timeout-sec
   (make-parameter
-   300
+   14400
    (lambda (v)
      (if (and (real? v) (positive? v))
          v
@@ -470,58 +484,162 @@
       #f
       (string-join (cons "raco make" targets) " ")))
 
-(define (run-verify-command command git-root timeout-sec)
-  ;; Run a shell command bounded by timeout-sec from git-root.
-  ;; Returns (list exit-code stdout) where exit-code is #f on timeout.
-  (define-values (sp out in err)
-    (parameterize ([current-directory git-root])
-      (subprocess #f #f #f "/bin/sh" "-c" command)))
-  (define deadline (+ (current-inexact-milliseconds) (* timeout-sec 1000.0)))
-  (let loop ()
-    (define status (subprocess-status sp))
-    (cond
-      [(eq? status 'running)
-       (if (>= (current-inexact-milliseconds) deadline)
-           (begin
-             (subprocess-kill sp #t)
-             (list #f "" ""))
-           (begin
-             (sleep 0.01)
-             (loop)))]
-      [else
-       (subprocess-wait sp)
-       (list status
-             (if (and out (input-port? out))
-                 (port->string out)
-                 "")
-             (if (and err (input-port? err))
-                 (port->string err)
-                 ""))])))
+;; ============================================================
+;; Verify command execution (owned-singleton registry lane)
+;; ============================================================
+
+;; The verify command executes through the ONE process-wide verification
+;; registry owned by the composition root (BUG-0053 follow-up), never as a
+;; raw unowned subprocess:
+;;   * one owned singleton job per identity — a duplicate verifier call for
+;;     the same wave+command+checkout ATTACHES to the running job instead
+;;     of launching a second concurrent gate;
+;;   * a bounded hard deadline with TERM→KILL escalation over the whole
+;;     process group;
+;;   * attributable terminal states — only ('completed, exit 0) approves;
+;;     'failed, 'timed-out (exit 124), 'cancelled and 'orphan-recovered
+;;     are failures;
+;;   * a real file-backed log (the job record's log-path) with a bounded
+;;     in-memory tail, surfaced in failure evidence for diagnosis.
+
+(define delivery-verify-suite "delivery-verify")
+
+(define (checkout-key p)
+  ;; Stable string key for a checkout/base-dir path: the singleton identity
+  ;; must be stable call-to-call (string vs path, relative vs complete).
+  (with-handlers ([exn:fail? (lambda (_) (format "~a" p))])
+    (path->string (simplify-path (path->complete-path p)))))
+
+;; Singleton identity: campaign scope (base-dir), wave, suite, the checkout
+;; the command runs in, and the command itself. A different command (wave
+;; doc edited between attempts) is a different identity → a fresh owned job,
+;; never a stale attach; the same wave+command+checkout across duplicate
+;; verifier calls is the SAME identity → attach, not launch.
+(define (delivery-verify-identity base-dir wave-idx run-cwd command)
+  (verification-identity (checkout-key base-dir)
+                         (format "W~a" wave-idx)
+                         delivery-verify-suite
+                         (checkout-key run-cwd)
+                         command))
+
+;; Start (or attach to) the owned job and wait for its terminal record. The
+;; job's own deadline (timeout-ms captured at start) bounds the wait even
+;; when the caller's window is generous.
+(define (registry-run-verify command run-cwd timeout-sec base-dir wave-idx)
+  (define reg (current-gsd-verification-registry))
+  (define timeout-ms (* 1.0 timeout-sec 1000.0))
+  (define started
+    (parameterize ([current-directory run-cwd])
+      (verification-start! reg
+                           (delivery-verify-identity base-dir wave-idx run-cwd command)
+                           "/bin/sh"
+                           (list "-c" command)
+                           #:timeout-ms timeout-ms)))
+  (define job-id (start-result-job-id started))
+  ;; A break/exception while the coordinator is waiting must not detach the
+  ;; owned gate. Cancel+reap before propagating the escape; terminal jobs are
+  ;; immutable, so this is safe if completion won the race.
+  (with-handlers ([exn? (lambda (e)
+                          (verification-cancel! reg job-id)
+                          (raise e))])
+    (verification-wait reg job-id timeout-ms)))
+
+;; cwd for a DECLARED verify command: the wave worktree under branch
+;; isolation (the delivered tree as committed); otherwise the base-dir
+;; project root the declaration was authored against (the PLAN.md/.planning
+;; layout, where "q/…"-prefixed targets resolve).
+(define (declared-verify-cwd base-dir)
+  (define ctx (current-gsd-delivery-branch-context))
+  (or (and ctx (branch-delivery-context-ref ctx 'worktree-path)) base-dir))
+
+;; Wave documents use the project-base placeholder deliberately so one plan
+;; can run in both the shared two-tier checkout (<base>/q) and an isolated
+;; branch worktree (whose root is q itself). Expand it before hashing or
+;; executing the command; a literal angle-bracket token would otherwise be
+;; parsed by /bin/sh as redirection and make every real plan fail.
+(define (shell-quote-path p)
+  ;; POSIX single-quote escaping: close quote, emit a literal quote, reopen.
+  ;; The project root is configuration, not shell syntax; spaces or shell
+  ;; metacharacters in a checkout path must never alter the Verify command.
+  (string-append "'" (string-replace (path->string p) "'" "'\"'\"'") "'"))
+
+(define (expand-project-base command base-dir)
+  (define ctx (current-gsd-delivery-branch-context))
+  (define worktree (and ctx (branch-delivery-context-ref ctx 'worktree-path)))
+  (define q-root
+    (if worktree
+        worktree
+        (build-path base-dir "q")))
+  (define with-q (string-replace command "<project-base>/q" (shell-quote-path q-root)))
+  (string-replace with-q "<project-base>" (shell-quote-path base-dir)))
+
+;; The wave's DECLARED verify command. The wave document is the authoritative
+;; declaration — it is what the agent was instructed with and what
+;; load-plan-from-index builds gsd-wave-verify from — so the doc is read
+;; directly; the plan struct's gsd-wave-verify is honored only when the doc
+;; cannot be read (hand-built plans). Fail closed to #f (empty declaration)
+;; on any read/parse failure.
+(define (declared-wave-verify base-dir wave-idx plan)
+  (define (non-empty s)
+    (and (string? s) (let ([v (string-trim s)]) (and (non-empty-string? v) v))))
+  (define doc
+    (let ([slug (wave-slug base-dir wave-idx)])
+      (and slug
+           (with-handlers ([exn:fail? (lambda (_) #f)])
+             (read-wave-doc base-dir wave-idx slug)))))
+  (or (and doc (non-empty (hash-ref (parse-wave-content (hash-ref doc 'content "")) 'verify #f)))
+      (let ([wave (and plan (plan-wave-ref plan wave-idx))])
+        (and wave (non-empty (gsd-wave-verify wave))))))
 
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
   (define explicit (current-gsd-delivery-verify-command))
-  (define gate (and root (not explicit) (build-compile-gate base-dir root wave-idx plan)))
-  ;; W7 (#9512b): under an active branch context the command runs from the
-  ;; wave WORKTREE (the delivered tree as committed), not the shared
-  ;; checkout — the shared tree does not contain the wave's changes.
+  ;; W7 (#9512b): under an active branch context the override and the derived
+  ;; fallback gate run from the wave WORKTREE (the delivered tree as
+  ;; committed), not the shared checkout.
   (define run-cwd (verify-command-cwd base-dir root))
-  (define (run-cmd command)
-    (let* ([result (run-verify-command command run-cwd (current-gsd-delivery-verify-timeout-sec))]
-           [exit-code (car result)]
-           [detail (format "cmd=~a exit=~a" command exit-code)])
-      (cons "verify"
-            (if (eq? exit-code 0)
-                (cons #t detail)
-                (cons #f detail)))))
+  (define (run-cmd command cwd note)
+    (define timeout-sec (current-gsd-delivery-verify-timeout-sec))
+    (define job (registry-run-verify command cwd timeout-sec base-dir wave-idx))
+    (define state (verification-job-state job))
+    (define exit-code (verification-job-exit-code job))
+    ;; Truthful verdict: ONLY a reaped 'completed job with exit 0 approves.
+    ;; timed-out (exit 124), cancelled, orphan-recovered, failed and any
+    ;; nonzero exit are failures — the registry's record, not a wrapper's
+    ;; exit status, is authoritative (a wrapper exiting 0 after a
+    ;; timeout-killed child can never hide here).
+    (define ok? (and (eq? state 'completed) (eqv? exit-code 0)))
+    (cons "verify"
+          (cons ok?
+                (if ok?
+                    ;; byte-compatible with the pre-registry verifier message
+                    (format "cmd=~a exit=~a~a" command exit-code note)
+                    (format "cmd=~a exit=~a state=~a log=~a~a"
+                            command
+                            exit-code
+                            state
+                            (verification-job-log-path job)
+                            note)))))
   (cond
     [(not root) (cons "verify" (cons #f "no git root"))]
-    [explicit (run-cmd explicit)]
-    [gate (run-cmd gate)]
-    ;; No Racket targets changed/derivable (docs-only or CI-only wave). The
-    ;; file-changed check already guarantees delivery evidence; there is no
-    ;; compile evidence to gate on.
-    [else (cons "verify" (cons #t "no Racket targets to compile (docs/CI-only change)"))]))
+    ;; explicit test override wins (fail-forcing / pinning)
+    [explicit (run-cmd explicit run-cwd "")]
+    [else
+     (define declared (declared-wave-verify base-dir wave-idx plan))
+     (cond
+       ;; the wave's DECLARED verify command is authoritative
+       [(and declared (non-empty-string? declared))
+        (run-cmd (expand-project-base declared base-dir) (declared-verify-cwd base-dir) "")]
+       ;; genuinely EMPTY verify declaration: the derived compile gate is a
+       ;; separately described FALLBACK — never a silent substitute
+       [else
+        (define gate (build-compile-gate base-dir root wave-idx plan))
+        (if gate
+            (run-cmd gate run-cwd " (compile-gate fallback: wave declared no verify command)")
+            ;; No Racket targets changed/derivable (docs-only or CI-only
+            ;; wave). The file-changed check already guarantees delivery
+            ;; evidence; there is no compile evidence to gate on.
+            (cons "verify" (cons #t "no Racket targets to compile (docs/CI-only change)")))])]))
 
 ;; ============================================================
 ;; Composition

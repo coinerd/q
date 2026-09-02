@@ -388,6 +388,12 @@
     (emit-gsd-event! 'gsd.wave.outcome-error
                      (hasheq 'wave wave-idx 'kind kind 'level "error" 'message (or message "")))))
 
+(define (runner-outcome-failure-reason outcome result)
+  (define msg (wave-execution-outcome-message result))
+  (if (and (string? msg) (positive? (string-length (string-trim msg))))
+      msg
+      (format "wave execution ended '~a' without a runner message" outcome)))
+
 ;; ============================================================
 ;; Build identity & version-freshness guard (v1.00.19 W3 — BUG-0031)
 ;;
@@ -533,21 +539,25 @@
          (warn-outside-lease-dirty-state! (find-repo-root base-dir)))
        (define (observe)
          (load-campaign-record base-dir (campaign-plan-id active)))
-       (define (mirror-status! status)
+       (define (mirror-status! status #:failure-reason [failure-reason #f])
          (define caller-wave (find-wave rec wave-idx))
          (when caller-wave
+           (when failure-reason
+             (stamp-wave-failure! caller-wave failure-reason))
            (set-campaign-wave-status! caller-wave status)))
-       (define (persist-current-status! status)
+       (define (persist-current-status! status #:failure-reason [failure-reason #f])
          (define observed (observe))
          (define observed-wave (current-wave-for-attempt observed wave-idx fence expected-id))
          (and observed-wave
               (begin
+                (when failure-reason
+                  (stamp-wave-failure! observed-wave failure-reason))
                 (set-campaign-wave-status! observed-wave status)
                 (persist-campaign! base-dir observed)
-                (mirror-status! status)
+                (mirror-status! status #:failure-reason failure-reason)
                 observed)))
-       (define (interrupt-current! message)
-         (persist-current-status! 'interrupted)
+       (define (interrupt-current! message #:failure-reason [failure-reason #f])
+         (persist-current-status! 'interrupted #:failure-reason failure-reason)
          (campaign-result 'wave-cancelled '() message))
        ;; Executor port boundary (W3 #9234): ONE structured terminal outcome per
        ;; invocation. Legacy symbol runners coerce; an optional deadline wraps
@@ -579,6 +589,18 @@
               wave-idx
               effective-stall-soft-limit
               effective-stall-hard-limit)))
+       (define prior-failure-reason
+         (let ([w (find-wave rec wave-idx)])
+           (and w
+                (let ([reason (wave-failure-reason w)])
+                  (and (positive? (string-length (string-trim reason))) reason)))))
+       (define durable-failure-context
+         (and
+          prior-failure-reason
+          (string-append
+           "\n\n=== PREVIOUS ATTEMPT TERMINAL REASON — ADAPT BEFORE RETRY ===\n"
+           prior-failure-reason
+           "\n\nDo not repeat the failed approach. Use this durable reason to choose the next concrete action.")))
        ;; BUG-0017 follow-up: retry a wave whose run exceeds the per-wave budget
        ;; (timed-out) with a FRESH session (each run-one invocation re-enters the
        ;; runner port, which the TUI/GUI factory maps to a new session). The
@@ -591,7 +613,9 @@
          ;; the prompt builder runs inside this parameterize extent, so
          ;; successor executors see prior attempts' artifacts without
          ;; rediscovering them.
-         (parameterize ([current-gsd-wave-inherited-artifacts inherited-artifact-text])
+         (parameterize ([current-gsd-wave-inherited-artifacts inherited-artifact-text]
+                        [current-gsd-wave-failure-context (or (current-gsd-wave-failure-context)
+                                                              durable-failure-context)])
            (let retry-loop ([retries-left retries-left])
              (define result (coerce-run-result (run-one/watchdog wave-idx)))
              ;; v1.00.22 W5 (BUG-0039): ATTEMPT BOUNDARY — drain the
@@ -921,6 +945,8 @@
                                                           #:reason "unexpected completion state")
                             (campaign-result 'wave-failed '() "unexpected completion state")])])))])]
             [(failed)
+             ;; Persist and report the runner's own failure reason.
+             (define failure-reason (runner-outcome-failure-reason outcome run-result))
              ;; BUG-0043 (W2): route the failure text to the typed error
              ;; transcript surface; the conversation copy is gone.
              (emit-wave-outcome-error! wave-idx outcome (wave-execution-outcome-message run-result))
@@ -934,7 +960,7 @@
                                (and w
                                     (artifact-merge-status/local (wave-worktree-repo-root w)
                                                                  (wave-worktree-branch w)))))
-             (if (persist-current-status! 'failed)
+             (if (persist-current-status! 'failed #:failure-reason failure-reason)
                  (begin
                    (apply-wave-status-projections! base-dir
                                                    wave-idx
@@ -944,8 +970,8 @@
                     (campaign-plan-id active)
                     wave-idx
                     (wave-failure-notification-kind (wave-execution-outcome-message run-result))
-                    #:reason (wave-execution-outcome-message run-result))
-                   (campaign-result 'wave-failed '() "runner error"))
+                    #:reason failure-reason)
+                   (campaign-result 'wave-failed '() failure-reason))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
             ;; D8 (#9357) + BUG-0024 W3: transient provider/network/SSE
             ;; failure — do NOT consume the attempt. Roll back the
@@ -1058,7 +1084,8 @@
                                               wave-idx
                                               expected-id
                                               'interrupted)
-             (interrupt-current! (wave-execution-outcome-message run-result))]
+             (interrupt-current! (wave-execution-outcome-message run-result)
+                                 #:failure-reason (runner-outcome-failure-reason outcome run-result))]
             ;; A hung tool that exceeded its deadline: persist INTERRUPTED per
             ;; D1 (cancelled/error/timeout stop the campaign) and never emit a
             ;; completion — the durable record says interrupted, so a restart
@@ -1070,6 +1097,12 @@
              ;; the wave (at-least-once, exactly-once event).
              ;; BUG-0043 (W2): the stall/timeout text rides the typed error
              ;; transcript event, not the conversation surface.
+             (define timeout-message
+               (if (> timeout-retries 0)
+                   (format "~a after ~a retries"
+                           (wave-execution-outcome-message run-result)
+                           timeout-retries)
+                   (wave-execution-outcome-message run-result)))
              (emit-wave-outcome-error! wave-idx
                                        'timed-out
                                        (wave-execution-outcome-message run-result))
@@ -1078,14 +1111,12 @@
                                               wave-idx
                                               expected-id
                                               'interrupted)
-             (interrupt-current! (if (> timeout-retries 0)
-                                     (format "~a after ~a retries"
-                                             (wave-execution-outcome-message run-result)
-                                             timeout-retries)
-                                     (wave-execution-outcome-message run-result)))]
+             (interrupt-current! timeout-message #:failure-reason timeout-message)]
             [else
              ;; BUG-0043 (W2): unknown terminal outcome — same typed error
              ;; transcript routing as the named failure branches.
+             ;; Name an unknown terminal outcome durably.
+             (define failure-reason (runner-outcome-failure-reason outcome run-result))
              (emit-wave-outcome-error! wave-idx outcome (wave-execution-outcome-message run-result))
              (mark-attempt-artifact-terminal!
               base-dir
@@ -1097,7 +1128,7 @@
                                (and w
                                     (artifact-merge-status/local (wave-worktree-repo-root w)
                                                                  (wave-worktree-branch w)))))
-             (if (persist-current-status! 'failed)
+             (if (persist-current-status! 'failed #:failure-reason failure-reason)
                  (begin
                    (apply-wave-status-projections! base-dir
                                                    wave-idx
@@ -1107,8 +1138,8 @@
                     (campaign-plan-id active)
                     wave-idx
                     (wave-failure-notification-kind (wave-execution-outcome-message run-result))
-                    #:reason (wave-execution-outcome-message run-result))
-                   (campaign-result 'wave-failed '() "unknown runner outcome"))
+                    #:reason failure-reason)
+                   (campaign-result 'wave-failed '() failure-reason))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))])]))
      ;; W7 (#9512b): run-once* receives fresh boxes; the worktree outlives
      ;; the run (its branch carries delivery evidence through verification

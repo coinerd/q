@@ -26,19 +26,21 @@
          "../llm/conn-pool.rkt"
          "../extensions/gsd/go-orchestrator.rkt")
 
-;; this file lives at <repo>/q/tests/ — two levels up is the repo root.
+;; This file lives at the q git root's tests/ directory. Resolve source files
+;; from that root directly so the characterization works in named git
+;; worktrees too (where the checkout need not literally be called "q").
 (define-runtime-path here-dir ".")
-(define repo-root (simplify-path (build-path here-dir 'up 'up)))
+(define q-root (simplify-path (build-path here-dir 'up)))
 (define (src mod-rel)
-  (file->string (build-path repo-root mod-rel)))
+  (file->string (build-path q-root mod-rel)))
 
-(define prompts-src (src (build-path "q" "extensions" "gsd" "prompts.rkt")))
-(define verifier-src (src (build-path "q" "extensions" "gsd" "delivery-verifier.rkt")))
-(define orchestrator-src (src (build-path "q" "extensions" "gsd" "go-orchestrator.rkt")))
-(define helpers-src (src (build-path "q" "tools" "builtins" "spawn-subagent-helpers.rkt")))
-(define retry-src (src (build-path "q" "runtime" "auto-retry.rkt")))
-(define provider-retry-src (src (build-path "q" "runtime" "provider-retry.rkt")))
-(define conn-pool-src (src (build-path "q" "llm" "conn-pool.rkt")))
+(define prompts-src (src (build-path "extensions" "gsd" "prompts.rkt")))
+(define verifier-src (src (build-path "extensions" "gsd" "delivery-verifier.rkt")))
+(define orchestrator-src (src (build-path "extensions" "gsd" "go-orchestrator.rkt")))
+(define helpers-src (src (build-path "tools" "builtins" "spawn-subagent-helpers.rkt")))
+(define retry-src (src (build-path "runtime" "auto-retry.rkt")))
+(define provider-retry-src (src (build-path "runtime" "provider-retry.rkt")))
+(define conn-pool-src (src (build-path "llm" "conn-pool.rkt")))
 
 ;; The transient network failure shape whose retry budget BUG-0022 truncates.
 (define no-status-line-msg "no response status line from peer")
@@ -68,13 +70,14 @@
       (check-true (string-contains? planning-implement-prompt
                                     "[gsd-planning] EXECUTE the plan below"))
       (check-true (string-contains? planning-implement-prompt "CRITICAL RULES:"))
-      (for ([rule '("1. Do NOT re-read the plan."
-                    "2. Do NOT write a new plan."
-                    "3. Do NOT use planning-write during implementation."
-                    "4. Read each target file BEFORE editing it."
-                    "5. After reading, apply the edits specified in the wave doc actions."
-                    "6. After completing the assigned wave, run its verify command."
-                    "7. Do NOT call /wave-done")])
+      (for ([rule
+             '("1. Do NOT re-read the plan."
+               "2. Do NOT write a new plan."
+               "3. Do NOT use planning-write during implementation."
+               "4. Read each target file BEFORE editing it."
+               "5. After reading, apply the edits specified in the wave doc actions."
+               "6. Run focused tests while implementing, but do NOT launch the wave's long Verify command through bash."
+               "7. Do NOT call /wave-done")])
         (check-true (string-contains? planning-implement-prompt rule)
                     (format "missing CRITICAL RULE: ~a" rule)))
       ;; The template is a PREFIX: the wave/plan body is appended after it.

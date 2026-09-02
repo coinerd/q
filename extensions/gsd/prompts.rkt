@@ -115,13 +115,15 @@
 "
    "5. After reading, apply the edits specified in the wave doc actions.
 "
-   "6. After completing the assigned wave, run its verify command.
+   "6. Run focused tests while implementing, but do NOT launch the wave's long Verify command through bash.
+"
+   "   After you return, the coordinator runs that exact declaration through the owned verification lane.
 "
    "7. Do NOT call /wave-done; the runtime coordinator owns status transitions only.
 "
-   "   After you return, the coordinator verifies real delivery evidence (expected branch,
+   "   It verifies the expected branch, changed wave files, and the owned gate's terminal result.
 "
-   "   changed wave files, passing verify command). Only that evidence marks the wave DONE.
+   "   Only that evidence marks the wave DONE.
 "
    "8. Scratch files (BUG-0026): for throwaway experiments use the edit tool to create files under `tmp/`, run them, then delete them.
 "

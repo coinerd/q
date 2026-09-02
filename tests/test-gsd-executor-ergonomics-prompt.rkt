@@ -120,7 +120,8 @@
    "- After EACH completed implementation step with green tests, commit to the delivery branch:\n"
    "  `git add -A && git commit -m \"checkpoint: <step summary>\"`\n"
    "- Checkpoints are normal commits: they do NOT trigger delivery verification, do NOT mark the\n"
-   "  wave DONE, and never replace the final completion flow (run the wave's verify command, then return).\n"
+   "  wave DONE, and never replace the final completion flow (finish focused checks, then return;\n"
+   "  the coordinator runs the declared Verify command through its owned lane).\n"
    "- Keep checkpointing even if you expect to finish the wave: an infra stop mid-wave must find\n"
    "  committed progress, not uncommitted residue.\n\n"))
 
@@ -137,10 +138,11 @@
    "4. Read each target file BEFORE editing it. You need the current content\n"
    "   to apply edits correctly. Read is necessary and expected.\n"
    "5. After reading, apply the edits specified in the wave doc actions.\n"
-   "6. After completing the assigned wave, run its verify command.\n"
+   "6. Run focused tests while implementing, but do NOT launch the wave's long Verify command through bash.\n"
+   "   After you return, the coordinator runs that exact declaration through the owned verification lane.\n"
    "7. Do NOT call /wave-done; the runtime coordinator owns status transitions only.\n"
-   "   After you return, the coordinator verifies real delivery evidence (expected branch,\n"
-   "   changed wave files, passing verify command). Only that evidence marks the wave DONE.\n"
+   "   It verifies the expected branch, changed wave files, and the owned gate's terminal result.\n"
+   "   Only that evidence marks the wave DONE.\n"
    "\n"
    "The plan follows. Start implementing immediately.\n"))
 

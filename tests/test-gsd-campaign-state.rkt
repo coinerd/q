@@ -265,8 +265,7 @@
       ;; Referenced wave docs must exist (BUG-0052 hard failure otherwise).
       (for ([name (list "W0-zero.md" "W1-one.md")])
         (call-with-output-file (build-path dir ".planning" "waves" name)
-                               (lambda (out)
-                                 (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
+                               (lambda (out) (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
                                #:exists 'truncate))
       (call-with-output-file (build-path dir ".planning" "STATE.md")
                              (lambda (out)
@@ -314,8 +313,7 @@
       ;; Referenced wave docs must exist: missing docs refuse campaign creation (BUG-0052).
       (for ([name (list "W0-alpha.md" "W1-beta.md" "W2-gamma.md")])
         (call-with-output-file (build-path dir ".planning" "waves" name)
-                               (lambda (out)
-                                 (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
+                               (lambda (out) (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
                                #:exists 'truncate))
       ;; Old STATE.md has 5 waves with different titles (stale campaign)
       (call-with-output-file (build-path dir ".planning" "STATE.md")
@@ -356,8 +354,7 @@
       ;; Referenced wave docs must exist (BUG-0052 hard failure otherwise).
       (for ([name (list "W0-zero.md" "W1-one.md")])
         (call-with-output-file (build-path dir ".planning" "waves" name)
-                               (lambda (out)
-                                 (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
+                               (lambda (out) (fprintf out "# ~a\nStatus: Inbox\n\nBody.\n" name))
                                #:exists 'truncate))
       ;; Old STATE.md has 3 waves (different count)
       (call-with-output-file (build-path dir ".planning" "STATE.md")
@@ -446,6 +443,52 @@
       (delete-directory/files dir #:must-exist? #f))))
 
 ;; ============================================================
+;; 7. v1.00.24 W3 (verification-truth): durable wave/attempt failure reason
+;; ============================================================
+
+(define failure-reason-suite
+  (test-suite "durable failure reason"
+    (test-case "fresh waves carry no failure reason"
+      (define rec (make-test-record 2))
+      (for ([w (campaign-record-waves rec)])
+        (check-equal? (wave-failure-reason w) "" "no reason recorded by default")))
+
+    (test-case "stamp-wave-failure! records the reason on wave and attempt"
+      (define rec (make-test-record 1))
+      (begin-attempt! rec 0 3)
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (stamp-wave-failure! w "provider 500 after 5 retries")
+      (check-equal? (wave-failure-reason w) "provider 500 after 5 retries")
+      (define a (campaign-wave-current-attempt w))
+      (check-not-false a)
+      (check-equal? (attempt-failure-reason a) "provider 500 after 5 retries"))
+
+    (test-case "blank and non-string reasons are ignored (never fake data)"
+      (define rec (make-test-record 1))
+      (begin-attempt! rec 0 3)
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (stamp-wave-failure! w "")
+      (stamp-wave-failure! w "   ")
+      (stamp-wave-failure! w #f)
+      (check-equal? (wave-failure-reason w) "")
+      (check-false (attempt-failure-reason (campaign-wave-current-attempt w))))
+
+    (test-case "clear-wave-failure! resets wave and attempt"
+      (define rec (make-test-record 1))
+      (begin-attempt! rec 0 3)
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (stamp-wave-failure! w "timed out")
+      (clear-wave-failure! w)
+      (check-equal? (wave-failure-reason w) "")
+      (check-false (attempt-failure-reason (campaign-wave-current-attempt w))))
+
+    (test-case "stamping without a current attempt records the wave reason only"
+      (define rec (make-test-record 1))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (stamp-wave-failure! w "verifier rejected")
+      (check-equal? (wave-failure-reason w) "verifier rejected"))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -456,6 +499,7 @@
     identity-suite
     invariant-suite
     migration-suite
-    persistence-suite))
+    persistence-suite
+    failure-reason-suite))
 
 (void (run-tests campaign-state-suite))

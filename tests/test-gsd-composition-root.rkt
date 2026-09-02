@@ -9,6 +9,7 @@
          "../extensions/gsd/effect-ports.rkt"
          "../extensions/gsd/composition-root.rkt"
          "../extensions/gsd/system-adapters.rkt"
+         "../extensions/gsd/verification-job.rkt"
          "helpers/gsd-port-fakes.rkt")
 
 (define-runtime-path effect-ports-source "../extensions/gsd/effect-ports.rkt")
@@ -92,4 +93,34 @@
     (define source (file->string effect-ports-source))
     (check-false (regexp-match?
                   #rx"require[^\n]*(?:runtime/|sandbox/|racket/file|racket/system|net/|github)"
-                  source))))
+                  source)))
+
+  (test-case "composition root owns one process-wide verification registry"
+    ;; v1.00.24 W3 verification-truth: delivery verification launches are
+    ;; owned singletons resolved through this parameter, so there must be
+    ;; exactly ONE process-wide registry, owned by the composition root.
+    (check-true (verification-registry? (current-gsd-verification-registry)))
+    (check-eq? (current-gsd-verification-registry) system-verification-registry)
+    ;; the parameter always resolves to the same process-wide instance
+    (check-eq? (current-gsd-verification-registry) (current-gsd-verification-registry)))
+
+  (test-case "verification registry parameter rebinds for tests and restores"
+    (define isolated (make-verification-registry))
+    (parameterize ([current-gsd-verification-registry isolated])
+      (check-eq? (current-gsd-verification-registry) isolated))
+    (check-eq? (current-gsd-verification-registry) system-verification-registry))
+
+  (test-case "isolated registries own independent singleton jobs"
+    ;; Same identity in two registries = two independent singletons: rebinding
+    ;; the parameter fully isolates a test from the process-wide registry.
+    (define a (make-verification-registry))
+    (define b (make-verification-registry))
+    (define ident (verification-identity "cr-camp" "W0" "delivery" "/repo" "local"))
+    (define ra (verification-start! a ident "/bin/sh" '("-c" "sleep 2; exit 0")))
+    (define rb (verification-start! b ident "/bin/sh" '("-c" "sleep 2; exit 0")))
+    (check-true (start-result-started? ra) "registry a owns a fresh job")
+    (check-true (start-result-started? rb) "registry b owns an independent job")
+    (check-equal? (registry-active-count a) 1)
+    (check-equal? (registry-active-count b) 1)
+    (verification-cancel! a (start-result-job-id ra))
+    (verification-cancel! b (start-result-job-id rb))))

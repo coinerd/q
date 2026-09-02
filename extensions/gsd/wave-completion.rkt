@@ -124,9 +124,21 @@
     [(not (eq? (campaign-wave-status wave) 'verifying)) (completion-result 'invalid-state #f)]
     [(not attempt-current?) (completion-result 'stale-attempt #f)]
     [(not approve?)
+     ;; v1.00.24 W3 (verification-truth): durable failure reason FIRST —
+     ;; the retry prompt reads wave-failure-reason / attempt-failure-reason
+     ;; from the campaign record, so the reason is stamped BEFORE the
+     ;; FAILED persist (and therefore before any projection/notification).
+     ;; Blank verifier verdicts get an honest named fallback instead of an
+     ;; actionable-looking blank.
+     (define rejection-reason
+       (if (and (string? verifier-message) (positive? (string-length (string-trim verifier-message))))
+           verifier-message
+           "verifier rejected: no verifier message recorded"))
+     (stamp-wave-failure! wave rejection-reason)
      (set-campaign-wave-status! wave 'failed)
      (persist-campaign! base-dir durable)
      (when caller-wave
+       (stamp-wave-failure! caller-wave rejection-reason)
        (set-campaign-wave-status! caller-wave 'failed))
      ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
      ;; atomic projection shell — a crash cannot leave partial tracking.
@@ -137,16 +149,18 @@
      ;; Retry-with-adaptation: persist the verifier's failure reason into the
      ;; wave doc so the follow-up wave run sees why the previous attempt
      ;; failed and can adapt instead of repeating the same mistake.
-     (record-wave-failure! base-dir wave-idx (lambda (idx) (wave-slug base-dir idx)) verifier-message)
+     (record-wave-failure! base-dir wave-idx (lambda (idx) (wave-slug base-dir idx)) rejection-reason)
      (completion-result 'failed #f)]
     ;; BUG-0051: a release wave whose GitHub Release object is missing/draft
     ;; fails completion with a named reason — the verifier approved the code
     ;; delivery, but the release was never published.
     [(not release-gate-ok?)
      (define release-failure-message (format "release not verified: ~a" release-reason))
+     (stamp-wave-failure! wave release-failure-message)
      (set-campaign-wave-status! wave 'failed)
      (persist-campaign! base-dir durable)
      (when caller-wave
+       (stamp-wave-failure! caller-wave release-failure-message)
        (set-campaign-wave-status! caller-wave 'failed))
      (apply-wave-status-projections! base-dir
                                      wave-idx
@@ -158,6 +172,10 @@
                            release-failure-message)
      (completion-result 'failed #f)]
     [else
+     ;; v1.00.24 W3 (verification-truth): success clears the durable failure
+     ;; reason — a completed wave carries none (same lifecycle rule as the
+     ;; BUG-0024 attempt-context hand-off clear).
+     (clear-wave-failure! wave)
      (set-campaign-wave-status! wave 'done)
      (define event-id
        (make-event-id (campaign-plan-id durable) wave-idx (campaign-attempt-id attempt)))
@@ -172,6 +190,7 @@
      (persist-campaign! base-dir durable)
      (append-completion-event! base-dir durable event-id)
      (when caller-wave
+       (clear-wave-failure! caller-wave)
        (set-campaign-wave-status! caller-wave 'done))
      ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
      ;; atomic projection shell — a crash cannot leave partial tracking.

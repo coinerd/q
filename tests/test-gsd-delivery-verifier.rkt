@@ -10,7 +10,13 @@
 ;;   1. git repository reachable from base-dir;
 ;;   2. current branch matches the wave's expected feature/issue-<N>-wave;
 ;;   3. at least one wave target file changed vs HEAD (or untracked-new);
-;;   4. a bounded verify command exits 0 (compile gate by default).
+;;   4. the wave's DECLARED verify command exits 0 — executed through the
+;;      process-wide owned-singleton verification registry. An explicit
+;;      override parameter wins for tests; the derived compile gate runs
+;;      only as a separately described fallback for genuinely EMPTY verify
+;;      declarations. Only a reaped 'completed job with exit 0 approves
+;;      (timed-out/exit 124, cancelled, orphan-recovered, failed are
+;;      failures).
 
 (require rackunit
          rackunit/text-ui
@@ -25,7 +31,12 @@
                   delivery-verification-approved?
                   delivery-verification-evidence
                   delivery-verification-message
-                  current-gsd-delivery-verify-command)
+                  current-gsd-delivery-verify-command
+                  current-gsd-delivery-verify-timeout-sec)
+         (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
+         (only-in "../extensions/gsd/verification-job.rkt"
+                  make-verification-registry
+                  registry-active-count)
          (only-in "../extensions/gsd/plan-types.rkt" gsd-plan make-gsd-wave plan-wave-ref)
          (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
          (only-in "../extensions/gsd/go-orchestrator.rkt" run-campaign-wave campaign-result-status)
@@ -119,8 +130,12 @@
   ;; minimal plan: one wave with the given files
   (load-plan** base-dir (list "q/ui-core/preferences.rkt")))
 
-(define (load-plan** base-dir files)
-  (define w0 (make-gsd-wave 0 "Wave Zero" "" files '() "verify" (list "done")))
+(define (load-plan** base-dir files [verify "verify"])
+  ;; verify defaults to the historical placeholder string; delivery
+  ;; verification reads the DECLARED command from the wave doc, so the
+  ;; placeholder never executes in these fixtures. Tests that exercise the
+  ;; compile-gate FALLBACK pass "" (a genuinely empty declaration).
+  (define w0 (make-gsd-wave 0 "Wave Zero" "" files '() verify (list "done")))
   (gsd-plan (list w0) "" '() '()))
 
 (define (make-git-file-change! base-dir)
@@ -548,6 +563,171 @@
       (define result (run-delivery-verification base plan 0))
       (check-true (delivery-verification-approved? result)
                   "verify gate must ignore non-Racket changed files")
+      (cleanup-tmp base))
+
+    (test-case "declared wave verify command executes when no override is bound"
+      ;; Truthful verification: without an explicit override the verifier runs
+      ;; the wave's DECLARED verify command (doc `## Verify` — the source
+      ;; gsd-wave-verify is built from), not a silently derived gate. The
+      ;; marker file proves the declared command actually executed.
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (define marker
+        (build-path (find-system-path 'temp-dir)
+                    (format "dv-declared-~a.marker" (current-inexact-milliseconds))))
+      (with-handlers ([exn:fail? void])
+        (delete-file marker))
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       (format "echo declared-verify-ran > ~a" marker))
+      (write-state! base 0 "42")
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-true (delivery-verification-approved? result) (delivery-verification-message result))
+      (check-true (file-exists? marker) "the DECLARED command executed")
+      (delete-file marker)
+      (cleanup-tmp base))
+
+    (test-case "declared verify command runs from the base-dir project root"
+      ;; Declared commands are authored against the PLAN.md/.planning layout
+      ;; ("q/…"-prefixed targets), so the two-tier checkout must resolve them
+      ;; from base-dir even though the git root is <base>/q.
+      ;; Include spaces so placeholder expansion must shell-quote the path.
+      (define base (make-temporary-file "dv cwd ~a" 'directory))
+      (make-directory* (build-path base ".planning" "waves"))
+      (make-directory* (build-path base "q" "scripts" "run-tests"))
+      (define (sh . args)
+        (define exit
+          (parameterize ([current-directory (build-path base "q")])
+            (apply system*/exit-code GIT args)))
+        (unless (zero? exit)
+          (error 'cwd-pin "command failed: ~a" (cons 'sh args))))
+      (sh "init" "-q" ".")
+      (sh "config" "user.email" "test@example.com")
+      (sh "config" "user.name" "Test")
+      (sh "checkout" "-q" "-b" "main")
+      (call-with-output-file (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+                             (lambda (out)
+                               (display "#lang racket/base\n(provide w)\n(define w 1)\n" out))
+                             #:exists 'truncate)
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "baseline")
+      ;; modify the target so the files gate passes
+      (call-with-output-file (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+                             (lambda (out)
+                               (display "#lang racket/base\n(provide w)\n(define w 2)\n" out))
+                             #:exists 'truncate)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("scripts/run-tests/reporting.rkt")
+                       "cd <project-base>/q && test -f scripts/run-tests/reporting.rkt")
+      (define plan (load-plan** base '("scripts/run-tests/reporting.rkt")))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-true (delivery-verification-approved? result)
+                  (format "base-dir cwd must resolve the <project-base>/q declaration: ~a"
+                          (delivery-verification-message result)))
+      (cleanup-tmp base))
+
+    (test-case "verify executes through the bound registry: duplicates attach, never launch twice"
+      ;; The owned-singleton lane: while one declared verify is running, a
+      ;; duplicate verifier call for the same wave+command+checkout attaches
+      ;; to the SAME job instead of launching a second gate.
+      (define base (setup-standard-campaign!))
+      (define reg (make-verification-registry))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "sleep 2; exit 0")
+      (define plan (load-plan* base))
+      (define first-result (box #f))
+      (parameterize ([current-gsd-verification-registry reg])
+        (define t
+          (thread (lambda () (set-box! first-result (run-delivery-verification base plan 0)))))
+        ;; Git evidence checks precede launch and can exceed a fixed 300ms on
+        ;; loaded CI hosts. Poll for the owned start under a hard 5s bound.
+        (let wait-for-owned-start ([remaining 250])
+          (when (and (zero? (registry-active-count reg)) (not (thread-dead? t)) (> remaining 0))
+            (sleep 0.02)
+            (wait-for-owned-start (sub1 remaining))))
+        (check-equal? (registry-active-count reg)
+                      1
+                      "declared verify runs as ONE owned job in the bound registry")
+        ;; duplicate verifier call while the first verify is still running:
+        ;; attaches to the running singleton — no second process launch
+        (define second (run-delivery-verification base plan 0))
+        (sync t)
+        (check-equal? (registry-active-count reg)
+                      0
+                      "job is terminal after both callers' waits returned")
+        (check-true (delivery-verification-approved? second) (delivery-verification-message second))
+        (check-true (delivery-verification-approved? (unbox first-result))
+                    "both attached callers observe the same approved job"))
+      (cleanup-tmp base))
+
+    (test-case "timed-out verify is a failure with truthful state and exit 124"
+      ;; BUG-0057 class fix: a deadline-killed gate can never approve; the
+      ;; verdict carries the attributable terminal state and exit 124.
+      (define base (setup-standard-campaign!))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "sleep 30; exit 0")
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)]
+                       [current-gsd-delivery-verify-timeout-sec 1])
+          (run-delivery-verification base plan 0)))
+      (check-false (delivery-verification-approved? result) "a timed-out gate must never approve")
+      (define msg (delivery-verification-message result))
+      (check-true (string-contains? msg "exit=124") msg)
+      (check-true (string-contains? msg "state=timed-out") msg)
+      (check-true (string-contains? msg "log=") msg)
+      (cleanup-tmp base))
+
+    (test-case "declared verify failing nonzero is a failure with attributable state"
+      (define base (setup-standard-campaign!))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "echo boom >&2; exit 3")
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-false (delivery-verification-approved? result)
+                   "a nonzero declared verify must fail delivery")
+      (define msg (delivery-verification-message result))
+      (check-true (string-contains? msg "exit=3") msg)
+      (check-true (string-contains? msg "state=failed") msg)
+      (check-true (string-contains? msg "log=") msg)
+      (cleanup-tmp base))
+
+    (test-case "default delivery verify deadline is 14400s (bounded, multi-hour)"
+      ;; Declared gates legitimately run for hours; the default deadline must
+      ;; accommodate them while staying BOUNDED.
+      (check-equal? (current-gsd-delivery-verify-timeout-sec) 14400))
+
+    (test-case "empty verify declaration: compile gate runs as a separately described fallback"
+      ;; A genuinely EMPTY declaration (doc `## Verify` empty and plan verify
+      ;; empty) falls back to the derived compile gate — and the fallback is
+      ;; DESCRIBED in the evidence, never a silent substitute.
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "")
+      (write-state! base 0 "42")
+      (define plan (load-plan** base '("q/ui-core/preferences.rkt") ""))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-true (delivery-verification-approved? result) (delivery-verification-message result))
+      (define verify-detail (cdr (cdr (assoc "verify" (delivery-verification-evidence result)))))
+      (check-true (string-contains? verify-detail "compile-gate fallback")
+                  (format "fallback must be separately described: ~a" verify-detail))
+      (check-true (string-contains? verify-detail "raco make")
+                  "the derived gate command is visible in the evidence")
       (cleanup-tmp base))))
 
 (module+ main
