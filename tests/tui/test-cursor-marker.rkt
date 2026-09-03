@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/terminal.rkt")
+         "../../tui/terminal.rkt")
 
 (define-test-suite
  test-cursor-marker

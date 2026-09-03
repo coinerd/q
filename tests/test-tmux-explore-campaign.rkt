@@ -39,14 +39,14 @@
 ;; T3: Campaign verification passes
 (test-case "campaign verification"
   (define result (run-campaign #:mode 'mock))
-  (define verification (verify-campaign result))
+  (define verification (verify-campaign result #:allow-mock? #t))
   (check-true (hash-ref verification 'valid?) "campaign should verify"))
 
 ;; T4: Campaign manifest verification passes
 (test-case "campaign manifest verification"
   (define result (run-campaign #:mode 'mock))
   (define manifest (campaign-result-manifest result))
-  (define verification (verify-campaign-manifest manifest))
+  (define verification (verify-campaign-manifest manifest #:allow-mock? #t))
   (check-true (hash-ref verification 'valid?) "manifest should verify"))
 
 ;; T5: Manifest chain verification

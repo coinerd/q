@@ -24,7 +24,8 @@
          racket/string
          (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
-         "../extensions/gsd/campaign-repository.rkt")
+         "../extensions/gsd/campaign-repository.rkt"
+         (only-in "../extensions/gsd/plan-snapshot.rkt" seed-and-bind-plan-snapshot!))
 
 ;; ============================================================
 ;; Helpers
@@ -95,6 +96,8 @@
       (check-equal? (campaign-record-provenance rec) 'plan-and-state)
       (check-equal? (campaign-record-created-at rec) 1000)
       (check-equal? (campaign-record-updated-at rec) 2000)
+      (check-false (campaign-record-plan-snapshot-path rec))
+      (check-false (campaign-record-plan-snapshot-digest rec))
       (check-true (campaign-cancellation? (campaign-record-cancellation rec)))
       (check-equal? (campaign-cancellation-reason (campaign-record-cancellation rec)) "operator")
       (define w (list-ref (campaign-record-waves rec) 0))
@@ -112,16 +115,30 @@
       (begin-attempt! rec 0 7)
       (set-campaign-fence-token! rec 42)
       (set-campaign-cancellation! rec (make-campaign-cancellation "operator" 12345))
+      (make-directory* (build-path dir ".planning"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out) (display "# Plan\n" out))
+                             #:exists 'truncate)
+      (define-values (snapshot-path snapshot-digest)
+        (seed-and-bind-plan-snapshot! dir (campaign-plan-id rec)))
+      (set-campaign-record-plan-snapshot-path! rec snapshot-path)
+      (set-campaign-record-plan-snapshot-digest! rec snapshot-digest)
       (persist-campaign! dir rec)
       (define loaded (load-campaign-record dir (campaign-plan-id rec)))
       (check-not-false loaded)
       (check-equal? (campaign-plan-id loaded) (campaign-plan-id rec))
       (check-equal? (campaign-fence-token loaded) 42)
+      (check-equal? (campaign-record-plan-snapshot-path loaded) snapshot-path)
+      (check-equal? (campaign-record-plan-snapshot-digest loaded) snapshot-digest)
       (check-equal? (campaign-cancellation-reason (campaign-record-cancellation loaded)) "operator")
       (define w (list-ref (campaign-record-waves loaded) 0))
       (check-eq? (campaign-wave-status w) 'in-progress)
       (check-equal? (campaign-wave-attempt-count w) 1)
       (check-equal? (campaign-attempt-fence-token (campaign-wave-current-attempt w)) 7)
+      (set-campaign-record-plan-snapshot-digest! loaded (make-string 64 #\b))
+      (persist-campaign! dir loaded)
+      (check-exn exn:fail:campaign-corrupt?
+                 (lambda () (load-campaign-record dir (campaign-plan-id loaded))))
       (delete-directory/files dir #:must-exist? #f))
 
     (test-case "missing file returns #f (not an error)"
@@ -460,6 +477,31 @@
       (check-eq? (campaign-wave-status (list-ref (campaign-record-waves rec2) 0))
                  'done
                  "returns persisted progress instead of re-seeding pending")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "legacy active campaign without a snapshot remains resumable"
+      (define dir (make-temporary-file "repo-migrate-~a" 'directory))
+      (seed-plan-dir! dir)
+      (define legacy (make-test-record 1))
+      (persist-campaign! dir legacy)
+      (define resumed (load-or-migrate-campaign! dir))
+      (check-equal? (campaign-plan-id resumed) (campaign-plan-id legacy))
+      (check-false (campaign-record-plan-snapshot-path resumed))
+      (check-false (campaign-record-plan-snapshot-digest resumed))
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "active resume rejects authored drift without replacing snapshot"
+      (define dir (make-temporary-file "repo-migrate-~a" 'directory))
+      (seed-plan-dir! dir)
+      (define rec (load-or-migrate-campaign! dir))
+      (define captured-wave
+        (build-path (string->path (campaign-record-plan-snapshot-path rec)) "waves" "W0-zero.md"))
+      (define captured-bytes (file->bytes captured-wave))
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-zero.md")
+                             (lambda (out) (display "\nauthored drift\n" out))
+                             #:exists 'append)
+      (check-exn exn:fail:campaign-corrupt? (lambda () (load-or-migrate-campaign! dir)))
+      (check-equal? (file->bytes captured-wave) captured-bytes)
       (delete-directory/files dir #:must-exist? #f))
 
     (test-case "corrupted existing record fails closed (no silent re-migration)"

@@ -24,10 +24,10 @@
     (set-box! runner-loaded? #t))
   (hash-ref! runner-cache sym (lambda () (dynamic-require runner-path sym))))
 
-;; New args added after inventory?: diagnose-overhead?, mode, json-out, ledger, profile
-;; Default test args: #f 'auto #f #f 'local
-;; Args are: diagnose-overhead? mode json-out ledger profile
-(define default-new-args (list #f 'auto #f #f 'local #f #f #f #f #f #f #f #f #f #f))
+;; Arguments after inventory?, in validate-args! order. Keep scheduler and
+;; ordering defaults aligned with parse-args so these tests exercise validation
+;; rather than stale procedure arity.
+(define default-new-args (list #f 'auto 'batch #f #f 'local #f #f #f #f #f #f #f #f #f #f 'fifo))
 
 ;; ---------------------------------------------------------------------------
 ;; Unit tests: validate-args!

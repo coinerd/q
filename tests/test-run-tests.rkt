@@ -438,6 +438,7 @@
                   inventory?
                   diagnose?
                   mode
+                  _scheduler
                   json-out
                   ledger
                   profile
@@ -469,6 +470,7 @@
                   inventory?
                   diagnose?
                   mode
+                  _scheduler
                   json-out
                   ledger
                   profile
@@ -500,6 +502,7 @@
                   inventory?
                   diagnose?
                   mode
+                  _scheduler
                   json-out
                   ledger
                   profile
@@ -536,6 +539,7 @@
                   inventory?
                   diagnose?
                   mode
+                  _scheduler
                   json-out
                   ledger
                   profile
@@ -566,6 +570,7 @@
                   inventory?
                   diagnose?
                   mode
+                  _scheduler
                   json-out
                   ledger
                   profile

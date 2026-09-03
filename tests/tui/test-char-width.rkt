@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/char-width.rkt")
+         "../../tui/char-width.rkt")
 
 (define char-width-tests
   (test-suite "TUI char-width"

@@ -142,7 +142,9 @@
 
 ;; Quote characters from token edges.
 (define (strip-quote-chars tok)
-  (regexp-replace* #px"^[\"'`]+|[\"'`]+$" tok ""))
+  ;; Backticks are executable substitution syntax, not inert quote edges;
+  ;; preserving them lets command-position checks reject dynamic verbs.
+  (regexp-replace* #px"^[\"']+|[\"']+$" tok ""))
 
 ;; Verbs that wrap a command without changing what the wrapped command does.
 ;; Anchored/verb checks look through them so `sudo rm -rf /`,
@@ -175,20 +177,18 @@
       [else ts])))
 
 ;; The real command behind a segment: leading grouping chars, `VAR=...`
-;; assignments, wrapper verbs and their flags are stripped (bounded, so
-;; pathological input cannot spin). Tokens are quote-stripped.
-(define (command-core text [budget 4])
+;; assignments, wrapper verbs, and their flags are stripped. Every iteration
+;; consumes at least one token, so arbitrary wrapper depth cannot bypass the
+;; classifier and pathological input cannot spin. Tokens are quote-stripped.
+(define (command-core text)
   (let loop ([toks (map strip-quote-chars
-                        (string-split (strip-leading-grouping (whitespace-flat text))))]
-             [n budget])
+                        (string-split (strip-leading-grouping (whitespace-flat text))))])
     (cond
       [(null? toks) ""]
-      [(<= n 0) (string-join toks " ")]
-      [(member (car toks) command-wrapper-verbs)
-       (loop (skip-wrapper-args (cdr toks) (car toks)) (sub1 n))]
+      [(member (car toks) command-wrapper-verbs) (loop (skip-wrapper-args (cdr toks) (car toks)))]
       [(and (> (string-length (car toks)) 1) (char=? (string-ref (car toks) 0) #\-))
-       (loop (cdr toks) (sub1 n))]
-      [(regexp-match? #px"^[A-Za-z_][A-Za-z0-9_]*=" (car toks)) (loop (cdr toks) (sub1 n))]
+       (loop (cdr toks))]
+      [(regexp-match? #px"^[A-Za-z_][A-Za-z0-9_]*=" (car toks)) (loop (cdr toks))]
       [else (string-join toks " ")])))
 
 (define (first-word-of text)
@@ -196,11 +196,21 @@
   (define toks (string-split (command-core text)))
   (and (not (null? toks)) (string-downcase (car toks))))
 
-;; sed with in-place editing mutates a file; streaming sed does not.
-;; (#px for \s — see first-word-of note.)
+;; sed with in-place editing mutates a file; streaming sed does not. GNU/BSD
+;; backup suffixes (`-i.bak`, `--in-place=.bak`) and short-option clusters
+;; still perform an in-place write. Stop option scanning at `--` so an operand
+;; such as `-input.txt` is not mistaken for an option.
 (define (sed-in-place? segment)
   (and (equal? (first-word-of segment) "sed")
-       (regexp-match? #px"(^|\\s)-\\S*i(\\s|$)|--in-place(\\s|$)" segment)))
+       (let loop ([tokens (cdr (string-split (command-core segment)))])
+         (cond
+           [(null? tokens) #f]
+           [(equal? (car tokens) "--") #f]
+           [(regexp-match? #px"^--in-place(?:=.*)?$" (car tokens)) #t]
+           [(and (regexp-match? #px"^-[^-]+" (car tokens))
+                 (string-contains? (substring (car tokens) 1) "i"))
+            #t]
+           [else (loop (cdr tokens))]))))
 
 ;; chmod/chown count as body mutation only for blanket/recursive modes.
 ;; Matched case-insensitively so `-R` (uppercase) is not a blind spot.
@@ -420,6 +430,13 @@
 ;; Mutation evidence anywhere in `text`'s segments, plus detached-segment
 ;; classification (v1.00.24 W3): a segment terminated by a single `&` runs
 ;; after the tool result is produced.
+(define dynamic-command-position-rx #px"^(?:\\$\\(|`)")
+
+(define (dynamic-command-position-reason text)
+  (for/or ([seg+op (in-list (annotated-segments text))])
+    (define core (command-core (whitespace-flat (string-trim (car seg+op)))))
+    (and (regexp-match? dynamic-command-position-rx core) 'dynamic-command-name)))
+
 (define (segment-mutation-reason text)
   (for/or ([seg+op (in-list (annotated-segments text))])
     (or (core-segment-reason (car seg+op))
@@ -447,6 +464,9 @@
       (and (regexp-match? pattern lower) pattern)))
   (cond
     [pattern-hit (format "~a" pattern-hit)]
+    [(dynamic-command-position-reason command)
+     =>
+     values]
     [(nested-mutation-reason command)
      =>
      values]

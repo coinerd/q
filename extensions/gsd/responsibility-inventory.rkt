@@ -88,14 +88,15 @@
    ;; v0.99.90 W1: .rktd storage boundary owns persistence effects
    (make-entry "campaign-repository.rkt"
                'persistence
-               '(fs-read fs-write fs-rename fs-delete mkdir)
+               '(fs-read fs-write fs-rename fs-delete mkdir dir-list path-ops)
                '()
                '("racket/file" "racket/path"
                                "racket/match"
                                "racket/format"
                                "racket/string"
                                "racket/contract"
-                               "campaign-state"))
+                               "campaign-state"
+                               "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
                '(git make-param mkdir path-ops parameterize)
@@ -341,6 +342,7 @@
                '(fs-read fs-write fs-rename fs-delete mkdir dir-list sha256 path-ops)
                '()
                '("racket/file" "racket/format"
+                               "racket/list"
                                "racket/match"
                                "racket/path"
                                "racket/port"

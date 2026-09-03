@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast
+;; @timeout 180
 ;; @boundary unit
 
 ;; BOUNDARY: unit
@@ -82,7 +83,8 @@
   (string-append "#lang racket/base\n"
                  "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
                  "(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n"
-                 "(sleep 1.1)\n"
+                 ";; Deliberately exceed loaded subprocess startup variance.\n"
+                 "(sleep 10)\n"
                  "(call-with-output-file slow-done\n"
                  "  #:exists 'append\n"
                  "  (lambda (o) (display \"done\" o)))\n"))

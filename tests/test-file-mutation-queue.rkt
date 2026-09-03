@@ -216,7 +216,9 @@
 ;; ============================================================
 
 (define (find-diag diags path)
-  (for/first ([d (in-list diags)] #:when (string=? (file-lock-diagnostic-path d) path)) d))
+  (for/first ([d (in-list diags)]
+              #:when (string=? (file-lock-diagnostic-path d) path))
+    d))
 
 (test-case "holder and waiter owners are identifiable with wait duration"
   (define tmp (make-temp-file))
@@ -226,54 +228,49 @@
   (define waiter-waiting (make-semaphore 0))
   (define waiter-entered (make-semaphore 0))
   (define holder
-    (thread
-     (lambda ()
-       (parameterize ([current-file-mutation-queue-owner "session-A/edit"])
-         (with-file-mutation-queue path-str
-                                   (lambda ()
-                                     (semaphore-post holder-entered)
-                                     (semaphore-wait release-holder)))))))
+    (thread (lambda ()
+              (parameterize ([current-file-mutation-queue-owner "session-A/edit"])
+                (with-file-mutation-queue path-str
+                                          (lambda ()
+                                            (semaphore-post holder-entered)
+                                            (semaphore-wait release-holder)))))))
   (semaphore-wait holder-entered)
   (define waiter-releasing (make-semaphore 0))
   (define waiter
-    (thread
-     (lambda ()
-       (parameterize ([current-file-mutation-queue-owner "session-B/edit"]
-                      [current-file-mutation-queue-hook
-                       (lambda (event _path)
-                         (when (eq? event 'lock-wait) (semaphore-post waiter-waiting)))])
-         (with-file-mutation-queue path-str
-                                   (lambda ()
-                                     (semaphore-post waiter-entered)
-                                     ;; Hold the lock so the handoff snapshot below
-                                     ;; is deterministic.
-                                     (semaphore-wait waiter-releasing)))))))
+    (thread (lambda ()
+              (parameterize ([current-file-mutation-queue-owner "session-B/edit"]
+                             [current-file-mutation-queue-hook (lambda (event _path)
+                                                                 (when (eq? event 'lock-wait)
+                                                                   (semaphore-post waiter-waiting)))])
+                (with-file-mutation-queue path-str
+                                          (lambda ()
+                                            (semaphore-post waiter-entered)
+                                            ;; Hold the lock so the handoff snapshot below
+                                            ;; is deterministic.
+                                            (semaphore-wait waiter-releasing)))))))
   (semaphore-wait waiter-waiting)
   ;; While blocked, diagnostics must identify holder and waiter.
   (define diags (file-mutation-queue-diagnostics))
   (define d (find-diag diags path-str))
   (check-not-false d "the contended path must appear in diagnostics")
   (when d
-    (check-equal? (file-lock-diagnostic-holder d) "session-A/edit"
-                  "holder owner must be reported")
-    (check-equal? (file-lock-diagnostic-waiter-owners d) (list "session-B/edit")
+    (check-equal? (file-lock-diagnostic-holder d) "session-A/edit" "holder owner must be reported")
+    (check-equal? (file-lock-diagnostic-waiter-owners d)
+                  (list "session-B/edit")
                   "waiter owners must be reported")
-    (check-true (real? (file-lock-diagnostic-oldest-wait-ms d))
-                "wait duration must be tracked"))
+    (check-true (real? (file-lock-diagnostic-oldest-wait-ms d)) "wait duration must be tracked"))
   ;; Wait duration advances while blocked (truthful timing, no fixed zero).
   (sync/timeout 0.08 never-evt)
   (define d2 (find-diag (file-mutation-queue-diagnostics) path-str))
   (when (and d d2)
-    (check-true (>= (file-lock-diagnostic-oldest-wait-ms d2)
-                    (file-lock-diagnostic-oldest-wait-ms d))
+    (check-true (>= (file-lock-diagnostic-oldest-wait-ms d2) (file-lock-diagnostic-oldest-wait-ms d))
                 "wait duration must be monotonic while blocked"))
   ;; No content leakage: the file contains "0"; diagnostics carry only
   ;; owner labels, path, and timing — never body/content payloads.
-  (check-false
-   (member "0"
-           (list (and d (file-lock-diagnostic-holder d))
-                 (and d2 (file-lock-diagnostic-holder d2))))
-   "diagnostics must not leak file content")
+  (check-false (member "0"
+                       (list (and d (file-lock-diagnostic-holder d))
+                             (and d2 (file-lock-diagnostic-holder d2))))
+               "diagnostics must not leak file content")
   ;; Release: waiter acquires, becomes the holder, waiters clear. The waiter
   ;; holds the lock until explicitly released, so d3 is deterministic.
   (semaphore-post release-holder)
@@ -282,10 +279,10 @@
   (define d3 (find-diag (file-mutation-queue-diagnostics) path-str))
   (check-not-false d3 "waiter must still hold the lock at the handoff snapshot")
   (when d3
-    (check-equal? (file-lock-diagnostic-holder d3) "session-B/edit"
+    (check-equal? (file-lock-diagnostic-holder d3)
+                  "session-B/edit"
                   "waiter becomes holder after release")
-    (check-equal? (file-lock-diagnostic-waiter-owners d3) (list)
-                  "no waiters remain after handoff"))
+    (check-equal? (file-lock-diagnostic-waiter-owners d3) (list) "no waiters remain after handoff"))
   (semaphore-post waiter-releasing)
   (thread-wait waiter)
   (check-equal? (mutation-queue-stats) 0 "registry cleans up after both finish")
@@ -295,11 +292,10 @@
   (define tmp (make-temp-file))
   (define path-str (path->string tmp))
   (define events '())
-  (parameterize ([current-file-mutation-queue-hook
-                  (lambda (event _path) (set! events (cons event events)))])
+  (parameterize ([current-file-mutation-queue-hook (lambda (event _path)
+                                                     (set! events (cons event events)))])
     (with-file-mutation-queue path-str (lambda () 'ok)))
-  (check-false (member 'lock-wait events)
-               "uncontended acquisition must not report lock-wait")
+  (check-false (member 'lock-wait events) "uncontended acquisition must not report lock-wait")
   (delete-file tmp))
 
 (test-case "holder exception releases the lock; waiter proceeds"
@@ -309,24 +305,67 @@
   (define waiter-entered (make-semaphore 0))
   (define captured 'nothing-raised)
   (define holder
-    (thread
-     (lambda ()
-       (with-handlers ([(lambda (v) (eq? v 'holder-boom))
-                        (lambda (v) (set! captured v))])
-         (with-file-mutation-queue path-str
-                                   (lambda ()
-                                     (semaphore-post holder-entered)
-                                     (raise 'holder-boom)))))))
+    (thread (lambda ()
+              (with-handlers ([(lambda (v) (eq? v 'holder-boom)) (lambda (v) (set! captured v))])
+                (with-file-mutation-queue path-str
+                                          (lambda ()
+                                            (semaphore-post holder-entered)
+                                            (raise 'holder-boom)))))))
   (semaphore-wait holder-entered)
   (thread-wait holder)
-  (check-eq? captured 'holder-boom
-             "exception must propagate out of the critical section")
+  (check-eq? captured 'holder-boom "exception must propagate out of the critical section")
   (define waiter
     (thread (lambda ()
-              (with-file-mutation-queue path-str
-                                        (lambda () (semaphore-post waiter-entered))))))
-  (check-not-false (sync/timeout 1 waiter-entered)
-                   "exception in holder must release the path lock")
+              (with-file-mutation-queue path-str (lambda () (semaphore-post waiter-entered))))))
+  (check-not-false (sync/timeout 1 waiter-entered) "exception in holder must release the path lock")
   (thread-wait waiter)
   (check-equal? (mutation-queue-stats) 0 "registry must clean up after failure path")
+  (delete-file tmp))
+
+(test-case "cancelled waiter unregisters without disturbing the holder"
+  (define tmp (make-temp-file))
+  (define path-str (path->string tmp))
+  (define holder-entered (make-semaphore 0))
+  (define release-holder (make-semaphore 0))
+  (define waiter-waiting (make-semaphore 0))
+  (define holder
+    (thread (lambda ()
+              (with-file-mutation-queue path-str
+                                        (lambda ()
+                                          (semaphore-post holder-entered)
+                                          (semaphore-wait release-holder))))))
+  (semaphore-wait holder-entered)
+  (define waiter
+    (thread
+     (lambda ()
+       (with-handlers ([exn:break? void])
+         (parameterize ([current-file-mutation-queue-owner "cancelled-waiter"]
+                        [current-file-mutation-queue-hook (lambda (event _path)
+                                                            (when (eq? event 'lock-wait)
+                                                              (semaphore-post waiter-waiting)))])
+           (with-file-mutation-queue path-str void))))))
+  (semaphore-wait waiter-waiting)
+  (break-thread waiter)
+  (thread-wait waiter)
+  (define d (find-diag (file-mutation-queue-diagnostics) path-str))
+  (check-not-false d)
+  (when d
+    (check-equal? (file-lock-diagnostic-waiter-owners d)
+                  '()
+                  "cancelled waiter must disappear from diagnostics"))
+  (check-equal? (mutation-queue-stats) 1 "the live holder remains registered")
+  (semaphore-post release-holder)
+  (thread-wait holder)
+  (check-equal? (mutation-queue-stats) 0 "cancelled waiter must not leak the registry entry")
+  (delete-file tmp))
+
+(test-case "registration-hook failure unregisters the operation"
+  (define tmp (make-temp-file))
+  (define path-str (path->string tmp))
+  (check-exn exn:fail?
+             (lambda ()
+               (parameterize ([current-file-mutation-queue-hook (lambda (_event _path)
+                                                                  (error 'hook "boom"))])
+                 (with-file-mutation-queue path-str void))))
+  (check-equal? (mutation-queue-stats) 0 "hook failure must not leak the registry entry")
   (delete-file tmp))

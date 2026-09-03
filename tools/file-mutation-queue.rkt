@@ -47,8 +47,7 @@
 (struct waiter-record (owner started-ms) #:transparent)
 
 ;; Immutable snapshot of one contended path, for reporting.
-(struct file-lock-diagnostic
-  (path holder waiter-owners oldest-wait-ms) #:transparent)
+(struct file-lock-diagnostic (path holder waiter-owners oldest-wait-ms) #:transparent)
 
 (define path-locks (make-hash))
 (define path-locks-mutex (make-semaphore 1))
@@ -83,17 +82,18 @@
 ;; record the waiter under its owner label. Returns (cons entry token); the
 ;; token removes this waiter from the map on acquire/unregister.
 (define (register-operation canonical-path owner)
-  (call-with-semaphore
-   path-locks-mutex
-   (lambda ()
-     (define entry
-       (hash-ref! path-locks canonical-path
-                  (lambda () (queue-entry (make-semaphore 1) 0 #f (make-hash)))))
-     (set-queue-entry-pending! entry (add1 (queue-entry-pending entry)))
-     (define token (gensym 'fmq-waiter))
-     (hash-set! (queue-entry-waiters entry) token
-                (waiter-record owner (current-inexact-milliseconds)))
-     (cons entry token))))
+  (call-with-semaphore path-locks-mutex
+                       (lambda ()
+                         (define entry
+                           (hash-ref! path-locks
+                                      canonical-path
+                                      (lambda () (queue-entry (make-semaphore 1) 0 #f (make-hash)))))
+                         (set-queue-entry-pending! entry (add1 (queue-entry-pending entry)))
+                         (define token (gensym 'fmq-waiter))
+                         (hash-set! (queue-entry-waiters entry)
+                                    token
+                                    (waiter-record owner (current-inexact-milliseconds)))
+                         (cons entry token))))
 
 ;; Remove a waiter token and release one pending count. Identity protects
 ;; against deleting a newer entry if this code is ever changed to permit
@@ -108,20 +108,24 @@
                            (when (eq? (hash-ref path-locks canonical-path #f) entry)
                              (hash-remove! path-locks canonical-path))))))
 
-;; WP3.5 (BUG-0056): promote a registered waiter to holder. Must run after the
-;; path semaphore is acquired; clears this operation's waiter record.
+;; WP3.5 (BUG-0056): promote a registered waiter to holder. The internal
+;; holder pair retains the operation token so cancellation cleanup can clear
+;; only its own label and can never erase a successor's label.
 (define (mark-holder! entry token owner)
   (call-with-semaphore path-locks-mutex
                        (lambda ()
                          (hash-remove! (queue-entry-waiters entry) token)
-                         (set-queue-entry-holder-owner! entry owner))))
+                         (set-queue-entry-holder-owner! entry (cons token owner)))))
 
-;; WP3.5 (BUG-0056): clear the holder label before posting the semaphore so a
-;; successor's acquire transitions cleanly. Runs before the semaphore post.
-(define (unmark-holder! entry)
+;; Clear this operation's holder label. The token check makes this safe both
+;; on the normal path and as outer cancellation cleanup after the semaphore
+;; has already handed off to another operation.
+(define (unmark-holder! entry token)
   (call-with-semaphore path-locks-mutex
                        (lambda ()
-                         (set-queue-entry-holder-owner! entry #f))))
+                         (define holder (queue-entry-holder-owner entry))
+                         (when (and (pair? holder) (eq? (car holder) token))
+                           (set-queue-entry-holder-owner! entry #f)))))
 
 ;; Wrap a thunk so that concurrent calls for the same file path are serialized.
 ;; path-str is the raw file path (may contain ~, symlinks, etc.).
@@ -135,27 +139,26 @@
              [entry (car entry+token)]
              [token (cdr entry+token)]
              [sem (queue-entry-semaphore entry)])
+        ;; Registration precedes this wind, so every escape from the hook,
+        ;; semaphore wait, holder transition, or thunk reaches unregister.
         (dynamic-wind
-         ;; Acquire under the pre-wind: the 'registered hook observes the
-         ;; operation after atomic registration but before any semaphore wait.
+         void
          (lambda ()
            ((current-file-mutation-queue-hook) 'registered canonical)
-           (cond
-             ;; Fast path: uncontended acquisition raises no 'lock-wait event.
-             [(sync/timeout 0 sem)
-              (mark-holder! entry token owner)]
-             ;; Contended: surface the wait, then block. A genuinely blocked
-             ;; waiter remains registered as a waiter until it acquires.
-             [else
-              ((current-file-mutation-queue-hook) 'lock-wait canonical)
-              (sync sem)
-              (mark-holder! entry token owner)]))
-         thunk
-         ;; Release: clear the holder label, post the semaphore, then unregister
-         ;; (this order lets the next waiter promote cleanly).
+           ;; Peek without consuming. `call-with-semaphore` below owns the
+           ;; break-safe acquire/release lifecycle; the peek is diagnostics
+           ;; only and avoids a lock leak between a try-wait and its cleanup.
+           (unless (sync/timeout 0 (semaphore-peek-evt sem))
+             ((current-file-mutation-queue-hook) 'lock-wait canonical))
+           (call-with-semaphore sem
+                                (lambda ()
+                                  (dynamic-wind (lambda () (mark-holder! entry token owner))
+                                                thunk
+                                                (lambda () (unmark-holder! entry token))))))
          (lambda ()
-           (unmark-holder! entry)
-           (semaphore-post sem)
+           ;; Also clear here for cancellation during the inner pre-thunk.
+           ;; Token ownership prevents clearing a successor after handoff.
+           (unmark-holder! entry token)
            (unregister-operation canonical entry token))))))
 
 ;; Return the number of paths with active or pending operations (for testing).
@@ -166,24 +169,24 @@
 ;; current holder label, ordered waiter owner labels, and the oldest waiter's
 ;; wait duration in ms. Metadata only — never file content or command bodies.
 (define (file-mutation-queue-diagnostics)
-  (call-with-semaphore path-locks-mutex
-                       (lambda ()
-                         (define now (current-inexact-milliseconds))
-                         (hash-map path-locks
-                                   (lambda (path entry)
-                                     (define waiters
-                                       (sort (hash-map (queue-entry-waiters entry)
-                                                       (lambda (_token rec) rec))
-                                             <
-                                             #:key waiter-record-started-ms))
-                                     (define oldest-start
-                                       (and (not (null? waiters))
-                                            (waiter-record-started-ms (car waiters))))
-                                     (file-lock-diagnostic
-                                      path
-                                      (queue-entry-holder-owner entry)
-                                      (map waiter-record-owner waiters)
-                                      (if oldest-start
-                                          (max 0 (inexact->exact
-                                                  (floor (- now oldest-start))))
-                                          0)))))))
+  (call-with-semaphore
+   path-locks-mutex
+   (lambda ()
+     (define now (current-inexact-milliseconds))
+     (hash-map path-locks
+               (lambda (path entry)
+                 (define waiters
+                   (sort (hash-map (queue-entry-waiters entry) (lambda (_token rec) rec))
+                         <
+                         #:key waiter-record-started-ms))
+                 (define oldest-start
+                   (and (not (null? waiters)) (waiter-record-started-ms (car waiters))))
+                 (define holder (queue-entry-holder-owner entry))
+                 (file-lock-diagnostic path
+                                       (if (pair? holder)
+                                           (cdr holder)
+                                           holder)
+                                       (map waiter-record-owner waiters)
+                                       (if oldest-start
+                                           (max 0 (inexact->exact (floor (- now oldest-start))))
+                                           0)))))))

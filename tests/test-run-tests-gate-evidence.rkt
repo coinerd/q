@@ -10,7 +10,8 @@
 (require rackunit
          racket/port
          racket/file
-         racket/runtime-path)
+         racket/runtime-path
+         "../util/version.rkt")
 
 (define-runtime-path runner-path "../scripts/run-tests.rkt")
 
@@ -151,7 +152,7 @@
   (check-exn exn:fail?
              (lambda ()
                (validate (hasheq 'version
-                                 "1.00.23"
+                                 q-version
                                  'git-sha
                                  "0123456789abcdef0123456789abcdef01234567"
                                  'parsed-test-count
@@ -170,7 +171,7 @@
   (check-exn exn:fail?
              (lambda ()
                (validate (hasheq 'version
-                                 "1.00.23"
+                                 q-version
                                  'git-sha
                                  "0123456789abcdef0123456789abcdef01234567"
                                  'shard-index
@@ -192,7 +193,7 @@
   (define validate (gate-evidence-ref 'validate-gate-evidence!))
   (check-not-exn (lambda ()
                    (validate (hasheq 'version
-                                     "1.00.23"
+                                     q-version
                                      'git-sha
                                      "0123456789abcdef0123456789abcdef01234567"
                                      'shard-index

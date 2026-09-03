@@ -44,10 +44,19 @@
 
 (define (write-test-plan content)
   (define plan-dir (build-path (current-directory) ".planning"))
-  (make-directory* plan-dir)
+  (define waves-dir (build-path plan-dir "waves"))
+  (make-directory* waves-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
                          (lambda (out) (display content out))
-                         #:exists 'replace))
+                         #:exists 'replace)
+  ;; Current /go validates indexed wave documents before constructing the
+  ;; execution prompt. Keep this reproducer's fixture complete so it reaches
+  ;; the replanning behavior it is intended to characterize.
+  (for ([wave (in-list '("W0-fix-foo.md" "W1-fix-bar.md"))]
+        [title (in-list '("Fix foo" "Fix bar"))])
+    (call-with-output-file (build-path waves-dir wave)
+                           (lambda (out) (fprintf out "# ~a\n\n- Verify: focused fixture\n" title))
+                           #:exists 'replace)))
 
 (define (result-action result)
   (if (hook-result? result)
@@ -61,14 +70,32 @@
   (displayln "=== Test 1: What prompt does /go produce? ===")
   (define-values (bus reg ext-reg) (setup))
 
-  (write-test-plan
-   (string-append "# Plan: Test\n\n"
-                  "- [Inbox] W0: Fix foo\n- [Inbox] W1: Fix bar\n\n"
-                  "## Wave 0: Fix foo\n- File: foo.rkt\n- Verify: raco test foo.rkt\n\n"
-                  "## Wave 1: Fix bar\n- File: bar.rkt\n- Verify: raco test bar.rkt\n"))
-
+  (define project-dir (make-temporary-file "q-gsd-go-reproducer-~a" 'directory))
   (define payload (hasheq 'command "/go" 'input "/go"))
-  (define result (dispatch-hooks 'execute-command payload ext-reg))
+  (define result
+    (parameterize ([current-directory project-dir])
+      (define git (find-executable-path "git"))
+      (unless git
+        (error 'test-go-prompt "git executable is required"))
+      (write-test-plan
+       (string-append "# Plan: Test\n\n"
+                      "- [Inbox] W0: Fix foo\n- [Inbox] W1: Fix bar\n\n"
+                      "## Wave 0: Fix foo\n- File: foo.rkt\n- Verify: raco test foo.rkt\n\n"
+                      "## Wave 1: Fix bar\n- File: bar.rkt\n- Verify: raco test bar.rkt\n"))
+      (unless (and (system* git "init" "--quiet")
+                   (system* git "add" ".planning")
+                   (system* git
+                            "-c"
+                            "user.name=q-test"
+                            "-c"
+                            "user.email=q-test@example.invalid"
+                            "commit"
+                            "--quiet"
+                            "-m"
+                            "fixture"))
+        (error 'test-go-prompt "could not initialize isolated git fixture"))
+      (dispatch-hooks 'execute-command payload ext-reg)))
+  (delete-directory/files project-dir)
 
   (define p (hook-result-payload result))
   (define execution-text (and (hash? p) (hash-ref p 'new-session #f)))

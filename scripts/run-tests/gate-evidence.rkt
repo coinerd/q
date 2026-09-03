@@ -38,10 +38,11 @@
     [(not (and (integer? shard-index) (>= shard-index 0) (< shard-index shard-total)))
      (format "--shard-index must be an integer in [0, ~a); got ~a" shard-total shard-index)]
     [(> shard-total 1)
-     (format
-      "--record-gate-evidence is refused for sharded runs (shard ~a of ~a): a shard produces only partial results and must never overwrite or emit full-suite PASS evidence"
-      shard-index
-      shard-total)]
+     (format (string-append "--record-gate-evidence is refused for sharded runs (shard ~a of ~a): "
+                            "a shard produces only partial results and must never overwrite or emit "
+                            "full-suite PASS evidence")
+             shard-index
+             shard-total)]
     [else #f]))
 
 ;; F-15: Validate recorded evidence hash against strict requirements.

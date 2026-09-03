@@ -32,7 +32,7 @@
   (define ext-reg (make-extension-registry))
   (define b (or bus (make-event-bus)))
   ;; Load from q/extensions/
-  (define ext-dir (build-path project-root "q" "extensions"))
+  (define ext-dir (build-path project-root "extensions"))
   (for ([f (in-directory ext-dir)]
         #:when (regexp-match? #rx"\\.rkt$" (path->string f)))
     (with-handlers ([exn:fail? (lambda (e) (void))])
@@ -158,7 +158,7 @@
                        "interfaces/sdk.rkt"
                        "wiring/run-modes.rkt"))
   (for ([rel-path core-modules])
-    (define full-path (build-path project-root "q" rel-path))
+    (define full-path (build-path project-root rel-path))
     (check-true (file-exists? full-path) (format "~a must exist" rel-path))))
 
 ;; ============================================================
@@ -184,7 +184,7 @@
 ;; Deep Test 8: Provider factory supports expected providers
 ;; ============================================================
 (test-case "DEEP-8: provider factory exists"
-  (define pf-path (build-path project-root "q" "runtime" "provider" "provider-factory.rkt"))
+  (define pf-path (build-path project-root "runtime" "provider" "provider-factory.rkt"))
   (check-true (file-exists? pf-path))
   (define content (file->string pf-path))
   (check-true (string-contains? content "openai"))
@@ -194,7 +194,7 @@
 ;; Deep Test 9: Version is current
 ;; ============================================================
 (test-case "DEEP-9: version is current"
-  (define ver-path (build-path project-root "q" "util" "version.rkt"))
+  (define ver-path (build-path project-root "util" "version.rkt"))
   (check-true (file-exists? ver-path))
   (define content (file->string ver-path))
   ;; Verify a valid semver is present (MAJOR.MINOR.PATCH, quoted string)
@@ -212,7 +212,7 @@
 ;; Deep Test 10: Benchmark suite infrastructure
 ;; ============================================================
 (test-case "DEEP-10: benchmark suite modules exist"
-  (define bench-dir (build-path project-root "q" "scripts" "benchmark"))
+  (define bench-dir (build-path project-root "scripts" "benchmark"))
   (check-true (directory-exists? bench-dir))
   (for ([f '("scorer.rkt" "executor.rkt" "task.rkt" "report.rkt")])
     (check-true (file-exists? (build-path bench-dir f)) (format "benchmark/~a must exist" f)))

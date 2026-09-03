@@ -83,6 +83,7 @@
                                  #:repo-sha repo-sha
                                  #:version version
                                  #:scenario-results scenario-results
+                                 #:mode [mode 'real]
                                  #:previous-manifest [previous-manifest #f])
   (define scenario-count (length scenario-results))
   (define step-count (for/sum ([r (in-list scenario-results)]) 1))
@@ -111,8 +112,13 @@
     (for/list ([f (in-list files)])
       (hasheq 'path (path->string (file-name-from-path f)) 'sha256 (or (sha256-file f) "ERROR"))))
 
-  ;; GitHub attestation
-  (define github-attestation (verify-github-attestation repo-sha))
+  ;; Live campaigns require remote GitHub attestation. Mock campaigns record
+  ;; explicitly non-live attestation so unit tests never depend on network or
+  ;; on the current worktree commit already having been pushed.
+  (define github-attestation
+    (if (eq? mode 'real)
+        (verify-github-attestation repo-sha)
+        (hasheq 'verified? #f 'reason "mock campaign: live attestation not attempted")))
 
   ;; Manifest chaining: include hash of previous manifest
   (define previous-hash
@@ -122,6 +128,8 @@
 
   (hasheq 'schema-version
           2
+          'mode
+          (symbol->string mode)
           'tag
           "all-nine-campaign"
           'status
@@ -242,6 +250,7 @@
                              #:repo-sha (or repo-sha "unknown")
                              #:version version
                              #:scenario-results scenario-results
+                             #:mode mode
                              #:previous-manifest previous-manifest))
 
   ;; Credential proof
@@ -264,7 +273,7 @@
   (campaign-result all-passed? scenario-results manifest credential-proof cleanup-verified?))
 
 ;; Verify campaign result
-(define (verify-campaign result)
+(define (verify-campaign result #:allow-mock? [allow-mock? #f])
   (define manifest (campaign-result-manifest result))
   (define reasons '())
   (define (fail! msg)
@@ -283,8 +292,11 @@
     (unless (hash-ref manifest 'github-attestation #f)
       (fail! "github-attestation is missing"))
     (define attestation (hash-ref manifest 'github-attestation #f))
+    (define mock-manifest? (equal? (hash-ref manifest 'mode "real") "mock"))
+    (when (and mock-manifest? (not allow-mock?))
+      (fail! "mock campaign requires explicit verifier opt-in"))
     (when (hash? attestation)
-      (unless (hash-ref attestation 'verified? #f)
+      (unless (or (hash-ref attestation 'verified? #f) (and mock-manifest? allow-mock?))
         (fail! "github-attestation is not verified")))
     (unless (hash-ref manifest 'previous-manifest-hash #f)
       (fail! "previous-manifest-hash is missing"))
@@ -299,8 +311,8 @@
       (hasheq 'valid? #f 'reasons (reverse reasons))))
 
 ;; Verify campaign manifest
-(define (verify-campaign-manifest manifest)
-  (verify-campaign (campaign-result #t '() manifest #t #t)))
+(define (verify-campaign-manifest manifest #:allow-mock? [allow-mock? #f])
+  (verify-campaign (campaign-result #t '() manifest #t #t) #:allow-mock? allow-mock?))
 
 ;; Cleanup campaign artifacts
 (define (campaign-cleanup! root)

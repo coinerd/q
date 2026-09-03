@@ -96,13 +96,11 @@
                       (unless rktd
                         (fail "repository persisted no .rktd — pin cannot observe the schema"))
                       (define d (with-input-from-file rktd read))
-                      ;; W3's schema is positional: (campaign-record pid manifest waves
-                      ;; cancellation fence prov created updated build-version
-                      ;; main-head-sha stale-override cumulative-usage) — 13 list
-                      ;; elements (BUG-0039 W5 appended the trailing usage slot). The
-                      ;; three identity values ride in slots 9-11.
-                      (check-true (and (list? d) (= (length d) 13))
-                                  (format "campaign datum is not the 13-element W5 form: ~s"
+                      ;; The positional schema carries build identity in slots
+                      ;; 9-11, budget-pause in slot 12, and BUG-0052's immutable
+                      ;; snapshot path+digest binding in slots 13-14.
+                      (check-true (and (list? d) (= (length d) 15))
+                                  (format "campaign datum is not the 15-element W3 form: ~s"
                                           (and (list? d) (length d))))
                       (check-equal? (list-ref d 9)
                                     "9.9.99-pin"

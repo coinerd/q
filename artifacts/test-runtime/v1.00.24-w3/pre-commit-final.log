@@ -1,0 +1,32 @@
+
+── q CI Lint (18 checks) ──
+  [PASS] format
+  [PASS] version-sync
+  [PASS] version-validate
+  [PASS] version-cross
+  [PASS] version-expectations
+  [PASS] protocols
+  [PASS] imports
+  [PASS] deps
+  [PASS] metrics-sync
+  [PASS] metrics-lint
+  [PASS] prose
+  [PASS] readme-status
+  [PASS] changelog-dates
+  [PASS] tests
+  [PASS] deprecation
+  [PASS] ci-readiness
+  [PASS] ivg
+  [PASS] doc-freshness
+
+── Summary: 18 passed ──
+=== q Pre-commit Check [quick (fast lints + affected tests)] ===
+
+--- Staged .rkt files: (none) ---
+
+--- Lint Checks (fast) ---
+Lint checks: PASS
+No affected test files found.
+
+=== Summary ===
+All checks passed.

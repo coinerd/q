@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @timeout 300
 ;; @boundary unit
 
 ;; BOUNDARY: integration
@@ -64,8 +65,7 @@
   (current-directory cwd)
   (define-values (sp out in err)
     (parameterize ([current-directory q-dir])
-      (apply subprocess #f #f #f (find-executable-path "racket")
-             (path->string audit-script) args)))
+      (apply subprocess #f #f #f (find-executable-path "racket") (path->string audit-script) args)))
   (current-directory caller-cwd)
   (define output (port->string out))
   (define stderr-output (port->string err))

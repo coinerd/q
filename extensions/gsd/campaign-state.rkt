@@ -40,11 +40,7 @@
                   wave-index-entry-slug
                   wave-index-entry-status)
          (only-in "../../util/json/checksum.rkt" sha256-string)
-         (only-in "plan-snapshot.rkt"
-                  seed-and-bind-plan-snapshot!
-                  load-snapshot-manifest
-                  snapshot-drift?
-                  restore-plan-from-snapshot!))
+         (only-in "plan-snapshot.rkt" seed-and-bind-plan-snapshot! normalize-wave-doc-content))
 
 ;; ============================================================
 ;; Public API with contracts (§24)
@@ -191,6 +187,10 @@
           [campaign-record-build-version (-> campaign-record? (or/c #f string?))]
           [campaign-record-main-head-sha (-> campaign-record? (or/c #f string?))]
           [campaign-record-stale-override (-> campaign-record? any/c)]
+          [campaign-record-plan-snapshot-path (-> campaign-record? (or/c #f string?))]
+          [campaign-record-plan-snapshot-digest (-> campaign-record? (or/c #f string?))]
+          [set-campaign-record-plan-snapshot-path! (-> campaign-record? (or/c #f string?) void?)]
+          [set-campaign-record-plan-snapshot-digest! (-> campaign-record? (or/c #f string?) void?)]
           [set-campaign-record-build-version! (-> campaign-record? (or/c #f string?) void?)]
           [set-campaign-record-main-head-sha! (-> campaign-record? (or/c #f string?) void?)]
           [set-campaign-record-stale-override! (-> campaign-record? any/c void?)]
@@ -899,7 +899,7 @@
 (define (wave-doc-content-hash base-dir idx slug)
   (define p (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
   (if (file-exists? p)
-      (sha256-string (strip-wave-doc-status (call-with-input-file p port->string)))
+      (sha256-string (normalize-wave-doc-content (call-with-input-file p port->string)))
       ;; BUG-0052: a missing wave document is a hard migration failure.
       ;; The empty-content SHA-256 must never stand in for absence.
       (raise
@@ -910,20 +910,9 @@
          slug)
         (current-continuation-marks)))))
 
-;; v0.99.90 W5 (#9236): the manifest hash (plan-id) must be STABLE across
-;; projection updates. Wave docs carry a mutable "Status:" header that the
-;; completion/failure projections rewrite (Inbox -> DONE/FAILED); hashing the
-;; raw file would change the plan-id after every wave, so
-;; load-or-migrate-campaign! would re-migrate and orphan the durable record
-;; and its outbox (Campaign Truth lost on restart). Hash only the doc body.
-(define wave-doc-status-header-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n")
-
-(define (strip-wave-doc-status text)
-  (define m (regexp-match wave-doc-status-header-rx text))
-  (if m
-      (substring text (string-length (car m)))
-      text))
-
+;; v0.99.90 W5 (#9236): plan identity must remain stable across mutable
+;; status/failure projections. plan-snapshot.rkt owns the shared normalization
+;; used both here and by immutable snapshot drift verification.
 (define (seed-record base-dir plan-text provenance)
   (define entries (parse-plan-index plan-text))
   (define title (or (extract-plan-title plan-text) "Plan"))
@@ -956,11 +945,11 @@
                         (current-seconds)
                         (current-seconds)))
 
-;; BUG-0052: after any successful seed, atomically capture the immutable
-;; plan snapshot and bind it into the record so resume can reconstruct the
-;; exact plan/wave instructions even if live .planning mutates later.
-;; Snapshot failure aborts migration — no durable running state is written
-;; without a bound snapshot.
+;; BUG-0052: after any successful seed, capture an immutable plan snapshot
+;; and bind its path+digest into the durable record. Explicit recovery can
+;; reconstruct missing instructions; authored-content drift is never silently
+;; overwritten. Snapshot failure aborts migration, so no newly seeded running
+;; state exists without a bound snapshot.
 (define (seed-and-bind-snapshot! base-dir plan-text provenance)
   (define record (seed-record base-dir plan-text provenance))
   ;; Plan-less migration sources (legacy STATE.md-only repositories) have no

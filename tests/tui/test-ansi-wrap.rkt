@@ -9,7 +9,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/ansi-wrap.rkt")
+         "../../tui/ansi-wrap.rkt")
 
 (define ESC (integer->char 27))
 

@@ -83,6 +83,11 @@
 (test-case "WP3.2: echo with $(date) NOT flagged"
   (check-false (destructive-command? "echo \"result: $(date)\"")))
 
+(test-case "SEC-01: dynamic command names are destructive"
+  (check-true (destructive-command? "$(printf rm) -rf /tmp/victim"))
+  (check-true (destructive-command? "echo safe && `printf rm` -rf /tmp/victim"))
+  (check-false (destructive-command? "echo $(printf rm)")))
+
 (test-case "SEC-01: eval indirection is destructive"
   (check-true (destructive-command? "eval $(echo boom)")))
 
@@ -376,3 +381,14 @@
   (define settings
     (make-minimal-settings #:overrides (hash 'security (hash 'shell-risk-classifier 'structured))))
   (check-equal? (shell-risk-classifier settings) 'structured))
+
+(test-case "W3 repair: wrapper depth cannot bypass destructive verbs"
+  (check-true (destructive-command? "env env env env env rm -rf /tmp/wrapper-depth"))
+  (check-true (destructive-command? "command env nohup time sudo rm -rf /tmp/wrapper-stack")))
+
+(test-case "W3 repair: sed backup suffixes are still in-place writes"
+  (check-true (destructive-command? "sed -i.bak s/x/y/ target.txt"))
+  (check-true (destructive-command? "sed --in-place=.bak s/x/y/ target.txt"))
+  (check-true (destructive-command? "command sed -Eni.bak s/x/y/ target.txt"))
+  (check-false (destructive-command? "sed -n s/x/y/ target.txt"))
+  (check-false (destructive-command? "sed -- -input.txt")))

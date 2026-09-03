@@ -1,9 +1,17 @@
-;; run-tests: suite=fast files=1169 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+;; run-tests: suite=fast files=1170 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
 
 ;; run-tests: serializing 10 mutation-sensitive files before parallel batches
-....user break
-  context...:
-   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:373:0: run-all-files/batch
-   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:713:0: run-suite-once
-   /home/user/src/q-agent/q/scripts/run-tests/runner.rkt:930:0: main
-   body of "/home/user/src/q-agent/q/scripts/run-tests/runner.rkt"
+..........
+........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1170 total, 1170 passed, 0 failed, 0 timeouts
+  Tests:     16950 total, 16950 passed, 0 failed
+  Category:  PASS=1170
+  Elapsed:   1h 31m 49.635s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.23 suite=fast profile=local shard=none execution-mode=subprocess file-count=1170 pass=1170 fail=0 timeout=0 skip=0 wall-clock-seconds=5509.635 metadata-completeness=explicit:1148/heuristic:0/missing:22
