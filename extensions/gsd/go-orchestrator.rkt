@@ -563,11 +563,8 @@
        ;; invocation. Legacy symbol runners coerce; a deadline wraps
        ;; the port with run-wave-with-timeout so a hung tool yields
        ;; 'timed-out (persisted as interrupted) instead of blocking forever.
-       ;; v1.00.24 follow-up: the deadline is MANDATORY. timeout-sec is an
-       ;; override; absent it the executor wraps with
-       ;; current-gsd-wave-timeout-seconds (parameter default 7200, guarded
-       ;; positive-real — never #f), removing the raw unbounded-port fallback
-       ;; that could leave /go sitting idle forever on a hung runner.
+       ;; v1.00.24: the deadline is MANDATORY (never #f/unbounded): absent
+       ;; timeout-sec, wrap with current-gsd-wave-timeout-seconds (default 7200).
        (define runner-port (coerce-runner runner))
        (define effective-timeout-sec (or timeout-sec (current-gsd-wave-timeout-seconds)))
        (define run-one (lambda (idx) (run-wave-with-timeout runner-port effective-timeout-sec idx)))
