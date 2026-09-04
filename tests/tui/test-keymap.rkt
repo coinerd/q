@@ -10,7 +10,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/keymap.rkt")
+         "../../tui/keymap.rkt")
 
 (define keymap-tests
   (test-suite "Configurable keybindings"

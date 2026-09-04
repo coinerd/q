@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; @speed fast
+;; @timeout 180
 ;; @boundary unit
 
 ;; BOUNDARY: unit
@@ -82,7 +83,8 @@
   (string-append "#lang racket/base\n"
                  "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
                  "(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n"
-                 "(sleep 1.1)\n"
+                 ";; Deliberately exceed loaded subprocess startup variance.\n"
+                 "(sleep 10)\n"
                  "(call-with-output-file slow-done\n"
                  "  #:exists 'append\n"
                  "  (lambda (o) (display \"done\" o)))\n"))
@@ -267,7 +269,9 @@
          (list "boom.rkt" "#lang racket/base\n(error \"boom\")\n" 'UNKNOWN_FAILURE 1 0 0 0)))
       (for ([c (in-list cases)])
         (match-define (list name content expected exit-code passed failed total) c)
-        (define r (run-single-file (mk name content) #:timeout 10000))
+        ;; Parallel fast-suite load can delay process startup substantially;
+        ;; keep the characterization bounded without a 10s scheduling flake.
+        (define r (run-single-file (mk name content) #:timeout 30000))
         (check-equal? (classify-test-result r) expected (format "~a classifies as ~a" name expected))
         (check-equal? (test-file-result-exit-code r) exit-code (format "~a exit code" name))
         (check-equal? (test-file-result-passed r) passed (format "~a passed" name))

@@ -66,19 +66,19 @@
                   ordering-record-requested
                   ordering-record-fallback-reason
                   ordering-record->jsexpr)
-         (only-in "gate-evidence.rkt" record-gate-evidence!)
+         (only-in "gate-evidence.rkt" record-gate-evidence! gate-evidence-refusal)
          (only-in "inventory.rkt" print-inventory compute-inventory-hash)
          (only-in "overhead.rkt" print-overhead-diagnostics)
          (only-in "impact.rkt"
-                   run-impact-selection!
-                   print-impact-explain
-                   selection->jsexpr
-                   write-covers-manifest!
-                   load-failure-history
-                   make-prioritize-ctx
-                   prioritize-partition
-                   partition-entries->jsexpr
-                   embed-impact-in-results!))
+                  run-impact-selection!
+                  print-impact-explain
+                  selection->jsexpr
+                  write-covers-manifest!
+                  load-failure-history
+                  make-prioritize-ctx
+                  prioritize-partition
+                  partition-entries->jsexpr
+                  embed-impact-in-results!))
 
 (provide run-single-file
          run-all-files
@@ -763,9 +763,9 @@
   ;; to FIFO with a named reason when duration evidence is unusable.
   (define effective-ordering (or ordering default-ordering))
   (define ordering-rec
-    (or ordering-record
-        (prepare-ordering runnable-files effective-ordering
-                          (current-max-age-seconds) duration-source)))
+    (or
+     ordering-record
+     (prepare-ordering runnable-files effective-ordering (current-max-age-seconds) duration-source)))
   (define ordered-runnable (order-files runnable-files ordering-rec))
   (when (or (not (eq? (ordering-record-mode ordering-rec) effective-ordering))
             (not (eq? effective-ordering 'fifo)))
@@ -982,6 +982,14 @@
                   shard-plan
                   durations
                   ordering)
+  ;; v1.00.24 W3: sharded runs never record gate evidence. A shard covers
+  ;; only part of the suite, so recording would emit (or overwrite) evidence
+  ;; that claims to be a full-suite PASS. Fail closed before doing any work.
+  (when record-gate?
+    (define refusal (gate-evidence-refusal shard-index shard-total))
+    (when refusal
+      (eprintf ";; run-tests: ~a~n" refusal)
+      (exit 2)))
   (when diagnose-overhead?
     (print-overhead-diagnostics #:base-dir base-dir)
     (exit 0))
@@ -1247,11 +1255,11 @@
                       json-out
                       ledger
                       profile
-                       #:shard (and (> shard-total 1) (cons shard-index shard-total))
-                       #:phases phases
-                       #:scheduler scheduler
-                       #:ordering ordering
-                       #:duration-source durations))
+                      #:shard (and (> shard-total 1) (cons shard-index shard-total))
+                      #:phases phases
+                      #:scheduler scheduler
+                      #:ordering ordering
+                      #:duration-source durations))
     (set-box! last-results results)
     (unless (zero? exit-code)
       (emit-impact-evidence!)
@@ -1266,7 +1274,9 @@
                            #:timeout timeout
                            #:repeat repeat
                            #:file-count (length suite-files)
-                           #:inventory-hash inv-hash))
+                           #:inventory-hash inv-hash
+                           #:shard-index shard-index
+                           #:shard-total shard-total))
   (exit 0))
 
 (define invoked-directly?

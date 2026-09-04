@@ -73,6 +73,7 @@
          (only-in "../extensions/hooks.rkt" hook-pass hook-amend hook-block)
          "../runtime/agent-session.rkt"
          (only-in "../runtime/session/session-store.rkt" append-entry! load-session-log)
+         (only-in "helpers/fast-fixtures.rkt" with-deterministic-retries)
          (only-in "../runtime/compaction/compactor.rkt"
                   compaction-strategy
                   compaction-result->message-list
@@ -522,8 +523,12 @@
                                       (make-exn:fail "HTTP 503 service unavailable"
                                                      (current-continuation-marks)))))))
 
-   (define sess (make-agent-session (make-test-config dir bus prov)))
-   (define-values (s result) (run-prompt! sess "trigger stream retry"))
+    (define sess (make-agent-session (make-test-config dir bus prov)))
+    ;; W2 v1.00.24: deterministic retry execution — computed logical delays are
+    ;; still reported (total-retry-delay-ms below), but no real production
+    ;; backoff is paid inside the fast suite (sleep-scale defaults to 0.0).
+    (define-values (s result)
+      (with-deterministic-retries (lambda () (run-prompt! sess "trigger stream retry"))))
 
    ;; Retries exhausted -> error termination
    (check-equal? (loop-result-termination-reason result) 'error)
@@ -535,7 +540,11 @@
                "retry metadata must survive partial stream-error wrapping")
    (check-true (>= (hash-ref payload 'retries-attempted) 1))
    (check-true (hash-has-key? payload 'errorHistory))
-   (check-true (hash-has-key? payload 'total-retry-delay-ms))
+   ;; Logical computed delay survives wrapping: a real number > 0 reported
+   ;; even though the deterministic seam skipped the wall-clock sleep.
+   (check-true (real? (hash-ref payload 'total-retry-delay-ms)))
+   (check-true (> (hash-ref payload 'total-retry-delay-ms) 0)
+               "logical retry delay must be reported despite skipped sleeps")
    ;; Partial messages were still flushed to the session log
    (check-equal? (length (session-history s)) 2 "user message + partial assistant message")
 
@@ -753,4 +762,9 @@
 
    (delete-directory/files dir #:must-exist? #f)))
 
-(run-tests test-agent-session-basic-suite)
+(module+ main
+  ;; W2 v1.00.24: top-level `run-tests` returned whatever exit code the module
+  ;; loader decided (0 even on rackunit failures). Propagate the failure count
+  ;; so the wave verify chain actually gates on this suite.
+  (define exit-code (run-tests test-agent-session-basic-suite))
+  (exit (if (zero? exit-code) 0 1)))

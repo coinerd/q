@@ -11,10 +11,10 @@
 (require rackunit
          rackunit/text-ui
          racket/port
-         "../../../q/tui/state.rkt"
-         "../../../q/tui/render.rkt"
-         "../../../q/tui/scrollback.rkt"
-         "../../../q/util/message/protocol-types.rkt")
+         "../../tui/state.rkt"
+         "../../tui/render.rkt"
+         "../../tui/scrollback.rkt"
+         "../../util/message/protocol-types.rkt")
 
 ;; Helper to make a simple event
 (define (make-test-event ev-type

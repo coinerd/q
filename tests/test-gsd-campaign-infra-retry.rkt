@@ -72,6 +72,12 @@
      (display "# Plan: W3 Infra Retry Test\n\n## Waves\n\n- [Inbox] W0: Wave 0 → waves/W0-wave.md\n"
               out))
    #:exists 'truncate)
+  ;; BUG-0052: every referenced wave doc must exist for campaign creation.
+  (call-with-output-file
+   (build-path dir ".planning" "waves" "W0-wave.md")
+   (lambda (out)
+     (display "# Wave 0\n\nGoal: wave 0\n\n## Verify\n\nraco test .\n" out))
+   #:exists 'truncate)
   dir)
 
 (define (load-or-migrate dir)

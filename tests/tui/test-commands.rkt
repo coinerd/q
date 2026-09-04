@@ -12,10 +12,10 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/commands.rkt"
-         "../../../q/tui/state.rkt"
-         "../../../q/tui/render.rkt"
-         "../../../q/util/message/protocol-types.rkt")
+         "../../tui/commands.rkt"
+         "../../tui/state.rkt"
+         "../../tui/render.rkt"
+         "../../util/message/protocol-types.rkt")
 
 ;; Helper to make a simple cmd-ctx with a fresh state
 (define (make-test-cctx)

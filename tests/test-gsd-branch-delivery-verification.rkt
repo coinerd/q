@@ -364,7 +364,8 @@
                                             #:worktree-path dir))
             (define plan (plan-for '("q/ui-core/preferences.rkt")))
             (define v
-              (parameterize ([current-gsd-delivery-branch-context ctx])
+              (parameterize ([current-gsd-delivery-branch-context ctx]
+                             [current-gsd-delivery-verify-command "true"])
                 (run-delivery-verification proj plan 0)))
             (check-true (delivery-verification-approved? v) (delivery-verification-message v))
             (cleanup-wave-worktree! wt)

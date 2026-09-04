@@ -10,7 +10,7 @@
 
 (require rackunit
          net/base64
-         "../../../q/tui/clipboard.rkt")
+         "../../tui/clipboard.rkt")
 
 ;; Helper: extract base64 payload from OSC 52 sequence
 (define (extract-osc52-b64 str)

@@ -26,7 +26,12 @@
                              ((or/c exact-nonnegative-integer? #f))
                              (values symbol? (or/c approval-grant? #f)))]
                        [approval-grant? (-> any/c boolean?)]
-                       [call-with-approval-grant (-> approval-grant? string? (-> any/c) any/c)]
+                       ;; BUG-0055: policy-level one-use grant for resolved
+                       ;; permissive policies (--auto-approve). Independent of
+                       ;; the interactive channel; still digest-bound.
+                       [make-policy-approval-grant (-> string? policy-approval-grant?)]
+                       [call-with-approval-grant
+                        (-> (or/c approval-grant? policy-approval-grant?) string? (-> any/c) any/c)]
                        [cancel-approval-request! (-> string? boolean?)]
                        [clear-pending-approvals! (-> void?)]
                        [pending-approval-count (-> exact-nonnegative-integer?)]))
@@ -41,6 +46,13 @@
   #:transparent)
 ;; Opaque outside this module. The semaphore makes consume exactly once.
 (struct approval-grant (id generation digest consumed? semaphore))
+
+;; Policy-level grant (BUG-0055): issued when the resolved permission policy
+;; is permissive. One-use via its own semaphore; independent of any channel.
+(struct policy-approval-grant (digest consumed? semaphore))
+
+(define (make-policy-approval-grant digest)
+  (policy-approval-grant digest (box #f) (make-semaphore 1)))
 
 (define current-channel-box (box #f))
 (define generation-box (box 0))
@@ -284,11 +296,27 @@
 ;; exact committed execution; unrelated approval lifecycle operations must not
 ;; be serialized behind an arbitrarily long tool or child execution.
 (define (call-with-approval-grant grant digest thunk)
-  (define consumed?
-    (call-with-semaphore registry-sem (lambda () (consume-grant-locked! grant digest))))
-  (if consumed?
-      (thunk)
-      #f))
+  (cond
+    [(policy-approval-grant? grant)
+     (define consumed?
+       (and (string? digest)
+            (equal? digest (policy-approval-grant-digest grant))
+            (call-with-semaphore
+             (policy-approval-grant-semaphore grant)
+             (lambda ()
+               (cond [(unbox (policy-approval-grant-consumed? grant)) #f]
+                     [else
+                      (set-box! (policy-approval-grant-consumed? grant) #t)
+                      #t])))))
+     (if consumed?
+         (thunk)
+         #f)]
+    [else
+     (define consumed?
+       (call-with-semaphore registry-sem (lambda () (consume-grant-locked! grant digest))))
+     (if consumed?
+         (thunk)
+         #f)]))
 
 (define (cancel-approval-request! id)
   (call-with-semaphore registry-sem

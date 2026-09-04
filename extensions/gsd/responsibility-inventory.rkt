@@ -88,14 +88,15 @@
    ;; v0.99.90 W1: .rktd storage boundary owns persistence effects
    (make-entry "campaign-repository.rkt"
                'persistence
-               '(fs-read fs-write fs-rename fs-delete mkdir)
+               '(fs-read fs-write fs-rename fs-delete mkdir dir-list path-ops)
                '()
                '("racket/file" "racket/path"
                                "racket/match"
                                "racket/format"
                                "racket/string"
                                "racket/contract"
-                               "campaign-state"))
+                               "campaign-state"
+                               "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
                '(git make-param mkdir path-ops parameterize)
@@ -153,14 +154,16 @@
                                "projection-effects"))
    (make-entry "delivery-verifier.rkt"
                'campaign-state
-               '(git subprocess fs-read make-param path-ops parameterize)
+               '(git fs-read make-param path-ops parameterize)
                '(current-gsd-delivery-verify-command current-gsd-delivery-verify-timeout-sec)
                '("racket/format" "racket/path"
                                  "racket/port"
                                  "racket/set"
                                  "racket/string"
                                  "racket/system"
+                                 "composition-root"
                                  "plan-types"
+                                 "verification-job"
                                  "wave-docs"
                                  "plan-context-builder"))
    ;; BUG-0040 W6: terminal-transition notification sink adapter
@@ -333,6 +336,30 @@
    ;; v0.99.90 W0 external-domain ports (3) + W3 executor port (1) + W4 github port (1)
    (make-entry "effect-ports.rkt" 'external-ports '() '() '("racket/contract"))
    (make-entry "wave-runner-port.rkt" 'external-ports '() '() '("racket/contract"))
+   ;; v1.00.24 W3 (BUG-0052): immutable plan snapshots
+   (make-entry "plan-snapshot.rkt"
+               'persistence
+               '(fs-read fs-write fs-rename fs-delete mkdir dir-list sha256 path-ops)
+               '()
+               '("racket/file" "racket/format"
+                               "racket/list"
+                               "racket/match"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "../../util/json/checksum"))
+   ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
+   (make-entry "verification-job.rkt"
+               'external-ports
+               '(fs-read sha256 subprocess parameterize path-ops)
+               '()
+               '("racket/contract" "racket/file"
+                                   "racket/format"
+                                   "racket/match"
+                                   "racket/path"
+                                   "racket/string"
+                                   "racket/system"
+                                   "../../util/json/checksum"))
    (make-entry "github-port.rkt"
                'external-ports
                '()
@@ -350,11 +377,12 @@
                                "effect-ports"
                                "wave-runner-port"
                                "sandbox/gateway-bridge"))
-   (make-entry "composition-root.rkt"
-               'external-ports
-               '(make-param)
-               '()
-               '("racket/contract" "effect-ports" "github-port" "system-adapters"))))
+   (make-entry
+    "composition-root.rkt"
+    'external-ports
+    '(make-param)
+    '(current-gsd-verification-registry)
+    '("racket/contract" "effect-ports" "github-port" "system-adapters" "verification-job"))))
 
 (provide inventory
          (struct-out entry)

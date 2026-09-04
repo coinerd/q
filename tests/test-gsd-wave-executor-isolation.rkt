@@ -55,6 +55,12 @@
                            (for ([i (in-range n-waves)])
                              (fprintf out "- [Inbox] W~a: Wave ~a → waves/W~a-wave.md\n" i i i)))
                          #:exists 'truncate)
+  ;; BUG-0052: every referenced wave doc must exist for campaign creation.
+  (for ([i (in-range n-waves)])
+    (call-with-output-file (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
+                           (lambda (out)
+                             (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
+                           #:exists 'truncate))
   dir)
 
 (define (load-or-migrate dir)

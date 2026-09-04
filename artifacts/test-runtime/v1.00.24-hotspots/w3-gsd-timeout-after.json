@@ -1,0 +1,244 @@
+{
+ "command": "racket tests/test-execution-plane-e2e.rkt && racket tests/test-run-tests-timeout-cleanup.rkt && racket tests/test-scheduler-execution-plane.rkt && racket tests/test-subprocess-edge-cases.rkt",
+ "environment": {
+  "machine": "x86_64",
+  "os": "linux",
+  "racket_version": "8.10",
+  "config_digest": "4aa0bd55a75585e251c2446d2bd1579696cb5f60453ec13c2adf80ca229b8c59"
+ },
+ "families": [
+  {
+   "file": "tests/test-execution-plane-e2e.rkt",
+   "samples": [
+    {
+     "duration_ms": 18488,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 18560,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 19247,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 19808,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 20273,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 18752,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 18313,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 19465,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 20815,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 18854,
+     "file": "tests/test-execution-plane-e2e.rkt",
+     "status": "pass"
+    }
+   ]
+  },
+  {
+   "file": "tests/test-run-tests-timeout-cleanup.rkt",
+   "samples": [
+    {
+     "duration_ms": 5157,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 5061,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 4917,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 4900,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 5419,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 5345,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 5110,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 5057,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 4653,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 4914,
+     "file": "tests/test-run-tests-timeout-cleanup.rkt",
+     "status": "pass"
+    }
+   ]
+  },
+  {
+   "file": "tests/test-scheduler-execution-plane.rkt",
+   "samples": [
+    {
+     "duration_ms": 3229,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3253,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 2990,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3179,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3118,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 2968,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3387,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3325,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3644,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 3840,
+     "file": "tests/test-scheduler-execution-plane.rkt",
+     "status": "pass"
+    }
+   ]
+  },
+  {
+   "file": "tests/test-subprocess-edge-cases.rkt",
+   "samples": [
+    {
+     "duration_ms": 12896,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12440,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12320,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12501,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12827,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12961,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12607,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12559,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12737,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    },
+    {
+     "duration_ms": 12254,
+     "file": "tests/test-subprocess-edge-cases.rkt",
+     "status": "pass"
+    }
+   ]
+  }
+ ],
+ "inputs": {
+  "allowlist_sha256": "79c23003f89243658f37950d1c7abf7efcdfe08213dd3d51ea4f634a5714eddb"
+ },
+ "jobs": 1,
+ "milestone": "v1.00.24",
+ "mode": "subprocess",
+ "q_sha": "a21a09c183661757fd39205ed210dcfc19e37082",
+ "samples_per_family": 10,
+ "scheduler": "serial",
+ "schema": "test-runtime/hotspot-baseline/v1",
+ "selected_paths_digest": "79c23003f89243658f37950d1c7abf7efcdfe08213dd3d51ea4f634a5714eddb",
+ "timeout_s": 240,
+ "wave": "W3"
+}

@@ -13,7 +13,8 @@
 ;;     below the W7 target (extract a module instead of growing).
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
-  . "next release W7 post-extraction pin (BUG-0042); supersedes the this release W0 baseline (2566 lines / 91 defines at flip time); re-recorded v1.00.22 W6 after BUG-0051 release-check wiring (1460 -> 1468 lines, still 23 defines)")
- (line-count . 1468)
- (top-level-define-count . 23)
+  .
+  "v1.00.24 W3 (verification-truth): durable failure-reason stamping and restart retry context added runner-outcome-failure-reason + #:failure-reason on the persist/interrupt boundary (1468 -> 1499 lines, 23 -> 24 defines); supersedes the v1.00.22 W6 BUG-0051 re-record")
+ (line-count . 1499)
+ (top-level-define-count . 24)
  (w7-target-max-lines . 1500))

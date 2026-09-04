@@ -55,7 +55,7 @@
 ;; Pattern 2: Extension Loading
 ;; ============================================================
 (test-case "P2: extensions discoverable from q/extensions/"
-  (define ext-dir (build-path project-root "q" "extensions"))
+  (define ext-dir (build-path project-root "extensions"))
   (check-true (directory-exists? ext-dir) "q/extensions/ must exist")
   (define ext-files
     (filter (lambda (f)
@@ -68,7 +68,7 @@
 (test-case "P2: extensions can be loaded into registry"
   (define bus (make-event-bus))
   (define ext-reg (make-extension-registry))
-  (define ext-dir (build-path project-root "q" "extensions"))
+  (define ext-dir (build-path project-root "extensions"))
   (define loaded-count 0)
   (for ([f (in-directory ext-dir)]
         #:when (and (regexp-match? #rx"\\.rkt$" (path->string f))
@@ -96,7 +96,7 @@
 (test-case "P3: planning-read/write extension tools load"
   (define bus (make-event-bus))
   (define ext-reg (make-extension-registry))
-  (define gsd-ext (build-path project-root "q" "extensions" "gsd-planning.rkt"))
+  (define gsd-ext (build-path project-root "extensions" "gsd-planning.rkt"))
   (check-true (file-exists? gsd-ext) "gsd-planning.rkt must exist")
   ;; Load it
   (load-extension! ext-reg gsd-ext #:event-bus bus)
@@ -129,12 +129,12 @@
 ;; ============================================================
 (test-case "P5: format-tool-schema-hint exists"
   ;; Check that the function is exported from tools/tool.rkt
-  (define mod-path (build-path project-root "q" "tools" "tool.rkt"))
+  (define mod-path (build-path project-root "tools" "tool.rkt"))
   (check-true (file-exists? mod-path)))
 
 (test-case "P5: auto-retry classifies permanent errors"
   ;; Check that permanent-tool-error? exists
-  (define mod-path (build-path project-root "q" "runtime" "auto-retry.rkt"))
+  (define mod-path (build-path project-root "runtime" "auto-retry.rkt"))
   (check-true (file-exists? mod-path)))
 
 ;; ============================================================
@@ -142,25 +142,25 @@
 ;; ============================================================
 (test-case "P6: compact-context tool available"
   ;; Compact context is an extension tool — check it loads
-  (define cc-path (build-path project-root "q" "extensions" "compact-context.rkt"))
+  (define cc-path (build-path project-root "extensions" "compact-context.rkt"))
   (check-true (file-exists? cc-path) "compact-context extension must exist"))
 
 (test-case "P6: context manager module exists"
-  (define ca-path (build-path project-root "q" "runtime" "context" "context-assembly.rkt"))
+  (define ca-path (build-path project-root "runtime" "context" "context-assembly.rkt"))
   (check-true (file-exists? ca-path) "context-assembly module must exist"))
 
 ;; ============================================================
 ;; Pattern 7: Project Tree Context Seeding (v0.19.3)
 ;; ============================================================
 (test-case "P7: project-tree module exists and exports correctly"
-  (define pt-path (build-path project-root "q" "runtime" "project-tree.rkt"))
+  (define pt-path (build-path project-root "runtime" "project-tree.rkt"))
   (check-true (file-exists? pt-path)))
 
 ;; ============================================================
 ;; Pattern 8: GitHub Integration
 ;; ============================================================
 (test-case "P8: github-integration extension exists"
-  (define gi-path (build-path project-root "q" "extensions" "github-integration.rkt"))
+  (define gi-path (build-path project-root "extensions" "github-integration.rkt"))
   (check-true (file-exists? gi-path)))
 
 (skip-on-ci "P8: gh_helpers.py script exists"
@@ -171,7 +171,7 @@
 ;; Pattern 9: Racket Tooling Extension
 ;; ============================================================
 (test-case "P9: racket-tooling extension exists"
-  (define rt-path (build-path project-root "q" "extensions" "racket-tooling.rkt"))
+  (define rt-path (build-path project-root "extensions" "racket-tooling.rkt"))
   (check-true (file-exists? rt-path)))
 
 ;; ============================================================
@@ -203,9 +203,9 @@
 ;; Pattern 12: Remote Collaboration
 ;; ============================================================
 (test-case "P12: remote-collab extension exists"
-  (define rc-path (build-path project-root "q" "extensions" "remote-collab" "remote-collab.rkt"))
+  (define rc-path (build-path project-root "extensions" "remote-collab" "remote-collab.rkt"))
   (check-true (file-exists? rc-path)))
 
 (test-case "P12: q-sync extension exists"
-  (define qs-path (build-path project-root "q" "extensions" "q-sync.rkt"))
+  (define qs-path (build-path project-root "extensions" "q-sync.rkt"))
   (check-true (file-exists? qs-path)))

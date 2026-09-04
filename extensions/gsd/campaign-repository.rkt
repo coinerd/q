@@ -28,7 +28,9 @@
          racket/format
          racket/string
          racket/contract
-         "campaign-state.rkt")
+         "campaign-state.rkt"
+         (only-in "plan-snapshot.rkt" snapshot-dir load-snapshot-manifest snapshot-manifest-digest)
+         (only-in "plan-snapshot.rkt" snapshot-drift?))
 
 ;; ============================================================
 ;; Public API
@@ -147,6 +149,11 @@
     ;; v1.00.18 (BUG-0024 W3): infra-retry hand-off context ("" = none).
     (unless (string? (campaign-wave-attempt-context w))
       (corrupt! "attempt-context must be a string"))
+    ;; v1.00.24 W3 (verification-truth): durable failure reason
+    ;; ("" = none recorded; non-string is corruption — it can only be
+    ;; produced programmatically, loads restore strings only).
+    (unless (string? (campaign-wave-failure-reason w))
+      (corrupt! "failure-reason must be a string"))
     ;; v1.00.21 W5 (BUG-0029): artifact ledger — validated per entry.
     (for ([e (in-list (wave-artifact-ledger w))])
       (unless (campaign-artifact-entry? e)
@@ -176,7 +183,12 @@
       (unless (or (not afence) (exact-nonnegative-integer? afence))
         (corrupt! "attempt fence token must be a non-negative integer"))
       (unless (exact-integer? (campaign-attempt-started-at attempt))
-        (corrupt! "attempt started-at must be an integer"))))
+        (corrupt! "attempt started-at must be an integer"))
+      ;; v1.00.24 W3 (verification-truth): per-attempt failure reason
+      ;; (#f = none recorded).
+      (unless (or (not (campaign-attempt-failure-reason attempt))
+                  (string? (campaign-attempt-failure-reason attempt)))
+        (corrupt! "attempt failure-reason must be a string or #f"))))
   (void))
 
 ;; ============================================================
@@ -213,7 +225,11 @@
                    (campaign-budget-pause-ceiling (campaign-record-budget-pause rec))
                    (campaign-budget-pause-observed (campaign-record-budget-pause rec))
                    (campaign-budget-pause-message (campaign-record-budget-pause rec))
-                   (campaign-budget-pause-timestamp (campaign-record-budget-pause rec))))))
+                   (campaign-budget-pause-timestamp (campaign-record-budget-pause rec))))
+        ;; v1.00.24 W3 (BUG-0052): immutable plan snapshot binding. These
+        ;; fields must survive the first persist/reload boundary.
+        (campaign-record-plan-snapshot-path rec)
+        (campaign-record-plan-snapshot-digest rec)))
 
 (define (manifest->datum m)
   (list 'manifest
@@ -269,7 +285,14 @@
               (wave-usage-total-tokens w)
               (wave-usage-cost-usd w)
               (wave-usage-source w)
-              (wave-usage-missing-attempts w))))
+              (wave-usage-missing-attempts w))
+        ;; v1.00.24 W3 (verification-truth): 12th field is the durable
+        ;; failure-reason pair — (list wave-reason attempt-reason) for the
+        ;; wave and its current attempt ("" / #f = none recorded). Legacy
+        ;; 11/9/8/7/5-field records load with none (absent ≠ corrupt).
+        (list (wave-failure-reason w)
+              (and (campaign-wave-current-attempt w)
+                   (attempt-failure-reason (campaign-wave-current-attempt w))))))
 
 (define (datum->manifest d)
   (match d
@@ -286,6 +309,36 @@
 
 (define (datum->wave d)
   (match d
+    ;; v1.00.24 W3 (verification-truth): 12-field form adds the durable
+    ;; failure-reason pair (fields 12: (list wave-reason attempt-reason)).
+    ;; Legacy 11/9/8/7/5-field records load with no reason (absent ≠
+    ;; corrupt) — the same tolerance rule as every wave-field evolution.
+    [(list idx
+           title
+           status
+           acct
+           attempt
+           branch
+           head-sha
+           attempt-context
+           ledger
+           attempt-usage
+           wave-usage
+           failure-reason)
+     (define w
+       (datum->wave (list idx
+                          title
+                          status
+                          acct
+                          attempt
+                          branch
+                          head-sha
+                          attempt-context
+                          ledger
+                          attempt-usage
+                          wave-usage)))
+     (restore-wave-failure! w failure-reason)
+     w]
     ;; v1.00.21 W5 (BUG-0029): 9-field form carries the artifact ledger.
     ;; Record-schema evolution: pre-W5 (8/7/5-field) records lack the field
     ;; and load with an EMPTY ledger — never a load failure (same tolerance
@@ -357,6 +410,22 @@
                               (match attempt
                                 [(list aid fence started) (campaign-attempt aid fence started)])))]))
 
+;; v1.00.24 W3 (verification-truth): restore the durable failure-reason pair
+;; written by wave->datum. A 2-list restores both the wave-level and the
+;; current-attempt-level reason; a bare string restores the wave level only;
+;; any other shape loads as absent (advisory tolerance, same rule as the
+;; ledger/usage evolutions — never a load failure for old campaigns).
+(define (restore-wave-failure! w failure-reason)
+  (define attempt (campaign-wave-current-attempt w))
+  (match failure-reason
+    [(list wr ar)
+     (when (string? wr)
+       (set-campaign-wave-failure-reason! w wr))
+     (when (and attempt (string? ar))
+       (set-campaign-attempt-failure-reason! attempt ar))]
+    [(? string? wr) (set-campaign-wave-failure-reason! w wr)]
+    [_ (void)]))
+
 ;; v1.00.21 W5 (BUG-0029): ledger entries deserialize with full tolerance —
 ;; a 4-field (start-time only) entry loads with lifecycle defaults, and any
 ;; malformed shape loads as #f and is dropped rather than failing the load
@@ -377,10 +446,48 @@
 
 (define (datum->record d)
   (match d
-    ;; v1.00.22 W5 (BUG-0039): 13-element form carries the durable budget
-    ;; pause (7-list or #f). Legacy forms load with #f (no pause recorded),
-    ;; never a load failure — the same tolerance rule as the ledger and
-    ;; build-identity evolutions.
+    ;; v1.00.24 W3 (BUG-0052): current records carry the immutable snapshot
+    ;; path+digest binding. Both fields are paired and fail closed on damage.
+    [(list 'campaign-record
+           pid
+           m
+           waves
+           cancellation
+           fence
+           prov
+           created
+           updated
+           build-version
+           main-head-sha
+           stale-override
+           budget-pause
+           snapshot-path
+           snapshot-digest)
+     (unless (or (not snapshot-path) (string? snapshot-path))
+       (corrupt! "plan snapshot path must be a string or #f"))
+     (unless (or (not snapshot-digest) (valid-plan-id? snapshot-digest))
+       (corrupt! "plan snapshot digest must be a 64-character SHA-256 or #f"))
+     (unless (equal? (not snapshot-path) (not snapshot-digest))
+       (corrupt! "plan snapshot path and digest must be present together"))
+     (define rec
+       (datum->record (list 'campaign-record
+                            pid
+                            m
+                            waves
+                            cancellation
+                            fence
+                            prov
+                            created
+                            updated
+                            build-version
+                            main-head-sha
+                            stale-override
+                            budget-pause)))
+     (set-campaign-record-plan-snapshot-path! rec snapshot-path)
+     (set-campaign-record-plan-snapshot-digest! rec snapshot-digest)
+     rec]
+    ;; Older budget/build-identity/base forms remain backward compatible and
+    ;; load with absent (#f) snapshot fields.
     [(list 'campaign-record
            pid
            m
@@ -419,7 +526,6 @@
               (campaign-budget-pause kind ceiling observed message timestamp))]
         [_ #f]))
      rec]
-    ;; v1.00.19 W3 (BUG-0031): 11-field form carries the build identity.
     [(list 'campaign-record
            pid
            m
@@ -447,8 +553,6 @@
      (set-campaign-record-main-head-sha! rec (if (string? main-head-sha) main-head-sha #f))
      (set-campaign-record-stale-override! rec (if (boolean? stale-override) stale-override #f))
      rec]
-    ;; Legacy 8-field records (pre-v1.00.19) MUST still load: missing build
-    ;; identity is treated as absent (#f), never as corruption.
     [(list 'campaign-record pid m waves cancellation fence prov created updated)
      (make-campaign-record pid
                            (datum->manifest m)
@@ -494,6 +598,27 @@
          (delete-file tmp)))))
   (void))
 
+(define (verify-snapshot-binding! base-dir rec)
+  (define bound-path (campaign-record-plan-snapshot-path rec))
+  (define bound-digest (campaign-record-plan-snapshot-digest rec))
+  (when (or bound-path bound-digest)
+    (unless (and bound-path bound-digest)
+      (corrupt! "campaign snapshot binding is incomplete"))
+    (define expected-path (snapshot-dir base-dir (campaign-plan-id rec)))
+    (unless (equal? (simplify-path (path->complete-path (string->path bound-path)))
+                    (simplify-path (path->complete-path expected-path)))
+      (corrupt! "campaign snapshot path does not match its plan identity"))
+    (define manifest
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (corrupt! "campaign snapshot verification failed: ~a"
+                                             (exn-message e)))])
+        (load-snapshot-manifest base-dir (campaign-plan-id rec))))
+    (unless manifest
+      (corrupt! "campaign snapshot binding points to a missing snapshot"))
+    (unless (equal? bound-digest (snapshot-manifest-digest manifest))
+      (corrupt! "campaign snapshot manifest digest does not match durable binding")))
+  (void))
+
 (define (load-campaign-record base-dir plan-id)
   (validate-plan-id! plan-id)
   (define target (build-path (campaigns-dir-of base-dir) (string-append plan-id ".rktd")))
@@ -514,14 +639,49 @@
                           (corrupt! "malformed campaign datum in ~a: ~a" target (exn-message e)))])
          (datum->record datum)))
      (validate-campaign-record! rec)
+     (verify-snapshot-binding! base-dir rec)
      rec]))
 
-;; Boundary composition: seed from PLAN/STATE when no durable record exists,
-;; otherwise return the persisted record. A corrupted durable record fails
-;; closed — it is never silently re-migrated.
+(define (active-campaign-records base-dir)
+  (define dir (campaigns-dir-of base-dir))
+  (if (not (directory-exists? dir))
+      '()
+      (for/fold ([active '()]) ([entry (in-list (directory-list dir))])
+        (define name (path->string entry))
+        (define maybe-id
+          (and (string-suffix? name ".rktd") (substring name 0 (- (string-length name) 5))))
+        (if (and maybe-id (valid-plan-id? maybe-id))
+            (let ([rec (load-campaign-record base-dir maybe-id)])
+              (if (for/or ([wave (in-list (campaign-record-waves rec))])
+                    (actionable-status? (campaign-wave-status wave)))
+                  (cons rec active)
+                  active))
+            active))))
+
+;; Resume a unique active durable campaign before consulting mutable live plan
+;; files. This prevents migration from replacing or bypassing its immutable
+;; snapshot. With no active campaign, seed/load by the current PLAN identity.
 (define (load-or-migrate-campaign! base-dir)
-  (define migrated (migrate-campaign! base-dir))
-  (or (load-campaign-record base-dir (campaign-plan-id migrated))
-      (begin
-        (persist-campaign! base-dir migrated)
-        migrated)))
+  (define active (active-campaign-records base-dir))
+  (cond
+    [(>= (length active) 2)
+     (corrupt! "multiple active durable campaigns require explicit resolution")]
+    [(pair? active)
+     (define rec (car active))
+     (define drifted
+       (if (campaign-record-plan-snapshot-path rec)
+           (snapshot-drift? base-dir (campaign-plan-id rec))
+           '()))
+     (unless (null? drifted)
+       (corrupt!
+        (string-append
+         "live planning content drifted from campaign snapshot: ~a; "
+         "restore missing files with restore-plan-from-snapshot!, or explicitly replan/archive authored changes")
+        drifted))
+     rec]
+    [else
+     (define migrated (migrate-campaign! base-dir))
+     (or (load-campaign-record base-dir (campaign-plan-id migrated))
+         (begin
+           (persist-campaign! base-dir migrated)
+           migrated))]))

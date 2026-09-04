@@ -16,7 +16,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/terminal.rkt")
+         "../../tui/terminal.rkt")
 
 (define terminal-tests
   (test-suite "TUI Terminal"

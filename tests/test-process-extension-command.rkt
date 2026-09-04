@@ -90,11 +90,20 @@
   (dynamic-wind
    void
    (lambda ()
-     (make-directory* (build-path dir ".planning" "waves"))
-     (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                            (lambda (out)
-                              (display "# Plan: TUI\n- [Inbox] W0: One\n- [Inbox] W1: Two\n" out))
-                            #:exists 'truncate)
+      (make-directory* (build-path dir ".planning" "waves"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (display "# Plan: TUI\n- [Inbox] W0: One\n- [Inbox] W1: Two\n" out))
+                             #:exists 'truncate)
+      ;; BUG-0052: campaign creation refuses when a referenced wave doc is
+      ;; missing; derived refs W0: One -> waves/W0-one.md, W1: Two -> W1-two.md.
+      (for ([i (in-range 2)]
+            [title (in-list '("One" "Two"))])
+        (call-with-output-file
+         (build-path dir ".planning" "waves" (format "W~a-~a.md" i (string-downcase title)))
+         (lambda (out)
+           (fprintf out "# Wave ~a\n\nGoal: ~a\n\n## Verify\n\nraco test .\n" i title))
+         #:exists 'truncate))
      (define rec (migrate-campaign! dir))
      (define request
        (make-campaign-request dir rec (lambda (idx) (format "isolated-W~a" idx)) (lambda (_) #t)))
@@ -127,10 +136,16 @@
   (dynamic-wind
    void
    (lambda ()
-     (make-directory* (build-path dir ".planning" "waves"))
-     (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                            (lambda (out) (display "# Plan: TUI\n- [Inbox] W0: One\n" out))
-                            #:exists 'truncate)
+      (make-directory* (build-path dir ".planning" "waves"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out) (display "# Plan: TUI\n- [Inbox] W0: One\n" out))
+                             #:exists 'truncate)
+      ;; BUG-0052: derived ref "W0: One" -> waves/W0-one.md must exist.
+      (call-with-output-file
+       (build-path dir ".planning" "waves" "W0-one.md")
+       (lambda (out)
+         (display "# Wave 0\n\nGoal: One\n\n## Verify\n\nraco test .\n" out))
+       #:exists 'truncate)
      (define rec (migrate-campaign! dir))
      (define request
        (make-campaign-request dir

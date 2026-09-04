@@ -10,9 +10,9 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/input.rkt"
-         "../../../q/tui/char-width.rkt"
-         (only-in "../../../q/tui/command-parse.rkt"
+         "../../tui/input.rkt"
+         "../../tui/char-width.rkt"
+         (only-in "../../tui/command-parse.rkt"
                   parsed-command
                   parsed-command-canonical-name
                   parsed-command-args

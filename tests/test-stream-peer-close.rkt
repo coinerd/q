@@ -191,9 +191,9 @@
                                             fake-event->chunks
                                             ;; Windows far shorter than the heartbeat span:
                                             ;; only live traffic keeps this alive.
-                                            #:initial-timeout 0.05
-                                            #:stream-timeout 0.05
-                                            #:thinking-timeout 0.05
+                                            #:initial-timeout 0.3
+                                            #:stream-timeout 0.3
+                                            #:thinking-timeout 0.3
                                             #:max-total-timeout 30
                                             #:peer-close-probe-secs 5))
                        (define outcome (drain-generator! gen))

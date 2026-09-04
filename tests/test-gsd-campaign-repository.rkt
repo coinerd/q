@@ -24,7 +24,8 @@
          racket/string
          (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
-         "../extensions/gsd/campaign-repository.rkt")
+         "../extensions/gsd/campaign-repository.rkt"
+         (only-in "../extensions/gsd/plan-snapshot.rkt" seed-and-bind-plan-snapshot!))
 
 ;; ============================================================
 ;; Helpers
@@ -95,6 +96,8 @@
       (check-equal? (campaign-record-provenance rec) 'plan-and-state)
       (check-equal? (campaign-record-created-at rec) 1000)
       (check-equal? (campaign-record-updated-at rec) 2000)
+      (check-false (campaign-record-plan-snapshot-path rec))
+      (check-false (campaign-record-plan-snapshot-digest rec))
       (check-true (campaign-cancellation? (campaign-record-cancellation rec)))
       (check-equal? (campaign-cancellation-reason (campaign-record-cancellation rec)) "operator")
       (define w (list-ref (campaign-record-waves rec) 0))
@@ -112,16 +115,30 @@
       (begin-attempt! rec 0 7)
       (set-campaign-fence-token! rec 42)
       (set-campaign-cancellation! rec (make-campaign-cancellation "operator" 12345))
+      (make-directory* (build-path dir ".planning"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out) (display "# Plan\n" out))
+                             #:exists 'truncate)
+      (define-values (snapshot-path snapshot-digest)
+        (seed-and-bind-plan-snapshot! dir (campaign-plan-id rec)))
+      (set-campaign-record-plan-snapshot-path! rec snapshot-path)
+      (set-campaign-record-plan-snapshot-digest! rec snapshot-digest)
       (persist-campaign! dir rec)
       (define loaded (load-campaign-record dir (campaign-plan-id rec)))
       (check-not-false loaded)
       (check-equal? (campaign-plan-id loaded) (campaign-plan-id rec))
       (check-equal? (campaign-fence-token loaded) 42)
+      (check-equal? (campaign-record-plan-snapshot-path loaded) snapshot-path)
+      (check-equal? (campaign-record-plan-snapshot-digest loaded) snapshot-digest)
       (check-equal? (campaign-cancellation-reason (campaign-record-cancellation loaded)) "operator")
       (define w (list-ref (campaign-record-waves loaded) 0))
       (check-eq? (campaign-wave-status w) 'in-progress)
       (check-equal? (campaign-wave-attempt-count w) 1)
       (check-equal? (campaign-attempt-fence-token (campaign-wave-current-attempt w)) 7)
+      (set-campaign-record-plan-snapshot-digest! loaded (make-string 64 #\b))
+      (persist-campaign! dir loaded)
+      (check-exn exn:fail:campaign-corrupt?
+                 (lambda () (load-campaign-record dir (campaign-plan-id loaded))))
       (delete-directory/files dir #:must-exist? #f))
 
     (test-case "missing file returns #f (not an error)"
@@ -423,6 +440,10 @@
                            (write-string "# Plan: RepoCampaign\n\n## Waves\n" out)
                            (write-string "- [Inbox] W0: Zero → waves/W0-zero.md\n" out))
                          #:exists 'truncate)
+  (call-with-output-file (build-path dir ".planning" "waves" "W0-zero.md")
+                         (lambda (out)
+                           (write-string "# Wave 0\n\nGoal: zero\n\n## Verify\n\nraco test .\n" out))
+                         #:exists 'truncate)
   (call-with-output-file (build-path dir ".planning" "STATE.md")
                          (lambda (out)
                            (write-string "| Wave | Title | Status |\n|---|---|---|\n" out)
@@ -458,6 +479,31 @@
                  "returns persisted progress instead of re-seeding pending")
       (delete-directory/files dir #:must-exist? #f))
 
+    (test-case "legacy active campaign without a snapshot remains resumable"
+      (define dir (make-temporary-file "repo-migrate-~a" 'directory))
+      (seed-plan-dir! dir)
+      (define legacy (make-test-record 1))
+      (persist-campaign! dir legacy)
+      (define resumed (load-or-migrate-campaign! dir))
+      (check-equal? (campaign-plan-id resumed) (campaign-plan-id legacy))
+      (check-false (campaign-record-plan-snapshot-path resumed))
+      (check-false (campaign-record-plan-snapshot-digest resumed))
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "active resume rejects authored drift without replacing snapshot"
+      (define dir (make-temporary-file "repo-migrate-~a" 'directory))
+      (seed-plan-dir! dir)
+      (define rec (load-or-migrate-campaign! dir))
+      (define captured-wave
+        (build-path (string->path (campaign-record-plan-snapshot-path rec)) "waves" "W0-zero.md"))
+      (define captured-bytes (file->bytes captured-wave))
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-zero.md")
+                             (lambda (out) (display "\nauthored drift\n" out))
+                             #:exists 'append)
+      (check-exn exn:fail:campaign-corrupt? (lambda () (load-or-migrate-campaign! dir)))
+      (check-equal? (file->bytes captured-wave) captured-bytes)
+      (delete-directory/files dir #:must-exist? #f))
+
     (test-case "corrupted existing record fails closed (no silent re-migration)"
       (define dir (make-temporary-file "repo-migrate-~a" 'directory))
       (seed-plan-dir! dir)
@@ -474,6 +520,187 @@
       (delete-directory/files dir #:must-exist? #f))))
 
 ;; ============================================================
+;; 7. v1.00.24 W3 (verification-truth): durable failure-reason round-trip
+;; ============================================================
+
+(define failure-reason-suite
+  (test-suite "durable failure reason round-trip"
+    (test-case "stamped wave+attempt failure reason survives persist/load"
+      (define dir (make-temporary-file "repo-failreason-~a" 'directory))
+      (define rec (make-test-record 1))
+      (begin-attempt! rec 0 7)
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (stamp-wave-failure! w "provider 500 after 5 retries")
+      (persist-campaign! dir rec)
+      (define loaded (load-campaign-record dir (campaign-plan-id rec)))
+      (define lw (list-ref (campaign-record-waves loaded) 0))
+      (check-equal? (wave-failure-reason lw) "provider 500 after 5 retries")
+      (check-equal? (attempt-failure-reason (campaign-wave-current-attempt lw))
+                    "provider 500 after 5 retries")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "legacy 5-field wave datum loads with empty failure reason"
+      (define dir (make-temporary-file "repo-failreason-legacy5-~a" 'directory))
+      (define m
+        (make-campaign-manifest 1
+                                "Legacy"
+                                '()
+                                (list (make-campaign-wave-descriptor 0 "W0" "waves/W0.md" "h0"))
+                                "constraints"))
+      (define real-id (campaign-manifest-hash m))
+      (write-fixture!
+       dir
+       real-id
+       (list 'campaign-record
+             real-id
+             (list 'manifest 1 "Legacy" '() (list (list 0 "W0" "waves/W0.md" "h0")) "constraints")
+             (list (list 0 "W0" 'failed 1 (list "attempt-1" 7 1234)))
+             #f
+             0
+             #f
+             1000
+             2000))
+      (define rec (load-campaign-record dir real-id))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (check-eq? (campaign-wave-status w) 'failed)
+      (check-equal? (wave-failure-reason w) "" "legacy records carry no failure reason")
+      (check-false (attempt-failure-reason (campaign-wave-current-attempt w)))
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "legacy 11-field wave datum (usage era) loads with empty failure reason"
+      (define dir (make-temporary-file "repo-failreason-legacy11-~a" 'directory))
+      (define m
+        (make-campaign-manifest 1
+                                "Legacy"
+                                '()
+                                (list (make-campaign-wave-descriptor 0 "W0" "waves/W0.md" "h0"))
+                                "constraints"))
+      (define real-id (campaign-manifest-hash m))
+      (write-fixture!
+       dir
+       real-id
+       (list 'campaign-record
+             real-id
+             (list 'manifest 1 "Legacy" '() (list (list 0 "W0" "waves/W0.md" "h0")) "constraints")
+             (list (list 0 "W0" 'failed 1 (list "attempt-1" 7 1234) "" "" "" '() #f #f))
+             #f
+             0
+             #f
+             1000
+             2000))
+      (define rec (load-campaign-record dir real-id))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (check-eq? (campaign-wave-status w) 'failed)
+      (check-equal? (wave-failure-reason w) "" "usage-era records carry no failure reason")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "12-field wave datum restores wave and attempt reasons distinctly"
+      (define dir (make-temporary-file "repo-failreason-attempt-~a" 'directory))
+      (define m
+        (make-campaign-manifest 1
+                                "Legacy"
+                                '()
+                                (list (make-campaign-wave-descriptor 0 "W0" "waves/W0.md" "h0"))
+                                "constraints"))
+      (define real-id (campaign-manifest-hash m))
+      (write-fixture!
+       dir
+       real-id
+       (list 'campaign-record
+             real-id
+             (list 'manifest 1 "Legacy" '() (list (list 0 "W0" "waves/W0.md" "h0")) "constraints")
+             (list (list 0
+                         "W0"
+                         'failed
+                         1
+                         (list "attempt-1" 7 1234)
+                         ""
+                         ""
+                         ""
+                         '()
+                         #f
+                         #f
+                         (list "stall: 92 read-only calls" "stall: 92 read-only calls")))
+             #f
+             0
+             #f
+             1000
+             2000))
+      (define rec (load-campaign-record dir real-id))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (check-equal? (wave-failure-reason w) "stall: 92 read-only calls")
+      (check-equal? (attempt-failure-reason (campaign-wave-current-attempt w))
+                    "stall: 92 read-only calls")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "attempt-level reason stays #f when only the wave reason is recorded"
+      (define dir (make-temporary-file "repo-failreason-waveonly-~a" 'directory))
+      (define m
+        (make-campaign-manifest 1
+                                "Legacy"
+                                '()
+                                (list (make-campaign-wave-descriptor 0 "W0" "waves/W0.md" "h0"))
+                                "constraints"))
+      (define real-id (campaign-manifest-hash m))
+      (write-fixture!
+       dir
+       real-id
+       (list 'campaign-record
+             real-id
+             (list 'manifest 1 "Legacy" '() (list (list 0 "W0" "waves/W0.md" "h0")) "constraints")
+             (list (list 0
+                         "W0"
+                         'in-progress
+                         2
+                         (list "attempt-2" 8 2345)
+                         ""
+                         ""
+                         ""
+                         '()
+                         #f
+                         #f
+                         (list "prior attempt failed" #f)))
+             #f
+             0
+             #f
+             1000
+             2000))
+      (define rec (load-campaign-record dir real-id))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (check-equal? (wave-failure-reason w)
+                    "prior attempt failed"
+                    "the wave keeps the last failure for retry prompts")
+      (check-false (attempt-failure-reason (campaign-wave-current-attempt w))
+                   "a fresh attempt never inherits the prior attempt's reason")
+      (delete-directory/files dir #:must-exist? #f))
+
+    (test-case "non-string wave failure reason loads as empty (advisory tolerance)"
+      (define dir (make-temporary-file "repo-failreason-tol-~a" 'directory))
+      (define m
+        (make-campaign-manifest 1
+                                "Legacy"
+                                '()
+                                (list (make-campaign-wave-descriptor 0 "W0" "waves/W0.md" "h0"))
+                                "constraints"))
+      (define real-id (campaign-manifest-hash m))
+      (write-fixture!
+       dir
+       real-id
+       (list 'campaign-record
+             real-id
+             (list 'manifest 1 "Legacy" '() (list (list 0 "W0" "waves/W0.md" "h0")) "constraints")
+             (list (list 0 "W0" 'failed 1 (list "attempt-1" 7 1234) "" "" "" '() #f #f 42))
+             #f
+             0
+             #f
+             1000
+             2000))
+      (define rec (load-campaign-record dir real-id))
+      (define w (list-ref (campaign-record-waves rec) 0))
+      (check-equal? (wave-failure-reason w) "" "malformed reason loads as absent, never a crash")
+      (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -484,6 +711,7 @@
     containment-suite
     nofollow-suite
     atomic-suite
-    migrate-suite))
+    migrate-suite
+    failure-reason-suite))
 
 (void (run-tests repository-suite))

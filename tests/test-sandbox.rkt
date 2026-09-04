@@ -10,9 +10,9 @@
 (require rackunit
          rackunit/text-ui
          racket/port
-         "../../q/sandbox/limits.rkt"
-         "../../q/sandbox/subprocess.rkt"
-         "../../q/sandbox/evaluator.rkt")
+         "../sandbox/limits.rkt"
+         "../sandbox/subprocess.rkt"
+         "../sandbox/evaluator.rkt")
 
 ;; ============================================================
 ;; 1. limits.rkt tests

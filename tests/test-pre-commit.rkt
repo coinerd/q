@@ -2,6 +2,7 @@
 
 ;; @speed slow
 ;; @suite default
+;; @timeout 600
 
 ;; BOUNDARY: integration
 

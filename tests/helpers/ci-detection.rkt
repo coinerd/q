@@ -21,13 +21,13 @@
          racket/file
          racket/path)
 
-;; Project root is three levels up from this file:
-;; tests/helpers/ -> tests/ -> q/ -> repo root
+;; Project root is the q checkout itself, two levels up from this file:
+;; tests/helpers/ -> tests/ -> q root. This remains valid for a standalone
+;; worktree and does not depend on a parent directory also being named `q`.
 (define project-root
   (simplify-path
    (build-path (path-only (resolved-module-path-name (variable-reference->resolved-module-path
                                                       (#%variable-reference))))
-               ".."
                ".."
                "..")))
 

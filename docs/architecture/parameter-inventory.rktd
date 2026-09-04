@@ -63,17 +63,21 @@
                             (current-gsd-lifecycle-reset-suppressed? . OTHER_REVIEWED))
  ("extensions/gsd/events.rkt" (current-gsd-correlation-id . TURN_LOCAL))
  ("extensions/gsd/plan-context-builder.rkt" (current-git-root . CONFIGURATION))
- ("extensions/gsd/composition-root.rkt" (current-gsd-effect-ports . SERVICE_HANDLE))
+ ("extensions/gsd/composition-root.rkt" (current-gsd-effect-ports . SERVICE_HANDLE)
+                                        ;; v1.00.24 W3 verification-truth: the ONE
+                                        ;; process-wide owned-singleton verification
+                                        ;; registry; tests rebind to an isolated
+                                        ;; registry per case
+                                        (current-gsd-verification-registry . SERVICE_HANDLE))
  ("extensions/gsd/delivery-verifier.rkt" (current-gsd-delivery-verify-command . SERVICE_HANDLE)
                                          (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
                                          (current-gsd-delivery-branch-context . SERVICE_HANDLE))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
- ("extensions/gsd/freshness.rkt"
-    ;; test seam: overrides the version-freshness probe (running version vs
-    ;; checkout) so tests can simulate a stale build; never set in prod
-    (current-gsd-freshness-check . OTHER_REVIEWED))
+ ;; test seam: overrides the version-freshness probe (running version vs
+ ;; checkout) so tests can simulate a stale build; never set in prod
+ ("extensions/gsd/freshness.rkt" (current-gsd-freshness-check . OTHER_REVIEWED))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)
@@ -94,7 +98,7 @@
                                      (gsd-wave-gate-counter . OTHER_REVIEWED))
  ("extensions/hooks.rkt" (current-hook-timeout-ms . CONFIGURATION))
  ("extensions/loader.rkt" (current-extension-startup-timeout . CONFIGURATION)
-                           (current-reload-bytecode-roots . CONFIGURATION))
+                          (current-reload-bytecode-roots . CONFIGURATION))
  ("extensions/mcp/protocol.rkt" (current-mcp-execute-fn . SERVICE_HANDLE))
  ("extensions/mcp/tool-bridge.rkt" (current-mcp-event-sink . SERVICE_HANDLE))
  ("extensions/quarantine.rkt" (current-quarantine-dir . CONFIGURATION))
@@ -201,6 +205,7 @@
                                (current-worker-args . CONFIGURATION)
                                (current-worker-command . CONFIGURATION)
                                (current-execution-plane-enabled . CONFIGURATION))
+ ("sandbox/gateway-ipc.rkt" (current-gateway-max-queue-depth . CONFIGURATION))
  ("sandbox/limits.rkt" (current-max-processes . CONFIGURATION)
                        (current-process-count . OTHER_REVIEWED))
  ("sandbox/subprocess.rkt" (current-subprocess-trace-id . OTHER_REVIEWED)
@@ -222,7 +227,8 @@
  ("tools/builtins/spawn-rate-limit.rkt" (current-spawn-timestamps . OTHER_REVIEWED))
  ("tools/builtins/write.rkt" (cumulative-write-budget . CONFIGURATION)
                              (current-max-write-bytes . CONFIGURATION))
- ("tools/file-mutation-queue.rkt" (current-file-mutation-queue-hook . SERVICE_HANDLE))
+ ("tools/file-mutation-queue.rkt" (current-file-mutation-queue-hook . SERVICE_HANDLE)
+                                  (current-file-mutation-queue-owner . TURN_LOCAL))
  ("tools/scheduler-execution.rkt" (max-parallel-tools . CONFIGURATION))
  ("tui/cell-diff-render.rkt" (current-full-render-threshold . CONFIGURATION))
  ("tui/clipboard.rkt" (current-clipboard-mode . CONFIGURATION))

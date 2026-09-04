@@ -1,0 +1,80 @@
+;; run-tests: suite=fast files=1168 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 10 mutation-sensitive files before parallel batches
+..........
+.....................................F............................................................................................................................................................................................................................................................................................................................................F.F.................F.........F....F.....................F........F....F..................................................................F..................................................................................................................................................................................................................F...........................................................................................................F................................F..............................................................................................................FFF.......F...F.F..............F..FF.FFFFFFF.....F.FFF.F.....FFF..............F.....F.........FF...F....F......FF.F..........................F..F....FF..FFF...F.FFFF..F........F....F.....
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1168 total, 1107 passed, 61 failed, 0 timeouts
+  Tests:     16135 total, 16055 passed, 80 failed
+  Category:  PASS=1107, ASSERTION_FAILURE=14, UNKNOWN_FAILURE=47
+  Elapsed:   1h 28m 45.498s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ❌ FAIL
+═══════════════════════════════════════════════════════════
+
+FAILURES:
+  ✗ tests/test-arch-boundaries.rkt [ASSERTION_FAILURE] (exit=1, 13 passed, 1 failed, 3.488s)
+  ✗ tests/test-gsd-campaign-infra-retry.rkt [ASSERTION_FAILURE] (exit=1, 1 passed, 6 failed, 16.939s)
+  ✗ tests/test-gsd-campaign-repository.rkt [ASSERTION_FAILURE] (exit=1, 22 passed, 3 failed, 1.896s)
+  ✗ tests/test-gsd-d8-provider-retry-scaling.rkt [ASSERTION_FAILURE] (exit=1, 7 passed, 2 failed, 22.241s)
+  ✗ tests/test-gsd-freshness-guard-characterization.rkt [ASSERTION_FAILURE] (exit=1, 2 passed, 1 failed, 1.475s)
+  ✗ tests/test-gsd-go-orchestrator.rkt [ASSERTION_FAILURE] (exit=1, 12 passed, 40 failed, 4.186s)
+  ✗ tests/test-gsd-responsibility-inventory.rkt [ASSERTION_FAILURE] (exit=1, 4 passed, 1 failed, 15.783s)
+  ✗ tests/test-gsd-wave-completion.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 9 failed, 2.023s)
+  ✗ tests/test-gsd-wave-executor-isolation.rkt [ASSERTION_FAILURE] (exit=1, 7 passed, 11 failed, 3.034s)
+  ✗ tests/test-hotspot-benchmark.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 0 failed, 1.928s)
+  ✗ tests/test-process-extension-command.rkt [ASSERTION_FAILURE] (exit=1, 7 passed, 2 failed, 17.496s)
+  ✗ tests/test-runner-scheduler-characterization.rkt [ASSERTION_FAILURE] (exit=1, 6 passed, 1 failed, 1m 34.796s)
+  ✗ tests/test-session-hygiene-characterization.rkt [ASSERTION_FAILURE] (exit=1, 12 passed, 1 failed, 2.618s)
+  ✗ tests/test-subagent-config.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 16.946s)
+  ✗ tests/test-subagent-retry.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.851s)
+  ✗ tests/test-summary-cache-eviction.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.172s)
+  ✗ tests/test-task-state.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.259s)
+  ✗ tests/test-termination-reasons.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 19.936s)
+  ✗ tests/test-test-gate-ownership.rkt [ASSERTION_FAILURE] (exit=1, 9 passed, 2 failed, 52.44s)
+  ✗ tests/test-token-metrics.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.012s)
+  ✗ tests/test-tool-classification.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.901s)
+  ✗ tests/test-tool-coordinator-contracts.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.626s)
+  ✗ tests/test-tool-coordinator-cwd.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.638s)
+  ✗ tests/test-tool-coordinator-duration.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.084s)
+  ✗ tests/test-tool-coordinator-edges.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.23s)
+  ✗ tests/test-tool-coordinator-phases.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.398s)
+  ✗ tests/test-tool-coordinator-pure.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.709s)
+  ✗ tests/test-tool-coordinator.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.034s)
+  ✗ tests/test-tool-dispatch-watchdog.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.657s)
+  ✗ tests/test-tool-edit.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 15.091s)
+  ✗ tests/test-tool-error-correction-wiring.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 15.0s)
+  ✗ tests/test-tool-gateway-bridge.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.095s)
+  ✗ tests/test-tool-internal-gate.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.056s)
+  ✗ tests/test-tool-progress.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.363s)
+  ✗ tests/test-tool-registry-unit.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.139s)
+  ✗ tests/test-tool-registry.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.306s)
+  ✗ tests/test-tool-timeout-scheduler.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.553s)
+  ✗ tests/test-transition-matrix.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.417s)
+  ✗ tests/test-turn-context-assembly.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 19.981s)
+  ✗ tests/test-ui-action-adapter-wiring.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.566s)
+  ✗ tests/test-ui-action-adapters.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.654s)
+  ✗ tests/test-ui-action-parity.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.538s)
+  ✗ tests/test-ui-import-safety.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 4.468s)
+  ✗ tests/test-universal-user-pinning-e2e.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.563s)
+  ✗ tests/test-universal-user-pinning.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.72s)
+  ✗ tests/test-v0756-audit-closure.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.464s)
+  ✗ tests/test-w3-capability-enforcement.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 15.16s)
+  ✗ tests/test-w3-correctness.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.317s)
+  ✗ tests/test-wave12.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 2.329s)
+  ✗ tests/test-wave2-runtime-ergonomics.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.747s)
+  ✗ tests/test-wave4-sdk-expansion.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.485s)
+  ✗ tests/test-wave4-user-facing.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 18.49s)
+  ✗ tests/test-wave5-capability-gaps.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 18.396s)
+  ✗ tests/test-wiring-contracts.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 15.503s)
+  ✗ tests/test-wiring-run-interactive.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.795s)
+  ✗ tests/test-wiring-run-modes.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.598s)
+  ✗ tests/test-worker-main.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.048s)
+  ✗ tests/test-worker-security.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.229s)
+  ✗ tests/test-workflow-executor.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 1.97s)
+  ✗ tests/test-ws-conclusion-fallback.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 14.423s)
+  ✗ tests/workflows/gsd/test-gsd-golden-traces.rkt [UNKNOWN_FAILURE] (exit=1, 0 passed, 0 failed, 19.478s)
+RUN-SUMMARY runner-version=1.00.23 suite=fast profile=local shard=none execution-mode=subprocess file-count=1168 pass=1107 fail=61 timeout=0 skip=0 wall-clock-seconds=5325.498 metadata-completeness=explicit:1147/heuristic:0/missing:21

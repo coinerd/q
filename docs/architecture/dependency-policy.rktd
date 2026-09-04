@@ -62,8 +62,12 @@
      (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
      (owner . "runtime")
      (permanent-waiver . #t)
-     (waiver-justification
-      . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
+      (waiver-justification
+       . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
+    (permission/permission-gate.rkt
+     (rationale . "BUG-0055 facade: spawn-approval (tools/builtins) consumes the resolved permission policy through this re-export plus the spawn auto-grant rule; dated so the rule relocates next to its canonical config after the W3 series")
+     (owner . "runtime")
+     (revisit-by . "2026-12-31"))
 ))
   (agent . ())
   (extensions

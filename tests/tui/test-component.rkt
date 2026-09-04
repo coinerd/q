@@ -9,9 +9,9 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/component.rkt"
-         "../../../q/tui/render.rkt"
-         "../../../q/tui/state.rkt")
+         "../../tui/component.rkt"
+         "../../tui/render.rkt"
+         "../../tui/state.rkt")
 
 (define-test-suite
  test-component

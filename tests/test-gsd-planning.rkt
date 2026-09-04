@@ -638,7 +638,7 @@
 (test-case "planning-implement-prompt assigns only status transitions to the coordinator"
   (check-true (string-contains? planning-implement-prompt "Do NOT call /wave-done"))
   (check-true (string-contains? planning-implement-prompt "coordinator owns status transitions"))
-  (check-true (string-contains? planning-implement-prompt "verifies real delivery evidence")))
+  (check-true (string-contains? planning-implement-prompt "owned gate's terminal result")))
 
 (test-case "planning-implement-prompt allows planning-read but blocks planning-write"
   (check-false (string-contains? planning-implement-prompt

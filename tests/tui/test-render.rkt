@@ -10,10 +10,10 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/render.rkt"
-         "../../../q/tui/state.rkt"
-         "../../../q/tui/input.rkt"
-         "../../../q/tui/char-width.rkt")
+         "../../tui/render.rkt"
+         "../../tui/state.rkt"
+         "../../tui/input.rkt"
+         "../../tui/char-width.rkt")
 
 (define render-tests
   (test-suite "TUI Render"

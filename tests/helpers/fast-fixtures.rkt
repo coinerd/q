@@ -39,14 +39,20 @@
 
 ;; Runs thunk with deterministic retry behavior:
 ;;  - current-random-source returns a deterministic 1.0 (max backoff), and
-;;  - current-auto-retry-sleep-scale is 0.0 — backoff delays are still
-;;    computed and reported in retry events/stats, only the wall-clock sleep
-;;    is skipped (production default scale is 1.0, unchanged).
+;;  - current-auto-retry-sleep-scale is 0.0 by default — backoff delays are
+;;    still computed and reported in retry events/stats, only the wall-clock
+;;    sleep is skipped (production default scale is 1.0, unchanged).
 ;; When #:max-retries is given, current-provider-retry-max-retries is pinned
 ;; to that value for the dynamic extent; otherwise the ambient value is kept.
-(define (with-deterministic-retries thunk #:max-retries [max-retries #f])
+;; W2 v1.00.24: #:sleep-scale (default 0.0) re-enables the REAL wall-clock
+;; sleep path for the bounded slow/L4 timer canary
+;; (tests/test-auto-retry-timer-canary.rkt) without changing the fast-suite
+;; default of skipping sleeps.
+(define (with-deterministic-retries thunk
+                                    #:max-retries [max-retries #f]
+                                    #:sleep-scale [sleep-scale 0.0])
   (parameterize ([current-random-source (lambda () 1.0)]
-                 [current-auto-retry-sleep-scale 0.0]
+                 [current-auto-retry-sleep-scale sleep-scale]
                  [current-provider-retry-max-retries (or max-retries
                                                          (current-provider-retry-max-retries))])
     (thunk)))

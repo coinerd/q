@@ -3,12 +3,10 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
-;; @timeout 600
-;; Rationale: the BUG-0033 spot-checks spawn three full racket subprocess
-;; test runs (test-ui-action-adapters, test-w9-ui-regression,
-;; test-audit-script). Cold-cache and under parallel-suite load these
-;; exceed the 120s default per-file timeout and abort the fast suite
-;; with a spurious timeout (observed in the v1.00.20 W0 campaign).
+;; RA-4 W1: the BUG-0033 spot-checks no longer spawn nested full test runs.
+;; A single minimal probe (tests/fixtures/cwd-invocation-probe.rkt) runs in
+;; a subprocess from an isolated private temp directory; the real audit
+;; CWD behavior is owned by tests/test-audit-script.rkt in slow/L4.
 
 ;; BOUNDARY: unit
 ;; Tests for CWD-independent module loading patterns (v0.99.38 W2)
@@ -136,31 +134,65 @@
     (check-not-false dispatch-fn "dynamic-require via runtime-path should work from any cwd")))
 
 ;; ============================================================
-;; Test 7: BUG-0033 — tracked test files invocable from an
-;; arbitrary cwd (subprocess spot-check from the system temp dir).
-;; The wave-doc convention is `cd <project-base>/q && racket
-;; tests/<name>.rkt`; each of these spot-checks additionally proves
-;; `racket <project-base>/q/tests/<name>.rkt` passes from ANY cwd.
-;; Spot-checked files must not include this file itself (recursion).
+;; Test 7: RA-4 W1 — CWD-independence probe invocable from an
+;; arbitrary cwd without nested suite execution.
+;; The probe is launched by absolute path while current-directory is an
+;; isolated private temp directory. All subprocess-induced writes are
+;; kept inside that private directory (PLT_COMPILED_DIR is redirected
+;; there); the test asserts the exit code, the deterministic sentinel,
+;; and that no writes landed outside the private temp directory.
 ;; ============================================================
 
+(require racket/port
+         racket/system)
+
 (define racket-exe (find-executable-path "racket"))
+(define probe-path
+  (simplify-path (build-path this-module-dir "fixtures" "cwd-invocation-probe.rkt")))
 
-(define (spot-check-from-tmp test-file)
-  (parameterize ([current-directory (find-system-path 'temp-dir)])
-    (system*/exit-code racket-exe (path->string (build-path this-module-dir test-file)))))
+;; Runs the probe with cwd = <private>/cwd, private output dir
+;; <private>/probe-out, and PLT_COMPILED_DIR = <private>.
+;; Returns (values exit-code stdout out-dir-entries cwd-dir-entries).
+(define (run-probe-in-private-dir! private-dir)
+  (define out-dir (build-path private-dir "probe-out"))
+  (define cwd-dir (build-path private-dir "cwd"))
+  (make-directory out-dir)
+  (make-directory cwd-dir)
+  (define stdout-path (build-path private-dir "probe-stdout.txt"))
+  (define env
+    (make-environment-variables
+     #"PLT_COMPILED_DIR" (string->bytes/utf-8 (path->string private-dir))))
+  (define exit-code
+    (parameterize ([current-directory cwd-dir]
+                   [current-environment-variables env])
+      (define stdout-file
+        (open-output-file stdout-path #:exists 'truncate/replace))
+      (define-values (proc _stdout _stdin _stderr)
+        (subprocess stdout-file #f stdout-file
+                    racket-exe (path->string probe-path) (path->string out-dir)))
+      (close-output-port stdout-file)
+      (subprocess-wait proc)
+      (subprocess-status proc)))
+  (define stdout (file->string stdout-path))
+  (values exit-code
+          stdout
+          (map path->string (directory-list out-dir))
+          (map path->string (directory-list cwd-dir))))
 
-(test-case "BUG-0033: test-ui-action-adapters.rkt passes from /tmp"
-  (check-equal? (spot-check-from-tmp "test-ui-action-adapters.rkt")
-                0
-                "must be invocable from an arbitrary cwd"))
-
-(test-case "BUG-0033: test-w9-ui-regression.rkt passes from /tmp"
-  (check-equal? (spot-check-from-tmp "test-w9-ui-regression.rkt")
-                0
-                "must be invocable from an arbitrary cwd"))
-
-(test-case "BUG-0033: test-audit-script.rkt passes from /tmp"
-  (check-equal? (spot-check-from-tmp "test-audit-script.rkt")
-                0
-                "must be invocable from an arbitrary cwd"))
+(test-case "RA-4 W1: minimal CWD probe passes from an isolated arbitrary cwd"
+  (define private-dir (make-temporary-file "cwd-probe-~a" 'directory))
+  (dynamic-wind
+   void
+   (λ ()
+     (define-values (exit-code stdout out-entries cwd-entries)
+       (run-probe-in-private-dir! private-dir))
+     (check-equal? exit-code 0 "probe must exit 0 from an arbitrary cwd")
+     (check-true (string-prefix? stdout "cwd-invocation-probe:sentinel")
+                 "probe must print the deterministic sentinel")
+     (check-true (string-contains? stdout "registry-defaults.rkt")
+                 "sentinel must name the required runtime-path target")
+     (check-equal? out-entries '("probe-sentinel.txt")
+                   "probe must write only its sentinel file")
+     (check-equal? cwd-entries '()
+                   "probe must not write outside its private temp directory"))
+   (λ () (delete-directory/files private-dir))))

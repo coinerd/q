@@ -16,8 +16,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/input.rkt"
-         "../../../q/tui/keymap.rkt")
+         "../../tui/input.rkt"
+         "../../tui/keymap.rkt")
 
 ;; ============================================================
 ;; Undo/Redo Deep Stack Tests (#609)

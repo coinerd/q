@@ -257,8 +257,13 @@
       ;; +1 — BUG-0051 W6 release-wave completion
       ;; (extensions/gsd/policy.rkt): current-gsd-release-check
       ;; (CONFIGURATION, external release gate seam).
+      ;; +2 — v1.00.24 W3 worker fairness: current-gateway-max-queue-depth
+      ;; (CONFIGURATION) plus current-file-mutation-queue-owner (TURN_LOCAL);
+      ;; the pre-existing queue hook remains one SERVICE_HANDLE entry.
+      ;; +1 — v1.00.24 W3 verification ownership:
+      ;; current-gsd-verification-registry (SERVICE_HANDLE).
       (check-equal? (length inventory-entries)
-                    223
+                    226
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
