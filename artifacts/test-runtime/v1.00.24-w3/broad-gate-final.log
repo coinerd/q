@@ -12,8 +12,8 @@
              Skipped by profile: 8
   Tests:     19328 total, 19328 passed, 0 failed
   Category:  PASS=1355, SKIPPED_BY_PROFILE=8
-  Elapsed:   2h 0m 25.675s
+  Elapsed:   1h 42m 22.471s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.23 suite=broad profile=local shard=none execution-mode=subprocess file-count=1363 pass=1355 fail=0 timeout=0 skip=8 wall-clock-seconds=7225.675 metadata-completeness=explicit:1341/heuristic:0/missing:22
+RUN-SUMMARY runner-version=1.00.23 suite=broad profile=local shard=none execution-mode=subprocess file-count=1363 pass=1355 fail=0 timeout=0 skip=8 wall-clock-seconds=6142.471 metadata-completeness=explicit:1341/heuristic:0/missing:22
