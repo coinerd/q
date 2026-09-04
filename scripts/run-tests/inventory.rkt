@@ -892,7 +892,53 @@
      "W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file "
      "carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside "
      "a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with "
-     "jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring."))))
+     "jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring."))
+   (hasheq
+    'behavior-id
+    "RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT"
+    'source-gate
+    "unit-fast"
+    'destination-gate
+    "unit-fast"
+    'members
+    '("tests/test-run-tests-shard.rkt")
+    'owner
+    "test-runtime"
+    'status
+    "re-tiered"
+    'wave
+    "W5"
+    'rationale
+    (string-append
+     "W5 re-tier: runner classifier/sharding unit assertions collect from the hermetic fixture tree tests/fixtures/run-tests-discovery/ "
+     "through the new #:root seam on collect-test-files instead of crawling the production repository. The fixture tree owns fast, slow, "
+     "platform, TUI, helper, malformed/edge-metadata, named/unnamed, symlink, and nested cases; unit assertions cover deterministic path "
+     "sort, metadata/heuristic selection, platform inclusion, shard partition, helper/fixture exclusion, missing-root failure, and no "
+     "escape through symlinks or .. without depending on the number of files in the live checkout. Omitted-root calls preserve the pre-W5 "
+     "q-root discovery byte-for-byte, asserted from both directions against the ignored-prefix contract. The test process now propagates "
+     "rackunit failure/error counts to its exit code so runner exit-code verdicts observe real failures."))
+   (hasheq
+    'behavior-id
+    "RUNNER-REPOSITORY-DISCOVERY-L4"
+    'source-gate
+    "slow/L4"
+    'destination-gate
+    "slow/L4"
+    'members
+    '("tests/test-run-tests-repository-discovery.rkt")
+    'owner
+    "test-runtime"
+    'status
+    "re-tiered"
+    'wave
+    "W5"
+    'rationale
+    (string-append
+     "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
+     "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
+     "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
+     "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
+     "live repository discovery remains executable in L4."))))
 
 ;; Rows actually owned by this milestone (frozen table).
 (define (gate-ownership-rows [memberships (gate-membership)])

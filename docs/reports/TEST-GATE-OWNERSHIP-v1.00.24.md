@@ -5,7 +5,7 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`34b399efa688e32bfb67c5a373306142bd92a54775bd33b3a5191e9068fec0d8`
+`d3542eee3904b57001cca97ee798026efb31c7c79e5f7a0b50921cf4022345fb`
 
 ## Gate membership (deterministic repository walk)
 
@@ -16,7 +16,7 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
 | unit-fast | 943 | 310c6ce693c0028d1b55f35d5716b429324df3c5f9b069e6ccf1d32a4b471b43 |
-| slow/L4 | 109 | beb1b48108a9bfae5d04b2518ed76b0808f45cbe44dcccd5cf73740be933e5df |
+| slow/L4 | 110 | 202089e4ca8cd8e2c7c7bde7b92d959ebda48e6b802f48fb2adc193838a96262 |
 
 ## Behavior ownership (frozen v1.00.24 W0 candidate rows)
 
@@ -34,6 +34,8 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GROUPED-MODE-CHARACTERIZATION | fast | fast | tests/test-run-tests-in-process-mode.rkt<br>tests/test-execution-plane-characterization.rkt | test-runtime | retained-in-place | W0 | Grouped in-process execution characterization stays hermetic and fast-tier owned. |
 | GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | fast | fast | tests/test-gsd-system-adapters-timeout.rkt<br>tests/test-gsd-wave-executor-isolation.rkt | gsd-delivery | retained-in-place | W4 | W4 re-tier: deterministic GSD wave timeout semantics remain fast — deadline expiry, external cancellation, exactly-once cancel/outcome emission, cooperative grace, and force-kill-after-grace assertions run against run-wave-with-timeout behind the injected deterministic timeout clock/wait seam (with-deterministic-timeout stages) and pay no wall-clock deadline or grace. Production defaults (current-inexact-milliseconds, sync/timeout, the two-second grace) are unchanged; the seam is test-scoped parameters only. Pre-W4 executor-isolation timeout cases that slept past real one-second deadlines now use the same seam with identical assertions and preserved campaign persistence (DONE never recorded on timeout), retry-count isolation, and durable cancellation coverage. |
 | GSD-TIMEOUT-REAL-CLOCK-CANARY | slow/L4 | slow/L4 | tests/test-gsd-wave-timeout-canary.rkt | gsd-delivery | re-tiered | W4 | W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring. |
+| RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT | unit-fast | unit-fast | tests/test-run-tests-shard.rkt | test-runtime | re-tiered | W5 | W5 re-tier: runner classifier/sharding unit assertions collect from the hermetic fixture tree tests/fixtures/run-tests-discovery/ through the new #:root seam on collect-test-files instead of crawling the production repository. The fixture tree owns fast, slow, platform, TUI, helper, malformed/edge-metadata, named/unnamed, symlink, and nested cases; unit assertions cover deterministic path sort, metadata/heuristic selection, platform inclusion, shard partition, helper/fixture exclusion, missing-root failure, and no escape through symlinks or .. without depending on the number of files in the live checkout. Omitted-root calls preserve the pre-W5 q-root discovery byte-for-byte, asserted from both directions against the ignored-prefix contract. The test process now propagates rackunit failure/error counts to its exit code so runner exit-code verdicts observe real failures. |
+| RUNNER-REPOSITORY-DISCOVERY-L4 | slow/L4 | slow/L4 | tests/test-run-tests-repository-discovery.rkt | test-runtime | re-tiered | W5 | W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; live repository discovery remains executable in L4. |
 
 ## Metadata boundary and declared side effects (per member)
 
@@ -58,3 +60,5 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | tests/test-gsd-system-adapters-timeout.rkt | extensions | fast | #f | #f | #f |  | #f |
 | GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | tests/test-gsd-wave-executor-isolation.rkt | extensions | fast | integration | #f | #f |  | #f |
 | GSD-TIMEOUT-REAL-CLOCK-CANARY | tests/test-gsd-wave-timeout-canary.rkt | extensions | slow | #f | #f | #f |  | #f |
+| RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT | tests/test-run-tests-shard.rkt | default | fast | unit | #f | #f |  | #f |
+| RUNNER-REPOSITORY-DISCOVERY-L4 | tests/test-run-tests-repository-discovery.rkt | default | slow | integration | #f | #f |  | #f |

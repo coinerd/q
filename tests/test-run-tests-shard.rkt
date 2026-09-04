@@ -34,7 +34,7 @@
 
 ;; The exact expected collection of the fixture tree for suite 'all:
 ;; deterministic lexicographic per-level sort, support modules excluded
-;; (/helpers/, /fixtures/), @not-test excluded (zulu-not-test).
+;; (/helpers/, /fixtures/), not-test marker excluded (zulu-not-test).
 (define expected-all
   '("tests/alpha-heuristic-test.rkt" "tests/eps-mutating-probe.rkt"
                                      "tests/gamma-platform-test.rkt"
