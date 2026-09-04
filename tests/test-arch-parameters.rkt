@@ -262,8 +262,14 @@
       ;; the pre-existing queue hook remains one SERVICE_HANDLE entry.
       ;; +1 — v1.00.24 W3 verification ownership:
       ;; current-gsd-verification-registry (SERVICE_HANDLE).
+      ;; +2 — v1.00.24 W4 GSD deadline/event seam
+      ;; (extensions/gsd/system-adapters.rkt): current-gsd-timeout-wait
+      ;; (SERVICE_HANDLE, bounded-wait operation handle) and
+      ;; current-gsd-timeout-now-ms (SERVICE_HANDLE, injected clock probe).
+      ;; Production defaults preserve current-inexact-milliseconds and
+      ;; sync/timeout semantics; tests rebind for determinism.
       (check-equal? (length inventory-entries)
-                    226
+                    228
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
