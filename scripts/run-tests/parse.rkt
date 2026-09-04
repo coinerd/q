@@ -176,7 +176,13 @@
      'MODULE_LOAD_FAILURE]
     [(or (> failed 0)
          (output-matches-any? output
-                              (list #rx"failure" #rx"check-[a-z0-9-]+" #rx"actual:" #rx"expected:")))
+                              (list #rx"failure"
+                                    #rx"check-[a-z0-9-]+"
+                                    #rx"actual:"
+                                    #rx"expected:"
+                                    ;; v1.00.24 W7: module+ test body raised; grouped
+                                    ;; in-process emits raco's phrasing verbatim.
+                                    #rx"test raised an exception")))
      'ASSERTION_FAILURE]
     [else 'UNKNOWN_FAILURE]))
 

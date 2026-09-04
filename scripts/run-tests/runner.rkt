@@ -357,20 +357,27 @@
      (define cust (make-custodian))
      (define worker
        (parameterize ([current-custodian cust])
-         (thread (lambda ()
-                   (with-handlers ([in-process-test-exit?
-                                    (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
-                                   [exn:fail? (lambda (e)
-                                                (displayln (exn->string e) stderr-out)
-                                                (set-box! exit-code 1))])
-                     (parameterize ([current-output-port stdout-out]
-                                    [current-error-port stderr-out]
-                                    [current-directory (in-process-cwd resolved-path)]
-                                    [current-command-line-arguments #()]
-                                    [exit-handler (make-in-process-exit-handler exit-code)]
-                                    [current-namespace (make-base-namespace)])
-                       (dynamic-require (in-process-module-path resolved-path) #f)
-                       (set-box! exit-code 0)))))))
+         (thread
+          (lambda ()
+            (with-handlers ([in-process-test-exit?
+                             (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
+                            [exn:fail? (lambda (e)
+                                         (displayln (exn->string e) stderr-out)
+                                         ;; v1.00.24 W7: mirror raco test's module-
+                                         ;; exception phrasing so grouped and
+                                         ;; subprocess outputs classify identically.
+                                         (fprintf stderr-out
+                                                  "~a: raco test: test raised an exception~n"
+                                                  (path->string (file-name-from-path resolved-path)))
+                                         (set-box! exit-code 1))])
+              (parameterize ([current-output-port stdout-out]
+                             [current-error-port stderr-out]
+                             [current-directory (in-process-cwd resolved-path)]
+                             [current-command-line-arguments #()]
+                             [exit-handler (make-in-process-exit-handler exit-code)]
+                             [current-namespace (make-base-namespace)])
+                (dynamic-require (in-process-module-path resolved-path) #f)
+                (set-box! exit-code 0)))))))
      (define completed? (sync/timeout (/ file-timeout 1000.0) worker))
      (unless completed?
        (custodian-shutdown-all cust))

@@ -1,236 +1,260 @@
 #lang racket/base
-;; v1.00.24 W7: grouped-mode equivalence characterization.
+
+;; tests/test-runner-grouped-characterization.rkt — v1.00.24 W7
 ;;
-;; Contract under test (wave W7, no defaults changed, no eligibility broadened):
-;; 1. A grouped request for an eligible module+ test file runs IN-PROCESS with
-;;    requested-execution-mode "grouped", no fallback reason, and the SAME
-;;    verdict / exit code / parsed counts / captured output as subprocess mode.
-;; 2. Every ineligible file gets a NAMED fallback reason
-;;    (missing-module-plus-test-form | declared-mutation |
-;;     declared-process-isolation), executes subprocess, and is NOT counted
-;;    as grouped (effective_execution_mode = "subprocess").
-;; 3. Timeout, explicit exit, failure, sequential two-file execution and
-;;    repeatability behave identically in both planes.
-;; 4. JSON serialization is ADDITIVE: requested_execution_mode,
-;;    effective_execution_mode, grouped_fallback_reason; legacy results
-;;    (no mode fields) keep serializing with "subprocess"/null defaults.
+;; Grouped-mode equivalence characterization: every eligible grouped-mode
+;; fixture must produce the SAME selected path, exit code, verdict class,
+;; parsed test counts, and stdout/stderr markers as subprocess execution
+;; (wall clock may differ; verdicts may not). Every grouped request that
+;; actually executes subprocess must carry a stable named fallback reason
+;; (or #f when none), and must not be counted as grouped.
+;;
+;; Scope guard: this suite exercises ONLY tests/fixtures/grouped-mode/* —
+;; it never changes production defaults, grouped eligibility, or queue
+;; activation.
+
+(require rackunit
+         racket/path
+         racket/string
+         racket/runtime-path
+         (only-in "../scripts/run-tests/runner.rkt"
+                  run-single-file
+                  current-requested-execution-mode
+                  execution-eligibility-reason
+                  execution-mode-of)
+         (only-in "../scripts/run-tests/parse.rkt"
+                  test-file-result-path
+                  test-file-result-exit-code
+                  test-file-result-total
+                  test-file-result-passed
+                  test-file-result-failed
+                  test-file-result-requested-execution-mode
+                  test-file-result-grouped-fallback-reason
+                  test-file-result-stdout-bytes
+                  test-file-result-stderr-bytes
+                  classify-test-result))
+
+(define-runtime-path fixtures-dir "fixtures/grouped-mode")
+
+(define (fx name)
+  (path->string (simplify-path (build-path fixtures-dir name))))
+
+(define (run-one p mode #:timeout [timeout #f])
+  (parameterize ([current-requested-execution-mode mode])
+    (run-single-file p #:timeout timeout #:mode (string->symbol mode))))
+
+(define (out-of r)
+  (bytes->string/utf-8 (test-file-result-stdout-bytes r)))
+
+(define (err-of r)
+  (bytes->string/utf-8 (test-file-result-stderr-bytes r)))
+
+;; ── 1. Static eligibility gate (no execution) ──────────────────────────
+;; The stable named reasons; a grouped request that falls back must name
+;; exactly why, and eligible files must yield #f.
+(define expected-reason
+  (hash "eligible-a.rkt"
+        #f
+        "eligible-b.rkt"
+        #f
+        "stdout-stderr.rkt"
+        #f
+        "exception.rkt"
+        #f
+        "explicit-exit.rkt"
+        #f
+        "timeout.rkt"
+        #f
+        "mutates-env-undeclared.rkt"
+        #f
+        "no-submodule.rkt"
+        'missing-module-plus-test-form
+        "top-level-only.rkt"
+        'missing-module-plus-test-form
+        "silent-checks.rkt"
+        #f ; eligible statically; falls back at runtime
+        "declared-mutation.rkt"
+        'declared-mutation
+        "process-isolation.rkt"
+        'declared-process-isolation))
+
+(for ([(name reason) (in-hash expected-reason)])
+  (check-equal? (execution-eligibility-reason (fx name))
+                reason
+                (format "static eligibility reason for ~a" name)))
+
+;; ── 2. Parity characterization: eligible fixtures, both modes ──────────
+;; Asserts equal path, exit code, verdict class, and parsed counts between
+;; subprocess and grouped execution; grouped result must additionally show
+;; requested=grouped, no fallback reason, and effective mode
+;; grouped-in-process.
+(define (assert-parity sub grp what)
+  (check-equal? (test-file-result-path grp)
+                (test-file-result-path sub)
+                (format "~a: same selected path" what))
+  (check-equal? (test-file-result-exit-code grp)
+                (test-file-result-exit-code sub)
+                (format "~a: same exit code" what))
+  (check-equal? (classify-test-result grp)
+                (classify-test-result sub)
+                (format "~a: same verdict class" what))
+  (check-equal? (test-file-result-total grp)
+                (test-file-result-total sub)
+                (format "~a: same parsed total" what))
+  (check-equal? (test-file-result-passed grp)
+                (test-file-result-passed sub)
+                (format "~a: same parsed passed" what))
+  (check-equal? (test-file-result-failed grp)
+                (test-file-result-failed sub)
+                (format "~a: same parsed failed" what))
+  (check-equal? (test-file-result-requested-execution-mode grp)
+                "grouped"
+                (format "~a: grouped result stamps requested mode" what))
+  (check-equal? (test-file-result-requested-execution-mode sub)
+                "subprocess"
+                (format "~a: subprocess result stamps requested mode" what)))
+
+(define (assert-grouped-in-process grp what)
+  (check-false (test-file-result-grouped-fallback-reason grp)
+               (format "~a: no fallback reason (counted as grouped)" what))
+  (check-equal? (execution-mode-of (test-file-result-path grp))
+                'grouped-in-process
+                (format "~a: effective mode is grouped-in-process" what)))
+
+(define (assert-subprocess-fallback grp reason what)
+  (check-equal? (test-file-result-grouped-fallback-reason grp)
+                reason
+                (format "~a: stable fallback reason ~a" what reason))
+  (check-equal? (execution-mode-of (test-file-result-path grp))
+                'subprocess
+                (format "~a: fell back to subprocess (not counted as grouped)" what)))
+
+;; eligible-a: two passing run-tests checks — repeat 3x for stability.
+(for ([i (in-range 3)])
+  (define sub (run-one (fx "eligible-a.rkt") "subprocess"))
+  (define grp (run-one (fx "eligible-a.rkt") "grouped"))
+  (assert-parity sub grp (format "eligible-a repetition ~a" (+ i 1)))
+  (assert-grouped-in-process grp (format "eligible-a repetition ~a" (+ i 1)))
+  (check-equal? (test-file-result-total grp) 2 "eligible-a parses 2 tests")
+  (check-equal? (test-file-result-exit-code grp) 0 "eligible-a exits 0"))
+
+;; eligible-b: single passing check, cwd-invocation context check.
+(define sub-b (run-one (fx "eligible-b.rkt") "subprocess"))
+(define grp-b (run-one (fx "eligible-b.rkt") "grouped"))
+(assert-parity sub-b grp-b "eligible-b")
+(assert-grouped-in-process grp-b "eligible-b")
+
+;; stdout/stderr capture parity: markers must appear in both modes.
+(define sub-o (run-one (fx "stdout-stderr.rkt") "subprocess"))
+(define grp-o (run-one (fx "stdout-stderr.rkt") "grouped"))
+(assert-parity sub-o grp-o "stdout-stderr")
+(assert-grouped-in-process grp-o "stdout-stderr")
+(check-true (string-contains? (out-of sub-o) "GMD-W7-STDOUT-MARKER")
+            "subprocess captures stdout marker")
+(check-true (string-contains? (out-of grp-o) "GMD-W7-STDOUT-MARKER") "grouped captures stdout marker")
+(check-true (string-contains? (err-of grp-o) "GMD-W7-STDERR-MARKER") "grouped captures stderr marker")
+
+;; exception: exit 1 with the marker on stderr in both modes. Parsed-count
+;; parity is intentionally not asserted here: the exception path emits no
+;; rackunit summary, so counts are 0 on both sides while verdicts agree.
+(define (assert-failure-parity sub grp what)
+  (check-equal? (test-file-result-path grp)
+                (test-file-result-path sub)
+                (format "~a: same selected path" what))
+  (check-equal? (test-file-result-exit-code grp)
+                (test-file-result-exit-code sub)
+                (format "~a: same exit code" what))
+  (check-equal? (classify-test-result grp)
+                (classify-test-result sub)
+                (format "~a: same verdict class" what))
+  (check-equal? (test-file-result-requested-execution-mode grp)
+                "grouped"
+                (format "~a: grouped result stamps requested mode" what)))
+
+(define sub-e (run-one (fx "exception.rkt") "subprocess"))
+(define grp-e (run-one (fx "exception.rkt") "grouped"))
+(assert-failure-parity sub-e grp-e "exception")
+(assert-grouped-in-process grp-e "exception")
+(check-equal? (test-file-result-exit-code grp-e) 1 "exception exits 1")
+(check-true (string-contains? (err-of grp-e) "GMD-W7-EXCEPTION-MARKER")
+            "grouped records the exception marker on stderr")
+
+;; explicit exit: (exit 0) runs before any self-report, so grouped cannot
+;; prove the checks ran — zero-parse strictness sends it back to subprocess
+;; under the stable zero-parsed-output reason, preserving exit 0 parity.
+(define sub-x (run-one (fx "explicit-exit.rkt") "subprocess"))
+(define grp-x (run-one (fx "explicit-exit.rkt") "grouped"))
+(assert-parity sub-x grp-x "explicit-exit")
+(assert-subprocess-fallback grp-x 'zero-parsed-output "explicit-exit")
+(check-equal? (test-file-result-exit-code grp-x) 0 "explicit (exit 0) records 0")
+
+;; timeout: short runner timeout yields exit 2 / TIMEOUT verdict in both.
+(define sub-t (run-one (fx "timeout.rkt") "subprocess" #:timeout 600))
+(define grp-t (run-one (fx "timeout.rkt") "grouped" #:timeout 600))
+(assert-parity sub-t grp-t "timeout")
+(assert-grouped-in-process grp-t "timeout")
+(check-equal? (test-file-result-exit-code grp-t) 2 "grouped timeout records exit 2")
+(check-equal? (classify-test-result grp-t) 'TIMEOUT "grouped timeout verdict is TIMEOUT")
+
+;; ── 3. Runtime fallback characterization: grouped request → subprocess ─
+;; silent-checks has (module+ test) but no run-tests self-report: grouped
+;; dynamic-require runs silently (exit 0, zero parsed) so the runner falls
+;; back and re-runs in subprocess. The final result must name the reason
+;; and match a direct subprocess run.
+(define sub-s (run-one (fx "silent-checks.rkt") "subprocess"))
+(define grp-s (run-one (fx "silent-checks.rkt") "grouped"))
+(assert-parity sub-s grp-s "silent-checks")
+(assert-subprocess-fallback grp-s 'zero-parsed-output "silent-checks")
+
+;; missing module+ test (two shapes) → stable named fallback.
+(define sub-n (run-one (fx "no-submodule.rkt") "subprocess"))
+(define grp-n (run-one (fx "no-submodule.rkt") "grouped"))
+(assert-parity sub-n grp-n "no-submodule")
+(assert-subprocess-fallback grp-n 'missing-module-plus-test-form "no-submodule")
+
+(define sub-l (run-one (fx "top-level-only.rkt") "subprocess"))
+(define grp-l (run-one (fx "top-level-only.rkt") "grouped"))
+(assert-parity sub-l grp-l "top-level-only")
+(assert-subprocess-fallback grp-l 'missing-module-plus-test-form "top-level-only")
+
+;; declared mutation → named fallback (never executed grouped).
+(define sub-m (run-one (fx "declared-mutation.rkt") "subprocess"))
+(define grp-m (run-one (fx "declared-mutation.rkt") "grouped"))
+(assert-parity sub-m grp-m "declared-mutation")
+(assert-subprocess-fallback grp-m 'declared-mutation "declared-mutation")
+
+;; declared process isolation → named fallback (never executed grouped).
+(define sub-p (run-one (fx "process-isolation.rkt") "subprocess"))
+(define grp-p (run-one (fx "process-isolation.rkt") "grouped"))
+(assert-parity sub-p grp-p "process-isolation")
+(assert-subprocess-fallback grp-p 'declared-process-isolation "process-isolation")
+
+;; ── 4. Two eligible files sequentially in one grouped worker ───────────
+;; Deterministic order (a then b), both grouped-in-process, host current
+;; directory restored between files by the runner's parameterization.
+(define host-cwd-before (current-directory))
+(define seq-a (run-one (fx "eligible-a.rkt") "grouped"))
+(define seq-b (run-one (fx "eligible-b.rkt") "grouped"))
+(assert-grouped-in-process seq-a "sequential-a")
+(assert-grouped-in-process seq-b "sequential-b")
+(check-equal? (test-file-result-exit-code seq-a) 0 "sequential-a exits 0")
+(check-equal? (test-file-result-exit-code seq-b) 0 "sequential-b exits 0")
+(check-equal? (test-file-result-total seq-b) 1 "sequential-b parses 1 test")
+(check-true (equal? (current-directory) host-cwd-before)
+            "host current directory restored after grouped files")
+
+;; ── 5. Documented boundary: undeclared env mutation leaks grouped ──────
+;; Characterization truth, not endorsement: an undeclared putenv in an
+;; eligible grouped file leaks into the worker process (subprocess mode
+;; cannot leak). The @mutates declaration contract is the v1.00.27
+;; migration boundary; this is why declared mutators fall back.
+(define grp-u (run-one (fx "mutates-env-undeclared.rkt") "grouped"))
+(assert-grouped-in-process grp-u "mutates-env-undeclared")
+(check-equal? (test-file-result-exit-code grp-u) 0 "mutates-env-undeclared exits 0")
+(check-equal? (getenv "GMD_W7_PROBE")
+              "set"
+              "DOCUMENTED LEAK: undeclared env mutation crosses grouped files")
+(putenv "GMD_W7_PROBE" "") ; restore host environment for later suites
 
 (module+ test
-  (require rackunit
-           rackunit/text-ui
-           racket/format
-           racket/string
-           "../scripts/run-tests/parse.rkt"
-           "../scripts/run-tests/runner.rkt")
-
-  (define FX "tests/fixtures/grouped-mode")
-  (define (fx name)
-    (string-append FX "/" name))
-
-  (define f01 (fx "f01-eligible-pass.rkt"))
-  (define f02 (fx "f02-output.rkt"))
-  (define f03 (fx "f03-fail.rkt"))
-  (define f04 (fx "f04-exit.rkt"))
-  (define f05 (fx "f05-toplevel.rkt"))
-  (define f06 (fx "f06-main-only.rkt"))
-  (define f07 (fx "f07-declared-mutator.rkt"))
-  (define f08 (fx "f08-isolation.rkt"))
-  (define f09 (fx "f09-timeout.rkt"))
-  (define f10 (fx "f10-undeclared-mutator.rkt"))
-
-  ;; ------------------------------------------------------------------
-  ;; Helpers
-  ;; ------------------------------------------------------------------
-
-  ;; Everything that may NOT differ between subprocess and grouped planes.
-  ;; (Wall clock may differ; verdicts may not.)
-  (define (comparison-key r)
-    (list (classify-test-result r)
-          (test-file-result-exit-code r)
-          (test-file-result-passed r)
-          (test-file-result-failed r)
-          (test-file-result-total r)))
-
-  (define (grouped-run path #:timeout [timeout 120000])
-    (run-single-file path #:timeout timeout #:mode 'grouped))
-
-  (define (subprocess-run path #:timeout [timeout 120000])
-    (run-single-file path #:timeout timeout #:mode 'subprocess))
-
-  (define suite
-    (test-suite "grouped-mode equivalence characterization"
-
-      ;; --------------------------------------------------------------
-      ;; 1. Additive JSON schema (reporting truthfulness, W7 step 1)
-      ;; --------------------------------------------------------------
-
-      (test-case "json: grouped success result carries additive per-file fields"
-        (define r (grouped-run f01))
-        (define js (test-result->jsexpr r))
-        (check-true (hash-has-key? js 'requested_execution_mode))
-        (check-true (hash-has-key? js 'effective_execution_mode))
-        (check-true (hash-has-key? js 'grouped_fallback_reason))
-        (check-equal? (hash-ref js 'requested_execution_mode) "grouped")
-        (check-equal? (hash-ref js 'effective_execution_mode) "grouped")
-        (check-false (hash-ref js 'grouped_fallback_reason)))
-
-      (test-case "json: fallback result names its reason and is not counted grouped"
-        (define r (grouped-run f05))
-        (define js (test-result->jsexpr r))
-        (check-equal? (hash-ref js 'requested_execution_mode) "grouped")
-        (check-equal? (hash-ref js 'effective_execution_mode) "subprocess")
-        (check-equal? (hash-ref js 'grouped_fallback_reason) "missing-module-plus-test-form"))
-
-      (test-case "json: legacy 8-field result still serializes (old evidence readable)"
-        (define legacy (make-test-file-result "legacy/path.rkt" 0 #"" #"" 0 0 0 0))
-        (define js (test-result->jsexpr legacy))
-        (check-equal? (hash-ref js 'requested_execution_mode) "subprocess")
-        (check-equal? (hash-ref js 'effective_execution_mode) "subprocess")
-        (check-false (hash-ref js 'grouped_fallback_reason))
-        ;; pre-existing keys untouched
-        (check-equal? (hash-ref js 'exit_code) 0)
-        (check-equal? (hash-ref js 'total) 0))
-
-      ;; --------------------------------------------------------------
-      ;; 2. Eligible fixture: grouped == subprocess, counted as grouped
-      ;; --------------------------------------------------------------
-
-      (test-case "eligible pass: grouped runs in-process with parity"
-        (define g (grouped-run f01))
-        (define s (subprocess-run f01))
-        (check-equal? (test-file-result-requested-execution-mode g) "grouped")
-        (check-false (test-file-result-grouped-fallback-reason g))
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "grouped")
-        (check-equal? (comparison-key g)
-                      (comparison-key s)
-                      "eligible pass verdict/counts must match across planes")
-        (check-equal? (test-file-result-exit-code g) 0)
-        ;; cache records the file as grouped-in-process
-        (check-equal? (execution-mode-of (test-file-result-path g)) 'grouped-in-process))
-
-      (test-case "eligible repeatability: three grouped runs are identical"
-        (define g1 (grouped-run f01))
-        (define g2 (grouped-run f01))
-        (define g3 (grouped-run f01))
-        (check-equal? (comparison-key g1) (comparison-key g2))
-        (check-equal? (comparison-key g2) (comparison-key g3)))
-
-      (test-case "sequential eligible files in one grouped process"
-        (define g-a (grouped-run f01))
-        (define g-b (grouped-run f02))
-        (define g-a2 (grouped-run f01))
-        (check-equal? (test-file-result-exit-code g-a) 0)
-        (check-equal? (test-file-result-exit-code g-b) 0)
-        (check-equal? (comparison-key g-a)
-                      (comparison-key g-a2)
-                      "first file unchanged after second file ran in same process"))
-
-      ;; --------------------------------------------------------------
-      ;; 3. stdout/stderr capture parity
-      ;; --------------------------------------------------------------
-
-      (test-case "output capture: stdout and stderr lines survive both planes"
-        (define g (grouped-run f02))
-        (define s (subprocess-run f02))
-        (check-true (string-contains? (bytes->string/utf-8 (test-file-result-stdout-bytes g) #\uFFFD)
-                                      "F02-OUT-LINE-1"))
-        (check-true (string-contains? (bytes->string/utf-8 (test-file-result-stderr-bytes g) #\uFFFD)
-                                      "F02-ERR-LINE-1"))
-        (check-true (string-contains? (bytes->string/utf-8 (test-file-result-stdout-bytes s) #\uFFFD)
-                                      "F02-OUT-LINE-1"))
-        (check-true (string-contains? (bytes->string/utf-8 (test-file-result-stderr-bytes s) #\uFFFD)
-                                      "F02-ERR-LINE-1")))
-
-      ;; --------------------------------------------------------------
-      ;; 4. Failure and explicit-exit parity
-      ;; --------------------------------------------------------------
-
-      (test-case "failing check: same failure classification in both planes"
-        (define g (grouped-run f03))
-        (define s (subprocess-run f03))
-        (check-equal? (comparison-key g) (comparison-key s))
-        (check-equal? (test-file-result-failed g) 1)
-        (check-equal? (test-file-result-passed g) 1))
-
-      (test-case "explicit exit 0: same verdict in both planes"
-        (define g (grouped-run f04))
-        (define s (subprocess-run f04))
-        (check-equal? (comparison-key g) (comparison-key s))
-        (check-equal? (test-file-result-exit-code g) 0))
-
-      ;; --------------------------------------------------------------
-      ;; 5. Named fallbacks; never counted as grouped
-      ;; --------------------------------------------------------------
-
-      (test-case "fallback: missing module+ test (top-level only)"
-        (define g (grouped-run f05))
-        (define s (subprocess-run f05))
-        (check-equal? (test-file-result-requested-execution-mode g) "grouped")
-        (check-equal? (test-file-result-grouped-fallback-reason g) 'missing-module-plus-test-form)
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "subprocess")
-        (check-equal? (execution-mode-of (test-file-result-path g)) 'subprocess)
-        (check-equal? (comparison-key g) (comparison-key s)))
-
-      (test-case "fallback: missing module+ test (module+ main only)"
-        (define g (grouped-run f06))
-        (check-equal? (test-file-result-grouped-fallback-reason g) 'missing-module-plus-test-form)
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "subprocess"))
-
-      (test-case "fallback: declared mutation"
-        (define g (grouped-run f07))
-        (define s (subprocess-run f07))
-        (check-equal? (test-file-result-grouped-fallback-reason g) 'declared-mutation)
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "subprocess")
-        (check-equal? (comparison-key g) (comparison-key s)))
-
-      (test-case "fallback: declared process isolation"
-        (define g (grouped-run f08))
-        (define s (subprocess-run f08))
-        (check-equal? (test-file-result-grouped-fallback-reason g) 'declared-process-isolation)
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "subprocess")
-        (check-equal? (comparison-key g) (comparison-key s)))
-
-      ;; --------------------------------------------------------------
-      ;; 6. Timeout parity (short timeout, both planes)
-      ;; --------------------------------------------------------------
-
-      (test-case "timeout: same classification with short timeout in both planes"
-        (define g (grouped-run f09 #:timeout 400))
-        (define s (subprocess-run f09 #:timeout 400))
-        (check-equal? (test-file-result-exit-code g) 2)
-        (check-equal? (test-file-result-exit-code s) 2)
-        (check-equal? (classify-test-result g) (classify-test-result s)))
-
-      ;; --------------------------------------------------------------
-      ;; 7. Undeclared mutation: documented leak boundary (f10)
-      ;; --------------------------------------------------------------
-
-      (test-case "undeclared mutator runs grouped and leaks env (documented boundary)"
-        (define prior (getenv "W7_F10_UNDECLARED"))
-        (define g (grouped-run f10))
-        (check-false (test-file-result-grouped-fallback-reason g)
-                     "gates cannot detect undeclared mutation: file is eligible")
-        (check-equal? (hash-ref (test-result->jsexpr g) 'effective_execution_mode) "grouped")
-        (check-equal? (getenv "W7_F10_UNDECLARED")
-                      "leaked"
-                      "host env leaked into by in-process grouped run")
-        ;; restore host environment (cannot truly unset via putenv)
-        (if prior
-            (putenv "W7_F10_UNDECLARED" prior)
-            (putenv "W7_F10_UNDECLARED" "")))
-
-      ;; --------------------------------------------------------------
-      ;; 8. Full matrix: repeated two-plane equivalence sweep
-      ;; --------------------------------------------------------------
-
-      (test-case "matrix: subprocess vs grouped equivalence holds on repeat"
-        (define paths (list f01 f02 f03 f04 f05 f06 f07 f08))
-        (for ([round '(1 2)])
-          (for ([p paths])
-            (define g (grouped-run p))
-            (define s (subprocess-run p))
-            (check-equal? (comparison-key g)
-                          (comparison-key s)
-                          (format "round ~a plane mismatch for ~a" round p)))))))
-
-  (run-tests suite))
+  (displayln "test-runner-grouped-characterization: all checks green"))
