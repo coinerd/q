@@ -1,0 +1,343 @@
+{
+ "comparison_keys": [
+  "status",
+  "exit_code",
+  "passed",
+  "failed",
+  "total",
+  "normalized_output"
+ ],
+ "fixtures": [
+  "tests/fixtures/grouped-mode/f01-eligible-pass.rkt",
+  "tests/fixtures/grouped-mode/f02-eligible-output.rkt",
+  "tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt",
+  "tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt",
+  "tests/fixtures/grouped-mode/f05-process-isolation.rkt",
+  "tests/fixtures/grouped-mode/f06-main-only.rkt",
+  "tests/fixtures/grouped-mode/f07-param-custodian.rkt",
+  "tests/fixtures/grouped-mode/f08-eligible-timeout.rkt",
+  "tests/fixtures/grouped-mode/f09-explicit-exit.rkt",
+  "tests/fixtures/grouped-mode/f10-top-level-mutator.rkt"
+ ],
+ "generated_at": "2026-09-04",
+ "grouped_effective_count": 1,
+ "jobs": 1,
+ "matrix": [
+  {
+   "counted_as_grouped": true,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "grouped",
+    "exit_code": 0,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "1 success(es) 0 failure(s) 0 error(s) 1 test(s) run\n0",
+    "passed": 1,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "pass",
+    "total": 1
+   },
+   "path": "tests/fixtures/grouped-mode/f01-eligible-pass.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 0,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "1 success(es) 0 failure(s) 0 error(s) 1 test(s) run\n0",
+    "passed": 1,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "pass",
+    "total": 1
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f02-eligible-output.rkt>\n  path: tests/fixtures/grouped-mode/f02-eligible-output.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f02-eligible-output.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f02-eligible-output.rkt>\n  path: tests/fixtures/grouped-mode/f02-eligible-output.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt>\n  path: tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt>\n  path: tests/fixtures/grouped-mode/f03-declared-env-mutation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt>\n  path: tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt>\n  path: tests/fixtures/grouped-mode/f04-declared-cwd-mutation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f05-process-isolation.rkt>\n  path: tests/fixtures/grouped-mode/f05-process-isolation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f05-process-isolation.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f05-process-isolation.rkt>\n  path: tests/fixtures/grouped-mode/f05-process-isolation.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 0,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "pass",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f06-main-only.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 0,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "pass",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f07-param-custodian.rkt>\n  path: tests/fixtures/grouped-mode/f07-param-custodian.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f07-param-custodian.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f07-param-custodian.rkt>\n  path: tests/fixtures/grouped-mode/f07-param-custodian.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f08-eligible-timeout.rkt>\n  path: tests/fixtures/grouped-mode/f08-eligible-timeout.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f08-eligible-timeout.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f08-eligible-timeout.rkt>\n  path: tests/fixtures/grouped-mode/f08-eligible-timeout.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f09-explicit-exit.rkt>\n  path: tests/fixtures/grouped-mode/f09-explicit-exit.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f09-explicit-exit.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f09-explicit-exit.rkt>\n  path: tests/fixtures/grouped-mode/f09-explicit-exit.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  },
+  {
+   "counted_as_grouped": false,
+   "equivalent_outcome": true,
+   "grouped": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": "missing-module-plus-test-form",
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f10-top-level-mutator.rkt>\n  path: tests/fixtures/grouped-mode/f10-top-level-mutator.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "grouped",
+    "runner_mode": "grouped",
+    "status": "fail",
+    "total": 0
+   },
+   "path": "tests/fixtures/grouped-mode/f10-top-level-mutator.rkt",
+   "subprocess": {
+    "effective_execution_mode": "subprocess",
+    "exit_code": 1,
+    "failed": 0,
+    "grouped_fallback_reason": false,
+    "output": "open-input-file: cannot open module file\n  module path: #<path:tests/fixtures/grouped-mode/f10-top-level-mutator.rkt>\n  path: tests/fixtures/grouped-mode/f10-top-level-mutator.rkt\n  system error: no such file or directory; rkt_err=3",
+    "passed": 0,
+    "requested_execution_mode": "subprocess",
+    "runner_mode": "subprocess",
+    "status": "fail",
+    "total": 0
+   }
+  }
+ ],
+ "modes": [
+  "subprocess",
+  "grouped"
+ ],
+ "repeats": 3,
+ "run_summary_grouped": {
+  "execution_mode": "grouped",
+  "fail": 8,
+  "file_count": 10,
+  "metadata_completeness": {
+   "explicit": 0,
+   "heuristic": 0,
+   "missing": 10
+  },
+  "pass": 2,
+  "profile": "local",
+  "runner_version": "1.00.23",
+  "shard": null,
+  "skip": 0,
+  "suite": "all",
+  "timeout": 0,
+  "wall_clock_seconds": 0.868
+ },
+ "timeout_seconds": 5,
+ "version": "v1.00.24",
+ "wave": "W7"
+}
