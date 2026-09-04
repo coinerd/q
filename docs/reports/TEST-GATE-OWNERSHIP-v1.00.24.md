@@ -5,13 +5,13 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`d3542eee3904b57001cca97ee798026efb31c7c79e5f7a0b50921cf4022345fb`
+`aa68f4139f7c731d0766eaf0cf0a875144bff5fe612e8d8d483fa807a216475f`
 
 ## Gate membership (deterministic repository walk)
 
 | Gate | Selected files | Selected-path digest |
 |---|---|---|
-| fast | 1170 | 00a07a8a7a4060f725c1b7a09df485442086c02b7769085aa89dcd7f7a607889 |
+| fast | 1171 | 6d71a2310abb1b0e66061ebd3c18228e132a3afc39d0a820991b0b3f60478dfb |
 | platform | 38 | 2c82c1959a5a3073b4a8c96e236a5d7f8e46a297c91ca2582ce2ceda009af4a5 |
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
