@@ -236,6 +236,18 @@
                   (~a "cancelled at " elapsed "ms, well before the 500 ms natural finish"))
       (check-equal? (unbox cancel-box) 1))
 
+    (test-case "raising-runner: exception propagates via done post (no deadline spin)"
+      ;; Mandatory-deadline follow-up: the wrapper's worker must post `done`
+      ;; even when the runner raises, and the waiting thread re-raises the
+      ;; captured exception at the FIRST done poll. Before the fix a raising
+      ;; runner never posted `done`, so the waiter ticked to the deadline and
+      ;; reported 'timed-out instead of propagating the exception.
+      (define port
+        (gsd-wave-runner-port (lambda (idx) (exn:fail "runner exploded" (current-continuation-marks)))
+                              (lambda () #f)
+                              (lambda () #f)))
+      (check-exn exn:fail? (lambda () (with-fake '() (lambda () (run-wave-with-timeout port 30 0))))))
+
     (test-case "seam guards: bad fake clock/wait values are rejected"
       (check-exn exn:fail?
                  (lambda ()

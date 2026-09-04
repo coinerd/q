@@ -174,10 +174,17 @@
   (define now-ms (current-gsd-timeout-now-ms))
   (define wait! (current-gsd-timeout-wait))
   (define result-box (box #f))
+  ;; Mandatory-deadline follow-up (v1.00.24): the worker must post `done`
+  ;; even when the runner raises. Without this a raising runner left the
+  ;; waiter below spinning until the deadline; the exception is captured
+  ;; here and re-raised in the waiting thread so propagation stays
+  ;; transparent to direct callers.
+  (define exn-box (box #f))
   (define done (make-semaphore 0))
   (define worker
     (thread (lambda ()
-              (set-box! result-box ((gsd-wave-runner-port-run port) wave-idx))
+              (with-handlers ([exn:fail? (lambda (e) (set-box! exn-box e))])
+                (set-box! result-box ((gsd-wave-runner-port-run port) wave-idx)))
               (semaphore-post done))))
   (define deadline (+ (now-ms) (* timeout-sec 1000.0)))
   (define (stop-runner! status message)
@@ -195,5 +202,9 @@
        (cond
          [(<= remaining 0)
           (stop-runner! 'timed-out (format "runner exceeded ~a second(s)" timeout-sec))]
-         [(wait! done (min 0.1 remaining)) (unbox result-box)]
+         [(wait! done (min 0.1 remaining))
+          (define raised (unbox exn-box))
+          (if raised
+              (raise raised)
+              (unbox result-box))]
          [else (wait-loop)])])))

@@ -162,6 +162,30 @@
       (check-false (eq? (wave-status* rec 0) 'done) "timeout must not persist DONE")
       (cleanup-tmp dir))
 
+    (test-case "missing timeout-sec → mandatory default deadline (never unbounded)"
+      ;; v1.00.24 follow-up regression: run-campaign-wave without
+      ;; #:timeout-sec used to bind run-one to the RAW runner port, so a hung
+      ;; runner blocked the campaign thread forever (the /go executor path
+      ;; sat idle and never returned to the coordinator). The deadline is now
+      ;; mandatory: absent the keyword the executor wraps with
+      ;; current-gsd-wave-timeout-seconds (default 7200, guarded
+      ;; positive-real — never #f). The deterministic fake expires even a
+      ;; 7200 s deadline in pure ticks — zero wall-clock cost.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define runner
+        (make-wave-runner-port (lambda (idx)
+                                 (sleep 30)
+                                 (wave-execution-outcome 'done "late"))))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 0])
+          (with-deterministic-timeout '() (lambda () (run-campaign-wave dir rec 0 #:runner runner)))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-true (string-contains? (campaign-result-message result) "exceeded"))
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (check-false (eq? (wave-status* rec 0) 'done) "default-deadline timeout must not persist DONE")
+      (cleanup-tmp dir))
+
     (test-case "interrupted outcome → interrupted"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
