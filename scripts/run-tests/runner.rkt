@@ -93,6 +93,7 @@
          mark-execution-mode!
          ;; v1.00.24 W7: explicit grouped-fallback telemetry
          current-requested-execution-mode
+         execution-mode-of
          execution-eligibility-reason
          main)
 

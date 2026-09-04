@@ -190,6 +190,18 @@
           (symbol->string (classify-test-result r))
           'exit_code
           (test-file-result-exit-code r)
+          ;; v1.00.24 W7: additive per-file execution-mode telemetry.
+          ;; requested = what was asked for; effective = what actually ran;
+          ;; grouped_fallback_reason = stable symbol name (JSON string) or null.
+          'requested_execution_mode
+          (or (test-file-result-requested-execution-mode r) "subprocess")
+          'effective_execution_mode
+          (if (test-file-result-grouped-fallback-reason r)
+              "subprocess"
+              (or (test-file-result-requested-execution-mode r) "subprocess"))
+          'grouped_fallback_reason
+          (let ([reason (test-file-result-grouped-fallback-reason r)])
+            (and reason (symbol->string reason)))
           'elapsed_ms
           (test-file-result-elapsed-ms r)
           'passed
