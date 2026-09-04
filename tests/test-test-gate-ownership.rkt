@@ -24,15 +24,17 @@
 ;; Frozen v1.00.24 candidate behavior table
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the ten mandated candidate IDs"
+(test-case "behavior table freezes exactly the twelve mandated candidate IDs"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 10)
+  (check-equal? (length ids) 12)
   (check-equal? (sort ids string<?)
                 (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
                             "RETRY-REAL-TIMER-CANARY"
                             "CWD-INVOCATION-AUDIT-CANARY"
                             "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
                             "GSD-WAVE-TIMEOUT-CANCELLATION"
+                            "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
+                            "GSD-TIMEOUT-REAL-CLOCK-CANARY"
                             "RUNNER-REPOSITORY-DISCOVERY"
                             "GOLDEN-SESSION-LIFECYCLE"
                             "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
@@ -53,7 +55,9 @@
     (check-true (string<? "" (hash-ref row 'rationale "")) (format "~a: rationale" id))))
 
 (test-case "W0 rows retain destination in the source tier"
-  (for ([row (in-list inv:v124-behavior-table)])
+  (define w0-rows (filter (lambda (row) (equal? (hash-ref row 'wave) "W0")) inv:v124-behavior-table))
+  (check-true (pair? w0-rows) "expected at least one W0 ownership row")
+  (for ([row (in-list w0-rows)])
     (check-equal? (hash-ref row 'destination-gate)
                   (hash-ref row 'source-gate)
                   (format "~a: W0 destination must equal source tier" (hash-ref row 'behavior-id)))))

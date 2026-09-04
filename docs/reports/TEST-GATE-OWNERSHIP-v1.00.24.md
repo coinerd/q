@@ -5,18 +5,18 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`bba6d69a4e7ab25322a653ad078406a3492da90f85ce6e10eb71fc3b55833bd5`
+`34b399efa688e32bfb67c5a373306142bd92a54775bd33b3a5191e9068fec0d8`
 
 ## Gate membership (deterministic repository walk)
 
 | Gate | Selected files | Selected-path digest |
 |---|---|---|
-| fast | 1166 | 083f915adc697ee6051461f654be9fb9de5fb73d4a10165b48382f6c7f5a4a2a |
+| fast | 1170 | 00a07a8a7a4060f725c1b7a09df485442086c02b7769085aa89dcd7f7a607889 |
 | platform | 38 | 2c82c1959a5a3073b4a8c96e236a5d7f8e46a297c91ca2582ce2ceda009af4a5 |
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
 | unit-fast | 943 | 310c6ce693c0028d1b55f35d5716b429324df3c5f9b069e6ccf1d32a4b471b43 |
-| slow/L4 | 108 | b8bd32798ccd794a37cd60eafeee944abe6b993133614a3b4d3faa1b94d2872f |
+| slow/L4 | 109 | beb1b48108a9bfae5d04b2518ed76b0808f45cbe44dcccd5cf73740be933e5df |
 
 ## Behavior ownership (frozen v1.00.24 W0 candidate rows)
 
@@ -32,6 +32,8 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GSD-DELIVERY-VERIFIER-GIT-SANDBOXES | fast | fast | tests/ci/verify-lock-selection-test.rkt | gsd-delivery | retained-in-place | W0 | Lock-selection verifier sandbox test is fast-classified (suite ci, no slow tags); W1 corrected the gate declaration from slow/L4 to fast to match classifier reality. |
 | GSD-WAVE-WORKTREE-SANDBOXES | fast | fast | tests/test-gsd-wave-worktree.rkt | gsd-delivery | retained-in-place | W0 | Wave worktree sandbox test has no explicit metadata tags and is selected by the fast classifier default; W1 corrected the gate declaration from slow/L4 to fast to match classifier reality. |
 | GROUPED-MODE-CHARACTERIZATION | fast | fast | tests/test-run-tests-in-process-mode.rkt<br>tests/test-execution-plane-characterization.rkt | test-runtime | retained-in-place | W0 | Grouped in-process execution characterization stays hermetic and fast-tier owned. |
+| GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | fast | fast | tests/test-gsd-system-adapters-timeout.rkt<br>tests/test-gsd-wave-executor-isolation.rkt | gsd-delivery | retained-in-place | W4 | W4 re-tier: deterministic GSD wave timeout semantics remain fast — deadline expiry, external cancellation, exactly-once cancel/outcome emission, cooperative grace, and force-kill-after-grace assertions run against run-wave-with-timeout behind the injected deterministic timeout clock/wait seam (with-deterministic-timeout stages) and pay no wall-clock deadline or grace. Production defaults (current-inexact-milliseconds, sync/timeout, the two-second grace) are unchanged; the seam is test-scoped parameters only. Pre-W4 executor-isolation timeout cases that slept past real one-second deadlines now use the same seam with identical assertions and preserved campaign persistence (DONE never recorded on timeout), retry-count isolation, and durable cancellation coverage. |
+| GSD-TIMEOUT-REAL-CLOCK-CANARY | slow/L4 | slow/L4 | tests/test-gsd-wave-timeout-canary.rkt | gsd-delivery | re-tiered | W4 | W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring. |
 
 ## Metadata boundary and declared side effects (per member)
 
@@ -53,3 +55,6 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GSD-WAVE-WORKTREE-SANDBOXES | tests/test-gsd-wave-worktree.rkt | #f | #f | #f | #f | #f |  | #f |
 | GROUPED-MODE-CHARACTERIZATION | tests/test-run-tests-in-process-mode.rkt | testing | fast | integration | fs | process |  | #f |
 | GROUPED-MODE-CHARACTERIZATION | tests/test-execution-plane-characterization.rkt | runtime | fast | unit | #f | #f |  | #f |
+| GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | tests/test-gsd-system-adapters-timeout.rkt | extensions | fast | #f | #f | #f |  | #f |
+| GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST | tests/test-gsd-wave-executor-isolation.rkt | extensions | fast | integration | #f | #f |  | #f |
+| GSD-TIMEOUT-REAL-CLOCK-CANARY | tests/test-gsd-wave-timeout-canary.rkt | extensions | slow | #f | #f | #f |  | #f |

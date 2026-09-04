@@ -848,7 +848,51 @@
     'wave
     "W0"
     'rationale
-    "Grouped in-process execution characterization stays hermetic and fast-tier owned.")))
+    "Grouped in-process execution characterization stays hermetic and fast-tier owned.")
+   (hasheq
+    'behavior-id
+    "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-system-adapters-timeout.rkt" "tests/test-gsd-wave-executor-isolation.rkt")
+    'owner
+    "gsd-delivery"
+    'status
+    "retained-in-place"
+    'wave
+    "W4"
+    'rationale
+    (string-append
+     "W4 re-tier: deterministic GSD wave timeout semantics remain fast — deadline expiry, external cancellation, exactly-once cancel/outcome "
+     "emission, cooperative grace, and force-kill-after-grace assertions run against run-wave-with-timeout behind the injected deterministic "
+     "timeout clock/wait seam (with-deterministic-timeout stages) and pay no wall-clock deadline or grace. Production defaults "
+     "(current-inexact-milliseconds, sync/timeout, the two-second grace) are unchanged; the seam is test-scoped parameters only. "
+     "Pre-W4 executor-isolation timeout cases that slept past real one-second deadlines now use the same seam with identical assertions "
+     "and preserved campaign persistence (DONE never recorded on timeout), retry-count isolation, and durable cancellation coverage."))
+   (hasheq
+    'behavior-id
+    "GSD-TIMEOUT-REAL-CLOCK-CANARY"
+    'source-gate
+    "slow/L4"
+    'destination-gate
+    "slow/L4"
+    'members
+    '("tests/test-gsd-wave-timeout-canary.rkt")
+    'owner
+    "gsd-delivery"
+    'status
+    "re-tiered"
+    'wave
+    "W4"
+    'rationale
+    (string-append
+     "W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file "
+     "carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside "
+     "a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with "
+     "jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring."))))
 
 ;; Rows actually owned by this milestone (frozen table).
 (define (gate-ownership-rows [memberships (gate-membership)])

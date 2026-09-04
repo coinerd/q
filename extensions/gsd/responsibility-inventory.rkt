@@ -365,18 +365,19 @@
                '()
                '()
                '("racket/contract" "racket/string" "effect-ports"))
-   (make-entry "system-adapters.rkt"
-               'external-ports
-               '(fs-read fs-write fs-rename fs-delete mkdir dir-list git parameterize subprocess)
-               '()
-               '("racket/file" "racket/list"
-                               "racket/path"
-                               "racket/port"
-                               "racket/string"
-                               "racket/system"
-                               "effect-ports"
-                               "wave-runner-port"
-                               "sandbox/gateway-bridge"))
+   (make-entry
+    "system-adapters.rkt"
+    'external-ports
+    '(fs-read fs-write fs-rename fs-delete mkdir dir-list git parameterize make-param subprocess)
+    '()
+    '("racket/file" "racket/list"
+                    "racket/path"
+                    "racket/port"
+                    "racket/string"
+                    "racket/system"
+                    "effect-ports"
+                    "wave-runner-port"
+                    "sandbox/gateway-bridge"))
    (make-entry
     "composition-root.rkt"
     'external-ports
