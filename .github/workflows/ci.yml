@@ -310,7 +310,7 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
       - name: Download retained fast-shard artifacts
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: test-results-fast-*
           path: durations-raw
