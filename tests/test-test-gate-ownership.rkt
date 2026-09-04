@@ -21,12 +21,12 @@
          (prefix-in inv: (file "../scripts/run-tests/inventory.rkt")))
 
 ;; ---------------------------------------------------------------
-;; Frozen v1.00.24 candidate behavior table (W0 freeze + W4/W5 rows)
+;; Frozen v1.00.24 candidate behavior table (W0 freeze + W4/W5/W6 rows)
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the fourteen mandated candidate IDs"
+(test-case "behavior table freezes exactly the nineteen mandated candidate IDs"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 14)
+  (check-equal? (length ids) 19)
   (check-equal? (sort ids string<?)
                 (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
                             "RETRY-REAL-TIMER-CANARY"
@@ -41,7 +41,12 @@
                             "GOLDEN-SESSION-LIFECYCLE"
                             "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
                             "GSD-WAVE-WORKTREE-SANDBOXES"
-                            "GROUPED-MODE-CHARACTERIZATION")
+                            "GROUPED-MODE-CHARACTERIZATION"
+                            "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
+                            "GOLDEN-SESSION-PRIVATE-TEMPLATE"
+                            "GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE"
+                            "GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE"
+                            "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE")
                       string<?)))
 
 (test-case "every behavior row carries complete frozen ownership data"
