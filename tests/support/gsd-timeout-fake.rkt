@@ -9,6 +9,6 @@
 (module+ test
   (require rackunit
            racket/runtime-path)
-  (define-runtime-path real-fake "helpers/gsd-timeout-fake.rkt")
+  (define-runtime-path real-fake "../helpers/gsd-timeout-fake.rkt")
   (check-true (file-exists? real-fake)
               "shared deterministic fake must live at tests/helpers/gsd-timeout-fake.rkt"))
