@@ -840,15 +840,20 @@
     'destination-gate
     "fast"
     'members
-    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt")
+    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt"
+                                                 "tests/test-runner-grouped-characterization.rkt")
     'owner
     "test-runtime"
     'status
     "retained-in-place"
     'wave
-    "W0"
+    "W7"
     'rationale
-    "Grouped in-process execution characterization stays hermetic and fast-tier owned.")
+    (string-append
+     "Grouped in-process execution characterization stays hermetic and fast-tier owned. "
+     "W7 extends membership with the grouped/subprocess equivalence characterization "
+     "(tests/fixtures/grouped-mode/ fixture matrix), which owns named fallback telemetry "
+     "coverage and parity verdicts; no production test file joins grouped eligibility."))
    (hasheq
     'behavior-id
     "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
@@ -933,12 +938,12 @@
     'wave
     "W5"
     'rationale
-     (string-append
-      "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
-      "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
-      "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
-      "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
-      "live repository discovery remains executable in L4."))
+    (string-append
+     "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
+     "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
+     "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
+     "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
+     "live repository discovery remains executable in L4."))
    (hasheq
     'behavior-id
     "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
