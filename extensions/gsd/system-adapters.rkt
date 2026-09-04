@@ -18,7 +18,9 @@
          make-system-git-port
          make-system-clock-port
          make-system-process-port
-         run-wave-with-timeout)
+         run-wave-with-timeout
+         current-gsd-timeout-now-ms
+         current-gsd-timeout-wait)
 
 (define (system-kind path)
   (cond
@@ -141,17 +143,46 @@
 ;; instant the deadline passes.
 (define cancel-grace-sec 2)
 
+;; W4 deterministic deadline/event seam (v1.00.24). These thread-inherited
+;; parameters are the ONLY clock/wait entry points of the timeout adapter.
+;; Production defaults keep the previous wall-clock behavior byte-for-byte:
+;;   - now-ms reads (current-inexact-milliseconds);
+;;   - wait performs (sync/timeout secs evt) with the existing two-second
+;;     grace and the 0.1s poll quantum supplied by the caller.
+;; Tests parameterize them with a deterministic fake clock so GSD component
+;; tests never pay the one-second deadline + two-second cancellation-grace
+;; wall-clock waits; no timeout, cancel, cleanup, or outcome semantics change.
+;; Values are inherited by the worker thread (Racket threads inherit the
+;; parameterization of their creating thread), so fakes installed around a
+;; run-campaign-wave call also cover the runner worker.
+(define current-gsd-timeout-now-ms
+  (make-parameter current-inexact-milliseconds
+                  (lambda (f)
+                    (unless (and (procedure? f) (procedure-arity-includes? f 0))
+                      (raise-argument-error 'current-gsd-timeout-now-ms "(-> real?)" f))
+                    f)))
+
+(define current-gsd-timeout-wait
+  (make-parameter
+   (lambda (evt secs) (sync/timeout secs evt))
+   (lambda (f)
+     (unless (and (procedure? f) (procedure-arity-includes? f 2))
+       (raise-argument-error 'current-gsd-timeout-wait "(-> evt? (or/c real? #f) any/c)" f))
+     f)))
+
 (define (run-wave-with-timeout port timeout-sec wave-idx)
+  (define now-ms (current-gsd-timeout-now-ms))
+  (define wait! (current-gsd-timeout-wait))
   (define result-box (box #f))
   (define done (make-semaphore 0))
   (define worker
     (thread (lambda ()
               (set-box! result-box ((gsd-wave-runner-port-run port) wave-idx))
               (semaphore-post done))))
-  (define deadline (+ (current-inexact-milliseconds) (* timeout-sec 1000.0)))
+  (define deadline (+ (now-ms) (* timeout-sec 1000.0)))
   (define (stop-runner! status message)
     ((gsd-wave-runner-port-cancel! port))
-    (sync/timeout cancel-grace-sec done)
+    (wait! done cancel-grace-sec)
     (unless (thread-dead? worker)
       (kill-thread worker))
     (wave-execution-outcome status message))
@@ -160,9 +191,9 @@
       [((gsd-wave-runner-port-cancel-requested? port))
        (stop-runner! 'cancelled "campaign cancellation requested")]
       [else
-       (define remaining (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+       (define remaining (/ (- deadline (now-ms)) 1000.0))
        (cond
          [(<= remaining 0)
           (stop-runner! 'timed-out (format "runner exceeded ~a second(s)" timeout-sec))]
-         [(sync/timeout (min 0.1 remaining) done) (unbox result-box)]
+         [(wait! done (min 0.1 remaining)) (unbox result-box)]
          [else (wait-loop)])])))
