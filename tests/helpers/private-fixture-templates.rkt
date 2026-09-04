@@ -23,6 +23,7 @@
          racket/file
          racket/format
          racket/path
+         racket/port
          racket/runtime-path
          racket/string
          racket/system)
@@ -117,6 +118,9 @@
     (define root (make-temporary-file "q-git-tmpl-~a" 'directory))
     (define repo (build-path root "baseline"))
     (git-quiet! root "init" "-q" (path->string repo))
+    ;; GSD tests assume a `main` branch; pin HEAD before the first commit so
+    ;; clones check out `main` regardless of the machine's init.defaultBranch.
+    (git-quiet! repo "symbolic-ref" "HEAD" "refs/heads/main")
     (hermetic-identity! repo)
     (with-output-to-file (build-path repo "baseline.txt")
                          (lambda () (displayln "template baseline"))
@@ -163,6 +167,24 @@
               (path->string (build-path tmpl "baseline"))
               (path->string repo))
   (hermetic-identity! repo)
+  ;; Belt and braces: guarantee a local `main` exists even if the clone's
+  ;; default HEAD resolution differs; create it from the current commit.
+  (define main-ref-ok?
+    (parameterize ([current-directory repo]
+                   [current-output-port (open-output-nowhere)]
+                   [current-error-port (open-output-nowhere)])
+      (zero? (system*/exit-code (find-executable-path "git")
+                                "rev-parse"
+                                "--verify"
+                                "-q"
+                                "refs/heads/main"))))
+  (unless main-ref-ok?
+    (git-quiet! repo "checkout" "-q" "-b" "main"))
+  ;; The clone maps the template's branches to refs/remotes/origin/main.
+  ;; Exactly ONE `origin/main` candidate must remain, else `worktree add
+  ;; <p> origin/main` aborts ("ambiguous refname") where rev-parse only
+  ;; warns. Keep the local stand-in branch, drop the remote-tracking ref.
+  (git-quiet! repo "update-ref" "-d" "refs/remotes/origin/main")
   (git-quiet! repo "update-ref" "refs/heads/origin/main" "HEAD")
   (when branch
     (git-quiet! repo "checkout" "-q" "-b" branch))

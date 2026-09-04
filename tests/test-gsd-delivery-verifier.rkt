@@ -24,6 +24,10 @@
          racket/path
          racket/string
          racket/system
+         (only-in "helpers/private-fixture-templates.rkt"
+                  make-private-git-fixture!
+                  private-fixture-root
+                  private-git-fixture-repo)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   run-delivery-verification
                   make-delivery-verifier
@@ -51,27 +55,34 @@
 (define GIT (find-executable-path "git"))
 
 (define (make-tmp-git-repo)
-  (define base (make-temporary-file "dv-base-~a" 'directory))
+  (define tmp (make-temporary-file "dv-base-~a" 'directory))
+  (define fx (make-private-git-fixture! #:parent-root tmp #:tag "dv-base"))
+  (define base (private-fixture-root fx))
+  (rename-file-or-directory (private-git-fixture-repo fx) (build-path base "q"))
   (make-directory* (build-path base ".planning" "waves"))
   (make-directory* (build-path base "q" "ui-core"))
   (make-directory* (build-path base "q" "tui"))
+  (define q-dir (build-path base "q"))
   (define (sh . args)
     (define exit
-      (parameterize ([current-directory base])
+      (parameterize ([current-directory q-dir])
         (apply system*/exit-code GIT args)))
     (unless (zero? exit)
       (error 'make-tmp-git-repo "command failed: ~a" (cons 'sh args))))
-  (sh "init" "-q" ".")
-  (sh "config" "user.email" "test@example.com")
-  (sh "config" "user.name" "Test")
-  (sh "checkout" "-q" "-b" "main")
-  ;; wave target file, committed as baseline
+  ;; Family-specific pin: the fixture clone is already on `main`; this is a
+  ;; cheap explicit assertion of the branch the verifier expects.
+  (sh "checkout" "-q" "main")
+  ;; wave target file, committed as baseline (family-specific)
   (call-with-output-file (build-path base "q" "ui-core" "preferences.rkt")
                          (lambda (out)
                            (display "#lang racket/base\n(provide foo)\n(define foo 1)\n" out))
                          #:exists 'truncate)
   (sh "add" "-A")
   (sh "commit" "-q" "-m" "baseline")
+  ;; Re-pin the offline origin/main stand-in to the rebuilt baseline: the
+  ;; verifier measures delivery as `origin/main...HEAD`, so the base ref must
+  ;; equal pre-test HEAD (the clone template tip is one commit behind).
+  (sh "update-ref" "refs/heads/origin/main" "HEAD")
   base)
 
 (define (write-plan! base-dir idx title slug)
@@ -147,7 +158,8 @@
    #:exists 'truncate))
 
 (define (make-git-branch! base-dir branch)
-  (parameterize ([current-directory base-dir])
+  ;; git root is base-dir/q in the two-tier fixture layout
+  (parameterize ([current-directory (build-path base-dir "q")])
     (system*/exit-code GIT "checkout" "-q" "-b" branch)))
 
 ;; Fully scaffolded campaign: git repo on feature/issue-42-wave, modified wave
@@ -206,7 +218,8 @@
       (make-git-branch! base "feature/issue-42-wave")
       ;; commit the change on the feature branch (no uncommitted diff)
       (make-git-file-change! base)
-      (parameterize ([current-directory base])
+      ;; git commands must run inside the repo (base/q), not the base dir
+      (parameterize ([current-directory (build-path base "q")])
         (system*/exit-code GIT "add" "-A")
         (system*/exit-code GIT "commit" "-q" "-m" "wave delivery"))
       (write-plan! base 0 "Wave Zero" "zero")
@@ -251,7 +264,7 @@
                              (lambda (out)
                                (display "#lang racket/base\n(provide x)\n(define x 1)\n" out))
                              #:exists 'truncate)
-      (parameterize ([current-directory base])
+      (parameterize ([current-directory (build-path base "q")])
         (system*/exit-code GIT "add" "-A")
         (system*/exit-code GIT "commit" "-q" "-m" "wave delivery under dir"))
       (write-plan! base 0 "Wave Zero" "zero")
@@ -537,7 +550,7 @@
       (call-with-output-file (build-path base "q" "docs" "reports" "x.md")
                              (lambda (out) (display "# x\n" out))
                              #:exists 'truncate)
-      (parameterize ([current-directory base])
+      (parameterize ([current-directory (build-path base "q")])
         (system*/exit-code GIT "add" "-A")
         (system*/exit-code GIT "commit" "-q" "-m" "add non-rkt files"))
       (make-git-branch! base "feature/issue-42-wave")
