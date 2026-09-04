@@ -111,6 +111,9 @@
 
 ;; filter-session-info imported from helpers/fixtures.rkt
 (require (only-in "helpers/fixtures.rkt" filter-session-info))
+(require (only-in "helpers/private-fixture-templates.rkt"
+                  make-private-session-fixture!
+                  private-session-fixture-session-dir))
 
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
@@ -165,7 +168,9 @@
                              #:cancellation-token [tok #f]
                              #:model-name [model-name #f]
                              #:system-instructions [instrs '()])
-  (define dir (or session-dir (make-temp-dir)))
+  (define dir
+    (or session-dir
+        (private-session-fixture-session-dir (make-private-session-fixture! #:tag "golden"))))
   (define reg (or tool-reg (make-tool-registry)))
   (sdk:make-runtime #:provider prov
                     #:session-dir dir
