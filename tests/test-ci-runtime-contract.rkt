@@ -184,11 +184,11 @@
                     (format "release-readiness must record gate evidence for ~a" suite))))
 
     ;; Pin 7: gsd-governance evidence contract
-    (test-case "gsd-governance validates exactly one changed wave-evidence record"
+    (test-case "gsd-governance validates one wave record and tolerates aggregate pushes"
       (define body (job-body "gsd-governance"))
-      (check-true (ormap (lambda (ln)
-                           (regexp-match? #rx"Expected exactly one changed wave evidence record" ln))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"Multiple wave evidence records changed" ln))
                          body))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"-gt 1" ln)) body))
       (check-true (ormap (lambda (ln) (regexp-match? #rx"gsd-wave-gate.rkt" ln)) body))
       (check-true (ormap (lambda (ln) (regexp-match? #rx"required-pr-checks.policy" ln)) body)))))
 
