@@ -933,12 +933,115 @@
     'wave
     "W5"
     'rationale
+     (string-append
+      "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
+      "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
+      "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
+      "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
+      "live repository discovery remains executable in L4."))
+   (hasheq
+    'behavior-id
+    "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-private-fixture-templates.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
     (string-append
-     "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
-     "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
-     "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
-     "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
-     "live repository discovery remains executable in L4."))))
+     "W6 retained: new fast contract/stress destination owning the copy-on-test fixture-template invariants — distinct private canonical "
+     "roots for concurrent instances, immutable template source, independent ref/history/CWD/env mutation, cross-instance and "
+     "template-safety proof, arbitrary-order destruction with idempotent cleanup, and explicit git-unavailable skip semantics (never a "
+     "silent pass). No product behavior is owned here."))
+   (hasheq
+    'behavior-id
+    "GOLDEN-SESSION-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-golden-flows.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): golden-session lifecycle family keeps its fast tier and every behavioral assertion. Repeated "
+     "baseline session construction is centralized behind the private copy-on-test session template (immutable "
+     "tests/fixtures/session-template/ copied to a fresh private temp root per test with fresh session IDs/event buses/registries); "
+     "scratch-build and meaningful multi-turn canary cases remain in the owner file."))
+   (hasheq
+    'behavior-id
+    "GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-delivery-verifier.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): delivery-verifier Git sandbox family keeps its fast tier and assertions. Duplicated "
+     "init/config/baseline-commit scaffolding is centralized in the lazy per-process Git template and cloned privately per test with "
+     "no shared refs, index, worktree metadata, config, or hooks; hermetic user identity and the offline origin/main stand-in are "
+     "preserved."))
+   (hasheq
+    'behavior-id
+    "GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-wave-worktree.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): GSD wave-worktree family keeps its fast tier and assertions. Duplicated baseline-repository "
+     "construction is centralized in the shared lazy Git template; real Git/filesystem behavior, family-specific branch/commit/"
+     "dirty-tree/delivery/cleanup/orphan assertions, and offline origin/main stand-ins remain in the owner file."))
+   (hasheq
+    'behavior-id
+    "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-branch-delivery-verification.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): branch-delivery verification family adopts the shared private Git sandbox builder for its "
+     "baseline repository only; branch, commit, dirty-tree, delivery, cleanup, and orphan assertions stay unchanged in the owner "
+     "file."))))
 
 ;; Rows actually owned by this milestone (frozen table).
 (define (gate-ownership-rows [memberships (gate-membership)])

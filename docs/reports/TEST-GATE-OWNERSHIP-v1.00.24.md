@@ -5,13 +5,13 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`d3542eee3904b57001cca97ee798026efb31c7c79e5f7a0b50921cf4022345fb`
+`aa68f4139f7c731d0766eaf0cf0a875144bff5fe612e8d8d483fa807a216475f`
 
 ## Gate membership (deterministic repository walk)
 
 | Gate | Selected files | Selected-path digest |
 |---|---|---|
-| fast | 1170 | 00a07a8a7a4060f725c1b7a09df485442086c02b7769085aa89dcd7f7a607889 |
+| fast | 1171 | 6d71a2310abb1b0e66061ebd3c18228e132a3afc39d0a820991b0b3f60478dfb |
 | platform | 38 | 2c82c1959a5a3073b4a8c96e236a5d7f8e46a297c91ca2582ce2ceda009af4a5 |
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
@@ -36,6 +36,11 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GSD-TIMEOUT-REAL-CLOCK-CANARY | slow/L4 | slow/L4 | tests/test-gsd-wave-timeout-canary.rkt | gsd-delivery | re-tiered | W4 | W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring. |
 | RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT | unit-fast | unit-fast | tests/test-run-tests-shard.rkt | test-runtime | re-tiered | W5 | W5 re-tier: runner classifier/sharding unit assertions collect from the hermetic fixture tree tests/fixtures/run-tests-discovery/ through the new #:root seam on collect-test-files instead of crawling the production repository. The fixture tree owns fast, slow, platform, TUI, helper, malformed/edge-metadata, named/unnamed, symlink, and nested cases; unit assertions cover deterministic path sort, metadata/heuristic selection, platform inclusion, shard partition, helper/fixture exclusion, missing-root failure, and no escape through symlinks or .. without depending on the number of files in the live checkout. Omitted-root calls preserve the pre-W5 q-root discovery byte-for-byte, asserted from both directions against the ignored-prefix contract. The test process now propagates rackunit failure/error counts to its exit code so runner exit-code verdicts observe real failures. |
 | RUNNER-REPOSITORY-DISCOVERY-L4 | slow/L4 | slow/L4 | tests/test-run-tests-repository-discovery.rkt | test-runtime | re-tiered | W5 | W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; live repository discovery remains executable in L4. |
+| PRIVATE-FIXTURE-TEMPLATE-CONTRACT | fast | fast | tests/test-private-fixture-templates.rkt | test-design | retained-in-place | W6 | W6 retained: new fast contract/stress destination owning the copy-on-test fixture-template invariants — distinct private canonical roots for concurrent instances, immutable template source, independent ref/history/CWD/env mutation, cross-instance and template-safety proof, arbitrary-order destruction with idempotent cleanup, and explicit git-unavailable skip semantics (never a silent pass). No product behavior is owned here. |
+| GOLDEN-SESSION-PRIVATE-TEMPLATE | fast | fast | tests/test-golden-flows.rkt | test-design | retained-in-place | W6 | W6 retained-in-place (no re-tier): golden-session lifecycle family keeps its fast tier and every behavioral assertion. Repeated baseline session construction is centralized behind the private copy-on-test session template (immutable tests/fixtures/session-template/ copied to a fresh private temp root per test with fresh session IDs/event buses/registries); scratch-build and meaningful multi-turn canary cases remain in the owner file. |
+| GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE | fast | fast | tests/test-gsd-delivery-verifier.rkt | test-design | retained-in-place | W6 | W6 retained-in-place (no re-tier): delivery-verifier Git sandbox family keeps its fast tier and assertions. Duplicated init/config/baseline-commit scaffolding is centralized in the lazy per-process Git template and cloned privately per test with no shared refs, index, worktree metadata, config, or hooks; hermetic user identity and the offline origin/main stand-in are preserved. |
+| GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE | fast | fast | tests/test-gsd-wave-worktree.rkt | test-design | retained-in-place | W6 | W6 retained-in-place (no re-tier): GSD wave-worktree family keeps its fast tier and assertions. Duplicated baseline-repository construction is centralized in the shared lazy Git template; real Git/filesystem behavior, family-specific branch/commit/dirty-tree/delivery/cleanup/orphan assertions, and offline origin/main stand-ins remain in the owner file. |
+| GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE | fast | fast | tests/test-gsd-branch-delivery-verification.rkt | test-design | retained-in-place | W6 | W6 retained-in-place (no re-tier): branch-delivery verification family adopts the shared private Git sandbox builder for its baseline repository only; branch, commit, dirty-tree, delivery, cleanup, and orphan assertions stay unchanged in the owner file. |
 
 ## Metadata boundary and declared side effects (per member)
 
@@ -62,3 +67,8 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | GSD-TIMEOUT-REAL-CLOCK-CANARY | tests/test-gsd-wave-timeout-canary.rkt | extensions | slow | #f | #f | #f |  | #f |
 | RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT | tests/test-run-tests-shard.rkt | default | fast | unit | #f | #f |  | #f |
 | RUNNER-REPOSITORY-DISCOVERY-L4 | tests/test-run-tests-repository-discovery.rkt | default | slow | integration | #f | #f |  | #f |
+| PRIVATE-FIXTURE-TEMPLATE-CONTRACT | tests/test-private-fixture-templates.rkt | runtime | fast | #f | #f | #f |  | #f |
+| GOLDEN-SESSION-PRIVATE-TEMPLATE | tests/test-golden-flows.rkt | default | fast | integration | #f | #f |  | #f |
+| GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE | tests/test-gsd-delivery-verifier.rkt | extensions | fast | integration | #f | #f |  | #f |
+| GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE | tests/test-gsd-wave-worktree.rkt | #f | #f | #f | #f | #f |  | #f |
+| GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE | tests/test-gsd-branch-delivery-verification.rkt | #f | #f | #f | #f | #f |  | #f |
