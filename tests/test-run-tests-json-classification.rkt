@@ -26,14 +26,14 @@
                 #:passed [passed 0]
                 #:failed [failed 0]
                 #:total [total 0])
-  (test-file-result path
-                    exit-code
-                    (string->bytes/utf-8 out)
-                    (string->bytes/utf-8 err)
-                    17
-                    passed
-                    failed
-                    total))
+  (make-test-file-result path
+                         exit-code
+                         (string->bytes/utf-8 out)
+                         (string->bytes/utf-8 err)
+                         17
+                         passed
+                         failed
+                         total))
 
 (define (write-temp-test content)
   (define dir (make-temporary-file "q-json-out-test-~a" 'directory))

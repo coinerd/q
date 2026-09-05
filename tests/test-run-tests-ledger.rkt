@@ -75,7 +75,7 @@
                 #:out [out "FAILURE"]
                 #:failed [failed 1]
                 #:total [total 1])
-  (test-file-result path exit-code (string->bytes/utf-8 out) #"" 10 0 failed total))
+  (make-test-file-result path exit-code (string->bytes/utf-8 out) #"" 10 0 failed total))
 
 (define (write-ledger entries)
   (define path (make-temporary-file "q-known-failures-~a.json"))

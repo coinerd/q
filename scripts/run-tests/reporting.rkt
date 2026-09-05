@@ -530,7 +530,7 @@
              (unless (hash-has-key? f rf)
                (problem (format "files[~a]: missing required result field ~a" i rf)))
              (when (hash-has-key? f rf)
-               (check-type rf
+               (check-type (format "files[~a].~a" i rf)
                            (hash-ref f rf)
                            (if (member rf '("path" "category")) string-field? number-field?)
                            (if (member rf '("path" "category")) "a string" "a number"))))]))))
