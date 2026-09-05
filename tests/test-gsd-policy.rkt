@@ -241,3 +241,10 @@
        (hasheq 'mode mode 'target-path "/project/.planning/PLAN.md" 'pinned-dir "/project/.planning")
        'write-file))
     (check-true (policy-allowed? d) (format "write should be allowed in ~a" mode))))
+
+(test-case "verification repair retry budget is bounded and independently configurable"
+  (check-equal? (current-gsd-wave-verification-repair-retries) 1)
+  (check-equal? (parameterize ([current-gsd-wave-verification-repair-retries 0])
+                  (current-gsd-wave-verification-repair-retries))
+                0)
+  (check-exn exn:fail:contract? (lambda () (current-gsd-wave-verification-repair-retries -1))))

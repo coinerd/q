@@ -233,6 +233,7 @@
          wave-worktree-planning-dir
          wave-worktree-cwd
          make-wave-worktree!
+         call-with-retained-wave-worktree!
          cleanup-wave-worktree!
          release-wave-worktree!
          reclaim-orphaned-worktrees!
@@ -1222,6 +1223,20 @@
                                        (list (wave-worktree-path wt)
                                              (wave-worktree-planning-dir wt))))
   wt)
+
+;; BUG-0060: execute one attempt in a worktree that may have been retained
+;; from a failed verification attempt. `on-acquire` runs for every attempt so
+;; each fresh fenced attempt gets a truthful artifact-ledger entry even when
+;; the physical branch/worktree is reused.
+(define (call-with-retained-wave-worktree! wt-box make-worktree on-acquire run)
+  (define wt (or (unbox wt-box) (make-worktree)))
+  (if (not wt)
+      (run)
+      (begin
+        (set-box! wt-box wt)
+        (on-acquire wt)
+        (parameterize ([current-directory (wave-worktree-path wt)])
+          (run)))))
 
 ;; Best-effort, NEVER raises, never masks the terminal outcome: remove the
 ;; worktree, then delete the branch (order matters — branch -D refuses while

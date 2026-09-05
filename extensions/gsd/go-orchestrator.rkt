@@ -38,6 +38,7 @@
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
                   current-gsd-wave-no-change-retries
+                  current-gsd-wave-verification-repair-retries
                   current-gsd-wave-failure-context
                   current-gsd-max-consecutive-tool-calls
                   current-gsd-campaign-infra-retries
@@ -47,7 +48,8 @@
                   wave-failure-context-block
                   wave-attempt-context-block
                   executor-reanchor-prompt)
-         (only-in "events.rkt" emit-gsd-event!)
+         (only-in "verification-repair.rkt" resolve-verification-rejection!)
+         (only-in "wave-outcome-reporting.rkt" emit-wave-outcome-error! runner-outcome-failure-reason)
          ;; v1.00.22 W6 (BUG-0040): terminal-transition notification
          ;; surface (tmux/desktop/webhook sinks; best-effort, never
          ;; affects the campaign).
@@ -75,6 +77,7 @@
                   wave-worktree-repo-root
                   wave-worktree-base-ref
                   make-wave-worktree!
+                  call-with-retained-wave-worktree!
                   cleanup-wave-worktree!
                   release-wave-worktree!
                   worktree-hash8
@@ -376,24 +379,6 @@
 ;; injection (soft limit) and the honest attempt termination (hard limit).
 ;; ============================================================
 
-;; BUG-0043 (W2): a terminal wave-execution-outcome with kind != 'done must
-;; surface as a typed [SYS] [ERROR] transcript event — NOT as conversation/
-;; message-surface text. The TUI reducer (core-handlers.rkt) renders the
-;; payload's kind + message verbatim on the error surface. Best-effort: a bus
-;; failure must never break the campaign control flow.
-(define (emit-wave-outcome-error! wave-idx kind message)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning "gsd: outcome-error event emission failed: ~a"
-                                            (exn-message e)))])
-    (emit-gsd-event! 'gsd.wave.outcome-error
-                     (hasheq 'wave wave-idx 'kind kind 'level "error" 'message (or message "")))))
-
-(define (runner-outcome-failure-reason outcome result)
-  (define msg (wave-execution-outcome-message result))
-  (if (and (string? msg) (positive? (string-length (string-trim msg))))
-      msg
-      (format "wave execution ended '~a' without a runner message" outcome)))
-
 ;; ============================================================
 ;; Build identity & version-freshness guard (v1.00.19 W3 — BUG-0031)
 ;;
@@ -512,8 +497,16 @@
      ;; descriptors ((attempt unix-timestamp) ...) for the aggregated stop
      ;; message once the bound is exhausted.
      (define infra-retry-state (box (cons (current-gsd-campaign-infra-retries) '())))
+     ;; BUG-0060: head SHA at the last same-wave verification repair. A
+     ;; second repair attempt on an unchanged head proves the executor
+     ;; cannot repair and stops instead of burning the remaining budget.
+     (define repair-head-box (box #f))
 
-     (define (run-once* no-change-retries-left wt-box keep-branch-box attempt-id-box)
+     (define (run-once* no-change-retries-left
+                        repair-retries-left
+                        wt-box
+                        keep-branch-box
+                        attempt-id-box)
        (set-campaign-fence-token! active fence)
        (begin-attempt! active wave-idx fence)
        (persist-campaign! base-dir active)
@@ -654,34 +647,23 @@
        (define (run-isolated run-thunk)
          (if (not (worktree-isolation-enabled? #:isolate? isolate?))
              (run-thunk)
-             (let ([wt
-                    (with-handlers
-                        ([exn:fail?
-                          (lambda (e)
-                            (log-warning
-                             "wave ~a: worktree isolation unavailable (~a); running in shared checkout"
-                             wave-idx
-                             (exn-message e))
-                            #f)])
-                      (make-wave-worktree! base-dir
-                                           #:campaign-id (campaign-plan-id active)
-                                           #:wave-index wave-idx))])
-               (cond
-                 [(not wt) (run-thunk)]
-                 [else
-                  (set-box! wt-box wt)
-                  ;; v1.00.21 W5 (BUG-0029 action 1): the worktree+branch
-                  ;; pair is a DURABLE artifact — it enters the wave's
-                  ;; artifact ledger AT CREATION, owned by the record from
-                  ;; its first breath until terminal update / teardown /
-                  ;; reclaim.
-                  (record-attempt-artifact! base-dir
-                                            (campaign-plan-id active)
-                                            wave-idx
-                                            expected-id
-                                            wt)
-                  (parameterize ([current-directory (wave-worktree-path wt)])
-                    (run-thunk))]))))
+             (call-with-retained-wave-worktree!
+              wt-box
+              (lambda ()
+                (with-handlers
+                    ([exn:fail?
+                      (lambda (e)
+                        (log-warning
+                         "wave ~a: worktree isolation unavailable (~a); running in shared checkout"
+                         wave-idx
+                         (exn-message e))
+                        #f)])
+                  (make-wave-worktree! base-dir
+                                       #:campaign-id (campaign-plan-id active)
+                                       #:wave-index wave-idx)))
+              (lambda (wt)
+                (record-attempt-artifact! base-dir (campaign-plan-id active) wave-idx expected-id wt))
+              run-thunk)))
        ;; W7 (#9512b): the worktree outlives the run thunk — its branch
        ;; carries the delivery evidence through verification and the
        ;; completion decision. run-once* therefore receives the boxes
@@ -910,32 +892,39 @@
                                                       verifier-message
                                                       (no-change-target-files verifier-message))])
                                        (run-once* (sub1 no-change-retries-left)
+                                                  repair-retries-left
                                                   wt-box
                                                   keep-branch-box
                                                   attempt-id-box))))]
                               [else
-                               (mark-attempt-artifact-terminal!
-                                base-dir
-                                (campaign-plan-id active)
-                                wave-idx
-                                expected-id
-                                'failure
-                                #:merge-status
-                                (and wt
-                                     (artifact-merge-status/local (wave-worktree-repo-root wt)
-                                                                  (wave-worktree-branch wt))))
-                               (notify-terminal-transition*! (campaign-plan-id active)
-                                                             wave-idx
-                                                             'wave-failed
-                                                             #:reason
-                                                             (if (string=? verifier-message "")
-                                                                 "verifier rejected"
-                                                                 verifier-message))
-                               (campaign-result 'wave-failed
-                                                '()
-                                                (if (string=? verifier-message "")
-                                                    "verifier rejected"
-                                                    verifier-message))])]
+                               (resolve-verification-rejection!
+                                #:base-dir base-dir
+                                #:active active
+                                #:wave-index wave-idx
+                                #:fence fence
+                                #:attempt-id expected-id
+                                #:worktree wt
+                                #:verifier-result verifier-result
+                                #:message verifier-message
+                                #:retries-left repair-retries-left
+                                #:repair-head-box repair-head-box
+                                #:retry (lambda ()
+                                          (run-once* no-change-retries-left
+                                                     (sub1 repair-retries-left)
+                                                     wt-box
+                                                     keep-branch-box
+                                                     attempt-id-box))
+                                #:make-cancelled
+                                (lambda ()
+                                  (campaign-result 'wave-cancelled '() "stale completion ignored"))
+                                #:make-failed (lambda (reason)
+                                                (campaign-result 'wave-failed '() reason))
+                                #:notify-failed!
+                                (lambda (reason)
+                                  (notify-terminal-transition*! (campaign-plan-id active)
+                                                                wave-idx
+                                                                'wave-failed
+                                                                #:reason reason)))])]
                            [(stale-attempt invalid-state)
                             (campaign-result 'wave-cancelled '() "stale completion ignored")]
                            [else
@@ -1065,7 +1054,11 @@
                    (parameterize ([current-gsd-wave-failure-context
                                    (wave-attempt-context-block
                                     (and infra-wave (campaign-wave-attempt-context infra-wave)))])
-                     (run-once* no-change-retries-left wt-box keep-branch-box attempt-id-box)))
+                     (run-once* no-change-retries-left
+                                repair-retries-left
+                                wt-box
+                                keep-branch-box
+                                attempt-id-box)))
                  ;; Bound exhausted: fail closed with an aggregated message
                  ;; listing every failure timestamp (attempt not consumed —
                  ;; the durable wave stays pending and re-attemptable).
@@ -1166,7 +1159,12 @@
        (set-box! infra-retry-state (cons (current-gsd-campaign-infra-retries) '()))
        (dynamic-wind
         void
-        (lambda () (run-once* no-change-retries wt-box keep-branch-box attempt-id-box))
+        (lambda ()
+          (run-once* no-change-retries
+                     (current-gsd-wave-verification-repair-retries)
+                     wt-box
+                     keep-branch-box
+                     attempt-id-box))
         (lambda ()
           (define wt (unbox wt-box))
           (when wt

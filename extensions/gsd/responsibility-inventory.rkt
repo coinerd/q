@@ -325,6 +325,22 @@
                                "racket/match"
                                "shared"
                                "wave-status"))
+   ;; BUG-0060: bounded same-wave verification repair policy + durable
+   ;; retry transition (classification, no-progress guard, ledger/persist).
+   (make-entry "verification-repair.rkt"
+               'transition-logic
+               '(parameterize)
+               '()
+               '("racket/match" "attempt-artifacts" "campaign-repository"
+                                 "campaign-state" "delivery-verifier" "events"
+                                 "policy" "prompts" "wave-executor"))
+   ;; BUG-0042 size discipline: terminal runner outcome reporting extracted
+   ;; from go-orchestrator (typed error-surface event + honest reason).
+   (make-entry "wave-outcome-reporting.rkt"
+               'event-projection
+               '()
+               '()
+               '("racket/string" "events" "wave-runner-port"))
    ;; event projection (2)
    (make-entry
     "events.rkt"

@@ -269,7 +269,7 @@
       ;; Production defaults preserve current-inexact-milliseconds and
       ;; sync/timeout semantics; tests rebind for determinism.
       (check-equal? (length inventory-entries)
-                    228
+                    229
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

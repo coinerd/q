@@ -82,6 +82,7 @@
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
+                  current-gsd-wave-verification-repair-retries
                   current-gsd-wave-failure-context
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay))
@@ -263,6 +264,97 @@
       (check-eq? (wave-status* rec 0) 'done)
       (check-eq? (wave-status* rec 1) 'failed)
       (check-false (eq? (wave-status* rec 2) 'done) "W2 must not advance past failed W1")
+      (cleanup-tmp dir))
+
+    (test-case "repairable declared-Verify rejection gets one bounded same-wave repair"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define runner-calls 0)
+      (define verifier-calls 0)
+      (define repair-context #f)
+      (define verify-detail
+        "cmd=racket tests/failing.rkt exit=1 state=failed log=/tmp/verify.log
+failed-output-summary:
+check-equal? actual 14 expected 12")
+      (define failed-verification
+        (delivery-verification #f
+                               (list (cons "verify" (cons #f verify-detail)))
+                               (string-append "delivery verification failed:\nverify: "
+                                              verify-detail)))
+      (define result
+        (parameterize ([current-gsd-wave-verification-repair-retries 1])
+          (run-campaign! dir
+                         rec
+                         #:runner (lambda (_)
+                                    (set! runner-calls (add1 runner-calls))
+                                    (when (= runner-calls 2)
+                                      (set! repair-context (current-gsd-wave-failure-context)))
+                                    'ok)
+                         #:verifier (lambda (_)
+                                      (set! verifier-calls (add1 verifier-calls))
+                                      (if (= verifier-calls 1) failed-verification #t)))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? runner-calls 2)
+      (check-equal? verifier-calls 2 "the complete verifier is rerun after repair")
+      (check-true (string-contains? repair-context "racket tests/failing.rkt"))
+      (check-true (string-contains? repair-context "/tmp/verify.log"))
+      (check-true (string-contains? repair-context "actual 14 expected 12"))
+      (check-eq? (wave-status* rec 0) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "repeated repairable verification failure exhausts repair budget and stays failed"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define runner-calls 0)
+      (define failed-verification
+        (delivery-verification
+         #f
+         (list (cons "verify" (cons #f "cmd=false exit=1 state=failed log=/tmp/verify.log")))
+         "delivery verification failed:\nverify: cmd=false exit=1 state=failed log=/tmp/verify.log"))
+      (define result
+        (parameterize ([current-gsd-wave-verification-repair-retries 1])
+          (run-campaign! dir
+                         rec
+                         #:runner (lambda (_)
+                                    (set! runner-calls (add1 runner-calls))
+                                    'ok)
+                         #:verifier (lambda (_) failed-verification))))
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (check-equal? runner-calls 2)
+      (check-eq? (wave-status* rec 0) 'failed)
+      (check-false (eq? (wave-status* rec 1) 'done) "later waves remain blocked")
+      (cleanup-tmp dir))
+
+    (test-case "durable cancellation during verification repair stops before another verify"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define runner-calls 0)
+      (define verifier-calls 0)
+      (define failed-verification
+        (delivery-verification
+         #f
+         (list (cons "verify" (cons #f "cmd=false exit=1 state=failed log=/tmp/verify.log")))
+         "delivery verification failed:\nverify: cmd=false exit=1 state=failed log=/tmp/verify.log"))
+      (define result
+        (parameterize ([current-gsd-wave-verification-repair-retries 1])
+          (run-campaign! dir
+                         rec
+                         #:runner
+                         (lambda (_)
+                           (set! runner-calls (add1 runner-calls))
+                           (when (= runner-calls 2)
+                             (define latest (load-campaign-record dir (campaign-plan-id rec)))
+                             (set-campaign-cancellation! latest
+                                                         (make-campaign-cancellation "stop repair" 9))
+                             (persist-campaign! dir latest))
+                           'ok)
+                         #:verifier (lambda (_)
+                                      (set! verifier-calls (add1 verifier-calls))
+                                      failed-verification))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-equal? runner-calls 2)
+      (check-equal? verifier-calls 1 "cancellation prevents repair verification")
+      (check-eq? (wave-status* rec 0) 'interrupted)
       (cleanup-tmp dir))
 
     (test-case "verifier rejection stops campaign"

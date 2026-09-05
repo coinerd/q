@@ -160,6 +160,20 @@
   (define p (verifying-prompt plan exec))
   (check-true (string-contains? p "no verify command")))
 
+(test-case "verification repair context preserves exact diagnostics and requires complete verify"
+  (define p
+    (verification-repair-context-block
+     "cmd=racket tests/failing.rkt exit=1 state=failed log=/tmp/verify.log\nfailed-output-summary:\nactual 14 expected 12"))
+  (check-true (string-contains? p "cmd=racket tests/failing.rkt"))
+  (check-true (string-contains? p "log=/tmp/verify.log"))
+  (check-true (string-contains? p "actual 14 expected 12"))
+  (check-true (string-contains? p "COMPLETE declared Verify chain")))
+
+(test-case "verification repair context bounds adversarially large diagnostics"
+  (define p (verification-repair-context-block (make-string 7000 #\x)))
+  (check-true (string-contains? p "diagnostics truncated"))
+  (check-true (< (string-length p) 7000)))
+
 ;; ============================================================
 ;; Status prompt
 ;; ============================================================
