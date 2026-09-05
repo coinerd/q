@@ -326,10 +326,13 @@
 ;; unit-fast eligibility audit (W3)
 ;; ============================================================
 ;; Lists unit-fast candidates and flags files that must NOT join the
-;; grouped in-process execution mode: declared mutations, declared or
-;; lexically-detected env/filesystem/network/process side effects, or
-;; a missing `module+ test` form (no RackUnit discovery point for
-;; grouped execution).
+;; grouped in-process execution mode: declared mutations, declared
+;; process isolation (@isolation), declared or lexically-detected
+;; env/filesystem/network/process side effects, or a missing
+;; `module+ test` form (no RackUnit discovery point for grouped
+;; execution).  W7: declared-process-isolation flags mirror the
+;; runner's grouped fallback so audit eligibility and grouped
+;; effective-mode selection cannot disagree.
 
 (define (file-content f)
   (with-handlers ([exn:fail? (lambda (_) "")])
@@ -353,11 +356,19 @@
   (define v (hash-ref (get-file-metadata f) 'mutates #f))
   (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
 
+(define (declared-isolation f)
+  (define v (hash-ref (get-file-metadata f) 'isolation #f))
+  (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
+
 (define (audit-unsafe-reasons f)
   (define content (file-content f))
   (define reasons '())
   (define (flag! r)
     (set! reasons (cons r reasons)))
+  (cond
+    [(declared-isolation f)
+     =>
+     (lambda (v) (flag! (format "declared-process-isolation:@isolation=~a" v)))])
   (cond
     [(declared-mutation f)
      =>

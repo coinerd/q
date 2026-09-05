@@ -15,7 +15,7 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 | platform | 38 | 2c82c1959a5a3073b4a8c96e236a5d7f8e46a297c91ca2582ce2ceda009af4a5 |
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 29 | 8f63529c15bc764aa1721fd0d1ffdf51aee8169d656c5b1019243d81879dd104 |
-| unit-fast | 943 | 310c6ce693c0028d1b55f35d5716b429324df3c5f9b069e6ccf1d32a4b471b43 |
+| unit-fast | 941 | d4341c08803e7e50a532fb2611c4cacdf0a6653918df5f3a0b78cffb31bc9026 |
 | slow/L4 | 110 | 202089e4ca8cd8e2c7c7bde7b92d959ebda48e6b802f48fb2adc193838a96262 |
 
 ## Behavior ownership (frozen v1.00.24 W0 candidate rows)
