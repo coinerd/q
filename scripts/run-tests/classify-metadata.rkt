@@ -19,9 +19,9 @@
 ;; distribution — a missing collection here is a discovery tool outage.
 
 (provide base-dir
-          q-root-candidate?
-          resolve-base-dir
-          resolve-repository-root
+         q-root-candidate?
+         resolve-base-dir
+         resolve-repository-root
          resolve-base-dir
          metadata-cache
          clear-metadata-cache!
@@ -45,17 +45,17 @@
          validate-files
          summarize-findings
          findings->jsexpr
-          lint-summary->jsexpr
-          print-lint-report
-          ;; Canonical test-file discovery + deterministic inventory (W2)
-          sha256-hex
-          discovery-ignored-directory-names
-          discovery-ignored-path-prefixes
-          discovery-support-module-names
-          discover-metadata-files
-          results-with-finding-code
-          build-metadata-inventory
-          emit-metadata-inventory-json)
+         lint-summary->jsexpr
+         print-lint-report
+         ;; Canonical test-file discovery + deterministic inventory (W2)
+         sha256-hex
+         discovery-ignored-directory-names
+         discovery-ignored-path-prefixes
+         discovery-support-module-names
+         discover-metadata-files
+         results-with-finding-code
+         build-metadata-inventory
+         emit-metadata-inventory-json)
 
 ;; ============================================================
 ;; Base directory resolution
@@ -538,26 +538,21 @@
   (write-char #\" out)
   (for ([c (in-string s)])
     (case c
-      [(#\")
-       (write-string "\\\"" out)]
-      [(#\\)
-       (write-string "\\\\" out)]
-      [(#\newline)
-       (write-string "\\n" out)]
-      [(#\return)
-       (write-string "\\r" out)]
-      [(#\tab)
-       (write-string "\\t" out)]
-      [(#\backspace)
-       (write-string "\\b" out)]
-      [(#\u000c)
-       (write-string "\\f" out)]
+      [(#\") (write-string "\\\"" out)]
+      [(#\\) (write-string "\\\\" out)]
+      [(#\newline) (write-string "\\n" out)]
+      [(#\return) (write-string "\\r" out)]
+      [(#\tab) (write-string "\\t" out)]
+      [(#\backspace) (write-string "\\b" out)]
+      [(#\u000c) (write-string "\\f" out)]
       [else
        ;; escape only control chars and non-ASCII; printables go through raw
        (if (or (char<? c #\space) (char>? c #\u007f))
-           (fprintf out "\\u~a" (let ([hex (number->string (char->integer c) 16)])
-                                  (string-append (make-string (max 0 (- 4 (string-length hex))) #\0)
-                                               (string-upcase hex))))
+           (fprintf out
+                    "\\u~a"
+                    (let ([hex (number->string (char->integer c) 16)])
+                      (string-append (make-string (max 0 (- 4 (string-length hex))) #\0)
+                                     (string-upcase hex))))
            (write-char c out))]))
   (write-char #\" out))
 
@@ -566,17 +561,23 @@
     [(hash? v)
      (write-char #\{ out)
      (define pairs (hash->list v))
-     (for ([i (in-naturals)] [kv (in-list pairs)])
-       (unless (zero? i) (write-char #\, out))
-       (json-escape-string!
-        (if (symbol? (car kv)) (symbol->string (car kv)) (car kv)) out)
+     (for ([i (in-naturals)]
+           [kv (in-list pairs)])
+       (unless (zero? i)
+         (write-char #\, out))
+       (json-escape-string! (if (symbol? (car kv))
+                                (symbol->string (car kv))
+                                (car kv))
+                            out)
        (write-char #\: out)
        (json-write (cdr kv) out))
      (write-char #\} out)]
     [(list? v)
      (write-char #\[ out)
-     (for ([i (in-naturals)] [e (in-list v)])
-       (unless (zero? i) (write-char #\, out))
+     (for ([i (in-naturals)]
+           [e (in-list v)])
+       (unless (zero? i)
+         (write-char #\, out))
        (json-write e out))
      (write-char #\] out)]
     [(string? v) (json-escape-string! v out)]
@@ -731,12 +732,12 @@
 ;; legacy resolve-base-dir candidate list when nothing matches (bounded
 ;; climb, 12 levels).
 (define (resolve-repository-root [from (find-system-path 'orig-dir)])
-  (let climb ([dir (simplify-path (path->complete-path from))] [fuel 12])
+  (let climb ([dir (simplify-path (path->complete-path from))]
+              [fuel 12])
     (cond
       [(<= fuel 0) (resolve-base-dir from)]
       [(q-root-candidate? dir) dir]
-      [(and (directory-exists? (build-path dir "q"))
-            (q-root-candidate? (build-path dir "q")))
+      [(and (directory-exists? (build-path dir "q")) (q-root-candidate? (build-path dir "q")))
        (simplify-path (build-path dir "q"))]
       [else (climb (simplify-path (build-path dir 'up)) (sub1 fuel))])))
 
@@ -747,9 +748,12 @@
 
 ;; repo-relative, forward-slash path string of p under root
 (define (repo-relative-path-string root p)
-  (define rel (find-relative-path (simplify-path root) (simplify-path p)))
+  (define rel (find-relative-path (simple-form-path root) (simple-form-path p)))
   (apply string-append
-         (add-between (map (lambda (seg) (if (symbol? seg) (symbol->string seg) (path->string seg)))
+         (add-between (map (lambda (seg)
+                             (if (symbol? seg)
+                                 (symbol->string seg)
+                                 (path->string seg)))
                            (explode-path rel))
                       "/")))
 
@@ -767,7 +771,10 @@
     (for ([entry (in-list (directory-list dir #:build? #t))])
       (define name
         (let ([n (file-name-from-path entry)])
-          (and n (if (path? n) (path->string n) (symbol->string n)))))
+          (and n
+               (if (path? n)
+                   (path->string n)
+                   (symbol->string n)))))
       (cond
         [(directory-exists? entry)
          (when (and (not (link-exists? entry))
@@ -781,7 +788,7 @@
                     (not (member name discovery-support-module-names)))
            (define rel (repo-relative-path-string root* entry))
            (when (and (not (discovery-ignored-path? rel))
-                       (not (hash-ref (get-file-metadata entry) 'not-test? #f)))
+                      (not (hash-ref (get-file-metadata entry) 'not-test? #f)))
              (set! found (cons rel found))))])))
   (when (directory-exists? tests-dir)
     (walk! tests-dir))
@@ -795,20 +802,73 @@
 ;; ("abc" and the empty string) in q/tests/ci/metadata-discovery-test.rkt.
 
 (define sha256-k
-  (list->vector
-   (list #x428a2f98 #x71374491 #xb5c0fbcf #xe9b5dba5 #x3956c25b #x59f111f1 #x923f82a4 #xab1c5ed5
-         #xd807aa98 #x12835b01 #x243185be #x550c7dc3 #x72be5d74 #x80deb1fe #x9bdc06a7 #xc19bf174
-         #xe49b69c1 #xefbe4786 #x0fc19dc6 #x240ca1cc #x2de92c6f #x4a7484aa #x5cb0a9dc #x76f988da
-         #x983e5152 #xa831c66d #xb00327c8 #xbf597fc7 #xc6e00bf3 #xd5a79147 #x06ca6351 #x14292967
-         #x27b70a85 #x2e1b2138 #x4d2c6dfc #x53380d13 #x650a7354 #x766a0abb #x81c2c92e #x92722c85
-         #xa2bfe8a1 #xa81a664b #xc24b8b70 #xc76c51a3 #xd192e819 #xd6990624 #xf40e3585 #x106aa070
-         #x19a4c116 #x1e376c08 #x2748774c #x34b0bcb5 #x391c0cb3 #x4ed8aa4a #x5b9cca4f #x682e6ff3
-         #x748f82ee #x78a5636f #x84c87814 #x8cc70208 #x90befffa #xa4506ceb #xbef9a3f7 #xc67178f2)))
+  (list->vector (list #x428a2f98
+                      #x71374491
+                      #xb5c0fbcf
+                      #xe9b5dba5
+                      #x3956c25b
+                      #x59f111f1
+                      #x923f82a4
+                      #xab1c5ed5
+                      #xd807aa98
+                      #x12835b01
+                      #x243185be
+                      #x550c7dc3
+                      #x72be5d74
+                      #x80deb1fe
+                      #x9bdc06a7
+                      #xc19bf174
+                      #xe49b69c1
+                      #xefbe4786
+                      #x0fc19dc6
+                      #x240ca1cc
+                      #x2de92c6f
+                      #x4a7484aa
+                      #x5cb0a9dc
+                      #x76f988da
+                      #x983e5152
+                      #xa831c66d
+                      #xb00327c8
+                      #xbf597fc7
+                      #xc6e00bf3
+                      #xd5a79147
+                      #x06ca6351
+                      #x14292967
+                      #x27b70a85
+                      #x2e1b2138
+                      #x4d2c6dfc
+                      #x53380d13
+                      #x650a7354
+                      #x766a0abb
+                      #x81c2c92e
+                      #x92722c85
+                      #xa2bfe8a1
+                      #xa81a664b
+                      #xc24b8b70
+                      #xc76c51a3
+                      #xd192e819
+                      #xd6990624
+                      #xf40e3585
+                      #x106aa070
+                      #x19a4c116
+                      #x1e376c08
+                      #x2748774c
+                      #x34b0bcb5
+                      #x391c0cb3
+                      #x4ed8aa4a
+                      #x5b9cca4f
+                      #x682e6ff3
+                      #x748f82ee
+                      #x78a5636f
+                      #x84c87814
+                      #x8cc70208
+                      #x90befffa
+                      #xa4506ceb
+                      #xbef9a3f7
+                      #xc67178f2)))
 
 (define (sha-rotr x n)
-  (bitwise-and #xffffffff
-               (bitwise-ior (arithmetic-shift x (- n))
-                            (arithmetic-shift x (- 32 n)))))
+  (bitwise-and #xffffffff (bitwise-ior (arithmetic-shift x (- n)) (arithmetic-shift x (- 32 n)))))
 
 (define (sha-hex8 x)
   (define s (number->string x 16))
@@ -821,14 +881,15 @@
   (define len (bytes-length msg))
   (define padded
     (let* ([k0 (- 56 (modulo (+ len 1) 64))]
-           [k (if (< k0 0) (+ k0 64) k0)]
+           [k (if (< k0 0)
+                  (+ k0 64)
+                  k0)]
            [out (make-bytes (+ len 1 k 8))])
       (bytes-copy! out 0 msg)
       (bytes-set! out len #x80)
       (define bitlen (* len 8))
       (for ([i (in-range 8)])
-        (bytes-set! out (+ len 1 k i)
-                    (bitwise-and (arithmetic-shift bitlen (* -8 (- 7 i))) #xff)))
+        (bytes-set! out (+ len 1 k i) (bitwise-and (arithmetic-shift bitlen (* -8 (- 7 i))) #xff)))
       out))
   (define h0 #x6a09e667)
   (define h1 #xbb67ae85)
@@ -839,23 +900,41 @@
   (define h6 #x1f83d9ab)
   (define h7 #x5be0cd19)
   (define-values (final0 final1 final2 final3 final4 final5 final6 final7)
-    (for/fold ([a0 h0] [a1 h1] [a2 h2] [a3 h3] [a4 h4] [a5 h5] [a6 h6] [a7 h7])
+    (for/fold ([a0 h0]
+               [a1 h1]
+               [a2 h2]
+               [a3 h3]
+               [a4 h4]
+               [a5 h5]
+               [a6 h6]
+               [a7 h7])
               ([off (in-range 0 (bytes-length padded) 64)])
       (define w (make-vector 64))
       (for ([i (in-range 16)])
-        (vector-set!
-         w i
-         (bitwise-ior (arithmetic-shift (bytes-ref padded (+ off (* 4 i))) 24)
-                      (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 1)) 16)
-                      (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 2)) 8)
-                      (bytes-ref padded (+ off (* 4 i) 3)))))
+        (vector-set! w
+                     i
+                     (bitwise-ior (arithmetic-shift (bytes-ref padded (+ off (* 4 i))) 24)
+                                  (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 1)) 16)
+                                  (arithmetic-shift (bytes-ref padded (+ off (* 4 i) 2)) 8)
+                                  (bytes-ref padded (+ off (* 4 i) 3)))))
       (for ([i (in-range 16 64)])
         (define x15 (vector-ref w (- i 15)))
         (define x2 (vector-ref w (- i 2)))
         (define s0 (bitwise-xor (sha-rotr x15 7) (sha-rotr x15 18) (arithmetic-shift x15 -3)))
         (define s1 (bitwise-xor (sha-rotr x2 17) (sha-rotr x2 19) (arithmetic-shift x2 -10)))
-        (vector-set! w i (bitwise-and #xffffffff (+ (vector-ref w (- i 16)) s0 (vector-ref w (- i 7)) s1))))
-      (let loop ([i 0] [ha a0] [hb a1] [hc a2] [hd a3] [he a4] [hf a5] [hg a6] [hh a7])
+        (vector-set! w
+                     i
+                     (bitwise-and #xffffffff
+                                  (+ (vector-ref w (- i 16)) s0 (vector-ref w (- i 7)) s1))))
+      (let loop ([i 0]
+                 [ha a0]
+                 [hb a1]
+                 [hc a2]
+                 [hd a3]
+                 [he a4]
+                 [hf a5]
+                 [hg a6]
+                 [hh a7])
         (if (= i 64)
             (values (bitwise-and #xffffffff (+ a0 ha))
                     (bitwise-and #xffffffff (+ a1 hb))
@@ -871,18 +950,20 @@
                                                  (bitwise-and (bitwise-not he) hg)))]
                    [temp1 (+ hh S1 ch (vector-ref sha256-k i) (vector-ref w i))]
                    [S0 (bitwise-xor (sha-rotr ha 2) (sha-rotr ha 13) (sha-rotr ha 22))]
-                   [maj (bitwise-and #xffffffff
-                                     (bitwise-xor (bitwise-and ha hb)
-                                                  (bitwise-and ha hc)
-                                                  (bitwise-and hb hc)))]
+                   [maj (bitwise-and
+                         #xffffffff
+                         (bitwise-xor (bitwise-and ha hb) (bitwise-and ha hc) (bitwise-and hb hc)))]
                    [temp2 (+ S0 maj)])
               (loop (add1 i)
                     (bitwise-and #xffffffff (+ temp1 temp2))
-                    ha hb hc
+                    ha
+                    hb
+                    hc
                     (bitwise-and #xffffffff (+ hd temp1))
-                    he hf hg))))))
-  (apply string-append
-         (map sha-hex8 (list final0 final1 final2 final3 final4 final5 final6 final7))))
+                    he
+                    hf
+                    hg))))))
+  (apply string-append (map sha-hex8 (list final0 final1 final2 final3 final4 final5 final6 final7))))
 
 ;; ============================================================
 ;; Deterministic metadata inventory (W2)
@@ -898,7 +979,7 @@
 (define (results-with-finding-code results code)
   (for/list ([r (in-list results)]
              #:when (for/or ([fnd (in-list (hash-ref r 'findings '()))])
-                       (eq? (hash-ref fnd 'code) code)))
+                      (eq? (hash-ref fnd 'code) code)))
     (file-result->jsexpr r)))
 
 ;; build-metadata-inventory : [#:root path?] -> jsexpr?
@@ -908,21 +989,31 @@
   (define results-abs (validate-files (map (lambda (rel) (build-path root* rel)) files)))
   ;; Re-key every result with its normalized repo-relative path so the
   ;; payload (and per-area bucketing) is invocation-root independent.
-  (define results
-    (map (lambda (r rel) (hash-set r 'file rel)) results-abs files))
+  (define results (map (lambda (r rel) (hash-set r 'file rel)) results-abs files))
   (define summary (summarize-findings results))
-  (hasheq 'tool "classify-metadata"
-          'schema_version metadata-schema-version
-          'inventory_schema_version 1
-          'invocation_root (path->string root*)
-          'file_count (length files)
-          'file_list_digest (sha256-hex (string-join files "\n"))
-          'files files
-          'counts (lint-summary->jsexpr summary)
+  (hasheq 'tool
+          "classify-metadata"
+          'schema_version
+          metadata-schema-version
+          'inventory_schema_version
+          1
+          'invocation_root
+          (path->string root*)
+          'file_count
+          (length files)
+          'file_list_digest
+          (sha256-hex (string-join files "\n"))
+          'files
+          files
+          'counts
+          (lint-summary->jsexpr summary)
           'violations
-          (hasheq 'invalid (results-with-finding-code results 'invalid-speed)
-                  'deprecated_alias (results-with-finding-code results 'deprecated-isolation-alias)
-                  'missing_required (results-with-finding-code results 'missing-required))))
+          (hasheq 'invalid
+                  (results-with-finding-code results 'invalid-speed)
+                  'deprecated_alias
+                  (results-with-finding-code results 'deprecated-isolation-alias)
+                  'missing_required
+                  (results-with-finding-code results 'missing-required))))
 
 ;; emit-metadata-inventory-json : [#:root path?] -> void?
 ;; Writes the deterministic inventory JSON to the current output port.
@@ -944,11 +1035,14 @@
         [(and (pair? rest) (pair? (cdr rest)) (string=? (car rest) "--root")) (cadr rest)]
         [(pair? rest) (loop (cdr rest))]
         [else #f])))
-  (define (flag? name) (and (member name raw-args) #t))
+  (define (flag? name)
+    (and (member name raw-args) #t))
   (define inventory? (flag? "--metadata-inventory-json"))
   (define lint? (flag? "--lint-metadata"))
   (define root
-    (if root-override (path->complete-path root-override) (resolve-repository-root)))
+    (if root-override
+        (path->complete-path root-override)
+        (resolve-repository-root)))
   (cond
     [inventory? (emit-metadata-inventory-json #:root root)]
     [lint? (print-lint-report (discover-metadata-files #:root root))]

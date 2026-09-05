@@ -21,12 +21,12 @@
          (prefix-in inv: (file "../scripts/run-tests/inventory.rkt")))
 
 ;; ---------------------------------------------------------------
-;; Frozen v1.00.24 candidate behavior table
+;; Frozen v1.00.24 candidate behavior table (W0 freeze + W4/W5 rows)
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the twelve mandated candidate IDs"
+(test-case "behavior table freezes exactly the fourteen mandated candidate IDs"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 12)
+  (check-equal? (length ids) 14)
   (check-equal? (sort ids string<?)
                 (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
                             "RETRY-REAL-TIMER-CANARY"
@@ -36,6 +36,8 @@
                             "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
                             "GSD-TIMEOUT-REAL-CLOCK-CANARY"
                             "RUNNER-REPOSITORY-DISCOVERY"
+                            "RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT"
+                            "RUNNER-REPOSITORY-DISCOVERY-L4"
                             "GOLDEN-SESSION-LIFECYCLE"
                             "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
                             "GSD-WAVE-WORKTREE-SANDBOXES"
