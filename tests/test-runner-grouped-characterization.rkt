@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; tests/test-runner-grouped-characterization.rkt — v1.00.24 W7
+;; tests/test-runner-grouped-characterization.rkt — W7
 ;;
 ;; Grouped-mode equivalence characterization: every eligible grouped-mode
 ;; fixture must produce the SAME selected path, exit code, verdict class,

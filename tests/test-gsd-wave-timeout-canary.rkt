@@ -2,10 +2,10 @@
 
 ;; @speed slow  ;; @suite extensions
 
-;; tests/test-gsd-wave-timeout-canary.rkt — v1.00.24 W4 L4 canary
+;; tests/test-gsd-wave-timeout-canary.rkt — W4 L4 canary
 ;;
 ;; The single retained real-clock witness for the GSD wave timeout adapter
-;; (v1.00.24 W4). Every deterministic deadline/cancel/grace/force-kill
+;; ( W4). Every deterministic deadline/cancel/grace/force-kill
 ;; scenario lives in tests/test-gsd-system-adapters-timeout.rkt behind the
 ;; injected timeout clock/wait seam; this canary is the only place where the
 ;; production adapter (current-inexact-milliseconds + sync/timeout + the

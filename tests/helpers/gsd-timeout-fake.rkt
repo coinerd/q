@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; q/tests/helpers/gsd-timeout-fake.rkt — deterministic GSD timeout seam fake
-;; (v1.00.24 W4).
+;; ( W4).
 ;;
 ;; ONE fake for the `current-gsd-timeout-now-ms` / `current-gsd-timeout-wait`
 ;; seam in extensions/gsd/system-adapters.rkt. It owns:

@@ -523,12 +523,12 @@
                                       (make-exn:fail "HTTP 503 service unavailable"
                                                      (current-continuation-marks)))))))
 
-    (define sess (make-agent-session (make-test-config dir bus prov)))
-    ;; W2 v1.00.24: deterministic retry execution — computed logical delays are
-    ;; still reported (total-retry-delay-ms below), but no real production
-    ;; backoff is paid inside the fast suite (sleep-scale defaults to 0.0).
-    (define-values (s result)
-      (with-deterministic-retries (lambda () (run-prompt! sess "trigger stream retry"))))
+   (define sess (make-agent-session (make-test-config dir bus prov)))
+   ;; W2 : deterministic retry execution — computed logical delays are
+   ;; still reported (total-retry-delay-ms below), but no real production
+   ;; backoff is paid inside the fast suite (sleep-scale defaults to 0.0).
+   (define-values (s result)
+     (with-deterministic-retries (lambda () (run-prompt! sess "trigger stream retry"))))
 
    ;; Retries exhausted -> error termination
    (check-equal? (loop-result-termination-reason result) 'error)
@@ -763,7 +763,7 @@
    (delete-directory/files dir #:must-exist? #f)))
 
 (module+ main
-  ;; W2 v1.00.24: top-level `run-tests` returned whatever exit code the module
+  ;; W2 : top-level `run-tests` returned whatever exit code the module
   ;; loader decided (0 even on rackunit failures). Propagate the failure count
   ;; so the wave verify chain actually gates on this suite.
   (define exit-code (run-tests test-agent-session-basic-suite))

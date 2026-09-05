@@ -9,7 +9,7 @@
 ;; Test shard support and platform-cross classifier.
 ;; CI Acceleration W0 — PR gate ≤ 20 min.
 ;;
-;; v1.00.24 W5: collector/classifier/sharding assertions run ONLY on the
+;; W5: collector/classifier/sharding assertions run ONLY on the
 ;; tiny explicit fixture tree tests/fixtures/run-tests-discovery/ via the
 ;; #:root/#:test-root seam — this file never crawls the live repository.
 ;; Real repository-scale discovery is owned by the scheduled L4 smoke in
@@ -122,7 +122,7 @@
       (check-true (and (member 'platform known-suites) #t)))
 
     ;; -------------------------------------------------------------------
-    ;; v1.00.24 W5: explicit-root discovery over the hermetic fixture tree.
+    ;; W5: explicit-root discovery over the hermetic fixture tree.
     ;; -------------------------------------------------------------------
 
     (test-case "explicit root collection is deterministic and exact"
@@ -271,7 +271,7 @@
                     '("tests/theta-slow-quietly-test.rkt")))
 
     ;; -------------------------------------------------------------------
-    ;; v1.00.24 W3: stable inventory identity for gate evidence.
+    ;; W3: stable inventory identity for gate evidence.
     ;; equal-hash-code is randomized per Racket process; the selected
     ;; inventory identity must be the SHA-256 selected-path digest so that
     ;; recorded evidence can be re-derived and compared after the fact.

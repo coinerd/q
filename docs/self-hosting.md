@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.23 -->
+<!-- verified-against: 1.00.24 -->
 # Self-Hosting Guide
 
 q is a self-hosting agent: it uses its own GSD (Get Stuff Done) planning workflow

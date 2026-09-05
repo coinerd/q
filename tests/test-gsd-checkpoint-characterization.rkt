@@ -119,7 +119,7 @@
       ;; W5 (BUG-0029) added exactly ONE slot: the attempt-artifact
       ;; ledger. this release W5 (BUG-0039) then added SIX cost/token slots
       ;; (in/out/total tokens, cost-usd, usage-complete?, budget-trips).
-      ;; v1.00.24 W3 adds one durable failure-reason slot. The count is now
+      ;; W3 adds one durable failure-reason slot. The count is now
       ;; 17 — further growth is a schema-review event.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
       (check-equal? (vector-length (struct->vector w)) 17)

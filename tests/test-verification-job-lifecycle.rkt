@@ -208,7 +208,7 @@
 
 ;; ---------------------------------------------------- file-backed output
 
-;; v1.00.24 W3 verification-truth: log-path must be REAL (an existing file
+;; W3 verification-truth: log-path must be REAL (an existing file
 ;; the job's output drains into) and the in-memory stdout/stderr records
 ;; must be BOUNDED tails — a multi-hour gate can never grow unbounded
 ;; strings in the registry, and dropped output stays durable in the log.

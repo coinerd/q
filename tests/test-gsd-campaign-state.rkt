@@ -443,7 +443,7 @@
       (delete-directory/files dir #:must-exist? #f))))
 
 ;; ============================================================
-;; 7. v1.00.24 W3 (verification-truth): durable wave/attempt failure reason
+;; 7. W3 (verification-truth): durable wave/attempt failure reason
 ;; ============================================================
 
 (define failure-reason-suite

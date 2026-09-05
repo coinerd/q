@@ -4,13 +4,13 @@
 ;; @suite default
 ;; @boundary unit
 
-;;; tests/test-test-gate-ownership.rkt — v1.00.24 W0 cross-gate ownership map
+;;; tests/test-test-gate-ownership.rkt — W0 cross-gate ownership map
 ;;;
 ;;; Unit/component tests for the deterministic `--gate-ownership-map` mode of
 ;;; scripts/run-tests/inventory.rkt. These tests are CWD-safe and repository-
 ;;; discovery-free: they exercise the pure validators/renderers with synthetic
 ;;; membership tables so the fast suite keeps paying no repository-wide walk
-;;; (see v1.00.24 W4 for why that matters). The real-repository `--check`
+;;; (see W4 for why that matters). The real-repository `--check`
 ;;; invocation runs once in the wave verify command, not here.
 
 (require rackunit
@@ -21,7 +21,7 @@
          (prefix-in inv: (file "../scripts/run-tests/inventory.rkt")))
 
 ;; ---------------------------------------------------------------
-;; Frozen v1.00.24 candidate behavior table (W0 freeze + W4/W5/W6 rows)
+;; Frozen candidate behavior table (W0 freeze + W4/W5/W6 rows)
 ;; ---------------------------------------------------------------
 
 (test-case "behavior table freezes exactly the nineteen mandated candidate IDs"
