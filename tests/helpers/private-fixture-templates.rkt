@@ -38,6 +38,7 @@
          private-session-fixture-session-dir
          private-session-fixture-session-id
          git-available?
+         call-with-private-git-environment
          with-private-git-repo
          private-session-template-dir
          private-git-template-root!)
@@ -87,15 +88,34 @@
 (define (git-available?)
   (and (find-executable-path "git") #t))
 
+;; Git exports repository-local variables to hooks. Foreign-repository fixture
+;; commands must not inherit those bindings or they can accidentally target
+;; the outer checkout instead of the private fixture.
+(define git-local-environment-keys
+  '(#"GIT_ALTERNATE_OBJECT_DIRECTORIES" #"GIT_COMMON_DIR"
+                                        #"GIT_DIR"
+                                        #"GIT_INDEX_FILE"
+                                        #"GIT_OBJECT_DIRECTORY"
+                                        #"GIT_WORK_TREE"))
+
+(define (call-with-private-git-environment thunk)
+  (define env (environment-variables-copy (current-environment-variables)))
+  (for ([key (in-list git-local-environment-keys)])
+    (environment-variables-set! env key #f))
+  (parameterize ([current-environment-variables env])
+    (thunk)))
+
 ;; Run git in dir, error on failure. Returns first line of stdout.
 (define (git! dir . args)
   (define outp (open-output-string))
   (define errp (open-output-string))
   (define res
-    (parameterize ([current-directory dir]
-                   [current-output-port outp]
-                   [current-error-port errp])
-      (apply system*/exit-code (find-executable-path "git") args)))
+    (call-with-private-git-environment
+     (lambda ()
+       (parameterize ([current-directory dir]
+                      [current-output-port outp]
+                      [current-error-port errp])
+         (apply system*/exit-code (find-executable-path "git") args)))))
   (unless (zero? res)
     (error 'git!
            "git ~a failed (~a): ~a"
@@ -105,8 +125,13 @@
   (string-trim (get-output-string outp)))
 
 (define (git-quiet! dir . args)
-  (parameterize ([current-directory dir])
-    (apply system*/exit-code (find-executable-path "git") args))
+  (define result
+    (call-with-private-git-environment
+     (lambda ()
+       (parameterize ([current-directory dir])
+         (apply system*/exit-code (find-executable-path "git") args)))))
+  (unless (zero? result)
+    (error 'git-quiet! "git command failed (~a): ~a" result args))
   (void))
 
 ;; ---------------------------------------------------------------------------
@@ -133,10 +158,18 @@
   (unbox git-template-root-box))
 
 ;; Repo-local hermetic identity: never touches global env or ~/.gitconfig.
+;; Append the three fixed keys in one filesystem operation. Spawning three
+;; separate `git config` processes per clone made fixture-heavy fast tests
+;; exceed their per-file deadline despite each repository being tiny.
 (define (hermetic-identity! repo)
-  (git-quiet! repo "config" "user.name" "Q Fixture Bot")
-  (git-quiet! repo "config" "user.email" "q-fixture@example.invalid")
-  (git-quiet! repo "config" "commit.gpgsign" "false"))
+  (call-with-output-file (build-path repo ".git" "config")
+                         (lambda (out)
+                           (displayln "[user]" out)
+                           (displayln "\tname = Q Fixture Bot" out)
+                           (displayln "\temail = q-fixture@example.invalid" out)
+                           (displayln "[commit]" out)
+                           (displayln "\tgpgsign = false" out))
+                         #:exists 'append))
 
 ;; ---------------------------------------------------------------------------
 ;; Private git fixture (clone of lazy baseline)
@@ -163,28 +196,18 @@
               "clone"
               "-q"
               "--no-local"
+              "--origin"
+              "fixture-source"
               "--template="
               (path->string (build-path tmpl "baseline"))
               (path->string repo))
   (hermetic-identity! repo)
-  ;; Belt and braces: guarantee a local `main` exists even if the clone's
-  ;; default HEAD resolution differs; create it from the current commit.
-  (define main-ref-ok?
-    (parameterize ([current-directory repo]
-                   [current-output-port (open-output-nowhere)]
-                   [current-error-port (open-output-nowhere)])
-      (zero? (system*/exit-code (find-executable-path "git")
-                                "rev-parse"
-                                "--verify"
-                                "-q"
-                                "refs/heads/main"))))
-  (unless main-ref-ok?
-    (git-quiet! repo "checkout" "-q" "-b" "main"))
-  ;; The clone maps the template's branches to refs/remotes/origin/main.
-  ;; Exactly ONE `origin/main` candidate must remain, else `worktree add
-  ;; <p> origin/main` aborts ("ambiguous refname") where rev-parse only
-  ;; warns. Keep the local stand-in branch, drop the remote-tracking ref.
-  (git-quiet! repo "update-ref" "-d" "refs/remotes/origin/main")
+  ;; The controlled template pins HEAD to `main` before its first commit, so
+  ;; clone deterministically creates the local main branch without a separate
+  ;; per-instance rev-parse subprocess.
+  ;; Clone under a non-conflicting remote name, then create exactly one
+  ;; `origin/main` candidate: the local offline stand-in branch. This avoids
+  ;; both ref ambiguity and a redundant per-instance delete-ref subprocess.
   (git-quiet! repo "update-ref" "refs/heads/origin/main" "HEAD")
   (when branch
     (git-quiet! repo "checkout" "-q" "-b" branch))

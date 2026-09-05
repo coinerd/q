@@ -47,10 +47,16 @@
 ;; `system` writes directly to the OS stdout fd (not Racket's
 ;; current-output-port), so capture git output via shell redirection into a
 ;; temp file instead of with-output-to-string.
+(define (private-git-system repo command)
+  (call-with-private-git-environment (lambda ()
+                                       (parameterize ([current-directory repo])
+                                         (system command)))))
+
 (define (git-out repo . args)
   (define out-file (make-temporary-file "q-fx-git-out-~a"))
-  (parameterize ([current-directory repo])
-    (system (string-append "git " (string-join args " ") " > " (path->string out-file) " 2>&1")))
+  (private-git-system
+   repo
+   (string-append "git " (string-join args " ") " > " (path->string out-file) " 2>&1"))
   (begin0 (string-trim (file->string out-file))
     (delete-file out-file)))
 
@@ -125,14 +131,12 @@
     (with-output-to-file (build-path repo-a "only-a.txt")
                          (lambda () (displayln "mutation in A"))
                          #:exists 'replace)
-    (parameterize ([current-directory repo-a])
-      (system "git add only-a.txt && git commit -q --no-gpg-sign -m 'a-only'"))
+    (private-git-system repo-a "git add only-a.txt && git commit -q --no-gpg-sign -m 'a-only'")
     (check-true (file-exists? (build-path repo-a "only-a.txt")))
     (check-false (file-exists? (build-path repo-b "only-a.txt"))
                  "commit in A must not appear in sibling B")
     ;; Ref mutation in A does not leak into B.
-    (parameterize ([current-directory repo-a])
-      (system "git branch hostile-branch"))
+    (private-git-system repo-a "git branch hostile-branch")
     (check-equal? (git-out repo-b "branch" "--list" "hostile-branch")
                   ""
                   "hostile branch in A must not leak into B")
@@ -215,15 +219,14 @@
       (with-output-to-file (build-path repo (format "f-~a.txt" i))
                            (lambda () (displayln i))
                            #:exists 'replace)
-      (parameterize ([current-directory repo])
-        (system (format "git add f-~a.txt && git commit -q --no-gpg-sign -m 'stress-~a'" i i))))
+      (private-git-system
+       repo
+       (format "git add f-~a.txt && git commit -q --no-gpg-sign -m 'stress-~a'" i i)))
     ;; Distinct SHAs across git fixtures.
     (define shas
       (for/list ([f fixtures]
                  #:when (eq? (private-fixture-kind f) 'git))
-        (with-output-to-string (lambda ()
-                                 (parameterize ([current-directory (private-git-fixture-repo f)])
-                                   (system "git rev-parse HEAD"))))))
+        (git-out (private-git-fixture-repo f) "rev-parse" "HEAD")))
     (check-equal? (length (remove-duplicates shas)) 4 "independent histories produce distinct HEADs")
     ;; Destroy in scrambled order, twice each.
     (for ([f (reverse fixtures)])

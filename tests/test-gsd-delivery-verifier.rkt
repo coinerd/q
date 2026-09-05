@@ -25,6 +25,7 @@
          racket/string
          racket/system
          (only-in "helpers/private-fixture-templates.rkt"
+                  call-with-private-git-environment
                   make-private-git-fixture!
                   private-fixture-root
                   private-git-fixture-repo)
@@ -69,9 +70,8 @@
         (apply system*/exit-code GIT args)))
     (unless (zero? exit)
       (error 'make-tmp-git-repo "command failed: ~a" (cons 'sh args))))
-  ;; Family-specific pin: the fixture clone is already on `main`; this is a
-  ;; cheap explicit assertion of the branch the verifier expects.
-  (sh "checkout" "-q" "main")
+  ;; The private-fixture contract already verifies that clones start on
+  ;; `main`; avoid a redundant checkout subprocess in every test fixture.
   ;; wave target file, committed as baseline (family-specific)
   (call-with-output-file (build-path base "q" "ui-core" "preferences.rkt")
                          (lambda (out)
@@ -744,4 +744,4 @@
       (cleanup-tmp base))))
 
 (module+ main
-  (exit (run-tests (delivery-suite))))
+  (exit (call-with-private-git-environment (lambda () (run-tests (delivery-suite))))))
