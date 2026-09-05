@@ -2,7 +2,7 @@
 
 ;; scripts/version-guard.rkt — Shared version reference guard
 ;;
-;; 7-pattern context-aware guard that identifies lines containing historical
+;; 14-pattern context-aware guard that identifies lines containing historical
 ;; version references that should NOT be updated to the current version.
 ;; Used by sync-version.rkt and lint-version.rkt.
 
@@ -15,23 +15,33 @@
   ;; version references that should NOT be updated to the current version.
   (define trimmed (string-trim line))
   ;; Pattern 1: README Status bold entries — "**vX.Y.Z** — Description"
-  (or (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
-      ;; Pattern 2: "in vX.Y.Z" — e.g. "narrowed in v0.28.22"
-      (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-      ;; Pattern 3: Wave labels — "(vX.Y.Z W0)"
-      (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
-      ;; Pattern 4: "As of vX.Y.Z"
-      (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-      ;; Pattern 5: Parenthetical EOL — "(vX.Y.Z)" at line end
-      (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
-      ;; Pattern 6: Temporal references — "introduced/added/since vX.Y.Z" (case-insensitive)
-      (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+"
-                     line)
-      ;; Pattern 7: Section headers with version — "## Title (vX.Y.Z)"
-      (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)
-      ;; Pattern 8: Document provenance — "**Established:** vX.Y.Z"
-      (regexp-match? #rx"^\\*\\*Established:\\*\\* v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
-      ;; Pattern 9: Explicit historical examples — "Example of the vX.Y.Z failure"
-      (regexp-match? #rx"^Example of the v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
-      ;; Pattern 10: Parenthesized audit-failure provenance.
-      (regexp-match? #px"^\\(v[0-9]+\\.[0-9]+\\.[0-9]+ .*(?:failure|close|claim)" trimmed)))
+  (or
+   (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
+   ;; Pattern 2: "in vX.Y.Z" — e.g. "narrowed in v0.28.22"
+   (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+   ;; Pattern 3: Wave labels — "(vX.Y.Z W0)"
+   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
+   ;; Pattern 4: "As of vX.Y.Z"
+   (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+   ;; Pattern 5: Parenthetical EOL — "(vX.Y.Z)" at line end
+   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
+   ;; Pattern 6: Temporal references — "introduced/added/since vX.Y.Z" (case-insensitive)
+   (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+   ;; Pattern 7: Section headers with version — "## Title (vX.Y.Z)"
+   (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)
+   ;; Pattern 8: Document provenance — "**Established:** vX.Y.Z"
+   (regexp-match? #rx"^\\*\\*Established:\\*\\* v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
+   ;; Pattern 9: Explicit historical examples — "Example of the vX.Y.Z failure"
+   (regexp-match? #rx"^Example of the v[0-9]+\\.[0-9]+\\.[0-9]+" trimmed)
+   ;; Pattern 10: Parenthesized audit-failure provenance.
+   (regexp-match? #px"^\\(v[0-9]+\\.[0-9]+\\.[0-9]+ .*(?:failure|close|claim)" trimmed)
+   ;; Pattern 11: Planned temporal references — "scheduled/planned after vX.Y.Z"
+   (regexp-match?
+    #px"(?i:(?:scheduled|planned|targeted|slated) (?:for|after|before|in) v[0-9]+\\.[0-9]+\\.[0-9]+)"
+    line)
+   ;; Pattern 12: Version-prefixed era labels — "pre-vX.Y.Z" / "post-vX.Y.Z"
+   (regexp-match? #px"(?i:(?:pre|post)-v[0-9]+\\.[0-9]+\\.[0-9]+)" line)
+   ;; Pattern 13: Version-noun compound historical anchors — "vX.Y.Z milestone"
+   (regexp-match? #px"(?i:v[0-9]+\\.[0-9]+\\.[0-9]+ milestone)" line)
+   ;; Pattern 14: Bolded inline version anchors — "in **vX.Y.Z**"
+   (regexp-match? #rx"\\*\\*v[0-9]+\\.[0-9]+\\.[0-9]+\\*\\*" line)))
