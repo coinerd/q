@@ -478,12 +478,12 @@
     (unless (pred v)
       (problem (format "~a: expected ~a, got ~s" field what v))))
   ;; Required top-level fields (shared by old and new schema).
-  (for ([f '("runner_version" "suite" "profile" "execution_mode")])
+  (for ([f '(runner_version suite profile execution_mode)])
     (unless (hash-has-key? js f)
       (problem (format "missing required field ~a" f)))
     (when (hash-has-key? js f)
       (check-type f (hash-ref js f) string-field? "a string")))
-  (for ([f '("file_count" "pass" "fail" "timeout" "skip" "wall_clock_seconds")])
+  (for ([f '(file_count pass fail timeout skip wall_clock_seconds)])
     (unless (hash-has-key? js f)
       (problem (format "missing required field ~a" f)))
     (when (hash-has-key? js f)
@@ -493,9 +493,9 @@
   (when (hash-has-key? js 'shard)
     (define sh (hash-ref js 'shard))
     (cond
-      [(null? sh) (void)]
+      [(eq? sh (json-null)) (void)]
       [(hash? sh)
-       (for ([f '("index" "total")])
+       (for ([f '(index total)])
          (unless (hash-has-key? sh f)
            (problem (format "shard: missing ~a" f)))
          (when (hash-has-key? sh f)
@@ -507,7 +507,7 @@
     (define mc (hash-ref js 'metadata_completeness))
     (cond
       [(hash? mc)
-       (for ([f '("explicit" "heuristic" "missing")])
+       (for ([f '(explicit heuristic missing)])
          (unless (hash-has-key? mc f)
            (problem (format "metadata_completeness: missing ~a" f)))
          (when (hash-has-key? mc f)
@@ -526,14 +526,14 @@
         (cond
           [(not (hash? f)) (problem (format "files[~a]: expected object, got ~s" i f))]
           [else
-           (for ([rf '("path" "category" "exit_code" "passed" "failed" "total")])
+           (for ([rf '(path category exit_code passed failed total)])
              (unless (hash-has-key? f rf)
                (problem (format "files[~a]: missing required result field ~a" i rf)))
              (when (hash-has-key? f rf)
                (check-type (format "files[~a].~a" i rf)
                            (hash-ref f rf)
-                           (if (member rf '("path" "category")) string-field? number-field?)
-                           (if (member rf '("path" "category")) "a string" "a number"))))]))))
+                           (if (member rf '(path category)) string-field? number-field?)
+                           (if (member rf '(path category)) "a string" "a number"))))]))))
   ;; Optional W1 telemetry: `extra` may be absent entirely; when present,
   ;; `scheduler` and `prepared_environment` may be absent or partially
   ;; populated — missing optional telemetry is never a problem. If the
@@ -546,7 +546,7 @@
         (if (hash? sched)
             (for ([(k v) (in-hash sched)])
               (cond
-                [(equal? k "scheduler_mode")
+                [(eq? k 'scheduler_mode)
                  (unless (string-field? v)
                    (problem (format "extra.scheduler.scheduler_mode: expected string, got ~s" v)))]
                 [else
@@ -565,10 +565,10 @@
               (format
                "extra.prepared_environment.result: expected restored/rebuilt/unavailable, got ~s"
                result)))
-           (for ([f '("restore_ms" "fallback_ms")])
+           (for ([f '(restore_ms fallback_ms)])
              (when (hash-has-key? pe f)
                (define v (hash-ref pe f))
-               (unless (or (null? v) (number-field? v))
+               (unless (or (eq? v (json-null)) (number-field? v))
                  (problem (format "extra.prepared_environment.~a: expected number or null, got ~s"
                                   f
                                   v)))))]))))

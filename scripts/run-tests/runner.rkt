@@ -734,9 +734,7 @@
        (equal? (hash-ref execution-modes
                          ;; W7 fix: resolve to the same absolute key form
                          ;; mark-execution-mode! writes.
-                         (path->string
-                          (simplify-path
-                           (resolve-test-path (test-file-result-path r))))
+                         (path->string (simplify-path (resolve-test-path (test-file-result-path r))))
                          'subprocess)
                'grouped-in-process))
      ran-results))
@@ -934,8 +932,7 @@
            ;; W7 fix: execution-modes keys are resolved absolute paths (see
            ;; mark-execution-mode!), so look up through resolve-test-path
            ;; instead of the raw (possibly relative) result path.
-           (define mode-key
-             (path->string (simplify-path (resolve-test-path p))))
+           (define mode-key (path->string (simplify-path (resolve-test-path p))))
            ;; The hash key mirrors reporting.rkt's file-execution-mode lookup,
            ;; which uses the raw result-path string.
            (values (if (path? p)
