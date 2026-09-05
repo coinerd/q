@@ -14,6 +14,7 @@
 ;; activation.
 
 (require rackunit
+         rackunit/text-ui
          racket/path
          racket/string
          racket/runtime-path
@@ -254,7 +255,15 @@
 (check-equal? (getenv "GMD_W7_PROBE")
               "set"
               "DOCUMENTED LEAK: undeclared env mutation crosses grouped files")
-(putenv "GMD_W7_PROBE" "") ; restore host environment for later suites
+(void (putenv "GMD_W7_PROBE" "")) ; restore host environment for later suites
 
 (module+ test
   (displayln "test-runner-grouped-characterization: all checks green"))
+
+(module+ main
+  ;; The characterization assertions execute at module load. This explicit
+  ;; text-ui sentinel gives the subprocess runner a truthful parsed result;
+  ;; any earlier assertion failure prevents this success from being emitted.
+  (exit (run-tests (test-suite "grouped-mode characterization"
+                     (test-case "all module-load characterization assertions completed"
+                       (check-true #t))))))
