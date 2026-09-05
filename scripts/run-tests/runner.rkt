@@ -732,9 +732,11 @@
     (count
      (lambda (r)
        (equal? (hash-ref execution-modes
-                         (path->string (simplify-path (if (path? (test-file-result-path r))
-                                                          (test-file-result-path r)
-                                                          (string->path (test-file-result-path r)))))
+                         ;; W7 fix: resolve to the same absolute key form
+                         ;; mark-execution-mode! writes.
+                         (path->string
+                          (simplify-path
+                           (resolve-test-path (test-file-result-path r))))
                          'subprocess)
                'grouped-in-process))
      ran-results))
@@ -929,11 +931,17 @@
          (for/hash ([r (in-list results)]
                     #:unless (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
            (define p (test-file-result-path r))
-           (define key
-             (path->string (simplify-path (if (path? p)
-                                              p
-                                              (string->path p)))))
-           (values key (hash-ref execution-modes key 'subprocess)))))
+           ;; W7 fix: execution-modes keys are resolved absolute paths (see
+           ;; mark-execution-mode!), so look up through resolve-test-path
+           ;; instead of the raw (possibly relative) result path.
+           (define mode-key
+             (path->string (simplify-path (resolve-test-path p))))
+           ;; The hash key mirrors reporting.rkt's file-execution-mode lookup,
+           ;; which uses the raw result-path string.
+           (values (if (path? p)
+                       (path->string p)
+                       p)
+                   (hash-ref execution-modes mode-key 'subprocess)))))
   (print-summary results total-elapsed)
   (print-run-summary-record results
                             #:suite suite-label
