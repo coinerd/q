@@ -82,7 +82,9 @@
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
-                  current-gsd-wave-failure-context))
+                  current-gsd-wave-failure-context
+                  current-gsd-campaign-infra-retries
+                  current-gsd-campaign-infra-retry-delay))
 
 ;; ============================================================
 ;; Helpers
@@ -464,15 +466,36 @@
       (check-eq? (wave-status* rec 0) 'failed)
       (cleanup-tmp dir))
 
-    (test-case "empty response fails current wave"
+    (test-case "empty response automatically retries current wave as infrastructure failure"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define calls 0)
+      (define result
+        (parameterize ([current-gsd-campaign-infra-retries 1]
+                       [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+          (execute-campaign-request! request
+                                     (lambda (_)
+                                       (set! calls (add1 calls))
+                                       (if (= calls 1)
+                                           (make-loop-result '() 'empty-response (hasheq))
+                                           (make-loop-result '() 'completed (hasheq)))))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? calls 2)
+      (check-eq? (wave-status* rec 0) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "empty response fails closed after campaign infrastructure budget exhaustion"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
       (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define result
-        (execute-campaign-request! request
-                                   (lambda (_) (make-loop-result '() 'empty-response (hasheq)))))
-      (check-eq? (campaign-result-status result) 'wave-failed)
-      (check-eq? (wave-status* rec 0) 'failed)
+        (parameterize ([current-gsd-campaign-infra-retries 0]
+                       [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+          (execute-campaign-request! request
+                                     (lambda (_) (make-loop-result '() 'empty-response (hasheq))))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-eq? (wave-status* rec 0) 'pending)
       (cleanup-tmp dir))
 
     (test-case "production request applies bounded wave timeout"

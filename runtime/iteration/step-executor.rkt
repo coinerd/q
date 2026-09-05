@@ -476,6 +476,13 @@
   (define max-iterations (iteration-snapshot-max-iterations snapshot))
   (define max-iterations-hard (iteration-snapshot-max-iterations-hard snapshot))
   (define action (step-result-action step-res))
+  (define empty-response? (hash-ref (step-result-metadata step-res) 'emptyResponse #f))
+  ;; BUG-0059: the nudge budget applies to CONSECUTIVE empty provider
+  ;; responses. Any intervening response with text or a tool call restores
+  ;; the one-shot local nudge; campaign-level infra retry remains separately
+  ;; bounded when consecutive empties exhaust it.
+  (unless empty-response?
+    (current-empty-response-retried? #f))
   ;; Local emit helper — avoids repeating bus/session-id everywhere
   (define (emit name payload)
     (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload))
@@ -484,7 +491,7 @@
     ;; v0.99.86: Empty-response retry — moved from main-loop.rkt to
     ;; consolidate all Runtime operations (including persistence) in the
     ;; step executor. The Agent loop no longer imports session-store.rkt.
-    [(? (lambda (_) (hash-ref (step-result-metadata step-res) 'emptyResponse #f)))
+    [(? (lambda (_) empty-response?))
      (define retried? (current-empty-response-retried?))
      (cond
        [(not retried?)

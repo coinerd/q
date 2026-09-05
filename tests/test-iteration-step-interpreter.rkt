@@ -34,7 +34,9 @@
          (only-in "../util/iteration/directive.rkt"
                   directive-stop
                   directive-stop-result
-                  directive-stop?)
+                  directive-stop?
+                  directive-recurse?)
+         (only-in "../agent/state.rkt" current-empty-response-retried?)
          (only-in "../runtime/iteration/step-executor.rkt" interpret-step))
 
 ;; ============================================================
@@ -110,6 +112,25 @@
       (check-equal? (loop-result-termination-reason final-result) 'tool-calls-pending)
       (check-true (hash-ref (loop-result-metadata final-result) 'toolLoopLimit #f)
                   "toolLoopLimit must reach the final loop-result metadata"))
+
+    (test-case "non-empty response resets the consecutive empty-response nudge budget"
+      (define bus (make-event-bus))
+      (define infra (loop-infra '(ctx) #f #f bus "test-session" "/tmp/test-log" #f))
+      (define counters (make-initial-counters))
+      (define snap (iteration-snapshot counters #f #f #f 10 100))
+      (parameterize ([current-empty-response-retried? #t])
+        (define non-empty-step (step-result 'stop 'completed counters (hasheq)))
+        (check-true
+         (directive-stop?
+          (interpret-step non-empty-step (make-loop-result '() 'completed (hasheq)) '() infra snap)))
+        (check-false (current-empty-response-retried?))
+        ;; A later isolated empty response receives a fresh local nudge rather
+        ;; than being treated as consecutive exhaustion.
+        (define empty-step (step-result 'stop 'empty-response counters (hasheq 'emptyResponse #t)))
+        (check-true
+         (directive-recurse?
+          (interpret-step empty-step (make-loop-result '() 'empty-response (hasheq)) '() infra snap)))
+        (check-true (current-empty-response-retried?))))
 
     (test-case "stop-hard-limit: max-iterations=1 with tool calls triggers limit"
       ;; Provider returns tool calls but no registry to execute them

@@ -78,7 +78,12 @@
        [(eq? termination 'tool-calls-pending)
         (wave-execution-outcome 'failed "tool calls remain pending")]
        [(eq? termination 'empty-response)
-        (wave-execution-outcome 'failed "model returned an empty response")]
+        ;; BUG-0059: exhausting the loop-local output nudge is a transient
+        ;; provider/infrastructure outcome, not evidence that implementation
+        ;; failed. The campaign-level infra budget remains the hard bound.
+        (wave-execution-outcome
+         'infra-failed
+         "model returned an empty response — wave preserved (attempt not consumed)")]
        [(let ([e (hash-ref metadata 'error #f)]) (stall-cause-message? e))
         ;; BUG-0037 W1: watchdog kill → retryable infrastructure, bounded
         ;; auto-resume with prior-attempt context (never a manual /retry).
