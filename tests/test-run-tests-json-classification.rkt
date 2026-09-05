@@ -26,14 +26,14 @@
                 #:passed [passed 0]
                 #:failed [failed 0]
                 #:total [total 0])
-  (test-file-result path
-                    exit-code
-                    (string->bytes/utf-8 out)
-                    (string->bytes/utf-8 err)
-                    17
-                    passed
-                    failed
-                    total))
+  (make-test-file-result path
+                         exit-code
+                         (string->bytes/utf-8 out)
+                         (string->bytes/utf-8 err)
+                         17
+                         passed
+                         failed
+                         total))
 
 (define (write-temp-test content)
   (define dir (make-temporary-file "q-json-out-test-~a" 'directory))
@@ -175,78 +175,83 @@
          (check-equal? (hash-ref file-js 'total) 1))
        (lambda () (delete-dir/safe dir))))))
 
-(test-case "W1 fixture: old-schema artifact still validates"
-  (define artifact
-    (read-json (open-input-string
-                (string-append
-                 "{\"runner_version\":\"1.0.22\",\"suite\":\"fast\",\"profile\":\"local\","
-                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
-                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
-                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
-                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
-                 "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}]}"))))
-  (check-equal? (validate-run-summary-json artifact) '()))
+(define w1-fixture-suite
+  (test-suite "run-summary JSON W1 fixtures"
+    (test-case "W1 fixture: old-schema artifact still validates"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.22\",\"suite\":\"fast\",\"profile\":\"local\","
+                     "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}]}"))))
+      (check-equal? (validate-run-summary-json artifact) '()))
 
-(test-case "W1 fixture: new-schema artifact with full telemetry validates"
-  (define artifact
-    (read-json (open-input-string
-                (string-append
-                 "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
-                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
-                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,"
-                 "\"shard\":{\"index\":0,\"total\":1,\"duration_ms\":12},"
-                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
-                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
-                 "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
-                 "\"extra\":{\"scheduler\":{\"schema_version\":1,\"scheduler_mode\":\"batch\","
-                 "\"worker_count\":4,\"queue_wait_ms\":3,\"worker_busy_ms\":400,"
-                 "\"worker_idle_ms\":50,\"serial_partition_ms\":200,\"parallel_partition_ms\":600,"
-                 "\"process_start_count\":5,\"grouped_subprocess_count\":2,\"gc_count\":3,"
-                 "\"gc_pause_ms\":12,\"selection_ms\":5,\"execution_ms\":610,\"first_batch_ms\":300},"
-                 "\"prepared_environment\":{\"result\":\"restored\",\"restore_ms\":120,"
-                 "\"fallback_ms\":null}}}"))))
-  (check-equal? (validate-run-summary-json artifact) '()))
+    (test-case "W1 fixture: new-schema artifact with full telemetry validates"
+      (define artifact
+        (read-json
+         (open-input-string
+          (string-append
+           "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
+           "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+           "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,"
+           "\"shard\":{\"index\":0,\"total\":1,\"duration_ms\":12},"
+           "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+           "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+           "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+           "\"extra\":{\"scheduler\":{\"schema_version\":1,\"scheduler_mode\":\"batch\","
+           "\"worker_count\":4,\"queue_wait_ms\":3,\"worker_busy_ms\":400,"
+           "\"worker_idle_ms\":50,\"serial_partition_ms\":200,\"parallel_partition_ms\":600,"
+           "\"process_start_count\":5,\"grouped_subprocess_count\":2,\"gc_count\":3,"
+           "\"gc_pause_ms\":12,\"selection_ms\":5,\"execution_ms\":610,\"first_batch_ms\":300},"
+           "\"prepared_environment\":{\"result\":\"restored\",\"restore_ms\":120,"
+           "\"fallback_ms\":null}}}"))))
+      (check-equal? (validate-run-summary-json artifact) '()))
 
-(test-case "W1 fixture: missing optional telemetry never a problem"
-  (define artifact
-    (read-json (open-input-string
-                (string-append
-                 "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
-                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
-                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
-                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
-                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
-                 "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],\"extra\":{}}"))))
-  (define bare artifact)
-  (check-equal? (validate-run-summary-json artifact) '()))
+    (test-case "W1 fixture: missing optional telemetry never a problem"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
+                     "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],\"extra\":{}}"))))
+      (define bare artifact)
+      (check-equal? (validate-run-summary-json artifact) '()))
 
-(test-case "W1 fixture: missing optional telemetry never a problem (partial)"
-  (define artifact
-    (read-json (open-input-string
-                (string-append
-                 "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
-                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
-                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
-                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
-                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
-                 "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
-                 "\"extra\":{\"scheduler\":{\"schema_version\":1,\"scheduler_mode\":\"batch\"}}}"))))
-  (define partial-artifact artifact)
-  (check-equal? (validate-run-summary-json artifact) '()))
+    (test-case "W1 fixture: missing optional telemetry never a problem (partial)"
+      (define artifact
+        (read-json
+         (open-input-string
+          (string-append
+           "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
+           "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+           "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+           "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+           "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+           "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+           "\"extra\":{\"scheduler\":{\"schema_version\":1,\"scheduler_mode\":\"batch\"}}}"))))
+      (define partial-artifact artifact)
+      (check-equal? (validate-run-summary-json artifact) '()))
 
-(test-case "W1 fixture: malformed required result fields produce problems"
-  (define malformed-artifact
-    (read-json (open-input-string
-                (string-append
-                 "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
-                 "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
-                 "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
-                 "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
-                 "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":42,\"exit_code\":0,"
-                 "\"passed\":1,\"failed\":0,\"total\":1}]}"))))
-  (define problems (validate-run-summary-json malformed-artifact))
-  (check-true (pair? problems))
-  (check-true (ormap (lambda (p) (regexp-match "files\\[0\\].category: expected a string" p))
-                     problems)))
+    (test-case "W1 fixture: malformed required result fields produce problems"
+      (define malformed-artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\",\"profile\":\"local\","
+                     "\"execution_mode\":\"subprocess\",\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":42,\"exit_code\":0,"
+                     "\"passed\":1,\"failed\":0,\"total\":1}]}"))))
+      (define problems (validate-run-summary-json malformed-artifact))
+      (check-pred pair? problems)
+      (check-not-false (ormap (lambda (p) (regexp-match "files\\[0\\].category: expected a string" p))
+                              problems)))))
 
-(run-tests suite)
+(define failures (+ (run-tests suite) (run-tests w1-fixture-suite)))
+(exit failures)

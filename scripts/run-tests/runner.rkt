@@ -36,6 +36,8 @@
                   test-file-result-path
                   test-file-result-exit-code
                   test-file-result-total
+                  test-file-result-requested-execution-mode
+                  test-file-result-grouped-fallback-reason
                   parse-raco-output
                   normalize-counts
                   effective-exit-code
@@ -89,6 +91,10 @@
          prepared-environment-state
          partition-scheduler-fields
          mark-execution-mode!
+         ;; v1.00.24 W7: explicit grouped-fallback telemetry
+         current-requested-execution-mode
+         execution-mode-of
+         execution-eligibility-reason
          main)
 
 ;; ── W0 fast-gate budget instrumentation (schema-additive) ─────────────
@@ -118,7 +124,9 @@
                           (elapsed)
                           0
                           0
-                          0)]
+                          0
+                          #f
+                          #f)]
        [else
         (define exit-code (ctrl 'exit-code))
         (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
@@ -134,7 +142,9 @@
                           (elapsed)
                           passed
                           failed
-                          total)])]
+                          total
+                          #f
+                          #f)])]
     [else
      (ctrl 'wait)
      (define exit-code (ctrl 'exit-code))
@@ -151,7 +161,9 @@
                        (elapsed)
                        passed
                        failed
-                       total)]))
+                       total
+                       #f
+                       #f)]))
 
 (define (resolve-test-path test-path)
   (define p
@@ -180,7 +192,9 @@
                     elapsed-ms
                     passed
                     failed
-                    total))
+                    total
+                    #f
+                    #f))
 
 ;; Per-file execution mode attribution (W0 fast-budget): records how each
 ;; file actually ran ('grouped-in-process vs 'subprocess) so the JSON report
@@ -192,7 +206,46 @@
 (define (execution-mode-of resolved-path)
   (hash-ref execution-modes (path->string (simplify-path resolved-path)) 'subprocess))
 
-(define (run-single-file/subprocess test-path #:timeout [timeout #f])
+;; ── v1.00.24 W7: explicit grouped-fallback telemetry ──────────────────
+;; A grouped-mode request that executes subprocess must say why and may not
+;; be counted as grouped. The CLI requested mode (before auto/fast suite
+;; resolution) is stamped onto every result so per-file JSON can distinguish
+;; "asked for grouped" from "actually ran grouped".
+(define current-requested-execution-mode (make-parameter #f))
+
+;; Attach W7 telemetry to a finished result (additive; nothing here changes
+;; exit code, verdict, or counts).
+(define (with-grouped-telemetry result
+                                #:requested-mode [requested-mode #f]
+                                #:fallback-reason [fallback-reason #f])
+  (if (and (not requested-mode) (not fallback-reason))
+      result
+      (struct-copy test-file-result
+                   result
+                   [requested-execution-mode
+                    (or requested-mode (test-file-result-requested-execution-mode result))]
+                   [grouped-fallback-reason
+                    (or fallback-reason (test-file-result-grouped-fallback-reason result))])))
+
+;; Stable named grouped-eligibility reasons (do not rename: downstream
+;; evidence and the characterization report key on these exact tokens):
+;;   'declared-process-isolation      file declares @isolation process|subprocess
+;;   'declared-mutation               file declares a truthy @mutates token
+;;   'missing-module-plus-test-form   no real (module+ test ...) submodule
+;;   'zero-parsed-output              eligible, but grouped load parsed no tests
+(define (execution-eligibility-reason resolved-path)
+  (define meta (get-file-metadata resolved-path))
+  (define isolation (hash-ref meta 'isolation #f))
+  (cond
+    [(member isolation '("process" "subprocess")) 'declared-process-isolation]
+    [(mutates-true? (hash-ref meta 'mutates #f)) 'declared-mutation]
+    [(not (module-plus-test-file? resolved-path)) 'missing-module-plus-test-form]
+    [else #f]))
+
+(define (run-single-file/subprocess test-path
+                                    #:timeout [timeout #f]
+                                    #:requested-mode [requested-mode #f]
+                                    #:fallback-reason [fallback-reason #f])
   (define resolved-path (resolve-test-path test-path))
   (mark-execution-mode! resolved-path 'subprocess)
   (define file-timeout (file-timeout-ms test-path timeout))
@@ -215,7 +268,10 @@
           (when out-in
             (close-output-port out-in))
           ctrl)))
-  (build-result-from-process test-path stdout-out stderr-out ctrl file-timeout elapsed))
+  (with-grouped-telemetry
+   (build-result-from-process test-path stdout-out stderr-out ctrl file-timeout elapsed)
+   #:requested-mode requested-mode
+   #:fallback-reason fallback-reason))
 
 ;; Line-anchored: "(module+ test" mentioned inside a comment (e.g. W3
 ;; reconciliation notes) must not make a file count as grouped-eligible —
@@ -235,7 +291,7 @@
 ;; rackunit reporting intact. Anything else — module+ main suites, top-level
 ;; checks, comment-only mentions — runs as a raco subprocess (W3 policy).
 (define (in-process-eligible? resolved-path)
-  (module-plus-test-file? resolved-path))
+  (not (execution-eligibility-reason resolved-path)))
 
 ;; ── W1 v1.00.16 grouped eligibility contract ──────────────────────────
 ;; A fast file qualifies for grouped in-process execution ONLY when it
@@ -276,13 +332,20 @@
                                  (current-continuation-marks)
                                  (if (and (number? code) (= code 0)) 0 1)))))
 
-(define (run-single-file/in-process test-path #:timeout [timeout #f])
+(define (run-single-file/in-process test-path
+                                    #:timeout [timeout #f]
+                                    #:requested-mode [requested-mode #f])
   (define resolved-path (resolve-test-path test-path))
   ;; Bare RackUnit files without run-tests/module+ still need raco's discovery output;
   ;; fall back to subprocess to avoid reintroducing zero-parsed false greens.
   (cond
     [(not (in-process-eligible? resolved-path))
-     (run-single-file/subprocess test-path #:timeout timeout)]
+     ;; W7: a grouped request that executes subprocess is named and never
+     ;; counted as grouped.
+     (run-single-file/subprocess test-path
+                                 #:timeout timeout
+                                 #:requested-mode requested-mode
+                                 #:fallback-reason (execution-eligibility-reason resolved-path))]
     [else
      (mark-execution-mode! resolved-path 'grouped-in-process)
      (define file-timeout (file-timeout-ms test-path timeout))
@@ -294,48 +357,73 @@
      (define cust (make-custodian))
      (define worker
        (parameterize ([current-custodian cust])
-         (thread (lambda ()
-                   (with-handlers ([in-process-test-exit?
-                                    (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
-                                   [exn:fail? (lambda (e)
-                                                (displayln (exn->string e) stderr-out)
-                                                (set-box! exit-code 1))])
-                     (parameterize ([current-output-port stdout-out]
-                                    [current-error-port stderr-out]
-                                    [current-directory (in-process-cwd resolved-path)]
-                                    [current-command-line-arguments #()]
-                                    [exit-handler (make-in-process-exit-handler exit-code)]
-                                    [current-namespace (make-base-namespace)])
-                       (dynamic-require (in-process-module-path resolved-path) #f)
-                       (set-box! exit-code 0)))))))
+         (thread
+          (lambda ()
+            (with-handlers ([in-process-test-exit?
+                             (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
+                            [exn:fail? (lambda (e)
+                                         (displayln (exn->string e) stderr-out)
+                                         ;; v1.00.24 W7: mirror raco test's module-
+                                         ;; exception phrasing so grouped and
+                                         ;; subprocess outputs classify identically.
+                                         (fprintf stderr-out
+                                                  "~a: raco test: test raised an exception~n"
+                                                  (path->string (file-name-from-path resolved-path)))
+                                         (set-box! exit-code 1))])
+              (parameterize ([current-output-port stdout-out]
+                             [current-error-port stderr-out]
+                             [current-directory (in-process-cwd resolved-path)]
+                             [current-command-line-arguments #()]
+                             [exit-handler (make-in-process-exit-handler exit-code)]
+                             [current-namespace (make-base-namespace)])
+                (dynamic-require (in-process-module-path resolved-path) #f)
+                (set-box! exit-code 0)))))))
      (define completed? (sync/timeout (/ file-timeout 1000.0) worker))
      (unless completed?
        (custodian-shutdown-all cust))
      (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
      (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
-     (if completed?
-         (let ([result (parse-result-bytes test-path
-                                           stdout-bytes
-                                           stderr-bytes
-                                           (or (unbox exit-code) 0)
-                                           (elapsed))])
-           (if (and (= (test-file-result-exit-code result) 0) (= (test-file-result-total result) 0))
-               ;; W6: grouped loading runs the module body, but files whose
-               ;; tests are bare test-case/check-* forms (no rackunit/text-ui
-               ;; run-tests self-report) pass silently — dynamic-require
-               ;; produces no per-check output. raco test's discovery wrapper
-               ;; prints pass counts, so re-run such files as a subprocess
-               ;; instead of surfacing a zero-parsed strict failure. This
-               ;; reproduces the pre-grouped (subprocess) behavior exactly.
-               (run-single-file/subprocess test-path #:timeout timeout)
-               result))
-         (test-file-result test-path 2 stdout-bytes stderr-bytes (elapsed) 0 0 0))]))
+     (define outcome
+       (if completed?
+           (let ([result (parse-result-bytes test-path
+                                             stdout-bytes
+                                             stderr-bytes
+                                             (or (unbox exit-code) 0)
+                                             (elapsed))])
+             (if (and (= (test-file-result-exit-code result) 0) (= (test-file-result-total result) 0))
+                 ;; W6: grouped loading runs the module body, but files whose
+                 ;; tests are bare test-case/check-* forms (no rackunit/text-ui
+                 ;; run-tests self-report) pass silently — dynamic-require
+                 ;; produces no per-check output. raco test's discovery wrapper
+                 ;; prints pass counts, so re-run such files as a subprocess
+                 ;; instead of surfacing a zero-parsed strict failure. This
+                 ;; reproduces the pre-grouped (subprocess) behavior exactly.
+                 ;; W7: that fallback now carries a stable named reason.
+                 (run-single-file/subprocess test-path
+                                             #:timeout timeout
+                                             #:requested-mode requested-mode
+                                             #:fallback-reason 'zero-parsed-output)
+                 result))
+           (test-file-result test-path
+                             2
+                             stdout-bytes
+                             stderr-bytes
+                             (elapsed)
+                             0
+                             0
+                             0
+                             requested-mode
+                             #f)))
+     (with-grouped-telemetry outcome #:requested-mode requested-mode)]))
 
 (define (run-single-file test-path #:timeout [timeout #f] #:mode [mode 'subprocess])
+  ;; W7: requested mode = the CLI request when the orchestrator stamped one,
+  ;; otherwise the explicit per-call mode (direct/test callers).
+  (define requested (or (current-requested-execution-mode) (symbol->string mode)))
   (case mode
-    [(in-process grouped) (run-single-file/in-process test-path #:timeout timeout)]
-    [(auto subprocess) (run-single-file/subprocess test-path #:timeout timeout)]
-    [else (run-single-file/subprocess test-path #:timeout timeout)]))
+    [(in-process grouped)
+     (run-single-file/in-process test-path #:timeout timeout #:requested-mode requested)]
+    [else (run-single-file/subprocess test-path #:timeout timeout #:requested-mode requested)]))
 
 (define (split-list lst n)
   (cond
@@ -491,17 +579,36 @@
             (let loop ()
               (define item (channel-get work-ch))
               (unless (eq? item stop-sentinel)
-                (with-handlers ([exn:fail? (lambda (e)
-                                             ;; Failure isolation: never kill the worker, never
-                                             ;; hang the coordinator, never discard the result.
-                                             (add-result! (test-file-result item 1 #"" #"" 0 0 0 0))
-                                             (channel-put done-ch 0))]
-                                [exn:break? (lambda (e)
-                                              ;; Cancellation bound: a break inside a worker is
-                                              ;; converted to a recorded failure + done signal so
-                                              ;; the coordinator can never wait on a dead worker.
-                                              (add-result! (test-file-result item 1 #"" #"" 0 0 0 0))
-                                              (channel-put done-ch 0))])
+                (with-handlers
+                    ([exn:fail? (lambda (e)
+                                  ;; Failure isolation: never kill the worker, never
+                                  ;; hang the coordinator, never discard the result.
+                                  (add-result! (test-file-result item
+                                                                 1
+                                                                 #""
+                                                                 #""
+                                                                 0
+                                                                 0
+                                                                 0
+                                                                 0
+                                                                 (current-requested-execution-mode)
+                                                                 #f))
+                                  (channel-put done-ch 0))]
+                     [exn:break? (lambda (e)
+                                   ;; Cancellation bound: a break inside a worker is
+                                   ;; converted to a recorded failure + done signal so
+                                   ;; the coordinator can never wait on a dead worker.
+                                   (add-result! (test-file-result item
+                                                                  1
+                                                                  #""
+                                                                  #""
+                                                                  0
+                                                                  0
+                                                                  0
+                                                                  0
+                                                                  (current-requested-execution-mode)
+                                                                  #f))
+                                   (channel-put done-ch 0))])
                   (define t-file (current-inexact-milliseconds))
                   (define result (run-single-file item #:timeout (or timeout 120000) #:mode mode))
                   (define file-dur (exact-round (- (current-inexact-milliseconds) t-file)))
@@ -625,9 +732,9 @@
     (count
      (lambda (r)
        (equal? (hash-ref execution-modes
-                         (path->string (simplify-path (if (path? (test-file-result-path r))
-                                                          (test-file-result-path r)
-                                                          (string->path (test-file-result-path r)))))
+                         ;; W7 fix: resolve to the same absolute key form
+                         ;; mark-execution-mode! writes.
+                         (path->string (simplify-path (resolve-test-path (test-file-result-path r))))
                          'subprocess)
                'grouped-in-process))
      ran-results))
@@ -822,11 +929,16 @@
          (for/hash ([r (in-list results)]
                     #:unless (eq? (classify-test-result r) 'SKIPPED_BY_PROFILE))
            (define p (test-file-result-path r))
-           (define key
-             (path->string (simplify-path (if (path? p)
-                                              p
-                                              (string->path p)))))
-           (values key (hash-ref execution-modes key 'subprocess)))))
+           ;; W7 fix: execution-modes keys are resolved absolute paths (see
+           ;; mark-execution-mode!), so look up through resolve-test-path
+           ;; instead of the raw (possibly relative) result path.
+           (define mode-key (path->string (simplify-path (resolve-test-path p))))
+           ;; The hash key mirrors reporting.rkt's file-execution-mode lookup,
+           ;; which uses the raw result-path string.
+           (values (if (path? p)
+                       (path->string p)
+                       p)
+                   (hash-ref execution-modes mode-key 'subprocess)))))
   (print-summary results total-elapsed)
   (print-run-summary-record results
                             #:suite suite-label
@@ -1193,6 +1305,8 @@
         "impact"
         (symbol->string suite)))
   (define mode (effective-mode requested-mode suite-label))
+  ;; W7: stamp the CLI-requested mode for per-file fallback truth.
+  (current-requested-execution-mode (symbol->string requested-mode))
   (define ledger (and ledger-path (load-known-failure-ledger ledger-path)))
   (define n-files (length suite-files))
   (printf

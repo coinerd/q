@@ -326,10 +326,13 @@
 ;; unit-fast eligibility audit (W3)
 ;; ============================================================
 ;; Lists unit-fast candidates and flags files that must NOT join the
-;; grouped in-process execution mode: declared mutations, declared or
-;; lexically-detected env/filesystem/network/process side effects, or
-;; a missing `module+ test` form (no RackUnit discovery point for
-;; grouped execution).
+;; grouped in-process execution mode: declared mutations, declared
+;; process isolation (@isolation), declared or lexically-detected
+;; env/filesystem/network/process side effects, or a missing
+;; `module+ test` form (no RackUnit discovery point for grouped
+;; execution).  W7: declared-process-isolation flags mirror the
+;; runner's grouped fallback so audit eligibility and grouped
+;; effective-mode selection cannot disagree.
 
 (define (file-content f)
   (with-handlers ([exn:fail? (lambda (_) "")])
@@ -353,11 +356,19 @@
   (define v (hash-ref (get-file-metadata f) 'mutates #f))
   (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
 
+(define (declared-isolation f)
+  (define v (hash-ref (get-file-metadata f) 'isolation #f))
+  (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
+
 (define (audit-unsafe-reasons f)
   (define content (file-content f))
   (define reasons '())
   (define (flag! r)
     (set! reasons (cons r reasons)))
+  (cond
+    [(declared-isolation f)
+     =>
+     (lambda (v) (flag! (format "declared-process-isolation:@isolation=~a" v)))])
   (cond
     [(declared-mutation f)
      =>
@@ -840,15 +851,20 @@
     'destination-gate
     "fast"
     'members
-    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt")
+    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt"
+                                                 "tests/test-runner-grouped-characterization.rkt")
     'owner
     "test-runtime"
     'status
     "retained-in-place"
     'wave
-    "W0"
+    "W7"
     'rationale
-    "Grouped in-process execution characterization stays hermetic and fast-tier owned.")
+    (string-append
+     "Grouped in-process execution characterization stays hermetic and fast-tier owned. "
+     "W7 extends membership with the grouped/subprocess equivalence characterization "
+     "(tests/fixtures/grouped-mode/ fixture matrix), which owns named fallback telemetry "
+     "coverage and parity verdicts; no production test file joins grouped eligibility."))
    (hasheq
     'behavior-id
     "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
@@ -933,12 +949,12 @@
     'wave
     "W5"
     'rationale
-     (string-append
-      "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
-      "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
-      "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
-      "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
-      "live repository discovery remains executable in L4."))
+    (string-append
+     "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
+     "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
+     "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
+     "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
+     "live repository discovery remains executable in L4."))
    (hasheq
     'behavior-id
     "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
