@@ -17,8 +17,8 @@ Released 2026-09-05.
 
 ### Testing
 
-- Ownership regeneration passes byte-identically: 20 behavior rows, 0 orphan IDs, 0 duplicate IDs, 0 missing destinations; four re-tiered behaviors each retain an executable required/L4 destination.
-- All seven hotspot benchmark manifests plus `SHA256SUMS` reproduce byte-identically under `--check`; the W0-declared before-baseline was never delivered, so every before/after comparison is honestly labeled incomparable and no performance ratio is claimed.
+- Ownership regeneration passes byte-identically: 19 behavior rows, 0 orphan IDs, 0 duplicate IDs, 0 missing destinations; four re-tiered behaviors each retain an executable required/L4 destination.
+- Five of six hotspot benchmark manifests reproduce byte-identically under `--check`; `w3-gsd-timeout-after.json` was regenerated during the W8 integrated preflight with the current stats-precomputing collector (its `SHA256SUMS` entry updated to match) and all six `--check` runs plus `SHA256SUMS` verification pass at the delivered tree; the W0-declared before-baseline was never delivered, so every before/after comparison is honestly labeled incomparable and no performance ratio is claimed.
 - Focused W8 drills pass: minimal CWD probe from a foreign CWD + real audit-script CWD canary, deterministic retry + bounded real-timer canary, deterministic GSD timeout/cancel/cleanup + real timeout canary, fixture-root classifier/shard checks + live repository discovery smoke, concurrent private session/Git/worktree contamination stress, grouped/subprocess equivalence with all named fallback cases, and old/new JSON compatibility with truthful effective-mode counters.
 
 ### Operational / Release
