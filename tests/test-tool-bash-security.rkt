@@ -34,7 +34,10 @@
                   current-bash-execution-config
                   effective-bash-config
                   shell-risk-classifier-diagnostic)
-         (only-in "../tools/builtins/bash-safety.rkt" destructive-reason)
+         (only-in "../tools/builtins/bash-safety.rkt"
+                  destructive-reason
+                  destructive-diagnostic
+                  sanctioned-scratch-root)
          (only-in "../tools/tool.rkt" tool-result-is-error? tool-result-content)
          (only-in "../runtime/safe-mode.rkt"
                   safe-mode?
@@ -316,6 +319,30 @@
   (check-true (destructive-command? "rm -rf /tmp/target &"))
   (check-true (destructive-command? "cat data | tee stolen.txt &"))
   (check-eq? (destructive-reason "producer | tee file.log &") 'tee-file-write))
+
+(test-case "BUG-0061: only containment-checked scratch redirections are allowed"
+  (define scratch-file (path->string (build-path sanctioned-scratch-root "formatter.log")))
+  (check-false (destructive-command? (format "racket scripts/pre-commit.rkt >~a 2>&1" scratch-file)))
+  (check-true (destructive-command? "raco fmt source.rkt >/tmp/source.rkt"))
+  (check-true (destructive-command? (format "raco fmt source.rkt >~a"
+                                            (build-path sanctioned-scratch-root ".." "escape.rkt"))))
+  (check-true (destructive-command? "printf bad >/etc/passwd")))
+
+(test-case "BUG-0061: redirection diagnostics name reason, segment, and target"
+  (define command "echo ok; raco fmt source.rkt >/tmp/source.rkt; tail /tmp/source.rkt")
+  (define diagnostic (destructive-diagnostic command))
+  (check-eq? (hash-ref diagnostic 'reason) 'redirection)
+  (check-equal? (hash-ref diagnostic 'target) "/tmp/source.rkt")
+  (check-true (string-contains? (hash-ref diagnostic 'segment) "raco fmt")))
+
+(test-case "BUG-0061: main bash rejection exposes actionable classifier details"
+  (parameterize ([current-bash-execution-config (make-bash-execution-config #:block? #t)])
+    (define result (tool-bash (hasheq 'command "raco fmt source.rkt >/tmp/source.rkt")))
+    (check-true (tool-result-is-error? result))
+    (define text (hash-ref (car (tool-result-content result)) 'text ""))
+    (check-true (string-contains? text "reason=redirection"))
+    (check-true (string-contains? text "target=/tmp/source.rkt"))
+    (check-true (string-contains? text "segment=raco fmt source.rkt"))))
 
 (test-case "W3: ampersand is not blanket-banned — read-only background forms stay allowed"
   (check-false (destructive-command? "sleep 2 &"))

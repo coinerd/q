@@ -40,6 +40,7 @@
          ;; truth as the main tool-bash path (STATE D1: import, don't duplicate).
          (only-in "../tools/builtins/bash-safety.rkt"
                   destructive-command?
+                  destructive-diagnostic-message
                   high-risk-command?
                   structured-destructive-command?
                   structured-critical-command?))
@@ -281,7 +282,10 @@
     ;; fail-closed structured classifier for obfuscated commands. Worker policy
     ;; is BLOCK (stricter than main's warn): the worker has no approval channel.
     [(destructive-command? command)
-     (make-error-response #f (format "bash: blocked destructive command: ~a" command))]
+     (make-error-response #f
+                          (format "bash: blocked destructive command (~a): ~a"
+                                  (destructive-diagnostic-message command)
+                                  command))]
     [(structured-critical-command? command)
      (make-error-response #f (format "bash: blocked by structured risk classifier: ~a" command))]
     [else
