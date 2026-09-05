@@ -44,6 +44,7 @@
          (only-in "bash-safety.rkt"
                   destructive-patterns
                   destructive-command?
+                  destructive-diagnostic-message
                   high-risk-command?
                   structured-destructive-command?)
          (only-in "../shell-risk.rkt"
@@ -241,7 +242,9 @@
         (make-error-result (format "Blocked by execution policy (allowlist mode): ~a" command))]
        ;; Block takes priority
        [(and block-destructive? (destructive-command? command))
-        (make-error-result (format "Blocked destructive command: ~a" command))]
+        (make-error-result (format "Blocked destructive command (~a): ~a"
+                                   (destructive-diagnostic-message command)
+                                   command))]
        [else
         ;; Optional warning. Prefer structured classifier for user-visible warning-only UX:
         ;; benign command substitutions such as name=$(basename "$f") should not alarm users

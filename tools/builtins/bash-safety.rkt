@@ -51,6 +51,9 @@
 (provide destructive-patterns
          destructive-command?
          destructive-reason
+         destructive-diagnostic
+         destructive-diagnostic-message
+         sanctioned-scratch-root
          high-risk-patterns
          high-risk-command?
          structured-destructive-command?
@@ -222,15 +225,41 @@
        ;; destructive evidence here.
        (regexp-match? #px"000|(^|\\s)-r" (string-downcase segment))))
 
-;; Redirection into a real file (anything other than /dev/null, an fd dup,
-;; or process substitution) is mutation evidence. Process substitution is a
-;; pipe endpoint, not a filesystem target; its body is scanned separately.
-(define (redirects-to-file? text)
+;; BUG-0061: bash may capture disposable output only below one explicit
+;; temporary root. Other filesystem redirections remain mutation evidence.
+;; Keeping the root fixed (rather than accepting arbitrary /tmp paths) makes
+;; the policy explainable and lets callers pre-create/clean one bounded area.
+(define sanctioned-scratch-root
+  (simplify-path (build-path (find-system-path 'temp-dir) "q-agent-scratch") #f))
+
+(define (redirection-targets text)
   (define without-process-substitution (regexp-replace* #rx">\\([^)]*\\)" text ""))
-  (for/or ([m (in-list
-               (regexp-match* #px">+\\s*(\\S+)" without-process-substitution #:match-select cadr))])
-    (define target (string-trim m))
-    (not (or (equal? target "/dev/null") (string-prefix? target "&") (string=? target "")))))
+  (for/list ([m (in-list
+                 (regexp-match* #px">+\\s*(\\S+)" without-process-substitution #:match-select cadr))])
+    (strip-quote-chars (string-trim m))))
+
+(define (sanctioned-scratch-target? target)
+  (and (not (string=? target ""))
+       (absolute-path? (string->path target))
+       (let* ([candidate (path->string (simplify-path (string->path target) #f))]
+              [root (path->string sanctioned-scratch-root)]
+              [prefix (string-append root "/")])
+         (string-prefix? candidate prefix))))
+
+;; Redirection into a real file (anything other than /dev/null, an fd dup,
+;; process substitution, or the sanctioned scratch root) is mutation evidence.
+;; Process substitution is a pipe endpoint, not a filesystem target; its body
+;; is scanned separately.
+(define (forbidden-redirection-target text)
+  (for/or ([target (in-list (redirection-targets text))])
+    (and (not (or (equal? target "/dev/null")
+                  (string-prefix? target "&")
+                  (string=? target "")
+                  (sanctioned-scratch-target? target)))
+         target)))
+
+(define (redirects-to-file? text)
+  (and (forbidden-redirection-target text) #t))
 
 ;; Heredocs write files (or feed mutation streams); treat as evidence.
 (define (heredoc-write? text)
@@ -471,6 +500,37 @@
      =>
      values]
     [else 'none]))
+
+;; Actionable counterpart to destructive-reason. The stable reason remains
+;; compatible with existing policy code, while execution surfaces can explain
+;; the exact segment and redirect target that caused a rejection.
+(define (destructive-diagnostic command)
+  (define reason (destructive-reason command))
+  (and (not (eq? reason 'none))
+       (let* ([trigger (or (for/or ([seg+op (in-list (annotated-segments command))])
+                             (define segment (string-trim (car seg+op)))
+                             (define segment-reason
+                               (or (core-segment-reason segment)
+                                   (and (equal? (cadr seg+op) "&")
+                                        (background-segment-reason segment))))
+                             (and segment-reason (cons segment segment-reason)))
+                           (cons (string-trim command) reason))]
+              [segment (car trigger)]
+              [segment-reason (cdr trigger)]
+              [target (and (eq? segment-reason 'redirection) (forbidden-redirection-target segment))])
+         (hasheq 'reason segment-reason 'segment segment 'target target))))
+
+(define (destructive-diagnostic-message command)
+  (define diagnostic (destructive-diagnostic command))
+  (if diagnostic
+      (format "reason=~a~a; segment=~a"
+              (hash-ref diagnostic 'reason)
+              (let ([target (hash-ref diagnostic 'target #f)])
+                (if target
+                    (format "; target=~a" target)
+                    ""))
+              (hash-ref diagnostic 'segment))
+      "reason=none"))
 
 ;; Check if a command is destructive: top-level pattern list OR mutation
 ;; evidence anywhere in nested substitution/loop bodies. Neutral control

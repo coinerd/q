@@ -27,6 +27,24 @@ The edit tool validates reader syntax before writing Racket-family files, but
 that guard does not perform module expansion, dependency resolution, or full
 compilation. `raco make <file>` remains mandatory.
 
+## Shell scratch output
+
+The bash safety guard permits file redirection only below the dedicated
+`/tmp/q-agent-scratch/` root (or the equivalent `q-agent-scratch` directory
+under the platform temporary directory). Create that directory explicitly,
+then capture disposable formatter, test, or hook output there. Arbitrary
+`/tmp` paths, repository paths, and system paths remain blocked. Rejections
+identify the classifier reason, target, and triggering command segment.
+
+```bash
+mkdir -p /tmp/q-agent-scratch
+racket scripts/pre-commit.rkt >/tmp/q-agent-scratch/pre-commit.log 2>&1
+tail -20 /tmp/q-agent-scratch/pre-commit.log
+```
+
+Do not use the scratch exception for source edits or release evidence; move
+reviewed results through the relevant structured file tool.
+
 ## Whole-form and structural edits
 
 When replacing a clause or other form containing nested `if`, `begin`, `case`,

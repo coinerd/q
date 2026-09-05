@@ -20,6 +20,7 @@
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/worker-tools.rkt"
          "../sandbox/worker-main.rkt"
+         (only-in "../tools/builtins/bash-safety.rkt" sanctioned-scratch-root)
          "../util/config-paths.rkt")
 
 ;; ── Test Helpers ────────────────────────────────────────────────
@@ -422,6 +423,24 @@
     (test-case "SEC-1: execute-bash allows safe commands"
       (define result (execute-bash (hasheq 'command "echo hello")))
       (check-equal? (ipc-response-status result) 'ok))
+
+    (test-case "BUG-0061: worker permits sanctioned scratch output"
+      (make-directory* sanctioned-scratch-root)
+      (define output (build-path sanctioned-scratch-root "worker-output.txt"))
+      (when (file-exists? output)
+        (delete-file output))
+      (define result (execute-bash (hasheq 'command (format "printf worker-ok >~a" output))))
+      (check-equal? (ipc-response-status result) 'ok)
+      (check-equal? (file->string output) "worker-ok")
+      (delete-file output))
+
+    (test-case "BUG-0061: worker rejection exposes redirection target and segment"
+      (define result (execute-bash (hasheq 'command "printf bad >/tmp/not-sanctioned.txt")))
+      (check-equal? (ipc-response-status result) 'error)
+      (define message (ipc-response-error-message result))
+      (check-true (string-contains? message "reason=redirection"))
+      (check-true (string-contains? message "target=/tmp/not-sanctioned.txt"))
+      (check-true (string-contains? message "segment=printf bad")))
 
     (test-case "SEC-1: execute-bash warns on high-risk commands"
       (define result (execute-bash (hasheq 'command "chmod 777 /tmp")))
