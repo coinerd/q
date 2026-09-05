@@ -13,7 +13,7 @@
 ;; PASS/FAIL/INCOMPLETE/INCONCLUSIVE instead of silently masking timeouts
 ;; and zero-test files.
 ;;
-;; v1.00.24 W7: adds additive execution-mode telemetry tests —
+;; W7: adds additive execution-mode telemetry tests —
 ;; requested_execution_mode, effective_execution_mode, and
 ;; grouped_fallback_reason must always be present in per-file JSON,
 ;; must default sanely for pre-W7 construction sites, and old evidence
@@ -179,7 +179,7 @@
    (check-false (hash-ref unknown-record 'known_failure))))
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.24 W7: additive per-file execution-mode telemetry.
+;; W7: additive per-file execution-mode telemetry.
 ;; ---------------------------------------------------------------------------
 
 ;; Stable named fallback reasons. When grouped mode is requested but a file

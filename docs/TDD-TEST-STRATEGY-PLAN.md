@@ -405,6 +405,63 @@ The work should be delivered as small, independently reviewable pull requests in
 | 9 | Scheduled/manual full-regression workflow and triage protocol | 1 and 3 | Definitive status, artifacts, release linkage. |
 | 10 | Targeted mutation/adequacy pilot and carefully evidenced consolidations | 4–9 | Bounded compute, useful findings, and no coverage-only deletions. |
 
+## Operational state after the test-design hotspot waves in v1.00.24 (W8 closure)
+
+Updated by Wave 8 of the v1.00.24 test-design hotspot campaign. The four
+v1.00.04-era states above (including the fast-gate halving **MISSED**
+verdict at 1.2848× and all C0 evidence) are preserved unchanged; this
+section records the v1.00.24 state only, with the five required categories
+stated separately.
+
+**Implemented** — new executable destinations (no assertion weakening, no
+test deletion):
+
+| Wave | Implemented |
+|---|---|
+| W1 | Minimal absolute-path CWD-independence probe (`tests/test-cwd-independence.rkt`); real audit-script CWD behavior owned by `tests/test-audit-script.rkt` (slow/L4). |
+| W2 | Deterministic retry-semantics destination (`RETRY-LOGICAL-SEMANTICS-FAST` behind the `with-deterministic-retries` sleep-scale-0.0 seam); bounded real-timer canary `tests/test-auto-retry-timer-canary.rkt`. |
+| W3 | Open-bug remediation: planning durability, execution ownership, and worker isolation (bug-fix wave; no re-tier). |
+| W4 | Deterministic GSD deadline/event seam (`run-wave-with-timeout` behind injected clock/wait parameters) with exactly-once cancel/outcome emission; bounded real-clock canary `tests/test-gsd-wave-timeout-canary.rkt`. |
+| W5 | Fixture-root classifier/shard seam (`collect-test-files` `#:root`, hermetic `tests/fixtures/run-tests-discovery/` tree); repository-scale slow/L4 discovery smoke asserting invariants only. |
+| W6 | Private copy-on-test fixture templates: session (`tests/fixtures/session-template/`), lazy per-process Git sandbox, wave-worktree builder; `tests/test-private-fixture-templates.rkt` contract/stress destination with concurrent-contamination stress and explicit git-unavailable skip semantics. |
+| W7 | Grouped/subprocess equivalence characterization over the private `tests/fixtures/grouped-mode/` matrix with named machine-readable fallback telemetry. |
+| W8 | Integrated bake report (`docs/reports/TEST-DESIGN-HOTSPOT-BAKE-v1.00.24.md`) consolidating all seven checksummed benchmark manifests; ownership regeneration with zero orphan/duplicate/missing destinations. |
+
+**Re-tiered** — four behaviors carry destination-tier changes, each with an
+executable destination (ledger:
+`docs/reports/TEST-RETIER-LEDGER-v1.00.24.rktd`):
+
+- `RETRY-REAL-TIMER-CANARY` → slow/L4 (W2, sole real-timer destination).
+- `GSD-TIMEOUT-REAL-CLOCK-CANARY` → slow/L4 (W4, sole real-clock destination).
+- `RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT` → unit-fast on the fixture root (W5).
+- `RUNNER-REPOSITORY-DISCOVERY-L4` → slow/L4 invariant-only smoke (W5).
+
+All other candidate rows are `retained-in-place`; the selected-path digest and
+per-gate membership in `TEST-GATE-OWNERSHIP-v1.00.24.md` are regenerated
+byte-identically at W8 with zero orphan behavior IDs, zero duplicate IDs, and
+zero missing destinations.
+
+**Observed** — timing evidence recorded without tier or activation changes:
+the seven `artifacts/test-runtime/v1.00.24-hotspots/*.json` manifests
+(W1/W2/W3/W4/W5/W6 after-manifests, each `--check`-verified, ≥10 successful
+samples, zero failures/timeouts) and the W7 parity-only characterization.
+The W0-declared before-baseline (`baseline.json`) was never delivered, so all
+before/after comparisons are honestly labeled **incomparable** in the bake
+report and no performance-ratio claim is made anywhere in v1.00.24.
+
+**Activated** — none. Queue/LPT scheduling was exercised only as a
+compatibility drill; batch remains the default scheduler. Grouped mode was
+characterized on the private fixture matrix only; no production test file
+joined grouped eligibility. No CI DAG, worker-count, or shard-plan change
+was activated in v1.00.24.
+
+**Target achieved** — the v1.00.24 milestone destinations are achieved:
+every remediated behavior has an executable required/L4 destination; all
+comparison evidence is byte-reproducible (`SHA256SUMS`-checked); the two real
+clock/timer canaries run explicitly (slow/L4 is not fast-selected); and the
+v1.00.16 halving target remains **MISSED** by prior record — v1.00.24 makes
+no new timing target claim and does not revisit that verdict.
+
 ## References
 
 [1]: https://github.com/coinerd/q/blob/main/docs/TEST_CONVENTIONS.md "q test conventions"

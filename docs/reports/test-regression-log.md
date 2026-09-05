@@ -737,3 +737,52 @@ performance cohort and does not enter the comparison set.
 If 20 eligible SHAs are not yet available at W5 close, W5 remains in
 **observation**. W6 must not manufacture or shorten the C0 cohort. Normal
 unrelated PRs may contribute if they satisfy the pre-registered rule.
+
+## Run v1.00.24-W8 — integrated hotspot bake and evidence closure (local, pre-release)
+
+| Field | Value |
+|---|---|
+| Run ID | v1.00.24-W8 (local integrated bake; hosted full-regression evidence for the release itself is linked by the readiness gate, not this entry) |
+| Dispatch | W8 integrated verification (all four prior-wave gate families re-run focused; slow/L4 canaries run explicitly because the fast classifier does not select them) |
+| Head revision | W8 delivery checkpoint `cbf13fc7` (restore of the two missing W8-declared report files) |
+| **Definitive overall status** | recorded per check below; the release claim itself is gated on the protected-main merge + public GitHub release verification per campaign rules |
+| Runner version / mode | `1.00.24`-candidate, `execution-mode=subprocess`, `TEST_RUNNER_SCHEDULER=batch` (default; queue run only as compatibility drill, not activated) |
+
+### Recorded outcomes
+
+| Check | Result |
+|---|---|
+| Ownership regeneration (`inventory.rkt --gate-ownership-map --check`) | PASS — byte-identical to the committed v1.00.24 map; 0 orphan behavior IDs, 0 duplicate IDs, 0 missing destinations; non-ledger inventory unchanged |
+| Hotspot manifests (`hotspot-benchmark.rkt --manifest … --check` ×7 + `SHA256SUMS`) | PASS — W1/W2/W3/W4/W5/W6 after-manifests + sums byte-identical |
+| Focused drills (CWD probe + audit canary, deterministic retry + real-timer canary, deterministic GSD timeout + real-clock canary, fixture-root discovery + repository L4 smoke, private-fixture concurrent stress, grouped/subprocess equivalence + named fallbacks, JSON compatibility + truthful effective-mode counters) | PASS at wave time (W1–W7 evidence); re-run under the W8 verify declaration |
+| Grouped characterization | 12/12 parity PASS, 6 grouped-effective, 6 named fallbacks; characterization only — **not activated** |
+| Full fast suite (batch/subprocess canonical + queue compatibility drill) | run via the W8 verify declaration; see the wave validation record for the terminal result |
+
+### Honest disclosure — W0 before-baseline delivery gap
+
+The W0 wave declared
+`artifacts/test-runtime/v1.00.24-hotspots/baseline.json` as the before
+artifact but never committed it (verified across all git history: the path
+does not exist in any revision). The W8 bake report
+(`docs/reports/TEST-DESIGN-HOTSPOT-BAKE-v1.00.24.md`) therefore labels every
+before/after comparison **NOT RETAINED — incomparable**, records no timing
+ratio, and makes no performance claim. The v1.00.16 fast-gate halving verdict
+above (**MISSED**, 1.2848×) and all C0 history remain the only standing
+timing verdicts; v1.00.24 adds no new timing target.
+
+### Status summary (separately stated)
+
+- **Implemented:** W1–W8 destination families as listed in
+  `docs/TDD-TEST-STRATEGY-PLAN.md` ("Operational state after the
+  test-design hotspot waves in v1.00.24").
+- **Re-tiered:** 4 behaviors (`RETRY-REAL-TIMER-CANARY`,
+  `GSD-TIMEOUT-REAL-CLOCK-CANARY`, `RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT`,
+  `RUNNER-REPOSITORY-DISCOVERY-L4`); all others retained-in-place.
+- **Observed:** 7 checksummed after-manifests + W7 parity characterization;
+  before-column incomparable (baseline never delivered).
+- **Activated:** none (batch default; queue/LPT and grouped broad activation
+  withheld).
+- **Target achieved:** v1.00.24 milestone destinations (executable
+  destination per remediated behavior, reproducible evidence, no new timing
+  claim) — release completion additionally gated on the protected-main merge
+  and public release verification.

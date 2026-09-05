@@ -57,6 +57,10 @@
       (string-contains? s "/.planning/")
       (string-contains? s "/docs/planning/")
       (string-contains? s "/.pi/")
+      ;; Frozen release-evidence baselines (C0 cohort, ci-baseline reports):
+      ;; byte-identical regeneration is required by the campaign contract, so
+      ;; recorded version stamps there are historical records, never bumped.
+      (string-contains? s "/artifacts/")
       (and (filename-extension p) (equal? (bytes->string/utf-8 (filename-extension p)) "zo"))))
 
 (define (collect-md-files base-dir)

@@ -1,10 +1,12 @@
 #lang racket
 
+(require (only-in "../util/version.rkt" q-version))
+
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
 
-;;; tests/test-hotspot-benchmark.rkt — v1.00.24 W0 focused hotspot baseline
+;;; tests/test-hotspot-benchmark.rkt — W0 focused hotspot baseline
 ;;;
 ;;; Unit/component tests for scripts/run-tests/hotspot-benchmark.rkt. All
 ;;; coverage is deterministic: percentile interpolation, per-file stats,
@@ -73,7 +75,7 @@
   (hasheq "schema"
           "test-runtime/hotspot-baseline/v1"
           "milestone"
-          "v1.00.24"
+          (format "v~a" q-version)
           "wave"
           "W0"
           "command"

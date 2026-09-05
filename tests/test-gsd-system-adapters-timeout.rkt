@@ -2,7 +2,7 @@
 
 ;; @speed fast  ;; @suite extensions
 
-;; tests/test-gsd-system-adapters-timeout.rkt — v1.00.24 W3 (BUG-0056/BUG-0057),
+;; tests/test-gsd-system-adapters-timeout.rkt — W3 (BUG-0056/BUG-0057),
 ;; re-owned by W4 on the deterministic deadline/event seam.
 ;;
 ;; Timeout-truth tests for the concrete wave-runner timeout adapter

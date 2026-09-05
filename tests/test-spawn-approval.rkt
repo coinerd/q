@@ -39,8 +39,8 @@
 
 (define (make-counting-context sends
                                #:publisher [publisher #f]
-                               #:permission-config [permission-config
-                                                    (make-default-permission-config)])
+                               #:permission-config
+                               [permission-config (make-default-permission-config)])
   (define provider
     (make-provider
      (lambda () "counting-mock")
@@ -244,11 +244,11 @@
       (clear-approval-channel!)
       (define events-received '())
       (define plan (make-direct-plan '(shell-exec) "auto task"))
-      (define ctx (make-exec-context
-                   #:permission-config (make-permissive-permission-config)
-                   #:event-publisher (lambda (type payload)
-                                       (set! events-received
-                                             (cons (cons type payload) events-received)))))
+      (define ctx
+        (make-exec-context #:permission-config (make-permissive-permission-config)
+                           #:event-publisher
+                           (lambda (type payload)
+                             (set! events-received (cons (cons type payload) events-received)))))
       (define grant (request-spawn-approval plan ctx))
       (check-not-false grant)
       (define event-types (map car events-received))
@@ -260,9 +260,11 @@
       (check-equal? (hash-ref audit 'capabilities) '(shell-exec))
       ;; one-use grant: execution happens exactly once, replay is refused
       (define executions (box 0))
-      (check-not-false (call-with-approval-grant grant (spawn-execution-plan-digest plan)
+      (check-not-false (call-with-approval-grant grant
+                                                 (spawn-execution-plan-digest plan)
                                                  (lambda () (set-box! executions 1))))
-      (check-false (call-with-approval-grant grant (spawn-execution-plan-digest plan)
+      (check-false (call-with-approval-grant grant
+                                             (spawn-execution-plan-digest plan)
                                              (lambda () (set-box! executions 2))))
       (check-equal? (unbox executions) 1))
 
@@ -270,11 +272,10 @@
       (clear-approval-channel!)
       (define sends (box 0))
       (define events '())
-      (define ctx (make-counting-context
-                   sends
-                   #:permission-config (make-permissive-permission-config)
-                   #:publisher (lambda (type payload)
-                                 (set! events (cons type events)))))
+      (define ctx
+        (make-counting-context sends
+                               #:permission-config (make-permissive-permission-config)
+                               #:publisher (lambda (type payload) (set! events (cons type events)))))
       (parameterize ([current-spawn-timestamps (box '())])
         (define result
           (run-subagent-with-config (make-cfg #:task "auto approved" #:capabilities '(shell-exec))
@@ -288,15 +289,13 @@
       (clear-approval-channel!)
       (define sends (box 0))
       (define events '())
-      (define ctx (make-counting-context
-                   sends
-                   #:permission-config (make-default-permission-config)
-                   #:publisher (lambda (type payload)
-                                 (set! events (cons type events)))))
+      (define ctx
+        (make-counting-context sends
+                               #:permission-config (make-default-permission-config)
+                               #:publisher (lambda (type payload) (set! events (cons type events)))))
       (parameterize ([current-spawn-timestamps (box '())])
         (define result
-          (run-subagent-with-config (make-cfg #:task "strict deny" #:capabilities '(shell-exec))
-                                    ctx))
+          (run-subagent-with-config (make-cfg #:task "strict deny" #:capabilities '(shell-exec)) ctx))
         (check-true (tool-result-is-error? result))
         (check-equal? (hash-ref (tool-result-details result) 'terminal-status) "denied")
         (check-equal? (unbox sends) 0)

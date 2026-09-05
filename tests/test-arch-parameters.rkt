@@ -257,12 +257,12 @@
       ;; +1 — BUG-0051 W6 release-wave completion
       ;; (extensions/gsd/policy.rkt): current-gsd-release-check
       ;; (CONFIGURATION, external release gate seam).
-      ;; +2 — v1.00.24 W3 worker fairness: current-gateway-max-queue-depth
+      ;; +2 — W3 worker fairness: current-gateway-max-queue-depth
       ;; (CONFIGURATION) plus current-file-mutation-queue-owner (TURN_LOCAL);
       ;; the pre-existing queue hook remains one SERVICE_HANDLE entry.
-      ;; +1 — v1.00.24 W3 verification ownership:
+      ;; +1 — W3 verification ownership:
       ;; current-gsd-verification-registry (SERVICE_HANDLE).
-      ;; +2 — v1.00.24 W4 GSD deadline/event seam
+      ;; +2 — W4 GSD deadline/event seam
       ;; (extensions/gsd/system-adapters.rkt): current-gsd-timeout-wait
       ;; (SERVICE_HANDLE, bounded-wait operation handle) and
       ;; current-gsd-timeout-now-ms (SERVICE_HANDLE, injected clock probe).

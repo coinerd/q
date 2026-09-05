@@ -163,7 +163,7 @@
       (cleanup-tmp dir))
 
     (test-case "missing timeout-sec → mandatory default deadline (never unbounded)"
-      ;; v1.00.24 follow-up regression: run-campaign-wave without
+      ;; follow-up regression: run-campaign-wave without
       ;; #:timeout-sec used to bind run-one to the RAW runner port, so a hung
       ;; runner blocked the campaign thread forever (the /go executor path
       ;; sat idle and never returned to the coordinator). The deadline is now

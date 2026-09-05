@@ -4,7 +4,7 @@
 ;; @suite default
 ;; @boundary integration
 
-;;; tests/test-run-tests-repository-discovery.rkt — v1.00.24 W5
+;;; tests/test-run-tests-repository-discovery.rkt — W5
 ;;;
 ;;; The SINGLE scheduled smoke that owns REAL repository-scale test
 ;;; discovery (the L4 tier). All other runner unit tests

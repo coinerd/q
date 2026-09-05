@@ -520,7 +520,7 @@
       (delete-directory/files dir #:must-exist? #f))))
 
 ;; ============================================================
-;; 7. v1.00.24 W3 (verification-truth): durable failure-reason round-trip
+;; 7. W3 (verification-truth): durable failure-reason round-trip
 ;; ============================================================
 
 (define failure-reason-suite
