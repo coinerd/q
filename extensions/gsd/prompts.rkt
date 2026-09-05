@@ -19,6 +19,7 @@
          executor-reanchor-role-line
          executor-reanchor-prompt
          wave-failure-context-block
+         verification-repair-context-block
          wave-attempt-context-block)
 
 ;; ============================================================
@@ -75,6 +76,27 @@
                  "That is why verification failed. On this retry you MUST produce at least "
                  "one real edit to a declared target file: read the file you are editing "
                  "(only the one you are about to edit), then apply the first edit now."))
+
+;; BUG-0060: bounded coordinator-verification diagnostics for a same-wave
+;; repair attempt. The verifier message includes the exact command, exit code,
+;; bounded failed-output summary, and durable log path when the owned delivery
+;; verifier produced it. The successor must repair and then return control so
+;; the coordinator reruns the COMPLETE declared Verify chain.
+(define (verification-repair-context-block verifier-message)
+  (define bounded
+    (let ([s (if (string? verifier-message)
+                 verifier-message
+                 (format "~a" verifier-message))])
+      (if (> (string-length s) 6144)
+          (string-append (substring s 0 6144) "\n...[verification diagnostics truncated]")
+          s)))
+  (string-append
+   "\n\n=== COORDINATOR VERIFICATION FAILED — REPAIR THIS SAME WAVE ===\n"
+   "Bounded verifier diagnostics (verbatim):\n"
+   bounded
+   "\n\nPreserve the existing implementation and checkpoints. Fix the reported failure now. "
+   "Focused checks may guide the repair, but completion requires returning to the coordinator, "
+   "which will rerun the COMPLETE declared Verify chain. Do not claim success from a focused check alone."))
 
 ;; Pure constructor: (prior-attempt-context) → context block PREFIXED to the
 ;; wave executor prompt for any non-first attempt of the same wave after an

@@ -49,6 +49,8 @@
                          gsd.verification.started
                          gsd.verification.completed
                          gsd.verification.escalated
+                         gsd.verification.repair-started
+                         gsd.verification.repair-exhausted
                          ;; v1.00.18 (BUG-0024 W3): automatic campaign-level
                          ;; infra retry (payload: wave idx, attempt, delay).
                          gsd.campaign.infra-retry

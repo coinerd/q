@@ -298,10 +298,17 @@
       (write-state! base 0 "42")
       (define plan (load-plan* base))
       (define result
-        (parameterize ([current-gsd-delivery-verify-command "false"])
+        (parameterize ([current-gsd-delivery-verify-command
+                        "printf 'assertion expected 12 got 14\\n' >&2; exit 7"])
           (run-delivery-verification base plan 0)))
       (check-false (delivery-verification-approved? result)
                    "failing verify command must fail delivery verification")
+      (define message (delivery-verification-message result))
+      (check-true (string-contains? message "cmd=printf"))
+      (check-true (string-contains? message "exit=7"))
+      (check-true (string-contains? message "log="))
+      (check-true (string-contains? message "failed-output-summary:"))
+      (check-true (string-contains? message "assertion expected 12 got 14"))
       (cleanup-tmp base))
 
     (test-case "rejects when git not available"

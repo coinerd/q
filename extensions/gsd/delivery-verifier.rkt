@@ -603,6 +603,18 @@
     (define job (registry-run-verify command cwd timeout-sec base-dir wave-idx))
     (define state (verification-job-state job))
     (define exit-code (verification-job-exit-code job))
+    ;; BUG-0060: carry a bounded failed-test/assertion summary directly in
+    ;; verifier evidence so the repair executor does not need to rediscover
+    ;; coordinator-only output. The complete output remains in log-path.
+    (define output-summary
+      (let* ([combined (string-trim (string-append (verification-job-stdout job)
+                                                   "\n"
+                                                   (verification-job-stderr job)))]
+             [len (string-length combined)]
+             [limit 4096])
+        (if (> len limit)
+            (substring combined (- len limit))
+            combined)))
     ;; Truthful verdict: ONLY a reaped 'completed job with exit 0 approves.
     ;; timed-out (exit 124), cancelled, orphan-recovered, failed and any
     ;; nonzero exit are failures — the registry's record, not a wrapper's
@@ -614,12 +626,15 @@
                 (if ok?
                     ;; byte-compatible with the pre-registry verifier message
                     (format "cmd=~a exit=~a~a" command exit-code note)
-                    (format "cmd=~a exit=~a state=~a log=~a~a"
+                    (format "cmd=~a exit=~a state=~a log=~a~a~a"
                             command
                             exit-code
                             state
                             (verification-job-log-path job)
-                            note)))))
+                            note
+                            (if (non-empty-string? output-summary)
+                                (format "\nfailed-output-summary:\n~a" output-summary)
+                                ""))))))
   (cond
     [(not root) (cons "verify" (cons #f "no git root"))]
     ;; explicit test override wins (fail-forcing / pinning)

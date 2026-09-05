@@ -107,5 +107,7 @@
                                        gsd.mode.changed
                                        gsd.wave.started
                                        gsd.wave.completed
+                                       gsd.verification.repair-started
+                                       gsd.verification.repair-exhausted
                                        gsd.plan.archived)])
       (check-not-false (member name gsd-event-names) (format "~a not in gsd-event-names" name)))))

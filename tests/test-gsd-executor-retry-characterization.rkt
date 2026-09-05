@@ -37,6 +37,7 @@
 (define prompts-src (src (build-path "extensions" "gsd" "prompts.rkt")))
 (define verifier-src (src (build-path "extensions" "gsd" "delivery-verifier.rkt")))
 (define orchestrator-src (src (build-path "extensions" "gsd" "go-orchestrator.rkt")))
+(define repair-src (src (build-path "extensions" "gsd" "verification-repair.rkt")))
 (define helpers-src (src (build-path "tools" "builtins" "spawn-subagent-helpers.rkt")))
 (define retry-src (src (build-path "runtime" "auto-retry.rkt")))
 (define provider-retry-src (src (build-path "runtime" "provider-retry.rkt")))
@@ -110,8 +111,10 @@
       ;; The verifier's message is preserved verbatim into the recorded
       ;; outcome: the failure branch re-uses delivery-verification-message
       ;; and only falls back to "verifier rejected" when it is empty.
+      ;; BUG-0060: the fallback text and the durable retry/failure transition
+      ;; moved into verification-repair.rkt (resolve-verification-rejection!).
       (contains? orchestrator-src "(delivery-verification-message verifier-result)")
-      (contains? orchestrator-src "\"verifier rejected\"")
+      (contains? repair-src "\"verifier rejected\"")
       (contains? orchestrator-src "\"unexpected completion state\"")
       ;; campaign-result is the transparent outcome struct.
       (contains? orchestrator-src
@@ -253,8 +256,10 @@
       ;; The retry carries the failure context block into the executor prompt.
       (contains? orchestrator-src "current-gsd-wave-failure-context")
       ;; Other verifier rejection messages fall through to permanent failure
-      ;; with the verbatim verifier message preserved.
-      (contains? orchestrator-src "\"verifier rejected\""))
+      ;; with the verbatim verifier message preserved (BUG-0060: the
+      ;; permanent-failure fallback lives in verification-repair.rkt).
+      (contains? orchestrator-src "resolve-verification-rejection!")
+      (contains? repair-src "\"verifier rejected\""))
 
     (test-case "W3 structural pins: re-anchor wiring into the session layer"
       ;; command-handlers launches the wave-executor session with the

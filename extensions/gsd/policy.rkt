@@ -21,6 +21,7 @@
          current-gsd-wave-timeout-seconds
          current-gsd-wave-timeout-retries
          current-gsd-wave-no-change-retries
+         current-gsd-wave-verification-repair-retries
          current-gsd-wave-failure-context
          current-gsd-campaign-infra-retries
          current-gsd-campaign-infra-retry-delay
@@ -104,6 +105,13 @@
 ;; semantics are preserved.
 (define current-gsd-wave-no-change-retries
   (make-parameter 1 (nonnegative-integer-guard 'current-gsd-wave-no-change-retries)))
+
+;; BUG-0060: ordinary declared-Verify failures receive a separately bounded
+;; same-wave repair attempt. This budget is intentionally independent from
+;; no-change and provider-infrastructure retries, and each repair consumes a
+;; truthful fresh campaign attempt.
+(define current-gsd-wave-verification-repair-retries
+  (make-parameter 1 (nonnegative-integer-guard 'current-gsd-wave-verification-repair-retries)))
 
 ;; v1.00.18 W? (BUG-0024): campaign-level infra-failure retry ceiling. When a
 ;; wave run classifies as 'infra-failed (D8 #9357: provider/network/SSE

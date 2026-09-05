@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.24 W3 (verification-truth): durable failure-reason stamping and restart retry context added runner-outcome-failure-reason + #:failure-reason on the persist/interrupt boundary (1468 -> 1499 lines, 23 -> 24 defines); supersedes the v1.00.22 W6 BUG-0051 re-record")
- (line-count . 1499)
- (top-level-define-count . 24)
+  "v1.00.25 BUG-0060: bounded same-wave verification repair (repair-retry state + resolve delegation) and wave-outcome-reporting.rkt extraction (1499 -> 1497 lines, 24 -> 22 defines); supersedes the v1.00.24 W3 verification-truth re-record")
+ (line-count . 1497)
+ (top-level-define-count . 22)
  (w7-target-max-lines . 1500))

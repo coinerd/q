@@ -82,6 +82,7 @@
  ("extensions/gsd/freshness.rkt" (current-gsd-freshness-check . OTHER_REVIEWED))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
+                              (current-gsd-wave-verification-repair-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retry-delay . TURN_LOCAL)
                               (current-gsd-wave-timeout-retries . CONFIGURATION)
