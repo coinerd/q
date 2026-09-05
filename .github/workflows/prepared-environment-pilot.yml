@@ -68,7 +68,7 @@ jobs:
             installer-sha: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
             role: full
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Probe whether the lock supports this tuple (W1 gate)
         id: lock-gate

@@ -46,7 +46,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Protected governance controller tests
         run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
@@ -125,7 +125,7 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/prepare-racket-environment
         with:
           racket-version: '8.10'
@@ -170,7 +170,7 @@ jobs:
       # version-override, rollback switch not off).
       PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       # Legacy pre-W3 cache; only pays off on the full path.
       - name: Cache Racket packages
         if: env.PREPARED_ENV != 'auto'
@@ -304,7 +304,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
@@ -404,7 +404,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -488,7 +488,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -554,7 +554,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -613,7 +613,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -670,7 +670,7 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -711,7 +711,7 @@ jobs:
         shard: [0, 1]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
@@ -790,7 +790,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-racket
@@ -844,7 +844,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Cache Racket packages
         uses: actions/cache@v6
         with:
@@ -877,7 +877,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
