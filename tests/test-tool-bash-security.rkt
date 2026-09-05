@@ -10,7 +10,7 @@
 ;; Tests for destructive-command? bypass-vector patterns and
 ;; safe-mode-aware block-destructive default.
 ;;
-;; v1.00.24 W3: TDD repair of the bash safety bypass — segment trimming
+;; W3: TDD repair of the bash safety bypass — segment trimming
 ;; before anchored checks, tee-with-file-operand writes, detached (&)
 ;; write/gate-launch rejection, nested/whitespace bypass hardening. Read-only
 ;; polling/status forms (grep count substitution, ps/pgrep/tail, bounded
@@ -250,7 +250,7 @@
       (check-true (string-contains? txt "Blocked destructive")))))
 
 ;; ============================================================
-;; v1.00.24 W3: bash safety bypass repairs (TDD red → green)
+;; W3: bash safety bypass repairs (TDD red → green)
 ;;   1. trim shell segments before anchored destructive checks
 ;;   2. tee with a file operand is a named write reason
 ;;   3. detached (&) writes / unowned gate-like launches are rejected

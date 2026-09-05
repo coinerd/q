@@ -560,14 +560,14 @@
          (persist-current-status! 'interrupted #:failure-reason failure-reason)
          (campaign-result 'wave-cancelled '() message))
        ;; Executor port boundary (W3 #9234): ONE structured terminal outcome per
-       ;; invocation. Legacy symbol runners coerce; an optional deadline wraps
+       ;; invocation. Legacy symbol runners coerce; a deadline wraps
        ;; the port with run-wave-with-timeout so a hung tool yields
        ;; 'timed-out (persisted as interrupted) instead of blocking forever.
+       ;; v1.00.24: the deadline is MANDATORY (never #f/unbounded): absent
+       ;; timeout-sec, wrap with current-gsd-wave-timeout-seconds (default 7200).
        (define runner-port (coerce-runner runner))
-       (define run-one
-         (if timeout-sec
-             (lambda (idx) (run-wave-with-timeout runner-port timeout-sec idx))
-             (gsd-wave-runner-port-run runner-port)))
+       (define effective-timeout-sec (or timeout-sec (current-gsd-wave-timeout-seconds)))
+       (define run-one (lambda (idx) (run-wave-with-timeout runner-port effective-timeout-sec idx)))
        ;; v1.00.18 W5 (#9513): wrap run-one with the mutation-stall
        ;; watchdog. Both limits #f → inert (no wrapper at all). The
        ;; watchdog counts executor tool calls since the last file

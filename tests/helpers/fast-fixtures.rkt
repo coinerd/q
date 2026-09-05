@@ -44,7 +44,7 @@
 ;;    sleep is skipped (production default scale is 1.0, unchanged).
 ;; When #:max-retries is given, current-provider-retry-max-retries is pinned
 ;; to that value for the dynamic extent; otherwise the ambient value is kept.
-;; W2 v1.00.24: #:sleep-scale (default 0.0) re-enables the REAL wall-clock
+;; W2 : #:sleep-scale (default 0.0) re-enables the REAL wall-clock
 ;; sleep path for the bounded slow/L4 timer canary
 ;; (tests/test-auto-retry-timer-canary.rkt) without changing the fast-suite
 ;; default of skipping sleeps.

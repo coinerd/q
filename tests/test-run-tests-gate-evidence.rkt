@@ -77,7 +77,7 @@
   (check-not-false (regexp-match? #rx"\"failed\": 0" content))
   (check-not-false (regexp-match? #rx"\"inventory_hash\":" content))
   (check-not-false (regexp-match? #rx"\"timestamp\":" content))
-  ;; v1.00.24 W3: explicit shard identity (schema migration — every evidence
+  ;; W3: explicit shard identity (schema migration — every evidence
   ;; file must state whether it is a full-suite run or a partial shard).
   (check-not-false (regexp-match? #rx"\"shard_index\": 0" content))
   (check-not-false (regexp-match? #rx"\"shard_total\": 1" content))
@@ -87,7 +87,7 @@
   (delete-file evidence-file))
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.24 W3: truthful gate evidence — shard refusal, complete-run proof,
+;; W3: truthful gate evidence — shard refusal, complete-run proof,
 ;; explicit shard identity, fail-closed validation.
 ;; ---------------------------------------------------------------------------
 

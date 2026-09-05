@@ -4,13 +4,13 @@
 ;; @suite default
 ;; @boundary unit
 
-;;; tests/test-test-gate-ownership.rkt — v1.00.24 W0 cross-gate ownership map
+;;; tests/test-test-gate-ownership.rkt — W0 cross-gate ownership map
 ;;;
 ;;; Unit/component tests for the deterministic `--gate-ownership-map` mode of
 ;;; scripts/run-tests/inventory.rkt. These tests are CWD-safe and repository-
 ;;; discovery-free: they exercise the pure validators/renderers with synthetic
 ;;; membership tables so the fast suite keeps paying no repository-wide walk
-;;; (see v1.00.24 W4 for why that matters). The real-repository `--check`
+;;; (see W4 for why that matters). The real-repository `--check`
 ;;; invocation runs once in the wave verify command, not here.
 
 (require rackunit
@@ -21,23 +21,32 @@
          (prefix-in inv: (file "../scripts/run-tests/inventory.rkt")))
 
 ;; ---------------------------------------------------------------
-;; Frozen v1.00.24 candidate behavior table
+;; Frozen candidate behavior table (W0 freeze + W4/W5/W6 rows)
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the ten mandated candidate IDs"
+(test-case "behavior table freezes exactly the nineteen mandated candidate IDs"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 10)
+  (check-equal? (length ids) 19)
   (check-equal? (sort ids string<?)
                 (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
                             "RETRY-REAL-TIMER-CANARY"
                             "CWD-INVOCATION-AUDIT-CANARY"
                             "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
                             "GSD-WAVE-TIMEOUT-CANCELLATION"
+                            "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
+                            "GSD-TIMEOUT-REAL-CLOCK-CANARY"
                             "RUNNER-REPOSITORY-DISCOVERY"
+                            "RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT"
+                            "RUNNER-REPOSITORY-DISCOVERY-L4"
                             "GOLDEN-SESSION-LIFECYCLE"
                             "GSD-DELIVERY-VERIFIER-GIT-SANDBOXES"
                             "GSD-WAVE-WORKTREE-SANDBOXES"
-                            "GROUPED-MODE-CHARACTERIZATION")
+                            "GROUPED-MODE-CHARACTERIZATION"
+                            "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
+                            "GOLDEN-SESSION-PRIVATE-TEMPLATE"
+                            "GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE"
+                            "GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE"
+                            "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE")
                       string<?)))
 
 (test-case "every behavior row carries complete frozen ownership data"
@@ -53,7 +62,9 @@
     (check-true (string<? "" (hash-ref row 'rationale "")) (format "~a: rationale" id))))
 
 (test-case "W0 rows retain destination in the source tier"
-  (for ([row (in-list inv:v124-behavior-table)])
+  (define w0-rows (filter (lambda (row) (equal? (hash-ref row 'wave) "W0")) inv:v124-behavior-table))
+  (check-true (pair? w0-rows) "expected at least one W0 ownership row")
+  (for ([row (in-list w0-rows)])
     (check-equal? (hash-ref row 'destination-gate)
                   (hash-ref row 'source-gate)
                   (format "~a: W0 destination must equal source tier" (hash-ref row 'behavior-id)))))

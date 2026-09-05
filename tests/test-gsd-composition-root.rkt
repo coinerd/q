@@ -96,7 +96,7 @@
                   source)))
 
   (test-case "composition root owns one process-wide verification registry"
-    ;; v1.00.24 W3 verification-truth: delivery verification launches are
+    ;; W3 verification-truth: delivery verification launches are
     ;; owned singletons resolved through this parameter, so there must be
     ;; exactly ONE process-wide registry, owned by the composition root.
     (check-true (verification-registry? (current-gsd-verification-registry)))

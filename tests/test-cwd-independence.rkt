@@ -147,8 +147,7 @@
          racket/system)
 
 (define racket-exe (find-executable-path "racket"))
-(define probe-path
-  (simplify-path (build-path this-module-dir "fixtures" "cwd-invocation-probe.rkt")))
+(define probe-path (simplify-path (build-path this-module-dir "fixtures" "cwd-invocation-probe.rkt")))
 
 ;; Runs the probe with cwd = <private>/cwd, private output dir
 ;; <private>/probe-out, and PLT_COMPILED_DIR = <private>.
@@ -160,16 +159,18 @@
   (make-directory cwd-dir)
   (define stdout-path (build-path private-dir "probe-stdout.txt"))
   (define env
-    (make-environment-variables
-     #"PLT_COMPILED_DIR" (string->bytes/utf-8 (path->string private-dir))))
+    (make-environment-variables #"PLT_COMPILED_DIR" (string->bytes/utf-8 (path->string private-dir))))
   (define exit-code
     (parameterize ([current-directory cwd-dir]
                    [current-environment-variables env])
-      (define stdout-file
-        (open-output-file stdout-path #:exists 'truncate/replace))
+      (define stdout-file (open-output-file stdout-path #:exists 'truncate/replace))
       (define-values (proc _stdout _stdin _stderr)
-        (subprocess stdout-file #f stdout-file
-                    racket-exe (path->string probe-path) (path->string out-dir)))
+        (subprocess stdout-file
+                    #f
+                    stdout-file
+                    racket-exe
+                    (path->string probe-path)
+                    (path->string out-dir)))
       (close-output-port stdout-file)
       (subprocess-wait proc)
       (subprocess-status proc)))
@@ -191,8 +192,6 @@
                  "probe must print the deterministic sentinel")
      (check-true (string-contains? stdout "registry-defaults.rkt")
                  "sentinel must name the required runtime-path target")
-     (check-equal? out-entries '("probe-sentinel.txt")
-                   "probe must write only its sentinel file")
-     (check-equal? cwd-entries '()
-                   "probe must not write outside its private temp directory"))
+     (check-equal? out-entries '("probe-sentinel.txt") "probe must write only its sentinel file")
+     (check-equal? cwd-entries '() "probe must not write outside its private temp directory"))
    (λ () (delete-directory/files private-dir))))

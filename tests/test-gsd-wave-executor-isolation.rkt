@@ -40,11 +40,21 @@
                   run-campaign!
                   campaign-result-status
                   campaign-result-message)
-         (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-timeout-retries))
+         (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-timeout-retries)
+         (only-in "helpers/gsd-timeout-fake.rkt" with-deterministic-timeout))
 
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+;; W4 deterministic timeout seam: campaign-level timeout cases run the real
+;; executor on a fake timeline owned by tests/helpers/gsd-timeout-fake.rkt.
+;; The fake clock advances only when the adapter waits, and a posted
+;; cancellation is delivered immediately, so deadline expiry, cancellation
+;; grace, and force-kill happen with zero wall-clock sleeps while every
+;; production timeout/cancel/cleanup/outcome step still executes for real.
+;; Empty stage list = every wait is a pure tick: the hung runner never
+;; completes, so the deadline expires deterministically.
 
 (define (make-tmp-campaign-dir n-waves)
   (define dir (make-temporary-file "exec-isol-~a" 'directory))
@@ -57,10 +67,10 @@
                          #:exists 'truncate)
   ;; BUG-0052: every referenced wave doc must exist for campaign creation.
   (for ([i (in-range n-waves)])
-    (call-with-output-file (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
-                           (lambda (out)
-                             (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
-                           #:exists 'truncate))
+    (call-with-output-file
+     (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
+     (lambda (out) (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
+     #:exists 'truncate))
   dir)
 
 (define (load-or-migrate dir)
@@ -122,7 +132,10 @@
       ;; only re-pay the 1s deadline + 2s cancel grace for no new information.
       ;; Disable them: timeout semantics under test are retry-count-agnostic.
       (define result
-        (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
+        (with-deterministic-timeout
+         '()
+         (lambda ()
+           (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-equal? (count-completion-events dir rec) 0 "timed-out run must not invent a DONE")
@@ -139,11 +152,38 @@
                                  (sleep 30)
                                  (wave-execution-outcome 'done "late"))))
       (define result
-        (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))
+        (with-deterministic-timeout
+         '()
+         (lambda ()
+           (run-campaign-wave dir rec 0 #:runner runner #:timeout-sec 1 #:timeout-retries 0))))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-true (string-contains? (campaign-result-message result) "exceeded"))
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-false (eq? (wave-status* rec 0) 'done) "timeout must not persist DONE")
+      (cleanup-tmp dir))
+
+    (test-case "missing timeout-sec → mandatory default deadline (never unbounded)"
+      ;; follow-up regression: run-campaign-wave without
+      ;; #:timeout-sec used to bind run-one to the RAW runner port, so a hung
+      ;; runner blocked the campaign thread forever (the /go executor path
+      ;; sat idle and never returned to the coordinator). The deadline is now
+      ;; mandatory: absent the keyword the executor wraps with
+      ;; current-gsd-wave-timeout-seconds (default 7200, guarded
+      ;; positive-real — never #f). The deterministic fake expires even a
+      ;; 7200 s deadline in pure ticks — zero wall-clock cost.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define runner
+        (make-wave-runner-port (lambda (idx)
+                                 (sleep 30)
+                                 (wave-execution-outcome 'done "late"))))
+      (define result
+        (parameterize ([current-gsd-wave-timeout-retries 0])
+          (with-deterministic-timeout '() (lambda () (run-campaign-wave dir rec 0 #:runner runner)))))
+      (check-eq? (campaign-result-status result) 'wave-cancelled)
+      (check-true (string-contains? (campaign-result-message result) "exceeded"))
+      (check-eq? (wave-status* rec 0) 'interrupted)
+      (check-false (eq? (wave-status* rec 0) 'done) "default-deadline timeout must not persist DONE")
       (cleanup-tmp dir))
 
     (test-case "interrupted outcome → interrupted"
@@ -264,13 +304,16 @@
         ;; Same retry rationale as above: the hung runner makes each retry
         ;; re-pay 1s deadline + 2s cancel grace, so pin the production
         ;; timeout-retry policy off for this deterministic scenario.
-        (parameterize ([current-gsd-wave-timeout-retries 0])
-          (run-campaign! dir
-                         rec
-                         #:runner (make-wave-runner-port (lambda (idx)
-                                                           (sleep 30)
-                                                           (wave-execution-outcome 'done "late")))
-                         #:timeout-sec 1)))
+        (with-deterministic-timeout
+         '()
+         (lambda ()
+           (parameterize ([current-gsd-wave-timeout-retries 0])
+             (run-campaign! dir
+                            rec
+                            #:runner (make-wave-runner-port (lambda (idx)
+                                                              (sleep 30)
+                                                              (wave-execution-outcome 'done "late")))
+                            #:timeout-sec 1)))))
       (check-eq? (campaign-result-status result) 'wave-cancelled)
       (check-eq? (wave-status* rec 0) 'interrupted)
       (check-equal? (count-completion-events dir rec) 0)

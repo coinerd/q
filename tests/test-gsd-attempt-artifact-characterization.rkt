@@ -112,7 +112,7 @@
   (test-suite "BUG-0029 W5 fixed pin: ledger + inherited-artifacts block exist"
     (test-case "campaign-wave struct HAS artifact ledger + failure reason (17 slots)"
       ;; 10 slots through BUG-0029 W5; BUG-0039 added six usage slots and
-      ;; v1.00.24 W3 adds one durable failure-reason slot → 17.
+      ;; W3 adds one durable failure-reason slot → 17.
       (define w (make-campaign-wave* 0 "W0" 'pending 0 #f))
       (check-equal? (vector-length (struct->vector w)) 17)
       (check-pred list?

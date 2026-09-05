@@ -913,7 +913,7 @@
                     (lambda () (delete-directory/files tmp))))))
 
 ;; ============================================================
-;; v1.00.24 W3 (verification-truth): durable failure-reason repair
+;; W3 (verification-truth): durable failure-reason repair
 ;; ============================================================
 
 (define failure-reason-suite

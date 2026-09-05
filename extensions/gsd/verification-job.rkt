@@ -393,17 +393,21 @@
         ;; Real log backing BEFORE spawn so every byte of output — including
         ;; output produced before any status read — has a durable home.
         (define-values (eff-log-path log-out) (open-verification-log job-id log-path))
-        ;; W1 v0.99.77 parity: subprocess-group-enabled makes the child its own
-        ;; process-group leader (PID == PGID), so `kill -SIGNAL -- -PID` reaches
-        ;; every descendant. Scoped via parameterize (W3 review): leaving the
-        ;; parameter enabled would leak group leadership into every later
-        ;; subprocess on this thread. Do NOT wrap in a bare `setsid`: setsid
-        ;; forks, the wrapper exits 0 immediately, orphaning the real child
-        ;; and hiding its exit code (observed as fabricated 'completed/0
-        ;; results).
+        ;; Verification runs in a new session, not merely a new process group.
+        ;; A background process group in the TUI's session still owns
+        ;; /dev/tty; terminal tests that call tcsetattr/stty then receive
+        ;; SIGTTOU and stop the entire verification tree. Spawn without
+        ;; subprocess-group-enabled so the setsid child is not already a
+        ;; process-group leader; util-linux setsid can then exec directly.
+        ;; --wait preserves the command's real exit status. The resulting
+        ;; identity is PID == PGID == SID, so the existing negative-PID
+        ;; TERM/KILL escalation continues to reach all descendants.
         (define-values (p out in err)
-          (parameterize ([subprocess-group-enabled #t])
-            (apply subprocess #f #f #f executable args)))
+          (if setsid-path
+              (parameterize ([subprocess-group-enabled #f])
+                (apply subprocess #f #f #f setsid-path "--wait" "--" executable args))
+              (error 'verification-start!
+                     "terminal-isolated verification requires the setsid executable")))
         (close-output-port in) ; child never reads our stdin
         (define out-box (box ""))
         (define err-box (box ""))
@@ -433,7 +437,7 @@
                       err
                       drains
                       timeout-ms
-                      #t ; group leader: spawned under subprocess-group-enabled
+                      #t ; session and process-group leader created by setsid
                       out-box
                       err-box
                       log-out

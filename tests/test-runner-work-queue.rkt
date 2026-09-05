@@ -2,6 +2,12 @@
 
 ;; @speed fast
 ;; @boundary unit
+;; @isolation process
+;; W7.1 grouped-mode reclassification: this file drives the runner's own
+;; run-all-files/run-single-file/run-suite-once in-process and pins
+;; subprocess kill/classification semantics, so true grouped isolation
+;; cannot be proved; grouped requests fall back to subprocess with the
+;; named reason `declared-process-isolation`.
 
 ;; BOUNDARY: unit
 ;; tests/test-runner-work-queue.rkt
