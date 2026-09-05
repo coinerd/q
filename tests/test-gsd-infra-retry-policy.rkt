@@ -121,9 +121,11 @@
       (check-equal? (wave-execution-outcome-message
                      (prompt-run-result->outcome (make-loop-result '() 'tool-calls-pending (hasheq))))
                     "tool calls remain pending")
-      (check-equal? (wave-execution-outcome-message
-                     (prompt-run-result->outcome (make-loop-result '() 'empty-response (hasheq))))
-                    "model returned an empty response")
+      (define empty-outcome
+        (prompt-run-result->outcome (make-loop-result '() 'empty-response (hasheq))))
+      (check-eq? (wave-execution-outcome-kind empty-outcome) 'infra-failed)
+      (check-equal? (wave-execution-outcome-message empty-outcome)
+                    "model returned an empty response — wave preserved (attempt not consumed)")
       (check-equal?
        (wave-execution-outcome-message
         (prompt-run-result->outcome (make-loop-result '() 'error (hasheq 'error "logic boom"))))
