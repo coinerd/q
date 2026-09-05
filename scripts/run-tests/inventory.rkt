@@ -326,10 +326,13 @@
 ;; unit-fast eligibility audit (W3)
 ;; ============================================================
 ;; Lists unit-fast candidates and flags files that must NOT join the
-;; grouped in-process execution mode: declared mutations, declared or
-;; lexically-detected env/filesystem/network/process side effects, or
-;; a missing `module+ test` form (no RackUnit discovery point for
-;; grouped execution).
+;; grouped in-process execution mode: declared mutations, declared
+;; process isolation (@isolation), declared or lexically-detected
+;; env/filesystem/network/process side effects, or a missing
+;; `module+ test` form (no RackUnit discovery point for grouped
+;; execution).  W7: declared-process-isolation flags mirror the
+;; runner's grouped fallback so audit eligibility and grouped
+;; effective-mode selection cannot disagree.
 
 (define (file-content f)
   (with-handlers ([exn:fail? (lambda (_) "")])
@@ -353,11 +356,19 @@
   (define v (hash-ref (get-file-metadata f) 'mutates #f))
   (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
 
+(define (declared-isolation f)
+  (define v (hash-ref (get-file-metadata f) 'isolation #f))
+  (and v (not (member (metadata-value->string v) '("none" "#f" "false"))) (metadata-value->string v)))
+
 (define (audit-unsafe-reasons f)
   (define content (file-content f))
   (define reasons '())
   (define (flag! r)
     (set! reasons (cons r reasons)))
+  (cond
+    [(declared-isolation f)
+     =>
+     (lambda (v) (flag! (format "declared-process-isolation:@isolation=~a" v)))])
   (cond
     [(declared-mutation f)
      =>
@@ -840,15 +851,213 @@
     'destination-gate
     "fast"
     'members
-    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt")
+    '("tests/test-run-tests-in-process-mode.rkt" "tests/test-execution-plane-characterization.rkt"
+                                                 "tests/test-runner-grouped-characterization.rkt")
     'owner
     "test-runtime"
     'status
     "retained-in-place"
     'wave
-    "W0"
+    "W7"
     'rationale
-    "Grouped in-process execution characterization stays hermetic and fast-tier owned.")))
+    (string-append
+     "Grouped in-process execution characterization stays hermetic and fast-tier owned. "
+     "W7 extends membership with the grouped/subprocess equivalence characterization "
+     "(tests/fixtures/grouped-mode/ fixture matrix), which owns named fallback telemetry "
+     "coverage and parity verdicts; no production test file joins grouped eligibility."))
+   (hasheq
+    'behavior-id
+    "GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-system-adapters-timeout.rkt" "tests/test-gsd-wave-executor-isolation.rkt")
+    'owner
+    "gsd-delivery"
+    'status
+    "retained-in-place"
+    'wave
+    "W4"
+    'rationale
+    (string-append
+     "W4 re-tier: deterministic GSD wave timeout semantics remain fast — deadline expiry, external cancellation, exactly-once cancel/outcome "
+     "emission, cooperative grace, and force-kill-after-grace assertions run against run-wave-with-timeout behind the injected deterministic "
+     "timeout clock/wait seam (with-deterministic-timeout stages) and pay no wall-clock deadline or grace. Production defaults "
+     "(current-inexact-milliseconds, sync/timeout, the two-second grace) are unchanged; the seam is test-scoped parameters only. "
+     "Pre-W4 executor-isolation timeout cases that slept past real one-second deadlines now use the same seam with identical assertions "
+     "and preserved campaign persistence (DONE never recorded on timeout), retry-count isolation, and durable cancellation coverage."))
+   (hasheq
+    'behavior-id
+    "GSD-TIMEOUT-REAL-CLOCK-CANARY"
+    'source-gate
+    "slow/L4"
+    'destination-gate
+    "slow/L4"
+    'members
+    '("tests/test-gsd-wave-timeout-canary.rkt")
+    'owner
+    "gsd-delivery"
+    'status
+    "re-tiered"
+    'wave
+    "W4"
+    'rationale
+    (string-append
+     "W4 re-tier: real clock/thread integration for the GSD wave timeout adapter is owned by exactly one bounded slow/L4 canary (the file "
+     "carries @speed slow), mirroring the W2 RETRY-REAL-TIMER-CANARY convention. The canary proves the production adapter completes inside "
+     "a real deadline, requests cancellation, and force-reaps a stubborn never-finishing worker after the real two-second grace, with "
+     "jitter-tolerant assertions and a hard 12-second ceiling. It is the sole executable destination for real-clock timeout wiring."))
+   (hasheq
+    'behavior-id
+    "RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT"
+    'source-gate
+    "unit-fast"
+    'destination-gate
+    "unit-fast"
+    'members
+    '("tests/test-run-tests-shard.rkt")
+    'owner
+    "test-runtime"
+    'status
+    "re-tiered"
+    'wave
+    "W5"
+    'rationale
+    (string-append
+     "W5 re-tier: runner classifier/sharding unit assertions collect from the hermetic fixture tree tests/fixtures/run-tests-discovery/ "
+     "through the new #:root seam on collect-test-files instead of crawling the production repository. The fixture tree owns fast, slow, "
+     "platform, TUI, helper, malformed/edge-metadata, named/unnamed, symlink, and nested cases; unit assertions cover deterministic path "
+     "sort, metadata/heuristic selection, platform inclusion, shard partition, helper/fixture exclusion, missing-root failure, and no "
+     "escape through symlinks or .. without depending on the number of files in the live checkout. Omitted-root calls preserve the pre-W5 "
+     "q-root discovery byte-for-byte, asserted from both directions against the ignored-prefix contract. The test process now propagates "
+     "rackunit failure/error counts to its exit code so runner exit-code verdicts observe real failures."))
+   (hasheq
+    'behavior-id
+    "RUNNER-REPOSITORY-DISCOVERY-L4"
+    'source-gate
+    "slow/L4"
+    'destination-gate
+    "slow/L4"
+    'members
+    '("tests/test-run-tests-repository-discovery.rkt")
+    'owner
+    "test-runtime"
+    'status
+    "re-tiered"
+    'wave
+    "W5"
+    'rationale
+    (string-append
+     "W5 re-tier: exactly one scheduled slow/L4 smoke owns REAL repository-scale discovery. It asserts invariant properties only — "
+     "nonempty normalized default discovery, suite containment/exclusion, a nonempty real platform inventory (responsibility moved from "
+     "the fixture-root unit tests), deterministic 64-hex selected-path digests sensitive to the selected set, and default-call "
+     "compatibility of the #:root seam — never a brittle exact file count. Classifier semantics for fixture-root units remain fast; "
+     "live repository discovery remains executable in L4."))
+   (hasheq
+    'behavior-id
+    "PRIVATE-FIXTURE-TEMPLATE-CONTRACT"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-private-fixture-templates.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained: new fast contract/stress destination owning the copy-on-test fixture-template invariants — distinct private canonical "
+     "roots for concurrent instances, immutable template source, independent ref/history/CWD/env mutation, cross-instance and "
+     "template-safety proof, arbitrary-order destruction with idempotent cleanup, and explicit git-unavailable skip semantics (never a "
+     "silent pass). No product behavior is owned here."))
+   (hasheq
+    'behavior-id
+    "GOLDEN-SESSION-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-golden-flows.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): golden-session lifecycle family keeps its fast tier and every behavioral assertion. Repeated "
+     "baseline session construction is centralized behind the private copy-on-test session template (immutable "
+     "tests/fixtures/session-template/ copied to a fresh private temp root per test with fresh session IDs/event buses/registries); "
+     "scratch-build and meaningful multi-turn canary cases remain in the owner file."))
+   (hasheq
+    'behavior-id
+    "GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-delivery-verifier.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): delivery-verifier Git sandbox family keeps its fast tier and assertions. Duplicated "
+     "init/config/baseline-commit scaffolding is centralized in the lazy per-process Git template and cloned privately per test with "
+     "no shared refs, index, worktree metadata, config, or hooks; hermetic user identity and the offline origin/main stand-in are "
+     "preserved."))
+   (hasheq
+    'behavior-id
+    "GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-wave-worktree.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): GSD wave-worktree family keeps its fast tier and assertions. Duplicated baseline-repository "
+     "construction is centralized in the shared lazy Git template; real Git/filesystem behavior, family-specific branch/commit/"
+     "dirty-tree/delivery/cleanup/orphan assertions, and offline origin/main stand-ins remain in the owner file."))
+   (hasheq
+    'behavior-id
+    "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-branch-delivery-verification.rkt")
+    'owner
+    "test-design"
+    'status
+    "retained-in-place"
+    'wave
+    "W6"
+    'rationale
+    (string-append
+     "W6 retained-in-place (no re-tier): branch-delivery verification family adopts the shared private Git sandbox builder for its "
+     "baseline repository only; branch, commit, dirty-tree, delivery, cleanup, and orphan assertions stay unchanged in the owner "
+     "file."))))
 
 ;; Rows actually owned by this milestone (frozen table).
 (define (gate-ownership-rows [memberships (gate-membership)])

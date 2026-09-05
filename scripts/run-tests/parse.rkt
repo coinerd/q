@@ -18,6 +18,8 @@
          test-file-result-passed
          test-file-result-failed
          test-file-result-total
+         test-file-result-requested-execution-mode
+         test-file-result-grouped-fallback-reason
          make-test-file-result
          bytes->string*
          parse-raco-output
@@ -33,9 +35,24 @@
   (with-handlers ([exn:fail? (lambda (e) (bytes->string/latin-1 bs))])
     (bytes->string/utf-8 bs)))
 
-(struct test-file-result (path exit-code stdout-bytes stderr-bytes elapsed-ms passed failed total)
+(struct test-file-result
+        (path exit-code
+              stdout-bytes
+              stderr-bytes
+              elapsed-ms
+              passed
+              failed
+              total
+              ;; v1.00.24 W7 additive telemetry: requested execution mode (symbol,
+              ;; e.g. 'grouped / 'subprocess) and a stable named fallback reason
+              ;; (string or #f) explaining why a grouped request executed
+              ;; subprocess. Both default to #f for pre-W7 construction sites.
+              requested-execution-mode
+              grouped-fallback-reason)
   #:transparent)
 
+;; Backward-compatible constructor: pre-W7 positional call sites continue to
+;; work; new telemetry is optional via keywords.
 (define (make-test-file-result path
                                exit-code
                                stdout-bytes
@@ -43,8 +60,19 @@
                                elapsed-ms
                                passed
                                failed
-                               total)
-  (test-file-result path exit-code stdout-bytes stderr-bytes elapsed-ms passed failed total))
+                               total
+                               #:requested-execution-mode [requested-execution-mode #f]
+                               #:grouped-fallback-reason [grouped-fallback-reason #f])
+  (test-file-result path
+                    exit-code
+                    stdout-bytes
+                    stderr-bytes
+                    elapsed-ms
+                    passed
+                    failed
+                    total
+                    requested-execution-mode
+                    grouped-fallback-reason))
 
 (define (parse-raco-output stdout-bytes)
   (define output (bytes->string* stdout-bytes))
@@ -148,7 +176,13 @@
      'MODULE_LOAD_FAILURE]
     [(or (> failed 0)
          (output-matches-any? output
-                              (list #rx"failure" #rx"check-[a-z0-9-]+" #rx"actual:" #rx"expected:")))
+                              (list #rx"failure"
+                                    #rx"check-[a-z0-9-]+"
+                                    #rx"actual:"
+                                    #rx"expected:"
+                                    ;; v1.00.24 W7: module+ test body raised; grouped
+                                    ;; in-process emits raco's phrasing verbatim.
+                                    #rx"test raised an exception")))
      'ASSERTION_FAILURE]
     [else 'UNKNOWN_FAILURE]))
 
@@ -162,6 +196,18 @@
           (symbol->string (classify-test-result r))
           'exit_code
           (test-file-result-exit-code r)
+          ;; v1.00.24 W7: additive per-file execution-mode telemetry.
+          ;; requested = what was asked for; effective = what actually ran;
+          ;; grouped_fallback_reason = stable symbol name (JSON string) or null.
+          'requested_execution_mode
+          (or (test-file-result-requested-execution-mode r) "subprocess")
+          'effective_execution_mode
+          (if (test-file-result-grouped-fallback-reason r)
+              "subprocess"
+              (or (test-file-result-requested-execution-mode r) "subprocess"))
+          'grouped_fallback_reason
+          (let ([reason (test-file-result-grouped-fallback-reason r)])
+            (and reason (symbol->string reason)))
           'elapsed_ms
           (test-file-result-elapsed-ms r)
           'passed

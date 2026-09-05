@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.23 -->
+<!-- verified-against: 1.00.24 -->
 # Workflow Testing Guide
 
 This guide covers q's workflow-level integration tests that verify
@@ -147,6 +147,6 @@ Use relative paths from the test file:
    `(current-load-relative-directory)` — never relative to
    `(current-directory)` (see Canonical Test-Runner Entry Point above)
 
-## Version 1.00.23
+## Version 1.00.24
 
-This documentation reflects v1.00.23.
+This documentation reflects v1.00.24.

@@ -114,8 +114,8 @@ without a `[Status]` bracket) are deprecated alongside it.
   warnings when a plan uses inline sections or relaxed rows. Loading and
   execution are unaffected; the warnings name the index skeleton to migrate to.
 - **Roadmap:** index+status (`- [Inbox] W0: Title → waves/W0-slug.md`) becomes
-  the single supported grammar; inline-format removal is targeted after
-  v1.00.23. The removal itself is out of scope for the deprecation change —
+  the single supported grammar; inline-format removal is targeted after v1.00.23.
+  The removal itself is out of scope for the deprecation change —
   new plans should simply be authored in the index format.
 
 ### Validation Rules

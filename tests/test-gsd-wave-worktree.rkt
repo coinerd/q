@@ -30,7 +30,11 @@
          racket/string
          rackunit
          rackunit/text-ui
-         "../extensions/gsd/wave-executor.rkt")
+         "../extensions/gsd/wave-executor.rkt"
+         (only-in "helpers/private-fixture-templates.rkt"
+                  make-private-git-fixture!
+                  private-fixture-root
+                  private-git-fixture-repo))
 
 (define GIT (find-executable-path "git"))
 
@@ -65,17 +69,12 @@
 ;; behave exactly like the real tracking ref.
 (define (make-sandbox)
   (define tmp (make-temporary-file "gsd-w6-~a" 'directory))
-  (define proj (build-path tmp "proj"))
-  (make-directory* (build-path proj ".planning"))
+  (define fx (make-private-git-fixture! #:parent-root tmp #:tag "w6-worktree"))
+  (define root (private-fixture-root fx))
+  (rename-file-or-directory (private-git-fixture-repo fx) (build-path root "q"))
+  (define proj root)
   (define repo (build-path proj "q"))
-  (make-directory* repo)
-  (git! repo "init" "-q" "-b" "main")
-  (git! repo "config" "user.email" "w6@test.local")
-  (git! repo "config" "user.name" "W6 Test")
-  (call-with-output-file* (build-path repo "README.md") (lambda (p) (display "base\n" p)))
-  (git! repo "add" "-A")
-  (git! repo "commit" "-q" "-m" "base")
-  (git! repo "update-ref" "refs/heads/origin/main" "HEAD")
+  (make-directory* (build-path proj ".planning"))
   (values proj repo))
 
 ;; ============================================================

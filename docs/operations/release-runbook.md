@@ -125,8 +125,8 @@ Dry mode (prints every stage and its sources, makes **no** writes):
 racket scripts/release-closeout.rkt v1.00.01 --dry-run
 ```
 
-(The flags are order-independent; both `v1.00.23 --dry-run` and
-`--dry-run v1.00.23` behave identically.)
+(The flags are order-independent; both `v1.00.24 --dry-run` and
+`--dry-run v1.00.24` behave identically.)
 
 ### Stages and what each verifies
 

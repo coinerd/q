@@ -219,8 +219,8 @@ are hard failures inside the lint itself and always were.
 
 | Field | Status | Condition |
 |-------|--------|-----------|
-| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory, re-verified at v1.00.23 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
-| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory, re-verified at v1.00.23 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
+| `@speed` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory as re-verified in v1.00.23 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
+| `@boundary` | **Mandatory on every test file** | — (complete: missing-required=0 on the enforced canonical inventory as re-verified in v1.00.23 against digest `ab265d57edba32d7499390578bee67c776ce3e1afe1fc9eac3e88096bf29f7e4`) |
 | `@area` | **Mandatory on every test file** | — (ownership map complete) |
 | `@suite` | Conditional | Required when the test belongs to a named suite (`runtime`, `tui`, `cli`, `llm`, `tools`, `extensions`) |
 | `@mutates` | Conditional | Required when the test mutates persistent state (values other than `none`) |

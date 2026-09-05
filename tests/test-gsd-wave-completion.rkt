@@ -235,7 +235,7 @@
       (check-false (eq? (wave-status* rec 0) 'done) "doc existence does not infer completion"))))
 
 ;; ============================================================
-;; v1.00.24 W3 (verification-truth): durable failure reason on completion
+;; W3 (verification-truth): durable failure reason on completion
 ;; ============================================================
 
 (define failure-reason-suite

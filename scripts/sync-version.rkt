@@ -113,7 +113,10 @@
       (string-contains? s "/docs/demos/")
       (string-contains? s "/docs/adr/")
       (string-contains? s "/docs/security.md")
-      (string-contains? s "/docs/reports/")))
+      (string-contains? s "/docs/reports/")
+      ;; Frozen release-evidence baselines (C0 cohort, ci-baseline reports):
+      ;; historical milestone evidence, never rewritten (matches lint-version.rkt)
+      (string-contains? s "/artifacts/")))
 
 ;; historical-line? is now provided by version-guard.rkt
 

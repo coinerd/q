@@ -1,0 +1,110 @@
+# TEST-DESIGN HOTSPOT BAKE v1.00.24 (integrated W1–W8 closure)
+
+This report is the integrated end-of-milestone bake table for the
+v1.00.24 test-design hotspot campaign. It consolidates the per-wave
+`--check`-verified benchmark manifests under
+`artifacts/test-runtime/v1.00.24-hotspots/` (checksummed in the adjacent
+`SHA256SUMS`) plus the W7 parity-only grouped characterization, and is
+consistent with those committed artifacts (the W3 hotspot manifest was
+regenerated during this bake with the current collector; see note A).
+
+## Method
+
+- Collector: `scripts/run-tests/hotspot-benchmark.rkt` (added in W0/W1).
+  Allowlisted file list, canonical batch/subprocess defaults, per-attempt
+  records including failures/timeouts, ≥10 successful samples required for a
+  closed comparison, linear-interpolated median/p95, input checksums.
+- Every manifest below passed `hotspot-benchmark.rkt --manifest … --check`
+  in its own wave (byte-identical + SHA256SUMS match), and the set was
+  re-checked as part of the W8 integrated preflight.
+- Times are wall-clock milliseconds per single-file invocation
+  (`racket tests/<file>.rkt`) under the scheduler/mode recorded in the
+  manifest environment.
+
+## Honest before/after disclosure (read this first)
+
+The W0 wave declared
+`artifacts/test-runtime/v1.00.24-hotspots/baseline.json` as its before
+artifact, but that manifest was **never delivered or committed** (verified
+across all git history: no revision of
+`artifacts/test-runtime/v1.00.24-hotspots/baseline.json` exists). Per the
+campaign honesty rules this bake table does **not** invent baseline numbers:
+every "before" cell below is labeled `NOT RETAINED — incomparable`, and no
+before/after ratio or speedup claim is made anywhere in v1.00.24. The after
+manifests prove reproducibility and closed comparisons at the remediated
+state; before/after deltas would have required the missing baseline and are
+reported as a W0 delivery gap in `docs/reports/test-regression-log.md`.
+Consistent with this, the roadmap's no-2×-claim constraint is preserved.
+
+## Integrated bake table
+
+Legend: digest prefixes are the manifest `environment.config_digest`
+(16 hex) and the per-wave implementation SHA; sample counts are successful
+samples `n` (the collector requires `n ≥ 10`); failures/timeouts are the
+counts recorded across all attempts. Destinations are the owning gate rows in
+`docs/reports/TEST-GATE-OWNERSHIP-v1.00.24.md` /
+`docs/reports/TEST-RETIER-LEDGER-v1.00.24.rktd`.
+
+| # | Family / command (`racket <file>`) | Source (wave, manifest) | n | Config digest @ impl SHA | Before median/p95 (ms) | After median/p95 (ms) | Failures / timeouts | Destination gate | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | CWD independence probe — `racket tests/test-cwd-independence.rkt` (run from foreign CWDs; minimal absolute-path probe) | W1, `w1-cwd-after.json` | 10 | `a6cf1f5b252a4b96` @ `fcbd5050` | NOT RETAINED — incomparable | 14405.5 / 14866.3 | 0 / 0 | fast — `CWD-INVOCATION-AUDIT-CANARY` | CLOSED (byte-identical manifest, --check PASS) |
+| 2 | Logical retry semantics — `racket tests/test-agent-session-basic.rkt` | W2, `w2-retry-after.json` | 10 | `576369c73aa38678` @ `88c4b0ea` | NOT RETAINED — incomparable | 11288.0 / 13928.0 | 0 / 0 | fast — `RETRY-LOGICAL-SEMANTICS-FAST` | CLOSED |
+| 3 | Logical retry semantics — `racket tests/test-partial-result-preservation.rkt` | W2, `w2-retry-after.json` | 10 | `576369c73aa38678` @ `88c4b0ea` | NOT RETAINED — incomparable | 6361.5 / 7745.4 | 0 / 0 | fast — `RETRY-LOGICAL-SEMANTICS-FAST` | CLOSED |
+| 4 | Deterministic GSD timeout seam — `racket tests/test-gsd-system-adapters-timeout.rkt` | W4, `w4-gsd-timeout-after.json` | 10 | `a6cf1f5b252a4b96` @ `aa2cc53b` | NOT RETAINED — incomparable | 441.5 / 446.0 | 0 / 0 | fast — `GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST` | CLOSED |
+| 5 | Deterministic GSD timeout seam — `racket tests/test-gsd-wave-executor-isolation.rkt` | W4, `w4-gsd-timeout-after.json` | 10 | `a6cf1f5b252a4b96` @ `aa2cc53b` | NOT RETAINED — incomparable | 620.0 / 631.0 | 0 / 0 | fast — `GSD-TIMEOUT-DETERMINISTIC-SEAM-FAST` | CLOSED |
+| 6 | Fixture-root discovery units — `racket tests/test-run-tests-shard.rkt` | W5, `w5-discovery-after.json` | 10 | `a6cf1f5b252a4b96` @ `d20c8eca` | NOT RETAINED — incomparable | 930.0 / 946.5 | 0 / 0 | unit-fast — `RUNNER-DISCOVERY-UNIT-FIXTURE-ROOT` | CLOSED |
+| 7 | Golden-session private template — `racket tests/test-golden-flows.rkt` | W6, `w6-fixtures-after.json` | 10 | `a6cf1f5b252a4b96` @ `00edc7c6` | NOT RETAINED — incomparable | 13087.0 / 13232.5 | 0 / 0 | fast — `GOLDEN-SESSION-PRIVATE-TEMPLATE` / `GOLDEN-SESSION-LIFECYCLE` | CLOSED |
+| 8 | Delivery-verifier private template — `racket tests/test-gsd-delivery-verifier.rkt` | W6, `w6-fixtures-after.json` | 10 | `a6cf1f5b252a4b96` @ `00edc7c6` | NOT RETAINED — incomparable | 12460.5 / 12581.9 | 0 / 0 | fast — `GSD-DELIVERY-VERIFIER-PRIVATE-TEMPLATE` | CLOSED |
+| 9 | Branch-delivery private template — `racket tests/test-gsd-branch-delivery-verification.rkt` | W6, `w6-fixtures-after.json` | 10 | `a6cf1f5b252a4b96` @ `00edc7c6` | NOT RETAINED — incomparable | 2946.5 / 2991.9 | 0 / 0 | fast — `GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE` | CLOSED |
+| 10 | Wave-worktree private template — `racket tests/test-gsd-wave-worktree.rkt` | W6, `w6-fixtures-after.json` | 10 | `a6cf1f5b252a4b96` @ `00edc7c6` | NOT RETAINED — incomparable | 1246.5 / 1288.8 | 0 / 0 | fast — `GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE` | CLOSED |
+| 11 | GSD timeout pre-seam carry-over family — `racket tests/test-execution-plane-e2e.rkt` | W3, `w3-gsd-timeout-after.json` | 10 | `0e7d70e49f4ce774` @ `d37b474b` | NOT RETAINED — incomparable | 5888.5 / 5939.95 | 0 / 0 | slow/L4-adjacent execution-plane family (see note A) | OBSERVED — no W3-era re-tier claimed |
+| 12 | GSD timeout pre-seam carry-over family — `racket tests/test-run-tests-timeout-cleanup.rkt` | W3, `w3-gsd-timeout-after.json` | 10 | `0e7d70e49f4ce774` @ `d37b474b` | NOT RETAINED — incomparable | 317.0 / 328.3 | 0 / 0 | fast — `GSD-WAVE-TIMEOUT-CANCELLATION` | OBSERVED |
+| 13 | GSD timeout pre-seam carry-over family — `racket tests/test-scheduler-execution-plane.rkt` | W3, `w3-gsd-timeout-after.json` | 10 | `0e7d70e49f4ce774` @ `d37b474b` | NOT RETAINED — incomparable | 938.0 / 957.2 | 0 / 0 | runtime execution-plane family (see note A) | OBSERVED |
+| 14 | GSD timeout pre-seam carry-over family — `racket tests/test-subprocess-edge-cases.rkt` | W3, `w3-gsd-timeout-after.json` | 10 | `0e7d70e49f4ce774` @ `d37b474b` | NOT RETAINED — incomparable | 11047.0 / 11071.05 | 0 / 0 | runtime execution-plane family (see note A) | OBSERVED |
+| 15 | Grouped/subprocess equivalence — `tests/fixtures/grouped-mode/` matrix, grouped vs subprocess, 3 repetitions × 12 fixtures | W7, `artifacts/test-runtime/v1.00.24-grouped/characterization.json` | 12 fixtures × 3 reps | fixture json sha256 `beab9849…46440` | n/a — parity family, no timing comparison applicable | 12/12 parity PASS, 6 grouped-effective, 6 named fallbacks | 0 / 0 (failure-shaped fixtures reproduced identical verdicts by design) | fast — `GROUPED-MODE-CHARACTERIZATION` | CLOSED (characterization only; grouped NOT activated) |
+
+Note A: the W3-era manifest was regenerated during the W8 integrated
+preflight with the current stats-precomputing collector, so the delivered
+`w3-gsd-timeout-after.json` stores median/p95 directly and carries the
+v1.00.24 allowlist digest (`0e7d70e4…`) rather than the W3-era digest —
+the digest inputs include the allowlist hash, which legitimately changed
+across the campaign. Regeneration was required because the wave-time file
+predated the stats-precomputing format. All 40 samples pass with zero
+failures/timeouts. These rows remain honest `OBSERVED` carry-overs: the
+before-side was never retained, so no comparison and no W3-era re-tier is
+claimed; W3's remediation was bug-fixing, not re-tiering, so no ownership
+row moved because of them.
+
+## Reproducibility
+
+```
+racket scripts/run-tests/hotspot-benchmark.rkt \
+  --manifest artifacts/test-runtime/v1.00.24-hotspots/w1-cwd-after.json  --check
+# …repeat for w2-retry-after.json, w3-gsd-timeout-after.json,
+#  w4-gsd-timeout-after.json, w5-discovery-after.json, w6-fixtures-after.json
+sha256sum --check artifacts/test-runtime/v1.00.24-hotspots/SHA256SUMS
+```
+
+Five of the six hotspot manifests (`w1`–`w6` except `w3`) plus `SHA256SUMS`
+are byte-identical to the wave-time deliveries; `w3-gsd-timeout-after.json`
+was regenerated during the W8 integrated preflight (see note A) and
+`SHA256SUMS` updated to match. All six `--check` runs and the `SHA256SUMS`
+verification pass at the delivered tree, and the W7 grouped
+characterization json is checksummed in
+`artifacts/test-runtime/v1.00.24-grouped/SHA256SUMS`.
+
+## Campaign-level honesty ledger
+
+- Batch remains the default scheduler; queue/LPT was exercised only as a
+  compatibility drill and is **not activated**.
+- No broad grouped migration: grouped eligibility is proven on the private
+  fixture matrix only; no production test file joined grouped eligibility.
+- No 2× performance claim is made (before manifests not retained).
+- Zero orphan behavior IDs, zero duplicate IDs, zero missing destinations in
+  the regenerated ownership map (see
+  `docs/reports/TEST-GATE-OWNERSHIP-v1.00.24.md` and
+  `docs/reports/test-regression-log.md`).
+- Every remediated behavior owns an executable destination gate; the two real
+  clock/timer canaries (`RETRY-REAL-TIMER-CANARY`,
+  `GSD-TIMEOUT-REAL-CLOCK-CANARY`) are slow/L4 and are run explicitly by the
+  W8 verification, since the fast classifier does not select them.
