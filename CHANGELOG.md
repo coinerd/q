@@ -1,3 +1,30 @@
+## v1.00.24 — 2026-09-05
+
+Released 2026-09-05.
+
+### Features
+
+- Test-design hotspot remediation integrated across waves W1–W7 and baked as one release: deterministic retry semantics behind a test-scoped sleep-scale seam with a bounded real-timer L4 canary; deterministic GSD wave timeout semantics behind an injected clock/wait seam with a bounded real-clock L4 canary; hermetic fixture-root classifier/shard discovery via the `collect-test-files` `#:root` seam with an invariant-only repository-scale L4 smoke; private copy-on-test session/Git/worktree fixture templates with concurrent-contamination stress coverage; and grouped/subprocess equivalence characterization with named machine-readable fallback telemetry.
+- New W8 integrated bake report (`docs/reports/TEST-DESIGN-HOTSPOT-BAKE-v1.00.24.md`) consolidating all seven checksummed benchmark manifests with command, source, sample counts, digests, failures/timeouts, destination, and honest per-family verdicts.
+
+### Breaking / Behavior Changes
+
+- None. Production defaults are unchanged: `current-auto-retry-sleep-scale` remains 1.0, the GSD timeout grace remains two real seconds, batch remains the default scheduler, and no test-selection or CI lane behavior changed.
+
+### Migration Notes
+
+- No migration is required. All new seams are test-scoped parameters; grouped-mode and queue/LPT findings are characterization only and no activation is required or recommended by this release.
+
+### Testing
+
+- Ownership regeneration passes byte-identically: 20 behavior rows, 0 orphan IDs, 0 duplicate IDs, 0 missing destinations; four re-tiered behaviors each retain an executable required/L4 destination.
+- All seven hotspot benchmark manifests plus `SHA256SUMS` reproduce byte-identically under `--check`; the W0-declared before-baseline was never delivered, so every before/after comparison is honestly labeled incomparable and no performance ratio is claimed.
+- Focused W8 drills pass: minimal CWD probe from a foreign CWD + real audit-script CWD canary, deterministic retry + bounded real-timer canary, deterministic GSD timeout/cancel/cleanup + real timeout canary, fixture-root classifier/shard checks + live repository discovery smoke, concurrent private session/Git/worktree contamination stress, grouped/subprocess equivalence with all named fallback cases, and old/new JSON compatibility with truthful effective-mode counters.
+
+### Operational / Release
+
+- Queue was exercised only as a compatibility drill and remains non-default; grouped-mode broad activation and any 2× performance claim remain withheld. The v1.00.16 fast-gate halving verdict (MISSED, 1.2848×) stands unchanged; v1.00.24 makes no new timing target claim.
+
 ## v1.00.23 — 2026-08-31
 
 Released 2026-08-31.
