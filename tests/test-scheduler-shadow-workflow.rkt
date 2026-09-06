@@ -149,7 +149,31 @@
 
     (test-case "rollback is achievable via TEST_RUNNER_SCHEDULER=batch"
       (check-true (regexp-match? #rx"vars\\.TEST_RUNNER_SCHEDULER" shadow-src))
-      (check-true (regexp-match? #rx"queue" shadow-src)))))
+      (check-true (regexp-match? #rx"queue" shadow-src)))
+
+    ;; ── W2 (#9590) fast-queue hold contract ──
+    ;; W1 closed cohort C1 with an explicit hold verdict for fast-queue
+    ;; (zero recorded shadow attempts), so W2 records the hold instead of
+    ;; activating. These pins make any silent activation a red CI run.
+
+    (test-case "hold: required fast lane carries no scheduler activation lever"
+      (check-true (file-exists? ci-wf-path))
+      (check-false (regexp-match? #rx"TEST_RUNNER_SCHEDULER" ci-src)
+                   "ci.yml must not reference TEST_RUNNER_SCHEDULER while the W1 hold stands")
+      (check-false (regexp-match? #rx"--scheduler" ci-src)
+                   "no ci.yml lane may pass --scheduler while the W1 hold stands")
+      ;; The lever itself stays available for a future paired-evidence
+      ;; re-evaluation via the shadow workflow only.
+      (check-true (regexp-match? #rx"vars\\.TEST_RUNNER_SCHEDULER" shadow-src)))
+
+    (test-case "rollback: required fast shard command line stays on the batch default"
+      ;; The one-command rollback contract: the required fast shard step
+      ;; keeps this exact command line (STRICT_TEST_RUNNER=1, --suite fast,
+      ;; --jobs 4) with no scheduler argument. Setting the repository
+      ;; variable back to batch — or leaving it unset, the current state —
+      ;; restores this line verbatim.
+      (check-true (string-contains? ci-src "STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \\\n"))
+      (check-true (string-contains? ci-src "--suite fast --jobs 4 \\\n")))))
 
 (module+ main
   (run-tests tests))

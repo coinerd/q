@@ -1,3 +1,46 @@
+## v1.00.25 — 2026-09-06
+
+Released 2026-09-06.
+
+> v1.00.25: work-conserving activation — the milestone closes with every
+scheduler lane explicitly reported. Cohort C1 closed at overall-verdict `hold`
+(zero recorded shadow attempts on all three queue configurations), so the
+fast-lane queue, fast-lane LPT ordering, and security-queue promotions were
+**not activated**; W2–W4 each recorded the honest hold with guard tests that
+pin the batch/fifo defaults. W5 integrated prepared-environment restore
+evidence (15/15 verified restores, rate 1.0 ≥ 95%, zero fallbacks) with the
+activation decision explicitly reserved. W6's post-promotion cohort C2 on
+20 new SHAs returned **`target unachieved`** (p50 253.5 s vs ≤ 115 s; p95
+276.0 s vs ≤ 135 s); a timing miss alone implies no queue rollback, and the
+next lever is recorded for a separate reviewed decision. Milestone #890.
+Per-lane activation states with every claim bound to checksummed evidence:
+`docs/reports/TEST-SCHEDULER-ACTIVATION-v1.00.25.md`.
+
+### Features
+
+- Prepared-environment restore evidence integration (W5): the `prepared-env-report` job aggregates per-restore outcomes (verified | rebuilt | fallback with named causes), gates CI on the ≥ 95 % verified-restore rate, and records a warm observation window of 15/15 verified restores (rate 1.0, restore times 338–635 ms); fresh setup+execution remeasures (5 samples, 249.578–275.619 s) replace historical comparison figures, which are cited as history only.
+- Post-promotion cohort C2 evidence (W6): 20 new eligible PR head SHAs measured on the required CI lane itself (no shadow duplication), full attempt honesty (20 attempts, 20 successes, 0 failures/cancellations/reruns, 8 named exclusions), machine-checked by the cohort-report post-promotion gate; verdict `target unachieved` is recorded with the named next lever, never a revised target.
+- Cohort decision artifacts (W1): paired shadow cohort C1 closed at overall-verdict `hold` with the real fast/batch/fifo baseline (20 samples, p50 228.5815 s / p95 235.9965 s) and named tool-computed incompleteness reasons for all three queue lanes; no target was revised.
+- New activation-states report (`docs/reports/TEST-SCHEDULER-ACTIVATION-v1.00.25.md`) stating, per lane, `activated (evidence link)` or `not activated (named reason)`, with every claim linked to its C1/C2/decision artifact by checksum.
+
+### Breaking / Behavior Changes
+
+- None. No scheduler or ordering lever changed in this milestone: `TEST_RUNNER_SCHEDULER` was never set (batch stays the required-lane default), `FAST_SHARD_ORDERING` was never added (fifo stays the default ordering), and the security lane keeps its pinned single `--suite security` run. Permission, isolation, and sandbox semantics are unchanged by construction.
+
+### Migration Notes
+
+- No migration is required. Nothing was activated, so there is no rollback to exercise: main already is the rollback state, and the one-command batch rollback contract (`gh api -X DELETE repos/coinerd/q/actions/TEST_RUNNER_SCHEDULER` style levers) remains documented for any future promoting decision. Prepared-environment reporting is observational and does not change any CLI surface.
+
+### Testing
+
+- Hold pins make any silent future activation a red CI run: W2 pins the required fast shard's strict command line verbatim and proves `parse-args` returns batch with the variable unset, set to queue, and set to batch; W3 adds eight pins covering the unset ordering default, manual `--ordering` override seams, and distinct named fallback reasons (missing/stale/malformed/wrong-inventory evidence) with byte-identical consecutive shard-plan digests; W4 pins the security lane's workflow block and scheduler-token absence across all lanes.
+- Cohort tooling verifies sample counts, configuration match, inventory equality, `SHA256SUMS` binding, and post-promotion linkage (`pr → head SHA → Actions run → successful test shards`) before accepting any comparison; the C1/C2 reports regenerate byte-identically under `cohort-report.rkt --check`.
+- The release-entry contract test (`tests/test-release-entry-current.rkt`) binds CHANGELOG, `util/version.rkt`, and the README badge to the same version and to the activation report's per-lane states.
+
+### Operational / Release
+
+- Not activated states remain explicit: work-conserving queue scheduling is **not activated** for fast lanes (W2 hold) or security lanes (W4 hold, gate unevaluable with zero paired samples), within-shard LPT ordering is **not activated** for fast lanes (W3 hold, no predicted improvement over round-robin), security-LPT and grouped-mode broad activation and tier-overlap scheduling remain not activated and withheld, prepared-environment activation is **reserved** for a later reviewed decision despite the passing ≥ 95 % evidence, and no 2× performance claim is made; shadow execution remains non-required. The C2 fast-execution target was missed out of sample (p50 253.5 s vs ≤ 115 s, p95 276.0 s vs ≤ 135 s); the named next lever — trimming batch shard fan-out and reusing the prepared-environment cache, then re-running the cohort on new SHAs — is queued for a separate reviewed decision (candidate for the reserved v1.00.26/v1.00.27 series), with no target revised inside this milestone.
+
 ## v1.00.24 — 2026-09-05
 
 Released 2026-09-05.

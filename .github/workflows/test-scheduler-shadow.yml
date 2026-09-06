@@ -1,13 +1,23 @@
 name: Test scheduler shadow
 
 # W5: Separate manual/reusable shadow workflow for controlled scheduler
-# evidence.  This workflow is OFF by default; it runs only on explicit
-# workflow_dispatch and is NEVER a pull-request required check in v1.00.23.
+# evidence.  Shadow lane only: this workflow is NEVER a pull-request
+# required check and never cancels or replaces required CI.
 #
 # Purpose: produce future queue/batch comparison evidence without changing
 # the required CI lane set or branch protection.  It uploads JSON results
 # in the same schema as the required fast gate so cohort tooling can
 # ingest shadow samples consistently.
+#
+# v1.00.25 W0 (cohort C1): automatic paired-shadow activation lives in a
+# SEPARATE driver workflow, .github/workflows/test-scheduler-cohort-c1.yml,
+# which listens for successful canonical CI completions on main and calls
+# this reusable workflow once per missing cohort cell (configuration x SHA)
+# from artifacts/ci-baseline/v1.00.25-c1/cohort.json.  Keeping the driver
+# out of this file preserves the W5 trigger contract (workflow_call +
+# workflow_dispatch only) and avoids an illegal recursive self-call.  The
+# driver only ADDS shadow runs; it never cancels required-CI runs, never
+# changes a required check, and never changes a default lane.
 
 on:
   workflow_call:
@@ -19,6 +29,21 @@ on:
         type: string
       scheduler:
         description: 'Scheduler mode to run (batch or queue)'
+        required: false
+        default: ''
+        type: string
+      ordering:
+        description: 'File ordering for the shadow run (fifo or lpt)'
+        required: false
+        default: 'fifo'
+        type: string
+      lane:
+        description: 'Shadow lane / suite to run (fast or security)'
+        required: false
+        default: 'fast'
+        type: string
+      cohort-config:
+        description: 'Cohort configuration id this leg covers (coverage marker)'
         required: false
         default: ''
         type: string
@@ -39,16 +64,38 @@ on:
         required: false
         default: ''
         type: string
+      ordering:
+        description: 'File ordering for the shadow run (fifo or lpt)'
+        required: false
+        default: 'fifo'
+        type: string
+      lane:
+        description: 'Shadow lane / suite to run (fast or security)'
+        required: false
+        default: 'fast'
+        type: string
+      cohort-config:
+        description: 'Cohort configuration id this leg covers (coverage marker)'
+        required: false
+        default: ''
+        type: string
       shard-count:
         description: 'Shard count (default 3, same as required gate)'
         required: false
         default: '3'
         type: string
-# Do not cancel required-CI runs; also avoid cancelling other shadow runs on
-# different refs.
+
+# Do not cancel required-CI runs: this workflow has its own concurrency
+# namespace and never cancels in progress, so shadow work only ever queues
+# behind other shadow work.  Groups are scoped per checkout ref and
+# configuration so distinct paired cells never cancel each other.
 concurrency:
-  group: scheduler-shadow-${{ github.ref }}-${{ inputs.ref || 'main' }}
+  group: scheduler-shadow-${{ inputs.ref || 'main' }}-${{ inputs.scheduler || 'paired' }}-${{ inputs.ordering || 'fifo' }}-${{ inputs.lane || 'fast' }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -56,18 +103,23 @@ env:
 
 jobs:
   shadow-run:
-    name: shadow (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }})
+    # Job name carries the exact cohort coverage marker that the C1 driver
+    # (test-scheduler-cohort-c1.yml) greps for when planning missing cells:
+    #   paired|<cohort-config>|<ref>|<scheduler>|<ordering>|<lane>
+    # Manual adhoc runs without a cohort-config use the 'adhoc' marker and
+    # never collide with real cohort cells.
+    name: paired|${{ inputs.cohort-config || 'adhoc' }}|${{ inputs.ref || 'main' }}|${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }}|${{ inputs.ordering || 'fifo' }}|${{ inputs.lane || 'fast' }} (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(inputs.shard-count == '4' && '[0, 1, 2, 3]' || inputs.shard-count == '6' && '[0, 1, 2, 3, 4, 5]' || inputs.shard-count == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
     steps:
-      - name: Resolve scheduler mode
+      - name: Resolve scheduler mode, ordering, and lane
         id: resolve
         run: |
           # Repository variable TEST_RUNNER_SCHEDULER governs the default.
-          # Explicit dispatch input overrides the variable.
+          # Explicit call/dispatch input overrides the variable.
           # Unset/unknown values resolve to batch; queue requires explicit 'queue'.
           SCHEDULER="${{ inputs.scheduler }}"
           if [ -z "$SCHEDULER" ]; then
@@ -77,7 +129,19 @@ jobs:
             queue) SCHEDULER=queue ;;
             *) SCHEDULER=batch ;;
           esac
+          ORDERING="${{ inputs.ordering }}"
+          case "$ORDERING" in
+            fifo|lpt) ORDERING="$ORDERING" ;;
+            *) ORDERING=fifo ;;
+          esac
+          LANE="${{ inputs.lane }}"
+          case "$LANE" in
+            fast|security) LANE="$LANE" ;;
+            *) LANE=fast ;;
+          esac
           echo "scheduler=$SCHEDULER" >> "$GITHUB_OUTPUT"
+          echo "ordering=$ORDERING" >> "$GITHUB_OUTPUT"
+          echo "lane=$LANE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
         with:
@@ -91,6 +155,7 @@ jobs:
           restore-keys: racket-pkgs-shadow-
 
       - uses: ./.github/actions/setup-racket
+        id: setup-racket
         with:
           racket-version: '8.10'
 
@@ -100,16 +165,19 @@ jobs:
       - name: Compile gate
         run: raco make main.rkt
 
-      - name: Run shadow fast shard
+      - name: Run shadow shard
         id: run
         env:
           STRICT_TEST_RUNNER: 1
         run: |
           SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
-          echo ";; shadow scheduler = $SCHEDULER" | tee -a shadow-output.log
+          ORDERING="${{ steps.resolve.outputs.ordering }}"
+          LANE="${{ steps.resolve.outputs.lane }}"
+          echo ";; shadow scheduler = $SCHEDULER ordering = $ORDERING lane = $LANE" | tee -a shadow-output.log
           racket scripts/run-tests.rkt \
-            --suite fast --jobs 4 \
+            --suite "$LANE" --jobs 4 \
             --scheduler "$SCHEDULER" \
+            --ordering "$ORDERING" \
             --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             --json-out shadow-results.json \
             2>&1 | tee -a shadow-output.log
@@ -118,6 +186,8 @@ jobs:
         if: always()
         run: |
           SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
+          ORDERING="${{ steps.resolve.outputs.ordering }}"
+          LANE="${{ steps.resolve.outputs.lane }}"
           SHA=$(git rev-parse HEAD)
           REF=$(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)
           cat > shadow-cohort-meta.json <<EOF
@@ -126,7 +196,9 @@ jobs:
             "resolved_ref": "$REF",
             "sha": "$SHA",
             "scheduler": "$SCHEDULER",
-            "ordering": "fifo",
+            "ordering": "$ORDERING",
+            "lane": "$LANE",
+            "cohort_config": "${{ inputs.cohort-config }}",
             "shard_index": ${{ matrix.shard }},
             "shard_total": ${{ strategy.job-total }},
             "workers": 4,
