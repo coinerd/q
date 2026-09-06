@@ -44,6 +44,36 @@
         (system/exit-code cmd)))
     (values code (get-output-string out) (get-output-string err))))
 
+(define (parse-scheduler args)
+  (define-values (_jobs
+                  _seq?
+                  _timeout
+                  _strict?
+                  _suite
+                  _extra
+                  _repeat
+                  _record?
+                  _inventory?
+                  _diagnose?
+                  _mode
+                  scheduler
+                  _json
+                  _ledger
+                  _profile
+                  _lint-metadata?
+                  _changed-base
+                  _changed-head
+                  _explain?
+                  _impact-dry-run?
+                  _prioritize
+                  _failure-history
+                  _generate-covers-manifest?
+                  _shard-plan
+                  _durations
+                  _ordering)
+    (parse-args args))
+  scheduler)
+
 (define suite
   (test-suite "run-tests environment profiles"
 
@@ -133,6 +163,28 @@
                       (check-equal? code 0 stderr)
                       (check-true (regexp-match? #rx"(^|\n)S\n" stdout))
                       (check-false (regexp-match? #rx"(^|\n)F\n" stdout)))
-                    (lambda () (delete-dir/safe dir))))))
+                    (lambda () (delete-dir/safe dir))))
+
+    ;; ── W2 (#9590) fast-queue hold contract ──
+    ;; W1 closed cohort C1 with an explicit hold verdict for fast-queue
+    ;; (zero recorded shadow attempts), so W2 records the hold instead of
+    ;; activating. These pins make the hold observable: the repository
+    ;; variable TEST_RUNNER_SCHEDULER stays a CI-shell-only lever and the
+    ;; runner CLI keeps its batch default under every resolution.
+
+    (test-case "hold: scheduler default remains batch while the W1 fast-queue hold stands"
+      (check-equal? (parse-scheduler '()) 'batch)
+      (define env-queue (make-environment-variables))
+      (environment-variables-set! env-queue #"TEST_RUNNER_SCHEDULER" #"queue")
+      (parameterize ([current-environment-variables env-queue])
+        (check-equal? (parse-scheduler '()) 'batch))
+      (define env-batch (make-environment-variables))
+      (environment-variables-set! env-batch #"TEST_RUNNER_SCHEDULER" #"batch")
+      (parameterize ([current-environment-variables env-batch])
+        (check-equal? (parse-scheduler '()) 'batch)))
+
+    (test-case "hold: manual --scheduler override still selects the requested scheduler"
+      (check-equal? (parse-scheduler '("--scheduler" "queue")) 'queue)
+      (check-equal? (parse-scheduler '("--scheduler" "batch")) 'batch))))
 
 (run-tests suite)
