@@ -75,6 +75,23 @@ Aggregate: `4ef89beec44077e1c8a19d02f761088e262c98567039fc04b3b5e7fc0e89f6e1|4ef
 | fast/queue/lpt | fast | queue | lpt | 058e5b89b9c7b65a2e2581a7c3a82d066bed78f8 | 20 | 0 | yes |
 | security/queue/fifo | security | queue | fifo | 058e5b89b9c7b65a2e2581a7c3a82d066bed78f8 | 20 | 0 | yes |
 
+## Promotion decision
+
+Initial fast threshold: queue fast execution p50 ≤ 130.0 s and p95 ≤ 145.0 s with no reliability regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1). A missed gate produces hold, never a revised target.
+
+| Lane | Configuration | Verdict | p50 (s) | p95 (s) | Attempts | Failures | Cancelled | Reruns | Inventory equal |
+|---|---|---|---|---|---|---|---|---|---|
+| fast-queue | fast/queue/fifo | hold | #f | #f | 0 | 0 | 0 | 0 | NO |
+| fast-LPT | fast/queue/lpt | hold | #f | #f | 0 | 0 | 0 | 0 | NO |
+| security-queue | security/queue/fifo | hold | #f | #f | 0 | 0 | 0 | 0 | NO |
+
+### Reasons
+
+- fast-queue: evidence incomplete for fast/queue/fifo: 0 of 20 SHAs have exactly one successful timing sample; cohort status is started
+- fast-LPT: evidence incomplete for fast/queue/lpt: 0 of 20 SHAs have exactly one successful timing sample; cohort status is started
+- fast-LPT: stale or missing duration evidence: LPT falls back to FIFO ordering (named reason: paired fast/queue/fifo leg evidence incomplete)
+- security-queue: evidence incomplete for security/queue/fifo: 0 of 20 SHAs have exactly one successful timing sample; cohort status is started
+
 ## Manifest digest
 
 ```

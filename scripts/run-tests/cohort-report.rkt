@@ -610,7 +610,10 @@
 
 (define fast-queue-gate-text
   (format
-   "Initial fast threshold: queue fast execution p50 ≤ ~a s and p95 ≤ ~a s with no reliability regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1). A missed gate produces hold, never a revised target."
+   (string-append
+    "Initial fast threshold: queue fast execution p50 ≤ ~a s and p95 ≤ ~a s with no reliability"
+    " regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1)."
+    " A missed gate produces hold, never a revised target.")
    (exact->inexact fast-p50-max-seconds)
    (exact->inexact fast-p95-max-seconds)))
 
@@ -801,23 +804,24 @@
                             'inventory-equal-to-baseline
                             (and complete? inv-equal?)))))
 
-     (hasheq
-      'lane
-      lane-id
-      'config-id
-      config-id
-      'timing-gate
-      timing-gate?
-      'verdict
-      (if (null? reasons) "promote" "hold")
-      'reasons
-      (reverse reasons)
-      'numbers
-      numbers
-      'gate-text
-      (if timing-gate?
-          fast-queue-gate-text
-          "Selected-inventory equality and no reliability regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1)."))]))
+     (hasheq 'lane
+             lane-id
+             'config-id
+             config-id
+             'timing-gate
+             timing-gate?
+             'verdict
+             (if (null? reasons) "promote" "hold")
+             'reasons
+             (reverse reasons)
+             'numbers
+             numbers
+             'gate-text
+             (if timing-gate? fast-queue-gate-text selected-inventory-gate-text))]))
+
+(define selected-inventory-gate-text
+  (string-append "Selected-inventory equality and no reliability regression versus the paired"
+                 " batch baseline on the same SHAs (roadmap v1.00.25 §6, W1)."))
 
 (define (decision-report-jsexpr manifest)
   (define lane-verdicts
@@ -923,8 +927,9 @@
     (for ([line (in-list (decision-reasons-lines l))])
       (out "~a" line)))
   (out "")
-  (out
-   "Cohort closure rule: the cohort may only be closed when every registered configuration has complete paired evidence; otherwise it remains open and every lane records hold.")
+  (out (string-append
+        "Cohort closure rule: the cohort may only be closed when every registered configuration"
+        " has complete paired evidence; otherwise it remains open and every lane records hold."))
   (out "")
   (out
    "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION; targets are never revised inside this wave.")
