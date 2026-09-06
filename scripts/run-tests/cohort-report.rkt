@@ -60,7 +60,13 @@
          sha-eligible?
          sha-has-timing-sample?
          sha-final-success-attempt
-         manifest-digest)
+         manifest-digest
+         decision-lane-verdict
+         decision-report-jsexpr
+         cohort-decision-md-string
+         fast-queue-gate-text
+         fast-p50-max-seconds
+         fast-p95-max-seconds)
 
 ;; ============================================================
 ;; Constants
@@ -589,6 +595,342 @@
                                      (hash-ref baseline-digests (hash-ref r 'sha "") #f)))
                            rows))))))
 
+;; ============================================================
+;; W1 promotion decision (paired lanes)
+;;
+;; The decision is explicit and fail-closed: a lane promotes only when its
+;; paired evidence is complete and every gate passes.  A missed gate produces
+;; hold, never a revised target; missing evidence produces hold with named
+;; reasons.  Stale or missing LPT duration evidence falls back to FIFO with a
+;; named reason.
+;; ============================================================
+
+(define fast-p50-max-seconds 130.0)
+(define fast-p95-max-seconds 145.0)
+
+(define fast-queue-gate-text
+  (format
+   "Initial fast threshold: queue fast execution p50 ≤ ~a s and p95 ≤ ~a s with no reliability regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1). A missed gate produces hold, never a revised target."
+   (exact->inexact fast-p50-max-seconds)
+   (exact->inexact fast-p95-max-seconds)))
+
+(define decision-lanes
+  (list (hasheq 'lane "fast-queue" 'config-id "fast/queue/fifo" 'timing-gate #t 'ordering-proof #f)
+        (hasheq 'lane
+                "fast-LPT"
+                'config-id
+                "fast/queue/lpt"
+                'timing-gate
+                #t
+                'ordering-proof
+                "fast/queue/fifo")
+        (hasheq 'lane
+                "security-queue"
+                'config-id
+                "security/queue/fifo"
+                'timing-gate
+                #f
+                'ordering-proof
+                #f)))
+
+(define (configuration-by-config-id manifest config-id)
+  (findf (lambda (c) (equal? (hash-ref c 'config-id "?") config-id))
+         (hash-ref manifest 'configurations '())))
+
+(define (configuration-timing-samples config)
+  ;; Final successful timing sample per eligible SHA row.
+  (filter values
+          (map (lambda (s) (and (sha-eligible? s) (sha-timing-seconds s)))
+               (hash-ref config 'shas '()))))
+
+(define (configuration-complete? config)
+  (define rows (hash-ref config 'shas '()))
+  (and (pair? rows)
+       (= (length rows) (length (hash-ref config 'eligible-shas '())))
+       (andmap sha-eligible? rows)))
+
+(define (configuration-attempts-summary config)
+  ;; Per-configuration reliability evidence (same shape as
+  ;; cohort-attempts-summary, scoped to one configuration).
+  (define rows (hash-ref config 'shas '()))
+  (define all-attempts (append* (map (lambda (s) (hash-ref s 'attempts '())) rows)))
+  (hasheq 'total-attempts
+          (length all-attempts)
+          'failures
+          (count (lambda (a) (equal? (hash-ref a 'result #f) "failure")) all-attempts)
+          'cancelled
+          (count (lambda (a) (equal? (hash-ref a 'result #f) "cancelled")) all-attempts)
+          'successes
+          (count (lambda (a) (equal? (hash-ref a 'result #f) "success")) all-attempts)
+          'reruns
+          (count (lambda (a) (equal? (hash-ref a 'result #f) "rerun")) all-attempts)))
+
+(define (configuration-attempts-recorded config)
+  (count (lambda (r) (positive? (length (hash-ref r 'attempts '())))) (hash-ref config 'shas '())))
+
+(define (configuration-inventory-equal? config baseline-digests)
+  (andmap (lambda (r)
+            (equal? (hash-ref r 'inventory-digest #f)
+                    (hash-ref baseline-digests (hash-ref r 'sha "") #f)))
+          (hash-ref config 'shas '())))
+
+(define (configuration-inventory-mismatch-count config baseline-digests)
+  (count (lambda (r)
+           (not (equal? (hash-ref r 'inventory-digest #f)
+                        (hash-ref baseline-digests (hash-ref r 'sha "") #f))))
+         (hash-ref config 'shas '())))
+
+(define (reliability-regression? leg-summary baseline-summary)
+  (> (+ (hash-ref leg-summary 'failures 0)
+        (hash-ref leg-summary 'cancelled 0)
+        (hash-ref leg-summary 'reruns 0))
+     (+ (hash-ref baseline-summary 'failures 0)
+        (hash-ref baseline-summary 'cancelled 0)
+        (hash-ref baseline-summary 'reruns 0))))
+
+(define (decision-lane-verdict manifest lane-id)
+  (define lanes (filter (lambda (l) (equal? (hash-ref l 'lane) lane-id)) decision-lanes))
+  (define lane (and (pair? lanes) (car lanes)))
+  (unless lane
+    (error 'decision-lane-verdict "unknown decision lane: ~a" lane-id))
+  (define config-id (hash-ref lane 'config-id))
+  (define config (configuration-by-config-id manifest config-id))
+  (define baseline-config
+    (findf (lambda (c) (hash-ref c 'required #f)) (hash-ref manifest 'configurations '())))
+  (define baseline-digests
+    (if baseline-config
+        (for/hash ([r (in-list (hash-ref baseline-config 'shas '()))])
+          (values (hash-ref r 'sha "") (hash-ref r 'inventory-digest "")))
+        (hash)))
+  (define baseline-summary
+    (if baseline-config
+        (configuration-attempts-summary baseline-config)
+        (hasheq 'failures 0 'cancelled 0 'reruns 0)))
+  (define reasons '())
+  (define (fail! reason)
+    (set! reasons (cons reason reasons)))
+
+  (cond
+    [(not config)
+     (fail! (format "configuration ~a is not registered in the cohort manifest" config-id))]
+    [else
+     (define complete? (configuration-complete? config))
+     (define samples (configuration-timing-samples config))
+     (define rows (hash-ref config 'shas '()))
+     (define summary (configuration-attempts-summary config))
+     (define inv-equal? (configuration-inventory-equal? config baseline-digests))
+     (define mismatch-count (configuration-inventory-mismatch-count config baseline-digests))
+     (define p50 (and (pair? samples) (cohort-quantile samples 0.50)))
+     (define p95 (and (pair? samples) (cohort-quantile samples 0.95)))
+     (define timing-gate? (hash-ref lane 'timing-gate #f))
+     (define ordering-proof-config
+       (and (hash-ref lane 'ordering-proof #f)
+            (configuration-by-config-id manifest (hash-ref lane 'ordering-proof))))
+     (define ordering-proof-possible?
+       (and ordering-proof-config (configuration-complete? ordering-proof-config)))
+
+     (unless complete?
+       (fail!
+        (format
+         "evidence incomplete for ~a: ~a of ~a SHAs have exactly one successful timing sample; cohort status is ~a"
+         config-id
+         (length samples)
+         (length (hash-ref config 'eligible-shas '()))
+         (hash-ref manifest 'cohort-status "?"))))
+     (unless inv-equal?
+       (fail! (format "selected inventory differs from the batch baseline on ~a SHA(s) (config ~a)"
+                      mismatch-count
+                      config-id)))
+     (when (reliability-regression? summary baseline-summary)
+       (fail!
+        (format
+         "reliability regression versus the paired batch baseline: leg failures+cancelled+reruns ~a > baseline ~a"
+         (+ (hash-ref summary 'failures 0)
+            (hash-ref summary 'cancelled 0)
+            (hash-ref summary 'reruns 0))
+         (+ (hash-ref baseline-summary 'failures 0)
+            (hash-ref baseline-summary 'cancelled 0)
+            (hash-ref baseline-summary 'reruns 0)))))
+     (when timing-gate?
+       (when (and p50 (> p50 fast-p50-max-seconds))
+         (fail! (format
+                 "p50 ~a s exceeds the ~a s fast target; the target is never revised inside this wave"
+                 p50
+                 fast-p50-max-seconds)))
+       (when (and p95 (> p95 fast-p95-max-seconds))
+         (fail! (format
+                 "p95 ~a s exceeds the ~a s fast target; the target is never revised inside this wave"
+                 p95
+                 fast-p95-max-seconds))))
+     (when (hash-ref lane 'ordering-proof #f)
+       (cond
+         [(not ordering-proof-possible?)
+          (fail!
+           (format
+            "stale or missing duration evidence: LPT falls back to FIFO ordering (named reason: paired ~a leg evidence incomplete)"
+            (hash-ref lane 'ordering-proof)))]
+         [else
+          (define fifo-digests
+            (for/hash ([r (in-list (hash-ref ordering-proof-config 'shas '()))])
+              (values (hash-ref r 'sha "") (hash-ref r 'inventory-digest ""))))
+          (define divergent (configuration-inventory-mismatch-count config fifo-digests))
+          (unless (zero? divergent)
+            (fail!
+             (format
+              "LPT ordering-only proof violated: per-SHA selected inventory differs from the ~a leg on ~a SHA(s)"
+              (hash-ref lane 'ordering-proof)
+              divergent)))]))
+
+     (define numbers
+       (apply hasheq
+              (append (if timing-gate?
+                          (list 'p50-seconds (or p50 #f) 'p95-seconds (or p95 #f))
+                          (list 'p50-seconds #f 'p95-seconds #f))
+                      (list 'samples
+                            (length samples)
+                            'complete
+                            complete?
+                            'attempts-recorded
+                            (configuration-attempts-recorded config)
+                            'failures
+                            (hash-ref summary 'failures 0)
+                            'cancelled
+                            (hash-ref summary 'cancelled 0)
+                            'reruns
+                            (hash-ref summary 'reruns 0)
+                            'inventory-equal-to-baseline
+                            (and complete? inv-equal?)))))
+
+     (hasheq
+      'lane
+      lane-id
+      'config-id
+      config-id
+      'timing-gate
+      timing-gate?
+      'verdict
+      (if (null? reasons) "promote" "hold")
+      'reasons
+      (reverse reasons)
+      'numbers
+      numbers
+      'gate-text
+      (if timing-gate?
+          fast-queue-gate-text
+          "Selected-inventory equality and no reliability regression versus the paired batch baseline on the same SHAs (roadmap v1.00.25 §6, W1)."))]))
+
+(define (decision-report-jsexpr manifest)
+  (define lane-verdicts
+    (map (lambda (l) (decision-lane-verdict manifest (hash-ref l 'lane))) decision-lanes))
+  (define baseline-config
+    (findf (lambda (c) (hash-ref c 'required #f)) (hash-ref manifest 'configurations '())))
+  (define baseline-samples
+    (if baseline-config
+        (configuration-timing-samples baseline-config)
+        '()))
+  (hasheq 'decision-version
+          "w1-decision-v1"
+          'cohort-id
+          (hash-ref manifest 'cohort-id "?")
+          'cohort-status
+          (hash-ref manifest 'cohort-status "?")
+          'baseline-config
+          (if baseline-config
+              (hash-ref baseline-config 'config-id "?")
+              #f)
+          'baseline
+          (hasheq 'p50-seconds
+                  (and (pair? baseline-samples) (cohort-quantile baseline-samples 0.50))
+                  'p95-seconds
+                  (and (pair? baseline-samples) (cohort-quantile baseline-samples 0.95))
+                  'samples
+                  (length baseline-samples)
+                  'attempts-summary
+                  (if baseline-config
+                      (configuration-attempts-summary baseline-config)
+                      (hasheq)))
+          'gates
+          (hasheq 'fast-p50-max-seconds
+                  (exact->inexact fast-p50-max-seconds)
+                  'fast-p95-max-seconds
+                  (exact->inexact fast-p95-max-seconds)
+                  'gate-text
+                  fast-queue-gate-text)
+          'lanes
+          lane-verdicts
+          'overall-verdict
+          (if (andmap (lambda (l) (equal? (hash-ref l 'verdict) "promote")) lane-verdicts)
+              "promote"
+              "hold")))
+
+(define (decision-md-lane-line lane)
+  (define nums (hash-ref lane 'numbers))
+  (format "| ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a |"
+          (hash-ref lane 'lane)
+          (hash-ref lane 'config-id)
+          (hash-ref lane 'verdict)
+          (if (hash-has-key? nums 'p50-seconds)
+              (format "~a" (hash-ref nums 'p50-seconds))
+              "n/a")
+          (if (hash-has-key? nums 'p95-seconds)
+              (format "~a" (hash-ref nums 'p95-seconds))
+              "n/a")
+          (hash-ref nums 'attempts-recorded 0)
+          (hash-ref nums 'failures 0)
+          (hash-ref nums 'cancelled 0)
+          (hash-ref nums 'reruns 0)
+          (if (hash-ref nums 'inventory-equal-to-baseline #f) "yes" "NO")))
+
+(define (decision-reasons-lines lane)
+  (if (null? (hash-ref lane 'reasons))
+      (list (format "- ~a: all gates passed (promote)." (hash-ref lane 'lane)))
+      (for/list ([r (in-list (hash-ref lane 'reasons))])
+        (format "- ~a: ~a" (hash-ref lane 'lane) r))))
+
+(define (cohort-decision-md-string manifest)
+  (define d (decision-report-jsexpr manifest))
+  (define baseline (hash-ref d 'baseline))
+  (define lines '())
+  (define (out . args)
+    (set! lines (append lines (list (apply format args)))))
+  (out "# Promotion decision: ~a" (hash-ref d 'cohort-id))
+  (out "")
+  (out "| Field | Value |")
+  (out "|---|---|")
+  (out "| Decision version | ~a |" (hash-ref d 'decision-version))
+  (out "| Cohort | ~a |" (hash-ref d 'cohort-id))
+  (out "| Cohort status | ~a |" (hash-ref d 'cohort-status))
+  (out "| Baseline configuration | ~a |" (hash-ref d 'baseline-config))
+  (out "| Baseline p50 / p95 (seconds) | ~a / ~a |"
+       (hash-ref baseline 'p50-seconds)
+       (hash-ref baseline 'p95-seconds))
+  (out "")
+  (out "## Gates")
+  (out "")
+  (out "~a" (hash-ref (hash-ref d 'gates) 'gate-text))
+  (out "")
+  (out "## Lane verdicts")
+  (out "")
+  (out
+   "| Lane | Configuration | Verdict | p50 (s) | p95 (s) | Attempts | Failures | Cancelled | Reruns | Inventory equal |")
+  (out "|---|---|---|---|---|---|---|---|---|---|")
+  (for ([l (in-list (hash-ref d 'lanes))])
+    (out "~a" (decision-md-lane-line l)))
+  (out "")
+  (out "### Reasons")
+  (out "")
+  (for ([l (in-list (hash-ref d 'lanes))])
+    (for ([line (in-list (decision-reasons-lines l))])
+      (out "~a" line)))
+  (out "")
+  (out
+   "Cohort closure rule: the cohort may only be closed when every registered configuration has complete paired evidence; otherwise it remains open and every lane records hold.")
+  (out "")
+  (out
+   "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION; targets are never revised inside this wave.")
+  (out "")
+  (string-join lines "\n"))
+
 (define (cohort-report-base-jsexpr manifest)
   (define vr (validate-cohort manifest))
   (define samples (cohort-timing-samples manifest))
@@ -733,10 +1075,12 @@
 (define (cohort-report-jsexpr manifest)
   (define base (cohort-report-base-jsexpr manifest))
   (define configurations (report-configurations-section manifest))
-  (if configurations
-      (hash-set base 'configurations configurations)
-      base))
-
+  (cond
+    [(not configurations) base]
+    [else
+     (hash-set (hash-set base 'configurations configurations)
+               'decision
+               (decision-report-jsexpr manifest))]))
 (define (cohort-report-json-string manifest)
   (jsexpr->string (cohort-report-jsexpr manifest)))
 
@@ -847,6 +1191,23 @@
            (hash-ref c 'attempts-recorded 0)
            (if (hash-ref c 'inventory-equal-to-baseline #f) "yes" "NO")))
     (out ""))
+  (when (hash-has-key? r 'configurations)
+    (out "## Promotion decision")
+    (out "")
+    (out "~a" (hash-ref (hash-ref (hash-ref r 'decision) 'gates) 'gate-text))
+    (out "")
+    (out
+     "| Lane | Configuration | Verdict | p50 (s) | p95 (s) | Attempts | Failures | Cancelled | Reruns | Inventory equal |")
+    (out "|---|---|---|---|---|---|---|---|---|---|")
+    (for ([l (in-list (hash-ref (hash-ref r 'decision) 'lanes))])
+      (out "~a" (decision-md-lane-line l)))
+    (out "")
+    (out "### Reasons")
+    (out "")
+    (for ([l (in-list (hash-ref (hash-ref r 'decision) 'lanes))])
+      (for ([line (in-list (decision-reasons-lines l))])
+        (out "~a" line)))
+    (out ""))
   (out "## Manifest digest")
   (out "")
   (out "```")
@@ -880,6 +1241,7 @@
   (define manifest-path #f)
   (define out-json #f)
   (define out-md #f)
+  (define decision-path #f)
   (define check? #f)
 
   (command-line
@@ -887,6 +1249,7 @@
    #:once-each [("--manifest") p "Cohort manifest JSON path" (set! manifest-path p)]
    [("--out-json") p "Write report JSON to path" (set! out-json p)]
    [("--out-md") p "Write report markdown to path" (set! out-md p)]
+   [("--decision") p "Write the promotion decision markdown to path" (set! decision-path p)]
    [("--check") "Regenerate from manifest and compare to stored report" (set! check? #t)])
 
   (cond
@@ -919,6 +1282,10 @@
        (call-with-output-file out-md
                               #:exists 'replace
                               (lambda (out) (display (cohort-report-md-string manifest) out))))
+     (when (and (validation-ok? vr) decision-path)
+       (call-with-output-file decision-path
+                              #:exists 'replace
+                              (lambda (out) (display (cohort-decision-md-string manifest) out))))
      (unless (validation-ok? vr)
        (for ([e (in-list (validation-errors vr))])
          (displayln (format "ERROR: ~a" e)))

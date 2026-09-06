@@ -207,6 +207,37 @@
           'exclusions
           '()))
 
+;; Shadow-leg row factory: full-schema rows for a shadow configuration,
+;; with a final successful timing attempt per SHA by default.  The keyword
+;; overrides let tests inject failures, reruns, and divergent inventories.
+(define (complete-shadow-rows
+         #:elapsed-at [elapsed-at (lambda (i) 100.0)]
+         #:attempts-for [attempts-for (lambda (i) #f)]
+         #:digest-for
+         [digest-for (lambda (i) (hash-ref (list-ref baseline-config-rows i) 'inventory-digest))])
+  (for/list ([i (in-range 20)])
+    (define base-row (list-ref baseline-config-rows i))
+    (define attempts (or (attempts-for i) (list (make-timing-attempt i (elapsed-at i)))))
+    (hash-set* base-row 'scheduler "queue" 'attempts attempts 'inventory-digest (digest-for i))))
+
+;; Paired manifest with explicit shadow-leg evidence: each argument is
+;; either a 20-row list (leg complete) or #f (leg still pending, no rows
+;; ingested).  The required baseline lane always carries its rows.
+(define (paired-manifest-with-legs queue-rows lpt-rows security-rows)
+  (define (leg config-id lane scheduler ordering rows)
+    (make-config config-id
+                 lane
+                 scheduler
+                 ordering
+                 #f
+                 #:shas (or rows '())
+                 #:eligible (map (lambda (r) (hash-ref r 'sha)) baseline-config-rows)))
+  (make-paired-manifest #:configs
+                        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+                              (leg "fast/queue/fifo" "fast" "queue" "fifo" queue-rows)
+                              (leg "fast/queue/lpt" "fast" "queue" "lpt" lpt-rows)
+                              (leg "security/queue/fifo" "security" "queue" "fifo" security-rows))))
+
 ;; ============================================================
 ;; Test suite
 ;; ============================================================
@@ -830,7 +861,141 @@
 
     (test-case "manifests without configurations keep the legacy report shape"
       (define r (cohort-report-jsexpr (make-valid-cohort 20)))
-      (check-false (hash-has-key? r 'configurations)))))
+      (check-false (hash-has-key? r 'configurations)))
+
+    ;; --- W1: decision outputs --------------------------------------------
+    ;; Per-configuration p50/p95 with linear interpolation, reliability
+    ;; counts, inventory-equality verdicts, and an explicit promote | hold
+    ;; verdict per lane.  A missed gate produces hold, never a revised
+    ;; target; missing paired evidence is a hold with named reasons.
+
+    (test-case "decision report holds every lane while paired shadow evidence is missing"
+      (define d (decision-report-jsexpr (make-paired-manifest)))
+      (check-equal? (hash-ref d 'baseline-config) "fast/batch/fifo")
+      (define baseline (hash-ref d 'baseline))
+      (check-equal? (hash-ref baseline 'p50-seconds) 300.0)
+      (check-equal? (hash-ref baseline 'p95-seconds) 300.0)
+      (check-equal? (map (lambda (l) (hash-ref l 'lane)) (hash-ref d 'lanes))
+                    (list "fast-queue" "fast-LPT" "security-queue"))
+      (check-equal? (hash-ref d 'overall-verdict) "hold")
+      (for ([l (in-list (hash-ref d 'lanes))])
+        (check-equal? (hash-ref l 'verdict)
+                      "hold"
+                      (format "~a must hold without paired evidence" (hash-ref l 'lane)))
+        (check-true (pair? (hash-ref l 'reasons)) "a hold must name its reasons")
+        (check-false (hash-ref (hash-ref l 'numbers) 'p50-seconds)
+                     "pending legs report no percentile")
+        (check-equal? (hash-ref (hash-ref l 'numbers) 'inventory-equal-to-baseline)
+                      #f
+                      "pending legs cannot prove inventory equality")))
+
+    (test-case "fast-queue verdict records the exact gate text"
+      (define fq (decision-lane-verdict (make-paired-manifest) "fast-queue"))
+      (check-true (string-contains? (hash-ref fq 'gate-text) "130")
+                  "the exact fast gate text must be recorded")
+      (check-true (string-contains? (hash-ref fq 'gate-text) "145")
+                  "the exact fast p95 threshold must be recorded"))
+
+    (test-case "per-configuration p50 and p95 use linear interpolation"
+      (define rows (complete-shadow-rows #:elapsed-at (lambda (i) (+ 100.0 i))))
+      (define manifest (paired-manifest-with-legs rows #f #f))
+      (define fq (decision-lane-verdict manifest "fast-queue"))
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'p50-seconds) 109.5)
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'p95-seconds) 118.5))
+
+    (test-case "fast-queue promotes on complete paired evidence inside the fast thresholds"
+      (define manifest (paired-manifest-with-legs (complete-shadow-rows) #f #f))
+      (define fq (decision-lane-verdict manifest "fast-queue"))
+      (check-equal? (hash-ref fq 'verdict) "promote")
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'p50-seconds) 100.0)
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'p95-seconds) 100.0)
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'inventory-equal-to-baseline) #t)
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'attempts-recorded) 20)
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'failures) 0))
+
+    (test-case "fast-queue holds when p95 exceeds the target (never a revised target)"
+      (define rows (complete-shadow-rows #:elapsed-at (lambda (i) (if (= i 19) 200.0 100.0))))
+      (define manifest (paired-manifest-with-legs rows #f #f))
+      (define fq (decision-lane-verdict manifest "fast-queue"))
+      (check-equal? (hash-ref fq 'verdict) "hold")
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'p95-seconds) 150.0)
+      (check-true (ormap (lambda (r) (string-contains? r "p95")) (hash-ref fq 'reasons))
+                  "the hold must name the p95 breach"))
+
+    (test-case "fast-queue holds on a reliability regression versus batch"
+      (define rows
+        (complete-shadow-rows #:attempts-for
+                              (lambda (i)
+                                (if (= i 7)
+                                    (list (make-failed-attempt 7 90.0) (make-timing-attempt 7 100.0))
+                                    #f))))
+      (define manifest (paired-manifest-with-legs rows #f #f))
+      (define fq (decision-lane-verdict manifest "fast-queue"))
+      (check-equal? (hash-ref fq 'verdict) "hold")
+      (check-true (ormap (lambda (r) (string-contains? r "reliability")) (hash-ref fq 'reasons))
+                  "the hold must name the reliability regression")
+      (check-equal? (hash-ref (hash-ref fq 'numbers) 'failures) 1))
+
+    (test-case "fast-queue holds on an inventory mismatch"
+      (define rows
+        (complete-shadow-rows #:digest-for (lambda (i)
+                                             (if (= i 3)
+                                                 "sha256:divergent"
+                                                 (hash-ref (list-ref baseline-config-rows i)
+                                                           'inventory-digest)))))
+      (define manifest (paired-manifest-with-legs rows #f #f))
+      (define fq (decision-lane-verdict manifest "fast-queue"))
+      (check-equal? (hash-ref fq 'verdict) "hold")
+      (check-false (hash-ref (hash-ref fq 'numbers) 'inventory-equal-to-baseline))
+      (check-true (ormap (lambda (r) (string-contains? r "inventory")) (hash-ref fq 'reasons))))
+
+    (test-case "fast-LPT falls back to FIFO with a named reason when duration evidence is missing"
+      (define manifest (make-paired-manifest))
+      (define lpt (decision-lane-verdict manifest "fast-LPT"))
+      (check-equal? (hash-ref lpt 'verdict) "hold")
+      (check-true (ormap (lambda (r) (string-contains? r "FIFO")) (hash-ref lpt 'reasons))
+                  "missing duration evidence must fall back to FIFO with a named reason"))
+
+    (test-case "fast-LPT promotes only when its ordering-only proof holds"
+      ;; Same rows as the queue/fifo promote case, plus an LPT leg selecting
+      ;; the identical per-SHA inventory → promote.
+      (define manifest (paired-manifest-with-legs (complete-shadow-rows) (complete-shadow-rows) #f))
+      (define lpt (decision-lane-verdict manifest "fast-LPT"))
+      (check-equal? (hash-ref lpt 'verdict) "promote")
+      ;; Divergent per-SHA inventory breaks the ordering-only proof → hold.
+      (define divergent (complete-shadow-rows #:digest-for (lambda (i) (format "sha256:lpt~a" i))))
+      (define bad (paired-manifest-with-legs (complete-shadow-rows) divergent #f))
+      (define bad-lpt (decision-lane-verdict bad "fast-LPT"))
+      (check-equal? (hash-ref bad-lpt 'verdict) "hold")
+      (check-true (ormap (lambda (r) (string-contains? r "ordering-only"))
+                         (hash-ref bad-lpt 'reasons))))
+
+    (test-case "security-queue judges inventory and reliability but not the fast timing gate"
+      (define manifest (paired-manifest-with-legs #f #f (complete-shadow-rows)))
+      (define sq (decision-lane-verdict manifest "security-queue"))
+      (check-equal? (hash-ref sq 'verdict) "promote")
+      (check-false (hash-ref (hash-ref sq 'numbers) 'p50-seconds #f)
+                   "the security lane has no fast timing gate"))
+
+    (test-case "decision markdown records the verdict table, gate text, and reviewer"
+      (define md (cohort-decision-md-string (make-paired-manifest)))
+      (check-true (string-contains? md "fast-queue"))
+      (check-true (string-contains? md "security-queue"))
+      (check-true (string-contains? md "hold"))
+      (check-true (string-contains? md "≤ 130"))
+      (check-true (string-contains? md "Reviewer"))
+      (check-true (string-contains? md "FIFO")))
+
+    (test-case "paired report jsexpr and markdown embed the decision section"
+      (define manifest (make-paired-manifest))
+      (check-equal? (hash-ref (cohort-report-jsexpr manifest) 'decision)
+                    (decision-report-jsexpr manifest))
+      (check-true (string-contains? (cohort-report-md-string manifest) "Promotion decision"))
+      (check-false (hash-has-key? (cohort-report-jsexpr (make-valid-cohort 20)) 'decision)))
+
+    (test-case "decision report is deterministic"
+      (check-equal? (decision-report-jsexpr (make-paired-manifest))
+                    (decision-report-jsexpr (make-paired-manifest))))))
 
 ;; ============================================================
 ;; Run
