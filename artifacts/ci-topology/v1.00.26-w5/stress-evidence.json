@@ -2,7 +2,7 @@
   "schema": "q.ci-topology.workflow-worker-stress/1",
   "campaign": "v1.00.26",
   "wave": "W5",
-  "recorded-at": "2026-02-14T00:00:00Z",
+  "recorded-at": "2026-09-06T23:56:00Z",
   "gate": {
     "target-workflow-p50-seconds": 220,
     "required-checks-green": true,
