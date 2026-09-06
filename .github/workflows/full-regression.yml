@@ -248,7 +248,7 @@ jobs:
       # than preventing run-summary.json from being retained.
       - name: Download Linux shard evidence
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: evidence/linux-shards
           pattern: results-shard-*
@@ -256,14 +256,14 @@ jobs:
 
       - name: Download workflows evidence
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: results-workflows
           path: evidence/workflows
 
       - name: Download macOS platform evidence
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: results-platform
           path: evidence/platform
