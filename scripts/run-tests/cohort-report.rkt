@@ -52,6 +52,10 @@
          expected-cohort-size
          cohort-schema-version
          known-exclusion-reasons
+         known-config-lanes
+         known-config-schedulers
+         known-config-orderings
+         known-cohort-statuses
          ;; helpers exposed for testing
          sha-eligible?
          sha-has-timing-sample?
@@ -74,6 +78,22 @@
                             "artifact-corrupt"
                             "artifact-expired"
                             "non-unique-sha"))
+
+;; Paired configuration schema (v1.00.25 W0: C1 shadow cohort start).
+;; Lanes and orderings known to the configuration schema; schedulers extend
+;; the flat-row set with the work-conserving "queue" scheduler, which is
+;; shadow-only: required CI keeps running batch/serial and nothing in this
+;; module activates a queue default.
+(define known-config-lanes '("fast" "security"))
+(define known-config-schedulers '("batch" "queue" "serial"))
+(define known-config-orderings '("fifo" "lpt"))
+(define known-cohort-statuses '("started" "open" "closed" "cancelled"))
+;; Cohort statuses in which shadow configurations may still carry empty
+;; attempt lists (the paired runs have not landed yet).
+(define open-cohort-statuses '("started" "open"))
+(define sha40-regexp #px"^[0-9a-f]{40}$")
+(define (sha40? s)
+  (and (string? s) (regexp-match? sha40-regexp s)))
 
 ;; ============================================================
 ;; Manifest loading
@@ -152,6 +172,184 @@
   (validation-result-errors vr))
 (define (validation-warnings vr)
   (validation-result-warnings vr))
+
+;; Paired-configuration validation (v1.00.25 W0).  When the manifest carries
+;; a `configurations` block, every configuration row must name its scheduler,
+;; ordering, lane, start SHA, eligible-SHA list, per-SHA attempts, and the
+;; inventory digest for every SHA.  The required configuration must be the
+;; required-lane baseline (fast/batch/fifo); all paired configurations must
+;; run over the identical ordered eligible-SHA list; and every selected-file
+;; inventory digest must equal the required-lane inventory for the same SHA —
+;; any mismatch is a cohort error, never silently ignored.
+(define (validate-configurations manifest err!)
+  (define configs (hash-ref manifest 'configurations #f))
+  (unless (not configs)
+    (define cohort-status (hash-ref manifest 'cohort-status #f))
+    (unless (member cohort-status known-cohort-statuses)
+      (err! (format
+             "manifest has configurations but unknown/missing cohort-status: ~a (must be one of ~a)"
+             cohort-status
+             known-cohort-statuses)))
+    (unless (and (list? configs) (not (null? configs)))
+      (err! "configurations must be a non-empty list of configuration objects"))
+    (when (and (list? configs) (not (null? configs)))
+      (define required-configs (filter (lambda (c) (hash-ref c 'required #f)) configs))
+      (unless (= 1 (length required-configs))
+        (err!
+         (format
+          "configurations must declare exactly one required configuration (the required-lane baseline); found ~a"
+          (length required-configs))))
+      (define baseline (and (= 1 (length required-configs)) (first required-configs)))
+      (when baseline
+        (unless (and (equal? (hash-ref baseline 'lane #f) "fast")
+                     (equal? (hash-ref baseline 'scheduler #f) "batch")
+                     (equal? (hash-ref baseline 'ordering #f) "fifo"))
+          (err! "required configuration must be the required-lane baseline fast/batch/fifo")))
+      (define exclusions (hash-ref manifest 'exclusions '()))
+      (define expected (hash-ref manifest 'expected-count expected-cohort-size))
+      (define allowed-lengths (list expected (+ expected (length exclusions))))
+      (define baseline-eligible (and baseline (hash-ref baseline 'eligible-shas #f)))
+      (define baseline-digests
+        (and baseline
+             (for/hash ([r (in-list (hash-ref baseline 'shas '()))])
+               (values (hash-ref r 'sha "") (hash-ref r 'inventory-digest "")))))
+      (define cohort-open? (and (member cohort-status open-cohort-statuses) #t))
+      (for ([c (in-list configs)]
+            [ci (in-naturals)])
+        (define config-id (hash-ref c 'config-id (format "#~a" ci)))
+        ;; required fields
+        (for ([field (in-list '(config-id lane scheduler ordering start-sha eligible-shas shas))])
+          (unless (hash-has-key? c field)
+            (err!
+             (format "configuration ~a (index ~a) missing required field: ~a" config-id ci field))))
+        (define lane (hash-ref c 'lane #f))
+        (define scheduler (hash-ref c 'scheduler #f))
+        (define ordering (hash-ref c 'ordering #f))
+        (define start-sha (hash-ref c 'start-sha #f))
+        (unless (member lane known-config-lanes)
+          (err! (format "configuration ~a has unknown lane: ~a" config-id lane)))
+        (unless (member scheduler known-config-schedulers)
+          (err! (format "configuration ~a has incompatible configuration scheduler: ~a"
+                        config-id
+                        scheduler)))
+        (unless (member ordering known-config-orderings)
+          (err! (format "configuration ~a has unknown ordering: ~a" config-id ordering)))
+        (unless (and config-id
+                     lane
+                     scheduler
+                     ordering
+                     (equal? config-id (string-append lane "/" scheduler "/" ordering)))
+          (err! (format "configuration config-id ~a does not match lane/scheduler/ordering (~a/~a/~a)"
+                        config-id
+                        lane
+                        scheduler
+                        ordering)))
+        (unless (sha40? start-sha)
+          (err! (format "configuration ~a start-sha must be 40 lowercase hex chars: ~a"
+                        config-id
+                        start-sha)))
+        (define manifest-start (hash-ref manifest 'start-sha #f))
+        (when (and (sha40? start-sha) manifest-start (not (equal? start-sha manifest-start)))
+          (err! (format "configuration ~a start-sha ~a does not match cohort start-sha ~a"
+                        config-id
+                        start-sha
+                        manifest-start)))
+        ;; eligible-SHA list
+        (define eligible (hash-ref c 'eligible-shas #f))
+        (unless (list? eligible)
+          (err! (format "configuration ~a eligible-shas must be a list" config-id)))
+        (when (list? eligible)
+          (unless (member (length eligible) allowed-lengths)
+            (err! (format "configuration ~a eligible-shas has ~a entries; expected one of ~a"
+                          config-id
+                          (length eligible)
+                          allowed-lengths)))
+          (define seen (make-hash))
+          (for ([s (in-list eligible)])
+            (unless (sha40? s)
+              (err! (format "configuration ~a eligible SHA is not 40 lowercase hex: ~a" config-id s)))
+            (when (hash-has-key? seen s)
+              (err! (format "duplicate SHA in configuration ~a: ~a" config-id s)))
+            (hash-set! seen s #t))
+          (when (and baseline-eligible (not (equal? eligible baseline-eligible)))
+            (err!
+             (format
+              "configuration ~a eligible-SHA list mismatch: paired configurations must run over the identical ordered eligible-SHA list"
+              config-id))))
+        ;; per-SHA rows
+        (define rows (hash-ref c 'shas #f))
+        (unless (list? rows)
+          (err! (format "configuration ~a shas must be a list of per-SHA rows" config-id)))
+        (when (list? rows)
+          (when (list? eligible)
+            (unless (= (length rows) (length eligible))
+              (err! (format "configuration ~a has ~a shas rows but ~a eligible SHAs"
+                            config-id
+                            (length rows)
+                            (length eligible))))
+            (for ([r (in-list rows)]
+                  [s (in-list eligible)]
+                  [ri (in-naturals)])
+              (unless (equal? (hash-ref r 'sha #f) s)
+                (err! (format "configuration ~a shas row ~a does not match eligible-SHA ~a in order"
+                              config-id
+                              ri
+                              s)))))
+          (for ([r (in-list rows)]
+                [ri (in-naturals)])
+            (define rs (hash-ref r 'sha (format "#~a" ri)))
+            (unless (hash-has-key? r 'attempts)
+              (err! (format "configuration ~a SHA ~a missing required field: attempts" config-id rs)))
+            (define attempts (hash-ref r 'attempts #f))
+            (when (list? attempts)
+              (for ([a (in-list attempts)]
+                    [ai (in-naturals)])
+                (unless (and (hash? a)
+                             (hash-has-key? a 'result)
+                             (string? (hash-ref a 'result))
+                             (hash-has-key? a 'timing-sample)
+                             (boolean? (hash-ref a 'timing-sample)))
+                  (err! (format "configuration ~a SHA ~a attempt ~a missing result/timing-sample flag"
+                                config-id
+                                rs
+                                ai)))))
+            (define d (hash-ref r 'inventory-digest #f))
+            (when (or (not d) (equal? d ""))
+              (err!
+               (format "configuration ~a SHA ~a has missing/empty inventory-digest" config-id rs)))
+            (when (and d baseline-digests (hash-has-key? baseline-digests rs))
+              (define baseline-digest (hash-ref baseline-digests rs))
+              (unless (equal? d baseline-digest)
+                (err!
+                 (format
+                  "inventory mismatch for configuration ~a SHA ~a: expected required-lane baseline digest ~a, got ~a — cohort error, never silently ignored"
+                  config-id
+                  rs
+                  baseline-digest
+                  d))))
+            (when (and baseline (equal? c baseline))
+              (unless (sha-eligible? r)
+                (err!
+                 (format
+                  "required-lane baseline configuration SHA ~a is not eligible: must have exactly one timing-sample attempt (final successful)"
+                  rs))))
+            (when (and (not cohort-open?) baseline (not (equal? c baseline)))
+              (when (and attempts (null? attempts))
+                (err! (format "closed cohort configuration ~a SHA ~a has no attempts collected"
+                              config-id
+                              rs)))
+              (unless (sha-eligible? r)
+                (err!
+                 (format
+                  "closed cohort configuration SHA ~a is not eligible: must have exactly one timing-sample attempt (final successful)"
+                  rs))))))
+        (void))
+      ;; flat view cross-check
+      (when baseline-eligible
+        (define flat (map (lambda (s) (hash-ref s 'sha #f)) (hash-ref manifest 'shas '())))
+        (unless (equal? flat baseline-eligible)
+          (err!
+           "flat shas do not match the required-lane configuration rows (order must be identical)"))))))
 
 (define (validate-cohort manifest)
   (define errors '())
@@ -272,6 +470,10 @@
     (unless (member pe '("match" "rebuild" "cached"))
       (err! (format "SHA ~a has unknown prepared-env: ~a" (hash-ref s 'sha "?") pe))))
 
+  ;; 11. Paired configurations (when present): schema, pairing, inventory
+  ;; equality, and lifecycle rules.
+  (validate-configurations manifest err!)
+
   (validation-result (null? errors) errors warnings))
 
 ;; ============================================================
@@ -348,7 +550,46 @@
 ;; Report generation
 ;; ============================================================
 
-(define (cohort-report-jsexpr manifest)
+;; Paired-configurations report section.  Returns #f when the manifest does
+;; not declare configurations (legacy shape is preserved byte-for-byte).
+(define (report-configurations-section manifest)
+  (define configs (hash-ref manifest 'configurations #f))
+  (and configs
+       (let ([baseline-c (findf (lambda (c) (hash-ref c 'required #f)) configs)])
+         (define baseline-digests
+           (if baseline-c
+               (for/hash ([r (in-list (hash-ref baseline-c 'shas '()))])
+                 (values (hash-ref r 'sha "") (hash-ref r 'inventory-digest "")))
+               (hash)))
+         (for/list ([c (in-list configs)])
+           (define rows (hash-ref c 'shas '()))
+           (hasheq 'config-id
+                   (hash-ref c 'config-id "?")
+                   'lane
+                   (hash-ref c 'lane "?")
+                   'scheduler
+                   (hash-ref c 'scheduler "?")
+                   'ordering
+                   (hash-ref c 'ordering "?")
+                   'start-sha
+                   (hash-ref c 'start-sha "?")
+                   'required
+                   (hash-ref c 'required #f)
+                   'eligible-count
+                   (length (hash-ref c 'eligible-shas '()))
+                   'attempts-recorded
+                   (count (lambda (r) (positive? (length (hash-ref r 'attempts '())))) rows)
+                   'inventory-digest
+                   (string-join (sort (map (lambda (r) (hash-ref r 'inventory-digest "")) rows)
+                                      string<?)
+                                "|")
+                   'inventory-equal-to-baseline
+                   (andmap (lambda (r)
+                             (equal? (hash-ref r 'inventory-digest #f)
+                                     (hash-ref baseline-digests (hash-ref r 'sha "") #f)))
+                           rows))))))
+
+(define (cohort-report-base-jsexpr manifest)
   (define vr (validate-cohort manifest))
   (define samples (cohort-timing-samples manifest))
   (define shas (hash-ref manifest 'shas '()))
@@ -487,6 +728,15 @@
    'manifest-digest
    (manifest-digest manifest)))
 
+;; Public report builder: base report plus the paired-configurations section
+;; when (and only when) the manifest declares configurations.
+(define (cohort-report-jsexpr manifest)
+  (define base (cohort-report-base-jsexpr manifest))
+  (define configurations (report-configurations-section manifest))
+  (if configurations
+      (hash-set base 'configurations configurations)
+      base))
+
 (define (cohort-report-json-string manifest)
   (jsexpr->string (cohort-report-jsexpr manifest)))
 
@@ -580,6 +830,23 @@
      (for ([e (in-list exclusions)])
        (out "| ~a | ~a | ~a |" (hash-ref e 'sha) (hash-ref e 'reason) (hash-ref e 'detail)))])
   (out "")
+  (when (hash-has-key? r 'configurations)
+    (out "## Paired configurations")
+    (out "")
+    (out
+     "| Configuration | Lane | Scheduler | Ordering | Start SHA | Eligible | Attempts recorded | Inventory equal |")
+    (out "|---|---|---|---|---|---|---|---|")
+    (for ([c (in-list (hash-ref r 'configurations))])
+      (out "| ~a | ~a | ~a | ~a | ~a | ~a | ~a | ~a |"
+           (hash-ref c 'config-id "?")
+           (hash-ref c 'lane "?")
+           (hash-ref c 'scheduler "?")
+           (hash-ref c 'ordering "?")
+           (hash-ref c 'start-sha "?")
+           (hash-ref c 'eligible-count 0)
+           (hash-ref c 'attempts-recorded 0)
+           (if (hash-ref c 'inventory-equal-to-baseline #f) "yes" "NO")))
+    (out ""))
   (out "## Manifest digest")
   (out "")
   (out "```")

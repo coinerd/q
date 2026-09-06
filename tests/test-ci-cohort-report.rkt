@@ -19,6 +19,7 @@
          racket/list
          racket/path
          racket/runtime-path
+         racket/string
          json
          (only-in "../util/version.rkt" q-version)
          "../scripts/run-tests/cohort-report.rkt")
@@ -122,6 +123,89 @@
 
 (define (has-error-matching? vr rx)
   (and (not (validation-ok? vr)) (ormap (lambda (e) (regexp-match? rx e)) (validation-errors vr))))
+
+;; ============================================================
+;; Helpers for paired configuration manifests (v1.00.25 W0: C1)
+;; ============================================================
+
+(define config-hex "0123456789abcdef")
+
+(define (fake-sha i)
+  ;; Injective on 0..99: the first char encodes (modulo i 16), the tail phase
+  ;; encodes (quotient i 16) so i and i+16 never collide.
+  (list->string (cons (string-ref config-hex (modulo i 16))
+                      (for/list ([k (in-range 39)])
+                        (string-ref config-hex (modulo (+ (* (quotient i 16) 7) k 3) 16))))))
+
+;; Shadow-configuration row: registered, attempts pending until the
+;; automatic paired runs land (allowed while the cohort is started/open).
+(define (make-config-sha-row i digest #:attempts [attempts '()])
+  (hasheq 'sha (fake-sha i) 'pr (+ 9580 i) 'attempts attempts 'inventory-digest digest))
+
+;; Required-lane baseline rows (full schema; also the flat `shas` view).
+(define baseline-config-rows
+  (for/list ([i (in-range 20)])
+    (hash-set (make-valid-sha i) 'sha (fake-sha i))))
+
+(define (make-config config-id
+                     lane
+                     scheduler
+                     ordering
+                     required
+                     #:shas [shas #f]
+                     #:eligible [eligible #f]
+                     #:start-sha [start-sha (fake-sha 99)])
+  (hasheq 'config-id
+          config-id
+          'lane
+          lane
+          'scheduler
+          scheduler
+          'ordering
+          ordering
+          'start-sha
+          start-sha
+          'required
+          required
+          'eligible-shas
+          (or eligible (map (lambda (r) (hash-ref r 'sha)) baseline-config-rows))
+          'shas
+          (or shas
+              (if required
+                  baseline-config-rows
+                  (for/list ([r (in-list baseline-config-rows)])
+                    (make-config-sha-row (index-of baseline-config-rows r)
+                                         (hash-ref r 'inventory-digest)))))))
+
+(define (default-paired-configs)
+  (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+        (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f)
+        (make-config "fast/queue/lpt" "fast" "queue" "lpt" #f)
+        (make-config "security/queue/fifo" "security" "queue" "fifo" #f)))
+
+(define (make-paired-manifest #:cohort-status [cohort-status "started"]
+                              #:configs [configs #f]
+                              #:shas [flat-shas baseline-config-rows])
+  (hasheq 'cohort-id
+          "test-c1"
+          'milestone
+          (format "v~a" q-version)
+          'schema-version
+          1
+          'expected-count
+          20
+          'cohort-status
+          cohort-status
+          'start-sha
+          (fake-sha 99)
+          'baseline-config
+          "fast/batch/fifo"
+          'configurations
+          (or configs (default-paired-configs))
+          'shas
+          flat-shas
+          'exclusions
+          '()))
 
 ;; ============================================================
 ;; Test suite
@@ -553,7 +637,200 @@
       (define r (cohort-report-jsexpr manifest))
       (check-true (hash? r))
       (check-true (hash? (hash-ref r 'statistics)))
-      (check-true (hash? (hash-ref r 'counts))))))
+      (check-true (hash? (hash-ref r 'counts))))
+
+    ;; --- 16. Paired configuration manifests (v1.00.25 W0: C1 shadow cohort) ---
+
+    (test-case "paired configuration manifest with baseline + shadow configs validates OK"
+      (define manifest (make-paired-manifest))
+      (define vr (validate-cohort manifest))
+      (check-true (validation-ok? vr)
+                  (format "expected validation OK; errors: ~a" (validation-errors vr))))
+
+    (test-case "configuration row missing required field is rejected"
+      (define configs
+        (cons (hash-remove (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t) 'ordering)
+              (cdr (default-paired-configs))))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"missing required field: ordering")
+                  (format "got: ~a" (validation-errors vr))))
+
+    (test-case "configuration with unknown lane is rejected"
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "staging/queue/fifo" "staging" "queue" "fifo" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"unknown lane")))
+
+    (test-case "configuration with unknown ordering is rejected"
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "fast/queue/random" "fast" "queue" "random" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"unknown ordering")))
+
+    (test-case "configuration with unknown scheduler is rejected"
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "fast/speculative/fifo" "fast" "speculative" "fifo" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"incompatible configuration scheduler")))
+
+    (test-case "configuration config-id must match lane/scheduler/ordering"
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "mislabeled/id" "fast" "queue" "fifo" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"config-id")))
+
+    (test-case "configuration start-sha must be 40-hex and consistent across configurations"
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f)
+              (make-config "fast/queue/lpt" "fast" "queue" "lpt" #f #:start-sha "deadbeef")))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"start-sha")))
+
+    (test-case "eligible-SHA list must be identical across configurations"
+      (define c3 (make-config "fast/queue/lpt" "fast" "queue" "lpt" #f))
+      (define c3-short (hash-set c3 'eligible-shas (cdr (hash-ref c3 'eligible-shas))))
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f)
+              c3-short))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"eligible-SHA list mismatch")))
+
+    (test-case "duplicate SHA within a configuration is rejected"
+      (define eligible (map (lambda (r) (hash-ref r 'sha)) baseline-config-rows))
+      (define c2
+        (make-config "fast/queue/fifo"
+                     "fast"
+                     "queue"
+                     "fifo"
+                     #f
+                     #:eligible (list* (second eligible) eligible)))
+      (define configs (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t) c2))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"duplicate SHA")))
+
+    (test-case "exactly one required (required-lane baseline) configuration"
+      (define vr-none
+        (validate-cohort (make-paired-manifest
+                          #:configs (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #f)
+                                          (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f)))))
+      (check-false (validation-ok? vr-none))
+      (check-true (has-error-matching? vr-none #rx"exactly one required configuration"))
+      (define vr-two
+        (validate-cohort (make-paired-manifest
+                          #:configs (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+                                          (make-config "fast/queue/fifo" "fast" "queue" "fifo" #t)))))
+      (check-false (validation-ok? vr-two))
+      (check-true (has-error-matching? vr-two #rx"exactly one required configuration")))
+
+    (test-case "required configuration must be the required-lane baseline fast/batch/fifo"
+      (define configs
+        (list (make-config "fast/queue/fifo" "fast" "queue" "fifo" #t)
+              (make-config "fast/batch/fifo" "fast" "batch" "fifo" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"required-lane baseline")))
+
+    (test-case "inventory mismatch vs baseline is a cohort error, never silently ignored"
+      (define shadow-rows
+        (for/list ([r (in-list baseline-config-rows)]
+                   [i (in-naturals)])
+          (define digest (hash-ref r 'inventory-digest))
+          (make-config-sha-row i (if (= i 7) "sha256:other-inventory" digest))))
+      (define configs
+        (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+              (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f #:shas shadow-rows)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"inventory mismatch")))
+
+    (test-case "shadow rows may have empty attempts while cohort is started"
+      ;; The default paired manifest already carries empty shadow attempts
+      ;; with cohort-status "started" — and the OK case above passes.  Here we
+      ;; additionally pin that a started cohort does not demand shadow attempts.
+      (define manifest (make-paired-manifest #:cohort-status "started"))
+      (check-true (validation-ok? (validate-cohort manifest))))
+
+    (test-case "closed cohort requires collected shadow attempts"
+      (define vr (validate-cohort (make-paired-manifest #:cohort-status "closed")))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"closed cohort configuration .* has no attempts")))
+
+    (test-case "required baseline rows must remain eligible inside configurations"
+      (define baseline-no-attempts
+        (hash-set (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t)
+                  'shas
+                  (for/list ([r (in-list baseline-config-rows)]
+                             [i (in-naturals)])
+                    (if (zero? i)
+                        (hash-set r 'attempts '())
+                        r))))
+      (define configs
+        (list baseline-no-attempts (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f)))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"exactly one timing-sample")))
+
+    (test-case "malformed attempt entries are rejected (result + timing-sample flag)"
+      (define c2-default (make-config "fast/queue/fifo" "fast" "queue" "fifo" #f))
+      (define rows
+        (cons (make-config-sha-row 0
+                                   (hash-ref (first baseline-config-rows) 'inventory-digest)
+                                   #:attempts (list (hasheq 'run-id "x" 'result "success")))
+              (cdr (hash-ref c2-default 'shas))))
+      (define c2 (hash-set c2-default 'shas rows))
+      (define configs (list (make-config "fast/batch/fifo" "fast" "batch" "fifo" #t) c2))
+      (define vr (validate-cohort (make-paired-manifest #:configs configs)))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"missing result/timing-sample flag")))
+
+    (test-case "flat shas must match the required-lane configuration rows"
+      (define vr (validate-cohort (make-paired-manifest #:shas (reverse baseline-config-rows))))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr
+                                       #rx"flat shas do not match the required-lane configuration")))
+
+    (test-case "report jsexpr exposes paired configurations with inventory equality"
+      (define r (cohort-report-jsexpr (make-paired-manifest)))
+      (define configs (hash-ref r 'configurations #f))
+      (check-true (list? configs))
+      (check-equal? (length configs) 4)
+      (for ([c (in-list configs)])
+        (check-true (hash-ref c 'inventory-equal-to-baseline)
+                    (format "~a inventory not equal" (hash-ref c 'config-id)))
+        (check-true (string? (hash-ref c 'start-sha))))
+      (define baseline-c (first configs))
+      (check-equal? (hash-ref baseline-c 'config-id) "fast/batch/fifo")
+      (check-equal? (hash-ref baseline-c 'attempts-recorded) 20)
+      (check-equal? (hash-ref (second configs) 'attempts-recorded) 0))
+
+    (test-case "paired configuration report is deterministic"
+      (define manifest (make-paired-manifest))
+      (check-equal? (cohort-report-json-string manifest) (cohort-report-json-string manifest))
+      (check-equal? (cohort-report-md-string manifest) (cohort-report-md-string manifest)))
+
+    (test-case "paired configuration report markdown contains the configuration table"
+      (define md (cohort-report-md-string (make-paired-manifest)))
+      (check-true (string-contains? md "Paired configurations"))
+      (check-true (string-contains? md "security/queue/fifo"))
+      (check-true (string-contains? md "fast/queue/lpt")))
+
+    (test-case "manifests without configurations keep the legacy report shape"
+      (define r (cohort-report-jsexpr (make-valid-cohort 20)))
+      (check-false (hash-has-key? r 'configurations)))))
 
 ;; ============================================================
 ;; Run

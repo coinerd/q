@@ -1,13 +1,22 @@
 name: Test scheduler shadow
 
 # W5: Separate manual/reusable shadow workflow for controlled scheduler
-# evidence.  This workflow is OFF by default; it runs only on explicit
-# workflow_dispatch and is NEVER a pull-request required check in v1.00.23.
+# evidence.  Shadow lane only: this workflow is NEVER a pull-request
+# required check and never cancels or replaces required CI.
 #
 # Purpose: produce future queue/batch comparison evidence without changing
 # the required CI lane set or branch protection.  It uploads JSON results
 # in the same schema as the required fast gate so cohort tooling can
 # ingest shadow samples consistently.
+#
+# v1.00.25 W0 (cohort C1): a workflow_run driver starts the paired shadow
+# configurations automatically — fast/queue/fifo, fast/queue/lpt, and
+# security/queue/fifo — over the cohort C1 manifest SHAs in
+# artifacts/ci-baseline/v1.00.25-c1/cohort.json, without manual dispatch.
+# The driver re-runs on every successful canonical CI completion and only
+# fills cohort cells that have no successful shadow leg yet.  It never
+# cancels required-CI runs, never changes a required check, and never
+# changes a default lane.
 
 on:
   workflow_call:
@@ -19,6 +28,21 @@ on:
         type: string
       scheduler:
         description: 'Scheduler mode to run (batch or queue)'
+        required: false
+        default: ''
+        type: string
+      ordering:
+        description: 'File ordering for the shadow run (fifo or lpt)'
+        required: false
+        default: 'fifo'
+        type: string
+      lane:
+        description: 'Shadow lane / suite to run (fast or security)'
+        required: false
+        default: 'fast'
+        type: string
+      cohort-config:
+        description: 'Cohort configuration id this leg covers (coverage marker)'
         required: false
         default: ''
         type: string
@@ -39,35 +63,164 @@ on:
         required: false
         default: ''
         type: string
+      ordering:
+        description: 'File ordering for the shadow run (fifo or lpt)'
+        required: false
+        default: 'fifo'
+        type: string
+      lane:
+        description: 'Shadow lane / suite to run (fast or security)'
+        required: false
+        default: 'fast'
+        type: string
+      cohort-config:
+        description: 'Cohort configuration id this leg covers (coverage marker)'
+        required: false
+        default: ''
+        type: string
       shard-count:
         description: 'Shard count (default 3, same as required gate)'
         required: false
         default: '3'
         type: string
-# Do not cancel required-CI runs; also avoid cancelling other shadow runs on
-# different refs.
+  # Cohort C1 automation: after each successful canonical CI run on main,
+  # plan and start the missing paired shadow cells.  This trigger only
+  # ADDS shadow runs; it never re-runs, cancels, or gates required CI.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Do not cancel required-CI runs: this workflow has its own concurrency
+# namespace and never cancels in progress, so shadow work only ever queues
+# behind other shadow work.  Groups are scoped per checkout ref and
+# configuration so distinct paired cells never cancel each other.
 concurrency:
-  group: scheduler-shadow-${{ github.ref }}-${{ inputs.ref || 'main' }}
+  group: scheduler-shadow-${{ github.event_name }}-${{ inputs.ref || github.event.workflow_run.head_sha || 'main' }}-${{ inputs.scheduler || 'paired' }}-${{ inputs.ordering || 'fifo' }}-${{ inputs.lane || 'fast' }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
 
 jobs:
+  cohort-plan:
+    # Plan the cohort C1 cells that still lack a successful shadow leg.
+    # Runs only on the automatic workflow_run path.  Reusable-call runs of
+    # this workflow (cohort legs) forward the caller's workflow_run event,
+    # so they are excluded via the cohort-config input; manual dispatches
+    # and direct reusable calls skip planning entirely.
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && inputs.cohort-config == ''
+    name: cohort-plan (paired shadow cells)
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-cells: ${{ steps.plan.outputs.has-cells }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Plan remaining paired shadow cells
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MANIFEST=artifacts/ci-baseline/v1.00.25-c1/cohort.json
+          if [ ! -f "$MANIFEST" ]; then
+            echo "no cohort manifest on this ref; nothing to plan"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Desired cells: every non-required configuration row x cohort SHA.
+          DESIRED=$(jq -r '
+            .configurations[]
+            | select(.required != true)
+            | .["config-id"] as $id
+            | .scheduler as $sched
+            | .ordering as $ord
+            | .lane as $lane
+            | .shas[].sha
+            | "paired|\($id)|\(.)|\($sched)|\($ord)|\($lane)"' "$MANIFEST")
+          if [ -z "$DESIRED" ]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Covered cells: successful shadow legs already recorded (or still
+          # in flight) in recent runs of this workflow.  Leg job names carry
+          # the "paired|<config>|<sha>|..." coverage marker.
+          COVERED=$(gh run list --workflow "Test scheduler shadow" \
+                      --limit 100 \
+                      --json databaseId,status \
+            | jq -r '.[] | select(.status == "completed" or .status == "in_progress" or .status == "queued") | .databaseId' \
+            | while read -r RID; do
+                [ -z "$RID" ] && continue
+                gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
+                  --jq '.jobs[]
+                        | select((.status == "in_progress" or .status == "queued")
+                                 or (.status == "completed" and .conclusion == "success"))
+                        | .name' 2>/dev/null || true
+              done | sort -u || true)
+          INCLUDE=$(printf '%s\n' "$DESIRED" | while IFS='|' read -r MARKER ID SHA SCHED ORD LANE; do
+            [ -z "$MARKER" ] && continue
+            if printf '%s\n' "$COVERED" | grep -qF "$MARKER"; then
+              continue
+            fi
+            jq -cn --arg id "$ID" --arg sched "$SCHED" --arg ord "$ORD" \
+                   --arg lane "$LANE" --arg sha "$SHA" \
+              '{cohort_config: $id, scheduler: $sched, ordering: $ord,
+                lane: $lane, sha: $sha}'
+          done | jq -s '{include: .}')
+          COUNT=$(printf '%s' "$INCLUDE" | jq '.include | length')
+          echo "planning $COUNT remaining paired shadow cell(s)"
+          echo "matrix=$(printf '%s' "$INCLUDE" | jq -c .)" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo 'has-cells=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  cohort-shadow:
+    needs: cohort-plan
+    if: needs.cohort-plan.outputs.has-cells == 'true'
+    name: cohort-shadow
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.cohort-plan.outputs.matrix) }}
+    uses: ./.github/workflows/test-scheduler-shadow.yml
+    with:
+      ref: ${{ matrix.sha }}
+      scheduler: ${{ matrix.scheduler }}
+      ordering: ${{ matrix.ordering }}
+      lane: ${{ matrix.lane }}
+      cohort-config: ${{ matrix.cohort_config }}
+      shard-count: '3'
+
   shadow-run:
-    name: shadow (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }})
+    # Root driver runs (workflow_run, no cohort-config) must not also run a
+    # stray default-config shadow leg: shadow-run executes only for
+    # cohort legs (cohort-config set) and for manual/reusable direct runs.
+    if: github.event_name != 'workflow_run' || inputs.cohort-config != ''
+    name: paired|${{ inputs.cohort-config || 'adhoc' }}|${{ inputs.ref || 'main' }} (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }}/${{ inputs.ordering || 'fifo' }}/${{ inputs.lane || 'fast' }} shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(inputs.shard-count == '4' && '[0, 1, 2, 3]' || inputs.shard-count == '6' && '[0, 1, 2, 3, 4, 5]' || inputs.shard-count == '8' && '[0, 1, 2, 3, 4, 5, 6, 7]' || '[0, 1, 2]') }}
     steps:
-      - name: Resolve scheduler mode
+      - name: Resolve scheduler mode, ordering, and lane
         id: resolve
         run: |
           # Repository variable TEST_RUNNER_SCHEDULER governs the default.
-          # Explicit dispatch input overrides the variable.
+          # Explicit call/dispatch input overrides the variable.
           # Unset/unknown values resolve to batch; queue requires explicit 'queue'.
           SCHEDULER="${{ inputs.scheduler }}"
           if [ -z "$SCHEDULER" ]; then
@@ -77,7 +230,19 @@ jobs:
             queue) SCHEDULER=queue ;;
             *) SCHEDULER=batch ;;
           esac
+          ORDERING="${{ inputs.ordering }}"
+          case "$ORDERING" in
+            fifo|lpt) ORDERING="$ORDERING" ;;
+            *) ORDERING=fifo ;;
+          esac
+          LANE="${{ inputs.lane }}"
+          case "$LANE" in
+            fast|security) LANE="$LANE" ;;
+            *) LANE=fast ;;
+          esac
           echo "scheduler=$SCHEDULER" >> "$GITHUB_OUTPUT"
+          echo "ordering=$ORDERING" >> "$GITHUB_OUTPUT"
+          echo "lane=$LANE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
         with:
@@ -91,6 +256,7 @@ jobs:
           restore-keys: racket-pkgs-shadow-
 
       - uses: ./.github/actions/setup-racket
+        id: setup-racket
         with:
           racket-version: '8.10'
 
@@ -100,16 +266,19 @@ jobs:
       - name: Compile gate
         run: raco make main.rkt
 
-      - name: Run shadow fast shard
+      - name: Run shadow shard
         id: run
         env:
           STRICT_TEST_RUNNER: 1
         run: |
           SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
-          echo ";; shadow scheduler = $SCHEDULER" | tee -a shadow-output.log
+          ORDERING="${{ steps.resolve.outputs.ordering }}"
+          LANE="${{ steps.resolve.outputs.lane }}"
+          echo ";; shadow scheduler = $SCHEDULER ordering = $ORDERING lane = $LANE" | tee -a shadow-output.log
           racket scripts/run-tests.rkt \
-            --suite fast --jobs 4 \
+            --suite "$LANE" --jobs 4 \
             --scheduler "$SCHEDULER" \
+            --ordering "$ORDERING" \
             --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             --json-out shadow-results.json \
             2>&1 | tee -a shadow-output.log
@@ -118,6 +287,8 @@ jobs:
         if: always()
         run: |
           SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
+          ORDERING="${{ steps.resolve.outputs.ordering }}"
+          LANE="${{ steps.resolve.outputs.lane }}"
           SHA=$(git rev-parse HEAD)
           REF=$(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)
           cat > shadow-cohort-meta.json <<EOF
@@ -126,7 +297,9 @@ jobs:
             "resolved_ref": "$REF",
             "sha": "$SHA",
             "scheduler": "$SCHEDULER",
-            "ordering": "fifo",
+            "ordering": "$ORDERING",
+            "lane": "$LANE",
+            "cohort_config": "${{ inputs.cohort-config }}",
             "shard_index": ${{ matrix.shard }},
             "shard_total": ${{ strategy.job-total }},
             "workers": 4,
