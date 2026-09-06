@@ -56,6 +56,7 @@
                   ordering-record-snapshot-checksum
                   ordering-record-snapshot-status
                   ordering-record->jsexpr)
+         (only-in "../scripts/run-tests/cli.rkt" resolve-scheduler)
          (only-in "../scripts/run-tests/shard-plan.rkt" build-shard-plan plan->jsexpr)
          "../scripts/run-tests.rkt")
 
@@ -162,6 +163,27 @@
 
 (define suite
   (test-suite "test-runner-scheduler-characterization"
+
+    (test-case "W4 env seam: TEST_RUNNER_SCHEDULER resolution (flag > queue env > batch default; batch kill switch wins; invalid fails loud)"
+      (define (with-env val thunk)
+        (define env (make-environment-variables))
+        (when val
+          (environment-variables-set! env #"TEST_RUNNER_SCHEDULER" val))
+        (parameterize ([current-environment-variables env])
+          (thunk)))
+      ;; unset -> whatever the CLI chose (product default 'batch)
+      (check-equal? (with-env #f (lambda () (resolve-scheduler 'batch))) 'batch)
+      (check-equal? (with-env #f (lambda () (resolve-scheduler 'queue))) 'queue)
+      ;; empty -> treated like unset
+      (check-equal? (with-env #"" (lambda () (resolve-scheduler 'batch))) 'batch)
+      ;; "queue" -> upgrades batch default, never overrides an explicit flag
+      (check-equal? (with-env #"queue" (lambda () (resolve-scheduler 'batch))) 'queue)
+      (check-equal? (with-env #"queue" (lambda () (resolve-scheduler 'queue))) 'queue)
+      ;; "batch" -> kill switch, wins even over --scheduler queue
+      (check-equal? (with-env #"batch" (lambda () (resolve-scheduler 'batch))) 'batch)
+      (check-equal? (with-env #"batch" (lambda () (resolve-scheduler 'queue))) 'batch)
+      ;; anything else -> fail loud
+      (check-exn exn:fail? (lambda () (with-env #"threads" (lambda () (resolve-scheduler 'batch))))))
 
     (test-case "W2 work-conserving queue vs fixed-batch rollback: jobs=2, third file starts when a worker frees"
       (define dir (make-temporary-file "w2-barrier-~a" 'directory))

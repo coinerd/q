@@ -328,6 +328,26 @@
     (test-case "no --scheduler option anywhere in ci.yml (W2 flips this)"
       (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))))
 
+    ;; Pin 5b (W4): workflow shards select the queue scheduler via the env
+    ;; seam only. The runner-side kill switch (--scheduler batch and
+    ;; TEST_RUNNER_SCHEDULER=batch) still wins over this env value, and
+    ;; unsetting the variable restores the product default (batch) — both
+    ;; reasserted in tests/test-runner-scheduler-characterization.rkt.
+    (test-case "workflow shards pass TEST_RUNNER_SCHEDULER=queue explicitly"
+      (define body (job-body "workflows"))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"TEST_RUNNER_SCHEDULER:[ \t]*queue" ln)) body)
+                  "workflows job must set TEST_RUNNER_SCHEDULER: queue in job env"))
+    (test-case "scheduler env stays scoped to the workflow shards"
+      (for ([job (in-list (top-jobs))])
+        (unless (equal? job "workflows")
+          (check-false
+           (ormap (lambda (ln) (regexp-match? #rx"TEST_RUNNER_SCHEDULER" ln)) (job-body job))
+           (format "job ~a must not set TEST_RUNNER_SCHEDULER (workflow shards only)" job)))))
+    (test-case "workflow shard commands keep jobs=2 and JSON shape (scheduler choice does not alter them)"
+      (define body (job-body "workflows"))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"--jobs 2" ln)) body))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"--json-out test-results.json" ln)) body)))
+
     ;; Pin 6: JSON / artifact consumers
     (test-case "relocated report consumes retained test-results-fast-* artifacts (post-workflow)"
       (define t

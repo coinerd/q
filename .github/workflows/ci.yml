@@ -721,6 +721,13 @@ jobs:
       matrix:
         shard: [0, 1]
     runs-on: ubuntu-latest
+    env:
+      # W4 (v1.00.26 §7): workflow shards select the queue scheduler via the
+      # env seam only — no CLI flag here. The runner-side batch kill switch
+      # still wins over this value, and unsetting the variable restores the
+      # product default (batch). Scoped to this job so the other suites keep
+      # the default until measured.
+      TEST_RUNNER_SCHEDULER: queue
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-racket

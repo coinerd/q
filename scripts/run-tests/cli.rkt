@@ -10,12 +10,11 @@
          racket/string
          (only-in racket/future processor-count)
          (only-in "profiles.rkt" known-profiles)
-         (only-in "scheduler-order.rkt"
-                  known-orderings
-                  default-ordering))
+         (only-in "scheduler-order.rkt" known-orderings default-ordering))
 
 (provide usage
          parse-args
+         resolve-scheduler
          validate-args!
          known-suites
          known-modes
@@ -104,6 +103,28 @@
         platform))
 (define known-modes '(auto subprocess in-process grouped))
 (define known-schedulers '(batch queue))
+
+;; W4 (#9592): TEST_RUNNER_SCHEDULER is the CI-shell-only lever. Resolution:
+;;  - unset or empty -> whatever the CLI chose (default 'batch)
+;;  - "batch"        -> batch, everywhere, even overriding an explicit
+;;                      --scheduler queue flag (the kill switch)
+;;  - "queue"        -> queue only when the CLI left the batch default;
+;;                      an explicit --scheduler flag always wins
+;;  - anything else  -> fail loud (mirrors the invalid --scheduler contract)
+;; Selection, verdicts, JSON shape, and result order are unaffected: the
+;; resolved value only picks the execution engine.
+(define (resolve-scheduler scheduler)
+  (define env-bytes
+    (environment-variables-ref (current-environment-variables) #"TEST_RUNNER_SCHEDULER"))
+  (cond
+    [(not env-bytes) scheduler]
+    [(equal? env-bytes #"") scheduler]
+    [(equal? env-bytes #"batch") 'batch]
+    [(equal? env-bytes #"queue") (if (eq? scheduler 'batch) 'queue scheduler)]
+    [else
+     (error 'resolve-scheduler
+            "invalid TEST_RUNNER_SCHEDULER value ~a (valid: batch, queue)"
+            (bytes->string/utf-8 env-bytes))]))
 
 (define (parse-args args)
   (let loop ([rest args]
@@ -368,7 +389,7 @@
           record-gate?
           inventory?
           mode
-          scheduler
+          (resolve-scheduler scheduler)
           json-out
           ledger
           profile
