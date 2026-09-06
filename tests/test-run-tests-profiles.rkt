@@ -11,6 +11,7 @@
          racket/file
          racket/path
          racket/runtime-path
+         racket/string
          racket/system
          "../scripts/run-tests.rkt")
 
@@ -73,6 +74,35 @@
                   _ordering)
     (parse-args args))
   scheduler)
+
+;; ── W4 (#9592) security-queue hold contract helpers ──
+
+(define ci-yml-path* (build-path project-root ".github" "workflows" "ci.yml"))
+
+(define (ci-yml-lines*)
+  (file->lines ci-yml-path*))
+
+(define (security-job-block*)
+  (define all (ci-yml-lines*))
+  (define start
+    (for/first ([line (in-list all)]
+                [i (in-naturals)]
+                #:when (regexp-match? #px"^  security:\\s*$" line))
+      i))
+  (unless start
+    (error 'security-job-block "ci.yml no longer declares a security job"))
+  (cons (list-ref all start)
+        (for/list ([line (in-list (list-tail all (add1 start)))]
+                   #:break (regexp-match? #px"^  [A-Za-z0-9_-]+:" line))
+          line)))
+
+(define (security-suite-run-line*)
+  (define candidates
+    (for/list ([line (in-list (security-job-block*))]
+               #:when (and (string-contains? line "run-tests.rkt --suite security")
+                           (string-contains? line "run:")))
+      line))
+  (and (= (length candidates) 1) (car candidates)))
 
 (define suite
   (test-suite "run-tests environment profiles"
@@ -185,6 +215,44 @@
 
     (test-case "hold: manual --scheduler override still selects the requested scheduler"
       (check-equal? (parse-scheduler '("--scheduler" "queue")) 'queue)
-      (check-equal? (parse-scheduler '("--scheduler" "batch")) 'batch))))
+      (check-equal? (parse-scheduler '("--scheduler" "batch")) 'batch))
+
+    ;; ── W4 (#9592) security-queue hold contract ──
+    ;; W1's cohort C1 decision block records security-queue . hold with zero
+    ;; paired shadow samples (security/queue/fifo: 0 recorded attempts across
+    ;; all 20 eligible SHAs), so the roadmap v1.00.25 §6 W4 security gate
+    ;; ("Security p50 <= 240 s; permission/isolation semantics unchanged") is
+    ;; not evaluable from absent evidence. W4 therefore records the hold
+    ;; instead of activating. These pins make the hold observable:
+    ;;  - the required security lane's workflow block carries no scheduler
+    ;;    lever and its single suite command is pinned verbatim (CLI batch
+    ;;    default end to end),
+    ;;  - the batch env lever still forces batch everywhere, and no ci.yml
+    ;;    lane may resolve a scheduler default from the repository variable.
+    ;; Any silent future activation (a workflow scheduler token, a changed
+    ;; suite command) breaks a pin deliberately.
+
+    (test-case "hold: security required lane stays on batch while the W1 security-queue hold stands"
+      (define block (string-join (security-job-block*) "\n"))
+      (check-true (> (string-length block) 100) "security job block extraction failed")
+      (check-false
+       (regexp-match? #rx"TEST_RUNNER_SCHEDULER" block)
+       "the security lane must not reference the scheduler repository variable while the W1 security-queue hold stands")
+      (check-false (regexp-match? #rx"--scheduler" block)
+                   "the security lane command must keep the CLI batch default")
+      (check-equal?
+       (security-suite-run-line*)
+       "        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log"
+       "the security lane's single suite command changed; only a reviewed promote may touch it"))
+
+    (test-case "hold: TEST_RUNNER_SCHEDULER=batch still forces batch everywhere"
+      (define env-batch (make-environment-variables))
+      (environment-variables-set! env-batch #"TEST_RUNNER_SCHEDULER" #"batch")
+      (parameterize ([current-environment-variables env-batch])
+        (check-equal? (parse-scheduler '()) 'batch)
+        (check-equal? (parse-scheduler '("--scheduler" "batch")) 'batch))
+      (check-false
+       (regexp-match? #rx"TEST_RUNNER_SCHEDULER" (string-join (ci-yml-lines*) "\n"))
+       "no ci.yml lane may resolve a scheduler from the repository variable while the W1 security-queue hold stands"))))
 
 (run-tests suite)

@@ -550,6 +550,14 @@ jobs:
   # ────────────────────────────────────────────────────────────
   # Gate 3: Security tier — sandbox/permission/safe-mode tests
   # ────────────────────────────────────────────────────────────
+  # W4 (#9592) security-queue hold: W1's cohort C1 decision recorded the
+  # security queue promotion as `hold` (zero paired shadow samples across all
+  # 20 eligible SHAs, so the roadmap "Security p50 <= 240 s" gate is not
+  # evaluable). This required lane keeps the CLI batch default; the only
+  # scheduler lever in this repository remains the shadow workflow's
+  # repository variable, and rollback to batch is always one lever removal.
+  # A future promote must relax the W4 guard pins in
+  # tests/test-run-tests-profiles.rkt deliberately — never silently.
   security:
     needs: lint
     runs-on: ubuntu-latest
