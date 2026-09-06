@@ -49,6 +49,20 @@
   ;; Should return state unchanged
   (check-eq? st0 st1))
 
+;; BUG-0062: live GSD emitters pass symbol event names (emit-gsd-event!
+;; 'gsd.verification.started), while the registry is keyed by strings.
+;; Dispatch must normalize symbol ev-keys to their string form instead of
+;; silently dropping the event.
+(test-case "apply-event-to-state dispatches symbol ev-keys to string-keyed reducers"
+  (define symbol-called (box #f))
+  (register-event-reducer! "test.symbol.dispatch"
+                           (lambda (state evt)
+                             (set-box! symbol-called #t)
+                             state))
+  (define st0 (initial-ui-state))
+  (apply-event-to-state st0 (make-test-event 'test.symbol.dispatch (hash)))
+  (check-true (unbox symbol-called) "symbol ev-key must reach the string-keyed reducer"))
+
 ;; ============================================================
 ;; Dispatch correctness (spot-check key handlers)
 ;; ============================================================
