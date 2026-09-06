@@ -162,7 +162,8 @@
    (current-error-port)
    "prepared-env-report: ~a
 usage:
-  prepared-env-report.rkt --emit-restore-record --out F --run-id N --head-sha S --shard N --created-at-utc T [--wall-clock-seconds V] [--fast-env-producer-result R] [--prepared-artifact-name A] [--installer-sha256 H]
+  prepared-env-report.rkt --emit-restore-record --out F --run-id N --head-sha S --shard N --created-at-utc T \
+  [--wall-clock-seconds V] [--fast-env-producer-result R] [--prepared-artifact-name A] [--installer-sha256 H]
   prepared-env-report.rkt --aggregate DIR --out F [--filter-prefix P] [--campaign C]
   prepared-env-report.rkt --manifest F --check [--write-checksums]
 "
@@ -418,7 +419,8 @@ usage:
         'basis
         (or
          basis-override
-         "machine-readable prepared-env-restore records emitted by the W5 ci.yml wiring from real CI runs on the activated defaults (test-results-fast-* artifacts)"))))
+         "machine-readable prepared-env-restore records emitted by the W5 ci.yml wiring from \
+         real CI runs on the activated defaults (test-results-fast-* artifacts)"))))
      (cons 'restores (apply json-arr records))
      (cons 'observation
            (json-obj (cons 'counts
@@ -439,10 +441,14 @@ usage:
        (cons 'label "fresh measurements")
        (cons
         'historical-note
-        "The v1.00.11 baseline 488.0 s and the v1.00.16 setup+execution 627.0 s are recorded history; this report contains only fresh measurements taken on the current tree with the same commands and profiles. Historical numbers are referenced as history and are never presented as current values.")
+        "The v1.00.11 baseline 488.0 s and the v1.00.16 setup+execution 627.0 s are recorded history; \
+        this report contains only fresh measurements taken on the current tree with the same commands and profiles. \
+        Historical numbers are referenced as history and are never presented as current values.")
        (cons
         'recipe
-        "Per run: critical path = slowest test-results-fast shard wall_clock_seconds (suite fast, 3 shards x 4 workers, FAST_SHARD_COUNT=3); setup component = that shard's prepared_environment restore_ms; both are reported and their sum as setup-plus-execution-seconds. Missing telemetry stays unknown.")
+        "Per run: critical path = slowest test-results-fast shard wall_clock_seconds \
+        (suite fast, 3 shards x 4 workers, FAST_SHARD_COUNT=3); setup component = that shard's prepared_environment restore_ms; \
+        both are reported and their sum as setup-plus-execution-seconds. Missing telemetry stays unknown.")
        (cons 'samples (apply json-arr samples))))))
   (write-json-file out report)
   ;; Bind the aggregate report to a SHA256SUMS file so the durable

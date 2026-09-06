@@ -396,7 +396,8 @@
       (script-succeeds
        (emit-command
         out
-        "--record-source backfilled-from-run-logs --fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+        "--record-source backfilled-from-run-logs --fast-env-producer-result success \
+         --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
        '(("Q_PREPARED_ENV_STATE" . "restored")))
       (define rec (read-jsexpr out))
       (check-equal? (hash-ref rec 'record-source) "backfilled-from-run-logs"))
