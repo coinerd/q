@@ -206,6 +206,36 @@ jobs:
           echo "Q_PREPARED_ENV_RESTORE_MS=${{ steps.setup.outputs.prepared-env-restore-ms }}" >> "$GITHUB_ENV"
           echo "Q_PREPARED_ENV_FALLBACK_MS=${{ steps.setup.outputs.prepared-env-fallback-ms }}" >> "$GITHUB_ENV"
 
+      # W5: persist the already-computed restore outcome as a
+      # machine-readable record for the warm-observation aggregator.
+      # Report wiring only — the guarded restore/fallback semantics
+      # inside setup-racket are untouched; this records what happened
+      # (state, durations, provenance) so real CI runs can be aggregated
+      # honestly, including named fallback causes.
+      - name: Emit prepared-environment restore record
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p prepared-env-records
+          racket scripts/ci/prepared-env-report.rkt \
+            --emit-restore-record \
+            --out "prepared-env-records/record-${{ github.run_id }}-${{ matrix.shard }}.json" \
+            --run-id "${{ github.run_id }}" \
+            --head-sha "${{ github.sha }}" \
+            --shard "${{ matrix.shard }}" \
+            --created-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --fast-env-producer-result "${{ needs.fast-env.result }}" \
+            --prepared-artifact-name "prepared-env-fast" \
+            --installer-sha256 "${{ env.INSTALLER_SHA_LINUX_8_10 }}"
+
+      - name: Upload prepared-environment restore records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-env-records-${{ github.run_id }}-${{ matrix.shard }}
+          path: prepared-env-records/
+          if-no-files-found: error
+
       - name: Clear stale bytecode
         if: steps.setup.outputs.prepared-env-result != 'success'
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
@@ -279,6 +309,55 @@ jobs:
           name: test-results-fast-${{ matrix.shard }}
           path: test-results.json
           if-no-files-found: ignore
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # W5: prepared-environment report — report wiring only, never an
+  # activation decision. Aggregates the warm-observation restore records
+  # emitted by the test shards into a run-local report (uploaded as
+  # evidence, with the verified-restore rate and named fallback causes)
+  # and schema-checks the committed baseline manifest with the same
+  # aggregator. The prepared-environment decision itself is explicitly
+  # reserved for a later reviewed change.
+  # ────────────────────────────────────────────────────────────
+  prepared-env-report:
+    needs: [test]
+    if: ${{ !cancelled() && needs.test.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+          prepared-environment: 'off'
+      - name: Download shard restore records
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: prepared-env-records-${{ github.run_id }}-*
+          path: records-raw
+      - name: Stage restore records
+        run: |
+          mkdir -p prepared-env-records
+          find records-raw -name 'record-*.json' -exec cp {} prepared-env-records/ \;
+          ls -1 prepared-env-records/ || true
+      - name: Aggregate warm-observation window (run-local)
+        run: |
+          racket scripts/ci/prepared-env-report.rkt \
+            --aggregate prepared-env-records \
+            --out prepared-env-report-run.json
+          cat prepared-env-report-run.json
+      - name: Schema-check the committed baseline manifest
+        run: |
+          racket scripts/ci/prepared-env-report.rkt \
+            --manifest artifacts/ci-baseline/v1.00.25-prepared-env/report.json --check
+      - name: Upload run-local prepared-env report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-env-report-${{ github.run_id }}
+          path: prepared-env-report-run.json
+          if-no-files-found: error
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────

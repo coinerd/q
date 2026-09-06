@@ -294,8 +294,8 @@
       (check-= (hash-ref obs 'verified-restore-rate) (/ 1 3) 1e-9)
       (check-equal? (hash-ref (hash-ref obs 'gate) 'verdict) "fallback-causes-named")
       (define causes (hash-ref (hash-ref obs 'gate) 'fallback-causes))
-      (check-true (hash-has-key? causes "restore-mismatch-or-failure"))
-      (check-true (hash-has-key? causes "producer-skipped"))
+      (check-true (hash-has-key? causes 'restore-mismatch-or-failure))
+      (check-true (hash-has-key? causes 'producer-skipped))
       ;; Missing wall clock stays "unknown" in the rebuilt record.
       (define recs (hash-ref rep 'restores))
       (define rebuilt-rec
@@ -307,10 +307,99 @@
       ;; historical numbers referenced but never substituted.
       (define fresh (hash-ref rep 'fresh-measurements))
       (check-equal? (hash-ref fresh 'label) "fresh measurements")
-      (check-equal? (length (hash-ref fresh 'samples)) 2)
+      (check-equal? (length (hash-ref fresh 'samples)) 3)
       (check-true (hash-has-key? fresh 'historical-note))
       ;; Round-trip: the aggregate output itself passes --check.
       (script-succeeds (string-append "--manifest " (path->string report) " --check")))
+
+    (test-case "round-trip: emit output feeds aggregate without semantic loss"
+      ;; The ci.yml wiring emits records with `raw-state` + composed
+      ;; `cache-key`; the aggregator must read those emitted records back
+      ;; with identical semantics (outcome, durations, cache key).
+      (define out-v (tmp-path "rt-verified.json"))
+      (script-succeeds
+       (emit-command
+        out-v
+        "--wall-clock-seconds 159.0 --fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 497f")
+       '(("Q_PREPARED_ENV_STATE" . "restored") ("Q_PREPARED_ENV_RESTORE_MS" . "22000")))
+      (define out-r (tmp-path "rt-rebuilt.json"))
+      (script-succeeds
+       (emit-command
+        out-r
+        "--fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 497f")
+       '(("Q_PREPARED_ENV_STATE" . "rebuilt") ("Q_PREPARED_ENV_RESTORE_MS" . "8000")
+                                              ("Q_PREPARED_ENV_FALLBACK_MS" . "340000")))
+      (define report (tmp-path "rt-report.json"))
+      (script-succeeds (string-append "--aggregate "
+                                      (path->string tmp-root)
+                                      " --filter-prefix rt- --out "
+                                      (path->string report)))
+      (define rep (read-jsexpr report))
+      (define recs (hash-ref rep 'restores))
+      (check-equal? (length recs) 2)
+      (define verified-rec
+        (for/first ([r (in-list recs)]
+                    #:when (equal? (hash-ref r 'raw-state) "restored"))
+          r))
+      (define rebuilt-rec
+        (for/first ([r (in-list recs)]
+                    #:when (equal? (hash-ref r 'raw-state) "rebuilt"))
+          r))
+      (check-equal? (hash-ref verified-rec 'outcome) "verified")
+      (check-equal? (hash-ref verified-rec 'restore-ms) 22000)
+      (check-equal? (hash-ref verified-rec 'cache-key) "prepared-env-fast:497f")
+      (check-equal? (hash-ref rebuilt-rec 'outcome) "rebuilt")
+      (check-equal? (hash-ref rebuilt-rec 'fallback-cause) "restore-mismatch-or-failure")
+      (define obs (hash-ref rep 'observation))
+      (check-equal? (hash-ref obs 'rate-denominator) 2)
+      (check-= (hash-ref obs 'verified-restore-rate) 0.5 1e-9))
+
+    (test-case "aggregate: --basis override lands in window.basis (honest provenance)"
+      (write-jsexpr (tmp-path "basis-a.json")
+                    (hasheq 'schema
+                            "prepared-env-restore-record"
+                            'run-id
+                            2001
+                            'head-sha
+                            "ffff"
+                            'created-at-utc
+                            "2026-09-06T00:35:00Z"
+                            'shard
+                            0
+                            'prepared-env-mode
+                            "auto"
+                            'fast-env-producer-result
+                            "success"
+                            'state
+                            "restored"
+                            'restore-ms
+                            16000
+                            'wall-clock-seconds
+                            249.0
+                            'prepared-artifact-name
+                            "prepared-env-fast"
+                            'installer-sha256
+                            "497f"))
+      (define report (tmp-path "basis-report.json"))
+      (script-succeeds
+       (string-append "--aggregate "
+                      (path->string tmp-root)
+                      " --filter-prefix basis- --out "
+                      (path->string report)
+                      " --basis reconstructed from real CI run logs via the jobs API"))
+      (define rep (read-jsexpr report))
+      (check-equal? (hash-ref (hash-ref rep 'window) 'basis)
+                    "reconstructed from real CI run logs via the jobs API"))
+
+    (test-case "emit: --record-source override is preserved verbatim"
+      (define out (tmp-path "emit-source.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--record-source backfilled-from-run-logs --fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+       '(("Q_PREPARED_ENV_STATE" . "restored")))
+      (define rec (read-jsexpr out))
+      (check-equal? (hash-ref rec 'record-source) "backfilled-from-run-logs"))
 
     (test-case "check: rejects raw CI vocabulary leaking into outcome"
       (define report (tmp-path "bad-vocab.json"))
@@ -415,7 +504,7 @@
                                'verdict
                                "fallback-causes-named"
                                'fallback-causes
-                               (hasheq "producer-skipped" 1)))
+                               (hasheq 'producer-skipped 1)))
                'fresh-measurements
                (hasheq 'label "fresh measurements" 'samples (list) 'historical-note "n")))
       (script-fails (string-append "--manifest " (path->string report) " --check")))
@@ -450,7 +539,18 @@
       (make-directory* dir)
       (define report (build-path dir "report.json"))
       (write-jsexpr report
-                    (valid-report (list (hasheq 'outcome "verified" 'restore-ms 5 'sha-context "x"))))
+                    (valid-report (list (hasheq 'outcome
+                                                "verified"
+                                                'restore-ms
+                                                5
+                                                'sha-context
+                                                "x"
+                                                'fallback-ms
+                                                "unknown"
+                                                'wall-clock-seconds
+                                                "unknown"
+                                                'cache-key
+                                                "prepared-env-fast:x"))))
       (script-succeeds
        (string-append "--manifest " (path->string report) " --check --write-checksums"))
       (check-true (file-exists? (build-path dir "SHA256SUMS")))
