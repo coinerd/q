@@ -320,13 +320,13 @@
             (when (and d baseline-digests (hash-has-key? baseline-digests rs))
               (define baseline-digest (hash-ref baseline-digests rs))
               (unless (equal? d baseline-digest)
-                (err!
-                 (format
-                  "inventory mismatch for configuration ~a SHA ~a: expected required-lane baseline digest ~a, got ~a — cohort error, never silently ignored"
-                  config-id
-                  rs
-                  baseline-digest
-                  d))))
+                (err! (format (string-append "inventory mismatch for configuration ~a SHA ~a: "
+                                             "expected required-lane baseline digest ~a, got ~a "
+                                             "— cohort error, never silently ignored")
+                              config-id
+                              rs
+                              baseline-digest
+                              d))))
             (when (and baseline (equal? c baseline))
               (unless (sha-eligible? r)
                 (err!
