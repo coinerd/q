@@ -41,7 +41,13 @@ concurrency:
 
 jobs:
   # ────────────────────────────────────────────────────────────
-  # Gate 1: Lint (< 30s) — fast feedback on every PR
+  # Gate 1: Lint — lightweight, required, fast PR feedback
+  # v1.00.26 W1 (§7): the PR-critical path keeps only the governance
+  # controller tests and workflow YAML validation. The Racket lint
+  # suite (lint-all, version-expectations, lint-alignment, metadata
+  # inventory/lint) moved to the parallel `lint-quality` job so
+  # downstream jobs (fast-env → test …) no longer wait for Racket lint
+  # steps. `lint` and `lint-quality` are both required.
   # ────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
@@ -50,16 +56,6 @@ jobs:
 
       - name: Protected governance controller tests
         run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
-
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
-          restore-keys: racket-pkgs-lint-
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Workflow YAML validation
         run: |
@@ -78,6 +74,21 @@ jobs:
             sys.exit(1)
           print('All workflows and actions valid YAML')
           "
+
+  lint-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-lint-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run all lint checks
         run: racket scripts/lint-all.rkt
@@ -121,7 +132,11 @@ jobs:
   # full path) and by the rollback switch RACKET_PREPARED_ARTIFACT=off.
   # ────────────────────────────────────────────────────────────
   fast-env:
-    needs: lint
+    # v1.00.26 W2 (§7): explicit single-element needs edge — fast-env
+    # starts after the lightweight `lint` gate only and runs concurrently
+    # with the parallel `lint-quality` job (no ordering edge in either
+    # direction; the prepared-environment contract is unchanged).
+    needs: [lint]
     if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
     runs-on: ubuntu-latest
     steps:
@@ -250,9 +265,10 @@ jobs:
 
       - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
         # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
-        # variable FAST_SHARD_PLAN=active ONLY after the shard-plan-report
-        # job below prints `activate` (predicted max-shard duration improves
-        # over round-robin with test inventory preserved). Default `off`
+        # variable FAST_SHARD_PLAN=active ONLY after the post-workflow
+        # shard-plan-report telemetry (.github/workflows/shard-plan-telemetry.yml)
+        # prints `activate` (predicted max-shard duration improves over
+        # round-robin with test inventory preserved). Default `off`
         # keeps the round-robin behavior byte-identical.
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
@@ -369,108 +385,16 @@ jobs:
     steps:
       - run: echo "All test shards and platform checks passed."
 
-  # ────────────────────────────────────────────────────────────
-  # Gate 2b+: Shard-plan report (W7) — report-only, never fails CI
-  # Compares the duration-aware plan (built from this run's retained
-  # per-shard artifacts, W0 schema) against the actual round-robin
-  # shard wall clocks. Activation is a human decision gated on the
-  # printed evidence: set FAST_SHARD_PLAN=active only when this job
-  # reports `activate` (predicted max-shard improves, inventory
-  # preserved). Workflow shards follow later under the same rule.
-  # ────────────────────────────────────────────────────────────
-  shard-plan-report:
-    needs: [test-aggregate]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
-      - name: Download retained fast-shard artifacts
-        continue-on-error: true
-        uses: actions/download-artifact@v7
-        with:
-          pattern: test-results-fast-*
-          path: durations-raw
-      - name: Stage per-shard duration JSONs
-        run: |
-          mkdir -p durations
-          i=0
-          for d in durations-raw/test-results-fast-*; do
-            [ -d "$d" ] || continue
-            if [ -f "$d/test-results.json" ]; then
-              cp "$d/test-results.json" "durations/shard-$i.json"
-            fi
-            i=$((i+1))
-          done
-          ls -1 durations/ || true
-      - name: Observed round-robin wall clocks
-        id: observed
-        run: |
-          obs=null
-          if compgen -G "durations/*.json" > /dev/null; then
-            obs=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null) || obs=null
-          fi
-          printf 'observed=%s\n' "$obs" >> "$GITHUB_OUTPUT"
-      - name: Build duration-aware plan (report-only)
-        if: always()
-        run: |
-          if ! compgen -G "durations/*.json" > /dev/null; then
-            echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
-            exit 0
-          fi
-          # Current shard total = number of staged per-shard duration JSONs
-          # (3 today; N once FAST_SHARD_COUNT is activated per the ledger).
-          CURRENT_TOTAL=$(ls -1 durations/*.json | wc -l)
-          racket scripts/run-tests.rkt \
-            --suite fast --shard-total "$CURRENT_TOTAL" \
-            --shard-plan report --durations durations \
-            2>&1 | tee shard-plan-report.log
-          # FAST_SHARD_COUNT study (v1.00.16 W3, report-only): predicted
-          # max shard at N=4/6/8 over this run's post-W1/W2 durations.
-          # Activation rule (FAST_SHARD_PLAN precedent): activate N only
-          # if the predicted max shard improves AND the runner-minute
-          # cost delta is recorded and accepted in
-          # docs/reports/test-regression-log.md.
-          echo ";; FAST_SHARD_COUNT study (W3, report-only): predicted max shard at N=4/6/8" | tee -a shard-plan-report.log
-          for n in 4 6 8; do
-            [ "$n" = "$CURRENT_TOTAL" ] && continue
-            echo ";; ---- N=$n ----"
-            racket scripts/run-tests.rkt \
-              --suite fast --shard-total "$n" \
-              --shard-plan report --durations durations 2>&1 \
-              | grep -E '^shard [0-9]+/[0-9]+:|^;; ' || echo ";; (planner produced no report for N=$n)"
-          done | tee -a shard-plan-report.log
-      - name: Post predicted-vs-observed summary
-        if: always()
-        run: |
-          {
-            echo "## Shard plan report (W7, report-only)"
-            echo '```'
-            grep -E 'shard [0-9]+/[0-9]+:|^;; ' shard-plan-report.log || true
-            echo '```'
-            if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
-              echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
-              echo "- Inventory check: planned files must equal the summed per-shard file counts"
-              jq -s '[.[].run_summary.file_count] | add' durations/*.json \
-                | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
-            else
-              echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
-            fi
-            echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
-            echo "- FAST_SHARD_COUNT (W3, report-only): predicted max shard for N=4/6/8 printed above from the same durations. Default stays 3; activate N only if the predicted max shard improves AND the runner-minute cost delta is recorded and accepted in \`docs/reports/test-regression-log.md\` (activation + revert procedure recorded there)."
-          } >> "$GITHUB_STEP_SUMMARY"
-        env:
-          OBSERVED: ${{ steps.observed.outputs.observed }}
-      - name: Upload shard-plan report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: shard-plan-report
-          path: shard-plan-report.log
-          if-no-files-found: ignore
-          retention-days: 7
+  # v1.00.26 W3: the shard-plan-report job moved OFF the PR critical path.
+  # The identical report-only job (same name, same artifact contract:
+  # shard-plan-report / shard-plan-report.log / retention 7d, same
+  # report content) now runs post-workflow in
+  # .github/workflows/shard-plan-telemetry.yml (workflow_run: CI
+  # completed + workflow_dispatch), checking out the triggering run's
+  # head SHA. DAG checkpoint: artifacts/ci-topology/v1.00.26-w3/dag-checkpoint.json
+  # (schema ci-topology/dag-checkpoint@1, label "topology checkpoint —
+  # not a cohort"). A failed report run fails that telemetry workflow
+  # loudly but can never block or fail this workflow.
 
   # ────────────────────────────────────────────────────────────
   # Gate 2c: Platform-cross verification
@@ -797,6 +721,13 @@ jobs:
       matrix:
         shard: [0, 1]
     runs-on: ubuntu-latest
+    # W4 (v1.00.26 §7) decision: HOLD. Workflow shards keep the product-default
+    # batch scheduler. CI measurement on the wave branch (2 queue runs, one
+    # 30-minute window) showed shard p50s ~9-25% above the 5-run batch baseline
+    # and was contention-confounded — not reliable enough to activate queue.
+    # Targets were not revised; the TEST_RUNNER_SCHEDULER env seam stays
+    # available runner-side for a future measured re-trial, and unsetting the
+    # variable restores this default everywhere.
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-racket

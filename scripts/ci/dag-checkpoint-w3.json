@@ -1,0 +1,4 @@
+{
+  "superseded_by": "artifacts/ci-topology/v1.00.26-w3/dag-checkpoint.json",
+  "note": "v1.00.26 W3 DAG checkpoints live under artifacts/ci-topology/<wave>/ per the W0/W1/W2 convention. This file previously held the W3 checkpoint at the wrong path; it is kept only as a redirect. Tests pin the canonical path's SHA256."
+}

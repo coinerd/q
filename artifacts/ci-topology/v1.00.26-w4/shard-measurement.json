@@ -1,0 +1,63 @@
+{
+  "schema": "q.ci-topology.shard-measurement/1",
+  "wave": "v1.00.26-w4",
+  "suite": "workflows",
+  "sharding": { "total": 2, "jobs": 2, "timeout-seconds": 90 },
+  "scheduler-env": "TEST_RUNNER_SCHEDULER",
+  "cohorts": [
+    {
+      "name": "batch-baseline",
+      "scheduler": "batch (product default, TEST_RUNNER_SCHEDULER unset)",
+      "ref": "main",
+      "runs": [
+        { "run-id": 34020013953, "sha": "ba3fe3e0", "shard-0-seconds": 667, "shard-1-seconds": 509 },
+        { "run-id": 34030475501, "sha": "6c2480b0", "shard-0-seconds": 637, "shard-1-seconds": 697 },
+        { "run-id": 34042586639, "sha": "879d6321", "shard-0-seconds": 694, "shard-1-seconds": 664 },
+        { "run-id": 34054844728, "sha": "a8424304", "shard-0-seconds": 503, "shard-1-seconds": 610 },
+        { "run-id": 34058651140, "sha": "11100893", "shard-0-seconds": 555, "shard-1-seconds": 590 }
+      ],
+      "n": 5,
+      "p50-seconds": { "shard-0": 637, "shard-1": 610 },
+      "p95-seconds": { "shard-0": 694, "shard-1": 697, "note": "n=5; p95 computed as max (weak upper bound, flagged unreliable)" }
+    },
+    {
+      "name": "queue-branch",
+      "scheduler": "queue (TEST_RUNNER_SCHEDULER=queue set in ci.yml workflows job)",
+      "ref": "campaign/v1.00.26-w4",
+      "runs": [
+        { "run-id": 34064484738, "sha": "c55e18f4", "shard-0-seconds": 719, "shard-1-seconds": 790 },
+        { "run-id": 34065151613, "sha": "70bc6f9c", "shard-0-seconds": 666, "shard-1-seconds": 733 }
+      ],
+      "n": 2,
+      "p50-seconds": { "shard-0": 692.5, "shard-1": 761.5 },
+      "p95-seconds": { "shard-0": 719, "shard-1": 790, "note": "n=2; p95 computed as max (weak upper bound, flagged unreliable)" },
+      "reliability-limitation": "both queue runs executed inside a single ~30-minute window on the same evening, so runner-pool contention is a confound; batch baseline spans 5 runs over multiple days"
+    }
+  ],
+  "comparison": {
+    "shard-0-p50-delta-percent": 8.7,
+    "shard-1-p50-delta-percent": 24.8,
+    "verdict-target": "queue at or below batch p50 with reliable p95 and clean isolation",
+    "verdict-target-met": false
+  },
+  "same-sha-a-b-local": {
+    "sha": "70bc6f9c",
+    "runner-version": "1.00.25",
+    "method": "run-tests.rkt --suite workflows --jobs 2 --timeout 90 per shard, TEST_RUNNER_SCHEDULER=batch vs =queue, JSON compared",
+    "shard-0": { "files": 15, "batch-pass": 15, "queue-pass": 15, "selection-order-verdicts-equal": true, "summary-shape-equal": true },
+    "shard-1": { "files": 14, "batch-pass": 14, "queue-pass": 14, "selection-order-verdicts-equal": true, "summary-shape-equal": true },
+    "json-shape-note": "run_summary carries no scheduler field in either mode — scheduler choice provably does not alter JSON shape"
+  },
+  "worker-isolation-spot-check": {
+    "shard-disjoint": "15 + 14 = 29 files, no overlap",
+    "worktree-clean-after-runs": true,
+    "leftover-runner-state-outside-tmp": 0,
+    "cross-shard-state-leakage-observed": false
+  },
+  "decision": {
+    "outcome": "hold",
+    "workflow-keeps": "batch (product default; TEST_RUNNER_SCHEDULER removed from ci.yml workflows job)",
+    "rationale": "queue p50s exceeded batch p50s on both shards (+8.7% / +24.8%) with only n=2 queue samples from one contention-confounded window and no reliable p95; per wave rule, unreliable measurement records hold with observed numbers; targets not revised; env seam remains for a future measured re-trial",
+    "follow-up-required": true
+  }
+}

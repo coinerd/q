@@ -16,7 +16,24 @@
 (require rackunit
          racket/string
          racket/match
-         racket/file)
+         racket/file
+         racket/list
+         racket/dict
+         racket/system
+         json
+         racket/runtime-path)
+
+;; The declared verification invocation is `racket tests/<file>.rkt` from the
+;; repo root, while `raco test` chdirs to this file's directory. Anchor on
+;; this file's location so both styles (and the `../`-relative reads below)
+;; resolve identically.
+(define-runtime-path test-file-dir ".")
+(current-directory (simplify-path test-file-dir))
+
+;; W1: evaluate live script definitions so the lint-split pin follows
+;; the real sources of truth (ci.yml + policy) rather than copies.
+(define (dynamic-script sym)
+  (dynamic-require (build-path ".." "scripts" "gsd-gates" "gate-claims.rkt") sym))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure validation logic (no I/O)
@@ -170,53 +187,214 @@
    (check-true (file-exists? (build-path ".." "scripts" "ci-package-setup.rkt"))))
  (test-case "release-repair.rkt script exists from W7"
    (check-true (file-exists? (build-path ".." "scripts" "release-repair.rkt"))))
-  (test-case "release-dry-run.rkt script exists from W3"
-    (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt"))))
-  ;; ── W0 v1.00.26: required-check graph characterization (integration layer) ──
-  ;; Pins, as literal data compiled into this module, the same graph that
-  ;; tests/test-ci-runtime-contract.rkt pins against the live policy file and
-  ;; the checksummed snapshot: the protected-main gate context list, the
-  ;; aggregate needs edges, and fail-closed gate verdict semantics.
-  (test-case "w0: required-check graph characterization"
-    (define W0-REQUIRED-CHECKS
-      '("lint" "security" "release-dry-run" "smoke (ubuntu-latest)"
-        "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"
-        "workflows (0)" "workflows (1)" "workflows-aggregate"))
-    (define W0-AGGREGATE-NEEDS
-      '(("test-aggregate" ("test (0)" "test (1)" "test (2)" "test-platform"))
-        ("workflows-aggregate" ("workflows (0)" "workflows (1)"))))
-    (define (w0-verdict required observed)
-      (define missing (filter (lambda (n) (not (member n observed))) required))
-      (if (null? missing) 'pass (list 'fail missing)))
-    (test-case "gate requires the pinned twelve contexts, and only those"
-      (check-equal? (length W0-REQUIRED-CHECKS) 12)
-      (check-true (andmap (lambda (n) (member n W0-REQUIRED-CHECKS))
-                          '("lint" "security" "release-dry-run" "test-aggregate"
-                            "test-platform" "workflows-aggregate")))
-      (check-false (member "fast-env" W0-REQUIRED-CHECKS))
-      (check-false (member "prepared-env-report" W0-REQUIRED-CHECKS))
-      (check-false (member "shard-plan-report" W0-REQUIRED-CHECKS))
-      (check-false (member "release-readiness" W0-REQUIRED-CHECKS)))
-    (test-case "every aggregate job needs its shard jobs"
-      (for-each
-       (lambda (entry)
-         (check-true (member (car entry) W0-REQUIRED-CHECKS)
-                     (format "aggregate ~a must itself be required" (car entry)))
-         (for-each
-          (lambda (shard)
-            (check-true (member shard W0-REQUIRED-CHECKS)
-                        (format "~a shard ~a must be required" (car entry) shard)))
-          (cadr entry)))
-       W0-AGGREGATE-NEEDS))
-    (test-case "missing any required check fails the gate (fail-closed)"
-      (check-equal? (w0-verdict W0-REQUIRED-CHECKS W0-REQUIRED-CHECKS) 'pass)
-      (for-each
-       (lambda (dropped)
-         (check-equal? (w0-verdict W0-REQUIRED-CHECKS (remove dropped W0-REQUIRED-CHECKS))
-                       (list 'fail (list dropped))
-                       (format "gate must fail closed when ~a is missing" dropped)))
-       W0-REQUIRED-CHECKS))))
+ (test-case "release-dry-run.rkt script exists from W3"
+   (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt"))))
+ ;; ── W0 v1.00.26: required-check graph characterization (integration layer) ──
+ ;; Pins, as literal data compiled into this module, the same graph that
+ ;; tests/test-ci-runtime-contract.rkt pins against the live policy file and
+ ;; the checksummed snapshot: the protected-main gate context list, the
+ ;; aggregate needs edges, and fail-closed gate verdict semantics.
+ (test-case "w0: required-check graph characterization"
+   (define W0-REQUIRED-CHECKS
+     '("lint" "lint-quality"
+              "security"
+              "release-dry-run"
+              "smoke (ubuntu-latest)"
+              "test (0)"
+              "test (1)"
+              "test (2)"
+              "test-aggregate"
+              "test-platform"
+              "workflows (0)"
+              "workflows (1)"
+              "workflows-aggregate"))
+   (define W0-AGGREGATE-NEEDS
+     '(("test-aggregate" ("test (0)" "test (1)" "test (2)" "test-platform"))
+       ("workflows-aggregate" ("workflows (0)" "workflows (1)"))))
+   (define (w0-verdict required observed)
+     (define missing (filter (lambda (n) (not (member n observed))) required))
+     (if (null? missing)
+         'pass
+         (list 'fail missing)))
+   (test-case "gate requires the pinned thirteen contexts, and only those"
+     (check-equal? (length W0-REQUIRED-CHECKS) 13)
+     (check-true (andmap (lambda (n) (and (member n W0-REQUIRED-CHECKS) #t))
+                         '("lint" "lint-quality"
+                                  "security"
+                                  "release-dry-run"
+                                  "test-aggregate"
+                                  "test-platform"
+                                  "workflows-aggregate")))
+     (check-false (member "fast-env" W0-REQUIRED-CHECKS))
+     (check-false (member "prepared-env-report" W0-REQUIRED-CHECKS))
+     (check-false (member "shard-plan-report" W0-REQUIRED-CHECKS))
+     (check-false (member "release-readiness" W0-REQUIRED-CHECKS))
+     (check-false (member "lint-alignment" W0-REQUIRED-CHECKS)))
+   (test-case "every aggregate job needs its shard jobs"
+     (for-each (lambda (entry)
+                 (check-true (and (member (car entry) W0-REQUIRED-CHECKS) #t)
+                             (format "aggregate ~a must itself be required" (car entry)))
+                 (for-each (lambda (shard)
+                             (check-true (and (member shard W0-REQUIRED-CHECKS) #t)
+                                         (format "~a shard ~a must be required" (car entry) shard)))
+                           (cadr entry)))
+               W0-AGGREGATE-NEEDS))
+   (test-case "missing any required check fails the gate (fail-closed)"
+     (check-equal? (w0-verdict W0-REQUIRED-CHECKS W0-REQUIRED-CHECKS) 'pass)
+     (for-each (lambda (dropped)
+                 (check-equal? (w0-verdict W0-REQUIRED-CHECKS (remove dropped W0-REQUIRED-CHECKS))
+                               (list 'fail (list dropped))
+                               (format "gate must fail closed when ~a is missing" dropped)))
+               W0-REQUIRED-CHECKS))))
+
+;; ── W1 v1.00.26: atomic lint split characterization ─────────────────────
+;; Pins the §7 contract: `lint` is lightweight (governance controller
+;; tests + workflow YAML validation only), `lint-quality` carries the
+;; Racket lint suite, and both are required in the live policy file.
+;; The workflow, policy, and this pin ship in the same commit so there
+;; is never a fail-open or never-reporting window.
+(test-case "w1: lint split — lightweight lint + required lint-quality"
+  (define ci-yml (file->string "../.github/workflows/ci.yml"))
+  (define policy-text (string-join (file->lines "../scripts/required-pr-checks.policy") "\n"))
+
+  (define (job-section text job-name)
+    (define lines (string-split text "\n"))
+    (define header-rx (format "^  ~a:\\s*$" (regexp-quote job-name)))
+    (define start-idx
+      (for/first ([l (in-list lines)]
+                  [i (in-naturals)]
+                  #:when (regexp-match? header-rx l))
+        i))
+    (and start-idx
+         (let loop ([i (add1 start-idx)]
+                    [acc '()])
+           (cond
+             [(>= i (length lines)) (string-join (reverse acc) "\n")]
+             [(and (non-empty-string? (string-trim (list-ref lines i)))
+                   (regexp-match? #rx"^  [a-zA-Z][a-zA-Z0-9_-]*:\\s*$" (list-ref lines i)))
+              (string-join (reverse acc) "\n")]
+             [else (loop (add1 i) (cons (list-ref lines i) acc))]))))
+
+  (define lint-section (job-section ci-yml "lint"))
+  (define lint-quality-section (job-section ci-yml "lint-quality"))
+
+  (test-case "both jobs exist in ci.yml"
+    (check-not-false lint-section)
+    (check-not-false lint-quality-section))
+
+  (test-case "lint is lightweight: governance + YAML validation only"
+    (check-true (string-contains? lint-section "Protected governance controller tests"))
+    (check-true (string-contains? lint-section "Workflow YAML validation"))
+    ;; no Racket lint work may remain on the PR critical path
+    (check-false (string-contains? lint-section "scripts/lint-all.rkt"))
+    (check-false (string-contains? lint-section "check-version-expectations"))
+    (check-false (string-contains? lint-section "check-lint-alignment"))
+    (check-false (string-contains? lint-section "classify-metadata"))
+    (check-false (string-contains? lint-section "setup-racket")))
+
+  (test-case "lint-quality carries the full Racket lint suite"
+    (check-true (string-contains? lint-quality-section "scripts/lint-all.rkt"))
+    (check-true (string-contains? lint-quality-section "check-version-expectations"))
+    (check-true (string-contains? lint-quality-section "check-lint-alignment"))
+    (check-true (string-contains? lint-quality-section "metadata-inventory (artifact)"))
+    (check-true (string-contains? lint-quality-section "metadata-lint (blocking)")))
+
+  (test-case "policy requires lint and lint-quality"
+    (check-true (string-contains? policy-text "\"lint\""))
+    (check-true (string-contains? policy-text "\"lint-quality\""))
+    (check-false (string-contains? policy-text "\"lint-alignment\"")))
+
+  (test-case "lint stays required throughout the split (fail-closed)"
+    ;; the lightweight lint job must remain in the policy: removing it
+    ;; would open a fail-open window during the §7.1 apply sequence
+    (define required (dynamic-script 'ci-required-jobs))
+    (check-true (and (member "lint" required) #t))
+    (check-true (and (member "lint-quality" required) #t)))
+
+  ;; ---- v1.00.26 W2: fast-env starts after the lightweight lint,
+  ;; concurrent with lint-quality. The integration layer re-pins the live
+  ;; workflow text and the recorded, checksum-bound DAG checkpoint.
+  (test-case "w2: fast-env needs edge — after lightweight lint, concurrent with lint-quality"
+    (define ci-text (file->string "../.github/workflows/ci.yml"))
+    (define cp-dir "artifacts/ci-topology/v1.00.26-w2")
+    (define cp-path (build-path ".." cp-dir "dag-checkpoint.json"))
+    (check-true (file-exists? cp-path) "the W2 dag-checkpoint.json must exist")
+    (check-true (file-exists? (build-path ".." cp-dir "SHA256SUMS"))
+                "the W2 SHA256SUMS manifest must exist")
+    ;; the checkpoint artifact must be checksum-consistent (verify-lane contract)
+    (check-equal?
+     (parameterize ([current-directory ".."])
+       (system*/exit-code (find-executable-path "sha256sum") "-c" (build-path cp-dir "SHA256SUMS")))
+     0
+     "the recorded DAG checkpoint must match its SHA256SUMS manifest")
+    (define cp-text (file->string cp-path))
+    (define cp (call-with-input-file cp-path read-json))
+    (check-true (string-contains? cp-text "\"wave\": \"v1.00.26-w2\""))
+    (define (needs-line-of text job-name)
+      (define lines (string-split text "\n"))
+      (define start (index-of lines (string-append "  " job-name ":")))
+      (and start
+           (let loop ([rest (drop lines (add1 start))])
+             (cond
+               [(null? rest) #f]
+               [(string-prefix? (car rest) "    needs:") (string-trim (car rest))]
+               [(or (equal? (string-trim (car rest)) "")
+                    (string-prefix? (car rest) "  #")
+                    (string-prefix? (car rest) "    "))
+                (loop (cdr rest))]
+               [else #f]))))
+    ;; live workflow text: fast-env has exactly one needs edge — the lightweight lint
+    (check-equal? (needs-line-of ci-text "fast-env")
+                  "needs: [lint]"
+                  "fast-env must wait exactly once, for the lightweight lint")
+    (check-equal? (needs-line-of ci-text "test")
+                  "needs: [lint, fast-env]"
+                  "test keeps its W0/W1-pinned requirements")
+    (check-false (needs-line-of ci-text "lint-quality") "lint-quality stays parallel: no needs edge")
+    ;; recorded DAG: same pin, plus the explicit absence of an ordering edge
+    (define edges (hash-ref cp 'needs_edges))
+    (check-equal? (map ~a (hash-ref edges 'fast-env)) '("lint"))
+    (check-equal? (hash-ref edges 'test) '("lint" "fast-env"))
+    (check-equal? (map ~a (hash-ref edges 'test-platform)) '("lint"))
+    (check-equal? (hash-ref edges 'fast-env_to_lint-quality_ordering_edge)
+                  "none"
+                  "no ordering edge in either direction between fast-env and lint-quality")
+    ;; the prepared-env producer and the guarded restore stay byte-identical
+    (define contract (hash-ref cp 'fast_env_verification_contract))
+    (check-equal? (hash-ref contract 'prepare_action_sha256)
+                  "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d"
+                  "manifest/OS/Racket/lockfile verification steps must stay byte-identical")
+    (check-equal? (hash-ref contract 'setup_action_sha256)
+                  "1a7b517f6c31e537f70dd6139f1b8017b4f0ac632410f38ed27b8e557077521e"
+                  "the guarded restore action must stay byte-identical")
+    (check-true (string-contains? ci-text "needs.fast-env.result")
+                "test shards must keep gating PREPARED_ENV on the fast-env result")
+    ;; same-SHA timing shape (topology checkpoint, not a cohort)
+    (define timing (hash-ref cp 'timing_checkpoint))
+    (check-equal? (hash-ref timing 'label) "topology checkpoint — not a cohort")
+    (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection")
+    (define (job-time side name)
+      (for/first ([j (in-list (hash-ref side 'jobs))]
+                  #:when (equal? (hash-ref j 'name) name))
+        j))
+    (define lint-after (job-time (hash-ref timing 'after) "lint"))
+    (define lq-after (job-time (hash-ref timing 'after) "lint-quality"))
+    (define fe-after (job-time (hash-ref timing 'after) "fast-env"))
+    (define fe-before (job-time (hash-ref timing 'before) "fast-env"))
+    (check-not-false (and lint-after lq-after fe-after fe-before))
+    (check-true (string<? (hash-ref lint-after 'completed_at) (hash-ref fe-after 'started_at))
+                "fast-env starts only after the lightweight lint completes")
+    (check-true (string<? (hash-ref fe-after 'started_at) (hash-ref fe-before 'started_at))
+                "fast-env starts earlier under the W2 edge (same-SHA shape)")
+    (check-true (string<? (hash-ref lq-after 'started_at) (hash-ref fe-after 'completed_at))
+                "lint-quality is still running when fast-env starts (concurrent)")
+    (check-true (string<? (hash-ref fe-after 'started_at) (hash-ref lq-after 'completed_at))
+                "fast-env is still running when lint-quality finishes (concurrent)")))
 
 (module+ test
   (require rackunit/text-ui)
   (run-tests w9-ci-verification))
+
+(module+ main
+  (require rackunit/text-ui)
+  (exit (run-tests w9-ci-verification)))

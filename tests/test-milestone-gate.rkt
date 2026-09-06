@@ -18,7 +18,7 @@
 
 ;; ── Script loading ──
 
-(define script-path "../scripts/milestone-gate.rkt")
+(define script-path "scripts/milestone-gate.rkt")
 
 (define (dynamic-script sym)
   (dynamic-require script-path sym))
@@ -198,8 +198,8 @@
 ;; ============================================================
 
 (test-case "milestone-gate.rkt exists and compiles"
-  (check-true (file-exists? "../scripts/milestone-gate.rkt"))
-  (check-not-exn (lambda () (dynamic-require "../scripts/milestone-gate.rkt" #f))))
+  (check-true (file-exists? "scripts/milestone-gate.rkt"))
+  (check-not-exn (lambda () (dynamic-require "scripts/milestone-gate.rkt" #f))))
 
 ;; ============================================================
 ;; W4: classify-release-verdict tests (in milestone-gate.rkt)
@@ -539,7 +539,8 @@
   (for ([s (in-list stale)])
     (check-false (member s required)))
   (check-false (member "release-readiness" required))
-  (for ([job (in-list '("lint" "test (0)"
+  (for ([job (in-list '("lint" "lint-quality"
+                               "test (0)"
                                "test (1)"
                                "test (2)"
                                "test-aggregate"
@@ -558,7 +559,8 @@
 (test-case "ci-required-jobs: classify-ci-verdict succeeds against a complete current-topology run"
   (define jobs
     (make-hash (map (lambda (job) (cons job "success"))
-                    '("lint" "test (0)"
+                    '("lint" "lint-quality"
+                             "test (0)"
                              "test (1)"
                              "test (2)"
                              "test-aggregate"
