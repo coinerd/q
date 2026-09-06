@@ -998,11 +998,87 @@
                     (decision-report-jsexpr (make-paired-manifest))))))
 
 ;; ============================================================
+;; C2 post-promotion activation cohort (v1.00.25 W6)
+;;
+;; C2 runs over promoted defaults with no shadow legs.  The report must
+;; name which mode produced each number (paired-shadow vs post-promotion),
+;; the C2 fast target is p50 ≤ 115 s / p95 ≤ 135 s, and a miss records
+;; "target unachieved" plus a named next lever for a separate reviewed
+;; decision.  CI-failed SHAs in the eligible window are recorded with the
+;; named mechanical reason "lane-run-failed" — SHAs are never dropped.
+;; ============================================================
+
+(define (c2-manifest #:elapsed [elapsed 300.0] #:exclusions [exclusions '()] #:expected-count [ec 20])
+  (hash-set (make-manifest #:shas (for/list ([i (in-range 18)])
+                                    (make-valid-sha i #:elapsed elapsed))
+                           #:exclusions exclusions
+                           #:expected-count ec
+                           #:cohort-id "v1.00.25-c2")
+            'cohort-mode
+            "post-promotion"))
+
+(define c2-suite
+  (test-suite "post-promotion activation cohort (C2)"
+
+    (test-case "cohort-mode defaults to paired-shadow and honors an explicit post-promotion mode"
+      (check-equal? (cohort-mode (make-valid-cohort 20)) "paired-shadow")
+      (check-equal? (cohort-mode (c2-manifest)) "post-promotion"))
+
+    (test-case "lane-run-failed is a named mechanical exclusion reason"
+      (check-true (and (member "lane-run-failed" known-exclusion-reasons) #t)))
+
+    (test-case "flat C2 manifest with lane-run-failed exclusions validates"
+      (define m
+        (c2-manifest
+         #:exclusions
+         (list (hasheq 'sha
+                       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                       'reason
+                       "lane-run-failed"
+                       'detail
+                       "required-lane run failed; timing artifacts never produced (run 9901)")
+               (hasheq 'sha
+                       "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                       'reason
+                       "lane-run-failed"
+                       'detail
+                       "required-lane run failed; timing artifacts never produced (run 9902)"))
+         #:expected-count 20))
+      (check-true (validation-ok? (validate-cohort m))
+                  (format "~a" (validation-errors (validate-cohort m)))))
+
+    (test-case "post-promotion report names the mode and has no shadow duplication"
+      (define r (cohort-report-jsexpr (c2-manifest)))
+      (check-equal? (hash-ref r 'cohort-mode) "post-promotion")
+      (check-false (hash-has-key? r 'configurations) "C2 must not duplicate shadow configurations")
+      (check-false (hash-has-key? r 'decision))
+      (check-true (string-contains? (cohort-report-md-string (c2-manifest)) "post-promotion")))
+
+    (test-case "post-promotion gate: miss records target unachieved with a named next lever"
+      (check-equal? post-promotion-p50-max-seconds 115.0)
+      (check-equal? post-promotion-p95-max-seconds 135.0)
+      (define gate (post-promotion-gate (c2-manifest #:elapsed 220.0)))
+      (check-equal? (hash-ref gate 'verdict) "target unachieved")
+      (check-false (hash-ref gate 'achieved))
+      (check-true (string-contains? (hash-ref gate 'next-lever) "separate reviewed decision"))
+      (check-true (string-contains? (hash-ref gate 'gate-text) "115")))
+
+    (test-case "post-promotion gate: pass records target achieved"
+      (define gate (post-promotion-gate (c2-manifest #:elapsed 90.0)))
+      (check-equal? (hash-ref gate 'verdict) "target achieved")
+      (check-true (hash-ref gate 'achieved)))
+
+    (test-case "post-promotion markdown embeds the gate verdict"
+      (define md (cohort-report-md-string (c2-manifest #:elapsed 220.0)))
+      (check-true (string-contains? md "target unachieved")))))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (define failures (run-tests suite))
+(define c2-failures (run-tests c2-suite))
 
 (module+ main
-  (when (positive? failures)
+  (when (positive? (+ failures c2-failures))
     (exit 1)))

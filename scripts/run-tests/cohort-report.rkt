@@ -66,7 +66,13 @@
          cohort-decision-md-string
          fast-queue-gate-text
          fast-p50-max-seconds
-         fast-p95-max-seconds)
+         fast-p95-max-seconds
+         ;; post-promotion activation cohort (v1.00.25 W6: C2)
+         cohort-mode
+         post-promotion-gate
+         post-promotion-gate-text
+         post-promotion-p50-max-seconds
+         post-promotion-p95-max-seconds)
 
 ;; ============================================================
 ;; Constants
@@ -83,7 +89,11 @@
                             "inventory-mismatch"
                             "artifact-corrupt"
                             "artifact-expired"
-                            "non-unique-sha"))
+                            "non-unique-sha"
+                            ;; W6 (C2): the required-lane run itself failed so
+                            ;; no timing artifact was ever produced for the
+                            ;; SHA.  Mechanical, named, never silently dropped.
+                            "lane-run-failed"))
 
 ;; Paired configuration schema (v1.00.25 W0: C1 shadow cohort start).
 ;; Lanes and orderings known to the configuration schema; schedulers extend
@@ -823,6 +833,69 @@
   (string-append "Selected-inventory equality and no reliability regression versus the paired"
                  " batch baseline on the same SHAs (roadmap v1.00.25 §6, W1)."))
 
+;; ============================================================
+;; Post-promotion activation cohort (v1.00.25 W6: C2)
+;;
+;; C2 measures the promoted defaults out of sample on new PR head SHAs.
+;; There are no shadow legs: the required lane itself produced every
+;; sample.  Targets are never revised inside this wave or milestone; a
+;; miss records "target unachieved" and names the next lever for a
+;; separate reviewed decision (a timing miss alone implies no queue
+;; rollback).
+;; ============================================================
+
+(define post-promotion-p50-max-seconds 115.0)
+(define post-promotion-p95-max-seconds 135.0)
+
+(define post-promotion-gate-text
+  (string-append "Out-of-sample fast execution target on promoted defaults: p50 ≤ 115 s and"
+                 " p95 ≤ 135 s (roadmap v1.00.25 §6, W6).  Targets are never revised inside"
+                 " this wave or milestone."))
+
+;; Which mode produced the report numbers: "paired-shadow" (C1) or
+;; "post-promotion" (C2).  Defaults to the original paired-shadow mode so
+;; pre-C2 manifests keep their current reports byte-identical.
+(define (cohort-mode manifest)
+  (hash-ref manifest 'cohort-mode "paired-shadow"))
+
+(define (post-promotion-gate manifest)
+  (define samples (cohort-timing-samples manifest))
+  (define p50
+    (if (null? samples)
+        #f
+        (cohort-quantile samples 0.50)))
+  (define p95
+    (if (null? samples)
+        #f
+        (cohort-quantile samples 0.95)))
+  (define achieved
+    (and p50 p95 (<= p50 post-promotion-p50-max-seconds) (<= p95 post-promotion-p95-max-seconds)))
+  (hasheq 'mode
+          "post-promotion"
+          'gate-text
+          post-promotion-gate-text
+          'p50-max-seconds
+          (exact->inexact post-promotion-p50-max-seconds)
+          'p95-max-seconds
+          (exact->inexact post-promotion-p95-max-seconds)
+          'p50-seconds
+          p50
+          'p95-seconds
+          p95
+          'samples
+          (length samples)
+          'achieved
+          achieved
+          'verdict
+          (if achieved "target achieved" "target unachieved")
+          'next-lever
+          (if achieved
+              #f
+              (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                             " queue rollback): reduce the fast-lane critical path by trimming batch"
+                             " shard fan-out and reusing the prepared environment cache; re-run this"
+                             " cohort on new SHAs before the next promotion decision."))))
+
 (define (decision-report-jsexpr manifest)
   (define lane-verdicts
     (map (lambda (l) (decision-lane-verdict manifest (hash-ref l 'lane))) decision-lanes))
@@ -1081,6 +1154,13 @@
   (define base (cohort-report-base-jsexpr manifest))
   (define configurations (report-configurations-section manifest))
   (cond
+    ;; W6 C2: post-promotion activation cohort — name the mode and attach
+    ;; the out-of-sample gate; no shadow duplication (no configurations /
+    ;; decision sections).
+    [(equal? (cohort-mode manifest) "post-promotion")
+     (hash-set (hash-set base 'cohort-mode "post-promotion")
+               'post-promotion-gate
+               (post-promotion-gate manifest))]
     [(not configurations) base]
     [else
      (hash-set (hash-set base 'configurations configurations)
@@ -1213,6 +1293,28 @@
       (for ([line (in-list (decision-reasons-lines l))])
         (out "~a" line)))
     (out ""))
+  (when (hash-has-key? r 'post-promotion-gate)
+    (define g (hash-ref r 'post-promotion-gate))
+    (out "## Post-promotion activation cohort (C2)")
+    (out "")
+    (out "Mode producing the numbers in this report: **~a** (promoted defaults,"
+         (hash-ref r 'cohort-mode))
+    (out "required lane itself, no shadow duplication).")
+    (out "")
+    (out "~a" (hash-ref g 'gate-text))
+    (out "")
+    (out "| Metric | Value |")
+    (out "|---|---|")
+    (out "| p50 (seconds) | ~a |" (hash-ref g 'p50-seconds))
+    (out "| p95 (seconds) | ~a |" (hash-ref g 'p95-seconds))
+    (out "| p50 target (seconds) | ≤ ~a |" (hash-ref g 'p50-max-seconds))
+    (out "| p95 target (seconds) | ≤ ~a |" (hash-ref g 'p95-max-seconds))
+    (out "| Timing samples | ~a |" (hash-ref g 'samples))
+    (out "| Verdict | **~a** |" (hash-ref g 'verdict))
+    (out "")
+    (when (hash-ref g 'next-lever #f)
+      (out "Next lever: ~a" (hash-ref g 'next-lever))
+      (out "")))
   (out "## Manifest digest")
   (out "")
   (out "```")
