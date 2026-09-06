@@ -6,7 +6,7 @@
 (status . "ready-for-merge")
 (implementation-sha . "e6d78f36")
 (dependency-sha . "879d6321")
-(branch . "campaign/v1.00.25-w0-shadow-cohort-start")
+(branch . "main")
 (non-artifact-content-digest . "ee685d383614e802b1a9462111f0caa78d4609e01d9a3df778d938d08c12d6f5")
 (non-artifact-digest-inputs . ".github/workflows/test-scheduler-cohort-c1.yml .github/workflows/test-scheduler-shadow.yml README.md scripts/run-tests/cohort-report.rkt tests/test-ci-cohort-report.rkt (paths relative to repo root; sha256 each file, sort the hex digests, newline-join, sha256 the joined text; reproduce with: cd q && for f in <those five paths>; do git show HEAD:$f | sha256sum; done | awk '{print $1}' | sort | sha256sum)")
 (artifact-directory . "artifacts/ci-baseline/v1.00.25-c1")
