@@ -580,3 +580,77 @@
 ;; Clean up test directory
 (when (directory-exists? temp-base)
   (delete-directory/files temp-base))
+
+;; ── v1.00.26 W5: workflow-worker isolation pins (four-worker guard) ──
+;; Wave v1.00.26 §7 W5 extends this suite with workflow-level worker
+;; isolation pins: the four-worker workflows job must keep per-worker
+;; separation signals and no shared mutable paths (outputs, cache keys,
+;; temp roots all carry the shard axis), and a re-entrant contamination
+;; canary must flag shared cache keys, overlapping temp roots, and
+;; cross-worker file writes on fixtures. Per-job VM isolation is the
+;; GitHub runner boundary; within-job worker isolation is enforced by
+;; these pins.
+
+(define w5-here (or (current-load-relative-directory) (current-directory)))
+(define w5-ci-yml (build-path w5-here ".github" "workflows" "ci.yml"))
+
+;; the workflows job body: lines after "  workflows:" until the next
+;; top-level job key (so the scan is scoped to the W5 seam only)
+(define (w5-workflows-job-lines lines)
+  (define start
+    (for/first ([ln (in-list lines)] [i (in-naturals)]
+                #:when (equal? ln "  workflows:"))
+      i))
+  (if (not start)
+      '()
+      (let loop ([acc '()] [xs (list-tail lines (add1 start))])
+        (cond [(null? xs) (reverse acc)]
+              [(regexp-match? #rx"^  [A-Za-z0-9_-]+:$" (car xs)) (reverse acc)]
+              [else (loop (cons (car xs) acc) (cdr xs))]))))
+
+;; detector: contamination signals — an output name, cache key, or temp
+;; root lacking the matrix.shard axis is shared mutable state that lets
+;; one worker read or clobber another's data.
+(define (w5-contamination-signals lines)
+  (for/list ([ln (in-list lines)]
+             #:when (or (and (string-contains? ln "name:")
+                             (or (string-contains? ln "workflow-test-output")
+                                 (string-contains? ln "test-results"))
+                             (not (string-contains? ln "matrix.shard")))
+                        (and (string-contains? ln "key:")
+                             (not (string-contains? ln "matrix.shard"))
+                             (not (string-contains? ln "restore-keys")))
+                        (and (string-contains? ln "TMPDIR")
+                             (not (string-contains? ln "matrix.shard")))))
+    ln))
+
+(define w5-suite
+  (test-suite
+   "worker security: W5 workflow four-worker isolation"
+
+   (test-case
+    "W5: the workflows job declares per-worker isolation (no shared mutable paths)"
+    (define body-lines (w5-workflows-job-lines (file->lines w5-ci-yml)))
+    (check-true (pair? body-lines) "the workflows job must exist in ci.yml")
+    (check-false (pair? (w5-contamination-signals body-lines))
+                 "live ci.yml must be free of contamination signals: every output/cache key/temp root carries the shard axis"))
+
+   (test-case
+    "W5: canary positive controls — shared cache key, shared artifact name, overlapping temp root"
+    (check-true (pair? (w5-contamination-signals
+                        (list "          key: racket-pkgs-workflows")))
+                "a shared cache key without a shard axis must be flagged")
+    (check-true (pair? (w5-contamination-signals
+                        (list "          name: workflow-test-output"
+                              "          name: test-results-workflows")))
+                "a shared (non-shard-suffixed) output name must be flagged")
+    (check-true (pair? (w5-contamination-signals
+                        (list "        TMPDIR: /tmp/wf-shared")))
+                "a shared temp root without a shard axis must be flagged")
+    (check-false (pair? (w5-contamination-signals
+                         (list "          name: workflow-test-output-${{ matrix.shard }}"
+                               "          key: racket-pkgs-${{ matrix.shard }}-v3"
+                               "        TMPDIR: ${{ runner.temp }}/wf-${{ matrix.shard }}")))
+                 "shard-suffixed outputs/keys/temp roots are isolated and must NOT be flagged"))))
+
+(run-tests w5-suite)
