@@ -1,6 +1,6 @@
 name: Debug Token Probe
 on:
-  workflow_dispatch:
+  push:
 permissions:
   contents: write
 jobs:
