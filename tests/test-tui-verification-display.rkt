@@ -415,6 +415,122 @@
                                                                        #:risk-level "high"))))
       (check-equal? (ui-state-status-message st2) "Verification requires approval")
       (define transcript (ui-state-transcript st2))
-      (check-true (pair? transcript) "escalation added transcript entry"))))
+      (check-true (pair? transcript) "escalation added transcript entry"))
+
+    ;; ── BUG-0062: live GSD event shape ──
+    ;;
+    ;; The coordinator emits via emit-gsd-event! with a SYMBOL event name and
+    ;; a wrapped payload ({event, correlation-id, timestamp, data}). These
+    ;; tests construct exactly that shape — the previous string-ev tests
+    ;; passed while every live gsd.* event was silently dropped at dispatch.
+
+    (test-case "live shape: symbol-ev started (wrapped payload) renders status + progress"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state
+         st0
+         (make-test-event 'gsd.verification.started
+                          (hasheq 'event
+                                  'gsd.verification.started
+                                  'correlation-id
+                                  #f
+                                  'timestamp
+                                  1000.0
+                                  'data
+                                  (hasheq 'wave
+                                          0
+                                          'command
+                                          "racket scripts/run-tests.rkt --suite fast"
+                                          'timeout-sec
+                                          1800
+                                          'log-path
+                                          "/var/tmp/gsd-verification-vj-1.log"
+                                          'attached?
+                                          #f
+                                          'start-ms
+                                          1788685499468.0)))))
+      (check-equal? (ui-state-status-message st1)
+                    "W0 verifying — budget 1800s · log /var/tmp/gsd-verification-vj-1.log")
+      (define progress (ui-state-verification-progress st1))
+      (check-true (hash? progress) "verification-progress must be set")
+      (check-equal? (hash-ref progress 'wave #f) 0))
+
+    (test-case "live shape: symbol-ev completed approve clears status + adds durable entry"
+      (define st0 (set-status-message (initial-ui-state) "W0 verifying — budget 1800s"))
+      (define st1
+        (apply-event-to-state
+         st0
+         (make-test-event 'gsd.verification.completed
+                          (hasheq 'event
+                                  'gsd.verification.completed
+                                  'correlation-id
+                                  #f
+                                  'timestamp
+                                  1000.0
+                                  'data
+                                  (hasheq 'wave
+                                          0
+                                          'command
+                                          "true"
+                                          'state
+                                          'completed
+                                          'exit-code
+                                          0
+                                          'approved?
+                                          #t
+                                          'verdict
+                                          "approve"
+                                          'reason
+                                          #f
+                                          'elapsed-sec
+                                          2711.5
+                                          'log-path
+                                          "/var/tmp/gsd-verification-vj-1.log")))))
+      (check-false (ui-state-status-message st1) "status cleared on approval")
+      (define transcript (ui-state-transcript st1))
+      (check-true (pair? transcript) "approval must leave a durable transcript entry")
+      (define entry (car transcript))
+      (check-equal? (transcript-entry-kind entry) 'system)
+      (check-true (string-contains? (transcript-entry-text entry) "approved"))
+      (check-true (string-contains? (transcript-entry-text entry) "45m 11s"))
+      (check-true (string-contains? (transcript-entry-text entry)
+                                    "/var/tmp/gsd-verification-vj-1.log")))
+
+    (test-case "live shape: symbol-ev completed reject adds REJECTED entry"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state
+         st0
+         (make-test-event 'gsd.verification.completed
+                          (hasheq 'event
+                                  'gsd.verification.completed
+                                  'correlation-id
+                                  #f
+                                  'timestamp
+                                  1000.0
+                                  'data
+                                  (hasheq 'wave
+                                          0
+                                          'command
+                                          "false"
+                                          'state
+                                          'completed
+                                          'exit-code
+                                          1
+                                          'approved?
+                                          #f
+                                          'verdict
+                                          "reject"
+                                          'reason
+                                          "verify state=completed exit=1"
+                                          'elapsed-sec
+                                          12.0
+                                          'log-path
+                                          "/var/tmp/gsd-verification-vj-2.log")))))
+      (define transcript (ui-state-transcript st1))
+      (check-true (pair? transcript) "rejection must add a transcript entry")
+      (define entry (car transcript))
+      (check-true (string-contains? (transcript-entry-text entry) "REJECTED"))
+      (check-true (string-contains? (transcript-entry-text entry) "verify state=completed exit=1")))))
 
 (run-tests suite)

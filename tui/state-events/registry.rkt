@@ -51,8 +51,16 @@
 
 (define (apply-event-to-state state evt)
   (define ev (event-ev evt))
+  ;; BUG-0062: live GSD emitters publish symbol event names
+  ;; (emit-gsd-event! 'gsd.verification.started) while this registry is
+  ;; keyed by strings. Normalize the ev-key instead of silently dropping
+  ;; the event; string keys (runtime typed events) pass through unchanged.
+  (define ev-key
+    (if (symbol? ev)
+        (symbol->string ev)
+        ev))
   (define handler
-    (call-with-semaphore event-reducers-lock (lambda () (hash-ref (get-event-reducers) ev #f))))
+    (call-with-semaphore event-reducers-lock (lambda () (hash-ref (get-event-reducers) ev-key #f))))
   (if handler
       (handler state evt)
       state))
