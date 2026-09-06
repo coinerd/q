@@ -132,7 +132,11 @@ jobs:
   # full path) and by the rollback switch RACKET_PREPARED_ARTIFACT=off.
   # ────────────────────────────────────────────────────────────
   fast-env:
-    needs: lint
+    # v1.00.26 W2 (§7): explicit single-element needs edge — fast-env
+    # starts after the lightweight `lint` gate only and runs concurrently
+    # with the parallel `lint-quality` job (no ordering edge in either
+    # direction; the prepared-environment contract is unchanged).
+    needs: [lint]
     if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
     runs-on: ubuntu-latest
     steps:

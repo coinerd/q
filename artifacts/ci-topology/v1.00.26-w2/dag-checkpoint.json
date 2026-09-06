@@ -1,0 +1,121 @@
+{
+  "schema": "ci-topology/dag-checkpoint@1",
+  "wave": "v1.00.26-w2",
+  "label": "fast-env starts after lightweight lint, concurrent with lint-quality",
+  "repository": "coinerd/q",
+  "captured_at": "2026-09-06T23:58:00Z",
+  "description": "same-SHA before/after needs-edge checkpoint for the W2 resequencing: the fast-env prepared-environment producer keeps a single needs edge into the lightweight lint job and runs concurrently with lint-quality; the manifest/OS/Racket/lockfile verification steps and the loud fallback are byte-identical. This is a topology checkpoint, not a cohort.",
+  "provenance": {
+    "before": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (measured run, head_sha c6ee39e43025cc49202a27084aed459221dac43c)",
+    "after": "derived shape projection at the SAME head SHA under the explicit W2 edge (fast-env needs: [lint] against the lightweight lint); per-job times inherited from the W1 split-topology projection because the W2 change makes the scheduling intent explicit without altering the split graph",
+    "branch": "campaign/v1.00.26-w2",
+    "base": "campaign/v1.00.26-w1 @ 6e9d2bac9e5b9c99277636661e357479a0ee988c",
+    "edges_recorded_from": ".github/workflows/ci.yml (the W2-relevant subgraph of the live needs edges at this commit; the full graph remains pinned by the W0/W1 tests)"
+  },
+  "policy_pin": [
+    "lint",
+    "lint-quality",
+    "security",
+    "release-dry-run",
+    "workflows (0)",
+    "workflows (1)",
+    "workflows-aggregate",
+    "smoke (ubuntu-latest)",
+    "test (0)",
+    "test (1)",
+    "test (2)",
+    "test-aggregate",
+    "test-platform"
+  ],
+  "needs_edges": {
+    "lint": [],
+    "lint-quality": [],
+    "fast-env": ["lint"],
+    "test": ["lint", "fast-env"],
+    "test-platform": ["lint"],
+    "fast-env_to_lint-quality_ordering_edge": "none",
+    "note": "fast-env and lint-quality have no ordering edge in either direction; the W2 resequencing touches the fast-env needs edge only, and downstream requirements (test needs lint+fast-env, test-platform needs lint) are unchanged from the W0/W1 pins."
+  },
+  "fast_env_verification_contract": {
+    "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
+    "prepare_action_sha256": "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d",
+    "setup_action": ".github/actions/setup-racket/action.yml",
+    "setup_action_sha256": "1a7b517f6c31e537f70dd6139f1b8017b4f0ac632410f38ed27b8e557077521e",
+    "pinned_dimensions": [
+      "manifest.rkt emit",
+      "manifest.rkt verify",
+      "lock_digest",
+      "::error::",
+      "exit 1"
+    ],
+    "loud_fallback": [
+      "::warning::prepared-environment restore failed or mismatched",
+      "REBUILT",
+      "needs.fast-env.result"
+    ],
+    "note": "byte-identical to the pre-W2 values recorded here: the resequencing is a needs-edge change only and must not touch the producer or the guarded restore action"
+  },
+  "timing_checkpoint": {
+    "label": "topology checkpoint — not a cohort",
+    "measurement_kind": "derived-shape-projection",
+    "derived_from": "artifacts/ci-topology/v1.00.26-w1/dag-checkpoint.json#timing_checkpoint",
+    "note": "before/after are anchored to the SAME head SHA (same-SHA pairing). before is the measured W0 baseline run; after is the derived projection under the W2 edge: fast-env starts right after the lightweight lint completes and its execution interval overlaps lint-quality's. The derived times match the W1 split-topology projection because the W2 change pins the already-split scheduling as an explicit single-element needs edge.",
+    "before": {
+      "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "jobs": [
+        {
+          "name": "lint",
+          "started_at": "2026-09-06T18:22:28Z",
+          "completed_at": "2026-09-06T18:26:45Z",
+          "conclusion": "success",
+          "note": "heavyweight pre-split lint (W0 measured baseline)"
+        },
+        {
+          "name": "fast-env",
+          "started_at": "2026-09-06T18:26:47Z",
+          "completed_at": "2026-09-06T18:31:28Z",
+          "conclusion": "success",
+          "note": "waits behind the heavyweight lint"
+        },
+        {
+          "name": "test (0)",
+          "started_at": "2026-09-06T18:31:30Z",
+          "completed_at": "2026-09-06T18:35:09Z",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "after": {
+      "anchor_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "jobs": [
+        {
+          "name": "lint",
+          "started_at": "2026-09-06T18:22:28Z",
+          "completed_at": "2026-09-06T18:23:12Z",
+          "conclusion": "success",
+          "note": "lightweight: governance controller tests + workflow YAML validation (~44s)"
+        },
+        {
+          "name": "lint-quality",
+          "started_at": "2026-09-06T18:22:29Z",
+          "completed_at": "2026-09-06T18:26:51Z",
+          "conclusion": "success",
+          "note": "full Racket lint suite, parallel; no ordering edge with fast-env"
+        },
+        {
+          "name": "fast-env",
+          "started_at": "2026-09-06T18:23:14Z",
+          "completed_at": "2026-09-06T18:27:55Z",
+          "conclusion": "success",
+          "note": "starts right after the lightweight lint; concurrent with lint-quality"
+        },
+        {
+          "name": "test (0)",
+          "started_at": "2026-09-06T18:27:57Z",
+          "completed_at": "2026-09-06T18:31:36Z",
+          "conclusion": "success"
+        }
+      ]
+    }
+  }
+}

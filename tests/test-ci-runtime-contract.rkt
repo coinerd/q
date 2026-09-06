@@ -526,7 +526,7 @@
         (build-path project-root "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "PENDING-W2-CHECKPOINT-HASH"
+                    "0c18bf7d204df7313fdeea213714828db825b22debc9bbfa5969019905a67187"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) "v1.00.26-w2")
