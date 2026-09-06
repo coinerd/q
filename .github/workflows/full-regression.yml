@@ -78,7 +78,7 @@ jobs:
       JOBS: ${{ github.event.inputs.jobs-per-shard || '4' }}
       EXTRA_ARGS: ${{ github.event.inputs.extra-args }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: ./.github/actions/setup-racket
         with:
@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: ./.github/actions/setup-racket
         with:
@@ -189,7 +189,7 @@ jobs:
                         # must complete before the warm-run evidence permits a
                         # measured budget reduction. The suite itself is ~15 min.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       # The reusable setup action is the sole cache owner. It restores the
       # locked, explicit PLTADDONDIR store and never caches workspace bytecode.
@@ -237,7 +237,7 @@ jobs:
     outputs:
       status: ${{ steps.status.outputs.status }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: ./.github/actions/setup-racket
         with:
@@ -350,7 +350,7 @@ jobs:
       group: mutation-pilot
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: ./.github/actions/setup-racket
         with:
