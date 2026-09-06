@@ -453,8 +453,15 @@
                        "")))
   (define cleared (set-verification-progress state #f))
   (match verdict
-    ;; Approval: clear status message
-    [(or "approve" 'approve) (set-status-message cleared #f)]
+    ;; Approval: clear status message. BUG-0062: an approval must also leave
+    ;; a durable, truthful transcript trace (elapsed + log path) — clearing
+    ;; the status bar silently made the coordinator gate invisible post-hoc.
+    [(or "approve" 'approve)
+     (append-entry (set-status-message cleared #f)
+                   (make-entry 'system
+                               (format "[Verification: approved~a]" suffix)
+                               (event-time evt)
+                               (hasheq 'verification #t 'approved #t)))]
     [(or "reject" 'reject)
      ;; Rejection: add transcript entry with reason
      (append-entry cleared
