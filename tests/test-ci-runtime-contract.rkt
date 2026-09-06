@@ -338,7 +338,9 @@
     (test-case "workflow shards keep the product-default scheduler (W4 hold: no scheduler env in ci.yml)"
       (check-false
        (regexp-match? #rx"TEST_RUNNER_SCHEDULER[ \t]*:" (file->string ci-yml))
-       "W4 hold: ci.yml must not set TEST_RUNNER_SCHEDULER anywhere — workflow shards run the product default (batch) until a reliable measurement justifies queue")
+       "W4 hold: ci.yml must not set TEST_RUNNER_SCHEDULER anywhere —
+        workflow shards run the product default (batch) until a reliable
+        measurement justifies queue")
       (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))
                    "no --scheduler option may appear in ci.yml (env seam only, and currently unset)"))
     (test-case "scheduler env stays scoped to the workflow shards"
