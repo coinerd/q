@@ -27,9 +27,14 @@ worker count. No queue/LPT activation in W0; W1 closes the cohort.
 
 The `fast/batch/fifo` row is the required-lane baseline already produced by
 normal CI; the other three are shadow configurations driven by
-`.github/workflows/test-scheduler-shadow.yml` (reusable workflow called from a
-`workflow_run` driver, so every paired configuration runs automatically on each
-cohort SHA without manual dispatch).
+`.github/workflows/test-scheduler-cohort-c1.yml`, a `workflow_run` driver
+that fires on every successful canonical CI completion on `main`, plans the
+missing cohort cells from `cohort.json`, and calls the reusable
+`.github/workflows/test-scheduler-shadow.yml` once per cell — every paired
+configuration runs automatically on each cohort SHA without manual dispatch.
+The reusable workflow itself keeps the W5 trigger contract (`workflow_call`
++ `workflow_dispatch` only) and is governance-pinned by
+`tests/test-scheduler-shadow-workflow.rkt`.
 
 ## Inventory equality
 

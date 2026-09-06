@@ -9,14 +9,15 @@ name: Test scheduler shadow
 # in the same schema as the required fast gate so cohort tooling can
 # ingest shadow samples consistently.
 #
-# v1.00.25 W0 (cohort C1): a workflow_run driver starts the paired shadow
-# configurations automatically — fast/queue/fifo, fast/queue/lpt, and
-# security/queue/fifo — over the cohort C1 manifest SHAs in
-# artifacts/ci-baseline/v1.00.25-c1/cohort.json, without manual dispatch.
-# The driver re-runs on every successful canonical CI completion and only
-# fills cohort cells that have no successful shadow leg yet.  It never
-# cancels required-CI runs, never changes a required check, and never
-# changes a default lane.
+# v1.00.25 W0 (cohort C1): automatic paired-shadow activation lives in a
+# SEPARATE driver workflow, .github/workflows/test-scheduler-cohort-c1.yml,
+# which listens for successful canonical CI completions on main and calls
+# this reusable workflow once per missing cohort cell (configuration x SHA)
+# from artifacts/ci-baseline/v1.00.25-c1/cohort.json.  Keeping the driver
+# out of this file preserves the W5 trigger contract (workflow_call +
+# workflow_dispatch only) and avoids an illegal recursive self-call.  The
+# driver only ADDS shadow runs; it never cancels required-CI runs, never
+# changes a required check, and never changes a default lane.
 
 on:
   workflow_call:
@@ -83,20 +84,13 @@ on:
         required: false
         default: '3'
         type: string
-  # Cohort C1 automation: after each successful canonical CI run on main,
-  # plan and start the missing paired shadow cells.  This trigger only
-  # ADDS shadow runs; it never re-runs, cancels, or gates required CI.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
 
 # Do not cancel required-CI runs: this workflow has its own concurrency
 # namespace and never cancels in progress, so shadow work only ever queues
 # behind other shadow work.  Groups are scoped per checkout ref and
 # configuration so distinct paired cells never cancel each other.
 concurrency:
-  group: scheduler-shadow-${{ github.event_name }}-${{ inputs.ref || github.event.workflow_run.head_sha || 'main' }}-${{ inputs.scheduler || 'paired' }}-${{ inputs.ordering || 'fifo' }}-${{ inputs.lane || 'fast' }}
+  group: scheduler-shadow-${{ inputs.ref || 'main' }}-${{ inputs.scheduler || 'paired' }}-${{ inputs.ordering || 'fifo' }}-${{ inputs.lane || 'fast' }}
   cancel-in-progress: false
 
 permissions:
@@ -108,108 +102,13 @@ env:
   INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
 
 jobs:
-  cohort-plan:
-    # Plan the cohort C1 cells that still lack a successful shadow leg.
-    # Runs only on the automatic workflow_run path.  Reusable-call runs of
-    # this workflow (cohort legs) forward the caller's workflow_run event,
-    # so they are excluded via the cohort-config input; manual dispatches
-    # and direct reusable calls skip planning entirely.
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && inputs.cohort-config == ''
-    name: cohort-plan (paired shadow cells)
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      has-cells: ${{ steps.plan.outputs.has-cells }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Plan remaining paired shadow cells
-        id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          MANIFEST=artifacts/ci-baseline/v1.00.25-c1/cohort.json
-          if [ ! -f "$MANIFEST" ]; then
-            echo "no cohort manifest on this ref; nothing to plan"
-            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
-            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Desired cells: every non-required configuration row x cohort SHA.
-          DESIRED=$(jq -r '
-            .configurations[]
-            | select(.required != true)
-            | .["config-id"] as $id
-            | .scheduler as $sched
-            | .ordering as $ord
-            | .lane as $lane
-            | .shas[].sha
-            | "paired|\($id)|\(.)|\($sched)|\($ord)|\($lane)"' "$MANIFEST")
-          if [ -z "$DESIRED" ]; then
-            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
-            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Covered cells: successful shadow legs already recorded (or still
-          # in flight) in recent runs of this workflow.  Leg job names carry
-          # the "paired|<config>|<sha>|..." coverage marker.
-          COVERED=$(gh run list --workflow "Test scheduler shadow" \
-                      --limit 100 \
-                      --json databaseId,status \
-            | jq -r '.[] | select(.status == "completed" or .status == "in_progress" or .status == "queued") | .databaseId' \
-            | while read -r RID; do
-                [ -z "$RID" ] && continue
-                gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
-                  --jq '.jobs[]
-                        | select((.status == "in_progress" or .status == "queued")
-                                 or (.status == "completed" and .conclusion == "success"))
-                        | .name' 2>/dev/null || true
-              done | sort -u || true)
-          INCLUDE=$(printf '%s\n' "$DESIRED" | while IFS='|' read -r MARKER ID SHA SCHED ORD LANE; do
-            [ -z "$MARKER" ] && continue
-            if printf '%s\n' "$COVERED" | grep -qF "$MARKER"; then
-              continue
-            fi
-            jq -cn --arg id "$ID" --arg sched "$SCHED" --arg ord "$ORD" \
-                   --arg lane "$LANE" --arg sha "$SHA" \
-              '{cohort_config: $id, scheduler: $sched, ordering: $ord,
-                lane: $lane, sha: $sha}'
-          done | jq -s '{include: .}')
-          COUNT=$(printf '%s' "$INCLUDE" | jq '.include | length')
-          echo "planning $COUNT remaining paired shadow cell(s)"
-          echo "matrix=$(printf '%s' "$INCLUDE" | jq -c .)" >> "$GITHUB_OUTPUT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo 'has-cells=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'has-cells=false' >> "$GITHUB_OUTPUT"
-          fi
-
-  cohort-shadow:
-    needs: cohort-plan
-    if: needs.cohort-plan.outputs.has-cells == 'true'
-    name: cohort-shadow
-    strategy:
-      fail-fast: false
-      max-parallel: 8
-      matrix: ${{ fromJSON(needs.cohort-plan.outputs.matrix) }}
-    uses: ./.github/workflows/test-scheduler-shadow.yml
-    with:
-      ref: ${{ matrix.sha }}
-      scheduler: ${{ matrix.scheduler }}
-      ordering: ${{ matrix.ordering }}
-      lane: ${{ matrix.lane }}
-      cohort-config: ${{ matrix.cohort_config }}
-      shard-count: '3'
-
   shadow-run:
-    # Root driver runs (workflow_run, no cohort-config) must not also run a
-    # stray default-config shadow leg: shadow-run executes only for
-    # cohort legs (cohort-config set) and for manual/reusable direct runs.
-    if: github.event_name != 'workflow_run' || inputs.cohort-config != ''
-    name: paired|${{ inputs.cohort-config || 'adhoc' }}|${{ inputs.ref || 'main' }} (${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }}/${{ inputs.ordering || 'fifo' }}/${{ inputs.lane || 'fast' }} shard ${{ matrix.shard }})
+    # Job name carries the exact cohort coverage marker that the C1 driver
+    # (test-scheduler-cohort-c1.yml) greps for when planning missing cells:
+    #   paired|<cohort-config>|<ref>|<scheduler>|<ordering>|<lane>
+    # Manual adhoc runs without a cohort-config use the 'adhoc' marker and
+    # never collide with real cohort cells.
+    name: paired|${{ inputs.cohort-config || 'adhoc' }}|${{ inputs.ref || 'main' }}|${{ inputs.scheduler || vars.TEST_RUNNER_SCHEDULER || 'batch' }}|${{ inputs.ordering || 'fifo' }}|${{ inputs.lane || 'fast' }} (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
