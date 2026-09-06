@@ -19,6 +19,8 @@
          racket/file
          racket/list
          racket/dict
+         racket/system
+         json
          racket/runtime-path)
 
 ;; The declared verification invocation is `racket tests/<file>.rkt` from the
@@ -307,7 +309,87 @@
     ;; would open a fail-open window during the §7.1 apply sequence
     (define required (dynamic-script 'ci-required-jobs))
     (check-true (and (member "lint" required) #t))
-    (check-true (and (member "lint-quality" required) #t))))
+    (check-true (and (member "lint-quality" required) #t)))
+
+  ;; ---- v1.00.26 W2: fast-env starts after the lightweight lint,
+  ;; concurrent with lint-quality. The integration layer re-pins the live
+  ;; workflow text and the recorded, checksum-bound DAG checkpoint.
+  (test-case "w2: fast-env needs edge — after lightweight lint, concurrent with lint-quality"
+    (define ci-text (file->string "../.github/workflows/ci.yml"))
+    (define cp-dir "artifacts/ci-topology/v1.00.26-w2")
+    (define cp-path (build-path ".." cp-dir "dag-checkpoint.json"))
+    (check-true (file-exists? cp-path) "the W2 dag-checkpoint.json must exist")
+    (check-true (file-exists? (build-path ".." cp-dir "SHA256SUMS"))
+                "the W2 SHA256SUMS manifest must exist")
+    ;; the checkpoint artifact must be checksum-consistent (verify-lane contract)
+    (check-equal?
+     (parameterize ([current-directory ".."])
+       (system*/exit-code (find-executable-path "sha256sum") "-c" (build-path cp-dir "SHA256SUMS")))
+     0
+     "the recorded DAG checkpoint must match its SHA256SUMS manifest")
+    (define cp-text (file->string cp-path))
+    (define cp (call-with-input-file cp-path read-json))
+    (check-true (string-contains? cp-text "\"wave\": \"v1.00.26-w2\""))
+    (define (needs-line-of text job-name)
+      (define lines (string-split text "\n"))
+      (define start (index-of lines (string-append "  " job-name ":")))
+      (and start
+           (let loop ([rest (drop lines (add1 start))])
+             (cond
+               [(null? rest) #f]
+               [(string-prefix? (car rest) "    needs:") (string-trim (car rest))]
+               [(or (equal? (string-trim (car rest)) "")
+                    (string-prefix? (car rest) "  #")
+                    (string-prefix? (car rest) "    "))
+                (loop (cdr rest))]
+               [else #f]))))
+    ;; live workflow text: fast-env has exactly one needs edge — the lightweight lint
+    (check-equal? (needs-line-of ci-text "fast-env")
+                  "needs: [lint]"
+                  "fast-env must wait exactly once, for the lightweight lint")
+    (check-equal? (needs-line-of ci-text "test")
+                  "needs: [lint, fast-env]"
+                  "test keeps its W0/W1-pinned requirements")
+    (check-false (needs-line-of ci-text "lint-quality") "lint-quality stays parallel: no needs edge")
+    ;; recorded DAG: same pin, plus the explicit absence of an ordering edge
+    (define edges (hash-ref cp 'needs_edges))
+    (check-equal? (map ~a (hash-ref edges 'fast-env)) '("lint"))
+    (check-equal? (hash-ref edges 'test) '("lint" "fast-env"))
+    (check-equal? (map ~a (hash-ref edges 'test-platform)) '("lint"))
+    (check-equal? (hash-ref edges 'fast-env_to_lint-quality_ordering_edge)
+                  "none"
+                  "no ordering edge in either direction between fast-env and lint-quality")
+    ;; the prepared-env producer and the guarded restore stay byte-identical
+    (define contract (hash-ref cp 'fast_env_verification_contract))
+    (check-equal? (hash-ref contract 'prepare_action_sha256)
+                  "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d"
+                  "manifest/OS/Racket/lockfile verification steps must stay byte-identical")
+    (check-equal? (hash-ref contract 'setup_action_sha256)
+                  "1a7b517f6c31e537f70dd6139f1b8017b4f0ac632410f38ed27b8e557077521e"
+                  "the guarded restore action must stay byte-identical")
+    (check-true (string-contains? ci-text "needs.fast-env.result")
+                "test shards must keep gating PREPARED_ENV on the fast-env result")
+    ;; same-SHA timing shape (topology checkpoint, not a cohort)
+    (define timing (hash-ref cp 'timing_checkpoint))
+    (check-equal? (hash-ref timing 'label) "topology checkpoint — not a cohort")
+    (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection")
+    (define (job-time side name)
+      (for/first ([j (in-list (hash-ref side 'jobs))]
+                  #:when (equal? (hash-ref j 'name) name))
+        j))
+    (define lint-after (job-time (hash-ref timing 'after) "lint"))
+    (define lq-after (job-time (hash-ref timing 'after) "lint-quality"))
+    (define fe-after (job-time (hash-ref timing 'after) "fast-env"))
+    (define fe-before (job-time (hash-ref timing 'before) "fast-env"))
+    (check-not-false (and lint-after lq-after fe-after fe-before))
+    (check-true (string<? (hash-ref lint-after 'completed_at) (hash-ref fe-after 'started_at))
+                "fast-env starts only after the lightweight lint completes")
+    (check-true (string<? (hash-ref fe-after 'started_at) (hash-ref fe-before 'started_at))
+                "fast-env starts earlier under the W2 edge (same-SHA shape)")
+    (check-true (string<? (hash-ref lq-after 'started_at) (hash-ref fe-after 'completed_at))
+                "lint-quality is still running when fast-env starts (concurrent)")
+    (check-true (string<? (hash-ref fe-after 'started_at) (hash-ref lq-after 'completed_at))
+                "fast-env is still running when lint-quality finishes (concurrent)")))
 
 (module+ test
   (require rackunit/text-ui)
