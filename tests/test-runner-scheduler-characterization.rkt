@@ -30,6 +30,10 @@
 ;;     and queue schedulers; results still sort by input order.
 ;;  7. --scheduler CLI seam: batch and queue are accepted; invalid values exit 2
 ;;     with a named diagnostic; --help advertises the option.
+;;  8. W3 (#9591) within-shard LPT hold: ordering default stays fifo (parse-args
+;;     never reads FAST_SHARD_ORDERING), ci.yml carries no ordering lever,
+;;     every unusable-evidence fallback is named, and consecutive ordering /
+;;     shard-plan generations are byte-identical on identical inputs.
 
 (require rackunit
          rackunit/text-ui
@@ -40,6 +44,19 @@
          racket/runtime-path
          racket/system
          (prefix-in p: racket/port)
+         (only-in "../scripts/run-tests/scheduler-order.rkt"
+                  default-ordering
+                  default-max-age-seconds
+                  known-orderings
+                  prepare-ordering
+                  order-files
+                  ordering-record-mode
+                  ordering-record-requested
+                  ordering-record-fallback-reason
+                  ordering-record-snapshot-checksum
+                  ordering-record-snapshot-status
+                  ordering-record->jsexpr)
+         (only-in "../scripts/run-tests/shard-plan.rkt" build-shard-plan plan->jsexpr)
          "../scripts/run-tests.rkt")
 
 (define-runtime-path here ".")
@@ -345,10 +362,233 @@
       (check-equal? (cdr help-res) 0 "--help exits 0")
       (check-true (regexp-match? #rx"--scheduler" (car help-res))
                   "--help advertises the --scheduler option")
+      (delete-dir/safe dir))
+
+    ;; ── W3 (#9591) within-shard LPT ordering hold contract ──
+    ;; W1 closed cohort C1 with (fast-LPT . hold), so W3 records the hold
+    ;; instead of flipping the ordering lever for the required fast shards.
+    ;; These pins make the hold observable and make any silent activation a
+    ;; red run: the CLI default stays unset (runner applies fifo), the
+    ;; repository variable never reaches parse-args, ci.yml carries no
+    ;; ordering lever, every unusable-evidence fallback is NAMED, and
+    ;; consecutive ordering/shard-plan generations are byte-identical on
+    ;; identical inputs (determinism even for a future activation).
+
+    (test-case "hold: ordering default stays unset (runner applies fifo) while the W1 fast-LPT hold stands"
+      (check-equal? (parse-ordering '()) #f "unset CLI must not request an ordering")
+      (check-equal? default-ordering 'fifo "runner default ordering stays fifo")
+      (check-equal? known-orderings '(fifo lpt) "ordering vocabulary is unchanged")
+      (define env-lpt (make-environment-variables))
+      (environment-variables-set! env-lpt #"FAST_SHARD_ORDERING" #"lpt")
+      (parameterize ([current-environment-variables env-lpt])
+        (check-equal? (parse-ordering '()) #f "FAST_SHARD_ORDERING must not reach parse-args"))
+      (define env-fifo (make-environment-variables))
+      (environment-variables-set! env-fifo #"FAST_SHARD_ORDERING" #"fifo")
+      (parameterize ([current-environment-variables env-fifo])
+        (check-equal? (parse-ordering '()) #f "even the no-op value must not reach parse-args")))
+
+    (test-case "hold: manual --ordering override still selects the requested ordering"
+      (check-equal? (parse-ordering '("--ordering" "lpt")) 'lpt)
+      (check-equal? (parse-ordering '("--ordering" "fifo")) 'fifo))
+
+    (test-case "--ordering CLI seam: fifo and lpt accepted, invalid exits 2 with a named diagnostic"
+      (define dir (make-temporary-file "w3-ord-cli-~a" 'directory))
+      (define solo
+        (write-fixture! dir
+                        "solo.rkt"
+                        "#lang racket/base\n(require rackunit)\n(module+ test (check-equal? 1 1))\n"))
+      (check-equal? (cdr (run/capture (format "racket ~a ~a --ordering fifo" (find-runner) solo)))
+                    0
+                    "--ordering fifo is accepted (exit 0)")
+      (check-equal? (cdr (run/capture (format "racket ~a ~a --ordering lpt" (find-runner) solo)))
+                    0
+                    "--ordering lpt is accepted (exit 0)")
+      (define invalid-res (run/capture (format "racket ~a ~a --ordering bogus" (find-runner) solo)))
+      (check-equal? (cdr invalid-res) 2 "invalid --ordering value exits 2")
+      (check-true (regexp-match? #rx"--ordering" (car invalid-res))
+                  (format "invalid --ordering diagnostic names the option; got: ~a"
+                          (car invalid-res)))
+      (delete-dir/safe dir))
+
+    (test-case "hold: ci.yml carries no ordering lever for the required fast shards"
+      (define ci (file->string (build-path project-root ".github" "workflows" "ci.yml")))
+      (check-false (regexp-match? #rx"--ordering" ci)
+                   "required CI must not pass --ordering while the hold stands")
+      (check-false
+       (regexp-match? #rx"FAST_SHARD_ORDERING" ci)
+       "required CI must not reference an ordering repository variable while the hold stands"))
+
+    (test-case "fallback: lpt with missing evidence falls back to fifo with a named reason"
+      (define rec
+        (prepare-ordering '("tests/w3-a.rkt" "tests/w3-b.rkt") 'lpt default-max-age-seconds #f))
+      (check-eq? (ordering-record-mode rec) 'fifo)
+      (check-eq? (ordering-record-requested rec) 'lpt)
+      (check-eq? (ordering-record-snapshot-status rec) 'missing)
+      (check-true (string? (ordering-record-fallback-reason rec))
+                  "missing-evidence fallback must name its reason, never fall back silently"))
+
+    (test-case "fallback: stale evidence falls back to fifo with the named stale reason"
+      (define dir (make-temporary-file "w3-stale-~a" 'directory))
+      (define snap (build-path dir "durations.json"))
+      (write-json-snapshot! snap (list (cons "tests/w3-a.rkt" 2.0)))
+      (file-or-directory-modify-seconds snap (- (current-seconds) (* 2 default-max-age-seconds)))
+      (define rec
+        (prepare-ordering '("tests/w3-a.rkt") 'lpt default-max-age-seconds (path->string snap)))
+      (check-eq? (ordering-record-mode rec) 'fifo)
+      (check-eq? (ordering-record-snapshot-status rec) 'stale)
+      (check-true (and (string? (ordering-record-fallback-reason rec))
+                       (string-contains? (ordering-record-fallback-reason rec) "max accepted age"))
+                  (format "stale fallback must name the freshness threshold; got: ~a"
+                          (ordering-record-fallback-reason rec)))
+      (delete-dir/safe dir))
+
+    (test-case "fallback: malformed evidence falls back to fifo with the named malformed reason"
+      (define dir (make-temporary-file "w3-bad-~a" 'directory))
+      (define snap (build-path dir "durations.json"))
+      (call-with-output-file snap
+                             #:exists 'replace
+                             (lambda (out) (display "{\"files\":[{\"path\": " out)))
+      (define rec
+        (prepare-ordering '("tests/w3-a.rkt") 'lpt default-max-age-seconds (path->string snap)))
+      (check-eq? (ordering-record-mode rec) 'fifo)
+      (check-eq? (ordering-record-snapshot-status rec) 'malformed)
+      (check-true (and (string? (ordering-record-fallback-reason rec))
+                       (string-contains? (ordering-record-fallback-reason rec) "invalid shape"))
+                  (format "malformed fallback must name its reason; got: ~a"
+                          (ordering-record-fallback-reason rec)))
+      (delete-dir/safe dir))
+
+    (test-case "fallback: wrong-inventory evidence falls back to fifo with the named overlap reason"
+      (define dir (make-temporary-file "w3-inv-~a" 'directory))
+      (define snap (build-path dir "durations.json"))
+      (write-json-snapshot! snap (list (cons "elsewhere/not-selected.rkt" 42.0)))
+      (define rec
+        (prepare-ordering '("tests/w3-a.rkt") 'lpt default-max-age-seconds (path->string snap)))
+      (check-eq? (ordering-record-mode rec) 'fifo)
+      (check-eq? (ordering-record-snapshot-status rec) 'wrong-inventory)
+      (check-true (and (string? (ordering-record-fallback-reason rec))
+                       (string-contains? (ordering-record-fallback-reason rec) "do not overlap"))
+                  (format "wrong-inventory fallback must name its reason; got: ~a"
+                          (ordering-record-fallback-reason rec)))
+      (delete-dir/safe dir))
+
+    (test-case "ordering: lpt applies only from fresh, well-formed, inventory-compatible evidence; path ties break deterministically"
+      (define dir (make-temporary-file "w3-lpt-~a" 'directory))
+      (define snap (build-path dir "durations.json"))
+      (write-json-snapshot!
+       snap
+       (list (cons "tests/w3-a.rkt" 2.0) (cons "tests/w3-b.rkt" 9.0) (cons "tests/w3-c.rkt" 2.0)))
+      (define files (list "tests/w3-c.rkt" "tests/w3-a.rkt" "tests/w3-b.rkt"))
+      (define rec (prepare-ordering files 'lpt default-max-age-seconds (path->string snap)))
+      (check-eq? (ordering-record-mode rec) 'lpt)
+      (check-eq? (ordering-record-snapshot-status rec) 'usable)
+      (check-equal? (ordering-record-fallback-reason rec) #f)
+      (check-true (and (string? (ordering-record-snapshot-checksum rec))
+                       (not (string=? (ordering-record-snapshot-checksum rec) "")))
+                  "the applied decision records the evidence checksum")
+      (check-equal? (order-files files rec)
+                    (list "tests/w3-b.rkt" "tests/w3-a.rkt" "tests/w3-c.rkt")
+                    "longest first; byte-length-and-lexicographic path tie-break for equal durations")
+      (delete-dir/safe dir))
+
+    (test-case "determinism: consecutive ordering and shard-plan generations are byte-identical on identical inputs"
+      (define dir (make-temporary-file "w3-det-~a" 'directory))
+      (define snap (build-path dir "durations.json"))
+      (write-json-snapshot!
+       snap
+       (list (cons "tests/w3-a.rkt" 2.0) (cons "tests/w3-b.rkt" 9.0) (cons "tests/w3-c.rkt" 2.0)))
+      (define files (list "tests/w3-c.rkt" "tests/w3-a.rkt" "tests/w3-b.rkt"))
+      (define rec1 (prepare-ordering files 'lpt default-max-age-seconds (path->string snap)))
+      (define rec2 (prepare-ordering files 'lpt default-max-age-seconds (path->string snap)))
+      (check-equal? (ordering-record->jsexpr rec1)
+                    (ordering-record->jsexpr rec2)
+                    "two consecutive ordering decisions serialize identically")
+      (check-equal? (order-files files rec1) (order-files files rec2))
+      (check-equal? (string->bytes/utf-8 (format "~s" (order-files files rec1)))
+                    (string->bytes/utf-8 (format "~s" (order-files files rec2)))
+                    "byte-identical orderings across runs")
+      (define durations (hash "tests/w3-a.rkt" 2.0 "tests/w3-b.rkt" 9.0 "tests/w3-c.rkt" 2.0))
+      (define plan1 (build-shard-plan files 2 #:durations durations))
+      (define plan2 (build-shard-plan files 2 #:durations durations))
+      (check-equal? (plan->jsexpr plan1)
+                    (plan->jsexpr plan2)
+                    "two consecutive shard-plan generations are structurally identical")
+      (check-equal? (canonical-plan-bytes plan1)
+                    (canonical-plan-bytes plan2)
+                    "byte-identical shard assignments across runs")
       (delete-dir/safe dir))))
 
 (module+ main
   (exit (run-tests suite)))
+
+;; ── W3 helpers ──────────────────────────────────────────────────────────
+;; parse-args is loaded dynamically (it lives in the CLI module the runner
+;; wraps); the helper extracts only the ordering slot of its 26 values.
+(define cli-parse-args
+  (dynamic-require (build-path project-root "scripts" "run-tests" "cli.rkt") 'parse-args))
+
+(define (parse-ordering args)
+  (define-values (_jobs
+                  _seq?
+                  _timeout
+                  _strict?
+                  _suite
+                  _extra
+                  _repeat
+                  _record?
+                  _inventory?
+                  _diagnose?
+                  _mode
+                  _scheduler
+                  _json
+                  _ledger
+                  _profile
+                  _lint-metadata?
+                  _changed-base
+                  _changed-head
+                  _explain?
+                  _impact-dry-run?
+                  _prioritize
+                  _failure-history
+                  _generate-covers-manifest?
+                  _shard-plan
+                  _durations
+                  ordering)
+    (cli-parse-args args))
+  ordering)
+
+;; Deterministic JSON duration snapshot in the shard-plan artifact shape.
+(define (write-json-snapshot! path pairs)
+  (call-with-output-file
+   path
+   #:exists 'replace
+   (lambda (out)
+     (display "{\"files\":[" out)
+     (for ([pair (in-list pairs)]
+           [i (in-naturals)])
+       (unless (zero? i)
+         (display "," out))
+       (fprintf out "{\"path\":~s,\"duration_seconds\":~a}" (car pair) (cdr pair)))
+     (display "]}" out))))
+
+;; Canonical byte rendering of a shard plan: hashes become key-sorted
+;; association lists (recursively), so two generations on identical inputs
+;; MUST render to identical bytes regardless of hash iteration order.
+(define (canonical-plan-bytes plan)
+  (string->bytes/utf-8 (format "~s" (canon/plan (plan->jsexpr plan)))))
+
+(define (canon/plan v)
+  (cond
+    [(hash? v)
+     (sort (for/list ([(k val) (in-hash v)])
+             (cons k (canon/plan val)))
+           string<?
+           #:key (lambda (kv) (format "~a" (car kv))))]
+    [(pair? v)
+     (if (list? v)
+         (map canon/plan v)
+         (cons (canon/plan (car v)) (canon/plan (cdr v))))]
+    [else v]))
 
 (module+ test
   (void (run-tests suite)))
