@@ -1070,7 +1070,31 @@
 
     (test-case "post-promotion markdown embeds the gate verdict"
       (define md (cohort-report-md-string (c2-manifest #:elapsed 220.0)))
-      (check-true (string-contains? md "target unachieved")))))
+      (check-true (string-contains? md "target unachieved")))
+
+    (test-case "post-promotion decision.md records observed numbers, verdict, and next lever"
+      (define pass-md (cohort-decision-md-string (c2-manifest #:elapsed 90.0)))
+      (check-true (string-contains? pass-md "target achieved")
+                  "pass decision must record the verdict")
+      (check-true (string-contains? pass-md "post-promotion") "decision must name the producing mode")
+      (check-true (string-contains? pass-md "90") "decision must record the observed p50")
+      (check-true (string-contains? pass-md "115") "decision must record the p50 target")
+      (check-true (string-contains? pass-md "135") "decision must record the p95 target")
+      (define miss-md (cohort-decision-md-string (c2-manifest #:elapsed 220.0)))
+      (check-true (string-contains? miss-md "target unachieved")
+                  "miss decision must record the verdict")
+      (check-true (string-contains? miss-md "220") "miss decision must record the observed p50")
+      (check-true (string-contains? miss-md "separate reviewed decision")
+                  "miss must name the next lever process")
+      (check-true (string-contains? miss-md "no queue rollback") "miss must not imply queue rollback")
+      (check-true (string-contains? miss-md "never revised") "targets are never revised"))
+
+    (test-case "decision-lane-verdict records a structured hold for unregistered configurations"
+      (define v (decision-lane-verdict (c2-manifest) "fast-queue"))
+      (check-equal? (hash-ref v 'verdict) "hold")
+      (check-true (pair? (hash-ref v 'reasons)) "unregistered configuration must carry a reason")
+      (check-true (hash-has-key? (hash-ref v 'numbers) 'attempts-recorded)
+                  "hold verdict must still carry the numbers table"))))
 
 ;; ============================================================
 ;; Run

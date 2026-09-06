@@ -725,7 +725,37 @@
 
   (cond
     [(not config)
-     (fail! (format "configuration ~a is not registered in the cohort manifest" config-id))]
+     ;; A configuration absent from the manifest (e.g. a C1 decision lane
+     ;; evaluated against a post-promotion C2 manifest) must still produce a
+     ;; structured hold verdict — never an undefined value.
+     (fail! (format "configuration ~a is not registered in the cohort manifest" config-id))
+     (hasheq 'lane
+             lane-id
+             'config-id
+             config-id
+             'verdict
+             "hold"
+             'reasons
+             (reverse reasons)
+             'numbers
+             (hasheq 'p50-seconds
+                     #f
+                     'p95-seconds
+                     #f
+                     'samples
+                     0
+                     'complete
+                     #f
+                     'attempts-recorded
+                     0
+                     'failures
+                     0
+                     'cancelled
+                     0
+                     'reruns
+                     0
+                     'inventory-equal-to-baseline
+                     #f))]
     [else
      (define complete? (configuration-complete? config))
      (define samples (configuration-timing-samples config))
@@ -965,6 +995,54 @@
         (format "- ~a: ~a" (hash-ref lane 'lane) r))))
 
 (define (cohort-decision-md-string manifest)
+  (if (equal? (cohort-mode manifest) "post-promotion")
+      (post-promotion-decision-md-string manifest)
+      (paired-shadow-decision-md-string manifest)))
+
+;; C2 (post-promotion) decision document: the honest achieved/unachieved
+;; verdict against the roadmap fast-execution targets, the observed numbers,
+;; and — on a miss — the named next lever for a separate reviewed decision.
+(define (post-promotion-decision-md-string manifest)
+  (define gate (post-promotion-gate manifest))
+  (define lines '())
+  (define (out . args)
+    (set! lines (append lines (list (apply format args)))))
+  (out "# C2 post-promotion activation decision: ~a" (hash-ref manifest 'cohort-id "?"))
+  (out "")
+  (out "| Field | Value |")
+  (out "|---|---|")
+  (out "| Decision mode | post-promotion (promoted defaults, no shadow duplication) |")
+  (out "| Cohort status | ~a |" (hash-ref manifest 'cohort-status "?"))
+  (out "| Timing samples | ~a |" (hash-ref gate 'samples))
+  (out "| Observed p50 (seconds) | ~a |" (or (hash-ref gate 'p50-seconds #f) "n/a"))
+  (out "| Observed p95 (seconds) | ~a |" (or (hash-ref gate 'p95-seconds #f) "n/a"))
+  (out "| Targets (never revised) | p50 ≤ ~a s, p95 ≤ ~a s |"
+       (hash-ref gate 'p50-max-seconds)
+       (hash-ref gate 'p95-max-seconds))
+  (out "| Verdict | ~a |" (hash-ref gate 'verdict))
+  (out "")
+  (out "## Gate")
+  (out "")
+  (out "~a" (hash-ref gate 'gate-text))
+  (out "")
+  (when (hash-ref gate 'next-lever #f)
+    (out "~a" (hash-ref gate 'next-lever))
+    (out ""))
+  (out (string-append
+        "Reliability closure: failed, cancelled, and rerun attempts are recorded; SHAs are never"
+        " dropped — SHAs whose required-lane run failed stay in the manifest with the named"
+        " mechanical reason \"lane-run-failed\"."))
+  (out "")
+  (out (string-append
+        "A timing miss alone implies no queue rollback; any lever change is a separate reviewed"
+        " decision. Targets are never revised inside this wave or this milestone."))
+  (out "")
+  (out "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION.")
+  (out "")
+  (string-join lines "\n"))
+
+;; C1 (paired-shadow) promotion decision document.
+(define (paired-shadow-decision-md-string manifest)
   (define d (decision-report-jsexpr manifest))
   (define baseline (hash-ref d 'baseline))
   (define lines '())
