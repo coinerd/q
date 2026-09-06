@@ -242,7 +242,9 @@
                    "the security lane command must keep the CLI batch default")
       (check-equal?
        (security-suite-run-line*)
-       "        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log"
+       (string-append
+        "        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt"
+        " --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log")
        "the security lane's single suite command changed; only a reviewed promote may touch it"))
 
     (test-case "hold: TEST_RUNNER_SCHEDULER=batch still forces batch everywhere"
