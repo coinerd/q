@@ -1,0 +1,161 @@
+name: Shard plan telemetry
+
+# v1.00.26 W3 — report-only telemetry moved OFF the PR critical path.
+#
+# History: this job lived inside ci.yml as the workflow-tail job
+# `shard-plan-report` (needs test-aggregate, if: always()), adding its
+# full duration (~286s measured) to every PR run purely to produce a
+# report. W3 relocates it, unchanged in semantics, to this post-workflow
+# listener:
+#   * Same job name: shard-plan-report.
+#   * Same artifact contract: name `shard-plan-report`, contents
+#     `shard-plan-report.log`, retention-days: 7, if-no-files-found: ignore.
+#   * Same report-only semantics: report-only, never blocks a PR; the
+#     only continue-on-error step is artifact download (same as before);
+#     a planner failure fails THIS workflow loudly (failed run + retained
+#     log) but can never fail or block a pull request, because this
+#     workflow is not a required PR check.
+#   * Same report content: duration-aware plan from this run's retained
+#     per-shard artifacts (W0 schema) + FAST_SHARD_COUNT N=4/6/8 study.
+#   * Same-SHA provenance: checks out the triggering run's head SHA.
+#
+# DAG checkpoint: artifacts/ci-topology/v1.00.26-w3/dag-checkpoint.json
+# (schema ci-topology/dag-checkpoint@1, label "topology checkpoint —
+# not a cohort").
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: shard-plan-telemetry-${{ github.event.workflow_run.id || 'manual' }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  shard-plan-report:
+    name: shard-plan-report (post-workflow telemetry)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve triggering CI run
+        id: trigger
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_dispatch: report against the latest completed CI run.
+            RUN_ID=$(gh run list --workflow "CI" --status completed --limit 1 --json databaseId --jq '.[0].databaseId')
+            HEAD_SHA=$(gh run view "$RUN_ID" --json headSha --jq '.headSha')
+            echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.trigger.outputs.head_sha }}
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+
+      # Retained artifacts live on the triggering run, so download by
+      # run id (same tolerant semantics as the in-CI job: missing
+      # artifacts degrade the report, never the run).
+      - name: Download retained fast-shard artifacts
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf durations-raw
+          gh run download "${{ steps.trigger.outputs.run_id }}" \
+            --pattern 'test-results-fast-*' \
+            --dir durations-raw
+
+      - name: Stage per-shard duration JSONs
+        run: |
+          mkdir -p durations
+          i=0
+          for d in durations-raw/test-results-fast-*; do
+            [ -d "$d" ] || continue
+            if [ -f "$d/test-results.json" ]; then
+              cp "$d/test-results.json" "durations/shard-$i.json"
+            fi
+            i=$((i+1))
+          done
+          ls -1 durations/ || true
+      - name: Observed round-robin wall clocks
+        id: observed
+        run: |
+          obs=null
+          if compgen -G "durations/*.json" > /dev/null; then
+            obs=$(jq -s '[.[].run_summary.wall_clock_seconds] | max' durations/*.json 2>/dev/null) || obs=null
+          fi
+          printf 'observed=%s\n' "$obs" >> "$GITHUB_OUTPUT"
+      - name: Build duration-aware plan (report-only, loud on failure)
+        if: always()
+        run: |
+          if ! compgen -G "durations/*.json" > /dev/null; then
+            echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
+            exit 0
+          fi
+          # Current shard total = number of staged per-shard duration JSONs
+          # (3 today; N once FAST_SHARD_COUNT is activated per the ledger).
+          CURRENT_TOTAL=$(ls -1 durations/*.json | wc -l)
+          racket scripts/run-tests.rkt \
+            --suite fast --shard-total "$CURRENT_TOTAL" \
+            --shard-plan report --durations durations \
+            2>&1 | tee shard-plan-report.log
+          # FAST_SHARD_COUNT study (v1.00.16 W3, report-only): predicted
+          # max shard at N=4/6/8 over this run's post-W1/W2 durations.
+          # Activation rule (FAST_SHARD_PLAN precedent): activate N only
+          # if the predicted max shard improves AND the runner-minute
+          # cost delta is recorded and accepted in
+          # docs/reports/test-regression-log.md.
+          echo ";; FAST_SHARD_COUNT study (W3, report-only): predicted max shard at N=4/6/8" | tee -a shard-plan-report.log
+          for n in 4 6 8; do
+            [ "$n" = "$CURRENT_TOTAL" ] && continue
+            echo ";; ---- N=$n ----"
+            racket scripts/run-tests.rkt \
+              --suite fast --shard-total "$n" \
+              --shard-plan report --durations durations 2>&1 \
+              | grep -E '^shard [0-9]+/[0-9]+:|^;; ' || echo ";; (planner produced no report for N=$n)"
+          done | tee -a shard-plan-report.log
+      - name: Post predicted-vs-observed summary
+        if: always()
+        run: |
+          {
+            echo "## Shard plan report (W7, report-only)"
+            echo '```'
+            grep -E 'shard [0-9]+/[0-9]+:|^;; ' shard-plan-report.log || true
+            echo '```'
+            if command -v jq >/dev/null 2>&1 && ls durations/*.json >/dev/null 2>&1; then
+              echo "- Observed round-robin max shard wall clock: ${OBSERVED}s"
+              echo "- Inventory check: planned files must equal the summed per-shard file counts"
+              jq -s '[.[].run_summary.file_count] | add' durations/*.json \
+                | xargs -I{} echo "  - Actual files executed (sum of shards): {}"
+            else
+              echo "- Observed round-robin max shard wall clock: n/a (no duration artifacts in this run)"
+            fi
+            echo "- Activation: set repo variable \`FAST_SHARD_PLAN=active\` only when the recommendation above is \`activate\`."
+            echo "- FAST_SHARD_COUNT (W3, report-only): predicted max shard for N=4/6/8 printed above from the same durations. Default stays 3; activate N only if the predicted max shard improves AND the runner-minute cost delta is recorded and accepted in \`docs/reports/test-regression-log.md\` (activation + revert procedure recorded there)."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          OBSERVED: ${{ steps.observed.outputs.observed }}
+      - name: Upload shard-plan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shard-plan-report
+          path: shard-plan-report.log
+          if-no-files-found: ignore
+          retention-days: 7

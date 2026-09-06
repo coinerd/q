@@ -1,0 +1,108 @@
+{
+  "schema": "ci-topology/dag-checkpoint@1",
+  "wave": "v1.00.26-w3",
+  "label": "report-only telemetry off the PR critical path (ci.yml tail becomes test-aggregate)",
+  "repository": "coinerd/q",
+  "captured_at": "2026-09-06T23:49:30Z",
+  "description": "same-SHA topology checkpoint for the W3 relocation: the report-only shard-plan-report job moves out of ci.yml (where, as the workflow-tail job with needs: [test-aggregate] and if: always(), its full ~286s duration extended every PR run) into a post-workflow telemetry workflow triggered by workflow_run: CI completed + workflow_dispatch. Job name, artifact contract (shard-plan-report / shard-plan-report.log / retention 7d / if-no-files-found: ignore), report content (duration-aware plan + FAST_SHARD_COUNT N=4/6/8 study) and same-SHA provenance are unchanged; only placement changes. Required checks are unchanged. This is a topology checkpoint, not a cohort.",
+  "provenance": {
+    "before": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (measured run 32746428342, head_sha c6ee39e43025cc49202a27084aed459221dac43c): the W0-measured run still carried shard-plan-report as the ci.yml workflow-tail job",
+    "after": "derived shape projection at the SAME head SHA under the W3 relocation: the report job is relocated post-workflow with identical steps; its measured interval is carried over unchanged because the relocation neither speeds up nor slows down the report — it only changes which workflow's critical path it extends",
+    "branch": "campaign/v1.00.26-w3",
+    "base": "campaign/v1.00.26-w2 @ 2f1ddcd4 (short sha; branch tip at creation)",
+    "edges_recorded_from": ".github/workflows/ci.yml (the W3-relevant subgraph of the live needs edges at this commit; the full graph remains pinned by the W0/W1/W2 tests)"
+  },
+  "policy_pin": [
+    "lint",
+    "lint-quality",
+    "security",
+    "release-dry-run",
+    "workflows (0)",
+    "workflows (1)",
+    "workflows-aggregate",
+    "smoke (ubuntu-latest)",
+    "test (0)",
+    "test (1)",
+    "test (2)",
+    "test-aggregate",
+    "test-platform"
+  ],
+  "needs_edges": {
+    "lint": [],
+    "lint-quality": [],
+    "fast-env": ["lint"],
+    "test": ["lint", "fast-env"],
+    "test-platform": ["lint"],
+    "test-aggregate": ["test", "test-platform"],
+    "shard-plan-report": "relocated out of ci.yml (see telemetry_relocation_contract); runs post-workflow with an empty needs list via workflow_run: CI completed, checking out the triggering run's head SHA",
+    "note": "with shard-plan-report removed, the ci.yml critical-path tail is test-aggregate; all other needs edges are unchanged from the W0/W1/W2 pins, and the required-check policy_pin is byte-identical to the W2 pin (the report was report-only and never a required check)."
+  },
+  "telemetry_relocation_contract": {
+    "telemetry_workflow": ".github/workflows/shard-plan-telemetry.yml",
+    "telemetry_workflow_sha256": "38101d4026bff08bc847a5a719e08496148cf97b138d232337864526a30c6b08",
+    "ci_yml_seam": "grep -c '^  shard-plan-report:' .github/workflows/ci.yml == 0 (no ci.yml job of that name; only the relocation pointer comment remains)",
+    "artifact_name": "shard-plan-report",
+    "artifact_path": "shard-plan-report.log",
+    "retention_days": 7,
+    "if_no_files_found": "ignore",
+    "same_sha_checkout": "actions/checkout ref = triggering run's head SHA (workflow_run.head_sha, or latest completed CI run for workflow_dispatch)",
+    "artifact_download": "gh run download <triggering run id> --pattern 'test-results-fast-*' with continue-on-error: true (tolerant, matching the former in-CI download step)",
+    "loud_failure": "plan-build/summary/upload steps carry no continue-on-error; a planner failure fails the telemetry workflow (failed run + retained log) and can never fail or block the pull-request workflow",
+    "report_content_unchanged": [
+      "duration-aware plan from this run's retained per-shard artifacts (W0 schema)",
+      "FAST_SHARD_COUNT study (W3, report-only): predicted max shard at N=4/6/8",
+      "FAST_SHARD_PLAN activation guidance (activate only on predicted max-shard improvement with inventory preserved)"
+    ]
+  },
+  "timing_checkpoint": {
+    "label": "topology checkpoint — not a cohort",
+    "measurement_kind": "derived-shape-projection",
+    "derived_from": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (measured run 32746428342)",
+    "note": "before/after are anchored to the SAME head SHA (same-SHA pairing). before is the measured W0 baseline run, in which shard-plan-report was the ci.yml tail job; after is the derived projection under the W3 relocation: the report runs post-workflow over the same retained artifacts at the same SHA with the same measured duration, and the PR workflow's critical path ends at test-aggregate instead.",
+    "before": {
+      "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "workflow_end": "2026-09-06T18:40:39Z",
+      "jobs": [
+        {
+          "name": "test-aggregate",
+          "started_at": "2026-09-06T18:28:22Z",
+          "completed_at": "2026-09-06T18:35:44Z",
+          "conclusion": "success"
+        },
+        {
+          "name": "shard-plan-report",
+          "started_at": "2026-09-06T18:35:47Z",
+          "completed_at": "2026-09-06T18:40:33Z",
+          "conclusion": "success",
+          "duration_seconds": 286,
+          "note": "ci.yml workflow-tail job (needs: [test-aggregate], if: always()); extended every PR run"
+        }
+      ]
+    },
+    "after": {
+      "anchor_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "workflow_end": "2026-09-06T18:35:44Z",
+      "jobs": [
+        {
+          "name": "test-aggregate",
+          "started_at": "2026-09-06T18:28:22Z",
+          "completed_at": "2026-09-06T18:35:44Z",
+          "conclusion": "success",
+          "note": "new ci.yml workflow tail (nothing needs it anymore)"
+        },
+        {
+          "name": "shard-plan-report (post-workflow telemetry)",
+          "started_at": "2026-09-06T18:35:47Z",
+          "completed_at": "2026-09-06T18:40:33Z",
+          "conclusion": "success",
+          "duration_seconds": 286,
+          "trigger": "workflow_run: CI completed",
+          "needs": [],
+          "note": "same job, same duration, same SHA — off the PR critical path"
+        }
+      ]
+    },
+    "delta_seconds_earlier": 289,
+    "delta_explained": "the PR workflow's critical path ends 289s earlier: the report's measured duration (286s) plus the 3s aggregate→report scheduling gap (18:35:44Z→18:35:47Z). The report itself is unchanged in duration (286s before and after) — the win is placement, not a faster report."
+  }
+}

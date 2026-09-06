@@ -262,15 +262,31 @@
         (check-not-false (member "lint" (job-needs job))
                          (format "~a needs must include lint; got ~a" job (job-needs job)))))
 
-    ;; Pin 2: shard-plan-report is report-only, workflow tail
-    (test-case "shard-plan-report depends on test-aggregate (workflow tail)"
-      (check-equal? (job-needs "shard-plan-report") '("test-aggregate")))
-    (test-case "shard-plan-report is report-only"
-      (define body (job-body "shard-plan-report"))
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"if: always" ln)) body)
-                  "shard-plan-report must run with if: always()")
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"continue-on-error: true" ln)) body)
-                  "artifact download must be continue-on-error"))
+    ;; Pin 2 (W3): shard-plan-report is relocated post-workflow; the ci.yml
+    ;; workflow tail is now test-aggregate. The job itself is byte-identical in
+    ;; .github/workflows/shard-plan-telemetry.yml (checksum-pinned via the W3
+    ;; checkpoint; deeper pins live in tests/test-w3-telemetry-relocation.rkt).
+    (test-case "shard-plan-report is relocated out of ci.yml (W3)"
+      (check-false (member "shard-plan-report" (top-jobs))
+                   "ci.yml must no longer define shard-plan-report")
+      (define telemetry-yml
+        (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml"))
+      (check-true (file-exists? telemetry-yml)
+                  "the relocated report must live in shard-plan-telemetry.yml")
+      (define cp
+        (call-with-input-file
+         (build-path project-root "artifacts" "ci-topology" "v1.00.26-w3" "dag-checkpoint.json")
+         read-json))
+      (check-equal? (sha256-hex telemetry-yml)
+                    (hash-ref (hash-ref cp 'telemetry_relocation_contract) 'telemetry_workflow_sha256)
+                    "the relocated job must stay byte-identical to the recorded relocation")
+      (check-true (regexp-match? #rx"workflow_run" (file->string telemetry-yml))
+                  "post-workflow trigger: workflow_run: CI completed"))
+    (test-case "test-aggregate is the ci.yml workflow tail"
+      (check-equal? (job-needs "test-aggregate") '("test" "test-platform"))
+      (for ([job (in-list (top-jobs))])
+        (check-false (member 'test-aggregate (job-needs job))
+                     (format "~a must not depend on the new workflow tail" job))))
     (test-case "shard-plan-report is not a required PR check"
       (check-false (regexp-match? #rx"shard-plan-report" (file->string policy-file))))
 
@@ -313,10 +329,12 @@
       (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))))
 
     ;; Pin 6: JSON / artifact consumers
-    (test-case "shard-plan-report consumes retained test-results-fast-* artifacts"
-      (define body (job-body "shard-plan-report"))
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"pattern: test-results-fast-" ln)) body))
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"test-results.json" ln)) body)))
+    (test-case "relocated report consumes retained test-results-fast-* artifacts (post-workflow)"
+      (define t
+        (file->string (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml")))
+      (check-true (regexp-match? #rx"test-results-fast" t)
+                  "telemetry consumes this run's retained per-shard artifacts")
+      (check-true (regexp-match? #rx"test-results.json" t) "per-shard JSON inputs unchanged"))
     (test-case "fast test job uploads test-results-fast-<shard> JSON artifacts"
       (define body (job-body "test"))
       (check-true (ormap (lambda (ln) (regexp-match? #rx"test-results-fast-" ln)) body))
