@@ -1,0 +1,144 @@
+{
+  "schema": "q.ci.dag-checkpoint/1",
+  "wave": "v1.00.26-w1",
+  "label": "topology checkpoint — not a cohort",
+  "repository": "coinerd/q",
+  "captured_at": "2026-09-06T21:40:00Z",
+  "description": "v1.00.26 W1 atomic lint split: lightweight lint (governance controller tests + workflow YAML validation) stays required; lint-quality (Racket lint, lint alignment, metadata inventory, blocking metadata lint) becomes required after reporting green on main. Applied via the §7.1 safe sequence: workflow+policy+tests changed atomically, lint required at every step, no fail-open or never-reporting window.",
+  "provenance": {
+    "derived_from": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline",
+    "before_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+    "note": "before = measured W0 baseline run on the pre-split topology; after = derived shape projection of the SAME head SHA under the split topology (topology checkpoint — not a cohort measurement)."
+  },
+  "policy_pin": [
+    "lint",
+    "lint-quality",
+    "security",
+    "release-dry-run",
+    "smoke (ubuntu-latest)",
+    "test (0)",
+    "test (1)",
+    "test (2)",
+    "test-aggregate",
+    "test-platform",
+    "workflows (0)",
+    "workflows (1)",
+    "workflows-aggregate"
+  ],
+  "branch_protection": {
+    "strict": true,
+    "required_status_checks": [
+      "lint",
+      "lint-quality",
+      "security",
+      "release-dry-run",
+      "smoke (ubuntu-latest)",
+      "test (0)",
+      "test (1)",
+      "test (2)",
+      "test-aggregate",
+      "test-platform",
+      "workflows (0)",
+      "workflows (1)",
+      "workflows-aggregate"
+    ]
+  },
+  "safe_apply_sequence": [
+    {
+      "step": 1,
+      "action": "pin-failing-tests-and-update-all-job-set-expectations",
+      "lint_required": true,
+      "detail": "Failing tests pin the new job set (lint lightweight, lint-quality full Racket lint); every other job-set pin across the repo updated in the same commit — no orphaned expectations. Workflow, policy and tests change atomically on the campaign branch; lint remains in the required set throughout."
+    },
+    {
+      "step": 2,
+      "action": "merge-split-pr",
+      "lint_required": true,
+      "detail": "Delivery-contract PR squash-merged to main with the split ci.yml and the extended required-pr-checks.policy. Branch protection still requires the pre-split set; lint is required before, during and after the merge — no fail-open window."
+    },
+    {
+      "step": 3,
+      "action": "observe-lint-quality-green-on-main",
+      "lint_required": true,
+      "precondition": "lint-quality reports success on main",
+      "detail": "lint-quality runs on main post-merge (never-reporting window closed) and must report success before it can become required."
+    },
+    {
+      "step": 4,
+      "action": "add-lint-quality-protection",
+      "lint_required": true,
+      "precondition_met": true,
+      "detail": "lint-quality reported green on main (step 3 precondition met), so the protection requirement is added. lint stays required at every step; order is green-before-required."
+    },
+    {
+      "step": 5,
+      "action": "verify-both-required-via-api-and-snapshot",
+      "lint_required": true,
+      "detail": "Both lint and lint-quality confirmed required via the GitHub API; the API snapshot is bound into this checkpoint's branch_protection block. Rollback rehearsal executed in dry-run form and documented in the wave validation record (remove lint-quality requirement first, then restore workflow/policy; lint never leaves the required set; a half-reverted or fail-open state is a release blocker)."
+    }
+  ],
+  "timing_checkpoint": {
+    "label": "topology checkpoint — not a cohort",
+    "derived_from": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline",
+    "measurement_kind": "derived-shape-projection",
+    "note": "before/after are anchored to the SAME head SHA (same-SHA pairing). before is the measured W0 baseline run; after is the derived projection of that run under the split topology: lint loses its Racket steps (~3m33s) and completes before fast-env/test start, while lint-quality carries the full Racket lint suite in parallel with no downstream needs.",
+    "before": {
+      "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "jobs": [
+        {
+          "name": "lint",
+          "started_at": "2026-09-06T18:22:28Z",
+          "completed_at": "2026-09-06T18:26:45Z",
+          "conclusion": "success",
+          "note": "heavyweight: full Racket lint on the PR critical path"
+        },
+        {
+          "name": "fast-env",
+          "started_at": "2026-09-06T18:26:47Z",
+          "completed_at": "2026-09-06T18:31:28Z",
+          "conclusion": "success"
+        },
+        {
+          "name": "test (0)",
+          "started_at": "2026-09-06T18:31:30Z",
+          "completed_at": "2026-09-06T18:35:09Z",
+          "conclusion": "success",
+          "note": "waits 9m02s behind heavyweight lint + fast-env"
+        }
+      ]
+    },
+    "after": {
+      "anchor_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "jobs": [
+        {
+          "name": "lint",
+          "started_at": "2026-09-06T18:22:28Z",
+          "completed_at": "2026-09-06T18:23:12Z",
+          "conclusion": "success",
+          "note": "lightweight: governance controller tests + workflow YAML validation only (~44s)"
+        },
+        {
+          "name": "lint-quality",
+          "started_at": "2026-09-06T18:22:29Z",
+          "completed_at": "2026-09-06T18:26:51Z",
+          "conclusion": "success",
+          "note": "full Racket lint suite, parallel (needs: []), completes before test (0) starts"
+        },
+        {
+          "name": "fast-env",
+          "started_at": "2026-09-06T18:23:14Z",
+          "completed_at": "2026-09-06T18:27:55Z",
+          "conclusion": "success",
+          "note": "same 4m41s duration, starts right after the lightweight lint"
+        },
+        {
+          "name": "test (0)",
+          "started_at": "2026-09-06T18:27:57Z",
+          "completed_at": "2026-09-06T18:31:36Z",
+          "conclusion": "success",
+          "note": "starts 3m33s earlier than under the pre-split topology (18:31:30 -> 18:27:57)"
+        }
+      ]
+    }
+  }
+}

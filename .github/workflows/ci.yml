@@ -41,7 +41,13 @@ concurrency:
 
 jobs:
   # ────────────────────────────────────────────────────────────
-  # Gate 1: Lint (< 30s) — fast feedback on every PR
+  # Gate 1: Lint — lightweight, required, fast PR feedback
+  # v1.00.26 W1 (§7): the PR-critical path keeps only the governance
+  # controller tests and workflow YAML validation. The Racket lint
+  # suite (lint-all, version-expectations, lint-alignment, metadata
+  # inventory/lint) moved to the parallel `lint-quality` job so
+  # downstream jobs (fast-env → test …) no longer wait for Racket lint
+  # steps. `lint` and `lint-quality` are both required.
   # ────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
@@ -50,16 +56,6 @@ jobs:
 
       - name: Protected governance controller tests
         run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
-
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
-          restore-keys: racket-pkgs-lint-
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Workflow YAML validation
         run: |
@@ -78,6 +74,21 @@ jobs:
             sys.exit(1)
           print('All workflows and actions valid YAML')
           "
+
+  lint-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Racket packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-lint-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run all lint checks
         run: racket scripts/lint-all.rkt

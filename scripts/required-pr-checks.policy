@@ -1,4 +1,5 @@
 ("lint"
+ "lint-quality"
  "security"
  "release-dry-run"
  "workflows (0)"

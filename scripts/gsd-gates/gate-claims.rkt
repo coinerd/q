@@ -217,8 +217,12 @@
 ;; and is skipped on main pushes, so requiring it would create false
 ;; CI-green failures during milestone closure.
 ;; ---------------------------------------------------------------------------
+;; v1.00.26 W1: `lint-quality` (Racket lint suite, alignment, metadata
+;; inventory) joined the required set alongside the lightweight `lint` job.
+;; ---------------------------------------------------------------------------
 (define ci-required-jobs
-  '("lint" "test (0)"
+  '("lint" "lint-quality"
+           "test (0)"
            "test (1)"
            "test (2)"
            "test-aggregate"
