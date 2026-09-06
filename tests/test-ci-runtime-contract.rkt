@@ -308,8 +308,13 @@
     (test-case "workflows job: 2 outer shards"
       (check-true (ormap (lambda (ln) (regexp-match? #rx"shard: \\[0, 1\\]" ln))
                          (job-body "workflows"))))
-    (test-case "workflows job: 2 inner workers"
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"--jobs 2" ln)) (job-body "workflows"))))
+    (test-case "workflows job: 2 inner workers (guarded default, W5)"
+      (define wf-body (job-body "workflows"))
+      (check-true
+       (ormap (lambda (ln) (regexp-match? #rx"\\|\\| '2' \\}\\}" ln)) wf-body)
+       "the guard default keeps 2 inner workers — only vars.WORKFLOW_TEST_JOBS == '4' widens")
+      (check-false (ormap (lambda (ln) (regexp-match? #rx"--jobs 4" ln)) wf-body)
+                   "no unconditional four-worker count in the workflows job"))
 
     ;; Pin 4: required job names
     (test-case "required-pr-checks.policy pins the required job-name set"
@@ -359,9 +364,12 @@
           (check-false
            (ormap (lambda (ln) (regexp-match? #rx"TEST_RUNNER_SCHEDULER" ln)) (job-body job))
            (format "job ~a must not set TEST_RUNNER_SCHEDULER (workflow shards only)" job)))))
-    (test-case "workflow shard commands keep jobs=2 and JSON shape (scheduler choice does not alter them)"
+    (test-case "workflow shard commands keep the guarded worker count and JSON shape (scheduler choice does not alter them)"
       (define body (job-body "workflows"))
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"--jobs 2" ln)) body))
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"--jobs \"\\$WORKFLOW_TEST_JOBS\"" ln)) body)
+                  "the worker count flows through the guarded WORKFLOW_TEST_JOBS seam (default 2)")
+      (check-false (ormap (lambda (ln) (regexp-match? #rx"--jobs 4" ln)) body)
+                   "still no unconditional four-worker count (W4 hold + W5 guard)")
       (check-true (ormap (lambda (ln) (regexp-match? #rx"--json-out test-results.json" ln)) body)))
 
     ;; Pin 6: JSON / artifact consumers
@@ -696,18 +704,17 @@
       ;; inner workers; any other value (unset, 2, garbage) keeps the
       ;; product default of 2 (mirrors the FAST_SHARD_COUNT guard shape)
       (check-true
-       (ormap (lambda (ln)
-                (regexp-match?
-                 #rx"WORKFLOW_TEST_JOBS: \\$\\{\\{ vars.WORKFLOW_TEST_JOBS == '4' && '4' \\|\\| '2' \\}\\}"
-                 ln))
-              body)
+       (ormap
+        (lambda (ln)
+          (regexp-match?
+           #rx"WORKFLOW_TEST_JOBS: \\$\\{\\{ vars.WORKFLOW_TEST_JOBS == '4' && '4' \\|\\| '2' \\}\\}"
+           ln))
+        body)
        "the workflows job must declare the guarded WORKFLOW_TEST_JOBS seam: vars.WORKFLOW_TEST_JOBS == '4' -> 4, else 2")
-      (check-true
-       (ormap (lambda (ln) (regexp-match? #rx"--jobs \"\\$WORKFLOW_TEST_JOBS\"" ln)) body)
-       "the workflows shard command must run with the guarded worker count")
-      (check-false
-       (ormap (lambda (ln) (regexp-match? #rx"--jobs 4" ln)) body)
-       "no unconditional four-worker widening may appear in the workflows job")
+      (check-true (ormap (lambda (ln) (regexp-match? #rx"--jobs \"\\$WORKFLOW_TEST_JOBS\"" ln)) body)
+                  "the workflows shard command must run with the guarded worker count")
+      (check-false (ormap (lambda (ln) (regexp-match? #rx"--jobs 4" ln)) body)
+                   "no unconditional four-worker widening may appear in the workflows job")
       ;; outer shard topology untouched: W5 changes the worker count only,
       ;; so the required-check graph (workflows (0), workflows (1)) is stable
       (check-true (ormap (lambda (ln) (regexp-match? #rx"shard: \\[0, 1\\]" ln)) body)
@@ -734,9 +741,11 @@
       (check-equal? (hash-ref j 'campaign) "v1.00.26")
       (check-equal? (hash-ref j 'wave) "W5")
       (define gate (hash-ref j 'gate))
-      (check-equal? (hash-ref gate 'target-workflow-p50-seconds) 220
+      (check-equal? (hash-ref gate 'target-workflow-p50-seconds)
+                    220
                     "the p50 target is recorded unrevised")
-      (check-equal? (hash-ref gate 'real-ci-four-worker-pr-runs) 0
+      (check-equal? (hash-ref gate 'real-ci-four-worker-pr-runs)
+                    0
                     "no real-CI four-worker PR cohort exists in this delivery environment")
       (check-false (hash-ref gate 'gate-evaluable)
                    "the activation gate is NOT evaluable without the >=5-run real-CI cohort")
@@ -750,19 +759,19 @@
         (check-true (hash-has-key? recon (string->symbol k))
                     (format "the reconciliation table must cover ~a" k)))
       (define decision (hash-ref j 'decision))
-      (check-equal? (hash-ref decision 'outcome) "hold"
-                    "the guarded activation is recorded as hold")
-      (check-equal? (hash-ref decision 'worker-count-stays) 2
+      (check-equal? (hash-ref decision 'outcome) "hold" "the guarded activation is recorded as hold")
+      (check-equal? (hash-ref decision 'worker-count-stays)
+                    2
                     "hold means the workflows worker count stays at the default")
       (check-true (> (string-length (hash-ref decision 'rollback)) 20)
                   "the one-line rollback must be documented")
       (check-true (hash-ref j 'targets-unrevised) "targets are never revised inside the wave")
       (check-equal?
        (sha256-hex ev)
-       (car (regexp-match* #rx"[0-9a-f]{64}"
-                           (file->string
-                            (build-path project-root "artifacts" "ci-topology"
-                                        "v1.00.26-w5" "SHA256SUMS"))))
+       (car (regexp-match*
+             #px"[0-9a-f]{64}"
+             (file->string
+              (build-path project-root "artifacts" "ci-topology" "v1.00.26-w5" "SHA256SUMS"))))
        "stress-evidence.json must be byte-bound by SHA256SUMS"))
     (test-case "W5: contamination canary — shared-mutable worker outputs fail the contract"
       ;; detector: pure scan of a job body; returns the contamination
@@ -780,14 +789,11 @@
           ln))
       (check-false (pair? (contamination-signals (job-body "workflows")))
                    "the live workflows job must be free of contamination signals")
-      (check-true
-       (pair? (contamination-signals
-               (list "          name: workflow-test-output"
-                     "          name: test-results-workflows")))
-       "a shared (non-shard-suffixed) output name must be flagged")
-      (check-true
-       (pair? (contamination-signals (list "          key: racket-pkgs-workflows")))
-       "a shared cache key without a shard axis must be flagged"))))
+      (check-true (pair? (contamination-signals (list "          name: workflow-test-output"
+                                                      "          name: test-results-workflows")))
+                  "a shared (non-shard-suffixed) output name must be flagged")
+      (check-true (pair? (contamination-signals (list "          key: racket-pkgs-workflows")))
+                  "a shared cache key without a shard axis must be flagged"))))
 
 (module+ test
   (exit (run-tests (suite))))

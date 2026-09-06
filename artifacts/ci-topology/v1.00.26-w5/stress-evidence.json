@@ -1,0 +1,59 @@
+{
+  "schema": "q.ci-topology.workflow-worker-stress/1",
+  "campaign": "v1.00.26",
+  "wave": "W5",
+  "recorded-at": "2026-02-14T00:00:00Z",
+  "gate": {
+    "target-workflow-p50-seconds": 220,
+    "required-checks-green": true,
+    "real-ci-four-worker-pr-runs": 0,
+    "required-real-ci-four-worker-pr-runs": 5,
+    "gate-evaluable": false,
+    "gate-evaluation-note": "The W5 delivery environment has no GitHub Actions runner, so the required cohort of >= 5 real-CI four-worker PR runs does not exist; measured workflow p50 is undefined and the activation gate is not evaluable."
+  },
+  "isolation": {
+    "cross-worker-contamination-observed": false,
+    "contamination-signals-scanned": [
+      "shared (non-shard-suffixed) artifact/upload names in the workflows job",
+      "cache keys without a matrix.shard axis and without restore-keys",
+      "overlapping per-worker temp roots / shared mutable output paths"
+    ],
+    "contamination-canary": "tests/test-ci-runtime-contract.rkt — W5 contamination canary case: positive control flags shared output names and shard-less cache keys; negative control requires the live workflows job to be signal-free",
+    "worker-separation": "per-worker HOME and workdir separation pins live in tests/test-worker-security.rkt (worker isolation pins); the batch runner resolves --jobs per inner worker",
+    "missing-for-activation": "No real-CI four-worker stress cohort exists: zero four-worker PR runs were measured in this delivery environment, so per-run p50, cross-worker contamination observations under load, and cache/artifact isolation behavior on hosted runners are all unobserved; the >= 5-run zero-contamination cohort required by the gate is missing."
+  },
+  "nightly-vs-pr-reconciliation": {
+    "nightly": {
+      "trigger": "schedule (nightly) and workflow_dispatch",
+      "concurrency-cancel": "none — nightly runs to completion, queue is cold at start",
+      "runner-contention": "low: scheduled off-peak, no PR queue pressure",
+      "timeout-budget": "generous job timeout (minutes-scale slack), workflow p50 headroom above the 220 s target",
+      "observed-precedent": "W4 measurement (artifacts/ci-topology/v1.00.26-w4/shard-measurement.json): batch-scheduler shard p50s from a cold, uncontended run; the queued variant measured 9-25% above the 5-run batch baseline with unreliable p95"
+    },
+    "pull-request": {
+      "trigger": "pull_request + push to campaign branches",
+      "concurrency-cancel": "in-progress cancellation on new pushes (grouped by ref)",
+      "runner-contention": "high: bursts of concurrent PR runs share hosted-runner capacity; W4's trial window coincided with queue pressure",
+      "timeout-budget": "tighter effective budget: cancelled/superseded runs and queue wait inflate wall-clock p50 even when in-job time is identical",
+      "observed-precedent": "W4 CI measurement on the wave branch (2 queue runs, one 30-minute window) was contention-confounded and not reliable enough to activate queue"
+    },
+    "reconciliation": "The nightly/PR timeout difference is an environment artifact, not a scheduler property: nightly runs start cold and uncontended with generous timeouts, while PR runs contend with concurrent PR bursts and in-progress cancellation, so identical in-job work shows higher and noisier wall-clock p50s under PR conditions. Because W4's PR-window measurement is contention-confounded and W5 has no real-CI four-worker cohort at all, the 220 s p50 target stays unrevised and is evaluated only against a clean cohort; the guard (WORKFLOW_TEST_JOBS == '4') exists so activation is a one-variable flip once such a cohort is recorded."
+  },
+  "decision": {
+    "outcome": "hold",
+    "worker-count-stays": 2,
+    "reason": "The activation gate requires >= 5 real-CI four-worker PR runs with zero contamination and workflow p50 <= 220 s; that cohort does not exist in this delivery environment (0 runs), so the guard holds the worker count at the product default of 2. This is a missing-evidence hold, not a contamination finding: the contamination canary and the guarded seam both pass, and no cross-worker contamination signal was observed.",
+    "activation-path": "Record a clean >= 5-run real-CI four-worker PR cohort with per-run p50 and zero contamination, confirm workflow p50 <= 220 s with all required checks green, then set the repo variable WORKFLOW_TEST_JOBS=4 — no code change required.",
+    "rollback": "Leave the repo variable WORKFLOW_TEST_JOBS unset (or set it to anything other than '4'); the guard resolves the worker count to the product default of 2 on the next run — a one-line variable revert."
+  },
+  "targets-unrevised": true,
+  "guard": {
+    "seam": "WORKFLOW_TEST_JOBS",
+    "expression": "${{ vars.WORKFLOW_TEST_JOBS == '4' && '4' || '2' }}",
+    "consumers": [".github/workflows/ci.yml — workflows job env + shard command --jobs"],
+    "pins": [
+      "tests/test-ci-runtime-contract.rkt — W5 guarded-seam, decision, stress-evidence, and contamination-canary cases",
+      "tests/test-worker-security.rkt — per-worker HOME/workdir isolation pins"
+    ]
+  }
+}
