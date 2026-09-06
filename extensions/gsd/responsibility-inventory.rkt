@@ -162,6 +162,7 @@
                                  "racket/string"
                                  "racket/system"
                                  "composition-root"
+                                 "events"
                                  "plan-types"
                                  "verification-job"
                                  "wave-docs"

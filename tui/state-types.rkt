@@ -142,6 +142,7 @@
           ;; Backward-compatible streaming accessors (v0.38.6 migration)
           [ui-state-busy? (-> ui-state? boolean?)]
           [ui-state-status-message (-> ui-state? (or/c string? #f))]
+          [ui-state-verification-progress (-> ui-state? (or/c hash? #f))]
           [ui-state-pending-tool-name (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
@@ -158,6 +159,7 @@
           [set-active-model-turn-id (-> ui-state? (or/c string? #f) ui-state?)]
           [set-interrupt-request-id (-> ui-state? (or/c string? #f) ui-state?)]
           [set-status-message (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-verification-progress (-> ui-state? (or/c hash? #f) ui-state?)]
           [set-pending-tool-name (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
@@ -223,7 +225,9 @@
          active-turn-id
          interrupt-request-id
          active-model-turn-id
-         compact-request-id) ; (or/c string? #f) — F-06: pending compact request ID
+         compact-request-id ; (or/c string? #f) — F-06: pending compact request ID
+         verification-progress) ; BUG-0058: (or/c hasheq? #f) — active coordinator
+  ; verification (wave, started-ms, log-path) for live elapsed rendering
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -409,7 +413,7 @@
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f #f) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f #f #f) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -440,6 +444,14 @@
 
 (define (ui-state-status-message state)
   (streaming-state-status-message (ui-state-streaming state)))
+
+;; BUG-0058: active coordinator-verification progress (live elapsed source).
+(define (ui-state-verification-progress state)
+  (streaming-state-verification-progress (ui-state-streaming state)))
+
+(define (set-verification-progress state progress)
+  (update-streaming state
+                    (lambda (s) (struct-copy streaming-state s [verification-progress progress]))))
 
 (define (ui-state-pending-tool-name state)
   (streaming-state-pending-tool-name (ui-state-streaming state)))

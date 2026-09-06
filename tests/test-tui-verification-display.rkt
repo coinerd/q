@@ -14,7 +14,9 @@
          rackunit/text-ui
          "../tui/state-events.rkt"
          "../tui/state-types.rkt"
-         "../util/message/protocol-types.rkt")
+         "../tui/render/status-line.rkt"
+         "../util/message/protocol-types.rkt"
+         (only-in "../tui/render/message-layout.rkt" styled-line->text))
 
 ;; ── Helpers ──
 
@@ -250,6 +252,135 @@
       (define entry (car (ui-state-transcript st1)))
       (check-true (string-contains? (transcript-entry-text entry) "Wrapped reason"))
       (check-true (string-contains? (transcript-entry-text entry) "medium")))
+
+    ;; ── BUG-0058: coordinator-owned verification progress ──
+
+    (test-case "coordinator started event renders wave-scoped status and stores progress"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state st0
+                              (make-test-event "gsd.verification.started"
+                                               (hasheq 'wave
+                                                       4
+                                                       'command
+                                                       "racket scripts/run-tests.rkt --suite fast"
+                                                       'timeout-sec
+                                                       7200
+                                                       'log-path
+                                                       "/var/tmp/gsd-verification-vj-1.log"
+                                                       'attached?
+                                                       #f
+                                                       'start-ms
+                                                       1000.0))))
+      (define status (ui-state-status-message st1))
+      (check-true (string-contains? status "W4 verifying") status)
+      (check-true (string-contains? status "budget 7200s") status)
+      (check-true (string-contains? status "/var/tmp/gsd-verification-vj-1.log") status)
+      (define progress (ui-state-verification-progress st1))
+      (check-true (hash? progress) "progress stored while verification is active")
+      (check-equal? (hash-ref progress 'wave) 4)
+      (check-equal? (hash-ref progress 'started-ms) 1000.0))
+
+    (test-case "coordinator completed (approve) clears status and progress"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state st0
+                              (make-test-event "gsd.verification.started"
+                                               (hasheq 'wave
+                                                       4
+                                                       'command
+                                                       "true"
+                                                       'timeout-sec
+                                                       60
+                                                       'log-path
+                                                       "/var/tmp/v.log"
+                                                       'start-ms
+                                                       1000.0))))
+      (define st2
+        (apply-event-to-state st1
+                              (make-test-event "gsd.verification.completed"
+                                               (hasheq 'wave
+                                                       4
+                                                       'state
+                                                       'completed
+                                                       'exit-code
+                                                       0
+                                                       'approved?
+                                                       #t
+                                                       'verdict
+                                                       "approve"
+                                                       'elapsed-sec
+                                                       12.5
+                                                       'log-path
+                                                       "/var/tmp/v.log"))))
+      (check-false (ui-state-status-message st2))
+      (check-false (ui-state-verification-progress st2)))
+
+    (test-case "coordinator completed (reject) records elapsed + log durably"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state st0
+                              (make-test-event "gsd.verification.started"
+                                               (hasheq 'wave
+                                                       0
+                                                       'command
+                                                       "false"
+                                                       'timeout-sec
+                                                       60
+                                                       'log-path
+                                                       "/var/tmp/v.log"
+                                                       'start-ms
+                                                       1000.0))))
+      (define st2
+        (apply-event-to-state st1
+                              (make-test-event "gsd.verification.completed"
+                                               (hasheq 'wave
+                                                       0
+                                                       'state
+                                                       'failed
+                                                       'exit-code
+                                                       1
+                                                       'approved?
+                                                       #f
+                                                       'verdict
+                                                       "reject"
+                                                       'reason
+                                                       "verify state=failed exit=1"
+                                                       'elapsed-sec
+                                                       252.0
+                                                       'log-path
+                                                       "/var/tmp/v.log"))))
+      (check-false (ui-state-verification-progress st2))
+      (define entry (car (ui-state-transcript st2)))
+      (define text (transcript-entry-text entry))
+      (check-true (string-contains? text "REJECTED") text)
+      (check-true (string-contains? text "verify state=failed exit=1") text)
+      (check-true (string-contains? text "4m 12s") text)
+      (check-true (string-contains? text "/var/tmp/v.log") text))
+
+    (test-case "status bar renders live elapsed while verification is active"
+      (define st0 (initial-ui-state))
+      (define st1
+        (apply-event-to-state st0
+                              (make-test-event "gsd.verification.started"
+                                               (hasheq 'wave
+                                                       4
+                                                       'command
+                                                       "raco test"
+                                                       'timeout-sec
+                                                       7200
+                                                       'log-path
+                                                       "/var/tmp/v.log"
+                                                       'start-ms
+                                                       (- (current-inexact-milliseconds) 65000.0)))))
+      (define line (render-status-bar st1 120))
+      (define text (styled-line->text line))
+      (check-true (string-contains? text "W4 verifying") text)
+      (check-true (regexp-match? #rx"1m [0-9]+s elapsed" text) text))
+
+    (test-case "status bar renders no elapsed when verification is inactive"
+      (define line (render-status-bar (initial-ui-state) 120))
+      (check-false (string-contains? (styled-line->text line) "elapsed")))
 
     ;; ── Full Lifecycle ──
 

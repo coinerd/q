@@ -38,6 +38,10 @@
                   delivery-verification-message
                   current-gsd-delivery-verify-command
                   current-gsd-delivery-verify-timeout-sec)
+         (only-in "../extensions/gsd/events.rkt"
+                  make-event-collector
+                  set-gsd-event-bus!
+                  gsd-event-bus-box)
          (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
          (only-in "../extensions/gsd/verification-job.rkt"
                   make-verification-registry
@@ -309,6 +313,41 @@
       (check-true (string-contains? message "log="))
       (check-true (string-contains? message "failed-output-summary:"))
       (check-true (string-contains? message "assertion expected 12 got 14"))
+      (cleanup-tmp base))
+
+    (test-case "BUG-0058: coordinator gate emits started/completed progress events"
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "false")
+      (write-state! base 0 "42")
+      (define plan (load-plan* base))
+      (define-values (collector query) (make-event-collector))
+      (define saved-bus (unbox gsd-event-bus-box))
+      (set-gsd-event-bus! collector)
+      (define result
+        (parameterize ([current-gsd-delivery-verify-command "exit 3"])
+          (run-delivery-verification base plan 0)))
+      (set-gsd-event-bus! saved-bus)
+      (check-false (delivery-verification-approved? result))
+      (define events (query))
+      (define names (map (lambda (e) (hash-ref e 'event)) events))
+      (check-true (and (member 'gsd.verification.started names) #t) (format "events: ~a" names))
+      (check-true (and (member 'gsd.verification.completed names) #t) (format "events: ~a" names))
+      (define started (findf (lambda (e) (eq? (hash-ref e 'event) 'gsd.verification.started)) events))
+      (define completed
+        (findf (lambda (e) (eq? (hash-ref e 'event) 'gsd.verification.completed)) events))
+      (define started-data (hash-ref started 'data))
+      (define completed-data (hash-ref completed 'data))
+      (check-equal? (hash-ref started-data 'wave) 0)
+      (check-equal? (hash-ref started-data 'timeout-sec) (current-gsd-delivery-verify-timeout-sec))
+      (check-true (string? (hash-ref started-data 'log-path)) "started carries the durable log path")
+      (check-equal? (hash-ref completed-data 'verdict) "reject")
+      (check-equal? (hash-ref completed-data 'exit-code) 3)
+      (check-true (real? (hash-ref completed-data 'elapsed-sec)) "elapsed is a real")
+      (check-true (string-contains? (hash-ref completed-data 'reason) "state=")
+                  "reject reason names the job state")
       (cleanup-tmp base))
 
     (test-case "rejects when git not available"
