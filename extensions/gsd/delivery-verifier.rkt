@@ -42,6 +42,7 @@
          racket/string
          racket/system
          "composition-root.rkt"
+         "events.rkt"
          "plan-types.rkt"
          "verification-job.rkt"
          "wave-docs.rkt"
@@ -525,24 +526,77 @@
 ;; Start (or attach to) the owned job and wait for its terminal record. The
 ;; job's own deadline (timeout-ms captured at start) bounds the wait even
 ;; when the caller's window is generous.
+;; BUG-0058: best-effort progress emission for the coordinator-owned gate.
+;; A bus failure must never break verification; these events are pure
+;; observability (paths + timings + exit code only, never log contents).
+(define (emit-verification-progress! name payload)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "gsd: verification progress event failed: ~a"
+                                            (exn-message e)))])
+    (emit-gsd-event! name payload)))
+
+(define (start-or-attach! reg identity run-cwd command timeout-ms)
+  (parameterize ([current-directory run-cwd])
+    (verification-start! reg identity "/bin/sh" (list "-c" command) #:timeout-ms timeout-ms)))
+
 (define (registry-run-verify command run-cwd timeout-sec base-dir wave-idx)
   (define reg (current-gsd-verification-registry))
   (define timeout-ms (* 1.0 timeout-sec 1000.0))
-  (define started
-    (parameterize ([current-directory run-cwd])
-      (verification-start! reg
-                           (delivery-verify-identity base-dir wave-idx run-cwd command)
-                           "/bin/sh"
-                           (list "-c" command)
-                           #:timeout-ms timeout-ms)))
+  (define identity (delivery-verify-identity base-dir wave-idx run-cwd command))
+  (define started (start-or-attach! reg identity run-cwd command timeout-ms))
   (define job-id (start-result-job-id started))
+  (define start-job (verification-status reg job-id))
+  ;; BUG-0058: the started event carries the durable log path so the TUI can
+  ;; show a truthful multi-minute gate instead of a frozen executor summary.
+  (emit-verification-progress! 'gsd.verification.started
+                               (hasheq 'wave
+                                       wave-idx
+                                       'command
+                                       command
+                                       'timeout-sec
+                                       timeout-sec
+                                       'log-path
+                                       (verification-job-log-path start-job)
+                                       'attached?
+                                       (start-result-existing-job? started)
+                                       'start-ms
+                                       (verification-job-start-ms start-job)))
   ;; A break/exception while the coordinator is waiting must not detach the
   ;; owned gate. Cancel+reap before propagating the escape; terminal jobs are
   ;; immutable, so this is safe if completion won the race.
-  (with-handlers ([exn? (lambda (e)
-                          (verification-cancel! reg job-id)
-                          (raise e))])
-    (verification-wait reg job-id timeout-ms)))
+  (define waited
+    (with-handlers ([exn? (lambda (e)
+                            (verification-cancel! reg job-id)
+                            (raise e))])
+      (verification-wait reg job-id timeout-ms)))
+  (define state (verification-job-state waited))
+  (define exit-code (verification-job-exit-code waited))
+  (define approved? (and (eq? state 'completed) (equal? exit-code 0)))
+  (emit-verification-progress!
+   'gsd.verification.completed
+   (hasheq 'wave
+           wave-idx
+           'command
+           command
+           'state
+           state
+           'exit-code
+           exit-code
+           'approved?
+           approved?
+           ;; Reducer-compatible verdict/reason (legacy payload contract).
+           'verdict
+           (if approved? "approve" "reject")
+           'reason
+           (and (not approved?) (format "verify state=~a exit=~a" state exit-code))
+           'elapsed-sec
+           (and (verification-job-start-ms waited)
+                (verification-job-end-ms waited)
+                (real? (verification-job-end-ms waited))
+                (/ (- (verification-job-end-ms waited) (verification-job-start-ms waited)) 1000.0))
+           'log-path
+           (verification-job-log-path waited)))
+  waited)
 
 ;; cwd for a DECLARED verify command: the wave worktree under branch
 ;; isolation (the delivered tree as committed); otherwise the base-dir

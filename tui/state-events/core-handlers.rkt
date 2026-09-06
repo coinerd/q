@@ -408,34 +408,74 @@
 ;; ============================================================
 
 (define (handle-verification-started state evt)
-  (define artifact-count (verification-payload-ref evt 'artifact-count 0))
-  (set-status-message state (format "Verifying ~a artifacts..." artifact-count)))
+  (define wave (verification-payload-ref evt 'wave #f))
+  (define log-path (verification-payload-ref evt 'log-path #f))
+  (if wave
+      ;; BUG-0058: coordinator-owned gate — truthful wave-scoped status plus a
+      ;; stored start time so the status bar renders live elapsed while the
+      ;; multi-minute verify command runs.
+      (let* ([budget (verification-payload-ref evt 'timeout-sec #f)]
+             [start-ms (verification-payload-ref evt 'start-ms (current-inexact-milliseconds))]
+             [status (format "W~a verifying — budget ~as~a"
+                             wave
+                             (or budget "?")
+                             (if log-path
+                                 (format " · log ~a" log-path)
+                                 ""))])
+        (set-verification-progress (set-status-message state status)
+                                   (hasheq 'wave wave 'started-ms start-ms 'log-path log-path)))
+      ;; Legacy payload (artifact-count): keep the historical rendering.
+      (set-verification-progress
+       (set-status-message state
+                           (format "Verifying ~a artifacts..."
+                                   (verification-payload-ref evt 'artifact-count 0)))
+       #f)))
 
 (define (handle-verification-completed state evt)
-  (define verdict (verification-payload-ref evt 'verdict "unknown"))
+  (define verdict
+    (verification-payload-ref evt
+                              'verdict
+                              (if (verification-payload-ref evt 'approved? #f) "approve" "unknown")))
   (define reason (verification-payload-ref evt 'reason #f))
+  (define elapsed (verification-payload-ref evt 'elapsed-sec #f))
+  (define log-path (verification-payload-ref evt 'log-path #f))
+  ;; BUG-0058: elapsed/log suffix renders the bounded outcome facts; no log
+  ;; content ever enters the transcript.
+  (define suffix
+    (string-append (if (real? elapsed)
+                       (let* ([total (inexact->exact (floor elapsed))]
+                              [m (quotient total 60)]
+                              [s (remainder total 60)])
+                         (format " — ~am ~as" m s))
+                       "")
+                   (if log-path
+                       (format " · log ~a" log-path)
+                       "")))
+  (define cleared (set-verification-progress state #f))
   (match verdict
     ;; Approval: clear status message
-    [(or "approve" 'approve) (set-status-message state #f)]
+    [(or "approve" 'approve) (set-status-message cleared #f)]
     [(or "reject" 'reject)
      ;; Rejection: add transcript entry with reason
-     (append-entry state
+     (append-entry cleared
                    (make-entry 'system
-                               (format "[Verification: REJECTED~a]"
+                               (format "[Verification: REJECTED~a~a]"
                                        (if reason
                                            (format " — ~a" reason)
-                                           ""))
+                                           "")
+                                       suffix)
                                (event-time evt)
                                (hasheq 'verification #t 'rejected #t)))]
     [else
      ;; Escalate or unknown: add generic transcript entry
-     (append-entry state
+     (append-entry cleared
                    (make-entry 'system
-                               (format "[Verification: ~a~a]"
+                               (format "[Verification: ~a~a~a]"
                                        verdict
                                        (if reason
                                            (format " — ~a" reason)
-                                           ""))
+                                           "")
+                                       suffix)
                                (event-time evt)
                                (hasheq 'verification #t)))]))
 

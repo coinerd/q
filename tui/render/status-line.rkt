@@ -54,9 +54,24 @@
   (define ctx-pressure-pct (ui-state-context-pressure-percent state))
 
   ;; Build state indicator based on busy state
+  ;; BUG-0058: while a coordinator-owned verification is active, render live
+  ;; elapsed time from the stored start so a healthy multi-minute gate is
+  ;; visibly progressing instead of looking frozen.
+  (define verification-progress (ui-state-verification-progress state))
+  (define elapsed-suffix
+    (if verification-progress
+        (let ([started-ms (hash-ref verification-progress 'started-ms #f)])
+          (if (real? started-ms)
+              (let* ([total (inexact->exact (floor (/ (- (current-inexact-milliseconds) started-ms)
+                                                      1000)))]
+                     [m (quotient total 60)]
+                     [s (remainder total 60)])
+                (format " | ~am ~as elapsed" m s))
+              ""))
+        ""))
   (define state-indicator
     (cond
-      [(and status-msg (not (string=? status-msg ""))) (format " | ~a" status-msg)]
+      [(and status-msg (not (string=? status-msg ""))) (format " | ~a~a" status-msg elapsed-suffix)]
       [(and busy pending-tool) (format " | ~a [~a]" model-name pending-tool)]
       [(and busy (not streaming))
        (if (string=? model-name "")
