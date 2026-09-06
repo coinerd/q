@@ -125,7 +125,7 @@
   (and (not (validation-ok? vr)) (ormap (lambda (e) (regexp-match? rx e)) (validation-errors vr))))
 
 ;; ============================================================
-;; Helpers for paired configuration manifests (v1.00.25 W0: C1)
+;; Helpers for paired configuration manifests (W0: C1)
 ;; ============================================================
 
 (define config-hex "0123456789abcdef")
@@ -670,7 +670,7 @@
       (check-true (hash? (hash-ref r 'statistics)))
       (check-true (hash? (hash-ref r 'counts))))
 
-    ;; --- 16. Paired configuration manifests (v1.00.25 W0: C1 shadow cohort) ---
+    ;; --- 16. Paired configuration manifests (W0: C1 shadow cohort) ---
 
     (test-case "paired configuration manifest with baseline + shadow configs validates OK"
       (define manifest (make-paired-manifest))
@@ -998,7 +998,7 @@
                     (decision-report-jsexpr (make-paired-manifest))))))
 
 ;; ============================================================
-;; C2 post-promotion activation cohort (v1.00.25 W6)
+;; C2 post-promotion activation cohort (W6)
 ;;
 ;; C2 runs over promoted defaults with no shadow legs.  The report must
 ;; name which mode produced each number (paired-shadow vs post-promotion),
@@ -1013,7 +1013,7 @@
                                     (make-valid-sha i #:elapsed elapsed))
                            #:exclusions exclusions
                            #:expected-count ec
-                           #:cohort-id "v1.00.25-c2")
+                           #:cohort-id (format "v~a-c2" q-version))
             'cohort-mode
             "post-promotion"))
 

@@ -5,7 +5,7 @@
 ;; @isolation process
 ;; @boundary integration
 
-;; W5 (v1.00.25): prepared-environment restore evidence report tooling.
+;; W5 (current milestone): prepared-environment restore evidence report tooling.
 ;;
 ;; The tool `scripts/ci/prepared-env-report.rkt` is built tests-first by
 ;; this file. It must support three modes:
@@ -30,11 +30,13 @@
          racket/string
          racket/system
          rackunit
-         rackunit/text-ui)
+         rackunit/text-ui
+         (only-in "../util/version.rkt" q-version))
 
 (define-runtime-path project-root "..")
 (define script-path (build-path project-root "scripts" "ci" "prepared-env-report.rkt"))
-(define committed-dir (build-path project-root "artifacts" "ci-baseline" "v1.00.25-prepared-env"))
+(define committed-dir
+  (build-path project-root "artifacts" "ci-baseline" (format "v~a-prepared-env" q-version)))
 (define committed-manifest (build-path committed-dir "report.json"))
 (define committed-sums (build-path committed-dir "SHA256SUMS"))
 
@@ -133,7 +135,7 @@
     (test-case "tool and committed evidence files exist"
       (check-true (file-exists? script-path) "scripts/ci/prepared-env-report.rkt must exist")
       (check-true (file-exists? committed-manifest)
-                  "artifacts/ci-baseline/v1.00.25-prepared-env/report.json must exist")
+                  (format "artifacts/ci-baseline/v~a-prepared-env/report.json must exist" q-version))
       (check-true (file-exists? committed-sums) "SHA256SUMS must sit next to the committed report"))
 
     (test-case "emit: verified restore (telemetry contract honored, cache key bound)"

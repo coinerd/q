@@ -220,7 +220,8 @@
     ;; ── W4 (#9592) security-queue hold contract ──
     ;; W1's cohort C1 decision block records security-queue . hold with zero
     ;; paired shadow samples (security/queue/fifo: 0 recorded attempts across
-    ;; all 20 eligible SHAs), so the roadmap v1.00.25 §6 W4 security gate
+    ;; all 20 eligible SHAs), so the roadmap's §6 W4 security gate (milestone
+    ;; of the current release)
     ;; ("Security p50 <= 240 s; permission/isolation semantics unchanged") is
     ;; not evaluable from absent evidence. W4 therefore records the hold
     ;; instead of activating. These pins make the hold observable:

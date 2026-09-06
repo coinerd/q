@@ -4,7 +4,8 @@
 ;; @suite default
 ;; @boundary unit
 
-;; test-release-entry-current.rkt — v1.00.25 W7 release-entry contract.
+;; test-release-entry-current.rkt — W7 release-entry contract for the
+;; canonical release (version from util/version.rkt, never a literal).
 ;;
 ;; Pins, derived from the canonical version surface (never from a hardcoded
 ;; literal, so the test survives future bumps):
