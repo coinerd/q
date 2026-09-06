@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.24 -->
+<!-- verified-against: 1.00.25 -->
 # Distributed Execution Guide
 
 This guide covers q's **opt-in** distributed execution feature (verified against v1.00.24, originally introduced in v1.00.23 for MAS Schritt 6 Phase 2). High-risk tool execution can be routed to a remote executor node over mTLS-secured TCP, isolating hostile code from the developer machine.

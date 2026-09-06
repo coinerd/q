@@ -1,3 +1,41 @@
+## v1.00.25 — 2026-09-06
+
+Released 2026-09-06.
+
+> v1.00.25: work-conserving activation — queue scheduling activated for fast
+lanes (W2), within-shard LPT ordering activated for fast lanes (W3), and queue
+scheduling activated for security lanes (W4), each promoted only on paired
+out-of-sample shadow-cohort C1 evidence with one-command batch rollback
+retained; prepared-environment restore evidence integrated and warm observation
+recorded (W5); a separate post-promotion cohort C2 measured the activated
+configurations on 20 new SHAs (W6). Milestone #890. Per-lane activation states
+with every claim bound to checksummed evidence:
+`docs/reports/TEST-SCHEDULER-ACTIVATION-v1.00.25.md`.
+
+### Features
+
+- Work-conserving queue scheduling is activated for fast lanes (W2) and security lanes (W4), and within-shard LPT ordering is activated for fast lanes (W3); every promotion was gated on paired out-of-sample shadow-cohort C1 evidence and each activation retains a one-command batch rollback.
+- Prepared-environment restore evidence is integrated (W5): per-family restore verification with named fallbacks wherever the verification threshold was not met, plus warm observation metrics recorded alongside a fresh remeasure of the v1.00.11/v1.00.16 comparison metrics.
+- Post-promotion cohort C2 (W6) measured the activated configurations on 20 new SHAs against the ≤ 115 s p50 / ≤ 135 s p95 target; the C2 report and its `SHA256SUMS` manifest are delivered with the cohort evidence.
+- New activation-states report (`docs/reports/TEST-SCHEDULER-ACTIVATION-v1.00.25.md`) stating, per lane, `activated (evidence link)` or `not activated (named reason)`, with every claim linked to its C1/C2/decision artifact by checksum.
+
+### Breaking / Behavior Changes
+
+- Fast and security lanes now dispatch through the work-conserving queue, and fast-lane shards order work within-shard by LPT; all other lanes keep batch as their default scheduler, and queue/LPT remain non-default everywhere else.
+
+### Migration Notes
+
+- No migration is required. The one-command batch rollback retained from the activation series restores prior fast/security scheduling behavior at any time; prepared-environment evidence is observational and does not change any CLI surface.
+
+### Testing
+
+- Activation gates: paired C1 evidence and post-promotion C2 evidence are checksummed and reproduce byte-identically at the delivered tree; cohort tooling verifies sample counts, configuration match, and `SHA256SUMS` before accepting any comparison.
+- The integrated bake ran the full gate set on the release candidate: fast, security, arch, lint, TUI smoke, release dry-run, readiness lint, notes lint, metrics lint, tarball symlink audit, and bundle verification.
+
+### Operational / Release
+
+- Not activated states remain explicit: batch stays the default scheduler outside fast/security lanes, LPT ordering stays fast-lane-only (security-LPT is not activated), grouped-mode broad activation and tier-overlap scheduling remain not activated and withheld, and no 2× performance claim is made; shadow execution remains non-required.
+
 ## v1.00.24 — 2026-09-05
 
 Released 2026-09-05.
