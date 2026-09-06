@@ -1,0 +1,126 @@
+{
+  "schema": "ci-topology/graph-snapshot",
+  "version": 1,
+  "wave": "v1.00.26-w0",
+  "repository": "coinerd/q",
+  "captured_at": "2026-09-06T19:11:22Z",
+  "description": "Fail-closed characterization of the CURRENT required-check graph: branch-protection required contexts for main, the ci.yml job needs-graph, and a same-SHA DAG timing baseline from one green PR run. The characterization tests compare the policy pin against this snapshot; any drift is an explicit, named failure.",
+  "provenance": {
+    "branch_protection": "GET /repos/coinerd/q/branches/main/protection",
+    "actions_run": "GET /repos/coinerd/q/actions/runs/34051240975/jobs?per_page=100",
+    "workflow_source": ".github/workflows/ci.yml",
+    "github_cli": "gh api",
+    "baseline_pr": 9606,
+    "baseline_pr_title": "v1.00.25 — Work-Conserving Activation (campaign delivery)",
+    "baseline_head_sha": "c6ee39e43025cc49202a27084aed459221dac43c"
+  },
+  "policy_pin": [
+    "lint",
+    "security",
+    "release-dry-run",
+    "smoke (ubuntu-latest)",
+    "test (0)",
+    "test (1)",
+    "test (2)",
+    "test-aggregate",
+    "test-platform",
+    "workflows (0)",
+    "workflows (1)",
+    "workflows-aggregate"
+  ],
+  "branch_protection": {
+    "branch": "main",
+    "enabled": true,
+    "strict": true,
+    "required_status_checks": [
+      "lint",
+      "security",
+      "release-dry-run",
+      "smoke (ubuntu-latest)",
+      "test (0)",
+      "test (1)",
+      "test (2)",
+      "test-aggregate",
+      "test-platform",
+      "workflows (0)",
+      "workflows (1)",
+      "workflows-aggregate"
+    ],
+    "required_status_checks_apps": {
+      "lint": "q-agent-ci",
+      "security": "q-agent-ci",
+      "release-dry-run": "q-agent-ci",
+      "smoke (ubuntu-latest)": "q-agent-ci",
+      "test (0)": "q-agent-ci",
+      "test (1)": "q-agent-ci",
+      "test (2)": "q-agent-ci",
+      "test-aggregate": "q-agent-ci",
+      "test-platform": "q-agent-ci"
+    },
+    "required_pull_request_reviews": {
+      "required_approving_review_count": 0,
+      "dismiss_stale_reviews": true
+    },
+    "enforce_admins": true,
+    "required_linear_history": true,
+    "required_conversation_resolution": true,
+    "allow_force_pushes": false,
+    "allow_deletions": false
+  },
+  "workflow": {
+    "path": ".github/workflows/ci.yml",
+    "jobs": {
+      "lint": { "needs": [] },
+      "fast-env": { "needs": ["lint"] },
+      "test": { "needs": ["lint", "fast-env"] },
+      "prepared-env-report": { "needs": ["test"] },
+      "test-aggregate": { "needs": ["test", "test-platform"] },
+      "shard-plan-report": { "needs": ["test-aggregate"] },
+      "test-platform": { "needs": ["lint"] },
+      "test-cross-version": { "needs": ["lint"] },
+      "security": { "needs": ["lint"] },
+      "release-dry-run": { "needs": ["lint"] },
+      "smoke": { "needs": ["lint"] },
+      "workflows": { "needs": ["lint"] },
+      "workflows-aggregate": { "needs": ["workflows"] },
+      "gsd-governance": { "needs": ["lint"] },
+      "abstraction-audit": { "needs": ["lint"] },
+      "release-readiness": { "needs": [], "note": "runs only on v* tag push; skipped on pull_request" }
+    },
+    "aggregate_edges": {
+      "test-aggregate": ["test (0)", "test (1)", "test (2)", "test-platform"],
+      "workflows-aggregate": ["workflows (0)", "workflows (1)"]
+    },
+    "not_required": ["fast-env", "prepared-env-report", "shard-plan-report", "test-cross-version", "gsd-governance", "abstraction-audit", "release-readiness"]
+  },
+  "timing_baseline": {
+    "description": "Same-SHA DAG timing baseline (documentation-grade, not a cohort): one green PR run's per-job start/end wall times under the current topology. W1-W3 compare scheduling changes against this shape.",
+    "run_id": 34051240975,
+    "run_event": "pull_request",
+    "run_conclusion": "success",
+    "run_started_at": "2026-09-06T18:17:28Z",
+    "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+    "pr_number": 9606,
+    "jobs": [
+      { "name": "lint", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:22:28Z", "completed_at": "2026-09-06T18:26:45Z", "conclusion": "success" },
+      { "name": "release-readiness", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:22:25Z", "completed_at": "2026-09-06T18:22:25Z", "conclusion": "skipped" },
+      { "name": "security", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:35:53Z", "conclusion": "success" },
+      { "name": "release-dry-run", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:31:20Z", "conclusion": "success" },
+      { "name": "smoke (ubuntu-latest)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:33:56Z", "conclusion": "success" },
+      { "name": "fast-env", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:31:28Z", "conclusion": "success" },
+      { "name": "workflows (1)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:37:58Z", "conclusion": "success" },
+      { "name": "test-platform", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:34:00Z", "conclusion": "success" },
+      { "name": "abstraction-audit", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:31:51Z", "conclusion": "success" },
+      { "name": "workflows (0)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:47Z", "completed_at": "2026-09-06T18:35:52Z", "conclusion": "success" },
+      { "name": "gsd-governance", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:45Z", "completed_at": "2026-09-06T18:26:45Z", "conclusion": "skipped" },
+      { "name": "test-cross-version", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:26:45Z", "completed_at": "2026-09-06T18:26:45Z", "conclusion": "skipped" },
+      { "name": "test (1)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:31:30Z", "completed_at": "2026-09-06T18:35:40Z", "conclusion": "success" },
+      { "name": "test (2)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:31:30Z", "completed_at": "2026-09-06T18:34:47Z", "conclusion": "success" },
+      { "name": "test (0)", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:31:30Z", "completed_at": "2026-09-06T18:35:09Z", "conclusion": "success" },
+      { "name": "prepared-env-report", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:35:42Z", "completed_at": "2026-09-06T18:39:56Z", "conclusion": "success" },
+      { "name": "test-aggregate", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:35:43Z", "completed_at": "2026-09-06T18:35:45Z", "conclusion": "success" },
+      { "name": "shard-plan-report", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:35:47Z", "completed_at": "2026-09-06T18:40:33Z", "conclusion": "success" },
+      { "name": "workflows-aggregate", "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c", "started_at": "2026-09-06T18:38:00Z", "completed_at": "2026-09-06T18:38:03Z", "conclusion": "success" }
+    ]
+  }
+}

@@ -170,8 +170,52 @@
    (check-true (file-exists? (build-path ".." "scripts" "ci-package-setup.rkt"))))
  (test-case "release-repair.rkt script exists from W7"
    (check-true (file-exists? (build-path ".." "scripts" "release-repair.rkt"))))
- (test-case "release-dry-run.rkt script exists from W3"
-   (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt")))))
+  (test-case "release-dry-run.rkt script exists from W3"
+    (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt"))))
+  ;; ── W0 v1.00.26: required-check graph characterization (integration layer) ──
+  ;; Pins, as literal data compiled into this module, the same graph that
+  ;; tests/test-ci-runtime-contract.rkt pins against the live policy file and
+  ;; the checksummed snapshot: the protected-main gate context list, the
+  ;; aggregate needs edges, and fail-closed gate verdict semantics.
+  (test-case "w0: required-check graph characterization"
+    (define W0-REQUIRED-CHECKS
+      '("lint" "security" "release-dry-run" "smoke (ubuntu-latest)"
+        "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"
+        "workflows (0)" "workflows (1)" "workflows-aggregate"))
+    (define W0-AGGREGATE-NEEDS
+      '(("test-aggregate" ("test (0)" "test (1)" "test (2)" "test-platform"))
+        ("workflows-aggregate" ("workflows (0)" "workflows (1)"))))
+    (define (w0-verdict required observed)
+      (define missing (filter (lambda (n) (not (member n observed))) required))
+      (if (null? missing) 'pass (list 'fail missing)))
+    (test-case "gate requires the pinned twelve contexts, and only those"
+      (check-equal? (length W0-REQUIRED-CHECKS) 12)
+      (check-true (andmap (lambda (n) (member n W0-REQUIRED-CHECKS))
+                          '("lint" "security" "release-dry-run" "test-aggregate"
+                            "test-platform" "workflows-aggregate")))
+      (check-false (member "fast-env" W0-REQUIRED-CHECKS))
+      (check-false (member "prepared-env-report" W0-REQUIRED-CHECKS))
+      (check-false (member "shard-plan-report" W0-REQUIRED-CHECKS))
+      (check-false (member "release-readiness" W0-REQUIRED-CHECKS)))
+    (test-case "every aggregate job needs its shard jobs"
+      (for-each
+       (lambda (entry)
+         (check-true (member (car entry) W0-REQUIRED-CHECKS)
+                     (format "aggregate ~a must itself be required" (car entry)))
+         (for-each
+          (lambda (shard)
+            (check-true (member shard W0-REQUIRED-CHECKS)
+                        (format "~a shard ~a must be required" (car entry) shard)))
+          (cadr entry)))
+       W0-AGGREGATE-NEEDS))
+    (test-case "missing any required check fails the gate (fail-closed)"
+      (check-equal? (w0-verdict W0-REQUIRED-CHECKS W0-REQUIRED-CHECKS) 'pass)
+      (for-each
+       (lambda (dropped)
+         (check-equal? (w0-verdict W0-REQUIRED-CHECKS (remove dropped W0-REQUIRED-CHECKS))
+                       (list 'fail (list dropped))
+                       (format "gate must fail closed when ~a is missing" dropped)))
+       W0-REQUIRED-CHECKS))))
 
 (module+ test
   (require rackunit/text-ui)
