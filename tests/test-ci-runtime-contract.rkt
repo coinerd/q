@@ -328,15 +328,19 @@
     (test-case "no --scheduler option anywhere in ci.yml (W2 flips this)"
       (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))))
 
-    ;; Pin 5b (W4): workflow shards select the queue scheduler via the env
-    ;; seam only. The runner-side kill switch (--scheduler batch and
-    ;; TEST_RUNNER_SCHEDULER=batch) still wins over this env value, and
-    ;; unsetting the variable restores the product default (batch) — both
-    ;; reasserted in tests/test-runner-scheduler-characterization.rkt.
-    (test-case "workflow shards pass TEST_RUNNER_SCHEDULER=queue explicitly"
-      (define body (job-body "workflows"))
-      (check-true (ormap (lambda (ln) (regexp-match? #rx"TEST_RUNNER_SCHEDULER:[ \t]*queue" ln)) body)
-                  "workflows job must set TEST_RUNNER_SCHEDULER: queue in job env"))
+    ;; Pin 5b (W4, decision: HOLD): the measured CI trial (see
+    ;; artifacts/ci-topology/v1.00.26-w4/shard-measurement.json) recorded queue
+    ;; p50s above the batch baseline with unreliable p95, so per the wave rule
+    ;; the workflow keeps the product-default batch scheduler. The runner-side
+    ;; TEST_RUNNER_SCHEDULER env seam and its kill switch remain available for
+    ;; a future measured re-trial — reasserted in
+    ;; tests/test-runner-scheduler-characterization.rkt.
+    (test-case "workflow shards keep the product-default scheduler (W4 hold: no scheduler env in ci.yml)"
+      (check-false
+       (regexp-match? #rx"TEST_RUNNER_SCHEDULER[ \t]*:" (file->string ci-yml))
+       "W4 hold: ci.yml must not set TEST_RUNNER_SCHEDULER anywhere — workflow shards run the product default (batch) until a reliable measurement justifies queue")
+      (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))
+                   "no --scheduler option may appear in ci.yml (env seam only, and currently unset)"))
     (test-case "scheduler env stays scoped to the workflow shards"
       (for ([job (in-list (top-jobs))])
         (unless (equal? job "workflows")
