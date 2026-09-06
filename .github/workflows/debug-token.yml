@@ -1,0 +1,22 @@
+name: Debug Token Probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: probe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          echo "== whoami =="; gh api user --jq .login; echo "rc=$?"
+          echo "== repo read =="; gh api repos/coinerd/q --jq .full_name; echo "rc=$?"
+          echo "== issues read =="; gh api 'repos/coinerd/q/issues?per_page=1' --jq '.[0].number'; echo "rc=$?"
+          echo "== releases read =="; gh api 'repos/coinerd/q/releases?per_page=1' --jq '.[0].tag_name'; echo "rc=$?"
+          echo "== headers =="; curl -sI -H "Authorization: token $GH_TOKEN" https://api.github.com/repos/coinerd/q | grep -i "x-oauth\|x-accepted\|x-github"
+          exit 0
