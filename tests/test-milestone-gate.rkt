@@ -11,6 +11,7 @@
 
 (require rackunit
          racket/file
+         racket/list
          racket/string
          racket/port
          racket/system
@@ -609,3 +610,61 @@
   (define ci-run (hasheq 'status "completed" 'conclusion "success" 'run_number 1))
   (check-equal? ((dynamic-script 'classify-ci-verdict) ci-run jobs (dynamic-script 'ci-required-jobs))
                 'ci_required_job_missing))
+
+;; ── v1.00.27 W0: tier-ownership matrix drift enforcement ──
+;;
+;; Governance-level red-CI check: the checksummed matrix artifact at
+;; artifacts/tier-ownership/v1.00.27-w0/ownership-matrix.json must match
+;; reality (eight columns per family, no matrix-vs-reality drift), and
+;; the drift detector must fail on both directions of drift (family on
+;; disk absent from the matrix; matrix family absent from disk).
+;;
+;; Resolution mirrors the script loading above: anchored to this file's
+;; location, not CWD, so it holds under both `racket` and `raco test`.
+
+(define inventory-path (build-path repo-root "scripts" "run-tests" "inventory.rkt"))
+(define tier-matrix-path
+  (build-path repo-root "artifacts" "tier-ownership" "v1.00.27-w0" "ownership-matrix.json"))
+(define (tier sym)
+  (dynamic-require inventory-path sym))
+
+(test-case "v1.00.27-w0 ownership matrix exists and matches reality (red-CI drift check)"
+  (check-true (file-exists? tier-matrix-path) "checksummed ownership matrix artifact is missing")
+  (check-equal? ((tier 'run-tier-ownership-check) tier-matrix-path)
+                '()
+                "matrix-vs-reality drift or validation error in the committed matrix"))
+
+(test-case "v1.00.27-w0 drift detector: family on disk absent from the matrix fails"
+  (define reality-rows ((tier 'tier-ownership-rows)))
+  (define matrix-rows (drop-right reality-rows 1))
+  (check-not-equal? ((tier 'tier-ownership-drift-errors) matrix-rows reality-rows) '()))
+
+(test-case "v1.00.27-w0 drift detector: matrix family absent from disk fails"
+  (define reality-rows ((tier 'tier-ownership-rows)))
+  (define ghost (hash-set (car reality-rows) 'test "tests/does-not-exist.rkt"))
+  (check-not-equal? ((tier 'tier-ownership-drift-errors) (cons ghost reality-rows) reality-rows) '()))
+
+(test-case "v1.00.27-w0 matrix completeness: every row carries all eight columns"
+  (check-equal? (length (tier 'tier-matrix-columns)) 8)
+  (define payload (read-json (open-input-file tier-matrix-path)))
+  (define (jref h k)
+    (hash-ref h
+              k
+              (λ ()
+                (hash-ref h
+                          (if (string? k)
+                              (string->symbol k)
+                              (symbol->string k))
+                          #f))))
+  (define rows (jref payload "rows"))
+  (check-true (pair? rows))
+  (for ([row (in-list rows)])
+    (for ([col (in-list (tier 'tier-matrix-columns))])
+      (define key (symbol->string col))
+      (check-not-false (jref row key) (format "row ~a missing column ~a" (jref row "test") key))
+      (check-true
+       (let ([v (jref row key)])
+         (if (equal? col 'required_gates)
+             (and (list? v) (pair? v) (andmap (λ (g) (and (string? g) (non-empty-string? g))) v))
+             (and (string? v) (non-empty-string? v))))
+       (format "row ~a column ~a is empty or non-string" (jref row "test") key)))))
