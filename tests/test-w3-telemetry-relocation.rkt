@@ -18,6 +18,7 @@
 ;;      duration unchanged — the win is placement, not a faster report.
 
 (require racket/file
+         (only-in "../util/version.rkt" q-version)
          racket/list
          racket/path
          racket/string
@@ -167,8 +168,8 @@
   (apply build-path project-root parts))
 
 (define ci-yml (file->string (rd ".github" "workflows" "ci.yml")))
-(define cp3 (rd "artifacts" "ci-topology" "v1.00.26-w3" "dag-checkpoint.json"))
-(define cp2 (rd "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
+(define cp3 (rd "artifacts" "ci-topology" (format "v~a-w3" q-version) "dag-checkpoint.json"))
+(define cp2 (rd "artifacts" "ci-topology" (format "v~a-w2" q-version) "dag-checkpoint.json"))
 (define telemetry-yml-path (rd ".github" "workflows" "shard-plan-telemetry.yml"))
 
 ;; ---- 1. checkpoint exists, checksum-bound, topology-checkpoint-not-cohort ----
@@ -178,7 +179,7 @@
                 "bffe410ac755bddec09642c6fa23b363896bde95b3a5503ab8b58f40f2db12ab"
                 "W3 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
   (define j (call-with-input-file cp3 read-json))
-  (check-equal? (hash-ref j 'wave) "v1.00.26-w3")
+  (check-equal? (hash-ref j 'wave) (format "v~a-w3" q-version))
   (check-equal? (hash-ref (hash-ref j 'timing_checkpoint) 'label)
                 "topology checkpoint — not a cohort")
   (check-equal? (hash-ref (hash-ref j 'timing_checkpoint) 'measurement_kind)
