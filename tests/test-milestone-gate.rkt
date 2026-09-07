@@ -14,11 +14,23 @@
          racket/string
          racket/port
          racket/system
-         json)
+         json
+         racket/runtime-path)
 
 ;; ── Script loading ──
+;;
+;; Resolution is anchored to this file's location via define-runtime-path:
+;; the run-tests runner executes test files with `raco test`, which binds
+;; current-directory to the test file's own directory, so CWD-relative
+;; paths like "scripts/milestone-gate.rkt" silently resolve to
+;; tests/scripts/…. Anchoring keeps the suite green under both `racket`
+;; and `raco test` execution modes.
 
-(define script-path "scripts/milestone-gate.rkt")
+(define-runtime-path repo-root "..")
+
+;; Path object (not string): dynamic-require accepts filesystem path
+;; objects directly but rejects absolute path strings.
+(define script-path (build-path repo-root "scripts" "milestone-gate.rkt"))
 
 (define (dynamic-script sym)
   (dynamic-require script-path sym))
@@ -198,8 +210,8 @@
 ;; ============================================================
 
 (test-case "milestone-gate.rkt exists and compiles"
-  (check-true (file-exists? "scripts/milestone-gate.rkt"))
-  (check-not-exn (lambda () (dynamic-require "scripts/milestone-gate.rkt" #f))))
+  (check-true (file-exists? script-path))
+  (check-not-exn (lambda () (dynamic-require script-path #f))))
 
 ;; ============================================================
 ;; W4: classify-release-verdict tests (in milestone-gate.rkt)
