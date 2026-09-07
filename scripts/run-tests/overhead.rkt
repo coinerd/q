@@ -151,7 +151,8 @@
 
 ;; v1.00.27-w4: L2 local p90 SLO adjusted 120s -> 240s through the governed
 ;; evidence record artifacts/tier-ownership/v1.00.27-w4/slo-evidence-record.md
-;; (measured p90 233.2s over 20 samples of the 943-file unit-fast tier).
+;; (measured p90 234.7s over 20 samples of the unit-fast tier; see
+;; artifacts/tier-ownership/v1.00.27-w4/local-p90.json).
 (define local-feedback-slo-table (list (cons "L0" 5000) (cons "L1" 30000) (cons "L2" 240000)))
 
 (define (slo-budget-for label)
