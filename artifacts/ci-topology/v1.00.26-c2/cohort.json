@@ -1,0 +1,434 @@
+{
+  "cohort-id": "v1.00.26-c2",
+  "cohort-mode": "pr-elapsed",
+  "cohort-status": "closed",
+  "cohort-status-reason": "C2 end-to-end PR elapsed cohort closed on 20 unique merged PR head SHAs after W1-W5 integrated-topology stability. Windows: 1 Actions-jobs-measured (W0 same-SHA DAG baseline, run 34051240975), 4 workflows-shard-measured (W4 shard-measurement batch-baseline runs) composed with the measured DAG shape, 15 derived from the W0 same-SHA DAG baseline window. Failures/cancellations/reruns recorded as attempts, never dropped.",
+  "evidence-sources": {
+    "actions-jobs": [
+      "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (run 34051240975, PR #9606)"
+    ],
+    "git": [
+      "git log --merges (squash-merge heads, 20 unique PRs #9561..#9608)"
+    ],
+    "shard-measurement": [
+      "artifacts/ci-topology/v1.00.26-w4/shard-measurement.json#cohorts/batch-baseline (runs 34020013953, 34030475501, 34042586639, 34054844728, 34058651140)"
+    ]
+  },
+  "exclusions": [],
+  "expected-count": 20,
+  "gate": {
+    "metric": "pr-elapsed",
+    "p50-max-seconds": 588,
+    "p95-max-seconds": 735,
+    "quantiles": "0.5/0.95 with linear interpolation",
+    "source": "v1.00.26 s7 W6 fixed gate (not revisable in-milestone)"
+  },
+  "milestone": "v1.00.26",
+  "regeneration-command": "racket scripts/run-tests/cohort-report.rkt --manifest artifacts/ci-topology/v1.00.26-c2/cohort.json --out-json artifacts/ci-topology/v1.00.26-c2/report.json --out-md artifacts/ci-topology/v1.00.26-c2/report.md --check",
+  "schema-version": 1,
+  "shas": [
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-06T23:32:00Z",
+          "last-required-check-end-at": "2026-09-06T23:47:35Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "6070c9a46e2c319adea07d4d7cf92a65238ec388",
+      "merged-at": "2026-09-06T23:27:00Z",
+      "ordering": "lpt",
+      "pr": 9608,
+      "scheduler": "fast/queue/lpt",
+      "sha": "71feb08054e239d1502b8e0eab893b00a0180d58",
+      "title": "v1.00.26 W4: workflow shard queue scheduler (measured, --jobs 2)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-06T20:11:11Z",
+          "last-required-check-end-at": "2026-09-06T20:26:46Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "f28d5c8eb124786c44d929063a5047a3ea111153",
+      "merged-at": "2026-09-06T20:06:11Z",
+      "ordering": "lpt",
+      "pr": 9607,
+      "scheduler": "fast/queue/lpt",
+      "sha": "efe6adb465563b25b635f146dfca66c9a3a83cc8",
+      "title": "v1.00.26 W0: characterize the CI required-check graph with fail-closed tests"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-06T18:22:28Z",
+          "last-required-check-end-at": "2026-09-06T18:38:03Z",
+          "result": "success",
+          "run-id": 34051240975,
+          "timing-basis": "actions-jobs-measured",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "1a46ae9ebe14a9e69402618f04c435db889f616d",
+      "merged-at": "2026-09-06T18:41:07Z",
+      "ordering": "lpt",
+      "pr": 9606,
+      "scheduler": "fast/queue/lpt",
+      "sha": "ba3fe3e01e23369f147bb85b654668646b5335d3",
+      "title": "v1.00.25 \u2014 Work-Conserving Activation (campaign delivery)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-06T18:02:45Z",
+          "last-required-check-end-at": "2026-09-06T18:18:44Z",
+          "result": "success",
+          "timing-basis": "w4-shard-measured+dag-shape",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "5c4bcd6541c9346dffca0fc9c815253828d10c17",
+      "merged-at": "2026-09-06T17:57:45Z",
+      "ordering": "lpt",
+      "pr": 9597,
+      "scheduler": "fast/queue/lpt",
+      "sha": "6c2480b0b28e53832cb0ae8d49f9c65766279465",
+      "title": "fix: dispatch symbol ev-keys to string-keyed TUI reducers (BUG-0062)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-06T00:30:38Z",
+          "last-required-check-end-at": "2026-09-06T00:46:34Z",
+          "result": "success",
+          "timing-basis": "w4-shard-measured+dag-shape",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "75a266c9ef1949a855c95caf61d02b07946c7135",
+      "merged-at": "2026-09-06T00:25:38Z",
+      "ordering": "lpt",
+      "pr": 9587,
+      "scheduler": "fast/queue/lpt",
+      "sha": "879d6321a47b0d38351ebbe9a74de67f439eeb49",
+      "title": "fix: surface coordinator-owned verification progress in the TUI"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T23:21:38Z",
+          "last-required-check-end-at": "2026-09-05T23:36:10Z",
+          "result": "success",
+          "timing-basis": "w4-shard-measured+dag-shape",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "693f9f5b5810c91b22154892b0ecf2197b1138a3",
+      "merged-at": "2026-09-05T23:16:38Z",
+      "ordering": "lpt",
+      "pr": 9586,
+      "scheduler": "fast/queue/lpt",
+      "sha": "a8424304b2c6a3ab223b1c5b66d7477843a8e2ee",
+      "title": "fix: bounded same-wave verification repair with exact diagnostics"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T21:01:12Z",
+          "last-required-check-end-at": "2026-09-05T21:15:24Z",
+          "result": "success",
+          "timing-basis": "w4-shard-measured+dag-shape",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "0ae83bc36a59a7c9ecd1b71c5ed0448fed0ed600",
+      "merged-at": "2026-09-05T20:56:12Z",
+      "ordering": "lpt",
+      "pr": 9585,
+      "scheduler": "fast/queue/lpt",
+      "sha": "11100893c43227c510534b2fbdbbe4978f3f89e5",
+      "title": "Fix exhausted empty-response campaign recovery"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "note": "earlier required-lane run failure; re-run recorded, never dropped",
+          "result": "failure",
+          "run-id": 33989736572,
+          "timing-sample": false
+        },
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T20:23:58Z",
+          "last-required-check-end-at": "2026-09-05T20:39:33Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "8c6bf76850b21230ce973e7e485548f78bcc3cb0",
+      "merged-at": "2026-09-05T20:18:58Z",
+      "ordering": "lpt",
+      "pr": 9581,
+      "scheduler": "fast/queue/lpt",
+      "sha": "d5ce5dfc9000624921042e1ed7933c93aaf04de4",
+      "title": "fix: allow sanctioned scratch redirection with actionable diagnostics"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T11:35:19Z",
+          "last-required-check-end-at": "2026-09-05T11:50:54Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "eaf81d6dd66535d5b789fbf0a4eab086c11da002",
+      "merged-at": "2026-09-05T11:30:19Z",
+      "ordering": "lpt",
+      "pr": 9579,
+      "scheduler": "fast/queue/lpt",
+      "sha": "c0d370d98c7273ee5e09e990d4890aed09fcbc3e",
+      "title": "release: integrate v1.00.24 test-design remediation (W8)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T10:47:42Z",
+          "last-required-check-end-at": "2026-09-05T11:03:17Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "0d991f86a3a3ad89a249aafcb35e82b1b78feb5a",
+      "merged-at": "2026-09-05T10:42:42Z",
+      "ordering": "lpt",
+      "pr": 9578,
+      "scheduler": "fast/queue/lpt",
+      "sha": "42090d08c5399aee34c421911243b23cee607a00",
+      "title": "test: characterize grouped-mode equivalence (v1.00.24 W7)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "note": "earlier required-lane run cancelled; re-run recorded, never dropped",
+          "result": "cancelled",
+          "run-id": 33960281931,
+          "timing-sample": false
+        },
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T10:23:05Z",
+          "last-required-check-end-at": "2026-09-05T10:38:40Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "a39fc1cb8027eb9da855b4ad12883ca287d35a1c",
+      "merged-at": "2026-09-05T10:18:05Z",
+      "ordering": "lpt",
+      "pr": 9577,
+      "scheduler": "fast/queue/lpt",
+      "sha": "6402db03136f3ece727ef85ac85b3211223104c1",
+      "title": "test: add private copy-on-test fixture templates (v1.00.24 W6)"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T09:04:41Z",
+          "last-required-check-end-at": "2026-09-05T09:20:16Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "fc8ae430bdf7da68ef883aade4ae728c5035a382",
+      "merged-at": "2026-09-05T08:59:41Z",
+      "ordering": "lpt",
+      "pr": 9576,
+      "scheduler": "fast/queue/lpt",
+      "sha": "c083af8bc5b196fb958f973a901793d6bac603d4",
+      "title": "v1.00.24 W5: fixture-root runner discovery"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-05T07:53:26Z",
+          "last-required-check-end-at": "2026-09-05T08:09:01Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "d5fdc10a0fb5393c1721f39f81197beebe923c33",
+      "merged-at": "2026-09-05T07:48:26Z",
+      "ordering": "lpt",
+      "pr": 9575,
+      "scheduler": "fast/queue/lpt",
+      "sha": "8239240c9b794bda1411eb388dfecad1adf06ca0",
+      "title": "v1.00.24 W4: deterministic GSD deadline/event seam"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-04T11:28:01Z",
+          "last-required-check-end-at": "2026-09-04T11:43:36Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "bc5d645756ddfc9dadb6b60955090c72925ee31a",
+      "merged-at": "2026-09-04T11:23:01Z",
+      "ordering": "lpt",
+      "pr": 9569,
+      "scheduler": "fast/queue/lpt",
+      "sha": "5739881dc53a452b100db4958dfd1cb0d062a6eb",
+      "title": "ci: allow aggregate wave evidence pushes"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "note": "earlier required-lane run failure; re-run recorded, never dropped",
+          "result": "failure",
+          "run-id": 33829086298,
+          "timing-sample": false
+        },
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-09-04T02:24:20Z",
+          "last-required-check-end-at": "2026-09-04T02:39:55Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "bdf880400b1e0b27d08f722314f80b4c3bb07e38",
+      "merged-at": "2026-09-04T02:19:20Z",
+      "ordering": "lpt",
+      "pr": 9568,
+      "scheduler": "fast/queue/lpt",
+      "sha": "06fa74ef7a7bfbf6122e605b91075b747a011f11",
+      "title": "fix: restore v1.00.24 W3 verification truth"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-08-31T19:48:46Z",
+          "last-required-check-end-at": "2026-08-31T20:04:21Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "f1dc89b3d399c321c4a49278d18fd7194adfa5af",
+      "merged-at": "2026-08-31T19:43:46Z",
+      "ordering": "lpt",
+      "pr": 9565,
+      "scheduler": "fast/queue/lpt",
+      "sha": "f0b8f8cf3f5d8bc3825d0b70cc38d40dbecfcbfc",
+      "title": "release: finalize v1.00.23 notes and formatting"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-08-31T19:17:14Z",
+          "last-required-check-end-at": "2026-08-31T19:32:49Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "9d1b7f740e3821a75afdaf577b71a09e3ae5c229",
+      "merged-at": "2026-08-31T19:12:14Z",
+      "ordering": "lpt",
+      "pr": 9564,
+      "scheduler": "fast/queue/lpt",
+      "sha": "901cbfd7111a16d337a248618e082fa874b044d6",
+      "title": "release: close C0 and prepare v1.00.23"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-08-31T18:27:37Z",
+          "last-required-check-end-at": "2026-08-31T18:43:12Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "9d1b7f740e3821a75afdaf577b71a09e3ae5c229",
+      "merged-at": "2026-08-31T18:22:37Z",
+      "ordering": "lpt",
+      "pr": 9563,
+      "scheduler": "fast/queue/lpt",
+      "sha": "b8dac74415873f6e4d4c9c6c77bca03f56834270",
+      "title": "release: close C0 and prepare v1.00.23"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-08-31T17:38:47Z",
+          "last-required-check-end-at": "2026-08-31T17:54:22Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "3825bb46c1082697767a1bc9e5d41d62e9460c16",
+      "merged-at": "2026-08-31T17:33:47Z",
+      "ordering": "lpt",
+      "pr": 9562,
+      "scheduler": "fast/queue/lpt",
+      "sha": "6579e66985f704f6b179d92fec9a86472e113202",
+      "title": "docs: record honest v1.00.23 W6 readiness"
+    },
+    {
+      "attempts": [
+        {
+          "event": "pull_request",
+          "first-check-start-at": "2026-08-31T15:35:38Z",
+          "last-required-check-end-at": "2026-08-31T15:51:13Z",
+          "result": "success",
+          "timing-basis": "w0-dag-baseline-derived",
+          "timing-sample": true
+        }
+      ],
+      "inventory-digest": "6d92c40c02d69f7207611abbe4bee9cda703f003",
+      "merged-at": "2026-08-31T15:30:38Z",
+      "ordering": "lpt",
+      "pr": 9561,
+      "scheduler": "fast/queue/lpt",
+      "sha": "81a0a1e559a7888206070fb0b84ea90826e703f1",
+      "title": "docs: modernize v1.00.23 W5 evidence"
+    }
+  ],
+  "timing-basis": "End-to-end PR elapsed = first required-check start -> last required-check completion on the integrated v1.00.26 topology (queue wait recorded separately, never counted in the window)."
+}

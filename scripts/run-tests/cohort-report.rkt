@@ -72,7 +72,15 @@
          post-promotion-gate
          post-promotion-gate-text
          post-promotion-p50-max-seconds
-         post-promotion-p95-max-seconds)
+         post-promotion-p95-max-seconds
+         ;; end-to-end PR elapsed cohort (v1.00.26 W6: C2, pr-elapsed mode)
+         pr-elapsed-gate
+         pr-elapsed-gate-text
+         pr-elapsed-p50-max-seconds
+         pr-elapsed-p95-max-seconds
+         pr-elapsed-required-fields
+         pr-elapsed-decision-md-string
+         pr-elapsed-seconds-from-window)
 
 ;; ============================================================
 ;; Constants
@@ -378,6 +386,15 @@
   (define shas (hash-ref manifest 'shas '()))
   (define exclusions (hash-ref manifest 'exclusions '()))
   (define expected (hash-ref manifest 'expected-count expected-cohort-size))
+  ;; W6 C2 (pr-elapsed): mode-aware validation.  The pr-elapsed cohort
+  ;; measures end-to-end mergeable-PR wall time on the integrated topology
+  ;; and accumulates openly: while its status is started/open it may
+  ;; legitimately hold fewer SHAs than expected with no exclusions yet —
+  ;; the gate is then simply not evaluable ("evidence pending"), never a
+  ;; silent miss.
+  (define mode (cohort-mode manifest))
+  (define pr-elapsed? (equal? mode "pr-elapsed"))
+  (define cohort-open? (member (hash-ref manifest 'cohort-status #f) open-cohort-statuses))
 
   ;; 1. Exactly 20 SHAs (or expected-count) — reject silently truncated cohorts.
   (define n-shas (length shas))
@@ -391,6 +408,15 @@
      ;; mechanical exclusion.  Silently truncated cohorts are rejected.
      (define n-exclusions (length exclusions))
      (cond
+       ;; An openly accumulating pr-elapsed cohort (W6 C2) may hold fewer
+       ;; SHAs than expected — the gate stays "evidence pending"; it is
+       ;; never a silent miss.  Cohort close enforces the full count.
+       [(and pr-elapsed? cohort-open?)
+        (warn! (format
+                "pr-elapsed cohort ~a is still accumulating: ~a of ~a unique PR head SHAs observed"
+                (hash-ref manifest 'cohort-id "?")
+                n-shas
+                expected))]
        ;; All gaps accounted for by named exclusions — acceptable.
        [(= (+ n-shas n-exclusions) expected) (void)]
        [else
@@ -413,38 +439,88 @@
       (hash-set! seen sha #t)))
 
   ;; 3. Every SHA must be eligible (one timing sample = final success).
+  ;;    pr-elapsed keeps the cohort open and honest: re-runs/failures are
+  ;;    recorded as warnings, never silently dropped, and eligibility is
+  ;;    re-checked at cohort close (pr-elapsed-gate).
   (for ([s (in-list shas)]
         [i (in-naturals)])
     (cond
       [(not (sha-eligible? s))
-       (err!
-        (format
-         "SHA ~a (index ~a) is not eligible: must have exactly one \
+       (cond
+         [pr-elapsed?
+          (warn!
+           (format
+            "SHA ~a (index ~a) has no final-success timing sample yet — re-run/failure recorded, cohort stays open"
+            (hash-ref s 'sha "?")
+            i))]
+         [else
+          (err!
+           (format
+            "SHA ~a (index ~a) is not eligible: must have exactly one \
                       timing-sample attempt (final successful)"
-         (hash-ref s 'sha "?")
-         i))]))
+            (hash-ref s 'sha "?")
+            i))])]))
 
-  ;; 4. Every SHA must have required fields.
+  ;; 4. Every SHA must have required fields.  pr-elapsed records carry the
+  ;;    end-to-end PR wall-time schema (pr-elapsed required fields) instead
+  ;;    of the paired-shadow per-lane schema; mode decides which contract.
+  (define required-fields
+    (if pr-elapsed?
+        pr-elapsed-required-fields
+        '(sha scheduler
+              ordering
+              inventory-digest
+              file-count
+              test-count
+              pass
+              fail
+              timeout
+              skip
+              flakes
+              parallel-only-failures
+              prepared-env
+              queue-wait-seconds
+              queue-depth
+              runner-minutes)))
   (for ([s (in-list shas)]
         [i (in-naturals)])
-    (for ([field (in-list '(sha scheduler
-                                ordering
-                                inventory-digest
-                                file-count
-                                test-count
-                                pass
-                                fail
-                                timeout
-                                skip
-                                flakes
-                                parallel-only-failures
-                                prepared-env
-                                queue-wait-seconds
-                                queue-depth
-                                runner-minutes))])
+    (for ([field (in-list required-fields)])
       (unless (hash-has-key? s field)
         (err!
          (format "SHA ~a (index ~a) missing required field: ~a" (hash-ref s 'sha "?") i field)))))
+
+  ;; 4b. pr-elapsed attempt schema: attempt entries must carry a boolean
+  ;;     timing-sample flag; a timing-sample attempt must carry a parseable
+  ;;     required-check window; a queue wait alone (or a queue wait that
+  ;;     exceeds the whole check window) is never accepted as the measure.
+  (when pr-elapsed?
+    (for ([s (in-list shas)]
+          [i (in-naturals)])
+      (define sha-id (hash-ref s 'sha "?"))
+      (for ([a (in-list (hash-ref s 'attempts '()))]
+            [j (in-naturals)])
+        (unless (boolean? (hash-ref a 'timing-sample (hash-ref a 'timing-sample #f)))
+          (err!
+           (format "SHA ~a (index ~a) attempt ~a: timing-sample flag must be a boolean" sha-id i j)))
+        (when (and (hash-ref a 'timing-sample #f) (not (pr-elapsed-attempt-window-seconds a)))
+          (err!
+           (format
+            "SHA ~a (index ~a) attempt ~a: timing-sample without a parseable \
+required-check window (first-check-start-at/last-required-check-end-at)"
+            sha-id
+            i
+            j)))
+        (define wait (hash-ref a 'queue-wait-seconds #f))
+        (define window (pr-elapsed-attempt-window-seconds a))
+        (when (and wait window (> wait window))
+          (err!
+           (format
+            "SHA ~a (index ~a) attempt ~a: queue wait ~as exceeds the \
+required-check window — queue wait alone is not accepted as the PR elapsed measure"
+            sha-id
+            i
+            j
+            wait))))))
 
   ;; 5. Zero-test detection: a SHA with test-count 0 must be flagged.
   (for ([s (in-list shas)])
@@ -459,10 +535,21 @@
       (err! (format "SHA ~a has missing/empty inventory-digest" (hash-ref s 'sha "?")))))
 
   ;; 7. Scheduler/config must be one of the known compatible values.
+  ;;    pr-elapsed records are end-to-end PR observations on the integrated
+  ;;    topology: the expected scheduler is fast/queue/lpt; anything else is
+  ;;    recorded as a warning for the decision record, not a hard error.
   (for ([s (in-list shas)])
     (define sched (hash-ref s 'scheduler #f))
-    (unless (member sched '("batch" "serial"))
-      (err! (format "SHA ~a has incompatible scheduler: ~a" (hash-ref s 'sha "?") sched))))
+    (cond
+      [pr-elapsed?
+       (unless (equal? sched "fast/queue/lpt")
+         (warn! (format
+                 "SHA ~a has non-fast scheduler ~a in pr-elapsed cohort (expected fast/queue/lpt)"
+                 (hash-ref s 'sha "?")
+                 sched)))]
+      [else
+       (unless (member sched '("batch" "serial"))
+         (err! (format "SHA ~a has incompatible scheduler: ~a" (hash-ref s 'sha "?") sched)))]))
 
   ;; 8. Exclusions must use named mechanical reasons.
   (for ([e (in-list exclusions)]
@@ -480,11 +567,18 @@
     (when (and esha (member esha sha-list))
       (err! (format "exclusion SHA ~a also appears in cohort — contradiction" esha))))
 
-  ;; 10. prepared-env must be a known value.
+  ;; 10. prepared-env must be a known value.  pr-elapsed records observe
+  ;;     the W5 prepared-environment restore evidence; absent evidence is
+  ;;     recorded, not treated as a hard schema error.
   (for ([s (in-list shas)])
     (define pe (hash-ref s 'prepared-env #f))
-    (unless (member pe '("match" "rebuild" "cached"))
-      (err! (format "SHA ~a has unknown prepared-env: ~a" (hash-ref s 'sha "?") pe))))
+    (cond
+      [pr-elapsed?
+       (unless (member pe '(#f "match" "rebuild" "cached"))
+         (err! (format "SHA ~a has unknown prepared-env: ~a" (hash-ref s 'sha "?") pe)))]
+      [else
+       (unless (member pe '("match" "rebuild" "cached"))
+         (err! (format "SHA ~a has unknown prepared-env: ~a" (hash-ref s 'sha "?") pe)))]))
 
   ;; 11. Paired configurations (when present): schema, pairing, inventory
   ;; equality, and lifecycle rules.
@@ -926,6 +1020,211 @@
                              " shard fan-out and reusing the prepared environment cache; re-run this"
                              " cohort on new SHAs before the next promotion decision."))))
 
+;; ============================================================
+;; End-to-end PR elapsed cohort (v1.00.26 W6: C2, pr-elapsed mode)
+;;
+;; C2 of the v1.00.26 campaign measures the full mergeable-PR wall time on
+;; the integrated topology: from the first required-check start to the
+;; last required-check completion — not the queue wait alone (the queue
+;; wait is recorded separately per attempt).  Closing the cohort requires
+;; 20 unique PR head SHAs; duplicates are rejected, and failed, cancelled,
+;; and rerun attempts are recorded, never dropped.  Targets are never
+;; revised inside this wave or milestone: a closed-cohort miss records
+;; "target unachieved" with the observed numbers and names the next lever
+;; for a separate reviewed decision (a timing miss alone implies no queue
+;; rollback).  While the cohort is still accumulating (status started or
+;; open with fewer SHAs than expected) the gate is not evaluable and the
+;; honest verdict is "evidence pending" — an accumulating cohort is never
+;; reported as a silent miss.
+;; ============================================================
+
+(define pr-elapsed-p50-max-seconds 588.0)
+(define pr-elapsed-p95-max-seconds 735.0)
+
+;; Minimal record schema for end-to-end PR cohort rows: the PR identity,
+;; the observed required-check window(s), and the inventory binding.  The
+;; richer paired-shadow telemetry fields are recorded when available but
+;; are not required for the PR-elapsed gate.
+(define pr-elapsed-required-fields '(sha pr scheduler ordering attempts inventory-digest))
+
+(define pr-elapsed-gate-text
+  (string-append "End-to-end PR elapsed target on the integrated topology: p50 ≤ 588 s and"
+                 " p95 ≤ 735 s (roadmap v1.00.26 §7, W6).  Targets are never revised inside"
+                 " this wave or milestone."))
+
+;; UTC ISO-8601 timestamps ("YYYY-MM-DDTHH:MM:SSZ") delimit the per-attempt
+;; required-check window.  Civil-date -> days conversion is the standard
+;; days-from-civil algorithm in pure arithmetic (no date-library pull-in).
+(define pr-elapsed-timestamp-regexp #px"^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})Z$")
+
+(define (pr-elapsed-civil-days y mo d)
+  (define y*
+    (if (<= mo 2)
+        (sub1 y)
+        y))
+  (define era
+    (quotient (if (>= y* 0)
+                  y*
+                  (- y* 399))
+              400))
+  (define yoe (- y* (* 400 era)))
+  (define m* (+ mo (if (> mo 2) -3 9)))
+  (define doy (+ (quotient (+ (* 153 m*) 2) 5) (sub1 d)))
+  (define doe (+ (* yoe 365) (quotient yoe 4) (- (quotient yoe 100)) doy))
+  (- (+ (* era 146097) doe) 719468))
+
+(define (pr-elapsed-utc-seconds ts)
+  ;; Parse "YYYY-MM-DDTHH:MM:SSZ" to Unix seconds; #f when not parseable.
+  (define m (regexp-match pr-elapsed-timestamp-regexp ts))
+  (and m
+       (let* ([y (string->number (list-ref m 1))]
+              [mo (string->number (list-ref m 2))]
+              [d (string->number (list-ref m 3))]
+              [h (string->number (list-ref m 4))]
+              [mi (string->number (list-ref m 5))]
+              [s (string->number (list-ref m 6))])
+         (+ (* 86400 (pr-elapsed-civil-days y mo d)) (* 3600 h) (* 60 mi) s))))
+
+(define (pr-elapsed-seconds-from-window start end)
+  ;; Wall time (seconds) from the first required-check start to the last
+  ;; required-check completion.  #f when an endpoint is missing or
+  ;; malformed, or the window is inverted (never a negative sample).
+  (define s (and (string? start) (pr-elapsed-utc-seconds start)))
+  (define e (and (string? end) (pr-elapsed-utc-seconds end)))
+  (and s e (<= s e) (- e s)))
+
+(define (pr-elapsed-attempt-seconds attempt)
+  (hash-ref attempt 'pr-elapsed-seconds #f))
+
+(define (pr-elapsed-attempt-window-seconds attempt)
+  (pr-elapsed-seconds-from-window (hash-ref attempt 'first-check-start-at #f)
+                                  (hash-ref attempt 'last-required-check-end-at #f)))
+
+(define (pr-elapsed-timing-samples manifest)
+  ;; Final-success attempt per eligible SHA; the sample is the required-
+  ;; check window width (recorded value preferred, window-derived fallback)
+  ;; — never the queue wait alone.
+  (filter values
+          (map (lambda (s)
+                 (cond
+                   [(sha-eligible? s)
+                    (define attempt (sha-final-success-attempt s))
+                    (or (pr-elapsed-attempt-seconds attempt)
+                        (pr-elapsed-attempt-window-seconds attempt))]
+                   [else #f]))
+               (hash-ref manifest 'shas '()))))
+
+(define (pr-elapsed-gate manifest)
+  (define samples (pr-elapsed-timing-samples manifest))
+  (define shas (hash-ref manifest 'shas '()))
+  (define expected (hash-ref manifest 'expected-count expected-cohort-size))
+  (define status (hash-ref manifest 'cohort-status "?"))
+  ;; The gate is evaluable only on a fully accumulated closed cohort: 20
+  ;; unique PR head SHAs, each with one final-success elapsed sample.
+  (define evaluable?
+    (and (equal? status "closed") (= (length shas) expected) (= (length samples) expected)))
+  (define p50
+    (if (null? samples)
+        #f
+        (cohort-quantile samples 0.50)))
+  (define p95
+    (if (null? samples)
+        #f
+        (cohort-quantile samples 0.95)))
+  (define achieved
+    (and evaluable? p50 p95 (<= p50 pr-elapsed-p50-max-seconds) (<= p95 pr-elapsed-p95-max-seconds)))
+  (hasheq
+   'mode
+   "pr-elapsed"
+   'gate-text
+   pr-elapsed-gate-text
+   'p50-max-seconds
+   (exact->inexact pr-elapsed-p50-max-seconds)
+   'p95-max-seconds
+   (exact->inexact pr-elapsed-p95-max-seconds)
+   'p50-seconds
+   p50
+   'p95-seconds
+   p95
+   'samples
+   (length samples)
+   'unique-head-shas
+   (length shas)
+   'expected-count
+   expected
+   'cohort-status
+   status
+   'gate-evaluable
+   evaluable?
+   'achieved
+   achieved
+   'verdict
+   (cond
+     [evaluable? (if achieved "target achieved" "target unachieved")]
+     [else "evidence pending (cohort open)"])
+   'next-lever
+   (if (and evaluable? (not achieved))
+       (string-append "Next lever (separate reviewed decision; a timing miss alone implies no queue"
+                      " rollback): move the slow required gates off the PR critical path by splitting"
+                      " the aggregate workflows out of the mergeable required set and pre-warming the"
+                      " prepared environment cache; re-run this cohort on 20 new PR head SHAs before"
+                      " the next promotion-adjacent decision.")
+       #f)))
+
+;; C2 (pr-elapsed) decision document: the honest achieved/unachieved
+;; verdict against the roadmap end-to-end PR elapsed targets, the observed
+;; numbers, the accumulating-cohort honesty clause, and — on a closed-
+;; cohort miss — the named next lever for a separate reviewed decision.
+(define (pr-elapsed-decision-md-string manifest)
+  (define gate (pr-elapsed-gate manifest))
+  (define lines '())
+  (define (out . args)
+    (set! lines (append lines (list (apply format args)))))
+  (out "# C2 end-to-end PR elapsed decision: ~a" (hash-ref manifest 'cohort-id "?"))
+  (out "")
+  (out "| Field | Value |")
+  (out "|---|---|")
+  (out "| Decision mode | pr-elapsed (mergeable-PR wall time, not the queue wait alone) |")
+  (out "| Cohort status | ~a |" (hash-ref gate 'cohort-status))
+  (out "| Unique PR head SHAs | ~a of ~a |"
+       (hash-ref gate 'unique-head-shas)
+       (hash-ref gate 'expected-count))
+  (out "| Timing samples | ~a |" (hash-ref gate 'samples))
+  (out "| Observed p50 (seconds) | ~a |" (or (hash-ref gate 'p50-seconds #f) "n/a"))
+  (out "| Observed p95 (seconds) | ~a |" (or (hash-ref gate 'p95-seconds #f) "n/a"))
+  (out "| Targets (never revised) | p50 ≤ ~a s, p95 ≤ ~a s |"
+       (hash-ref gate 'p50-max-seconds)
+       (hash-ref gate 'p95-max-seconds))
+  (out "| Gate evaluable | ~a |" (if (hash-ref gate 'gate-evaluable) "yes" "no — cohort open"))
+  (out "| Verdict | ~a |" (hash-ref gate 'verdict))
+  (out "")
+  (out "## Gate")
+  (out "")
+  (out "~a" (hash-ref gate 'gate-text))
+  (out "")
+  (unless (hash-ref gate 'gate-evaluable #f)
+    (out (string-append
+          "The cohort is still accumulating on the integrated topology; the gate is not"
+          " evaluable in this window.  An accumulating cohort is never reported as a miss:"
+          " the verdict stays \"evidence pending\" until 20 unique PR head SHAs are closed"
+          " on the integrated topology."))
+    (out ""))
+  (when (hash-ref gate 'next-lever #f)
+    (out "~a" (hash-ref gate 'next-lever))
+    (out ""))
+  (out (string-append
+        "Reliability closure: failed, cancelled, and rerun attempts are recorded; re-runs"
+        " are recorded and never dropped or silently deduplicated — 20 unique PR head SHAs"
+        " are enforced at cohort close."))
+  (out "")
+  (out (string-append
+        "A timing miss alone implies no queue rollback; any lever change is a separate"
+        " reviewed decision. Targets are never revised inside this wave or this milestone."))
+  (out "")
+  (out "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION.")
+  (out "")
+  (string-join lines "\n"))
+
 (define (decision-report-jsexpr manifest)
   (define lane-verdicts
     (map (lambda (l) (decision-lane-verdict manifest (hash-ref l 'lane))) decision-lanes))
@@ -995,9 +1294,10 @@
         (format "- ~a: ~a" (hash-ref lane 'lane) r))))
 
 (define (cohort-decision-md-string manifest)
-  (if (equal? (cohort-mode manifest) "post-promotion")
-      (post-promotion-decision-md-string manifest)
-      (paired-shadow-decision-md-string manifest)))
+  (cond
+    [(equal? (cohort-mode manifest) "pr-elapsed") (pr-elapsed-decision-md-string manifest)]
+    [(equal? (cohort-mode manifest) "post-promotion") (post-promotion-decision-md-string manifest)]
+    [else (paired-shadow-decision-md-string manifest)]))
 
 ;; C2 (post-promotion) decision document: the honest achieved/unachieved
 ;; verdict against the roadmap fast-execution targets, the observed numbers,
@@ -1235,6 +1535,11 @@
     ;; W6 C2: post-promotion activation cohort — name the mode and attach
     ;; the out-of-sample gate; no shadow duplication (no configurations /
     ;; decision sections).
+    ;; W6 C2: pr-elapsed mode (v1.00.26) — name the mode and attach the
+    ;; end-to-end PR elapsed gate; no shadow duplication (no configurations
+    ;; or decision sections).
+    [(equal? (cohort-mode manifest) "pr-elapsed")
+     (hash-set (hash-set base 'cohort-mode "pr-elapsed") 'pr-elapsed-gate (pr-elapsed-gate manifest))]
     [(equal? (cohort-mode manifest) "post-promotion")
      (hash-set (hash-set base 'cohort-mode "post-promotion")
                'post-promotion-gate
@@ -1371,6 +1676,31 @@
       (for ([line (in-list (decision-reasons-lines l))])
         (out "~a" line)))
     (out ""))
+  (when (hash-has-key? r 'pr-elapsed-gate)
+    (define g (hash-ref r 'pr-elapsed-gate))
+    (out "## End-to-end PR elapsed cohort (C2)")
+    (out "")
+    (out "Mode producing the numbers in this report: **~a** (mergeable-PR wall time from"
+         (hash-ref r 'cohort-mode))
+    (out "first check start to last required check completion, not the queue wait alone;")
+    (out "no shadow duplication).")
+    (out "")
+    (out "~a" (hash-ref g 'gate-text))
+    (out "")
+    (out "| Metric | Value |")
+    (out "|---|---|")
+    (out "| p50 (seconds) | ~a |" (hash-ref g 'p50-seconds))
+    (out "| p95 (seconds) | ~a |" (hash-ref g 'p95-seconds))
+    (out "| p50 target (seconds) | ≤ ~a |" (hash-ref g 'p50-max-seconds))
+    (out "| p95 target (seconds) | ≤ ~a |" (hash-ref g 'p95-max-seconds))
+    (out "| Unique PR head SHAs | ~a of ~a |"
+         (hash-ref g 'unique-head-shas)
+         (hash-ref g 'expected-count))
+    (out "| Verdict | **~a** |" (hash-ref g 'verdict))
+    (out "")
+    (when (hash-ref g 'next-lever #f)
+      (out "Next lever: ~a" (hash-ref g 'next-lever))
+      (out "")))
   (when (hash-has-key? r 'post-promotion-gate)
     (define g (hash-ref r 'post-promotion-gate))
     (out "## Post-promotion activation cohort (C2)")

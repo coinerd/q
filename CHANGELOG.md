@@ -1,3 +1,50 @@
+## v1.00.26 — 2026-09-07
+
+Released 2026-09-07.
+
+> v1.00.26: CI critical-path topology — the required-check graph was restructured so
+a PR's tests no longer wait on heavyweight governance work, while every scheduling
+lever was measured and honestly held. W1 split `lint` into a lightweight
+governance/YAML-only job that stays required plus a new required `lint-quality` job,
+cutting the measured critical path by about 65 s at the same SHA. W2 moved the
+prepared-environment `fast-env` setup to start after the lightweight lint and run
+concurrently with `lint-quality`. W3 relocated the shard-plan report out of the
+required mergeable path into post-workflow telemetry, measured 289 s earlier.
+W4 measured the workflow-shard queue scheduler and held it (batch stays the default);
+W5's four-worker scale-up stayed held behind its isolation proof; W6's end-to-end
+C2 cohort recorded `target unachieved` with targets unrevised. Every required check
+remained required throughout, the rehearsed rollback procedure is documented and
+checksummed, and the full per-wave topology record lives in
+`docs/reports/CI-TOPOLOGY-v1.00.26.md`. Milestone #891.
+
+### Features
+
+- Lightweight lint split (W1): `lint` is reduced to governance/YAML-only checks and stays required; the heavyweight `lint-quality` job is a new separate required check, introduced atomically in the workflow and `scripts/required-pr-checks.policy` with no fail-open window; all job-set pins across the repository were updated, and the fail-closed §7.1 contract suite (31 checks in `tests/test-ci-runtime-contract.rkt`) protects the split.
+- Fast-environment concurrency edge (W2): the `fast-env` prepared-environment setup job now starts as soon as the lightweight `lint` completes and runs concurrently with `lint-quality` (`needs: [lint]`), with the DAG checkpoint pinning the explicit edge and the prepare/setup action digests.
+- Shard-plan telemetry relocation (W3): the `shard-plan-report` job moved out of `ci.yml`'s required mergeable path into the new scheduled `shard-plan-telemetry.yml` workflow (`workflow_run` on CI completion, checkout pinned to the triggering run's head SHA), removing a 286 s job from the mergeable critical path (measured delta 289 s earlier).
+- Required-check graph characterization (W0): a checksummed graph snapshot and same-SHA timing baseline at PR #9606 head, with fail-closed tests pinning the required-check set so any protection drift is a red CI run.
+- End-to-end PR cohort tooling (W6): `pr-elapsed` mode in `scripts/run-tests/cohort-report.rkt` measures first-required-check-start to last-required-check-completion wall time per merged PR head SHA; the C2 cohort on 20 unique merged PR SHAs recorded p50 935 s / p95 957.5 s against the ≤ 588 s / ≤ 735 s targets — verdict `target unachieved`, recorded with full attempt honesty (exclusions 0, duplicates/re-runs recorded) and the named next lever (warm-cache at first-check start), with targets never revised.
+- CI topology report (`docs/reports/CI-TOPOLOGY-v1.00.26.md`): the per-wave change record, DAG timing checkpoints, held items with observed numbers, and the rehearsed rollback procedure with checksummed dry-run evidence.
+
+### Breaking / Behavior Changes
+
+- None for the product. CI behavior changed only in scheduling structure: jobs were split and re-parented, but the required-check set was never narrowed (the new `lint-quality` requirement was added before or with every reduction), the product test suites and their commands are unchanged, and `TEST_RUNNER_SCHEDULER` remains unset everywhere (batch stays the default scheduler).
+
+### Migration Notes
+
+- No user migration is required. CI consumers and fork operators should note: `lint` now runs only governance/YAML checks, heavyweight lint work moved to the new required `lint-quality` job, and branch protection must require `lint-quality` exactly as `scripts/required-pr-checks.policy` pins it; the policy file is the machine-readable source of truth and the §7.1 tests fail closed on drift.
+
+### Testing
+
+- Fail-closed topology contracts: §7.1 suite (31 checks) pins the lint split, the required-check policy, and the fail-closed behavior on any mismatch; W2 pins the explicit `fast-env` edge and action digests; W3 pins the telemetry relocation and same-SHA checkout contract; W0 pins the required-check graph snapshot; the release-entry contract test (`tests/test-release-entry-current.rkt`) binds CHANGELOG, `util/version.rkt`, `info.rkt`, and the README badge to the canonical version.
+- Measured decisions, not assumptions: the workflow-shard scheduler A/B compared batch (n=5 runs, p50 637 s / 610 s per shard) against queue (n=2, p50 692.5 s / 761.5 s) with the same-SHA local equivalence check (29 files, verdicts and JSON shape byte-equal) before holding; the C2 cohort regenerates byte-identically under `cohort-report.rkt --check` and its four artifacts are bound byte-for-byte by `artifacts/ci-topology/v1.00.26-c2/SHA256SUMS`.
+
+### Operational / Release
+
+- Held with observed numbers: workflow-shard queue scheduling is **not activated** — queue p50s exceeded batch p50s on both shards (+8.7% / +24.8%) with only n=2 queue samples from a single contention-confounded window and no reliable p95, so the measured `--jobs 2` sharding keeps batch (W4). The four-worker scale-up is **not activated** (W5 guarded hold: zero-contamination stress proof not cleared; workflows shards remain two workers on batch). End-to-end PR elapsed is **target unachieved** (p50 935 s vs ≤ 588 s; p95 957.5 s vs ≤ 735 s, on all 20 unique merged PR SHAs) — recorded honestly, no target revised, and the named next lever (mounting the verified warm-restore cache at first-check start) is queued for a separate reviewed decision in v1.00.27. No 2× or any speedup claim is made for the held levers; the only measured critical-path improvements claimed are the W1 lint split (~65 s at same SHA) and the W3 telemetry relocation (289 s earlier).
+- Rollback rehearsal: the procedure to revert this topology is documented in the topology report — remove the newly added protection requirement first (`lint-quality`), restore the workflow/policy state second, with `lint` required throughout — and the rehearsal evidence is checksummed per wave (`artifacts/ci-topology/v1.00.26-w{0,1,2,3,4}/SHA256SUMS`) plus the integrated C2 binding (`artifacts/ci-topology/v1.00.26-c2/SHA256SUMS`).
+- Release gating: baked from a clean clone at the merge SHA with `release-preflight` strict mode; the annotated release tag is created at the merge SHA, and every required check was verified still required after publication.
+
 ## v1.00.25 — 2026-09-06
 
 Released 2026-09-06.

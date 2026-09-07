@@ -21,7 +21,12 @@
          racket/dict
          racket/system
          json
-         racket/runtime-path)
+         racket/runtime-path
+         (only-in "../util/version.rkt" q-version))
+
+;; BUG-0009: version-bearing artifact expectations must derive from q-version
+;; so a version bump fails loudly here instead of silently pinning stale literals.
+(define topology-tag (format "v~a" q-version))
 
 ;; The declared verification invocation is `racket tests/<file>.rkt` from the
 ;; repo root, while `raco test` chdirs to this file's directory. Anchor on
@@ -189,7 +194,7 @@
    (check-true (file-exists? (build-path ".." "scripts" "release-repair.rkt"))))
  (test-case "release-dry-run.rkt script exists from W3"
    (check-true (file-exists? (build-path ".." "scripts" "release-dry-run.rkt"))))
- ;; ── W0 v1.00.26: required-check graph characterization (integration layer) ──
+ ;; ── W0: required-check graph characterization (integration layer) ──
  ;; Pins, as literal data compiled into this module, the same graph that
  ;; tests/test-ci-runtime-contract.rkt pins against the live policy file and
  ;; the checksummed snapshot: the protected-main gate context list, the
@@ -247,7 +252,7 @@
                                (format "gate must fail closed when ~a is missing" dropped)))
                W0-REQUIRED-CHECKS))))
 
-;; ── W1 v1.00.26: atomic lint split characterization ─────────────────────
+;; ── W1: atomic lint split characterization (campaign topology) ───────────
 ;; Pins the §7 contract: `lint` is lightweight (governance controller
 ;; tests + workflow YAML validation only), `lint-quality` carries the
 ;; Racket lint suite, and both are required in the live policy file.
@@ -311,12 +316,12 @@
     (check-true (and (member "lint" required) #t))
     (check-true (and (member "lint-quality" required) #t)))
 
-  ;; ---- v1.00.26 W2: fast-env starts after the lightweight lint,
+  ;; ---- W2: fast-env starts after the lightweight lint,
   ;; concurrent with lint-quality. The integration layer re-pins the live
   ;; workflow text and the recorded, checksum-bound DAG checkpoint.
   (test-case "w2: fast-env needs edge — after lightweight lint, concurrent with lint-quality"
     (define ci-text (file->string "../.github/workflows/ci.yml"))
-    (define cp-dir "artifacts/ci-topology/v1.00.26-w2")
+    (define cp-dir (format "artifacts/ci-topology/~a-w2" topology-tag))
     (define cp-path (build-path ".." cp-dir "dag-checkpoint.json"))
     (check-true (file-exists? cp-path) "the W2 dag-checkpoint.json must exist")
     (check-true (file-exists? (build-path ".." cp-dir "SHA256SUMS"))
@@ -329,7 +334,7 @@
      "the recorded DAG checkpoint must match its SHA256SUMS manifest")
     (define cp-text (file->string cp-path))
     (define cp (call-with-input-file cp-path read-json))
-    (check-true (string-contains? cp-text "\"wave\": \"v1.00.26-w2\""))
+    (check-true (string-contains? cp-text (format "\"wave\": \"~a-w2\"" topology-tag)))
     (define (needs-line-of text job-name)
       (define lines (string-split text "\n"))
       (define start (index-of lines (string-append "  " job-name ":")))

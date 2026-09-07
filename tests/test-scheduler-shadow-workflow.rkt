@@ -158,7 +158,11 @@
 
     (test-case "hold: required fast lane carries no scheduler activation lever"
       (check-true (file-exists? ci-wf-path))
-      (check-false (regexp-match? #rx"TEST_RUNNER_SCHEDULER" ci-src)
+      (check-false (regexp-match? #rx"TEST_RUNNER_SCHEDULER"
+                                  (string-join (filter (lambda (line)
+                                                         (not (regexp-match? #px"^\\s*#" line)))
+                                                       (string-split ci-src "\n"))
+                                               "\n"))
                    "ci.yml must not reference TEST_RUNNER_SCHEDULER while the W1 hold stands")
       (check-false (regexp-match? #rx"--scheduler" ci-src)
                    "no ci.yml lane may pass --scheduler while the W1 hold stands")

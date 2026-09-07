@@ -20,7 +20,8 @@
 (define valid-digest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
 (define required-checks
-  '("lint" "security"
+  '("lint" "lint-quality"
+           "security"
            "release-dry-run"
            "workflows (0)"
            "workflows (1)"

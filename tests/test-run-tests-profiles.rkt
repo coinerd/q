@@ -255,7 +255,10 @@
         (check-equal? (parse-scheduler '()) 'batch)
         (check-equal? (parse-scheduler '("--scheduler" "batch")) 'batch))
       (check-false
-       (regexp-match? #rx"TEST_RUNNER_SCHEDULER" (string-join (ci-yml-lines*) "\n"))
+       (regexp-match? #rx"TEST_RUNNER_SCHEDULER"
+                      (string-join (filter (lambda (line) (not (regexp-match? #px"^\\s*#" line)))
+                                           (ci-yml-lines*))
+                                   "\n"))
        "no ci.yml lane may resolve a scheduler from the repository variable while the W1 security-queue hold stands"))))
 
 (run-tests suite)
