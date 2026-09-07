@@ -67,3 +67,66 @@
       (check-equal? (current-agent-pool-limit) 3))))
 
 (run-tests suite)
+
+;; ── v1.00.27 W1: tier-semantics truthfulness ──────────────────────────────
+;; `fast` is the broad PR regression tier (what CI runs per PR); `unit-fast`
+;; is the developer iteration tier with a declared local SLO (p90, measured
+;; in W4). CLI help text must name tiers exactly as the docs do, and the
+;; docs must not regress to legacy synonyms. Help strings and docs only —
+;; this section asserts no runner behavior.
+
+(require racket/file
+         racket/list
+         racket/port
+         (only-in "../scripts/run-tests/cli.rkt" usage))
+
+(define tier-doc-conventions "docs/TEST_CONVENTIONS.md")
+(define tier-doc-plan "docs/TDD-TEST-STRATEGY-PLAN.md")
+
+;; Legacy synonyms that must never come back as tier names.
+(define forbidden-tier-synonyms
+  (list #rx"unit fast" #rx"fast-unit" #rx"unitfast" #rx"quick tier" #rx"unit-tier"))
+
+(define (tier-usage-text)
+  (with-output-to-string usage))
+
+(define tier-semantics-suite
+  (test-suite "tier-semantics truthfulness (v1.00.27 W1)"
+
+    (test-case "usage names fast as the broad PR regression tier"
+      (define u (tier-usage-text))
+      (check-regexp-match #rx"fast +Broad PR regression tier" u)
+      (check-regexp-match #rx"what CI runs per PR" u))
+
+    (test-case "usage names unit-fast as the developer iteration tier with its SLO"
+      (define u (tier-usage-text))
+      (check-regexp-match #rx"unit-fast +Developer iteration tier" u)
+      (check-regexp-match #rx"measured in W4" u))
+
+    (test-case "usage does not regress to legacy tier synonyms"
+      (define u (tier-usage-text))
+      (for ([rx (in-list forbidden-tier-synonyms)])
+        (check-false (regexp-match? rx u) "legacy tier synonym in --help")))
+
+    (test-case "TEST_CONVENTIONS.md carries the tier table and SLO anchors"
+      (define doc (file->string tier-doc-conventions))
+      (check-regexp-match #rx"(?i:## Tier semantics)" doc)
+      (check-regexp-match #rx"(?i:broad PR regression tier)" doc)
+      (check-regexp-match #rx"(?i:developer iteration tier)" doc)
+      (check-regexp-match #rx"measured in W4" doc)
+      (check-regexp-match #rx"(?i:never gate or filter required CI)" doc))
+
+    (test-case "TDD-TEST-STRATEGY-PLAN.md states the tier semantics"
+      (define doc (file->string tier-doc-plan))
+      (check-regexp-match #rx"(?i:broad PR regression tier)" doc)
+      (check-regexp-match #rx"(?i:developer iteration tier)" doc)
+      (check-regexp-match #rx"measured in W4" doc)
+      (check-regexp-match #rx"(?i:fail-open)" doc))
+
+    (test-case "docs do not regress to legacy tier synonyms"
+      (for ([path (in-list (list tier-doc-conventions tier-doc-plan))])
+        (define doc (file->string path))
+        (for ([rx (in-list forbidden-tier-synonyms)])
+          (check-false (regexp-match? rx doc) (format "legacy tier synonym in ~a" path)))))))
+
+(run-tests tier-semantics-suite)

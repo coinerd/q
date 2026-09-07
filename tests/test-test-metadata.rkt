@@ -154,3 +154,66 @@
   (define output (with-output-to-string (lambda () (report (list m)))))
   (check-not-false (regexp-match? #rx"0 tagged, 1 untagged" output))
   (delete-file tmp))
+
+;; ---------------------------------------------------------------------------
+;; tier vocabulary consistency (v1.00.27 W1)
+;; ---------------------------------------------------------------------------
+
+;; The documented tier vocabulary must match the runner CLI: `fast` (the
+;; broad PR regression tier, what CI runs per PR) and `unit-fast` (the
+;; developer iteration tier with a declared local p90 SLO, measured in W4)
+;; exist as runner suites, and every suite named via `--suite X` in the
+;; docs' Suites and Tier semantics tables is a real CLI suite. Docs and
+;; naming only — no runner behavior is asserted here.
+
+(require racket/string
+         rackunit/text-ui
+         (only-in "../scripts/run-tests/cli.rkt" known-suites))
+
+(define-runtime-path cli-path "../scripts/run-tests/cli.rkt")
+(define (cli-ref sym)
+  (dynamic-require cli-path sym))
+
+;; Extract a "## <heading>" section body: from the heading line to the next
+;; top-level "## " heading (or end of file).
+(define (doc-section doc heading-rx)
+  (define m (regexp-match-positions heading-rx doc))
+  (unless m
+    (raise-user-error 'tier-semantics "docs section missing: ~a" heading-rx))
+  (define start (cdr (car m)))
+  (define rest (substring doc start))
+  (define next (regexp-match-positions #rx"\n## " rest))
+  (if next
+      (substring rest 0 (caar next))
+      rest))
+
+;; Every `--suite <name>` selector named in a docs section.
+(define (suite-names-in-section doc heading-rx)
+  (map string->symbol
+       (regexp-match* #rx"`--suite ([a-z0-9-]+)`" (doc-section doc heading-rx) #:match-select cadr)))
+
+(define tier-vocabulary-suite
+  (test-suite "tier vocabulary consistency (v1.00.27 W1)"
+
+    (test-case "the two tier names of record exist as runner suites"
+      (define suites (cli-ref 'known-suites))
+      (check-not-false (memq 'fast suites) "fast is not a known suite")
+      (check-not-false (memq 'unit-fast suites) "unit-fast is not a known suite"))
+
+    (test-case "every Suites-table command names a real CLI suite"
+      (define doc (file->string "docs/TEST_CONVENTIONS.md"))
+      (define suites (cli-ref 'known-suites))
+      (define names (suite-names-in-section doc #rx"(?m:^## Suites)"))
+      (check-true (pair? names) "no --suite selectors found in the Suites table")
+      (for ([n (in-list names)])
+        (check-not-false (memq n suites) (format "~a is not a known suite" n))))
+
+    (test-case "tier semantics table names both tiers as --suite selectors"
+      (define doc (file->string "docs/TEST_CONVENTIONS.md"))
+      (define names (suite-names-in-section doc #rx"(?m:^## Tier semantics)"))
+      (check-not-false (memq 'fast names) "tier table does not name the fast tier")
+      (check-not-false (memq 'unit-fast names) "tier table does not name the unit-fast tier")
+      (for ([n (in-list names)])
+        (check-not-false (memq n (cli-ref 'known-suites)) (format "~a is not a known suite" n))))))
+
+(run-tests tier-vocabulary-suite)
