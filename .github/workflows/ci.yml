@@ -746,17 +746,19 @@ jobs:
 
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
+          # W5 four-worker guard (v1.00.26 §7 W5): decision HOLD. Only the
+          # exact repo variable WORKFLOW_TEST_JOBS=4 widens the inner
+          # workers to four; unset, 2, or any other value keeps the
+          # product default of 2. Evidence:
+          # artifacts/ci-topology/v1.00.26-w5/stress-evidence.json — the
+          # activation gate (>=5 real-CI four-worker PR runs, zero
+          # cross-worker contamination, workflow p50 <= 220s with all
+          # required checks green) was NOT evaluable in this delivery
+          # environment, so the count stays 2. Rollback: leave the repo
+          # variable WORKFLOW_TEST_JOBS unset (one-line revert to default).
+          # (The comment block sits above the command on purpose: a '#' line
+          # inside a backslash-continued command would terminate it.)
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            # W5 four-worker guard (v1.00.26 §7 W5): decision HOLD. Only the
-            # exact repo variable WORKFLOW_TEST_JOBS=4 widens the inner
-            # workers to four; unset, 2, or any other value keeps the
-            # product default of 2. Evidence:
-            # artifacts/ci-topology/v1.00.26-w5/stress-evidence.json — the
-            # activation gate (>=5 real-CI four-worker PR runs, zero
-            # cross-worker contamination, workflow p50 <= 220s with all
-            # required checks green) was NOT evaluable in this delivery
-            # environment, so the count stays 2. Rollback: leave the repo
-            # variable WORKFLOW_TEST_JOBS unset (one-line revert to default).
             --suite workflows --jobs "$WORKFLOW_TEST_JOBS" --timeout 90 \
             --shard-index ${{ matrix.shard }} --shard-total 2 \
             --json-out test-results.json \
