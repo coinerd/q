@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "artifact": "v1.00.27 W3 (#9591) — per-area grouped-expansion comparison",
+  "description": "Comparison of subprocess vs grouped execution for candidate areas. An area may carry decision 'grouped' only when match is true: per-file exit codes, pass/fail counts, and totals identical in both modes, with zero grouped-fallback rows. Rollback: set Q_GROUPED_ROLLBACK_AREAS to a comma-separated area list to force subprocess for those areas.",
+  "comparison": {
+    "area": "ci",
+    "subprocess-evidence": "artifacts/tier-ownership/v1.00.27-w3/ci-subprocess.json",
+    "grouped-evidence": "artifacts/tier-ownership/v1.00.27-w3/ci-grouped.json"
+  },
+  "areas": [
+    {
+      "area": "ci",
+      "decision": "grouped",
+      "match": true,
+      "approved": "v1.00.27",
+      "evidence-path": "artifacts/tier-ownership/v1.00.27-w3/ci-grouped.json",
+      "files": {
+        "tests/ci/metadata-discovery-test.rkt": { "total": 10 },
+        "tests/ci/verify-lock-selection-test.rkt": { "total": 7 }
+      }
+    }
+  ]
+}

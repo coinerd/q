@@ -51,7 +51,16 @@
                   print-run-summary-record)
          (only-in "ledger.rkt" load-known-failure-ledger)
          (only-in "cli.rkt" parse-args validate-args!)
-         (only-in "profiles.rkt" profile-skips-test? make-skipped-result)
+         (only-in "profiles.rkt"
+                  profile-skips-test?
+                  make-skipped-result
+                  area-grouped-decision
+                  grouped-area-config
+                  grouped-area-config->jsexpr
+                  grouped-rollback-areas
+                  grouped-rollback-env-var
+                  grouped-fallback-rows
+                  test-file-area)
          (only-in "shard-plan.rkt"
                   build-shard-plan/safe
                   plan-shard-files
@@ -346,6 +355,18 @@
                                  #:timeout timeout
                                  #:requested-mode requested-mode
                                  #:fallback-reason (execution-eligibility-reason resolved-path))]
+    ;; v1.00.27 W3 (#9591): per-area grouped policy — only areas backed by an
+    ;; exact subprocess-vs-grouped comparison execute grouped; a per-area env
+    ;; rollback switch restores subprocess for a single area, named, without
+    ;; touching the others.
+    [(let-values ([(mode fallback) (area-grouped-decision resolved-path)])
+       (and (eq? mode 'subprocess) (or fallback 'area-not-expanded)))
+     =>
+     (lambda (fallback)
+       (run-single-file/subprocess test-path
+                                   #:timeout timeout
+                                   #:requested-mode requested-mode
+                                   #:fallback-reason fallback))]
     [else
      (mark-execution-mode! resolved-path 'grouped-in-process)
      (define file-timeout (file-timeout-ms test-path timeout))
@@ -939,6 +960,15 @@
                        (path->string p)
                        p)
                    (hash-ref execution-modes mode-key 'subprocess)))))
+  ;; v1.00.27 W3 (#9591): area-level grouped fallbacks are named, never
+  ;; silent — one summary line per affected area.
+  (define area-fallback-rows (grouped-fallback-rows results))
+  (for ([row (in-list area-fallback-rows)])
+    (printf ";; run-tests: ~a area=~a reason=~a files=~a\n"
+            (hash-ref row 'kind)
+            (hash-ref row 'area)
+            (hash-ref row 'reason)
+            (hash-ref row 'files)))
   (print-summary results total-elapsed)
   (print-run-summary-record results
                             #:suite suite-label
@@ -962,6 +992,19 @@
      (let ([m (make-hasheq)])
        (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
        (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
+       ;; v1.00.27 W3 (#9591): grouped expansion policy + named fallbacks.
+       ;; The policy must cross the write-json boundary symbol-keyed: a
+       ;; string-keyed hash is not a legal jsexpr (write-json raises
+       ;; "<legal JSON key value>; given: \"ci\""), so the summary renders
+       ;; it through the profiles-level jsexpr projection.
+       (hash-set! m
+                  'grouped_expansion
+                  (hasheq 'policy
+                          (grouped-area-config->jsexpr)
+                          'rollback_areas
+                          (grouped-rollback-areas)
+                          'fallbacks
+                          area-fallback-rows))
        (when exec-start-ms
          (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
        (when selection-end-ms
