@@ -598,15 +598,18 @@
 ;; top-level job key (so the scan is scoped to the W5 seam only)
 (define (w5-workflows-job-lines lines)
   (define start
-    (for/first ([ln (in-list lines)] [i (in-naturals)]
+    (for/first ([ln (in-list lines)]
+                [i (in-naturals)]
                 #:when (equal? ln "  workflows:"))
       i))
   (if (not start)
       '()
-      (let loop ([acc '()] [xs (list-tail lines (add1 start))])
-        (cond [(null? xs) (reverse acc)]
-              [(regexp-match? #rx"^  [A-Za-z0-9_-]+:$" (car xs)) (reverse acc)]
-              [else (loop (cons (car xs) acc) (cdr xs))]))))
+      (let loop ([acc '()]
+                 [xs (list-tail lines (add1 start))])
+        (cond
+          [(null? xs) (reverse acc)]
+          [(regexp-match? #rx"^  [A-Za-z0-9_-]+:$" (car xs)) (reverse acc)]
+          [else (loop (cons (car xs) acc) (cdr xs))]))))
 
 ;; detector: contamination signals — an output name, cache key, or temp
 ;; root lacking the matrix.shard axis is shared mutable state that lets
@@ -625,32 +628,27 @@
     ln))
 
 (define w5-suite
-  (test-suite
-   "worker security: W5 workflow four-worker isolation"
+  (test-suite "worker security: W5 workflow four-worker isolation"
 
-   (test-case
-    "W5: the workflows job declares per-worker isolation (no shared mutable paths)"
-    (define body-lines (w5-workflows-job-lines (file->lines w5-ci-yml)))
-    (check-true (pair? body-lines) "the workflows job must exist in ci.yml")
-    (check-false (pair? (w5-contamination-signals body-lines))
-                 "live ci.yml must be free of contamination signals: every output/cache key/temp root carries the shard axis"))
+    (test-case "W5: the workflows job declares per-worker isolation (no shared mutable paths)"
+      (define body-lines (w5-workflows-job-lines (file->lines w5-ci-yml)))
+      (check-true (pair? body-lines) "the workflows job must exist in ci.yml")
+      (check-false
+       (pair? (w5-contamination-signals body-lines))
+       "live ci.yml must be free of contamination signals: every output/cache key/temp root carries the shard axis"))
 
-   (test-case
-    "W5: canary positive controls — shared cache key, shared artifact name, overlapping temp root"
-    (check-true (pair? (w5-contamination-signals
-                        (list "          key: racket-pkgs-workflows")))
-                "a shared cache key without a shard axis must be flagged")
-    (check-true (pair? (w5-contamination-signals
-                        (list "          name: workflow-test-output"
-                              "          name: test-results-workflows")))
-                "a shared (non-shard-suffixed) output name must be flagged")
-    (check-true (pair? (w5-contamination-signals
-                        (list "        TMPDIR: /tmp/wf-shared")))
-                "a shared temp root without a shard axis must be flagged")
-    (check-false (pair? (w5-contamination-signals
-                         (list "          name: workflow-test-output-${{ matrix.shard }}"
-                               "          key: racket-pkgs-${{ matrix.shard }}-v3"
-                               "        TMPDIR: ${{ runner.temp }}/wf-${{ matrix.shard }}")))
-                 "shard-suffixed outputs/keys/temp roots are isolated and must NOT be flagged"))))
+    (test-case "W5: canary positive controls — shared cache key, shared artifact name, overlapping temp root"
+      (check-true (pair? (w5-contamination-signals (list "          key: racket-pkgs-workflows")))
+                  "a shared cache key without a shard axis must be flagged")
+      (check-true (pair? (w5-contamination-signals (list "          name: workflow-test-output"
+                                                         "          name: test-results-workflows")))
+                  "a shared (non-shard-suffixed) output name must be flagged")
+      (check-true (pair? (w5-contamination-signals (list "        TMPDIR: /tmp/wf-shared")))
+                  "a shared temp root without a shard axis must be flagged")
+      (check-false (pair? (w5-contamination-signals
+                           (list "          name: workflow-test-output-${{ matrix.shard }}"
+                                 "          key: racket-pkgs-${{ matrix.shard }}-v3"
+                                 "        TMPDIR: ${{ runner.temp }}/wf-${{ matrix.shard }}")))
+                   "shard-suffixed outputs/keys/temp roots are isolated and must NOT be flagged"))))
 
 (run-tests w5-suite)
