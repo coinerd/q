@@ -3,7 +3,7 @@
 (campaign . "v1.00.26")
 (wave . "W7")
 (reviewed-artifact . "docs/reports/gsd-wave-evidence/v1.00.26-w7.rktd")
-(implementation-sha . "61be1eef26e2048d5d1860b02a1bc1686094faae")
+(implementation-sha . "b14b6b295a815249b0ab5c7557a00f664302db93")
 (branch . "campaign/v1.00.26-w7")
 (review-verdict . approve)
 (review-confidence . medium)
