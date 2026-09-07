@@ -11,14 +11,14 @@ untouched. Only the L2 target changes.
 |------|-------|-----------|-----------------|--------------|---------------------|
 | L0   | single test file (`racket scripts/run-tests.rkt <file>`) | ≤ 5 s | — (confirmed) | 1,883 ms | meet |
 | L1   | area (direct unit impact set, grouped per W3 config) | ≤ 30 s | — (confirmed) | 4,428 ms | meet |
-| L2   | full unit-fast tier (`racket scripts/run-tests.rkt`) | ≤ 120 s | **≤ 240 s** | 234,909 ms | meet |
+| L2   | full unit-fast tier (`racket scripts/run-tests.rkt`) | ≤ 120 s | **≤ 240 s** | 234,910 ms | meet |
 
 ## Sample
 
 20 fresh `racket scripts/run-tests.rkt` invocations of the full unit-fast tier (1 cold start,
 19 warm), collected 2026-09-07T23:00:07Z–2026-09-08T00:16:59Z on the current tree
 (implementation-sha `aa96e61a…`, recorded in `local-p90.json` along with per-sample elapsed
-times and exit codes). Per-sample durations: min 225,629 ms, median 230,908 ms, max
+times and exit codes). Per-sample durations: min 225,629 ms, median 230,401 ms, max
 318,098 ms; every sample exited 0. Machine context (12 CPUs, load averages, Racket 8.10,
 unix) and the W3 grouped-expansion configuration are embedded in `local-p90.json`. L0 and L1
 were sampled under the same protocol in the same collection (20 samples each).
