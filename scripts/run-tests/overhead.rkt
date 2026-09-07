@@ -596,7 +596,7 @@
          (begin
            (call-with-output-file out
                                   (lambda (port)
-                                    (write-json rec)
+                                    (write-json rec port)
                                     (newline port))
                                   #:exists 'replace)
            (printf "wrote ~a\n" out))
