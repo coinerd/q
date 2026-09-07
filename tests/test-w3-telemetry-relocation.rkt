@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; v1.00.26 W3 pins: the report-only shard-plan-report job is relocated off the
+;; v<q-version> W3 pins: the report-only shard-plan-report job is relocated off the
 ;; PR critical path. The job (name, artifact contract, report content, same-SHA
 ;; provenance) moves byte-for-byte into .github/workflows/shard-plan-telemetry.yml,
 ;; triggered post-workflow (workflow_run: CI completed + workflow_dispatch).

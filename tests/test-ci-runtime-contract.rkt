@@ -1,4 +1,5 @@
 #lang racket/base
+(require (only-in "../util/version.rkt" q-version))
 
 ;; @speed fast
 ;; @boundary unit
@@ -31,14 +32,14 @@
 ;;  7. gsd-governance: a PR changing gsd-wave-evidence must change exactly
 ;;     one .rktd record (validated by scripts/gsd-wave-gate.rkt with the
 ;;     required-pr-checks.policy).
-;;  8. (v1.00.26 W0) fail-closed gate semantics: a missing required check
+;;  8. (v<q-version> W0) fail-closed gate semantics: a missing required check
 ;;     fails the gate naming the missing check — never passes; fast-env is
 ;;     a job but not a required check; every aggregate job needs its shards
 ;;     and both aggregates + all shards are required.
-;;  9. (v1.00.26 W0) the live required-check graph is captured in
-;;     artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json, bound by
+;;  9. (v<q-version> W0) the live required-check graph is captured in
+;;     artifacts/ci-topology/v<q-version>-w0/graph-snapshot.json, bound by
 ;;     SHA256SUMS, and must equal the policy pin (drift names itself).
-;; 10. (v1.00.26 W0) a same-SHA DAG timing baseline (per-job start/end for
+;; 10. (v<q-version> W0) a same-SHA DAG timing baseline (per-job start/end for
 ;;     one PR run) travels with the snapshot for W1-W3 comparison.
 
 (require rackunit
@@ -274,9 +275,12 @@
       (check-true (file-exists? telemetry-yml)
                   "the relocated report must live in shard-plan-telemetry.yml")
       (define cp
-        (call-with-input-file
-         (build-path project-root "artifacts" "ci-topology" "v1.00.26-w3" "dag-checkpoint.json")
-         read-json))
+        (call-with-input-file (build-path project-root
+                                          "artifacts"
+                                          "ci-topology"
+                                          (format "v~a-w3" q-version)
+                                          "dag-checkpoint.json")
+                              read-json))
       (check-equal? (sha256-hex telemetry-yml)
                     (hash-ref (hash-ref cp 'telemetry_relocation_contract) 'telemetry_workflow_sha256)
                     "the relocated job must stay byte-identical to the recorded relocation")
@@ -329,7 +333,7 @@
       (check-false (regexp-match? #rx"--scheduler" (file->string ci-yml))))
 
     ;; Pin 5b (W4, decision: HOLD): the measured CI trial (see
-    ;; artifacts/ci-topology/v1.00.26-w4/shard-measurement.json) recorded queue
+    ;; artifacts/ci-topology/v<q-version>-w4/shard-measurement.json) recorded queue
     ;; p50s above the batch baseline with unreliable p95, so per the wave rule
     ;; the workflow keeps the product-default batch scheduler. The runner-side
     ;; TEST_RUNNER_SCHEDULER env seam and its kill switch remain available for
@@ -387,7 +391,7 @@
       (check-true (ormap (lambda (ln) (regexp-match? #rx"gsd-wave-gate.rkt" ln)) body))
       (check-true (ormap (lambda (ln) (regexp-match? #rx"required-pr-checks.policy" ln)) body)))
 
-    ;; Pin 8 (v1.00.26 W0): fail-closed required-check gate semantics
+    ;; Pin 8 (v<q-version> W0): fail-closed required-check gate semantics
     (test-case "W0: the protected-main gate is fail-closed by characterization"
       (define (required-gate-verdict required completed)
         (define missing
@@ -428,13 +432,17 @@
         (check-not-false (member shard (policy-jobs))
                          (format "shard ~a must be a required check" shard))))
 
-    ;; Pin 9 (v1.00.26 W0, re-pointed W1): the W0 graph snapshot stays
+    ;; Pin 9 (v<q-version> W0, re-pointed W1): the W0 graph snapshot stays
     ;; checksum-bound as the HISTORICAL baseline. Its recorded policy_pin is
     ;; compared against its own frozen capture — not against the live policy,
     ;; which W1 legitimately extends with lint-quality.
     (test-case "W1: the W0 graph snapshot remains checksum-bound as the historical baseline"
       (define snap
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w0" "graph-snapshot.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w0" q-version)
+                    "graph-snapshot.json"))
       (check-true (file-exists? snap) "W0 graph-snapshot.json must exist")
       (check-equal? (sha256-hex snap)
                     "6e0eee763b696c772482e3f4c3c060d95d96546c690394b2aa5f85139eb41a25"
@@ -458,27 +466,35 @@
        (member "lint-quality" (hash-ref j 'policy_pin))
        "the W0 baseline predates lint-quality; if it appears, the baseline was rewritten"))
 
-    ;; Pin 10 (v1.00.26 W1): the W1 DAG checkpoint binds the CURRENT required
+    ;; Pin 10 (v<q-version> W1): the W1 DAG checkpoint binds the CURRENT required
     ;; topology: live policy equality, the §7.1 safe-apply sequence with lint
     ;; required at every step, and the same-SHA before/after timing shape
     ;; showing test (0) no longer waits for Racket lint steps. The checkpoint
     ;; is a topology checkpoint — explicitly NOT a cohort.
     (test-case "W1: dag-checkpoint exists, is checksum-bound, and equals the live policy"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w1" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w1" q-version)
+                    "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W1 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
                     "2f4d64e8728a18578ab81758a02acb93950613e9a49d0ee5903f99a3f67739e2"
                     "W1 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
-      (check-equal? (hash-ref j 'wave) "v1.00.26-w1")
+      (check-equal? (hash-ref j 'wave) (format "v~a-w1" q-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)
                     (sort (policy-jobs) string<?)
                     "checkpoint policy_pin must equal the live required-pr-checks.policy")
       (check-not-false (member "lint-quality" (policy-jobs)) "lint-quality must be a required check"))
     (test-case "W1: checkpoint records the post-split required graph with both lint jobs required"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w1" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w1" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define prot (hash-ref j 'branch_protection))
       (define ctxs (map ~a (hash-ref prot 'required_status_checks)))
@@ -491,7 +507,11 @@
                     "required contexts must equal the policy set exactly"))
     (test-case "W1: safe-apply sequence keeps lint required at every step and orders lint-quality green-before-required"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w1" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w1" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define seq (hash-ref j 'safe_apply_sequence))
       (check-true (>= (length seq) 5) "the §7.1 sequence must record its ordered steps")
@@ -511,7 +531,11 @@
                   "lint-quality must report green on main BEFORE protection (precondition recorded)"))
     (test-case "W1: same-SHA timing checkpoint shows test (0) no longer waits for Racket lint steps"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w1" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w1" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define timing (hash-ref j 'timing_checkpoint))
       (check-equal? (hash-ref timing 'label) "topology checkpoint — not a cohort")
@@ -548,7 +572,8 @@
                   "lint-quality runs in parallel and completes before test (0) under the split")
       ;; topology-not-cohort honesty: derived projection, provenance recorded
       (check-equal? (hash-ref timing 'derived_from)
-                    "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline")
+                    (format "artifacts/ci-topology/v~a-w0/graph-snapshot.json#timing_baseline"
+                            q-version))
       (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection"))
     (test-case "W1: lint-quality is parallel in the workflow graph (no downstream waits on it)"
       (check-equal? (job-needs "lint-quality")
@@ -559,7 +584,7 @@
         (check-not-false (member "lint" (job-needs job))
                          (format "~a must still need only the lightweight lint gate" job))))
 
-    ;; Pin 11 (v1.00.26 W2): fast-env starts after the LIGHTWEIGHT lint
+    ;; Pin 11 (v<q-version> W2): fast-env starts after the LIGHTWEIGHT lint
     ;; gate, concurrent with lint-quality. The resequencing touches the
     ;; needs edge only: the prepared-environment producer's
     ;; manifest/OS/Racket/lockfile verification steps stay byte-identical
@@ -567,19 +592,27 @@
     ;; the lane.
     (test-case "W2: dag-checkpoint exists, is checksum-bound, and equals the live policy"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w2" q-version)
+                    "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
                     "0c18bf7d204df7313fdeea213714828db825b22debc9bbfa5969019905a67187"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
-      (check-equal? (hash-ref j 'wave) "v1.00.26-w2")
+      (check-equal? (hash-ref j 'wave) (format "v~a-w2" q-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)
                     (sort (policy-jobs) string<?)
                     "checkpoint policy_pin must equal the live required-pr-checks.policy"))
     (test-case "W2: needs-edge pin — fast-env needs only lint, no ordering edge with lint-quality"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w2" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define edges (hash-ref j 'needs_edges))
       ;; the live workflow: fast-env waits exactly once, for the lightweight gate
@@ -601,7 +634,11 @@
       (check-equal? (map ~a (hash-ref edges 'test-platform)) '("lint")))
     (test-case "W2: prepared-env verification steps byte-identical, loud fallback fails the lane"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w2" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define contract (hash-ref j 'fast_env_verification_contract))
       (define prepare-action
@@ -634,13 +671,18 @@
                   "test shards must keep gating PREPARED_ENV on the fast-env result"))
     (test-case "W2: same-SHA timing shape — fast-env after lightweight lint, concurrent with lint-quality"
       (define cp
-        (build-path project-root "artifacts" "ci-topology" "v1.00.26-w2" "dag-checkpoint.json"))
+        (build-path project-root
+                    "artifacts"
+                    "ci-topology"
+                    (format "v~a-w2" q-version)
+                    "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define timing (hash-ref j 'timing_checkpoint))
       (check-equal? (hash-ref timing 'label) "topology checkpoint — not a cohort")
       (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection")
       (check-equal? (hash-ref timing 'derived_from)
-                    "artifacts/ci-topology/v1.00.26-w1/dag-checkpoint.json#timing_checkpoint")
+                    (format "artifacts/ci-topology/v~a-w1/dag-checkpoint.json#timing_checkpoint"
+                            q-version))
       (define before (hash-ref timing 'before))
       (define after (hash-ref timing 'after))
       (check-equal? (hash-ref before 'head_sha)

@@ -1100,7 +1100,7 @@
                   "hold verdict must still carry the numbers table"))))
 
 ;; ============================================================
-;; End-to-end PR elapsed cohort (v1.00.26 W6: C2, pr-elapsed mode)
+;; End-to-end PR elapsed cohort (v<q-version> W6: C2, pr-elapsed mode)
 ;; ============================================================
 
 (define pe-base "2026-01-01T00:00:00Z")
@@ -1161,11 +1161,11 @@
                                   #:shas [shas '()]
                                   #:exclusions [exclusions '()]
                                   #:expected-count [expected-count 20]
-                                  #:cohort-id [cohort-id "v1.00.26-c2"])
+                                  #:cohort-id [cohort-id (format "v~a-c2" q-version)])
   (hasheq 'cohort-id
           cohort-id
           'milestone
-          "v1.00.26"
+          (format "v~a" q-version)
           'cohort-mode
           "pr-elapsed"
           'schema-version
