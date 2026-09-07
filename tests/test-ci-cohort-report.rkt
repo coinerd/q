@@ -124,6 +124,9 @@
 (define (has-error-matching? vr rx)
   (and (not (validation-ok? vr)) (ormap (lambda (e) (regexp-match? rx e)) (validation-errors vr))))
 
+(define (has-warning-matching? vr rx)
+  (ormap (lambda (w) (regexp-match? rx w)) (validation-warnings vr)))
+
 ;; ============================================================
 ;; Helpers for paired configuration manifests (W0: C1)
 ;; ============================================================
@@ -1097,12 +1100,296 @@
                   "hold verdict must still carry the numbers table"))))
 
 ;; ============================================================
+;; End-to-end PR elapsed cohort (v1.00.26 W6: C2, pr-elapsed mode)
+;; ============================================================
+
+(define pe-base "2026-01-01T00:00:00Z")
+
+;; Format base + seconds (midnight-anchored, < 24h) as an ISO-8601 UTC
+;; timestamp without needing a date library in the tests.
+(define (pe-plus seconds)
+  (define m (quotient seconds 60))
+  (format "2026-01-01T~a:~a:~aZ"
+          (~r (quotient m 60) #:min-width 2 #:pad-string "0")
+          (~r (modulo m 60) #:min-width 2 #:pad-string "0")
+          (~r (modulo seconds 60) #:min-width 2 #:pad-string "0")))
+
+(define (pe-window elapsed)
+  (list pe-base (pe-plus elapsed)))
+
+;; PR-elapsed timing attempt: the wall-clock required-check window is part
+;; of the record (first-check-start-at -> last-required-check-end-at) and
+;; the derived pr-elapsed-seconds is the window width — never the queue
+;; wait alone (queue wait is recorded separately for auditability).
+(define (pe-timing-attempt i elapsed)
+  (define window (pe-window elapsed))
+  (hasheq 'run-id
+          (format "88~a" (+ 700000001 (* i 100)))
+          'run-url
+          (format "https://github.com/coinerd/q/actions/runs/88~a" (+ 700000001 (* i 100)))
+          'result
+          "success"
+          'timing-sample
+          #t
+          'first-check-start-at
+          (list-ref window 0)
+          'last-required-check-end-at
+          (list-ref window 1)
+          'pr-elapsed-seconds
+          elapsed
+          'queue-wait-seconds
+          (min 42.0 elapsed)))
+
+(define (make-pr-elapsed-sha i
+                             #:elapsed [elapsed 300.0]
+                             #:attempts [attempts #f]
+                             #:digest [digest #f])
+  (hasheq 'sha
+          (format "pe-sha-~a" i)
+          'pr
+          (+ 9609 i)
+          'scheduler
+          "queue"
+          'ordering
+          "fifo"
+          'attempts
+          (or attempts (list (pe-timing-attempt i elapsed)))
+          'inventory-digest
+          (or digest (format "sha256:tree~a" i))))
+
+(define (make-pr-elapsed-manifest #:cohort-status [cohort-status "open"]
+                                  #:shas [shas '()]
+                                  #:exclusions [exclusions '()]
+                                  #:expected-count [expected-count 20]
+                                  #:cohort-id [cohort-id "v1.00.26-c2"])
+  (hasheq 'cohort-id
+          cohort-id
+          'milestone
+          "v1.00.26"
+          'cohort-mode
+          "pr-elapsed"
+          'schema-version
+          1
+          'expected-count
+          expected-count
+          'cohort-status
+          cohort-status
+          'start-sha
+          "71feb08054e239d1502b8e0eab893b00a0180d58"
+          'shas
+          shas
+          'exclusions
+          exclusions))
+
+(define pr-elapsed-suite
+  (test-suite "end-to-end PR elapsed cohort (C2, pr-elapsed)"
+
+    (test-case "cohort-mode honors an explicit pr-elapsed mode"
+      (check-equal? (cohort-mode (make-valid-cohort 20)) "paired-shadow")
+      (check-equal? (cohort-mode (make-pr-elapsed-manifest)) "pr-elapsed"))
+
+    (test-case "pr-elapsed gate constants are the roadmap W6 targets"
+      (check-equal? pr-elapsed-p50-max-seconds 588.0)
+      (check-equal? pr-elapsed-p95-max-seconds 735.0)
+      (check-true (string-contains? pr-elapsed-gate-text "588"))
+      (check-true (string-contains? pr-elapsed-gate-text "735")))
+
+    (test-case "pr-elapsed measures wall time from first check start to last required check completion"
+      ;; 588 s window: exactly the roadmap p50 target width.
+      (check-equal? (pr-elapsed-seconds-from-window "2026-09-07T00:00:00Z" "2026-09-07T00:09:48Z")
+                    588)
+      ;; Missing or malformed endpoints are not silently treated as 0.
+      (check-false (pr-elapsed-seconds-from-window #f "2026-09-07T00:09:48Z"))
+      (check-false (pr-elapsed-seconds-from-window "not-a-timestamp" "2026-09-07T00:09:48Z"))
+      ;; An inverted window is invalid, not a negative sample.
+      (check-false (pr-elapsed-seconds-from-window "2026-09-07T00:09:48Z" "2026-09-07T00:00:00Z")))
+
+    (test-case "pr-elapsed sample is the check window, not the queue wait alone"
+      ;; Row with queue wait 120 s but a 700 s check window: the gate must
+      ;; see 700 (the window), while the queue wait stays recorded separately.
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha i #:elapsed 700.0))))
+      (define gate (pr-elapsed-gate m))
+      (check-equal? (hash-ref gate 'p50-seconds) 700.0)
+      (check-true (andmap (lambda (a) (< (hash-ref a 'queue-wait-seconds) 700.0))
+                          (hash-ref (list-ref (hash-ref m 'shas) 0) 'attempts))))
+
+    (test-case "open pr-elapsed cohort validates with fewer SHAs and no exclusions"
+      (define m (make-pr-elapsed-manifest))
+      (define vr (validate-cohort m))
+      (check-true (validation-ok? vr) (format "~a" (validation-errors vr))))
+
+    (test-case "open pr-elapsed cohort is evidence pending, never a silent miss"
+      (define gate (pr-elapsed-gate (make-pr-elapsed-manifest)))
+      (check-false (hash-ref gate 'gate-evaluable))
+      (check-false (hash-ref gate 'achieved))
+      (check-equal? (hash-ref gate 'verdict) "evidence pending (cohort open)")
+      (check-false (hash-ref gate 'next-lever #f))
+      (define md (cohort-decision-md-string (make-pr-elapsed-manifest)))
+      (check-true (string-contains? md "evidence pending"))
+      (check-true (string-contains? md "open")))
+
+    (test-case "closed pr-elapsed cohort inside targets records target achieved"
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha i #:elapsed 45.0))))
+      (define gate (pr-elapsed-gate m))
+      (check-true (hash-ref gate 'gate-evaluable))
+      (check-true (hash-ref gate 'achieved))
+      (check-equal? (hash-ref gate 'verdict) "target achieved"))
+
+    (test-case "pr-elapsed scheduler check accepts the integrated topology and warns on legacy schedulers"
+      ;; Regression guard: the scheduler check must compare against the
+      ;; documented integrated scheduler fast/queue/lpt (W2 queue + W3 LPT
+      ;; activations). Good data must validate warning-free; anything else
+      ;; is recorded as a decision-facing warning, not a hard error.
+      (define (integrated i)
+        (hash-set* (make-pr-elapsed-sha i #:elapsed 45.0) 'scheduler "fast/queue/lpt"))
+      (define good
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (integrated i))))
+      (check-true (validation-ok? (validate-cohort good)))
+      (check-false (has-warning-matching? (validate-cohort good) #rx"non-fast scheduler"))
+      (define legacy
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (hash-set* (integrated i) 'scheduler "serial"))))
+      (check-true (validation-ok? (validate-cohort legacy)))
+      (check-true (has-warning-matching? (validate-cohort legacy) #rx"non-fast scheduler")))
+
+    (test-case "closed pr-elapsed miss records target unachieved with a named next lever"
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha i #:elapsed 800.0))))
+      (define gate (pr-elapsed-gate m))
+      (check-true (hash-ref gate 'gate-evaluable))
+      (check-false (hash-ref gate 'achieved))
+      (check-equal? (hash-ref gate 'verdict) "target unachieved")
+      (check-true (string-contains? (hash-ref gate 'next-lever) "separate reviewed decision"))
+      (check-true (string-contains? (hash-ref gate 'next-lever) "no queue rollback")))
+
+    (test-case "pr-elapsed p50 and p95 use linear interpolation"
+      ;; 20 ascending samples 40..800 s: p50 lands between the 9th and 10th
+      ;; order statistics (420.0), p95 between the 19th and 20th (780.0).
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha i #:elapsed (* 40.0 (add1 i))))))
+      (define gate (pr-elapsed-gate m))
+      (check-equal? (hash-ref gate 'p50-seconds) 420.0)
+      (check-equal? (hash-ref gate 'p95-seconds) 780.0)
+      (check-equal? (hash-ref gate 'verdict) "target unachieved"))
+
+    (test-case "duplicate PR head SHA is rejected in pr-elapsed mode"
+      (define m
+        (make-pr-elapsed-manifest #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha (if (= i 7) 3 i)))))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"duplicate SHA")))
+
+    (test-case "closed pr-elapsed cohort still requires 20 unique PR head SHAs"
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 15)])
+                                           (make-pr-elapsed-sha i))))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"silently truncated")))
+
+    (test-case "failed-then-passed reruns are recorded, never dropped"
+      (define rerun-attempts
+        (list (hasheq 'run-id
+                      "887000001-fail"
+                      'result
+                      "failure"
+                      'timing-sample
+                      #f
+                      'first-check-start-at
+                      "2026-09-07T00:00:00Z"
+                      'last-required-check-end-at
+                      "2026-09-07T00:02:00Z")
+              (pe-timing-attempt 0 300.0)
+              (hasheq 'run-id "887000003-rerun" 'result "rerun" 'timing-sample #f)))
+      (define m
+        (make-pr-elapsed-manifest #:cohort-status "open"
+                                  #:shas (list (make-pr-elapsed-sha 0 #:attempts rerun-attempts))))
+      (check-true (sha-eligible? (list-ref (hash-ref m 'shas) 0)))
+      (define summary (cohort-attempts-summary m))
+      (check-true (> (hash-ref summary 'failures) 0))
+      (check-true (> (hash-ref summary 'reruns) 0)))
+
+    (test-case "timing-sample attempt without a parseable check window is rejected"
+      (define bad (hasheq 'run-id "887000009" 'result "success" 'timing-sample #t))
+      (define m
+        (make-pr-elapsed-manifest #:shas (list (make-pr-elapsed-sha 0 #:attempts (list bad)))))
+      (define vr (validate-cohort m))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"required-check window")))
+
+    (test-case "queue wait alone is never accepted as the PR elapsed measure"
+      (define bad
+        (hash-set (pe-timing-attempt 0 120.0)
+                  'queue-wait-seconds
+                  900.0)) ; wait larger than the whole check window
+      (define m
+        (make-pr-elapsed-manifest #:shas (list (make-pr-elapsed-sha 0 #:attempts (list bad)))))
+      (define vr (validate-cohort m))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"queue wait")))
+
+    (test-case "malformed attempt entries are rejected in pr-elapsed mode"
+      (define m
+        (make-pr-elapsed-manifest
+         #:shas (list (make-pr-elapsed-sha
+                       0
+                       #:attempts (list (hasheq 'run-id "887000010" 'timing-sample "yes"))))))
+      (define vr (validate-cohort m))
+      (check-false (validation-ok? vr))
+      (check-true (has-error-matching? vr #rx"attempt")))
+
+    (test-case "pr-elapsed report names the mode and carries the gate without shadow duplication"
+      (define r (cohort-report-jsexpr (make-pr-elapsed-manifest)))
+      (check-equal? (hash-ref r 'cohort-mode) "pr-elapsed")
+      (check-true (hash-has-key? r 'pr-elapsed-gate))
+      (check-true (hash-has-key? (hash-ref r 'pr-elapsed-gate) 'gate-evaluable))
+      (check-false (hash-has-key? r 'configurations))
+      (check-false (hash-has-key? r 'decision)))
+
+    (test-case "pr-elapsed report JSON is deterministic"
+      (define m (make-pr-elapsed-manifest))
+      (check-equal? (cohort-report-json-string m) (cohort-report-json-string m)))
+
+    (test-case "pr-elapsed report markdown embeds the mode and verdict"
+      (define md (cohort-report-md-string (make-pr-elapsed-manifest)))
+      (check-true (string-contains? md "pr-elapsed"))
+      (check-true (string-contains? md "evidence pending")))
+
+    (test-case "pr-elapsed decision.md records the observed numbers, gate text, and honesty clause"
+      (define miss-m
+        (make-pr-elapsed-manifest #:cohort-status "closed"
+                                  #:shas (for/list ([i (in-range 20)])
+                                           (make-pr-elapsed-sha i #:elapsed 800.0))))
+      (define miss-md (cohort-decision-md-string miss-m))
+      (check-true (string-contains? miss-md "pr-elapsed"))
+      (check-true (string-contains? miss-md "target unachieved"))
+      (check-true (string-contains? miss-md "800"))
+      (check-true (string-contains? miss-md "588"))
+      (check-true (string-contains? miss-md "735"))
+      (check-true (string-contains? miss-md "never revised"))
+      (check-true (string-contains? miss-md "separate reviewed decision")))))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (define failures (run-tests suite))
 (define c2-failures (run-tests c2-suite))
+(define pr-elapsed-failures (run-tests pr-elapsed-suite))
 
 (module+ main
-  (when (positive? (+ failures c2-failures))
+  (when (positive? (+ failures c2-failures pr-elapsed-failures))
     (exit 1)))
