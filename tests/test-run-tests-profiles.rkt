@@ -104,6 +104,51 @@
       line))
   (and (= (length candidates) 1) (car candidates)))
 
+;; ── v1.00.27 W2 (#9590) overlap ownership helpers ──
+
+;; Generic ci.yml job-block extraction (same idiom as security-job-block*).
+(define (ci-job-block* name)
+  (define all (ci-yml-lines*))
+  (define start
+    (for/first ([line (in-list all)]
+                [i (in-naturals)]
+                #:when (regexp-match?
+                        (byte-regexp (bytes-append #"^  " (string->bytes/utf-8 name) #":\\s*$"))
+                        line))
+      i))
+  (unless start
+    (error 'ci-job-block "ci.yml no longer declares a ~a job" name))
+  (cons (list-ref all start)
+        (for/list ([line (in-list (list-tail all (add1 start)))]
+                   #:break (regexp-match? #px"^  [A-Za-z0-9_-]+:" line))
+          line)))
+
+;; W0 ownership-matrix reality derivation: the authoritative per-family
+;; required_gates source (same function the milestone gate derives from).
+(define inventory-path* (build-path project-root "scripts" "run-tests" "inventory.rkt"))
+(define (tier-ownership-rows*)
+  ((dynamic-require inventory-path*
+                    'tier-ownership-rows
+                    (lambda ()
+                      (error 'w2-overlap "inventory.rkt no longer exports tier-ownership-rows")))))
+
+;; W2 checksummed overlap-review artifact.
+(define overlap-review-path*
+  (build-path project-root "artifacts" "tier-ownership" "v1.00.27-w2" "overlap-review.json"))
+(define w2-sha256sums-path*
+  (build-path project-root "artifacts" "tier-ownership" "v1.00.27-w2" "SHA256SUMS"))
+
+;; read-json yields hashes with symbol keys; jref accepts either spelling.
+(define (jref payload key)
+  (if (hash? payload)
+      (hash-ref payload (string->symbol key) (hash-ref payload key #f))
+      #f))
+
+(define sha256-hex*
+  (dynamic-require (build-path project-root "scripts" "run-tests" "sha256.rkt")
+                   'sha256-hex
+                   (lambda () (error 'w2-overlap "sha256.rkt no longer exports sha256-hex"))))
+
 (define suite
   (test-suite "run-tests environment profiles"
 
@@ -261,4 +306,102 @@
                                    "\n"))
        "no ci.yml lane may resolve a scheduler from the repository variable while the W1 security-queue hold stands"))))
 
-(run-tests suite)
+(define suite-failures (run-tests suite))
+
+;; ── v1.00.27 W2 (#9590) overlap ownership: platform/fast + security/fast ──
+;; W2 scope: every test family whose W0-derived required_gates include
+;; `fast` AND (`platform` or `security`) is an overlap row. Governance:
+;; each such row must carry a verdict in the checksummed W2 overlap
+;; review — either decision "kept" with a non-empty rationale (intentional
+;; overlap: different env, isolation, or gate), or decision
+;; "removed-duplicate" with same-commit equivalence evidence. An overlap
+;; row with neither fails here. Delivered as flat top-level checks so every
+;; form's balance is local.
+
+;; W2 helpers over the W0 ownership-matrix reality derivation.
+(define (w2-gates-of r)
+  (jref r "required_gates"))
+
+(define (w2-axis-rows axis)
+  (define other (car (string-split axis "/")))
+  (for/list ([r (in-list (tier-ownership-rows*))]
+             #:when (and (member "fast" (w2-gates-of r)) (member other (w2-gates-of r))))
+    r))
+
+;; W0 matrix rows identify their test-family path under whichever spelling
+;; inventory.rkt emits; accept all known spellings.
+(define (w2-family-path r)
+  (for/or ([key (in-list '("file" "test" "path" "family" "name"))])
+    (define v (jref r key))
+    (and (string? v) v)))
+
+;; W2 artifact governance checks run via text-ui so their result is
+;; countable; the module epilogue turns any failure into a nonzero exit
+;; (rackunit's body printing alone does not fail the process).
+(define w2-profiles-failures
+  (run-tests
+   (test-suite "W2 overlap artifact governance"
+     (test-case "W2: overlap review artifact exists, is well-formed, and is checksummed"
+       (check-true (file-exists? overlap-review-path*) "W2 overlap review artifact is missing")
+       (define payload (call-with-input-file overlap-review-path* read-json))
+       (check-equal? (jref payload "schema") "tier-ownership-overlap-review/v1")
+       (check-equal? (jref payload "milestone") "v1.00.27")
+       (check-equal? (jref payload "wave") "v1.00.27-w2")
+       (check-equal? (jref payload "source_matrix")
+                     "artifacts/tier-ownership/v1.00.27-w0/ownership-matrix.json")
+       (check-equal? (jref payload "overlap_axes") '("platform/fast" "security/fast"))
+       (check-true (file-exists? w2-sha256sums-path*) "W2 SHA256SUMS is missing")
+       (define review-digest (sha256-hex* (open-input-file overlap-review-path*)))
+       (check-true (for/or ([line (in-list (file->lines w2-sha256sums-path*))])
+                     (and (regexp-match? #rx"overlap-review[.]json$" line)
+                          (equal? (car (string-split line)) review-digest)))
+                   "SHA256SUMS entry for overlap-review.json is missing or stale")
+       ;; Governance (wave TDD step 2): every overlap row must carry a valid
+       ;; verdict — decision "kept" with a non-empty rationale, or decision
+       ;; "removed-duplicate" with same-commit equivalence evidence. A row
+       ;; with neither fails here.
+       (define rows (jref payload "rows"))
+       (check-true (list? rows) "overlap review rows missing or not a list")
+       (when (list? rows)
+         (for ([row (in-list rows)]
+               [i (in-naturals)])
+           (check-true (and (member (jref row "axis") '("platform/fast" "security/fast")) #t)
+                       (format "row ~a: unknown axis" i))
+           (check-true (and (string? (jref row "test")) (non-empty-string? (jref row "test")))
+                       (format "row ~a: missing test path" i))
+           (define decision (jref row "decision"))
+           (check-true (and (member decision '("kept" "removed-duplicate")) #t)
+                       (format "row ~a: decision must be kept or removed-duplicate" i))
+           (check-true
+            (or (and (equal? decision "kept")
+                     (string? (jref row "rationale"))
+                     (non-empty-string? (jref row "rationale")))
+                (and (equal? decision "removed-duplicate")
+                     (string? (jref row "evidence"))
+                     (non-empty-string? (jref row "evidence"))))
+            (format
+             "row ~a: kept rows need a rationale; removed-duplicate rows need equivalence evidence"
+             i)))
+         (check-equal?
+          (length (filter (lambda (row) (equal? (jref row "decision") "removed-duplicate")) rows))
+          (jref payload "removals")
+          "removals count must equal the number of removed-duplicate rows"))
+       ;; Coverage: every W0-derived overlap row (fast ∩ platform or fast ∩
+       ;; security) must appear in the review artifact with a verdict.
+       (when (list? rows)
+         (for ([axis (in-list '("platform/fast" "security/fast"))])
+           (define derived (w2-axis-rows axis))
+           (check-true (pair? derived)
+                       (format "~a: no W0 overlap rows derived — derivation is broken" axis))
+           (for ([r (in-list derived)])
+             (define t (w2-family-path r))
+             (check-true
+              (for/or ([row (in-list rows)])
+                (and (equal? (jref row "axis") axis) (equal? (jref row "test") t)))
+              (format "~a: overlap row ~a has no verdict row in the review artifact" axis t)))))
+       (void)))))
+
+;; A red suite or red W2 artifact check must fail the process: rackunit's
+;; printing alone does not set the exit code.
+(when (> (+ suite-failures w2-profiles-failures) 0)
+  (exit 1))
