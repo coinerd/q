@@ -3,7 +3,7 @@
 **Status:** delivered (release baked and published from the verified merge SHA)
 **Campaign:** v1.00.26 — CI Critical-Path Topology (milestone #891, issues #9598–#9605)
 **Baseline provenance:** PR #9606 (v1.00.25 — Work-Conserving Activation), head SHA `c6ee39e43025cc49202a27084aed459221dac43c`; every same-SHA DAG timing checkpoint below is anchored at that SHA.
-**This report is the per-wave topology record required by roadmap §7 W7.** Wave evidence lives in `docs/reports/gsd-wave-{evidence,reviews,validation}/v1.00.26-w{0..6}.rktd`; artifacts live under `artifacts/ci-topology/v1.00.26-*` and are bound byte-for-byte by per-wave `SHA256SUMS` files plus the integrated C2 binding.
+**This report is the per-wave topology record required by roadmap §7 W7.** Wave evidence records exist for waves W0, W1, W2, W4, W6, and W7 in `docs/reports/gsd-wave-{evidence,reviews,validation}/v1.00.26-w{0,1,2,4,6,7}.rktd`; W3's relocation is evidenced by its checksummed same-SHA DAG checkpoint artifact (no separate record — the change is fully characterized by `artifacts/ci-topology/v1.00.26-w3/` plus the `ci.yml` diff), and W5 changed no workflow bytes (a decision-recorded hold, held in the W4/W6 evidence records). Artifacts live under `artifacts/ci-topology/v1.00.26-*` and are bound byte-for-byte by per-wave `SHA256SUMS` files plus the integrated C2 binding.
 
 ## 1. What changed, per wave
 
