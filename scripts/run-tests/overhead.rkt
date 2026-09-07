@@ -275,8 +275,11 @@
                     (if (member policy '(grouped "grouped")) "grouped" "subprocess")))))
 
 (define (implementation-sha #:base-dir [base-dir (current-directory)])
-  (with-handlers ([exn:fail? (lambda (_) "unknown")])
-    (define r (run-overhead-command "git" (list "rev-parse" "HEAD") #:cwd base-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (eprintf "warning: implementation-sha: git rev-parse failed: ~a\n"
+                                        (exn-message e))
+                               "unknown")])
+    (define r (run-overhead-command "git rev-parse" "git" (list "rev-parse" "HEAD") #:cwd base-dir))
     (define line (string-trim (overhead-result-stdout r)))
     (if (regexp-match? #px"^[0-9a-f]{40,64}$" line)
         line

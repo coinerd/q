@@ -244,7 +244,7 @@
 ;; collection recorded "unknown"; root cause is now diagnosed at the call site
 ;; and the accepted format is widened to 40/64 hex for SHA-1/SHA-256 repos).
 (test-case "implementation-sha resolves a real 40/64-hex commit sha"
-  (define sha (implementation-sha project-root))
+  (define sha (implementation-sha #:base-dir project-root))
   (check-false (equal? sha "unknown") "implementation-sha must resolve on this repo")
   (check-pred (lambda (s) (regexp-match? #px"^[0-9a-f]{40,64}$" s)) sha))
 
