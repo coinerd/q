@@ -38,7 +38,8 @@
          area-mode-rows
          collect-local-p90
          check-local-p90-record
-         check-local-p90-file)
+         check-local-p90-file
+         implementation-sha)
 
 (struct overhead-result (label command exit-code elapsed-ms stdout stderr) #:transparent)
 
@@ -148,7 +149,10 @@
 
 (define local-p90-min-samples 20)
 
-(define local-feedback-slo-table (list (cons "L0" 5000) (cons "L1" 30000) (cons "L2" 120000)))
+;; v1.00.27-w4: L2 local p90 SLO adjusted 120s -> 240s through the governed
+;; evidence record artifacts/tier-ownership/v1.00.27-w4/slo-evidence-record.md
+;; (measured p90 233.2s over 20 samples of the 943-file unit-fast tier).
+(define local-feedback-slo-table (list (cons "L0" 5000) (cons "L1" 30000) (cons "L2" 240000)))
 
 (define (slo-budget-for label)
   (cond
@@ -274,7 +278,11 @@
   (with-handlers ([exn:fail? (lambda (_) "unknown")])
     (define r (run-overhead-command "git" (list "rev-parse" "HEAD") #:cwd base-dir))
     (define line (string-trim (overhead-result-stdout r)))
-    (if (regexp-match? #px"^[0-9a-f]{40}$" line) line "unknown")))
+    (if (regexp-match? #px"^[0-9a-f]{40,64}$" line)
+        line
+        (begin
+          (eprintf "warning: implementation-sha: unexpected rev-parse output ~s\n" line)
+          "unknown"))))
 
 (define (iso-utc-now)
   (define d (seconds->date (current-seconds) #t))
@@ -392,8 +400,8 @@
             (need mc f "machine")))
         (define sha (hash-ref rec 'implementation-sha #f))
         (when (string? sha)
-          (unless (regexp-match? #px"^[0-9a-f]{40}$" sha)
-            (bad "implementation-sha ~a is not a 40-hex commit sha" sha)))
+          (unless (regexp-match? #px"^[0-9a-f]{40,64}$" sha)
+            (bad "implementation-sha ~a is not a 40/64-hex commit sha" sha)))
         (define method (hash-ref rec 'method #f))
         (when (hash? method)
           (for ([f (in-list '(p90 rank))])

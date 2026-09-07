@@ -86,7 +86,7 @@
                          (or l0-p90 l0-recomputed-p90)
                          (or l0-verdict (slo-verdict l0-recomputed-p90 5000)))
                 (mk-loop "L1" 30000 l0-samples 281 (slo-verdict 281 30000))
-                (mk-loop "L2" 120000 l0-samples 281 (slo-verdict 281 120000)))))
+                (mk-loop "L2" 240000 l0-samples 281 (slo-verdict 281 240000)))))
 
 (define (run/capture cmd)
   (parameterize ([current-directory project-root])
@@ -147,7 +147,7 @@
     (test-case "local feedback loops declare L0 L1 L2 with slo budgets"
       (define loops (local-feedback-loops project-root))
       (check-equal? (map (lambda (l) (hash-ref l 'loop)) loops) '("L0" "L1" "L2"))
-      (check-equal? (map (lambda (l) (hash-ref l 'slo-ms)) loops) '(5000 30000 120000))
+      (check-equal? (map (lambda (l) (hash-ref l 'slo-ms)) loops) '(5000 30000 240000))
       (for ([l (in-list loops)])
         (check-pred (lambda (a) (and (list? a) (pair? a))) (hash-ref l 'argv))
         (check-pred (lambda (p) (and (list? p) (pair? p))) (hash-ref l 'paths))
@@ -239,5 +239,13 @@
       (check-true (pair? (hash-ref loop0 'area-modes)))
       (check-pred integer? (hash-ref (hash-ref rec 'machine) 'cpu-count))
       (check-pred string? (hash-ref rec 'implementation-sha)))))
+
+;; v1.00.27-w4: implementation-sha must resolve on the real repo (the W4
+;; collection recorded "unknown"; root cause is now diagnosed at the call site
+;; and the accepted format is widened to 40/64 hex for SHA-1/SHA-256 repos).
+(test-case "implementation-sha resolves a real 40/64-hex commit sha"
+  (define sha (implementation-sha project-root))
+  (check-false (equal? sha "unknown") "implementation-sha must resolve on this repo")
+  (check-pred (lambda (s) (regexp-match? #px"^[0-9a-f]{40,64}$" s)) sha))
 
 (run-tests suite)
