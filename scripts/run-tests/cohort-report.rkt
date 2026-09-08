@@ -42,6 +42,7 @@
          cohort-timing-samples
          cohort-attempts-summary
          cohort-quantile
+         cohort-quantile-exact
          ;; report generation
          cohort-report-jsexpr
          cohort-report-json-string
@@ -675,6 +676,24 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
      (if (= lo hi)
          (list-ref s lo)
          (/ (+ (list-ref s lo) (list-ref s hi)) 2.0))]))
+
+;; Exact linear interpolation at rank k = q*(n-1): s[lo] + (k-lo)*(s[hi]-s[lo]).
+;; The final-claim §8 rows report p95 verbatim, so they must not inherit the
+;; midpoint-only smoothing of cohort-quantile (which existing callers rely on).
+(define (cohort-quantile-exact xs q)
+  (cond
+    [(null? xs) #f]
+    [else
+     (define s (sort (map (lambda (x) (exact->inexact x)) xs) <))
+     (define n (length s))
+     (define k (* q (sub1 n)))
+     (define lo (inexact->exact (floor k)))
+     (define hi (min (add1 lo) (sub1 n)))
+     (define frac (- k lo))
+     ;; Round to millisecond precision so interpolated p95s neither carry
+     ;; floating-point noise (e.g. 1175.6500000000005) nor vary across
+     ;; regeneration runs — the checksummed artifacts must be byte-stable.
+     (/ (round (* 1000.0 (+ (* (- 1.0 frac) (list-ref s lo)) (* frac (list-ref s hi))))) 1000.0)]))
 
 ;; ============================================================
 ;; Cohort analysis
@@ -1366,6 +1385,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'fast-execution-seconds
+           'quantile
+           0.50
            'guards
            '("inventory-accounted" "reliability-non-regression"
                                    "semantic-gate-equivalence"
@@ -1383,6 +1404,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'fast-execution-seconds
+           'quantile
+           0.95
            'guards
            '("inventory-accounted" "reliability-non-regression"
                                    "semantic-gate-equivalence"
@@ -1399,6 +1422,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'pr-elapsed-seconds
+           'quantile
+           0.50
            'guards
            '("inventory-accounted" "reliability-non-regression" "failure-truth")
            'next-lever
@@ -1413,6 +1438,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'pr-elapsed-seconds
+           'quantile
+           0.95
            'guards
            '("inventory-accounted" "reliability-non-regression" "failure-truth")
            'next-lever
@@ -1427,6 +1454,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'security-runner-seconds
+           'quantile
+           0.50
            'guards
            '("inventory-accounted" "reliability-non-regression" "shared-state-permission-isolation")
            'next-lever
@@ -1441,6 +1470,8 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
            "<="
            'sample-key
            'workflows-runner-seconds
+           'quantile
+           0.50
            'guards
            '("inventory-accounted" "reliability-non-regression" "four-worker-isolation-proof")
            'next-lever
@@ -1660,7 +1691,7 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
        (define observed
          (if (null? samples)
              #f
-             (cohort-quantile samples 0.50)))
+             (cohort-quantile-exact samples (hash-ref row 'quantile 0.50))))
        (unless (hash-ref guards 'satisfied)
          (set!
           reasons

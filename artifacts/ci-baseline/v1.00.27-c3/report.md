@@ -89,9 +89,9 @@ Final-claim verdict over every roadmap §8 row against the FIXED thresholds (fas
 | Row | Measure | Target | Observed | Samples | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | fast-p50 | fast execution p50 on the required fast lane | <= 115.0 | 267.5 | 20 of 20 | provided | **target not achieved** |
-| fast-p95 | fast execution p95 on the required fast lane | <= 135.0 | 267.5 | 20 of 20 | provided | **target not achieved** |
+| fast-p95 | fast execution p95 on the required fast lane | <= 135.0 | 285.95 | 20 of 20 | provided | **target not achieved** |
 | pr-ci-p50 | end-to-end PR CI p50 (first required-check start to last required-check end) | <= 588.0 | 1043.5 | 20 of 20 | provided | **target not achieved** |
-| pr-ci-p95 | end-to-end PR CI p95 (first required-check start to last required-check end) | <= 735.0 | 1043.5 | 20 of 20 | provided | **target not achieved** |
+| pr-ci-p95 | end-to-end PR CI p95 (first required-check start to last required-check end) | <= 735.0 | 1175.65 | 20 of 20 | provided | **target not achieved** |
 | security-runner-p50 | security suite runner p50 | <= 240.0 | 685.5 | 20 of 20 | provided | **target not achieved** |
 | workflows-runner-p50 | workflows suite runner p50 | <= 220.0 | 695.5 | 20 of 20 | provided | **target not achieved** |
 | prepared-env-verified-restores | prepared-environment verified-restore rate (percent) | >= 95.0 | 100.0 | 24 of 20 | provided | **pass** |

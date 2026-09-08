@@ -1501,6 +1501,43 @@
       (check-equal? (hash-ref (final-claim-gate (make-fc-manifest)) 'overall-verdict)
                     "target not achieved")) ; empty cohort cannot pass
 
+    (test-case "p95 rows evaluate the 95th percentile, not the median"
+      ;; Regression guard (W5 independent verification finding): the
+      ;; timing-row evaluator must honor each row's quantile.  With spread
+      ;; fast samples the p50 and p95 rows must observe different quantiles
+      ;; of the same sample set.
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:fast (+ 100.0 i)))))
+      (define gate (final-claim-gate m))
+      (define p50-obs (hash-ref (fc-row gate "fast-p50") 'observed))
+      (define p95-obs (hash-ref (fc-row gate "fast-p95") 'observed))
+      (check-equal? p50-obs 109.5) ; k = 0.50*19 = 9.5 -> (109.0+110.0)/2
+      (check-equal? p95-obs 118.05) ; k = 0.95*19 = 18.05 -> 118.0 + 0.05*(119.0-118.0)
+      (check-not-equal? p50-obs p95-obs))
+
+    (test-case "cohort-quantile-exact interpolates exactly at integer and edge ranks"
+      ;; frac = 0 (integer rank) returns the sample verbatim; the max rank
+      ;; never indexes past the sorted list; a single sample is returned as-is.
+      ;; Millisecond rounding keeps interpolated results noise-free and
+      ;; byte-stable for checksummed artifact regeneration.
+      (check-equal? (cohort-quantile-exact '(5.0) 0.95) 5.0)
+      (check-equal? (cohort-quantile-exact (for/list ([i (in-range 21)])
+                                             (* 1.0 i))
+                                           1.0)
+                    20.0)
+      (check-equal? (cohort-quantile-exact (for/list ([i (in-range 21)])
+                                             (* 1.0 i))
+                                           0.50)
+                    10.0)
+      (check-equal? (cohort-quantile-exact (list 3.0 1.0 2.0) 0.95) ; k=1.9 -> 2.0+0.9*1.0
+                    2.9)
+      (check-equal? ; k=5.7 -> 0.3*5.0+0.7*6.0; raw FP sum is 5.7000000000000002
+       (cohort-quantile-exact (for/list ([i (in-range 7)])
+                                (* 1.0 i))
+                              0.95)
+       5.7))
+
     (test-case "JSON round-trip manifests validate (guard ids + JSON null prepared-env)"
       ;; Live C3 cohort.json arrives via read-json (string-keyed hashes,
       ;; JSON null for absent prepared-env evidence) and is canonicalized
