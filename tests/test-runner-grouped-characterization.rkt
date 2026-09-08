@@ -87,7 +87,7 @@
 ;; ── 2. Parity characterization: eligible fixtures, both modes ──────────
 ;; Asserts equal path, exit code, verdict class, and parsed counts between
 ;; subprocess and grouped execution; grouped result must additionally show
-;; requested=grouped, no fallback reason, and effective mode
+;; requested=grouped-in-process, no fallback reason, and effective mode
 ;; grouped-in-process.
 (define (assert-parity sub grp what)
   (check-equal? (test-file-result-path grp)
@@ -109,7 +109,7 @@
                 (test-file-result-failed sub)
                 (format "~a: same parsed failed" what))
   (check-equal? (test-file-result-requested-execution-mode grp)
-                "grouped"
+                "grouped-in-process"
                 (format "~a: grouped result stamps requested mode" what))
   (check-equal? (test-file-result-requested-execution-mode sub)
                 "subprocess"
@@ -133,7 +133,7 @@
 ;; eligible-a: two passing run-tests checks — repeat 3x for stability.
 (for ([i (in-range 3)])
   (define sub (run-one (fx "eligible-a.rkt") "subprocess"))
-  (define grp (run-one (fx "eligible-a.rkt") "grouped"))
+  (define grp (run-one (fx "eligible-a.rkt") "grouped-in-process"))
   (assert-parity sub grp (format "eligible-a repetition ~a" (+ i 1)))
   (assert-grouped-in-process grp (format "eligible-a repetition ~a" (+ i 1)))
   (check-equal? (test-file-result-total grp) 2 "eligible-a parses 2 tests")
@@ -141,13 +141,13 @@
 
 ;; eligible-b: single passing check, cwd-invocation context check.
 (define sub-b (run-one (fx "eligible-b.rkt") "subprocess"))
-(define grp-b (run-one (fx "eligible-b.rkt") "grouped"))
+(define grp-b (run-one (fx "eligible-b.rkt") "grouped-in-process"))
 (assert-parity sub-b grp-b "eligible-b")
 (assert-grouped-in-process grp-b "eligible-b")
 
 ;; stdout/stderr capture parity: markers must appear in both modes.
 (define sub-o (run-one (fx "stdout-stderr.rkt") "subprocess"))
-(define grp-o (run-one (fx "stdout-stderr.rkt") "grouped"))
+(define grp-o (run-one (fx "stdout-stderr.rkt") "grouped-in-process"))
 (assert-parity sub-o grp-o "stdout-stderr")
 (assert-grouped-in-process grp-o "stdout-stderr")
 (check-true (string-contains? (out-of sub-o) "GMD-W7-STDOUT-MARKER")
@@ -169,11 +169,11 @@
                 (classify-test-result sub)
                 (format "~a: same verdict class" what))
   (check-equal? (test-file-result-requested-execution-mode grp)
-                "grouped"
+                "grouped-in-process"
                 (format "~a: grouped result stamps requested mode" what)))
 
 (define sub-e (run-one (fx "exception.rkt") "subprocess"))
-(define grp-e (run-one (fx "exception.rkt") "grouped"))
+(define grp-e (run-one (fx "exception.rkt") "grouped-in-process"))
 (assert-failure-parity sub-e grp-e "exception")
 (assert-grouped-in-process grp-e "exception")
 (check-equal? (test-file-result-exit-code grp-e) 1 "exception exits 1")
@@ -184,14 +184,14 @@
 ;; prove the checks ran — zero-parse strictness sends it back to subprocess
 ;; under the stable zero-parsed-output reason, preserving exit 0 parity.
 (define sub-x (run-one (fx "explicit-exit.rkt") "subprocess"))
-(define grp-x (run-one (fx "explicit-exit.rkt") "grouped"))
+(define grp-x (run-one (fx "explicit-exit.rkt") "grouped-in-process"))
 (assert-parity sub-x grp-x "explicit-exit")
 (assert-subprocess-fallback grp-x 'zero-parsed-output "explicit-exit")
 (check-equal? (test-file-result-exit-code grp-x) 0 "explicit (exit 0) records 0")
 
 ;; timeout: short runner timeout yields exit 2 / TIMEOUT verdict in both.
 (define sub-t (run-one (fx "timeout.rkt") "subprocess" #:timeout 600))
-(define grp-t (run-one (fx "timeout.rkt") "grouped" #:timeout 600))
+(define grp-t (run-one (fx "timeout.rkt") "grouped-in-process" #:timeout 600))
 (assert-parity sub-t grp-t "timeout")
 (assert-grouped-in-process grp-t "timeout")
 (check-equal? (test-file-result-exit-code grp-t) 2 "grouped timeout records exit 2")
@@ -203,30 +203,30 @@
 ;; back and re-runs in subprocess. The final result must name the reason
 ;; and match a direct subprocess run.
 (define sub-s (run-one (fx "silent-checks.rkt") "subprocess"))
-(define grp-s (run-one (fx "silent-checks.rkt") "grouped"))
+(define grp-s (run-one (fx "silent-checks.rkt") "grouped-in-process"))
 (assert-parity sub-s grp-s "silent-checks")
 (assert-subprocess-fallback grp-s 'zero-parsed-output "silent-checks")
 
 ;; missing module+ test (two shapes) → stable named fallback.
 (define sub-n (run-one (fx "no-submodule.rkt") "subprocess"))
-(define grp-n (run-one (fx "no-submodule.rkt") "grouped"))
+(define grp-n (run-one (fx "no-submodule.rkt") "grouped-in-process"))
 (assert-parity sub-n grp-n "no-submodule")
 (assert-subprocess-fallback grp-n 'missing-module-plus-test-form "no-submodule")
 
 (define sub-l (run-one (fx "top-level-only.rkt") "subprocess"))
-(define grp-l (run-one (fx "top-level-only.rkt") "grouped"))
+(define grp-l (run-one (fx "top-level-only.rkt") "grouped-in-process"))
 (assert-parity sub-l grp-l "top-level-only")
 (assert-subprocess-fallback grp-l 'missing-module-plus-test-form "top-level-only")
 
 ;; declared mutation → named fallback (never executed grouped).
 (define sub-m (run-one (fx "declared-mutation.rkt") "subprocess"))
-(define grp-m (run-one (fx "declared-mutation.rkt") "grouped"))
+(define grp-m (run-one (fx "declared-mutation.rkt") "grouped-in-process"))
 (assert-parity sub-m grp-m "declared-mutation")
 (assert-subprocess-fallback grp-m 'declared-mutation "declared-mutation")
 
 ;; declared process isolation → named fallback (never executed grouped).
 (define sub-p (run-one (fx "process-isolation.rkt") "subprocess"))
-(define grp-p (run-one (fx "process-isolation.rkt") "grouped"))
+(define grp-p (run-one (fx "process-isolation.rkt") "grouped-in-process"))
 (assert-parity sub-p grp-p "process-isolation")
 (assert-subprocess-fallback grp-p 'declared-process-isolation "process-isolation")
 
@@ -234,8 +234,8 @@
 ;; Deterministic order (a then b), both grouped-in-process, host current
 ;; directory restored between files by the runner's parameterization.
 (define host-cwd-before (current-directory))
-(define seq-a (run-one (fx "eligible-a.rkt") "grouped"))
-(define seq-b (run-one (fx "eligible-b.rkt") "grouped"))
+(define seq-a (run-one (fx "eligible-a.rkt") "grouped-in-process"))
+(define seq-b (run-one (fx "eligible-b.rkt") "grouped-in-process"))
 (assert-grouped-in-process seq-a "sequential-a")
 (assert-grouped-in-process seq-b "sequential-b")
 (check-equal? (test-file-result-exit-code seq-a) 0 "sequential-a exits 0")
@@ -247,9 +247,9 @@
 ;; ── 5. Documented boundary: undeclared env mutation leaks grouped ──────
 ;; Characterization truth, not endorsement: an undeclared putenv in an
 ;; eligible grouped file leaks into the worker process (subprocess mode
-;; cannot leak). The @mutates declaration contract is the v1.00.27
+;; cannot leak). The @mutates declaration contract is this series'
 ;; migration boundary; this is why declared mutators fall back.
-(define grp-u (run-one (fx "mutates-env-undeclared.rkt") "grouped"))
+(define grp-u (run-one (fx "mutates-env-undeclared.rkt") "grouped-in-process"))
 (assert-grouped-in-process grp-u "mutates-env-undeclared")
 (check-equal? (test-file-result-exit-code grp-u) 0 "mutates-env-undeclared exits 0")
 (check-equal? (getenv "GMD_W7_PROBE")

@@ -10,12 +10,39 @@ that implement it.
 | Suite | Speed | Purpose | Command |
 |---|---|---|---|
 | smoke | ~40s | Quick sanity | `--suite smoke` |
-| fast | ~1m | Full minus slow | `--suite fast` |
+| unit-fast | ~30s | Developer iteration tier (see [Tier semantics](#tier-semantics)) | `--suite unit-fast` |
+| fast | ~1m | Broad PR regression (CI per PR); full minus slow | `--suite fast` |
+| broad | ~5m | Alias for all discoverable tests | `--suite broad` |
 | runtime | ~2m | Runtime/provider/tool | `--suite runtime` |
 | tui | ~2m | TUI rendering/state | `--suite tui` |
 | workflows | ~3m | Integration workflows | `--suite workflows` |
 | slow | ~5m | Long-running | `--suite slow` |
 | all | ~5m | Everything | `--suite all` |
+
+## Tier semantics
+
+Two named tiers govern test selection across CI and local iteration. The
+names below are the vocabulary of record (v1.00.27 W1) and match the runner
+CLI exactly:
+
+| Tier | Command | Scope | Role |
+|---|---|---|---|
+| `fast` | `--suite fast` | All tests except slow patterns (per-file spawn) | **Broad PR regression tier** — the suite CI runs per PR (`.github/workflows/ci.yml`), and the declared broad fallback that escalated local impact runs widen to |
+| `unit-fast` | `--suite unit-fast` | Fast unit tests eligible for in-process/grouped execution | **Developer iteration tier** — the tier you run inside the red-green-refactor loop |
+
+`unit-fast` local SLO: **p90 ≤ 90 s of wall clock (declared target;
+measured in W4).** W4 owns the baseline measurement that finalizes this
+number; until then it is a declared target, not a measured budget.
+
+The **L0/L1/L2 levels of the local feedback loop** (below) are not tiers —
+they are recommended feedback ladders built on the tier commands. They are
+never gates.
+
+**The local impact selector is recommended and fail-open.** It reorders and
+preselects a local run for developer convenience only. It must
+never gate or filter required CI, and whenever it is uncertain it escalates by widening to
+the declared broad fallback (`fast` plus the area suites of the changed
+files) — an escalated run is a broad run by design, never a smaller one.
 
 ## Local feedback loop
 

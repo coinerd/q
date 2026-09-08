@@ -1,3 +1,57 @@
+## v1.00.27 — 2026-09-08
+
+Released 2026-09-08.
+
+> v1.00.27: gate ownership and the honest final measurement — the series' last milestone.
+The gate-ownership matrix was extended and audited: every test family carries the
+eight-column ownership row with drift enforcement, and the W2 overlap review
+classified all 80 `platform/fast` and `security/fast` intersect rows as
+intentional overlap (kept with an explicit rationale; zero exact duplicates
+found, zero rows removed), with the review artifact checksummed and pinned by
+governance tests. The final-claim cohort then measured the series' speed levers
+on 20 new SHAs and returned an honest per-row verdict: **target not achieved** —
+six of the seven fixed §8 rows miss; the prepared-environment row passes. Fast
+lane p50 267.5 s / p95 285.95 s against ≤ 115 s / ≤ 135 s; PR end-to-end
+p50 1043.5 s / p95 1175.65 s against ≤ 588 s / ≤ 735 s; security-runner
+p50 685.5 s against ≤ 240 s; workflows-runner p50 695.5 s against ≤ 220 s;
+prepared-environment verified restores 24/24 (100.0 %) against ≥ 95 %. The 2×
+claim is therefore **not published**; no target
+was revised, no lever was activated (batch remains the default scheduler, and
+main already is the rollback state), and the evidence is preserved and
+checksummed. The full series record — all five milestone releases with their
+tags and merge SHAs, lane states with rollback commands, re-tiering and
+overlap-review evidence — lives in
+`docs/reports/SERIES-COMPLETION-v1.00.23-v1.00.27.md`, bound to
+`artifacts/ci-baseline/v1.00.27-c3/SHA256SUMS`. Milestone #892.
+
+### Features
+
+- Gate-ownership matrix extension (W0/W1): the generated ownership matrix now covers the full tier semantics with a naming-of-record section in `docs/TDD-TEST-STRATEGY-PLAN.md`; regeneration checks exit 0 with zero orphan behavior IDs, zero duplicates, and zero missing destinations.
+- Overlap review with checksummed classification (W2): every `platform/fast` and `security/fast` intersect test (80 rows) was classified by module path, metadata contract, and execution context; verdict **80 kept / 0 removed** — no test is byte-identical across tiers (fast runs the prepared shard, platform and security run cold full-install contexts, security under `STRICT_TEST_RUNNER` with the required blocking gate). Bound by `artifacts/tier-ownership/v1.00.27-w2/overlap-review.json` + `SHA256SUMS` and pinned by the W2 governance suites (`tests/test-run-tests-profiles.rkt`, `tests/test-worker-security.rkt`).
+- Final-claim cohort verdict (W5): `target not achieved` on six of seven fixed §8 rows measured on 20 new SHAs — fast p50 267.5 s / p95 285.95 s, PR end-to-end p50 1043.5 s / p95 1175.65 s, security-runner p50 685.5 s, workflows-runner p50 695.5 s, each above its fixed target — while prepared-env verified restores pass at 24/24 (100.0 %) — recorded in the W5 evidence record and bound to the C3 artifacts; queue, LPT, security-queue, and four-workers remain unactivated with the one-command per-lever rollback retained from the v1.00.23 foundation (`gh api -X DELETE repos/coinerd/q/actions/variables/TEST_RUNNER_SCHEDULER` pattern).
+- Grouped-in-process explicit escalation (W5): characterization arms can run grouped in-process via the documented explicit escalation, deliberately bypassing per-area policy and pinned by the grouped-characterization suite.
+- Series-completion record (W6): `docs/reports/SERIES-COMPLETION-v1.00.23-v1.00.27.md` — the roadmap §11 ledger binding all five milestones, lane states with rollback commands, re-tiered-destination and removed-overlap evidence, and the final not-achieved verdict.
+
+### Breaking / Behavior Changes
+
+- None for the product. No scheduling lever was activated anywhere in the series (batch stays the default), the required-check set is unchanged, and grouped mode remains opt-in characterization-only.
+
+### Migration Notes
+
+- No migration required. Operators auditing the series should consult the series-completion record for the per-lever rollback commands and the per-row miss numbers; CI consumers are unaffected.
+
+### Operational / Release
+
+- All series scheduling levers remain **not activated** on main: queue, within-shard LPT, security-queue, and four-workers were gated on the final-claim cohort and stay disabled; batch remains the default scheduler, so main already is the rollback state.
+- The one-command per-lever rollback is retained unchanged from the v1.00.23 foundation (for example `gh api -X DELETE repos/coinerd/q/actions/variables/TEST_RUNNER_SCHEDULER`); the v1.00.26 CI-topology rollback rehearsal remains documented and checksummed in `docs/reports/CI-TOPOLOGY-v1.00.26.md`.
+- The tag `v1.00.27` is placed at the exact squash-merge SHA of the delivery PR, the release ships from the tag-publish environment with the tarball SHA-256 manifest verified, and all cohort/guard evidence is bound by `artifacts/ci-baseline/v1.00.27-c3/SHA256SUMS` (`sha256sum -c` = 5/5 OK).
+- The series record `docs/reports/SERIES-COMPLETION-v1.00.23-v1.00.27.md` binds all five milestones with their tags and merge SHAs.
+
+### Testing
+
+- Ownership and overlap: gate-ownership-map regeneration checks green across the series; the W2 overlap-review governance suites are green and the w2 artifact checksum verifies (`sha256sum -c artifacts/tier-ownership/v1.00.27-w2/SHA256SUMS` → OK); the C3 manifest verifies 5/5 at this bake.
+- Final-claim honesty: the cohort verdict regenerates byte-for-byte from the C3 artifacts; per-wave evidence trios (`docs/reports/gsd-wave-{evidence,reviews,validation}/v1.00.27-w*.rktd`) bind every wave to its implementation SHA; the release-entry contract test (`tests/test-release-entry-current.rkt`) binds CHANGELOG, `util/version.rkt`, `info.rkt`, and the README badge to the canonical version.
+
 ## v1.00.26 — 2026-09-07
 
 Released 2026-09-07.

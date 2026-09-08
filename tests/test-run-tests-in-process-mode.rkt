@@ -5,13 +5,19 @@
 ;; @isolation process
 ;; @boundary integration  ;; @mutates fs
 
-(require rackunit
-         rackunit/text-ui
+(require json
          racket/file
+         racket/list
          racket/path
          racket/runtime-path
          racket/system
-         "../scripts/run-tests.rkt")
+         rackunit
+         rackunit/text-ui
+         "../scripts/run-tests.rkt"
+         (only-in "../scripts/run-tests/profiles.rkt"
+                  grouped-area-config
+                  grouped-config-violation
+                  area-grouped-decision))
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))
@@ -25,6 +31,15 @@
 (define (delete-dir/safe dir)
   (with-handlers ([exn:fail? (lambda (_) (void))])
     (delete-directory/files dir)))
+
+(define (write-temp-test-in-area area content)
+  ;; W3: create a temporary test file inside the repo's
+  ;; tests/<area>/ directory so test-file-area maps it to that area; the
+  ;; caller removes the directory via delete-dir/safe.
+  (define dir (make-temporary-file "q-w3-tmp-~a" 'directory (build-path project-root "tests" area)))
+  (define file (build-path dir "test-w3-area.rkt"))
+  (call-with-output-file file #:exists 'replace (lambda (out) (display content out)))
+  (values file dir))
 
 (define (run/capture cmd)
   (parameterize ([current-directory project-root])

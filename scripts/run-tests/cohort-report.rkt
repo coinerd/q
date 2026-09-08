@@ -42,6 +42,7 @@
          cohort-timing-samples
          cohort-attempts-summary
          cohort-quantile
+         cohort-quantile-exact
          ;; report generation
          cohort-report-jsexpr
          cohort-report-json-string
@@ -80,7 +81,23 @@
          pr-elapsed-p95-max-seconds
          pr-elapsed-required-fields
          pr-elapsed-decision-md-string
-         pr-elapsed-seconds-from-window)
+         pr-elapsed-seconds-from-window
+         ;; final-claim verdict mode (v1.00.27 W5: C3)
+         final-claim-gate
+         final-claim-gate-text
+         final-claim-row-ids
+         final-claim-guard-ids
+         final-claim-thresholds
+         final-claim-decision-md-string
+         final-claim-required-fields
+         final-claim-fast-samples
+         final-claim-security-samples
+         final-claim-workflows-samples
+         final-claim-prepared-env-stats
+         final-claim-reliability-ok?
+         final-claim-guard-provided?
+         normalize-manifest
+         manifest-has-key?)
 
 ;; ============================================================
 ;; Constants
@@ -133,12 +150,28 @@
 ;;               queue-wait-seconds, queue-depth, runner-minutes} ... ],
 ;;    "exclusions": [ {sha, reason, detail} ... ] }
 
+(define (manifest-has-key? v k)
+  ;; Tolerant key check: manifest hashes arrive symbol-keyed (in-process
+  ;; fixtures, normalize-manifest output) or string-keyed (read-json).
+  (and (hash? v) (or (hash-has-key? v k) (hash-has-key? v (symbol->string k)))))
+
+(define (hash-ref-tolerant h key [default #f])
+  ;; Content-based lookup across the symbol/string key duality: the load
+  ;; path (normalize-manifest) yields symbol keys while in-process fixtures
+  ;; may carry string keys — and ids like guard ids and row ids are strings.
+  (cond
+    [(not (hash? h)) default]
+    [(hash-has-key? h key) (hash-ref h key)]
+    [(and (string? key) (hash-has-key? h (string->symbol key))) (hash-ref h (string->symbol key))]
+    [(and (symbol? key) (hash-has-key? h (symbol->string key))) (hash-ref h (symbol->string key))]
+    [else default]))
+
 (define (cohort-manifest? v)
   (and (hash? v)
-       (hash-has-key? v 'cohort-id)
-       (hash-has-key? v 'milestone)
-       (hash-has-key? v 'schema-version)
-       (hash-has-key? v 'shas)))
+       (manifest-has-key? v 'cohort-id)
+       (manifest-has-key? v 'milestone)
+       (manifest-has-key? v 'schema-version)
+       (manifest-has-key? v 'shas)))
 
 (define (load-cohort-manifest path)
   (cond
@@ -149,9 +182,15 @@
          (call-with-input-file path read-json)))
      (cond
        [(not v) (error 'load-cohort-manifest "manifest is not valid JSON: ~a" path)]
-       [(not (cohort-manifest? v))
+       [(not (hash? v))
         (error 'load-cohort-manifest "manifest does not match cohort schema: ~a" path)]
-       [else v])]))
+       [else
+        ;; Normalize string keys to symbols BEFORE schema validation so the
+        ;; canonical symbol-keyed form is the only form past the loader.
+        (define m (normalize-manifest v))
+        (unless (cohort-manifest? m)
+          (error 'load-cohort-manifest "manifest does not match cohort schema: ~a" path))
+        m])]))
 
 ;; ============================================================
 ;; SHA-level helpers
@@ -393,7 +432,11 @@
   ;; the gate is then simply not evaluable ("evidence pending"), never a
   ;; silent miss.
   (define mode (cohort-mode manifest))
-  (define pr-elapsed? (equal? mode "pr-elapsed"))
+  ;; final-claim (v1.00.27 W5: C3) reuses the pr-elapsed per-SHA schema
+  ;; (end-to-end PR observations with attempts and inventory bindings) and
+  ;; adds the guard-evidence contract validated below.
+  (define pr-elapsed? (member mode (list "pr-elapsed" "final-claim")))
+  (define final-claim? (equal? mode "final-claim"))
   (define cohort-open? (member (hash-ref manifest 'cohort-status #f) open-cohort-statuses))
 
   ;; 1. Exactly 20 SHAs (or expected-count) — reject silently truncated cohorts.
@@ -584,6 +627,36 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
   ;; equality, and lifecycle rules.
   (validate-configurations manifest err!)
 
+  ;; 12. final-claim guard evidence: every guard-evidence entry must name a
+  ;;     known guard id, carry a boolean `provided` flag, and — when the
+  ;;     guard is claimed as provided — carry a non-empty named reference
+  ;;     (artifact or evidence pointer).  Unknown guard ids are rejected so
+  ;;     guard names cannot drift between roadmap and manifest.
+  (when final-claim?
+    (define guard-ev (hash-ref manifest 'guard-evidence #f))
+    (unless (hash? guard-ev)
+      (err! "final-claim cohort requires a guard-evidence object"))
+    (when (hash? guard-ev)
+      (for ([(gid ev) (in-hash guard-ev)])
+        ;; normalize-manifest canonicalizes hash keys to symbols, so guard
+        ;; ids arrive as symbols here while final-claim-guard-ids holds
+        ;; strings; compare by content, never by eq?.
+        (define gid-name
+          (if (symbol? gid)
+              (symbol->string gid)
+              gid))
+        (unless (member gid-name final-claim-guard-ids)
+          (err! (format "final-claim guard-evidence has unknown guard id: ~a (must be one of ~a)"
+                        gid-name
+                        final-claim-guard-ids)))
+        (unless (and (hash? ev) (boolean? (hash-ref ev 'provided)))
+          (err! (format "final-claim guard-evidence ~a must be an object with a boolean provided flag"
+                        gid)))
+        (when (and (hash? ev) (hash-ref ev 'provided #f))
+          (unless (non-empty-string? (hash-ref ev 'reference ""))
+            (err! (format "final-claim guard-evidence ~a claims provided but names no reference"
+                          gid)))))))
+
   (validation-result (null? errors) errors warnings))
 
 ;; ============================================================
@@ -603,6 +676,24 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
      (if (= lo hi)
          (list-ref s lo)
          (/ (+ (list-ref s lo) (list-ref s hi)) 2.0))]))
+
+;; Exact linear interpolation at rank k = q*(n-1): s[lo] + (k-lo)*(s[hi]-s[lo]).
+;; The final-claim §8 rows report p95 verbatim, so they must not inherit the
+;; midpoint-only smoothing of cohort-quantile (which existing callers rely on).
+(define (cohort-quantile-exact xs q)
+  (cond
+    [(null? xs) #f]
+    [else
+     (define s (sort (map (lambda (x) (exact->inexact x)) xs) <))
+     (define n (length s))
+     (define k (* q (sub1 n)))
+     (define lo (inexact->exact (floor k)))
+     (define hi (min (add1 lo) (sub1 n)))
+     (define frac (- k lo))
+     ;; Round to millisecond precision so interpolated p95s neither carry
+     ;; floating-point noise (e.g. 1175.6500000000005) nor vary across
+     ;; regeneration runs — the checksummed artifacts must be byte-stable.
+     (/ (round (* 1000.0 (+ (* (- 1.0 frac) (list-ref s lo)) (* frac (list-ref s hi))))) 1000.0)]))
 
 ;; ============================================================
 ;; Cohort analysis
@@ -651,10 +742,26 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
   (define sum (for/sum ([b (in-bytes bytes)]) b))
   (format "check:~x:~a" sum (bytes-length bytes)))
 
-(define (normalize-manifest manifest)
-  ;; Produce a canonical jsexpr with sorted keys (hasheq already sorts in
-  ;; jsexpr->string, but we also normalize the structure).
-  manifest)
+(define (normalize-manifest v)
+  ;; Canonicalize a manifest jsexpr: every hash key becomes a symbol and
+  ;; contents are normalized recursively.  read-json yields string-keyed
+  ;; hashes, but all accessors here use symbol keys and jsexpr->string only
+  ;; accepts symbol keys — so the canonical form is the symbol-keyed form.
+  (cond
+    [(hash? v)
+     (for/hash ([(k val) (in-hash v)])
+       (values (string->symbol (if (symbol? k)
+                                   (symbol->string k)
+                                   (format "~a" k)))
+               (normalize-manifest val)))]
+    [(list? v) (map normalize-manifest v)]
+    [(vector? v) (list->vector (map normalize-manifest (vector->list v)))]
+    ;; JSON null means "absent evidence" in this schema (e.g. a SHA entry
+    ;; without an observed prepared-env outcome); read-json yields the
+    ;; 'null symbol, which nothing downstream accepts — canonicalize to #f
+    ;; so the validator and reporters see exactly one representation.
+    [(eq? v 'null) #f]
+    [else v]))
 
 ;; ============================================================
 ;; Report generation
@@ -1225,6 +1332,528 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
   (out "")
   (string-join lines "\n"))
 
+;; ============================================================
+;; Final-claim verdict mode (v1.00.27 W5: C3)
+;;
+;; C3 closes the final claim: every roadmap §8 row is evaluated against its
+;; FIXED threshold with its coupled guard evidence, by the tooling alone —
+;; the verdict is "pass", "target not achieved", or "unverified", and the
+;; targets are never revised inside this wave or milestone.  A row without
+;; its guard evidence is "unverified", never "pass".  The overall verdict is
+;; "verified" only when every row passes with its guards; otherwise the
+;; decision records "target not achieved" per missed row with the observed
+;; numbers and the named next lever (a separate reviewed decision; a timing
+;; miss alone implies no queue rollback).
+;; ============================================================
+
+(define final-claim-guard-ids
+  '("inventory-accounted" "reliability-non-regression"
+                          "semantic-gate-equivalence"
+                          "failure-truth"
+                          "shared-state-permission-isolation"
+                          "four-worker-isolation-proof"
+                          "prepared-env-no-bypass"))
+
+;; The seven roadmap §8 rows with their FIXED thresholds.  These constants
+;; are the final-claim contract: neither the gate nor a manifest may revise
+;; them.
+;; equal?-based hash: ids are strings and must match by content, not by
+;; identity (hasheq with string keys silently misses fresh string objects).
+(define final-claim-thresholds
+  (hash "fast-p50"
+        115.0
+        "fast-p95"
+        135.0
+        "pr-ci-p50"
+        588.0
+        "pr-ci-p95"
+        735.0
+        "security-runner-p50"
+        240.0
+        "workflows-runner-p50"
+        220.0
+        "prepared-env-verified-restores"
+        95.0))
+
+(define final-claim-rows
+  (list
+   (hasheq 'id
+           "fast-p50"
+           'measure
+           "fast execution p50 on the required fast lane"
+           'comparison
+           "<="
+           'sample-key
+           'fast-execution-seconds
+           'quantile
+           0.50
+           'guards
+           '("inventory-accounted" "reliability-non-regression"
+                                   "semantic-gate-equivalence"
+                                   "four-worker-isolation-proof")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): shrink the fast-lane critical path (shard fan-out and"
+                          " prepared-env cache reuse); re-run the final cohort on 20 new PR head"
+                          " SHAs."))
+   (hasheq 'id
+           "fast-p95"
+           'measure
+           "fast execution p95 on the required fast lane"
+           'comparison
+           "<="
+           'sample-key
+           'fast-execution-seconds
+           'quantile
+           0.95
+           'guards
+           '("inventory-accounted" "reliability-non-regression"
+                                   "semantic-gate-equivalence"
+                                   "four-worker-isolation-proof")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): tail-shard rebalancing and cache reuse on the slowest"
+                          " fast shards; re-run the final cohort on 20 new PR head SHAs."))
+   (hasheq 'id
+           "pr-ci-p50"
+           'measure
+           "end-to-end PR CI p50 (first required-check start to last required-check end)"
+           'comparison
+           "<="
+           'sample-key
+           'pr-elapsed-seconds
+           'quantile
+           0.50
+           'guards
+           '("inventory-accounted" "reliability-non-regression" "failure-truth")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): move slow required gates off the mergeable critical"
+                          " path per the v1.00.26 topology analysis; re-run the final cohort."))
+   (hasheq 'id
+           "pr-ci-p95"
+           'measure
+           "end-to-end PR CI p95 (first required-check start to last required-check end)"
+           'comparison
+           "<="
+           'sample-key
+           'pr-elapsed-seconds
+           'quantile
+           0.95
+           'guards
+           '("inventory-accounted" "reliability-non-regression" "failure-truth")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): tail latency of the slowest required gates; re-run the"
+                          " final cohort."))
+   (hasheq 'id
+           "security-runner-p50"
+           'measure
+           "security suite runner p50"
+           'comparison
+           "<="
+           'sample-key
+           'security-runner-seconds
+           'quantile
+           0.50
+           'guards
+           '("inventory-accounted" "reliability-non-regression" "shared-state-permission-isolation")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): shard the security suite and reuse the prepared"
+                          " environment; re-run the final cohort."))
+   (hasheq 'id
+           "workflows-runner-p50"
+           'measure
+           "workflows suite runner p50"
+           'comparison
+           "<="
+           'sample-key
+           'workflows-runner-seconds
+           'quantile
+           0.50
+           'guards
+           '("inventory-accounted" "reliability-non-regression" "four-worker-isolation-proof")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): shard-count rebalancing of the workflows suite;"
+                          " re-run the final cohort."))
+   (hasheq 'id
+           "prepared-env-verified-restores"
+           'measure
+           "prepared-environment verified-restore rate (percent)"
+           'comparison
+           ">="
+           'sample-key
+           'prepared-env
+           'guards
+           '("prepared-env-no-bypass" "reliability-non-regression")
+           'next-lever
+           (string-append "Next lever (separate reviewed decision; a timing miss alone implies no"
+                          " queue rollback): wire restore-step verification emission into the"
+                          " prepared-env report and re-observe on a new cohort window."))))
+
+(define final-claim-row-ids (map (lambda (r) (hash-ref r 'id)) final-claim-rows))
+
+(define final-claim-required-fields pr-elapsed-required-fields)
+
+(define final-claim-gate-text
+  (string-append "Final-claim verdict over every roadmap §8 row against the FIXED thresholds"
+                 " (fast p50 ≤ 115 s / p95 ≤ 135 s; PR CI p50 ≤ 588 s / p95 ≤ 735 s;"
+                 " security runner p50 ≤ 240 s; workflows runner p50 ≤ 220 s; verified prepared-env"
+                 " restores ≥ 95%) with the coupled guards.  A row without its guard evidence is"
+                 " \"unverified\", never \"pass\"; targets are never revised inside this wave or"
+                 " milestone."))
+
+(define (final-claim-fast-samples manifest)
+  ;; One fast-execution sample per SHA whose final-success attempt carries
+  ;; a measured fast-execution-seconds datum.
+  (filter values
+          (map (lambda (s)
+                 (and (sha-eligible? s)
+                      (hash-ref (sha-final-success-attempt s) 'fast-execution-seconds #f)))
+               (hash-ref manifest 'shas '()))))
+
+(define (final-claim-security-samples manifest)
+  (filter values
+          (map (lambda (s)
+                 (and (sha-eligible? s)
+                      (hash-ref (sha-final-success-attempt s) 'security-runner-seconds #f)))
+               (hash-ref manifest 'shas '()))))
+
+(define (final-claim-workflows-samples manifest)
+  (filter values
+          (map (lambda (s)
+                 (and (sha-eligible? s)
+                      (hash-ref (sha-final-success-attempt s) 'workflows-runner-seconds #f)))
+               (hash-ref manifest 'shas '()))))
+
+(define (final-claim-prepared-env-stats manifest)
+  ;; Prepared-environment restore outcomes observed in the cohort window.
+  ;; The manifest carries the observed stats block (verified restores,
+  ;; total records, fallback records); the verified-restore rate is 0.0
+  ;; when no records were observed — never assumed.
+  (define stats (hash-ref manifest 'prepared-env-restore-stats #f))
+  (cond
+    [(hash? stats)
+     (define verified (hash-ref stats 'verified 0))
+     (define total (hash-ref stats 'total 0))
+     (hasheq 'verified
+             verified
+             'total
+             total
+             'fallback
+             (hash-ref stats 'fallback 0)
+             'rate
+             (if (zero? total)
+                 0.0
+                 (* 100.0 (/ verified total 1.0)))
+             'records-observed
+             (hash-ref stats 'records-observed 0)
+             'window
+             (hash-ref stats 'window ""))]
+    [else (hasheq 'verified 0 'total 0 'fallback 0 'rate 0.0 'records-observed 0 'window "")]))
+
+(define (final-claim-guard-provided? manifest guard-id)
+  (define ev (hash-ref-tolerant (hash-ref manifest 'guard-evidence (hasheq)) guard-id #f))
+  (and (hash? ev)
+       (hash-ref-tolerant ev 'provided #f)
+       (non-empty-string? (hash-ref-tolerant ev 'reference ""))))
+
+(define (final-claim-reliability-ok? manifest)
+  ;; Computed non-regression: failures+cancelled+reruns across all cohort
+  ;; attempts must not exceed the recorded baseline block.
+  (define baseline (hash-ref manifest 'reliability-baseline #f))
+  (and (hash? baseline)
+       (let ([summary (cohort-attempts-summary manifest)])
+         (<= (+ (hash-ref summary 'failures 0)
+                (hash-ref summary 'cancelled 0)
+                (hash-ref summary 'reruns 0))
+             (+ (hash-ref baseline 'failures 0)
+                (hash-ref baseline 'cancelled 0)
+                (hash-ref baseline 'reruns 0))))))
+
+(define (final-claim-gate manifest)
+  (define shas (hash-ref manifest 'shas '()))
+  (define expected (hash-ref manifest 'expected-count expected-cohort-size))
+  (define status (hash-ref manifest 'cohort-status "?"))
+  (define closed? (equal? status "closed"))
+  (define fast-samples (final-claim-fast-samples manifest))
+  (define pr-samples (pr-elapsed-timing-samples manifest))
+  (define sec-samples (final-claim-security-samples manifest))
+  (define wf-samples (final-claim-workflows-samples manifest))
+  (define pe-stats (final-claim-prepared-env-stats manifest))
+  (define reliability-ok? (final-claim-reliability-ok? manifest))
+
+  (define (samples-for key)
+    (cond
+      [(equal? key 'pr-elapsed-seconds) pr-samples]
+      [(equal? key 'fast-execution-seconds) fast-samples]
+      [(equal? key 'security-runner-seconds) sec-samples]
+      [(equal? key 'workflows-runner-seconds) wf-samples]
+      [else '()]))
+
+  (define (guards-for row)
+    (define guard-hashes
+      (for/list ([g (in-list (hash-ref row 'guards))])
+        (hasheq 'id
+                g
+                'provided
+                (final-claim-guard-provided? manifest g)
+                'reference
+                (hash-ref-tolerant
+                 (hash-ref-tolerant (hash-ref manifest 'guard-evidence (hasheq)) g (hasheq))
+                 'reference
+                 ""))))
+    (hasheq 'entries
+            guard-hashes
+            'satisfied
+            (andmap (lambda (e) (hash-ref e 'provided #f)) guard-hashes)
+            'reliability-satisfied
+            (if (member "reliability-non-regression" (hash-ref row 'guards)) reliability-ok? #t)))
+
+  (define (evaluate-row row)
+    (define key (hash-ref row 'sample-key))
+    (define threshold (hash-ref final-claim-thresholds (hash-ref row 'id)))
+    (define comparison (hash-ref row 'comparison))
+    (define guards (guards-for row))
+    (define reasons '())
+    (cond
+      [(equal? key 'prepared-env)
+       ;; Verified-restore rate row: no sample distribution — one observed
+       ;; rate against the ≥ 95% target.
+       (define rate (hash-ref pe-stats 'rate))
+       (define observed-total (hash-ref pe-stats 'records-observed))
+       (unless (hash-ref guards 'satisfied)
+         (set!
+          reasons
+          (cons
+           "guard evidence missing: prepared-env rows without their coupled guards are unverified, never pass"
+           reasons)))
+       (unless (hash-ref guards 'reliability-satisfied)
+         (set! reasons
+               (cons "reliability non-regression violated versus the recorded baseline" reasons)))
+       (when (zero? observed-total)
+         (set!
+          reasons
+          (cons
+           (format
+            "no prepared-env restore records observed in the cohort window (~a; last observed basis: verified ~a of ~a records, fallback ~a)"
+            (hash-ref pe-stats 'window)
+            (hash-ref pe-stats 'verified)
+            (hash-ref pe-stats 'total)
+            (hash-ref pe-stats 'fallback))
+           reasons)))
+       (when (and (positive? observed-total) (< rate threshold))
+         (set!
+          reasons
+          (cons
+           (format
+            "verified-restore rate ~a% is below the fixed ~a% target; the target is never revised"
+            rate
+            threshold)
+           reasons)))
+       (define verdict
+         (cond
+           [(or (not (hash-ref guards 'satisfied))
+                (not (hash-ref guards 'reliability-satisfied))
+                (and (zero? observed-total) (not closed?)))
+            "unverified"]
+           [(and (zero? observed-total) closed?) "target not achieved"]
+           [(equal? comparison ">=") (if (>= rate threshold) "pass" "target not achieved")]
+           [else (if (<= rate threshold) "pass" "target not achieved")]))
+       (hasheq 'id
+               (hash-ref row 'id)
+               'measure
+               (hash-ref row 'measure)
+               'threshold
+               (exact->inexact threshold)
+               'comparison
+               comparison
+               'observed
+               rate
+               'samples
+               observed-total
+               'expected
+               expected
+               'guards
+               guards
+               'verdict
+               verdict
+               'reasons
+               (reverse reasons)
+               'next-lever
+               (if (equal? verdict "pass")
+                   #f
+                   (hash-ref row 'next-lever)))]
+      [else
+       (define samples (samples-for key))
+       (define observed
+         (if (null? samples)
+             #f
+             (cohort-quantile-exact samples (hash-ref row 'quantile 0.50))))
+       (unless (hash-ref guards 'satisfied)
+         (set!
+          reasons
+          (cons "guard evidence missing: rows without their coupled guards are unverified, never pass"
+                reasons)))
+       (unless (hash-ref guards 'reliability-satisfied)
+         (set! reasons
+               (cons "reliability non-regression violated versus the recorded baseline" reasons)))
+       (when (null? samples)
+         (set! reasons (cons "no in-window samples captured for this measure" reasons)))
+       (when (and observed (> observed threshold))
+         (set!
+          reasons
+          (cons (format "observed ~a s exceeds the fixed ≤ ~a s target; the target is never revised"
+                        observed
+                        threshold)
+                reasons)))
+       (when (and observed (<= observed threshold) (< (length samples) expected))
+         (set!
+          reasons
+          (cons
+           (format
+            "observed sample set is incomplete (~a of ~a unique PR head SHAs); the row cannot pass on partial evidence"
+            (length samples)
+            expected)
+           reasons)))
+       (define verdict
+         (cond
+           [(or (not (hash-ref guards 'satisfied))
+                (not (hash-ref guards 'reliability-satisfied))
+                (null? samples))
+            "unverified"]
+           [(> observed threshold) "target not achieved"]
+           [(< (length samples) expected) "unverified"]
+           [else "pass"]))
+       (hasheq 'id
+               (hash-ref row 'id)
+               'measure
+               (hash-ref row 'measure)
+               'threshold
+               (exact->inexact threshold)
+               'comparison
+               comparison
+               'observed
+               observed
+               'samples
+               (length samples)
+               'expected
+               expected
+               'guards
+               guards
+               'verdict
+               verdict
+               'reasons
+               (reverse reasons)
+               'next-lever
+               (if (equal? verdict "pass")
+                   #f
+                   (hash-ref row 'next-lever)))]))
+
+  (define row-results (map evaluate-row final-claim-rows))
+  (define all-pass (andmap (lambda (r) (equal? (hash-ref r 'verdict) "pass")) row-results))
+  (hasheq 'mode
+          "final-claim"
+          'gate-text
+          final-claim-gate-text
+          'cohort-status
+          status
+          'unique-head-shas
+          (length shas)
+          'expected-count
+          expected
+          'rows
+          row-results
+          'reliability
+          (cohort-attempts-summary manifest)
+          'reliability-baseline
+          (hash-ref manifest 'reliability-baseline #f)
+          'reliability-non-regression
+          reliability-ok?
+          'prepared-env
+          pe-stats
+          'overall-verdict
+          (if all-pass "verified" "target not achieved")))
+
+;; C3 (final-claim) decision document: one explicit verdict per §8 row with
+;; the observed numbers, the guard evidence, and — for every non-passing
+;; row — the named next lever.  Targets are never revised.
+(define (final-claim-decision-md-string manifest)
+  (define gate (final-claim-gate manifest))
+  (define lines '())
+  (define (out . args)
+    (set! lines (append lines (list (apply format args)))))
+  (out "# C3 final-claim decision: ~a" (hash-ref manifest 'cohort-id "?"))
+  (out "")
+  (out "| Field | Value |")
+  (out "|---|---|")
+  (out "| Decision mode | final-claim (every roadmap §8 row, fixed thresholds, coupled guards) |")
+  (out "| Cohort status | ~a |" (hash-ref gate 'cohort-status))
+  (out "| Unique PR head SHAs | ~a of ~a |"
+       (hash-ref gate 'unique-head-shas)
+       (hash-ref gate 'expected-count))
+  (out "| Overall verdict | **~a** |" (hash-ref gate 'overall-verdict))
+  (out "")
+  (out "## Gate")
+  (out "")
+  (out "~a" (hash-ref gate 'gate-text))
+  (out "")
+  (out "## Per-row verdicts")
+  (out "")
+  (out "| Row | Measure | Target | Observed | Samples | Guards | Verdict |")
+  (out "|---|---|---|---|---|---|---|")
+  (for ([r (in-list (hash-ref gate 'rows))])
+    (define observed (hash-ref r 'observed))
+    (out "| ~a | ~a | ~a ~a | ~a | ~a of ~a | ~a | **~a** |"
+         (hash-ref r 'id)
+         (hash-ref r 'measure)
+         (hash-ref r 'comparison)
+         (hash-ref r 'threshold)
+         (if observed
+             (format "~a" observed)
+             "n/a")
+         (hash-ref r 'samples)
+         (hash-ref r 'expected)
+         (if (hash-ref (hash-ref r 'guards) 'satisfied) "provided" "MISSING")
+         (hash-ref r 'verdict)))
+  (out "")
+  (out "## Missed rows: observed numbers and named next levers")
+  (out "")
+  (define missed
+    (filter (lambda (r) (not (equal? (hash-ref r 'verdict) "pass"))) (hash-ref gate 'rows)))
+  (cond
+    [(null? missed) (out "(none — every row passed with its guards)")]
+    [else
+     (for ([r (in-list missed)])
+       (out "- **~a** — verdict ~a; observed ~a; reasons: ~a"
+            (hash-ref r 'id)
+            (hash-ref r 'verdict)
+            (or (hash-ref r 'observed #f) "n/a")
+            (string-join (hash-ref r 'reasons) "; "))
+       (when (hash-ref r 'next-lever #f)
+         (out "  - ~a" (hash-ref r 'next-lever))))])
+  (out "")
+  (define rel (hash-ref gate 'reliability))
+  (out (string-append
+        "Reliability closure: failed, cancelled, and rerun attempts are recorded and never"
+        " dropped — cohort totals: ~a attempts, ~a failures, ~a cancelled, ~a reruns; reliability"
+        " non-regression versus the recorded baseline: ~a.")
+       (hash-ref rel 'total-attempts)
+       (hash-ref rel 'failures)
+       (hash-ref rel 'cancelled)
+       (hash-ref rel 'reruns)
+       (if (hash-ref gate 'reliability-non-regression) "holds" "VIOLATED"))
+  (out "")
+  (out (string-append
+        "Targets are never revised inside this wave or this milestone.  The overall verdict is"
+        " \"verified\" only when every row passes with its coupled guard evidence."))
+  (out "")
+  (out "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION.")
+  (out "")
+  (string-join lines "\n"))
+
 (define (decision-report-jsexpr manifest)
   (define lane-verdicts
     (map (lambda (l) (decision-lane-verdict manifest (hash-ref l 'lane))) decision-lanes))
@@ -1295,6 +1924,7 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
 
 (define (cohort-decision-md-string manifest)
   (cond
+    [(equal? (cohort-mode manifest) "final-claim") (final-claim-decision-md-string manifest)]
     [(equal? (cohort-mode manifest) "pr-elapsed") (pr-elapsed-decision-md-string manifest)]
     [(equal? (cohort-mode manifest) "post-promotion") (post-promotion-decision-md-string manifest)]
     [else (paired-shadow-decision-md-string manifest)]))
@@ -1532,9 +2162,12 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
   (define base (cohort-report-base-jsexpr manifest))
   (define configurations (report-configurations-section manifest))
   (cond
-    ;; W6 C2: post-promotion activation cohort — name the mode and attach
-    ;; the out-of-sample gate; no shadow duplication (no configurations /
-    ;; decision sections).
+    ;; W5 C3: final-claim verdict mode (v1.00.27) — name the mode and
+    ;; attach the seven-row final-claim gate; no shadow duplication.
+    [(equal? (cohort-mode manifest) "final-claim")
+     (hash-set (hash-set base 'cohort-mode "final-claim")
+               'final-claim-gate
+               (final-claim-gate manifest))]
     ;; W6 C2: pr-elapsed mode (v1.00.26) — name the mode and attach the
     ;; end-to-end PR elapsed gate; no shadow duplication (no configurations
     ;; or decision sections).
@@ -1676,6 +2309,46 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
       (for ([line (in-list (decision-reasons-lines l))])
         (out "~a" line)))
     (out ""))
+  (when (hash-has-key? r 'final-claim-gate)
+    (define g (hash-ref r 'final-claim-gate))
+    (out "## Final-claim cohort (C3, roadmap §8)")
+    (out "")
+    (out "Mode producing the numbers in this report: **~a** (every §8 row, fixed thresholds,"
+         (hash-ref r 'cohort-mode))
+    (out "coupled guard evidence; a row without its guards is \"unverified\", never \"pass\").")
+    (out "")
+    (out "~a" (hash-ref g 'gate-text))
+    (out "")
+    (out "| Row | Measure | Target | Observed | Samples | Guards | Verdict |")
+    (out "|---|---|---|---|---|---|---|")
+    (for ([row (in-list (hash-ref g 'rows))])
+      (define observed (hash-ref row 'observed))
+      (out "| ~a | ~a | ~a ~a | ~a | ~a of ~a | ~a | **~a** |"
+           (hash-ref row 'id)
+           (hash-ref row 'measure)
+           (hash-ref row 'comparison)
+           (hash-ref row 'threshold)
+           (if observed
+               (format "~a" observed)
+               "n/a")
+           (hash-ref row 'samples)
+           (hash-ref row 'expected)
+           (if (hash-ref (hash-ref row 'guards) 'satisfied) "provided" "MISSING")
+           (hash-ref row 'verdict)))
+    (out "")
+    (out "| Overall verdict | **~a** |" (hash-ref g 'overall-verdict))
+    (out "")
+    (when (hash-ref g 'reliability-baseline #f)
+      (define rel (hash-ref g 'reliability))
+      (out (string-append
+            "Reliability closure: ~a attempts, ~a failures, ~a cancelled, ~a reruns recorded;"
+            " non-regression versus baseline: ~a.")
+           (hash-ref rel 'total-attempts)
+           (hash-ref rel 'failures)
+           (hash-ref rel 'cancelled)
+           (hash-ref rel 'reruns)
+           (if (hash-ref g 'reliability-non-regression) "holds" "VIOLATED"))
+      (out "")))
   (when (hash-has-key? r 'pr-elapsed-gate)
     (define g (hash-ref r 'pr-elapsed-gate))
     (out "## End-to-end PR elapsed cohort (C2)")

@@ -1383,13 +1383,392 @@
       (check-true (string-contains? miss-md "separate reviewed decision")))))
 
 ;; ============================================================
+;; Final-claim verdict mode (W5: C3)
+;; ============================================================
+
+(define fc-full-guards
+  (hasheq
+   "inventory-accounted"
+   (hasheq 'provided #t 'reference "artifact: per-SHA inventory digests equal the baseline")
+   "reliability-non-regression"
+   (hasheq 'provided
+           #t
+           'reference
+           "computed: cohort attempts summary versus the recorded baseline block")
+   "semantic-gate-equivalence"
+   (hasheq 'provided #t 'reference "artifact: semantic-gate equivalence record")
+   "failure-truth"
+   (hasheq 'provided #t 'reference "artifact: failed attempts recorded, never dropped")
+   "shared-state-permission-isolation"
+   (hasheq 'provided #t 'reference "artifact: shared-state permission isolation proof")
+   "four-worker-isolation-proof"
+   (hasheq 'provided #t 'reference "artifact: four-worker isolation record")
+   "prepared-env-no-bypass"
+   (hasheq 'provided #t 'reference "artifact: no-bypass prepared-env record with named fallbacks")))
+
+(define (fc-timing-attempt i
+                           #:elapsed [elapsed 300.0]
+                           #:fast [fast 100.0]
+                           #:security [security 180.0]
+                           #:workflows [workflows 160.0])
+  (hash-set* (pe-timing-attempt i elapsed)
+             'fast-execution-seconds
+             fast
+             'security-runner-seconds
+             security
+             'workflows-runner-seconds
+             workflows))
+
+(define (make-fc-sha i
+                     #:elapsed [elapsed 300.0]
+                     #:fast [fast 100.0]
+                     #:security [security 180.0]
+                     #:workflows [workflows 160.0]
+                     #:attempts [attempts #f]
+                     #:digest [digest #f])
+  (make-pr-elapsed-sha i
+                       #:elapsed elapsed
+                       #:attempts (or attempts
+                                      (list (fc-timing-attempt i
+                                                               #:elapsed elapsed
+                                                               #:fast fast
+                                                               #:security security
+                                                               #:workflows workflows)))
+                       #:digest digest))
+
+(define (make-fc-manifest #:cohort-status [cohort-status "closed"]
+                          #:shas [shas '()]
+                          #:guards [guards fc-full-guards]
+                          #:pe-verified [pe-verified 20]
+                          #:pe-total [pe-total 20]
+                          #:pe-fallback [pe-fallback 0]
+                          #:pe-records [pe-records 20]
+                          #:baseline-failures [baseline-failures 1]
+                          #:baseline-cancelled [baseline-cancelled 1]
+                          #:baseline-reruns [baseline-reruns 2]
+                          #:expected-count [expected-count 20])
+  (hasheq 'cohort-id
+          (format "v~a-c3" q-version)
+          'milestone
+          (format "v~a" q-version)
+          'cohort-mode
+          "final-claim"
+          'schema-version
+          1
+          'expected-count
+          expected-count
+          'cohort-status
+          cohort-status
+          'start-sha
+          "71feb08054e239d1502b8e0eab893b00a0180d58"
+          'shas
+          shas
+          'exclusions
+          '()
+          'guard-evidence
+          guards
+          'prepared-env-restore-stats
+          (hasheq 'verified
+                  pe-verified
+                  'total
+                  pe-total
+                  'fallback
+                  pe-fallback
+                  'records-observed
+                  pe-records
+                  'window
+                  "cohort C3 observation window")
+          'reliability-baseline
+          (hasheq 'failures baseline-failures 'cancelled baseline-cancelled 'reruns baseline-reruns)))
+
+(define (fc-row gate id)
+  (findf (lambda (r) (equal? (hash-ref r 'id) id)) (hash-ref gate 'rows)))
+
+(define final-claim-suite
+  (test-suite (format "final-claim verdict cohort (C3, v~a W5)" q-version)
+
+    (test-case "fixed §8 thresholds are exactly the roadmap values"
+      (check-equal? (hash-ref final-claim-thresholds "fast-p50") 115.0)
+      (check-equal? (hash-ref final-claim-thresholds "fast-p95") 135.0)
+      (check-equal? (hash-ref final-claim-thresholds "pr-ci-p50") 588.0)
+      (check-equal? (hash-ref final-claim-thresholds "pr-ci-p95") 735.0)
+      (check-equal? (hash-ref final-claim-thresholds "security-runner-p50") 240.0)
+      (check-equal? (hash-ref final-claim-thresholds "workflows-runner-p50") 220.0)
+      (check-equal? (hash-ref final-claim-thresholds "prepared-env-verified-restores") 95.0))
+
+    (test-case "the gate evaluates all seven §8 rows"
+      (check-equal? (length (hash-ref (final-claim-gate (make-fc-manifest)) 'rows)) 7)
+      (check-equal? (hash-ref (final-claim-gate (make-fc-manifest)) 'overall-verdict)
+                    "target not achieved")) ; empty cohort cannot pass
+
+    (test-case "p95 rows evaluate the 95th percentile, not the median"
+      ;; Regression guard (W5 independent verification finding): the
+      ;; timing-row evaluator must honor each row's quantile.  With spread
+      ;; fast samples the p50 and p95 rows must observe different quantiles
+      ;; of the same sample set.
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:fast (+ 100.0 i)))))
+      (define gate (final-claim-gate m))
+      (define p50-obs (hash-ref (fc-row gate "fast-p50") 'observed))
+      (define p95-obs (hash-ref (fc-row gate "fast-p95") 'observed))
+      (check-equal? p50-obs 109.5) ; k = 0.50*19 = 9.5 -> (109.0+110.0)/2
+      (check-equal? p95-obs 118.05) ; k = 0.95*19 = 18.05 -> 118.0 + 0.05*(119.0-118.0)
+      (check-not-equal? p50-obs p95-obs))
+
+    (test-case "cohort-quantile-exact interpolates exactly at integer and edge ranks"
+      ;; frac = 0 (integer rank) returns the sample verbatim; the max rank
+      ;; never indexes past the sorted list; a single sample is returned as-is.
+      ;; Millisecond rounding keeps interpolated results noise-free and
+      ;; byte-stable for checksummed artifact regeneration.
+      (check-equal? (cohort-quantile-exact '(5.0) 0.95) 5.0)
+      (check-equal? (cohort-quantile-exact (for/list ([i (in-range 21)])
+                                             (* 1.0 i))
+                                           1.0)
+                    20.0)
+      (check-equal? (cohort-quantile-exact (for/list ([i (in-range 21)])
+                                             (* 1.0 i))
+                                           0.50)
+                    10.0)
+      (check-equal? (cohort-quantile-exact (list 3.0 1.0 2.0) 0.95) ; k=1.9 -> 2.0+0.9*1.0
+                    2.9)
+      (check-equal? ; k=5.7 -> 0.3*5.0+0.7*6.0; raw FP sum is 5.7000000000000002
+       (cohort-quantile-exact (for/list ([i (in-range 7)])
+                                (* 1.0 i))
+                              0.95)
+       5.7))
+
+    (test-case "JSON round-trip manifests validate (guard ids + JSON null prepared-env)"
+      ;; Live C3 cohort.json arrives via read-json (string-keyed hashes,
+      ;; JSON null for absent prepared-env evidence) and is canonicalized
+      ;; by normalize-manifest.  Simulate that exact shape: every hash key
+      ;; is a string, 'prepared-env carries the JSON null.
+      (define (string-keyed v)
+        (cond
+          [(hash? v)
+           (for/hash ([(k val) (in-hash v)])
+             (values (format "~a" k) (string-keyed val)))]
+          [(list? v) (map string-keyed v)]
+          [else v]))
+      (define sh (hash-set (make-pr-elapsed-sha 1) 'prepared-env 'null))
+      (define m (normalize-manifest (string-keyed (make-fc-manifest #:shas (list sh)))))
+      (define vr (validate-cohort m))
+      (check-false (has-error-matching? vr #rx"unknown guard id"))
+      (check-false (has-error-matching? vr #rx"unknown prepared-env")))
+
+    (test-case "a row without its guard evidence is unverified, never pass"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0))
+                          #:guards (hash-remove fc-full-guards "four-worker-isolation-proof")))
+      (define gate (final-claim-gate m))
+      (define fast-row (fc-row gate "fast-p50"))
+      (check-equal? (hash-ref fast-row 'verdict) "unverified")
+      (check-false (hash-ref (hash-ref fast-row 'guards) 'satisfied)))
+
+    (test-case "every row is unverified when guard evidence is missing entirely"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0))
+                          #:guards (hasheq)))
+      (define gate (final-claim-gate m))
+      (for ([r (in-list (hash-ref gate 'rows))])
+        (check-equal? (hash-ref r 'verdict) "unverified")))
+
+    (test-case "all-pass closed cohort with guards verifies every row"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0))))
+      (define gate (final-claim-gate m))
+      (for ([r (in-list (hash-ref gate 'rows))])
+        (check-equal? (hash-ref r 'verdict) "pass"))
+      (check-equal? (hash-ref gate 'overall-verdict) "verified"))
+
+    (test-case "loaded-from-disk manifests digest and report (read-json string keys)"
+      ;; read-json yields string-keyed hashes while write-json only accepts
+      ;; symbol keys; digest and full report serialization must still work on
+      ;; the realistic load-from-disk path, and guard evidence must survive.
+      (define tmp (make-temporary-file "w5-~a.json"))
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (with-handlers ([exn:fail? void])
+                                     (delete-file tmp))
+                                   (raise e))])
+        (call-with-output-file
+         tmp
+         (lambda (out)
+           (displayln (jsexpr->string (normalize-manifest
+                                       (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                                                  (make-fc-sha i #:elapsed 100.0)))))
+                      out))
+         #:exists 'truncate)
+        (define m (load-cohort-manifest tmp))
+        (check-not-exn (lambda () (manifest-digest m)))
+        (check-not-exn (lambda () (jsexpr->string (cohort-report-jsexpr m))))
+        (define gate (final-claim-gate m))
+        (check-equal? (hash-ref (fc-row gate "fast-p50") 'verdict) "pass")
+        (check-equal? (hash-ref (fc-row gate "prepared-env-verified-restores") 'verdict) "pass")
+        (with-handlers ([exn:fail? void])
+          (delete-file tmp))))
+
+    (test-case "a closed-cohort timing miss records target not achieved with observed numbers"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0 #:fast 250.0))))
+      (define gate (final-claim-gate m))
+      (define fast-row (fc-row gate "fast-p50"))
+      (check-equal? (hash-ref fast-row 'verdict) "target not achieved")
+      (check-equal? (hash-ref fast-row 'observed) 250.0)
+      (check-equal? (hash-ref fast-row 'threshold) 115.0)
+      (check-true (pair? (hash-ref fast-row 'reasons)))
+      (check-true (string-contains? (first (hash-ref fast-row 'reasons)) "never revised")))
+
+    (test-case "in-window samples on an incomplete cohort stay unverified"
+      (define m
+        (make-fc-manifest #:cohort-status "open"
+                          #:shas (for/list ([i (in-range 5)])
+                                   (make-fc-sha i #:elapsed 100.0))))
+      (define gate (final-claim-gate m))
+      (check-equal? (hash-ref (fc-row gate "fast-p50") 'verdict) "unverified")
+      (check-equal? (hash-ref gate 'overall-verdict) "target not achieved"))
+
+    (test-case "empty sample set is unverified even with full guards"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:attempts (list (pe-timing-attempt i 100.0))))))
+      (define gate (final-claim-gate m))
+      (check-equal? (hash-ref (fc-row gate "fast-p50") 'verdict) "unverified")
+      (check-equal? (hash-ref (fc-row gate "security-runner-p50") 'verdict) "unverified")
+      ;; pr-ci rows still observe their window-derived samples
+      (check-equal? (hash-ref (fc-row gate "pr-ci-p50") 'verdict) "pass"))
+
+    (test-case "reliability non-regression is computed, not asserted"
+      (define rerun-attempts
+        (list (fc-timing-attempt 0 #:elapsed 100.0)
+              (hasheq 'run-id "887000003-rerun" 'result "rerun" 'timing-sample #f)))
+      (define shas
+        (append (list (make-fc-sha 0 #:attempts rerun-attempts))
+                (for/list ([i (in-range 1 20)])
+                  (make-fc-sha i #:elapsed 100.0))))
+      (define m
+        (make-fc-manifest #:shas shas
+                          #:baseline-failures 0
+                          #:baseline-cancelled 0
+                          #:baseline-reruns 0))
+      (check-false (final-claim-reliability-ok? m))
+      (define gate (final-claim-gate m))
+      (check-equal? (hash-ref (fc-row gate "fast-p50") 'verdict) "unverified")
+      (check-false (hash-ref (hash-ref (fc-row gate "fast-p50") 'guards) 'reliability-satisfied #f)))
+
+    (test-case "prepared-env row: zero observed records on a closed cohort is target not achieved"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0))
+                          #:pe-verified 0
+                          #:pe-total 0
+                          #:pe-records 0))
+      (define row (fc-row (final-claim-gate m) "prepared-env-verified-restores"))
+      (check-equal? (hash-ref row 'verdict) "target not achieved")
+      (check-equal? (hash-ref row 'observed) 0.0))
+
+    (test-case "prepared-env row: below-target rate is target not achieved with the observed rate"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0))
+                          #:pe-verified 18
+                          #:pe-total 20
+                          #:pe-fallback 2
+                          #:pe-records 20))
+      (define row (fc-row (final-claim-gate m) "prepared-env-verified-restores"))
+      (check-equal? (hash-ref row 'verdict) "target not achieved")
+      (check-equal? (hash-ref row 'observed) 90.0))
+
+    (test-case "guard-evidence with an unknown guard id is rejected"
+      (define m
+        (make-fc-manifest #:guards (hash-set fc-full-guards
+                                             "unknown-guard"
+                                             (hasheq 'provided #t 'reference "somewhere"))))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"unknown guard id")))
+
+    (test-case "a provided guard without a named reference is rejected"
+      (define m
+        (make-fc-manifest
+         #:guards (hash-set fc-full-guards "failure-truth" (hasheq 'provided #t 'reference ""))))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"names no reference")))
+
+    (test-case "final-claim manifests require the guard-evidence object"
+      (define m (hash-remove (make-fc-manifest) 'guard-evidence))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"guard-evidence")))
+
+    (test-case "final-claim reuses the pr-elapsed per-SHA schema (duplicate SHA rejected)"
+      (define m
+        (make-fc-manifest #:cohort-status "open"
+                          #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha (if (= i 7) 3 i)))))
+      (check-false (validation-ok? (validate-cohort m)))
+      (check-true (has-error-matching? (validate-cohort m) #rx"duplicate SHA")))
+
+    (test-case "failed/cancelled attempts stay in the cohort record (failure truth)"
+      (define failed
+        (list (hasheq 'run-id
+                      "887000001-fail"
+                      'result
+                      "failure"
+                      'timing-sample
+                      #f
+                      'first-check-start-at
+                      "2026-09-07T00:00:00Z"
+                      'last-required-check-end-at
+                      "2026-09-07T00:02:00Z")
+              (fc-timing-attempt 0 #:elapsed 100.0)))
+      (define m (make-fc-manifest #:shas (list (make-fc-sha 0 #:attempts failed))))
+      (define summary (cohort-attempts-summary m))
+      (check-true (> (hash-ref summary 'failures) 0)))
+
+    (test-case "report names the mode and carries the gate without shadow duplication"
+      (define r (cohort-report-jsexpr (make-fc-manifest)))
+      (check-equal? (hash-ref r 'cohort-mode) "final-claim")
+      (check-true (hash-has-key? r 'final-claim-gate))
+      (check-false (hash-has-key? r 'configurations))
+      (check-false (hash-has-key? r 'decision)))
+
+    (test-case "report JSON is deterministic"
+      (define m (make-fc-manifest))
+      (check-equal? (cohort-report-json-string m) (cohort-report-json-string m)))
+
+    (test-case "report markdown embeds the final-claim section and per-row table"
+      (define md (cohort-report-md-string (make-fc-manifest)))
+      (check-true (string-contains? md "Final-claim cohort (C3"))
+      (check-true (string-contains? md "fast-p50"))
+      (check-true (string-contains? md "prepared-env-verified-restores")))
+
+    (test-case "decision.md records per-row verdicts, observed numbers, and never-revised clause"
+      (define m
+        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                   (make-fc-sha i #:elapsed 100.0 #:fast 250.0))
+                          #:pe-verified 18
+                          #:pe-total 20
+                          #:pe-records 20))
+      (define md (final-claim-decision-md-string m))
+      (check-true (string-contains? md "final-claim"))
+      (check-true (string-contains? md "target not achieved"))
+      (check-true (string-contains? md "250"))
+      (check-true (string-contains? md "115"))
+      (check-true (string-contains? md "90.0"))
+      (check-true (string-contains? md "never revised"))
+      (check-true (string-contains? md "Next lever")))))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (define failures (run-tests suite))
 (define c2-failures (run-tests c2-suite))
 (define pr-elapsed-failures (run-tests pr-elapsed-suite))
+(define final-claim-failures (run-tests final-claim-suite))
 
 (module+ main
-  (when (positive? (+ failures c2-failures pr-elapsed-failures))
+  (when (positive? (+ failures c2-failures pr-elapsed-failures final-claim-failures))
     (exit 1)))

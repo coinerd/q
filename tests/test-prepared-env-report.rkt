@@ -30,13 +30,15 @@
          racket/string
          racket/system
          rackunit
-         rackunit/text-ui
-         (only-in "../util/version.rkt" q-version))
+         rackunit/text-ui)
 
 (define-runtime-path project-root "..")
 (define script-path (build-path project-root "scripts" "ci" "prepared-env-report.rkt"))
 (define committed-dir
-  (build-path project-root "artifacts" "ci-baseline" (format "v~a-prepared-env" q-version)))
+  (build-path project-root
+              "artifacts"
+              "ci-baseline"
+              "v1.00.26-prepared-env")) ;; frozen: prepared-env evidence is a v1.00.26-series artifact
 (define committed-manifest (build-path committed-dir "report.json"))
 (define committed-sums (build-path committed-dir "SHA256SUMS"))
 
@@ -135,7 +137,7 @@
     (test-case "tool and committed evidence files exist"
       (check-true (file-exists? script-path) "scripts/ci/prepared-env-report.rkt must exist")
       (check-true (file-exists? committed-manifest)
-                  (format "artifacts/ci-baseline/v~a-prepared-env/report.json must exist" q-version))
+                  "artifacts/ci-baseline/v1.00.26-prepared-env/report.json must exist")
       (check-true (file-exists? committed-sums) "SHA256SUMS must sit next to the committed report"))
 
     (test-case "emit: verified restore (telemetry contract honored, cache key bound)"

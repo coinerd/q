@@ -37,7 +37,12 @@
          gate-ownership-json
          gate-ownership-ledger-text
          selected-paths-digest
-         run-gate-ownership-map)
+         run-gate-ownership-map
+         tier-matrix-columns
+         tier-ownership-rows
+         tier-ownership-errors
+         tier-ownership-drift-errors
+         run-tier-ownership-check)
 
 (define (classify-exclusion-reason f)
   (cond
@@ -606,35 +611,61 @@
                      "**GAPS:** areas above with `**none**` have no test destination.\n"
                      "No gaps: every production area has a test destination.\n")))
 
-(define (run-ownership-map #:md-out [md-out #f] #:json-out [json-out #f])
-  (define records (ownership-records))
-  (define gaps (filter (lambda (r) (hash-ref r 'gap?)) records))
-  (printf ";; TEST OWNERSHIP MAP (W3)~n")
-  (printf ";; ═══════════════════════~n")
-  (for ([r (in-list records)])
-    (printf ";; ~a (source: ~a) -> suite ~a: ~a test(s), boundaries [~a], owner: ~a~a~n"
-            (hash-ref r 'area)
-            (hash-ref r 'production_source)
-            (hash-ref r 'suite)
-            (hash-ref r 'test_count)
-            (string-join (hash-ref r 'boundary_tags) ",")
-            (or (hash-ref r 'owning_path) "<none>")
-            (if (hash-ref r 'gap?) "  ** GAP: no test destination **" "")))
-  (printf ";; areas: ~a, gaps: ~a~n~n" (length records) (length gaps))
-  (define md-path (or md-out (build-path base-dir "reports" "test-ownership-map.md")))
-  (define json-path (or json-out (build-path base-dir "reports" "test-ownership-map.json")))
-  (ensure-parent-dir! md-path)
-  (call-with-output-file md-path
-                         #:exists 'truncate/replace
-                         (lambda (out) (display (ownership-markdown records) out)))
-  (ensure-parent-dir! json-path)
-  (call-with-output-file
-   json-path
-   #:exists 'truncate/replace
-   (lambda (out) (write-json (hasheq 'generator "inventory.rkt --ownership-map" 'areas records) out)))
-  (printf ";; markdown report written to ~a~n" md-path)
-  (printf ";; json report written to ~a~n" json-path)
-  (hasheq 'areas (length records) 'gaps (length gaps)))
+;; v1.00.27 W0: tier-ownership matrix generation (additive evolution of
+;; --ownership-map) and --check drift enforcement. In check mode no
+;; report is rewritten; the existing byte-identity consumers of the md
+;; and json reports are unaffected.
+(define (run-ownership-map #:md-out [md-out #f]
+                           #:json-out [json-out #f]
+                           #:tier-matrix-out [tier-matrix-out #f]
+                           #:tier-check [tier-check #f])
+  (cond
+    [tier-check
+     (define errors (run-tier-ownership-check tier-check))
+     (printf ";; TIER-OWNERSHIP MATRIX CHECK (v1.00.27 W0)~n")
+     (printf ";; ═════════════════════════════════════════~n")
+     (printf ";; matrix: ~a~n" tier-check)
+     (if (null? errors)
+         (begin
+           (printf ";; PASS: matrix matches reality (eight columns per family, no drift)~n")
+           (hasheq 'ok? #t 'errors '()))
+         (begin
+           (printf ";; FAIL: ~a validation/drift error(s)~n" (length errors))
+           (for ([e (in-list errors)])
+             (printf ";; DRIFT: ~a~n" e))
+           (hasheq 'ok? #f 'errors errors)))]
+    [else
+     (define records (ownership-records))
+     (define gaps (filter (lambda (r) (hash-ref r 'gap?)) records))
+     (printf ";; TEST OWNERSHIP MAP (W3)~n")
+     (printf ";; ═══════════════════════~n")
+     (for ([r (in-list records)])
+       (printf ";; ~a (source: ~a) -> suite ~a: ~a test(s), boundaries [~a], owner: ~a~a~n"
+               (hash-ref r 'area)
+               (hash-ref r 'production_source)
+               (hash-ref r 'suite)
+               (hash-ref r 'test_count)
+               (string-join (hash-ref r 'boundary_tags) ",")
+               (or (hash-ref r 'owning_path) "<none>")
+               (if (hash-ref r 'gap?) "  ** GAP: no test destination **" "")))
+     (printf ";; areas: ~a, gaps: ~a~n~n" (length records) (length gaps))
+     (when tier-matrix-out
+       (tier-write-ownership-matrix tier-matrix-out))
+     (define md-path (or md-out (build-path base-dir "reports" "test-ownership-map.md")))
+     (define json-path (or json-out (build-path base-dir "reports" "test-ownership-map.json")))
+     (ensure-parent-dir! md-path)
+     (call-with-output-file md-path
+                            #:exists 'truncate/replace
+                            (lambda (out) (display (ownership-markdown records) out)))
+     (ensure-parent-dir! json-path)
+     (call-with-output-file
+      json-path
+      #:exists 'truncate/replace
+      (lambda (out)
+        (write-json (hasheq 'generator "inventory.rkt --ownership-map" 'areas records) out)))
+     (printf ";; markdown report written to ~a~n" md-path)
+     (printf ";; json report written to ~a~n" json-path)
+     (hasheq 'areas (length records) 'gaps (length gaps))]))
 
 ;; ============================================================
 ;; v1.00.24 W0 cross-gate ownership map
@@ -1322,12 +1353,304 @@
           'ledger
           ledger-path))
 
+;; ============================================================
+;; v1.00.27 W0 tier-ownership matrix
+;; ============================================================
+;; Every executable test family declares eight ownership columns:
+;; test, behavior, boundary, side effects, required gates, L4
+;; destination, overlap rationale, owner. `--ownership-map
+;; --tier-matrix PATH` generates the matrix over the current tree and
+;; fails closed on incompleteness (missing column), staleness (L4
+;; destination inconsistent with the required gates) or undeclared
+;; overlap (family shared by 2+ v1.00.24 behavior rows). The checksummed
+;; artifact is enforced by `--ownership-map --check PATH`: a family on
+;; disk absent from the matrix — or vice versa — is drift and is red in
+;; CI. Additive, versioned schema evolution: tier-ownership-matrix/v1;
+;; existing --ownership-map consumers keep working unchanged.
+
+(define tier-matrix-columns
+  '(test behavior boundary side_effects required_gates l4_destination overlap_rationale owner))
+
+;; The tier matrix gates include tui so that every family on disk is
+;; selected by at least one known gate (fast excludes slow and tui, so
+;; the union of fast, slow/L4 and tui covers the full selection).
+(define tier-known-gates (append v124-gate-names '("tui")))
+
+(define (tier-gate-membership)
+  (hasheq "fast"
+          (collect-test-files 'fast)
+          "platform"
+          (collect-test-files 'platform)
+          "security"
+          (collect-test-files 'security)
+          "workflows"
+          (collect-test-files 'workflows)
+          "unit-fast"
+          (collect-test-files 'unit-fast)
+          "slow/L4"
+          (collect-test-files 'slow)
+          "tui"
+          (collect-test-files 'tui)))
+
+;; Owner chain: a v1.00.24 behavior-row owner when the family belongs to
+;; exactly one owner's rows, else the first --ownership-map area whose
+;; definition selects the family, else "core".
+(define (tier-owner-map behaviors)
+  (define behavior-owners (make-hash))
+  (for ([b (in-list behaviors)])
+    (for ([m (in-list (hash-ref b 'members))])
+      (hash-set! behavior-owners m (cons (hash-ref b 'owner) (hash-ref behavior-owners m '())))))
+  (define area-owner (make-hash))
+  (define all (collect-test-files 'all))
+  (for ([def (in-list ownership-area-definitions)])
+    (define suite-name (hash-ref def 'suite))
+    (define dirs (hash-ref def 'dirs))
+    (for ([f (in-list all)])
+      (unless (hash-has-key? area-owner f)
+        (when (or (metadata-suite=? f suite-name)
+                  (area-predicate-match? (hash-ref def 'predicate) f)
+                  (for/or ([d (in-list dirs)])
+                    (string-prefix? f d)))
+          (hash-set! area-owner f (hash-ref def 'area))))))
+  (lambda (f)
+    (define owners (remove-duplicates (reverse (hash-ref behavior-owners f '()))))
+    (cond
+      [(and (pair? owners) (null? (cdr owners))) (car owners)]
+      [(hash-ref area-owner f #f)
+       =>
+       values]
+      [else "core"])))
+
+;; Declared side effects: isolation / mutates / requires metadata plus
+;; the lexical high-risk flags (cwd, env, temp-file, subprocess, perf,
+;; terminal). Empty becomes "none-declared" — the column must exist.
+(define (tier-side-effects f meta)
+  (define flags (detect-high-risk-flags f))
+  (define parts
+    (filter values
+            (list (let ([iso (hash-ref meta 'isolation #f)])
+                    (and iso (format "isolation=~a" (v124-meta-str iso))))
+                  (let ([mut (hash-ref meta 'mutates #f)])
+                    (and mut (format "mutates=~a" (v124-meta-str mut))))
+                  (let ([req (hash-ref meta 'requires '())])
+                    (and (pair? req) (format "requires=~a" (v124-meta-str req))))
+                  (and (pair? flags)
+                       (format "flags=~a" (string-join (map symbol->string flags) ","))))))
+  (if (null? parts)
+      "none-declared"
+      (string-join parts "; ")))
+
+;; One complete eight-column row for a single test family. Deterministic;
+;; missing test metadata is declared (never imputed from other families).
+(define (tier-family-row f membership behaviors owner)
+  (define meta (get-file-metadata f))
+  (define gates
+    (sort (for/list ([g (in-list tier-known-gates)]
+                     #:when (member f (hash-ref membership g '())))
+            g)
+          string<?))
+  (define suite
+    (let ([s (v124-meta-str (hash-ref meta 'suite 'default))])
+      (if (non-empty-string? s) s "default")))
+  (define boundary
+    (let ([b (v124-meta-str (hash-ref meta 'boundary '()))])
+      (if (non-empty-string? b) b "undeclared")))
+  (define behavior-ids
+    (for/list ([b (in-list behaviors)]
+               #:when (member f (hash-ref b 'members)))
+      (hash-ref b 'behavior-id)))
+  (define overlap
+    (if (>= (length behavior-ids) 2)
+        (format
+         "shared member of ~a v1.00.24 behavior rows (~a): one file carries multiple behavior contracts, edits require every row owner's review"
+         (length behavior-ids)
+         (string-join behavior-ids ","))
+        "none"))
+  (hasheq
+   'test
+   f
+   'behavior
+   (format
+    "changes shift ~a-area ~a coverage (suite ~a); v1.00.24 behavior row(s): ~a; re-tiering requires destination-gate signoff"
+    (owner f)
+    boundary
+    suite
+    (if (null? behavior-ids)
+        "none"
+        (string-join behavior-ids ",")))
+   'boundary
+   boundary
+   'side_effects
+   (tier-side-effects f meta)
+   'required_gates
+   gates
+   'l4_destination
+   (if (member "slow/L4" gates) "slow/L4" "in-place fast")
+   'overlap_rationale
+   overlap
+   'owner
+   (owner f)))
+
+;; Reality derivation: one complete row per executable test family on
+;; disk.
+(define (tier-ownership-rows [membership (tier-gate-membership)] [behaviors (gate-ownership-rows)])
+  (define families (sort (remove-duplicates (collect-test-files 'all)) string<?))
+  (define owner (tier-owner-map behaviors))
+  (for/list ([f (in-list families)])
+    (tier-family-row f membership behaviors owner)))
+
+;; Generation-time validation: all eight columns present and non-empty,
+;; gates are known, the L4 destination agrees with the required gates
+;; (stale L4 destination fails generation), and overlap is declared
+;; exactly when the family is shared by 2+ v1.00.24 behavior rows.
+(define (tier-ownership-errors rows [behaviors (gate-ownership-rows)])
+  (define overlap-count
+    (for/hash ([f (in-list (remove-duplicates (append-map (lambda (b) (hash-ref b 'members))
+                                                          behaviors)))])
+      (values f
+              (length (for/list ([b (in-list behaviors)]
+                                 #:when (member f (hash-ref b 'members)))
+                        b)))))
+  (append
+   (append-map
+    (lambda (row)
+      (define test (hash-ref row 'test "(row without a test column)"))
+      (append (for/list ([col (in-list tier-matrix-columns)]
+                         #:when (or (not (hash-has-key? row col))
+                                    (let ([v (hash-ref row col #f)])
+                                      (or (not v)
+                                          (and (string? v) (string=? v ""))
+                                          (and (list? v) (null? v))))))
+                (format "~a: missing column: ~a" test col))
+              (let ([gates (hash-ref row 'required_gates '())])
+                (append (for/list ([g (in-list gates)]
+                                   #:unless (member g tier-known-gates))
+                          (format "~a: unknown required gate: ~a" test g))
+                        (let ([declared (hash-ref row 'l4_destination "")]
+                              [expected (if (member "slow/L4" gates) "slow/L4" "in-place fast")])
+                          (if (and (string? declared) (string=? declared expected))
+                              '()
+                              (list (format "~a: stale L4 destination ~s (required gates ~a say ~s)"
+                                            test
+                                            declared
+                                            (string-join gates ",")
+                                            expected))))))))
+    rows)
+   (append-map
+    (lambda (row)
+      (define test (hash-ref row 'test ""))
+      (define n (hash-ref overlap-count test 0))
+      (define declared-overlap (hash-ref row 'overlap_rationale "none"))
+      (cond
+        [(and (>= n 2) (string=? declared-overlap "none"))
+         (list
+          (format
+           "~a: undeclared overlap: family is a member of ~a v1.00.24 behavior rows but overlap_rationale is none"
+           test
+           n))]
+        [(and (< n 2) (not (string=? declared-overlap "none")))
+         (list
+          (format
+           "~a: stale overlap declaration: family is a member of ~a v1.00.24 behavior rows but overlap_rationale is ~s"
+           test
+           n
+           declared-overlap))]
+        [else '()]))
+    rows)))
+
+;; Matrix-vs-reality drift: a family on disk absent from the matrix is
+;; drift; a matrix row absent from disk is stale; any column mismatch is
+;; a stale declaration.
+(define (tier-ownership-drift-errors matrix-rows reality-rows)
+  (define matrix-by
+    (for/hash ([r (in-list matrix-rows)])
+      (values (hash-ref r 'test #f) r)))
+  (define reality-by
+    (for/hash ([r (in-list reality-rows)])
+      (values (hash-ref r 'test #f) r)))
+  (append (for/list ([r (in-list reality-rows)]
+                     #:unless (hash-has-key? matrix-by (hash-ref r 'test #f)))
+            (format "drift: test family ~a is present on disk but absent from the matrix"
+                    (hash-ref r 'test)))
+          (for/list ([r (in-list matrix-rows)]
+                     #:unless (hash-has-key? reality-by (hash-ref r 'test #f)))
+            (format "drift: matrix row ~a references a test family absent from disk"
+                    (hash-ref r 'test)))
+          (append-map (lambda (r)
+                        (define test (hash-ref r 'test))
+                        (define actual (hash-ref reality-by test #f))
+                        (if actual
+                            (for/list ([col (in-list tier-matrix-columns)]
+                                       #:unless (equal? (hash-ref r col #f) (hash-ref actual col #f)))
+                              (format "stale column ~a in matrix row ~a: matrix=~s reality=~s"
+                                      col
+                                      test
+                                      (hash-ref r col)
+                                      (hash-ref actual col)))
+                            '()))
+                      matrix-rows)))
+
+;; --ownership-map --check PATH: load the checksummed matrix, re-derive
+;; reality over the current tree, and report every validation/drift
+;; error. The caller turns a non-empty list into exit 1.
+(define (run-tier-ownership-check matrix-path)
+  (define reality (tier-ownership-rows))
+  (define matrix
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (with-input-from-file matrix-path read-json)))
+  (cond
+    [(not matrix) (list (format "~a: unreadable or missing matrix" matrix-path))]
+    [(not (and (hash? matrix) (string=? (hash-ref matrix 'schema #f) "tier-ownership-matrix/v1")))
+     (list (format "~a: unsupported matrix schema (expected tier-ownership-matrix/v1)" matrix-path))]
+    [(not (equal? (hash-ref matrix 'columns '()) (map symbol->string tier-matrix-columns)))
+     (list (format "~a: matrix columns drifted from the v3 eight-column vocabulary" matrix-path))]
+    [else
+     (define rows (hash-ref matrix 'rows '()))
+     (append (tier-ownership-errors rows)
+             (tier-ownership-errors reality)
+             (tier-ownership-drift-errors rows reality))]))
+
+;; Generate + validate the matrix artifact; fails closed (raises) when
+;; any family's row is incomplete, stale, or overlaps undeclared.
+(define (tier-write-ownership-matrix out-path)
+  (define rows (tier-ownership-rows))
+  (define errors (tier-ownership-errors rows))
+  (unless (null? errors)
+    (for ([e (in-list errors)])
+      (printf ";; MATRIX ERROR: ~a~n" e))
+    (error 'tier-ownership "matrix generation failed with ~a validation error(s)" (length errors)))
+  (define payload
+    (hasheq 'generator
+            "inventory.rkt --ownership-map --tier-matrix"
+            'schema
+            "tier-ownership-matrix/v1"
+            'milestone
+            "v1.00.27"
+            'wave
+            "W0"
+            'columns
+            (map symbol->string tier-matrix-columns)
+            'families
+            (length rows)
+            'families_digest
+            (selected-paths-digest (map (lambda (r) (hash-ref r 'test)) rows))
+            'rows
+            rows))
+  (ensure-parent-dir! out-path)
+  (call-with-output-file out-path #:exists 'truncate/replace (lambda (out) (write-json payload out)))
+  (printf ";; tier-ownership matrix written to ~a (~a families)~n" out-path (length rows)))
+
 (define (inventory-usage)
   (displayln "usage: racket scripts/run-tests/inventory.rkt MODE [--json-out PATH] [--md-out PATH]")
   (displayln "  MODE is one of:")
   (displayln "    --metadata-quality   metadata tag quality report (missing/invalid/explicit)")
   (displayln "    --unit-fast-audit    unit-fast grouped-execution eligibility audit")
   (displayln "    --ownership-map      production-area test ownership map (md + json)")
+  (displayln "      [--tier-matrix P]  generate the v1.00.27 tier-ownership matrix")
+  (displayln "                         (eight columns per family, tier-ownership-matrix/v1)")
+  (displayln "      [--check P]        red-on-drift check of a tier matrix vs the current tree")
+  (displayln
+   "                         (family on disk absent from the matrix is drift, and vice versa)")
   (displayln "    --gate-ownership-map v1.00.24 W0 behavior ownership map + retier ledger")
   (displayln "      [--ledger PATH]    retier ledger output path (default docs/reports)")
   (displayln "      [--check]          verify existing artifacts byte-identically, no rewrite"))
@@ -1338,6 +1661,9 @@
   (define ledger-out #f)
   (define check? #f)
   (define mode #f)
+  ;; v1.00.27 W0: tier-ownership matrix generation / drift check paths.
+  (define tier-matrix-path #f)
+  (define tier-check-path #f)
   (let loop ([rest argv])
     (match rest
       ['() (void)]
@@ -1356,12 +1682,21 @@
       [(list "--gate-ownership-map" rest ...)
        (set! mode 'gate-ownership-map)
        (loop rest)]
+      [(list "--tier-matrix" p rest ...)
+       (set! tier-matrix-path p)
+       (loop rest)]
       [(list "--ledger" p rest ...)
        (set! ledger-out p)
        (loop rest)]
       [(list "--check" rest ...)
        (set! check? #t)
-       (loop rest)]
+       ;; v1.00.27 W0: --check may carry the tier-ownership matrix path;
+       ;; --gate-ownership-map keeps its bare --check byte-identity form.
+       (loop (if (and (pair? rest) (not (string-prefix? (car rest) "-")))
+                 (begin
+                   (set! tier-check-path (car rest))
+                   (cdr rest))
+                 rest))]
       [(list "--json-out" p rest ...)
        (set! json-out p)
        (loop rest)]
@@ -1375,7 +1710,16 @@
   (case mode
     [(metadata-quality) (run-metadata-quality-report #:json-out json-out)]
     [(unit-fast-audit) (run-unit-fast-audit #:json-out json-out)]
-    [(ownership-map) (run-ownership-map #:md-out md-out #:json-out json-out)]
+    [(ownership-map)
+     (cond
+       [tier-check-path
+        (define result (run-ownership-map #:tier-check tier-check-path))
+        (exit (if (hash-ref result 'ok?) 0 1))]
+       [else
+        (run-ownership-map #:md-out md-out
+                           #:json-out json-out
+                           #:tier-matrix-out
+                           (and tier-matrix-path (build-path base-dir tier-matrix-path)))])]
     [(gate-ownership-map)
      (define result
        (run-gate-ownership-map #:md-out md-out

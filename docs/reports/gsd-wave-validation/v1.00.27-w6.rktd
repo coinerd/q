@@ -1,0 +1,15 @@
+;; Wave validation: v1.00.27 W6 — Series bake and v1.00.27 release
+;; Record-only companion to gsd-wave-evidence/v1.00.27-w6.rktd.
+(
+(wave . "v1.00.27-w6")
+(validated-sha . "e453da533e1f72aec5eb47d2e0b866361a29e1d7")
+(checks
+  (branch . "campaign/v1.00.27-w6 checked out (not main); base origin/main 9f529830 (v1.00.26 merge); prior-attempt checkpoints 2032fed1/9dfce821/933263bf present, this attempt added e453da53 (test-side version-dynamic sync + metrics re-sync)")
+  (checksums . "cd artifacts/ci-baseline/v1.00.27-c3 && sha256sum -c SHA256SUMS → all five C3 artifacts OK at the validated SHA")
+  (focused-suites . "racket scripts/run-tests.rkt --suite fast / security / arch green at the branch head per the evidence record; this attempt additionally ran the touched test files individually after the version-dynamic sync and raco-fmt: test-ci-cohort-report 20/0/0, test-run-tests-metadata-discovery 2/0/0, test-run-tests-overhead-diagnostics 15/0/0, test-run-tests-profiles 1/0/0, test-worker-security 31/0/0, test-cli-flags 6/0/0, test-run-tests-in-process-mode 4/0/0, test-runner-grouped-characterization 1/0/0, test-test-metadata 3/0/0, test-milestone-gate exit 0, test-runner-governance exit 0, test-run-tests-todo exit 0")
+  (lints . "racket scripts/release-dry-run.rkt → 6/6 checks passed, no tags/releases created; racket scripts/lint-release-notes.rkt --check → PASSED (CHANGELOG version 1.00.27); racket scripts/metrics.rkt --lint → all 5 static metrics match README.md (including version and test-lines consistency); racket tests/test-milestone-gate.rkt → exit 0")
+  (declared-files . "all eight declared wave files exist at HEAD: CHANGELOG.md (release entry), README.md (metrics/status synced), util/version.rkt (1.00.27), SERIES-COMPLETION-v1.00.23-v1.00.27.md, artifacts/ci-baseline/v1.00.27-c3/SHA256SUMS, and the gsd-wave-{evidence,reviews,validation}/v1.00.27-w6.rktd trio")
+  (verdict-language . "the CHANGELOG release entry and the series record state 'target not achieved' with per-row numbers for the six missed §8 rows and link the checksummed C3 evidence; no sentence claims 2x; the achieved prepared-env row is stated with its artifact")
+  (no-security-delta . "no execute-* check, isolation root, worker-security contract, gate semantics, or scheduler variable modified; the release waves publish the existing integrated topology read-only, and the only code-side changes in this wave are test-side version-dynamic expectations"))
+(prior-failure-addressed . "attempt-1 ended in a provider/network infrastructure failure with the record/checkpoint work already committed on this branch; this attempt resumed from those checkpoints instead of restarting, completed the remaining version-dynamic test-side sync, re-synced the README test-lines metric after the edits (264260 → 264294), passed the pre-commit raco-fmt gate, and wrote the missing reviews/validation records so the full evidence trio exists at HEAD on the delivery branch")
+(result . "all wave-scoped checks green at validated-sha; the declared Verify command is coordinator-owned and runs at return"))

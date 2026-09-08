@@ -3,7 +3,8 @@
 ;; W7 characterization fixture: mutates the process environment WITHOUT
 ;; declaring @mutates. Characterization only: documents that undeclared env
 ;; mutation leaks across grouped files (the contract relies on @mutates
-;; declarations; undeclared mutators are the named v1.00.27 boundary risk).
+;; declarations; undeclared mutators are the named boundary risk of
+;; this series).
 (require rackunit
          rackunit/text-ui)
 
