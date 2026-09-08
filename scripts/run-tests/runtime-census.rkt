@@ -540,9 +540,15 @@
 
 ;; Per-file rounds: sample i of every family starts no earlier than sample
 ;; i-1 of the same family completes (same invariant as the hotspot tool).
+;; BUG-0066 recovery: emit one flushed progress line per attempt so a
+;; multi-hour serial run is never indistinguishable from a hang — the
+;; 2026-09-08 crash began with a silent census log misread as a zombie.
 (define (census-collect files #:samples [samples 3] #:jobs [jobs 4] #:timeout-s [timeout-s 300])
   (define counters-root (make-temporary-file "q-census-counters-~a" 'directory))
   (define records (make-hash)) ; file -> attempts, newest first
+  (define census-started (current-inexact-milliseconds))
+  (define attempts-done (box 0))
+  (define total-attempts (* samples (length files)))
   (for ([round (in-range 1 (add1 samples))])
     (define sema (make-semaphore (max 1 jobs)))
     (define results (make-hash))
@@ -550,20 +556,33 @@
       (for/list ([f (in-list files)])
         (thread (lambda ()
                   (semaphore-wait sema)
-                  (hash-set! results
-                             f
-                             (with-handlers ([exn:fail? (lambda (e)
-                                                          (hasheq 'attempt
-                                                                  round
-                                                                  'status
-                                                                  "collection-failure"
-                                                                  'duration_ms
-                                                                  0
-                                                                  'counters
-                                                                  (hasheq)
-                                                                  'error
-                                                                  (exn-message e)))])
-                               (run-attempt f round timeout-s counters-root)))
+                  (define res
+                    (with-handlers ([exn:fail? (lambda (e)
+                                                 (hasheq 'attempt
+                                                         round
+                                                         'status
+                                                         "collection-failure"
+                                                         'duration_ms
+                                                         0
+                                                         'counters
+                                                         (hasheq)
+                                                         'error
+                                                         (exn-message e)))])
+                      (run-attempt f round timeout-s counters-root)))
+                  (hash-set! results f res)
+                  (set-box! attempts-done (add1 (unbox attempts-done)))
+                  (define elapsed-s (/ (- (current-inexact-milliseconds) census-started) 1000.0))
+                  (fprintf (current-output-port)
+                           "census: [~a/~a round ~a/~a] ~a — ~a (~ams, ~as elapsed)\n"
+                           (unbox attempts-done)
+                           total-attempts
+                           round
+                           samples
+                           f
+                           (hash-ref res 'status "?")
+                           (hash-ref res 'duration_ms 0)
+                           (~r elapsed-s #:precision 1))
+                  (flush-output)
                   (semaphore-post sema)))))
     (for ([t (in-list threads)])
       (thread-wait t))
