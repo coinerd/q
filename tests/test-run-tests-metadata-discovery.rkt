@@ -270,7 +270,7 @@
                                status
                                all_attempts
                                instrumentation))])
-        (check-true (member f fields) (format "required field missing: ~a" f))))
+        (check-not-false (member f fields) (format "required field missing: ~a" f))))
 
     (test-case "unknown counters serialize as null, never 0"
       (define unknown (census:census-instrumentation-unknown))
