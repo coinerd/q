@@ -26,6 +26,9 @@
                   fast-inventory-files
                   fast-inventory-file?
                   fast-inventory-metadata)
+         (only-in "../scripts/run-tests/hotspot-benchmark.rkt"
+                  hotspot-manifest-errors
+                  current-hotspot-sample-floor)
          (only-in "../scripts/run-tests/runtime-census.rkt"
                   census-record
                   census-record-required-fields
@@ -367,3 +370,70 @@
     (check-false (string-contains? f "/compiled/") (format "~a hits compiled/" f)))
   (check-true (hash? (fast-inventory-metadata "tests/test-runtime-census.rkt"))
               "per-file metadata must be exposed for census records"))
+
+;; ============================================================
+;; hotspot machinery reuse: sample-floor parameterization
+;; (the census runs at the >= 3-sample floor via
+;; current-hotspot-sample-floor; the hotspot default stays 10)
+;; ============================================================
+
+(define (mk-floor-manifest n)
+  (hasheq 'schema
+          "test-runtime/hotspot-baseline/v1"
+          'milestone
+          "v1.00.27-testwork"
+          'wave
+          "W0"
+          'mode
+          "subprocess"
+          'jobs
+          3
+          'scheduler
+          "batch"
+          'q_sha
+          "0000000000000000000000000000000000000000"
+          'command
+          "racket scripts/run-tests/hotspot-baseline.rkt"
+          'selected_paths_digest
+          (make-string 64 #\b)
+          'environment
+          (hasheq 'config_digest "cfg-test" 'machine "test-host" 'os "linux" 'racket_version "8.15")
+          'inputs
+          (hasheq 'allowlist_sha256 (make-string 64 #\a))
+          'families
+          (list (hasheq 'file
+                        "tests/example.rkt"
+                        'samples
+                        (for/list ([i (in-range n)])
+                          (hasheq 'sample i 'status "pass" 'duration_ms 100))
+                        'stats
+                        (hasheq 'median_ms
+                                100
+                                'p95_ms
+                                100
+                                'min_ms
+                                100
+                                'max_ms
+                                100
+                                'successful
+                                n
+                                'failures
+                                0
+                                'timeouts
+                                0)))))
+
+(test-case "sampling: hotspot sample floor is parameterized for census reuse"
+  (check-true (null? (hotspot-manifest-errors (mk-floor-manifest 10)))
+              "default floor (10) accepts a 10-sample manifest")
+  (check-true (pair? (hotspot-manifest-errors (mk-floor-manifest 9)))
+              "default floor (10) rejects a below-floor manifest")
+  (parameterize ([current-hotspot-sample-floor 3])
+    (check-true (null? (hotspot-manifest-errors (mk-floor-manifest 3)))
+                "census floor (3) accepts a 3-sample manifest")
+    (check-true (pair? (hotspot-manifest-errors (mk-floor-manifest 2)))
+                "census floor (3) rejects a 2-sample manifest"))
+  (parameterize ([current-hotspot-sample-floor 5])
+    (check-true (null? (hotspot-manifest-errors (mk-floor-manifest 6)))
+                "floor honors its parameter value, not the default")
+    (check-true (pair? (hotspot-manifest-errors (mk-floor-manifest 4)))
+                "floor rejects samples below its parameter value")))
