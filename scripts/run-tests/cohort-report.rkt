@@ -154,6 +154,17 @@
   ;; fixtures, normalize-manifest output) or string-keyed (read-json).
   (and (hash? v) (or (hash-has-key? v k) (hash-has-key? v (symbol->string k)))))
 
+(define (hash-ref-tolerant h key [default #f])
+  ;; Content-based lookup across the symbol/string key duality: the load
+  ;; path (normalize-manifest) yields symbol keys while in-process fixtures
+  ;; may carry string keys — and ids like guard ids and row ids are strings.
+  (cond
+    [(not (hash? h)) default]
+    [(hash-has-key? h key) (hash-ref h key)]
+    [(and (string? key) (hash-has-key? h (string->symbol key))) (hash-ref h (string->symbol key))]
+    [(and (symbol? key) (hash-has-key? h (symbol->string key))) (hash-ref h (symbol->string key))]
+    [else default]))
+
 (define (cohort-manifest? v)
   (and (hash? v)
        (manifest-has-key? v 'cohort-id)
@@ -1315,21 +1326,23 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
 ;; The seven roadmap §8 rows with their FIXED thresholds.  These constants
 ;; are the final-claim contract: neither the gate nor a manifest may revise
 ;; them.
+;; equal?-based hash: ids are strings and must match by content, not by
+;; identity (hasheq with string keys silently misses fresh string objects).
 (define final-claim-thresholds
-  (hasheq "fast-p50"
-          115.0
-          "fast-p95"
-          135.0
-          "pr-ci-p50"
-          588.0
-          "pr-ci-p95"
-          735.0
-          "security-runner-p50"
-          240.0
-          "workflows-runner-p50"
-          220.0
-          "prepared-env-verified-restores"
-          95.0))
+  (hash "fast-p50"
+        115.0
+        "fast-p95"
+        135.0
+        "pr-ci-p50"
+        588.0
+        "pr-ci-p95"
+        735.0
+        "security-runner-p50"
+        240.0
+        "workflows-runner-p50"
+        220.0
+        "prepared-env-verified-restores"
+        95.0))
 
 (define final-claim-rows
   (list
@@ -1499,8 +1512,10 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
     [else (hasheq 'verified 0 'total 0 'fallback 0 'rate 0.0 'records-observed 0 'window "")]))
 
 (define (final-claim-guard-provided? manifest guard-id)
-  (define ev (hash-ref (hash-ref manifest 'guard-evidence (hasheq)) guard-id #f))
-  (and (hash? ev) (hash-ref ev 'provided #f) (non-empty-string? (hash-ref ev 'reference ""))))
+  (define ev (hash-ref-tolerant (hash-ref manifest 'guard-evidence (hasheq)) guard-id #f))
+  (and (hash? ev)
+       (hash-ref-tolerant ev 'provided #f)
+       (non-empty-string? (hash-ref-tolerant ev 'reference ""))))
 
 (define (final-claim-reliability-ok? manifest)
   ;; Computed non-regression: failures+cancelled+reruns across all cohort
@@ -1543,9 +1558,10 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
                 'provided
                 (final-claim-guard-provided? manifest g)
                 'reference
-                (hash-ref (hash-ref (hash-ref manifest 'guard-evidence (hasheq)) g (hasheq))
-                          'reference
-                          ""))))
+                (hash-ref-tolerant
+                 (hash-ref-tolerant (hash-ref manifest 'guard-evidence (hasheq)) g (hasheq))
+                 'reference
+                 ""))))
     (hasheq 'entries
             guard-hashes
             'satisfied
