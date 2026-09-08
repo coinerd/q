@@ -72,7 +72,7 @@ jobs:
         id: fast-tests
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --suite fast --timeout 300 --record-gate-evidence 2>&1 | tee test-output.log
+          racket scripts/run-tests.rkt --suite fast --timeout 300 --record-gate-evidence --json-out test-results-release.json 2>&1 | tee test-output.log
 
       - name: Record gate evidence (arch)
         run: |
@@ -105,6 +105,12 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           grep -A 4 'FAILURE\|ERROR\|FAILED\|TIMEOUT' test-output.log release-readiness.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
+          # BUG-0065: CI-only failures need per-file rackunit detail; the
+          # runner already captures it — persist the failing files' output.
+          if [ -f test-results-release.json ]; then
+            echo "## Per-file failure output" >> $GITHUB_STEP_SUMMARY
+            jq -r '.files[] | select(.category != "PASS") | "### \(.path) [\(.category)]\n```\n\(.output)\n```"' test-results-release.json >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          fi
 
       - name: Upload test log
         if: always()
@@ -114,6 +120,7 @@ jobs:
           path: |
             test-output.log
             release-readiness.log
+            test-results-release.json
           retention-days: 7
 
   # ── Extract version from tag ──
