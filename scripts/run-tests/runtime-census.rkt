@@ -35,7 +35,8 @@
          racket/port
          racket/string
          racket/system
-         (only-in "classify.rkt" collect-test-files get-file-metadata)
+         (only-in "classify.rkt" get-file-metadata)
+         (only-in "inventory.rkt" resolved-fast-inventory)
          (only-in "hotspot-benchmark.rkt" hotspot-percentile)
          (only-in "sha256.rkt" sha256-hex))
 
@@ -724,7 +725,9 @@
                  '()
                  (list "census: stored bytes are not canonical JSON")))
            ;; inventory completeness against the live fast inventory.
-           (let ([live (sort (collect-test-files 'fast) string<?)]
+           (let ([live (sort (for/list ([r (in-list (resolved-fast-inventory))])
+                               (hash-ref r 'path))
+                             string<?)]
                  [recorded (append (hash-ref m 'records '()) (hash-ref m 'collection_failures '()))])
              (census-completeness-errors live recorded))
            ;; sample floor + median/p95 self-consistency.
@@ -794,7 +797,9 @@
      (write-sha256sums! "artifacts/test-runtime/v1.00.28-census/SHA256SUMS")
      (printf "refreshed SHA256SUMS\n")]
     [else
-     (define files (collect-test-files 'fast))
+     (define files
+       (for/list ([r (in-list (resolved-fast-inventory))])
+         (hash-ref r 'path)))
      (when (limit-n)
        (set! files (take files (min (limit-n) (length files)))))
      (printf "census: fast inventory = ~a files, ~a samples, jobs ~a\n"

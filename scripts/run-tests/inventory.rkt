@@ -30,6 +30,7 @@
          run-unit-fast-audit
          run-ownership-map
          gate-membership
+         resolved-fast-inventory
          v124-behavior-table
          gate-ownership-rows
          gate-ownership-errors
@@ -679,6 +680,27 @@
 (require "sha256.rkt")
 
 (define v124-gate-names '("fast" "platform" "security" "workflows" "unit-fast" "slow/L4"))
+
+;; Resolved canonical `fast` inventory with per-file metadata, exposed for
+;; the v1.00.28 runtime census (RUNTIME-AUDIT-SPEC §1/§2). Each record:
+;; path (repo-relative string), speed/suite/boundary (string or #f → null
+;; at JSON time), covers (list of strings). Unknown metadata stays #f so
+;; the census can serialize it as null, never 0.
+(define (resolved-fast-inventory)
+  (for/list ([f (in-list (collect-test-files 'fast))])
+    (define m
+      (with-handlers ([exn:fail? (lambda (_) (hash))])
+        (get-file-metadata f)))
+    (hasheq 'path
+            f
+            'speed
+            (hash-ref m 'speed #f)
+            'suite
+            (hash-ref m 'suite #f)
+            'boundary
+            (hash-ref m 'boundary #f)
+            'covers
+            (hash-ref m 'covers '()))))
 
 ;; Gate name -> sorted list of selected test files (repository walk).
 (define (gate-membership)
