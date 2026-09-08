@@ -102,6 +102,15 @@
   (define content (read-release-yml))
   (check-true (string-contains? content "needs: test") "prepare job must depend on test"))
 
+(test-case "release.yml test job retains per-file failure diagnostics (BUG-0065)"
+  (define content (read-release-yml))
+  (check-true (string-contains? content "--json-out test-results-release.json")
+              "fast suite must write per-file JSON results so CI-only failures are diagnosable")
+  (check-true (string-contains? content "test-results-release.json")
+              "results JSON must be referenced by upload/summary steps")
+  (check-true (string-contains? content "Per-file failure output")
+              "failure summary must include per-file failure output"))
+
 (test-case "release.yml release-core depends on prepare"
   (define content (read-release-yml))
   (check-true (string-contains? content "needs: prepare") "release-core must depend on prepare"))
