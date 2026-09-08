@@ -497,7 +497,7 @@
     (for ([f (in-list (directory-list cdir #:build? #t))]
           #:when (string-suffix? (path->string f) ".json"))
       (with-handlers ([exn:fail? void])
-        (define obj (read-json (open-input-file f)))
+        (define obj (call-with-input-file f read-json))
         (when (hash? obj)
           (for ([(k v) (in-hash obj)]
                 #:when (symbol? (string->symbol (format "~a" k)))
@@ -518,19 +518,26 @@
   (define marker (build-path (current-directory) ".q-census-counters"))
   (with-output-to-file marker (lambda () (displayln (path->string cdir))) #:exists 'replace)
   (define started (current-inexact-milliseconds))
-  (define stdout-p (open-output-file "/dev/null" #:exists 'append))
-  (define-values (proc _i _o _e) (subprocess stdout-p #f (current-error-port) racket-path target))
   (define status
-    (let ([ready (sync/timeout timeout-s proc)])
-      (cond
-        [ready (if (zero? (subprocess-status proc)) "pass" "fail")]
-        [else
-         (with-handlers ([exn:fail? void])
-           (subprocess-kill proc #t))
-         "timeout"])))
-  (sync/timeout 5 proc)
+    ;; stdout port must close on every path, including spawn failures —
+    ;; a per-attempt fd leak exhausts the process fd limit mid-census
+    ;; (BUG-0031: 3531 files x 3 rounds leaked ~10k fds and cascaded into
+    ;; spurious 0ms collection-failures + a static-scan directory-list crash).
+    (let ([stdout-p (open-output-file "/dev/null" #:exists 'append)])
+      (dynamic-wind void
+                    (lambda ()
+                      (define-values (proc _i _o _e)
+                        (subprocess stdout-p #f (current-error-port) racket-path target))
+                      (define ready (sync/timeout timeout-s proc))
+                      (unless ready
+                        (with-handlers ([exn:fail? void])
+                          (subprocess-kill proc #t)))
+                      (sync/timeout 5 proc) ; reap grace (as before)
+                      (cond
+                        [ready (if (zero? (subprocess-status proc)) "pass" "fail")]
+                        [else "timeout"]))
+                    (lambda () (close-output-port stdout-p)))))
   (define duration (inexact->exact (floor (- (current-inexact-milliseconds) started))))
-  (close-output-port stdout-p)
   (with-handlers ([exn:fail? void])
     (delete-file marker))
   (define counters (read-attempt-counters cdir))
