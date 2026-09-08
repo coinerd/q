@@ -48,6 +48,25 @@ rollout stage reached is the local developer default (2C-equivalent); the 2B
 shadow-CI stage was replaced by the fail-open fallback design plus unchanged L3
 gates, because the shadow job could not fit the job runtime budget.
 
+### Tier semantics — v1.00.27 W1 naming of record
+
+Two named tiers carry the repository's test-selection vocabulary; they match
+the runner CLI (`scripts/run-tests/cli.rkt` help) and
+`docs/TEST_CONVENTIONS.md` exactly:
+
+- `fast` is the **broad PR regression tier** — the suite CI runs per PR
+  (three shards in `.github/workflows/ci.yml`), and the declared broad
+  fallback that escalated local impact runs widen to.
+- `unit-fast` is the **developer iteration tier** — the tier a developer runs
+  inside the red-green-refactor loop. Its local SLO is declared as
+  p90 ≤ 90 s (measured in W4); until W4's baseline lands it is a declared
+  target, not a measured budget.
+
+The local impact selector remains recommended and fail-open: it reorders and
+preselects local runs for developer convenience, and it must never gate or
+filter required CI. The L0–L2 levels are local feedback ladder rungs
+(recommendations), not tiers.
+
 ### `@covers` manifest — pilot-area expansion complete (W1)
 
 `tests/.coverage-manifest.json` now maps **95 test files** covering **92

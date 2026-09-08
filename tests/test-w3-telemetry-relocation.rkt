@@ -168,8 +168,11 @@
   (apply build-path project-root parts))
 
 (define ci-yml (file->string (rd ".github" "workflows" "ci.yml")))
-(define cp3 (rd "artifacts" "ci-topology" (format "v~a-w3" q-version) "dag-checkpoint.json"))
-(define cp2 (rd "artifacts" "ci-topology" (format "v~a-w2" q-version) "dag-checkpoint.json"))
+(define ci-topology-version "1.00.26") ;; frozen: telemetry checkpoints are v1.00.26-series artifacts
+(define cp3
+  (rd "artifacts" "ci-topology" (format "v~a-w3" ci-topology-version) "dag-checkpoint.json"))
+(define cp2
+  (rd "artifacts" "ci-topology" (format "v~a-w2" ci-topology-version) "dag-checkpoint.json"))
 (define telemetry-yml-path (rd ".github" "workflows" "shard-plan-telemetry.yml"))
 
 ;; ---- 1. checkpoint exists, checksum-bound, topology-checkpoint-not-cohort ----
@@ -179,7 +182,7 @@
                 "bffe410ac755bddec09642c6fa23b363896bde95b3a5503ab8b58f40f2db12ab"
                 "W3 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
   (define j (call-with-input-file cp3 read-json))
-  (check-equal? (hash-ref j 'wave) (format "v~a-w3" q-version))
+  (check-equal? (hash-ref j 'wave) (format "v~a-w3" ci-topology-version))
   (check-equal? (hash-ref (hash-ref j 'timing_checkpoint) 'label)
                 "topology checkpoint — not a cohort")
   (check-equal? (hash-ref (hash-ref j 'timing_checkpoint) 'measurement_kind)

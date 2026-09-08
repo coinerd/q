@@ -1,0 +1,492 @@
+{
+  "schema": "tier-ownership-overlap-review/v1",
+  "milestone": "v1.00.27",
+  "wave": "v1.00.27-w2",
+  "overlap_axes": ["platform/fast", "security/fast"],
+  "source_matrix": "artifacts/tier-ownership/v1.00.27-w0/ownership-matrix.json",
+  "duplicate_criteria": "exact duplicate = identical module, identical metadata, identical execution context in both tiers for no ownership reason",
+  "removals": 0,
+  "note": "no platform/fast or security/fast intersecting test is byte-identical in execution context: fast runs the prepared-environment shard while platform (raco make full-install) and security (STRICT_TEST_RUNNER full-install) run cold contexts; security/fast rows additionally own required blocking security semantics and are never removable.",
+  "rows": [
+    {
+      "axis": "security/fast",
+      "test": "tests/test-approval-broker.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-approval-channel-teardown.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-approval-channel.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-approval-correlation.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-browser-permission-tiers.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-browser-safe-mode.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-capability-aware-spawn.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-capability-token-hardening.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-capability-tokens.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-cell-diff-render.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-cli-flags.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-cli.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-config-paths.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-cwd-independence.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-destructive-warning.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-error-classify.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-execution-plane-error-label.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-explorer-redaction-boundaries.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-export-formats.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-extension-tiers.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-facade-surface.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-frontmatter-extended.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-generic-tool-approval.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-hitl-approval-integration.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-legacy-approval-api.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-llm-error-visibility.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-llm-model.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-lockfile.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-loop-cancellation.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-loop-edge-cases.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-loop-events.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-mcp-protocol-compliance.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-mcp-security-gates.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-message-layout.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-metrics-helpers.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-mutating-tool-taxonomy.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-mutating-tool-taxonomy.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-oauth-callback-security.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-permission-bash-w1.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-permission-denial-path.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-permission-gate.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-permission-mode-wiring.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-permission-policy-mode.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-property-security.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-provider-config-redaction.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-provider-differential-fixtures.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-provider-tool-transport.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-red-module-boundaries.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-routing-policy-integration.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-rpc-credential-redaction.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-runtime-packages.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-safe-mode-defense-depth.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-safe-mode.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-safe-mode.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-scheduler-safe-mode.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-session-id-containment.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-session-production-cutover.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-settings.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-spawn-approval-single-gate.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-spawn-approval.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-spawn-execution-plan.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-spawn-subagent-serialization.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-spawn-subagents-approval.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-streaming-tool-bug.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-streaming-transitions.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-subprocess-helpers.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-test-sandbox.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-token-estimate-cache.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-tool-bash-security-edges.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-tool-bash-security.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-tool-gateway-remote-routing.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-tool-internal-gate.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-trace-logger-containment.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-truncation.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-verifier-gate.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-version.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-w2-credential-redaction.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "platform/fast",
+      "test": "tests/test-worker-security.rkt",
+      "decision": "kept",
+      "rationale": "kept: the platform gate re-executes this suite in its own cold full-install context (raco make main.rkt) to protect platform-surface behavior; fast runs it in the prepared-environment shard. Different execution context and gate ownership, so this is an intentional platform/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/test-worker-security.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    },
+    {
+      "axis": "security/fast",
+      "test": "tests/workflows/test-sandbox-integration.rkt",
+      "decision": "kept",
+      "rationale": "kept: the security gate is a required blocking control that re-executes this suite under STRICT_TEST_RUNNER=1 in a cold full-install environment; removing it from the security gate would be a security re-tiering. The fast/prepared-environment run is a complementary shard, so this is an intentional security/fast overlap, not an exact duplicate."
+    }
+  ]
+}

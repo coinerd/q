@@ -3,7 +3,7 @@
 ;; mutates the host environment. Undeclared mutation cannot be detected by
 ;; static gates; grouped execution therefore leaks it into the host process.
 ;; This fixture documents WHY mutation declaration headers are mandatory and why
-;; grouped stays opt-in (v1.00.27 boundary).
+;; grouped stays opt-in (this series' boundary).
 (require rackunit)
 
 (module+ test

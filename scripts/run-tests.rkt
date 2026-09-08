@@ -39,6 +39,16 @@
          run-single-file
          run-all-files
          run-suite-once
+         ;; v1.00.27 W3 (#9591): per-area grouped-expansion policy
+         test-file-area
+         grouped-area-config
+         grouped-area-config->jsexpr
+         grouped-expansion-artifact-path
+         grouped-config-violation
+         grouped-rollback-env-var
+         grouped-rollback-areas
+         area-grouped-decision
+         grouped-fallback-rows
          collect-test-files
          mutating-file?
          mutating-patterns

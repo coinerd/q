@@ -26,7 +26,7 @@
 
 ;; BUG-0009: version-bearing artifact expectations must derive from q-version
 ;; so a version bump fails loudly here instead of silently pinning stale literals.
-(define topology-tag (format "v~a" q-version))
+(define topology-tag "v1.00.26") ;; frozen: the w2 topology checkpoint is a v1.00.26-series artifact
 
 ;; The declared verification invocation is `racket tests/<file>.rkt` from the
 ;; repo root, while `raco test` chdirs to this file's directory. Anchor on

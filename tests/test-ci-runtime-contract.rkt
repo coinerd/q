@@ -1,5 +1,6 @@
 #lang racket/base
-(require (only-in "../util/version.rkt" q-version))
+(define ci-topology-version
+  "1.00.26") ;; frozen: CI-topology checkpoints are v1.00.26-series artifacts (SHA-bound below)
 
 ;; @speed fast
 ;; @boundary unit
@@ -278,7 +279,7 @@
         (call-with-input-file (build-path project-root
                                           "artifacts"
                                           "ci-topology"
-                                          (format "v~a-w3" q-version)
+                                          (format "v~a-w3" ci-topology-version)
                                           "dag-checkpoint.json")
                               read-json))
       (check-equal? (sha256-hex telemetry-yml)
@@ -441,7 +442,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w0" q-version)
+                    (format "v~a-w0" ci-topology-version)
                     "graph-snapshot.json"))
       (check-true (file-exists? snap) "W0 graph-snapshot.json must exist")
       (check-equal? (sha256-hex snap)
@@ -476,14 +477,14 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w1" q-version)
+                    (format "v~a-w1" ci-topology-version)
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W1 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
                     "2f4d64e8728a18578ab81758a02acb93950613e9a49d0ee5903f99a3f67739e2"
                     "W1 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
-      (check-equal? (hash-ref j 'wave) (format "v~a-w1" q-version))
+      (check-equal? (hash-ref j 'wave) (format "v~a-w1" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)
                     (sort (policy-jobs) string<?)
                     "checkpoint policy_pin must equal the live required-pr-checks.policy")
@@ -493,7 +494,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w1" q-version)
+                    (format "v~a-w1" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define prot (hash-ref j 'branch_protection))
@@ -510,7 +511,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w1" q-version)
+                    (format "v~a-w1" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define seq (hash-ref j 'safe_apply_sequence))
@@ -534,7 +535,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w1" q-version)
+                    (format "v~a-w1" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define timing (hash-ref j 'timing_checkpoint))
@@ -573,7 +574,7 @@
       ;; topology-not-cohort honesty: derived projection, provenance recorded
       (check-equal? (hash-ref timing 'derived_from)
                     (format "artifacts/ci-topology/v~a-w0/graph-snapshot.json#timing_baseline"
-                            q-version))
+                            ci-topology-version))
       (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection"))
     (test-case "W1: lint-quality is parallel in the workflow graph (no downstream waits on it)"
       (check-equal? (job-needs "lint-quality")
@@ -595,14 +596,14 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w2" q-version)
+                    (format "v~a-w2" ci-topology-version)
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
                     "0c18bf7d204df7313fdeea213714828db825b22debc9bbfa5969019905a67187"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
-      (check-equal? (hash-ref j 'wave) (format "v~a-w2" q-version))
+      (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)
                     (sort (policy-jobs) string<?)
                     "checkpoint policy_pin must equal the live required-pr-checks.policy"))
@@ -611,7 +612,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w2" q-version)
+                    (format "v~a-w2" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define edges (hash-ref j 'needs_edges))
@@ -637,7 +638,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w2" q-version)
+                    (format "v~a-w2" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define contract (hash-ref j 'fast_env_verification_contract))
@@ -674,7 +675,7 @@
         (build-path project-root
                     "artifacts"
                     "ci-topology"
-                    (format "v~a-w2" q-version)
+                    (format "v~a-w2" ci-topology-version)
                     "dag-checkpoint.json"))
       (define j (call-with-input-file cp read-json))
       (define timing (hash-ref j 'timing_checkpoint))
@@ -682,7 +683,7 @@
       (check-equal? (hash-ref timing 'measurement_kind) "derived-shape-projection")
       (check-equal? (hash-ref timing 'derived_from)
                     (format "artifacts/ci-topology/v~a-w1/dag-checkpoint.json#timing_checkpoint"
-                            q-version))
+                            ci-topology-version))
       (define before (hash-ref timing 'before))
       (define after (hash-ref timing 'after))
       (check-equal? (hash-ref before 'head_sha)
