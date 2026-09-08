@@ -358,9 +358,16 @@
     ;; v1.00.27 W3 (#9591): per-area grouped policy — only areas backed by an
     ;; exact subprocess-vs-grouped comparison execute grouped; a per-area env
     ;; rollback switch restores subprocess for a single area, named, without
-    ;; touching the others.
-    [(let-values ([(mode fallback) (area-grouped-decision resolved-path)])
-       (and (eq? mode 'subprocess) (or fallback 'area-not-expanded)))
+    ;; touching the others. W5: the policy gates policy-driven grouped runs
+    ;; (orchestrator #:mode 'grouped and suite requests). An explicit
+    ;; call-site #:mode 'grouped-in-process is a deliberate per-call
+    ;; escalation and is never downgraded by an un-expanded area — the
+    ;; characterization suite's parity contract depends on that. The
+    ;; in-process eligibility and zero-parsed-output fallbacks still apply to
+    ;; every path; no production default changes.
+    [(and (not (equal? requested-mode "grouped-in-process"))
+          (let-values ([(mode fallback) (area-grouped-decision resolved-path)])
+            (and (eq? mode 'subprocess) (or fallback 'area-not-expanded))))
      =>
      (lambda (fallback)
        (run-single-file/subprocess test-path
@@ -442,7 +449,11 @@
   ;; otherwise the explicit per-call mode (direct/test callers).
   (define requested (or (current-requested-execution-mode) (symbol->string mode)))
   (case mode
-    [(in-process grouped)
+    ;; W5: 'grouped-in-process is the explicit per-call escalation symbol
+    ;; (used by tests/test-runner-grouped-characterization.rkt). The
+    ;; orchestrator never requests it; suite-wide grouped runs keep using
+    ;; #:mode 'grouped, which remains subject to the W3 per-area policy.
+    [(in-process grouped grouped-in-process)
      (run-single-file/in-process test-path #:timeout timeout #:requested-mode requested)]
     [else (run-single-file/subprocess test-path #:timeout timeout #:requested-mode requested)]))
 

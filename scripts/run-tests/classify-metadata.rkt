@@ -69,9 +69,23 @@
   (define parent (simplify-path (build-path orig "..")))
   (define candidates
     (list (simplify-path (build-path orig "q")) (simplify-path (build-path parent "q")) orig parent))
+  ;; Ancestor walk: when the launch cwd sits at an arbitrary depth inside
+  ;; the repo (e.g. suite harness subprocess execution), the original
+  ;; one-level candidates can all miss the root. Walk upward from orig
+  ;; looking for a q-root directory; preserve prior behavior otherwise.
+  (define ancestor-root
+    (let loop ([dir (simplify-path orig)])
+      (cond
+        [(q-root-candidate? dir) dir]
+        [else
+         (define up (simplify-path (build-path dir "..")))
+         (if (string=? (path->string up) (path->string dir))
+             #f ; filesystem root reached
+             (loop up))])))
   (or (for/first ([candidate (in-list candidates)]
                   #:when (q-root-candidate? candidate))
         candidate)
+      ancestor-root
       orig))
 
 (define base-dir (resolve-base-dir (find-system-path 'orig-dir)))
