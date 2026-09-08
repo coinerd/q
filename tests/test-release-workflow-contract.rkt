@@ -111,6 +111,15 @@
   (check-true (string-contains? content "Per-file failure output")
               "failure summary must include per-file failure output"))
 
+(test-case "release.yml test job purges restored workspace bytecode (BUG-0065 root cause)"
+  (define content (read-release-yml))
+  (check-true
+   (string-contains? content "Purge restored workspace bytecode")
+   "the test job must purge restored .zo files: prepared-env snapshots carry\nmtimes newer than the checkout, so Racket executes producer bytecode")
+  (check-true (string-contains? content "name '*.zo'") "purge must remove stale .zo files")
+  (check-true (string-contains? content "tests/metadata-discovery/fixture")
+              "purge must preserve the frozen discovery fixture"))
+
 (test-case "release.yml release-core depends on prepare"
   (define content (read-release-yml))
   (check-true (string-contains? content "needs: prepare") "release-core must depend on prepare"))
