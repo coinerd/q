@@ -637,9 +637,16 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
       (err! "final-claim cohort requires a guard-evidence object"))
     (when (hash? guard-ev)
       (for ([(gid ev) (in-hash guard-ev)])
-        (unless (member gid final-claim-guard-ids)
+        ;; normalize-manifest canonicalizes hash keys to symbols, so guard
+        ;; ids arrive as symbols here while final-claim-guard-ids holds
+        ;; strings; compare by content, never by eq?.
+        (define gid-name
+          (if (symbol? gid)
+              (symbol->string gid)
+              gid))
+        (unless (member gid-name final-claim-guard-ids)
           (err! (format "final-claim guard-evidence has unknown guard id: ~a (must be one of ~a)"
-                        gid
+                        gid-name
                         final-claim-guard-ids)))
         (unless (and (hash? ev) (boolean? (hash-ref ev 'provided)))
           (err! (format "final-claim guard-evidence ~a must be an object with a boolean provided flag"
@@ -730,6 +737,11 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
                (normalize-manifest val)))]
     [(list? v) (map normalize-manifest v)]
     [(vector? v) (list->vector (map normalize-manifest (vector->list v)))]
+    ;; JSON null means "absent evidence" in this schema (e.g. a SHA entry
+    ;; without an observed prepared-env outcome); read-json yields the
+    ;; 'null symbol, which nothing downstream accepts — canonicalize to #f
+    ;; so the validator and reporters see exactly one representation.
+    [(eq? v 'null) #f]
     [else v]))
 
 ;; ============================================================

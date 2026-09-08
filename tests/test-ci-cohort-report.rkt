@@ -1501,6 +1501,24 @@
       (check-equal? (hash-ref (final-claim-gate (make-fc-manifest)) 'overall-verdict)
                     "target not achieved")) ; empty cohort cannot pass
 
+    (test-case "JSON round-trip manifests validate (guard ids + JSON null prepared-env)"
+      ;; Live C3 cohort.json arrives via read-json (string-keyed hashes,
+      ;; JSON null for absent prepared-env evidence) and is canonicalized
+      ;; by normalize-manifest.  Simulate that exact shape: every hash key
+      ;; is a string, 'prepared-env carries the JSON null.
+      (define (string-keyed v)
+        (cond
+          [(hash? v)
+           (for/hash ([(k val) (in-hash v)])
+             (values (format "~a" k) (string-keyed val)))]
+          [(list? v) (map string-keyed v)]
+          [else v]))
+      (define sh (hash-set (make-pr-elapsed-sha 1) 'prepared-env 'null))
+      (define m (normalize-manifest (string-keyed (make-fc-manifest #:shas (list sh)))))
+      (define vr (validate-cohort m))
+      (check-false (has-error-matching? vr #rx"unknown guard id"))
+      (check-false (has-error-matching? vr #rx"unknown prepared-env")))
+
     (test-case "a row without its guard evidence is unverified, never pass"
       (define m
         (make-fc-manifest #:shas (for/list ([i (in-range 20)])
