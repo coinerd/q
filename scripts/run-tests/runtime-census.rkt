@@ -48,6 +48,7 @@
          census-static-scan
          census-canonical-bytes
          census-manifest-errors
+         census-collect
          main)
 
 ;; ============================================================
@@ -549,12 +550,25 @@
       (for/list ([f (in-list files)])
         (thread (lambda ()
                   (semaphore-wait sema)
-                  (hash-set! results f (run-attempt f round timeout-s counters-root))
+                  (hash-set! results
+                             f
+                             (with-handlers ([exn:fail? (lambda (e)
+                                                          (hasheq 'attempt
+                                                                  round
+                                                                  'status
+                                                                  "collection-failure"
+                                                                  'duration_ms
+                                                                  0
+                                                                  'counters
+                                                                  (hasheq)
+                                                                  'error
+                                                                  (exn-message e)))])
+                               (run-attempt f round timeout-s counters-root)))
                   (semaphore-post sema)))))
     (for ([t (in-list threads)])
       (thread-wait t))
     (for ([f (in-list files)])
-      (hash-set! records f (cons (hash-ref results f) (hash-ref records f)))))
+      (hash-set! records f (cons (hash-ref results f) (hash-ref records f '())))))
   (with-handlers ([exn:fail? void])
     (delete-directory/files counters-root))
   (for/list ([f (in-list (sort files string<?))])

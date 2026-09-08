@@ -35,7 +35,8 @@
                   census-aggregates
                   census-static-scan
                   census-canonical-bytes
-                  census-manifest-errors))
+                  census-manifest-errors
+                  census-collect))
 
 ;; ============================================================
 ;; §2 — record schema and unknown-counter serialization
@@ -323,6 +324,33 @@
   (check-true
    (pair? (census-manifest-errors (hash-set good 'records (list (hash-remove rec 'instrumentation)))))
    "record without instrumentation must be a schema error"))
+
+;; ============================================================
+;; §3 — sampling runner regression (round-1 empty records hash)
+;; ============================================================
+
+(test-case "sampling: census-collect records an attempt on the very first round"
+  ;; Regression: the per-round records update used (hash-ref records f)
+  ;; without a default, so the first sampled file of the first round raised
+  ;; "no value found for key". One file, one sample must simply produce one
+  ;; retained attempt.
+  (define fixture ".census-regression-fixture.rkt")
+  (with-output-to-file fixture (lambda () (displayln "#lang racket")) #:exists 'replace)
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define records (census-collect (list fixture) #:samples 1 #:jobs 1 #:timeout-s 120))
+     (check-equal? (length records) 1 "one file in, one record out")
+     (define rec (first records))
+     (check-equal? (hash-ref rec 'path) fixture "record must be keyed to the fixture path")
+     (define attempts (hash-ref rec 'all_attempts))
+     (check-true (list? attempts) "sampled file must have an attempt list")
+     (check-equal? (length attempts) 1 "one sample requested, one attempt retained")
+     (check-not-false (member (hash-ref (first attempts) 'status) '("pass" "fail" "timeout"))
+                      "attempt status must be pass/fail/timeout"))
+   (lambda ()
+     (with-handlers ([exn:fail? void])
+       (delete-file fixture)))))
 
 ;; ============================================================
 ;; live inventory exposure (extended in
