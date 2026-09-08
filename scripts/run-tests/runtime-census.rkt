@@ -538,6 +538,13 @@
                         [else "timeout"]))
                     (lambda () (close-output-port stdout-p)))))
   (define duration (inexact->exact (floor (- (current-inexact-milliseconds) started))))
+  ;; BUG-0031 residual: Racket releases a subprocess's internal status-pipe
+  ;; fds only when the subprocess object is garbage collected. The stdout-port
+  ;; close above is necessary but not sufficient: without a GC here the
+  ;; process accumulates one pipe fd per attempt (~1000 attempts exhausts the
+  ;; 1024-fd limit and every later spawn fails instantly with 0ms
+  ;; collection-failures). GC outside the timing window so durations stay honest.
+  (collect-garbage)
   (with-handlers ([exn:fail? void])
     (delete-file marker))
   (define counters (read-attempt-counters cdir))
