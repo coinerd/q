@@ -136,8 +136,13 @@
   (define resp-ch (make-channel))
   (define req (ui-request 'confirm resp-ch "Do you want to proceed?"))
   (thread (lambda () (channel-put ui-ch req)))
-  ;; Give the bridge time to process
-  (sleep 0.1)
+  ;; W1 wait-audit (v1.00.28): the fixed 0.1s bridge settle is replaced by
+  ;; bounded observation polling — exit as soon as the bridge has processed the
+  ;; request (notification visible in buf), with a 1s worst-case ceiling.
+  (let poll ([attempts 100])
+    (unless (or (string-contains? (get-output-string buf) "ui.confirm") (zero? attempts))
+      (sleep 0.01)
+      (poll (sub1 attempts))))
   ;; Check that a notification was written to buf
   (define output (get-output-string buf))
   (check-true (string-contains? output "ui.confirm")

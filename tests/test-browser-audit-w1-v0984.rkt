@@ -45,8 +45,13 @@
   (set-playwright-sidecar-state-custodian! state cust2)
   (set-playwright-sidecar-state-reader-thread! state dead-reader)
   ;; Wait for heartbeat to wake up and act on the mutated state.
-  ;; Use generous margin (3× interval) to avoid CI flakes.
-  (sleep 1.0)
+  ;; W1 wait-audit (v1.00.28): the fixed 1.0s sleep is replaced by bounded
+  ;; observation polling — exit as soon as the heartbeat visibly acts on the
+  ;; mutated state (victim2 stopped), with a 2s worst-case ceiling.
+  (let poll ([attempts 40])
+    (unless (or (not (thread-running? victim2)) (zero? attempts))
+      (sleep 0.05)
+      (poll (sub1 attempts))))
   ;; Dynamic read: current custodian (cust2) is shut down because reader is dead.
   (check-false (thread-running? victim2))
   ;; Stale custodian (cust1) was replaced before the read, so victim1 survives.

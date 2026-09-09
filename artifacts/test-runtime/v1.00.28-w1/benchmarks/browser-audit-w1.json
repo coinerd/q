@@ -1,0 +1,63 @@
+{
+  "family": "browser-audit-w1",
+  "file": "tests/test-browser-audit-w1-v0984.rkt",
+  "wave": "v1.00.28-w1",
+  "method": "racket tests/FILE run to completion from git root, wall-clock seconds via time.monotonic, 10 samples, post-remediation (after-only)",
+  "before": null,
+  "status": "INCOMPARABLE",
+  "incomparable-reason": "no retained before-samples with an identical method exist for this family: the sleeps it carried were remediated in earlier campaigns (F5a) or in this wave after the W0 census (different harness), so no same-method before measurement can be taken; no speedup is inferred",
+  "after-samples": [
+    {
+      "run": 1,
+      "seconds": 0.583,
+      "pass": true
+    },
+    {
+      "run": 2,
+      "seconds": 0.584,
+      "pass": true
+    },
+    {
+      "run": 3,
+      "seconds": 0.589,
+      "pass": true
+    },
+    {
+      "run": 4,
+      "seconds": 0.591,
+      "pass": true
+    },
+    {
+      "run": 5,
+      "seconds": 0.59,
+      "pass": true
+    },
+    {
+      "run": 6,
+      "seconds": 0.573,
+      "pass": true
+    },
+    {
+      "run": 7,
+      "seconds": 0.575,
+      "pass": true
+    },
+    {
+      "run": 8,
+      "seconds": 0.579,
+      "pass": true
+    },
+    {
+      "run": 9,
+      "seconds": 0.577,
+      "pass": true
+    },
+    {
+      "run": 10,
+      "seconds": 0.592,
+      "pass": true
+    }
+  ],
+  "after-failures": 0,
+  "after-median-seconds": 0.584
+}

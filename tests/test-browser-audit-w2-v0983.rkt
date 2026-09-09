@@ -37,7 +37,10 @@
 
 (test-case "SEC-05: start-heartbeat! works with stale thread reference"
   (define dead-thread (thread (lambda () (void))))
-  (sleep 0.1) ; ensure thread finishes
+  ;; W1 wait-audit (v1.00.28): the fixed (sleep 0.1) settle is replaced by a
+  ;; deterministic completion event — thread-wait returns exactly when the
+  ;; thread is finished, with zero arbitrary delay.
+  (thread-wait dead-thread) ; ensure thread finishes
   (define state
     (playwright-sidecar-state #f
                               #f
