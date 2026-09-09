@@ -22,6 +22,7 @@
          racket/list
          racket/string
          (only-in "helpers/metadata.rkt" get-file-metadata)
+         (only-in "../util/version.rkt" q-version)
          (only-in "helpers/fast-inventory.rkt"
                   fast-inventory-files
                   fast-inventory-file?
@@ -381,7 +382,7 @@
   (hasheq 'schema
           "test-runtime/hotspot-baseline/v1"
           'milestone
-          "v1.00.27-testwork"
+          (format "v~a-testwork" q-version)
           'wave
           "W0"
           'mode

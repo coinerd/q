@@ -83,3 +83,7 @@ q/build/q
 
 # Scratch files (BUG-0026)
 tmp/
+
+# v1.00.28 W0: runtime-generated census files (counter scope marker + probe output)
+.q-census-counters
+artifacts/test-runtime/.probe-census.json
