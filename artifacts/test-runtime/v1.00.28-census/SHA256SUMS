@@ -1,2 +1,3 @@
-0e1f5b2200ab4f6ad0db4a5a1d688fc567a4f000f3e94e9e154d68c527b2f4ae  artifacts/test-runtime/v1.00.28-census/fast-runtime-census.json
-2e0dc1d99a906700d681400688c86636fb0029dd8f8df0b920eab3039ff5ea2a  artifacts/test-runtime/v1.00.28-census/static-wait-scan.json
+3210bb0f40b2505bea38df050b41d560efd0c09b148b073bb7f3915216ee77f2  artifacts/test-runtime/v1.00.28-census/fast-runtime-census.json
+6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166  artifacts/test-runtime/v1.00.28-census/static-wait-scan.json
+32e4f8bc0798800cb6d2f782a94064111fa898eaee758866ae04b2e35893a810  docs/reports/TEST-WORK-MASS-v1.00.28.md

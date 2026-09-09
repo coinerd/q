@@ -569,36 +569,39 @@
     (define results (make-hash))
     (define threads
       (for/list ([f (in-list files)])
-        (thread (lambda ()
-                  (semaphore-wait sema)
-                  (define res
-                    (with-handlers ([exn:fail? (lambda (e)
-                                                 (hasheq 'attempt
-                                                         round
-                                                         'status
-                                                         "collection-failure"
-                                                         'duration_ms
-                                                         0
-                                                         'counters
-                                                         (hasheq)
-                                                         'error
-                                                         (exn-message e)))])
-                      (run-attempt f round timeout-s counters-root)))
-                  (hash-set! results f res)
-                  (set-box! attempts-done (add1 (unbox attempts-done)))
-                  (define elapsed-s (/ (- (current-inexact-milliseconds) census-started) 1000.0))
-                  (fprintf (current-output-port)
-                           "census: [~a/~a round ~a/~a] ~a — ~a (~ams, ~as elapsed)\n"
-                           (unbox attempts-done)
-                           total-attempts
-                           round
-                           samples
-                           f
-                           (hash-ref res 'status "?")
-                           (hash-ref res 'duration_ms 0)
-                           (~r elapsed-s #:precision 1))
-                  (flush-output)
-                  (semaphore-post sema)))))
+        (thread
+         (lambda ()
+           (semaphore-wait sema)
+           (define res
+             (with-handlers ([exn:fail?
+                              (lambda (e)
+                                (eprintf "census: attempt-error ~a r~a: ~a\n" f round (exn-message e))
+                                (hasheq 'attempt
+                                        round
+                                        'status
+                                        "collection-failure"
+                                        'duration_ms
+                                        0
+                                        'counters
+                                        (hasheq)
+                                        'error
+                                        (exn-message e)))])
+               (run-attempt f round timeout-s counters-root)))
+           (hash-set! results f res)
+           (set-box! attempts-done (add1 (unbox attempts-done)))
+           (define elapsed-s (/ (- (current-inexact-milliseconds) census-started) 1000.0))
+           (fprintf (current-output-port)
+                    "census: [~a/~a round ~a/~a] ~a — ~a (~ams, ~as elapsed)\n"
+                    (unbox attempts-done)
+                    total-attempts
+                    round
+                    samples
+                    f
+                    (hash-ref res 'status "?")
+                    (hash-ref res 'duration_ms 0)
+                    (~r elapsed-s #:precision 1))
+           (flush-output)
+           (semaphore-post sema)))))
     (for ([t (in-list threads)])
       (thread-wait t))
     (for ([f (in-list files)])
