@@ -199,9 +199,11 @@ KEEP-3 study are recorded in the regression log and the adoption-status section
 above. The halving verdict (MISSED at 1.2848×, sample p50 627.0 s vs 488.0 s
 baseline) is recorded with attribution and the named next lever, not massaged.
 
-**Deferred (still governed by the plan text below):** confirmation of the
-L0–L2 latency SLOs against measured baselines — these are recorded below as
-explicit scoped unknowns; the remaining metadata gap (18 files without
+**Deferred (still governed by the plan text below):** ~~confirmation of the
+L0–L2 latency SLOs against measured baselines~~ — **done in v1.00.28 W6**:
+retained local samples measured and recorded in
+`docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md` (L0 confirmed, L1 miss
+attributed, L2 selection confirmed); the remaining metadata gap (18 files without
 `@boundary`); Phase 0 rolling *trend* updates beyond the retained v1.00.15
 snapshot; and any test-suite consolidation, which stays blocked pending
 adequacy evidence per the consolidation policy. The halving-objective
@@ -248,15 +250,22 @@ The current runner applies static filters and path/name heuristics; it does not 
 
 The following table defines the desired execution contracts. Time budgets are initial targets, not claims about current duration; Phase 0 establishes the baseline and adjusts targets only with evidence.
 
-**Status of the time budgets (v1.00.15, from the retained baseline):** the
-L0/L1/L2 budgets below remain *unconfirmed aspirations* — developer-local
-latency has **not yet been measured** (the baseline records `not yet measured`
-and ships the opt-in collection command
-`baseline-report.rkt --local --local-input <dir>` that emits the same JSON
-shape); they are scoped unknowns, not measured properties. L3/L4 are measured:
-per-suite and per-shard p50/p95 wall clocks for the twelve retained runs are
-in `docs/reports/test-feedback-baseline-v1.00.15.md`. No target in this table
-has been revised from the original 5s/30s/120s aspiration yet; any future
+**Status of the time budgets (v1.00.28 W6 — first measured developer-local
+sample):** the L0/L1/L2 budgets are now **measured properties**, not scoped
+unknowns. Retained local samples (12 L0, 10 L1, 10 L2 runs, single-host Linux,
+wall clock including `racket` process startup; per-run data in
+`artifacts/test-runtime/v1.00.28-w6/{l0,l1}-samples.json`, SHA-256 checksummed;
+method and verdicts in `docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md`, Class E):
+measured p90 — L0 **2.041 s** (target ≤ 5 s: **met**, 59% headroom), L1
+**52.711 s** (target ≤ 30 s: **MISS recorded with attribution** — the cost is
+the runtime of the selected file `tests/test-run-tests-script.rkt`, not
+selection overhead, which is ≈ 2 s), L2 **7.986 s** selection-only (target
+≤ 120 s: **met** for the `--impact-dry-run --explain` walk; full transitive
+execution remains an L3/broad-window activity by escalation policy). Caveats
+recorded in the report: n is small (10–12), one host, and p90 is nearest-rank
+(equal to near-max at n = 10). L3/L4 remain measured from the retained CI
+runs in `docs/reports/test-feedback-baseline-v1.00.15.md`. No target in this
+table has been revised from the original 5s/30s/120s aspiration; any future
 revision must state sample, reason, owner, and remeasurement date in the
 report, per the rule below.
 
@@ -295,9 +304,9 @@ been revised from the original 5s/30s/120s aspiration.
 
 | Level | Decision (v1.00.11) | Basis | Owner | Remeasure |
 |---|---|---|---|---|
-| L0 (≤5s) | Scoped unknown — *not yet measured* | No developer-local L0 samples collected; opt-in command shipped with the report | Test infrastructure | After local collection lands |
-| L1 (≤30s) | Scoped unknown — *not yet measured* | No developer-local L1 samples collected; same opt-in path | Test infrastructure | After local collection lands |
-| L2 (≤120s) | Scoped unknown — *not yet measured* | L2 selection (impact graph) not yet implemented; nothing to measure | Test infrastructure | When L2 selection ships |
+| L0 (≤5s) | **Measured (v1.00.28 W6)** — p50 1.375 s, p90 2.041 s, max 4.170 s over 12 retained local runs → **CONFIRMED** (59% headroom) | 12 positional single-file runs in `artifacts/test-runtime/v1.00.28-w6/l0-samples.json`; report `docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md` | Test infrastructure | Next retained refresh (larger n, second host) |
+| L1 (≤30s) | **Measured (v1.00.28 W6)** — p50 48.276 s, p90 52.711 s, max 57.182 s over 10 retained local runs → **MISS, attributed**: selected-file runtime (`tests/test-run-tests-script.rkt`), not selection (≈ 2 s); no target edit in this milestone | 10 `--changed-base/--changed-head` runs in `artifacts/test-runtime/v1.00.28-w6/l1-samples.json`; same report | Test infrastructure | Remeasure against a typical-p90 target file after the W2 thin-file remediation lane lands |
+| L2 (≤120s) | **Measured (v1.00.28 W6, selection-only)** — p50 7.957 s, p90 7.986 s, max 8.046 s over 10 retained `--impact-dry-run --explain` walks → **CONFIRMED** for selection (93% headroom); transitive *execution* is escalated to L3 by policy and not re-measured here | 10 graph-walk runs in `artifacts/test-runtime/v1.00.28-w6/l1-samples.json` (L2 cohort); same report | Test infrastructure | When transitive execution is measured end-to-end |
 | L3 | Measured — adopt report p50/p95 as the baseline of record; fast-gate p50 **halving objective** set for v1.00.16 (≤ 50% of W0 p50 488.0 s); 2026-08-24 sample p50 627.0 s → ratio 1.2848× — **MISSED**, shortfall attributed to legacy-path setup 343/348 s + execution max shard 276/287 s | Runs 32745843124 (PR) + 32748197712 (main @ 93e7996a) in the v1.00.16 report | Test infrastructure | 2026-09-30 (remeasure after a warm prepared-env hosted run) |
 | L4 | Measured — adopt cold/warm runs 32522576690/32526868295 as the baseline of record | Two full-regression runs in the v1.00.15 report | Test infrastructure | Next retained refresh |
 
