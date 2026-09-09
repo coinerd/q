@@ -36,9 +36,14 @@
          make-private-session-fixture!
          make-private-git-fixture!
          private-git-fixture-repo
+         current-git-fixture-strategy
          private-session-fixture-session-dir
          private-session-fixture-session-id
          git-available?
+         (struct-out private-fixture)
+         allocate-unique-root!
+         git-quiet!
+         hermetic-identity!
          call-with-private-git-environment
          with-private-git-repo
          private-session-template-dir
@@ -162,6 +167,28 @@
     (set-box! git-template-root-box root))
   (unbox git-template-root-box))
 
+;; ---------------------------------------------------------------------------
+;; Fixture construction census (v1.00.28 W2)
+;; ---------------------------------------------------------------------------
+
+;; Stands in for the (unmerged) W0 fixture counters: when
+;; Q_FIXTURE_CENSUS_LOG names a file, every fixture construction appends one
+;; tab-separated census line "<family>\t<unix-ms>\t<duration-ms>\t<strategy>".
+;; Fail-open by design — no env var means no I/O and no behavior change.
+(define (log-fixture-construction! family start-ms strategy)
+  (define path (getenv "Q_FIXTURE_CENSUS_LOG"))
+  (when path
+    (with-handlers ([exn:fail? void])
+      (call-with-output-file path
+                             (lambda (out)
+                               (fprintf out
+                                        "~a\t~a\t~a\t~a\n"
+                                        family
+                                        (current-milliseconds)
+                                        (- (current-milliseconds) start-ms)
+                                        strategy))
+                             #:exists 'append))))
+
 ;; Repo-local hermetic identity: never touches global env or ~/.gitconfig.
 ;; Append the three fixed keys in one filesystem operation. Spawning three
 ;; separate `git config` processes per clone made fixture-heavy fast tests
@@ -188,12 +215,52 @@
 ;; - `refs/heads/origin/main` stand-in is recreated inside the clone's own
 ;;   .git so offline `worktree add <p> origin/main` keeps working.
 ;; Keyword `#:branch` creates and checks out an initial feature branch.
+;; Fixture strategy selector (W2): 'pristine-copy builds instances by copying
+;; an immutable pristine baseline directory (helpers/pristine-git-fixture.rkt);
+;; 'clone is the legacy `git clone --no-local` path. W2 ACTIVATION GATE: HELD —
+;; the checksummed interleaved benchmark (artifacts/test-runtime/v1.00.28-w2/
+;; git-fixture-experiment.json) measured pristine-copy at ~155ms median total
+;; vs legacy-clone ~44ms (>=3x slower on this environment), so the strategy was
+;; NOT activated as default. Rollback/activation is this single default edit:
+;; set 'pristine-copy to activate, keep 'clone (legacy) otherwise.
+(define current-git-fixture-strategy (make-parameter 'clone))
+
+;; Sibling module path resolved relative to THIS source file; a bare string in
+;; `dynamic-require` would resolve against (current-directory) instead.
+(define-runtime-path pristine-git-fixture-module "pristine-git-fixture.rkt")
+
+;; First-touch instantiation of the pristine module (and its lazy dependency
+;; chain: racket/file -> setup/path-to-relative -> planet/config) must be
+;; serialized: N threads racing the same dynamic-require crash this Racket's
+;; linklet instantiation with "reference to a variable that is uninitialized".
+;; After the first successful instantiation the binding is cached, so the
+;; semaphore only guards microseconds — instance CONSTRUCTION below stays
+;; fully parallel. (The indirection also keeps the templates <-> pristine
+;; require graph acyclic; the pristine module imports helpers from here.)
+(define pristine-entry-semaphore (make-semaphore 1))
+(define (pristine-make-entry!)
+  (call-with-semaphore
+   pristine-entry-semaphore
+   (lambda () (dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!))))
+
 (define (make-private-git-fixture! #:parent-root [parent-root #f]
                                    #:tag [tag "git"]
                                    #:branch [branch #f])
   (q-work-count! 'git_fixtures)
   (unless (git-available?)
     (error 'make-private-git-fixture! "git unavailable"))
+  (define start-ms (current-milliseconds))
+  (define strategy (current-git-fixture-strategy))
+  (define fx
+    (case strategy
+      [(pristine-copy) ((pristine-make-entry!) #:parent-root parent-root #:tag tag #:branch branch)]
+      [else (legacy-clone-git-fixture! #:parent-root parent-root #:tag tag #:branch branch)]))
+  (log-fixture-construction! (format "git:~a" tag) start-ms strategy)
+  fx)
+
+(define (legacy-clone-git-fixture! #:parent-root [parent-root #f]
+                                   #:tag [tag "git"]
+                                   #:branch [branch #f])
   (define tmpl (ensure-git-template!))
   (define parent (or parent-root (make-temporary-file "q-fx-git-host-~a" 'directory)))
   (define root (allocate-unique-root! parent tag))
@@ -248,6 +315,7 @@
 ;; id or file bytes. The template itself is never written.
 (define (make-private-session-fixture! #:parent-root [parent-root #f] #:tag [tag "session"])
   (q-work-count! 'session_fixtures)
+  (define start-ms (current-milliseconds))
   (define parent (or parent-root (make-temporary-file "q-fx-sess-host-~a" 'directory)))
   (define root (allocate-unique-root! parent tag))
   (define new-id (fresh-session-id!))
@@ -259,9 +327,12 @@
   (define text (file->string jsonl))
   (define rewritten (string-replace text tmpl-session-id new-id))
   (with-output-to-file jsonl (lambda () (write-string rewritten)) #:exists 'replace)
-  (private-fixture 'session
-                   root
-                   (hash 'root root 'session-id new-id 'session-dir dst-dir 'jsonl jsonl)))
+  (define fx
+    (private-fixture 'session
+                     root
+                     (hash 'root root 'session-id new-id 'session-dir dst-dir 'jsonl jsonl)))
+  (log-fixture-construction! (format "session:~a" tag) start-ms 'template-copy)
+  fx)
 
 (define (private-session-fixture-session-dir fx)
   (hash-ref (private-fixture-meta fx) 'session-dir))

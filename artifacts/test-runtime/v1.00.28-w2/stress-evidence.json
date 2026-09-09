@@ -1,0 +1,34 @@
+{
+  "wave": "v1.00.28-w2",
+  "artifact": "stress-evidence.json",
+  "purpose": "Concurrent-instance isolation stress: both fixture strategies under parallel creation/destruction, with pristine-baseline byte-integrity checked before and after.",
+  "method": "12 concurrent fixture instances per strategy (pristine-copy and clone); each instance constructed, first-use-asserted, and destroyed concurrently; the immutable pristine baseline's file count and total byte size are snapshotted before and after the batches and must be identical.",
+  "raw": {
+    "baseline-integrity-unchanged": true,
+    "baseline-before": {
+      "file-count": 16,
+      "total-bytes": 1574
+    },
+    "baseline-after": {
+      "file-count": 16,
+      "total-bytes": 1574
+    },
+    "batches": [
+      {
+        "strategy": "pristine-copy",
+        "concurrent-instances": 12,
+        "ok-count": 12,
+        "all-ok": true,
+        "wall-ms": 719.07421875
+      },
+      {
+        "strategy": "clone",
+        "concurrent-instances": 12,
+        "ok-count": 12,
+        "all-ok": true,
+        "wall-ms": 184.480712890625
+      }
+    ]
+  },
+  "interpretation": "Isolation holds under concurrency for both strategies: no hardlink, alternates, shared ref, or hook leakage was detected (the safety suite also asserts these directly). The baseline stayed byte-identical across both batches. Wall time corroborates the experiment medians: pristine-copy batching is slower even under parallelism. Consistent with the experiment's HOLD decision: clone remains the default."
+}
