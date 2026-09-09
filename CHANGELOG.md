@@ -28,6 +28,17 @@ Scheduler savings are never reported as work-mass reduction
 never reported as hosted PR latency reduction without the hosted measurement
 (artifacts/ci-baseline/v1.00.28-final/decision.md).
 
+Scheduler states for this release are explicit (milestone #893). Activated in
+this release: the grouped-lane production gate with fail-closed eligibility and
+the census measurement tooling, both shipped behind governance tests
+(scripts/run-tests/grouped-config.rkt, docs/reports/TEST-WORK-MASS-v1.00.28.md).
+Not activated in this release: every sharding or scheduling lever named by the
+decision — shard fan-out, prepared-env cache reuse, tail-shard rebalancing,
+moving slow required gates off the mergeable critical path, and
+security/workflows suite sharding — each requires a separate reviewed decision,
+and a timing miss alone implies no queue rollback
+(artifacts/ci-baseline/v1.00.28-final/decision.md).
+
 ### Test workload reduction: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED
 
 ### Features

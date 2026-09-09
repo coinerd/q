@@ -5,10 +5,10 @@
 ;; @boundary unit
 ;; @covers scripts/run-tests/work-mass-comparison.rkt
 
-;; tests/test-work-mass-comparison.rkt — v1.00.28 W7: contract tests for the
-;; W0-vs-W7 work-mass comparison tool.
+;; tests/test-work-mass-comparison.rkt — W7: contract tests for the
+;; W0-vs-W7 work-mass comparison tool (campaign plan for this release).
 ;;
-;; PLAN-v1.00.28 §W7 / Measurement Contract §3 contracts exercised here:
+;; Measurement Contract §3 contracts exercised here:
 ;; §W7.2 — inventory equality: a file present in the W0 census but silently
 ;;         absent from the W7 census is a red error; new files get explicit
 ;;         rows (never silent additions);
@@ -168,8 +168,7 @@
                                           250)
                #:q7 (list "tests/a.rkt" "tests/c.rkt" "tests/new-e.rkt")))
 (define explicit-removals
-  (hash "tests/b.rkt"
-        (format "removed in v~a W1 remediation (commit 999beadb)" q-version)))
+  (hash "tests/b.rkt" (format "removed in v~a W1 remediation (commit 999beadb)" q-version)))
 (define explicit-compare
   (work-mass-compare baseline-census post-without-b #:removed-since-baseline explicit-removals))
 (define removed-rows (hash-ref (hash-ref explicit-compare 'inventory) 'removed))

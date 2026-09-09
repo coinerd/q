@@ -1473,6 +1473,18 @@
         }
       ]
     },
+    "tests/test-runtime-census.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 270,
+          "text": "(sleep 30)",
+          "class": "D",
+          "disposition": "not-a-test-sleep",
+          "reason": "sleep term is a string literal written into a census-scan fixture file to exercise the scanner; no live sleep executes in this test"
+        }
+      ]
+    },
     "tests/test-sandbox-evaluator.rkt": {
       "suite": "other",
       "occurrences": [
@@ -2034,7 +2046,7 @@
     }
   },
   "summary": {
-    "total-occurrences": 228,
+    "total-occurrences": 229,
     "unit-fast-files": 34,
     "unit-fast-occurrences": 95,
     "remediated-occurrences-w1": 1,
