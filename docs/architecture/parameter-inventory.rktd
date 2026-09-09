@@ -72,8 +72,13 @@
                                         ;; registry per case
                                         (current-gsd-verification-registry . SERVICE_HANDLE))
  ("extensions/gsd/delivery-verifier.rkt" (current-gsd-delivery-verify-command . SERVICE_HANDLE)
-                                         (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
-                                         (current-gsd-delivery-branch-context . SERVICE_HANDLE))
+                                          (current-gsd-delivery-verify-timeout-sec . CONFIGURATION)
+                                          (current-gsd-delivery-branch-context . SERVICE_HANDLE)
+                                          ;; injectable Git-facts runner: #f keeps the real git
+                                          ;; boundary in production; a (git-root args) -> (exit out
+                                          ;; err) procedure lets decision-logic tests substitute the
+                                          ;; whole boundary at once (W3 architecture review)
+                                          (current-gsd-git-runner . SERVICE_HANDLE))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
