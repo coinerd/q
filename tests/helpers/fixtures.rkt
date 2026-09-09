@@ -15,7 +15,8 @@
 
 (require racket/file
          (only-in "../../util/message/protocol-types.rkt" message? message-kind)
-         (only-in "test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir test-sandbox?))
+         (only-in "test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir test-sandbox?)
+         "../../scripts/run-tests/work-counters.rkt")
 
 (provide with-temp-dir
          with-env-var
@@ -26,6 +27,7 @@
 ;; Uses dynamic-wind so cleanup runs even if the test throws.
 (define (with-temp-dir thunk)
   (define dir (make-temporary-file "q-test-~a" 'directory))
+  (q-work-count! 'temp_dirs)
   (dynamic-wind void
                 (lambda () (thunk dir))
                 (lambda ()

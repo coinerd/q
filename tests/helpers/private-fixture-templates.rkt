@@ -26,7 +26,8 @@
          racket/port
          racket/runtime-path
          racket/string
-         racket/system)
+         racket/system
+         "../../scripts/run-tests/work-counters.rkt")
 
 (provide private-fixture?
          private-fixture-root
@@ -107,6 +108,8 @@
 
 ;; Run git in dir, error on failure. Returns first line of stdout.
 (define (git! dir . args)
+  (q-work-count! 'git_commands)
+  (q-work-count! 'subprocesses)
   (define outp (open-output-string))
   (define errp (open-output-string))
   (define res
@@ -125,6 +128,8 @@
   (string-trim (get-output-string outp)))
 
 (define (git-quiet! dir . args)
+  (q-work-count! 'git_commands)
+  (q-work-count! 'subprocesses)
   (define result
     (call-with-private-git-environment
      (lambda ()
@@ -186,6 +191,7 @@
 (define (make-private-git-fixture! #:parent-root [parent-root #f]
                                    #:tag [tag "git"]
                                    #:branch [branch #f])
+  (q-work-count! 'git_fixtures)
   (unless (git-available?)
     (error 'make-private-git-fixture! "git unavailable"))
   (define tmpl (ensure-git-template!))
@@ -241,6 +247,7 @@
 ;; session id, and rewrite the copied JSONL meta so no two instances share an
 ;; id or file bytes. The template itself is never written.
 (define (make-private-session-fixture! #:parent-root [parent-root #f] #:tag [tag "session"])
+  (q-work-count! 'session_fixtures)
   (define parent (or parent-root (make-temporary-file "q-fx-sess-host-~a" 'directory)))
   (define root (allocate-unique-root! parent tag))
   (define new-id (fresh-session-id!))

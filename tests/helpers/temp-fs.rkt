@@ -11,7 +11,8 @@
 ;; cleanup regardless of test success or failure.
 
 (require racket/file
-         rackunit)
+         rackunit
+         "../../scripts/run-tests/work-counters.rkt")
 
 (provide with-temp-file
          with-temp-dir)
@@ -22,9 +23,12 @@
 
 ;; (with-temp-file (path) body ...)
 ;; Creates a temporary file, binds path, runs body, deletes file on exit.
+;; Counts temp_files for the runtime census (opt-in dynamic scope; no-op
+;; outside a census run).
 (define-syntax-rule (with-temp-file (path-id) body ...)
   (let* ([tmp-dir (find-system-path 'temp-dir)]
          [path-id (make-temporary-file "q-test-~a" #f tmp-dir)])
+    (q-work-count! 'temp_files)
     (dynamic-wind (lambda () (void))
                   (lambda ()
                     body ...)
@@ -38,8 +42,10 @@
 
 ;; (with-temp-dir (dir) body ...)
 ;; Creates a temporary directory, binds dir, runs body, deletes recursively on exit.
+;; Counts temp_dirs for the runtime census (opt-in dynamic scope).
 (define-syntax-rule (with-temp-dir (dir-id) body ...)
   (let ([dir-id (make-temporary-file "q-testdir-~a" 'directory)])
+    (q-work-count! 'temp_dirs)
     (dynamic-wind (lambda () (void))
                   (lambda ()
                     body ...)
