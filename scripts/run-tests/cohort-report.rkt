@@ -499,7 +499,9 @@
             [(equal? (hash-ref manifest 'cohort-status #f) "closed")
              (err!
               (format
-               "closed-cohort SHA ~a (index ~a) records no final-success run — a cohort SHA cell with no successful run is a cohort error or a named reliability strike, never silence"
+               (string-append
+                "closed-cohort SHA ~a (index ~a) records no final-success run — "
+                "a cohort SHA cell with no successful run is a cohort error or a named reliability strike, never silence")
                (hash-ref s 'sha "?")
                i))]
             [else
