@@ -27,6 +27,8 @@
          (only-in "helpers/private-fixture-templates.rkt"
                   call-with-private-git-environment
                   make-private-git-fixture!
+                  current-git-fixture-strategy
+                  private-fixture-kind
                   private-fixture-root
                   private-git-fixture-repo)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
@@ -186,6 +188,35 @@
 
 (define (delivery-suite)
   (test-suite "delivery-verifier"
+
+    ;; v1.00.28 W2: this suite consumes git fixtures exclusively through the
+    ;; shared `make-private-git-fixture!` constructor contract, so the
+    ;; activated 'pristine-copy strategy must be invisible to every consumer.
+    ;; Contract test: both strategies yield the same consumer-visible shape
+    ;; (kind, repo dir, resolvable HEAD, self-contained object store).
+    (test-case "git fixture constructor contract is strategy-agnostic"
+      (define (shape)
+        (define tmp (make-temporary-file "dv-strategy-~a" 'directory))
+        (define fx (make-private-git-fixture! #:parent-root tmp #:tag "dv-shape"))
+        (define repo (private-git-fixture-repo fx))
+        (begin0 (list (private-fixture-kind fx)
+                      (path? (private-fixture-root fx))
+                      (directory-exists? (build-path repo ".git" "objects"))
+                      (zero? (system*/exit-code (find-executable-path "git")
+                                                "-C"
+                                                (path->string repo)
+                                                "rev-parse"
+                                                "--verify"
+                                                "HEAD")))
+          (delete-directory/files tmp #:must-exist? #f)))
+      (define pristine-shape
+        (parameterize ([current-git-fixture-strategy 'pristine-copy])
+          (shape)))
+      (define legacy-shape
+        (parameterize ([current-git-fixture-strategy 'legacy-clone])
+          (shape)))
+      (check-equal? pristine-shape legacy-shape)
+      (check-equal? pristine-shape (list 'git #t #t #t)))
 
     (test-case "approves when branch + files changed + verify passes"
       (define base (setup-standard-campaign!))
