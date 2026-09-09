@@ -212,13 +212,31 @@
 ;; Keyword `#:branch` creates and checks out an initial feature branch.
 ;; Fixture strategy selector (W2): 'pristine-copy builds instances by copying
 ;; an immutable pristine baseline directory (helpers/pristine-git-fixture.rkt);
-;; 'legacy-clone uses the historical `git clone --no-local` path. Rollback to
-;; the legacy strategy is this single default edit.
-(define current-git-fixture-strategy (make-parameter 'pristine-copy))
+;; 'clone is the legacy `git clone --no-local` path. W2 ACTIVATION GATE: HELD —
+;; the checksummed interleaved benchmark (artifacts/test-runtime/v1.00.28-w2/
+;; git-fixture-experiment.json) measured pristine-copy at ~155ms median total
+;; vs legacy-clone ~44ms (>=3x slower on this environment), so the strategy was
+;; NOT activated as default. Rollback/activation is this single default edit:
+;; set 'pristine-copy to activate, keep 'clone (legacy) otherwise.
+(define current-git-fixture-strategy (make-parameter 'clone))
 
 ;; Sibling module path resolved relative to THIS source file; a bare string in
 ;; `dynamic-require` would resolve against (current-directory) instead.
 (define-runtime-path pristine-git-fixture-module "pristine-git-fixture.rkt")
+
+;; First-touch instantiation of the pristine module (and its lazy dependency
+;; chain: racket/file -> setup/path-to-relative -> planet/config) must be
+;; serialized: N threads racing the same dynamic-require crash this Racket's
+;; linklet instantiation with "reference to a variable that is uninitialized".
+;; After the first successful instantiation the binding is cached, so the
+;; semaphore only guards microseconds — instance CONSTRUCTION below stays
+;; fully parallel. (The indirection also keeps the templates <-> pristine
+;; require graph acyclic; the pristine module imports helpers from here.)
+(define pristine-entry-semaphore (make-semaphore 1))
+(define (pristine-make-entry!)
+  (call-with-semaphore
+   pristine-entry-semaphore
+   (lambda () (dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!))))
 
 (define (make-private-git-fixture! #:parent-root [parent-root #f]
                                    #:tag [tag "git"]
@@ -229,11 +247,7 @@
   (define strategy (current-git-fixture-strategy))
   (define fx
     (case strategy
-      [(pristine-copy)
-       ((dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!)
-        #:parent-root parent-root
-        #:tag tag
-        #:branch branch)]
+      [(pristine-copy) ((pristine-make-entry!) #:parent-root parent-root #:tag tag #:branch branch)]
       [else (legacy-clone-git-fixture! #:parent-root parent-root #:tag tag #:branch branch)]))
   (log-fixture-construction! (format "git:~a" tag) start-ms strategy)
   fx)

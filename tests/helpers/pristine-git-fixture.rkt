@@ -98,10 +98,20 @@
   (freeze-tree! root)
   root)
 
+;; Double-checked, semaphore-guarded baseline build: concurrent first calls
+;; (e.g. the W2 stress harness spawning N instances at once) must not race
+;; into N parallel `build-pristine-baseline!` runs. Semaphore primitives only
+;; — both are provided by racket/base, so no extra imports.
+(define baseline-semaphore (make-semaphore 1))
 (define (pristine-git-baseline-root!)
-  (unless baseline-root
-    (set! baseline-root (build-pristine-baseline!)))
-  baseline-root)
+  (or baseline-root
+      (dynamic-wind (lambda () (semaphore-wait baseline-semaphore))
+                    (lambda ()
+                      (or baseline-root
+                          (begin
+                            (set! baseline-root (build-pristine-baseline!))
+                            baseline-root)))
+                    (lambda () (semaphore-post baseline-semaphore)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Isolated instances

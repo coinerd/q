@@ -1,0 +1,85 @@
+{
+  "wave": "v1.00.28-w2",
+  "artifact": "fixture-census.json",
+  "purpose": "Per-family fixture construction counts: W0 census-counter channel (attempt-1 instrumented runs) plus fresh counts taken on branch campaign/v1.00.28-w2.",
+  "method": "W0 counter channel: the git-fixture helper emits one 'git:<shape> <timestamp-ms> <duration-ms> <strategy>' line per git-repository fixture construction; counts are line counts per suite log. Fresh counts: one run per suite on this branch, counting the same channel (campaign-repository: 0 lines) plus test counts from the suite summaries.",
+  "families": {
+    "git-repositories": {
+      "test-gsd-delivery-verifier": {
+        "count": 21,
+        "by-shape": {
+          "dv-base": 19,
+          "dv-shape": 2
+        },
+        "source": "w0-counter-log (attempt 1)",
+        "strategy": "legacy-clone"
+      },
+      "test-gsd-wave-worktree": {
+        "count": 4,
+        "by-shape": {
+          "w": 4
+        },
+        "source": "w0-counter-log (attempt 1)",
+        "strategy": "legacy-clone"
+      },
+      "test-pristine-git-fixture": {
+        "count": 14,
+        "by-shape": {
+          "stress": 8,
+          "pristine": 1,
+          "pristine-contract": 1,
+          "legacy-contract": 1,
+          "hardlink-attack": 1,
+          "other-safety": 2
+        },
+        "source": "w0-counter-log (attempt 1; W2's own safety suite)",
+        "strategy": "mixed (pristine-copy instances + legacy-contract test)"
+      },
+      "test-gsd-campaign-repository": {
+        "count": 0,
+        "source": "fresh run on branch campaign/v1.00.28-w2 (0 'git:' counter lines; the suite builds planning trees, not git repositories)"
+      },
+      "fast-suite": {
+        "count": 0,
+        "source": "w0-counter-log (attempt 1; 0 'git:' lines)"
+      }
+    },
+    "session-temp-directories": {
+      "count-per-suite": {
+        "test-gsd-delivery-verifier": 21,
+        "test-gsd-wave-worktree": 4,
+        "test-pristine-git-fixture": 15,
+        "test-gsd-campaign-repository": "1 private root per test (33 tests, fresh run)",
+        "fast-suite": 0
+      },
+      "note": "One private root per fixture instance plus one immutable pristine baseline directory per process for suites that consume the pristine fixture. Derived from the git-repository instance counts and the helper's per-process baseline rule.",
+      "source": "derived from w0-counter-log counts + helper contract"
+    },
+    "git-branches-and-commits": {
+      "count": null,
+      "note": "Not instrumented by the W0 counter channel. Per-construction shape is fixed by the helper's baseline (default branch, single commit) and is covered by the safety suite's per-instance identity checks rather than by a counter.",
+      "source": "not-instrumented"
+    },
+    "worktrees": {
+      "count": 4,
+      "note": "One per wave-worktree suite test instance ('git:w' family).",
+      "source": "w0-counter-log (attempt 1)"
+    },
+    "campaign-planning-trees": {
+      "count": 33,
+      "note": "One planning tree per campaign-repository suite test; 33/33 tests green on the fresh run.",
+      "source": "fresh run on branch campaign/v1.00.28-w2"
+    },
+    "generated-fixtures": {
+      "count": null,
+      "note": "No independent generator family observed outside the repository and planning-tree families above.",
+      "source": "not-instrumented"
+    },
+    "subprocess-backed-verifier-environments": {
+      "count": 21,
+      "note": "One per dv-base/dv-shape instance in the delivery-verifier suite; the verifier subprocess runs inside the fixture repository.",
+      "source": "derived from w0-counter-log counts"
+    }
+  },
+  "interpretation": "Amplification is concentrated in the delivery-verifier suite (21 git repositories, 19 of them the same dv-base shape rebuilt per assertion group) and the wave-worktree suite (4 repositories + 4 worktrees). The W0 hypothesis that a pristine physical copy would be cheaper than 'git clone --no-local' is refuted by the checksummed experiment in git-fixture-experiment.json; see the truthful hold there."
+}
