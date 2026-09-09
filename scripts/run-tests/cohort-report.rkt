@@ -491,11 +491,23 @@
       [(not (sha-eligible? s))
        (cond
          [pr-elapsed?
-          (warn!
-           (format
-            "SHA ~a (index ~a) has no final-success timing sample yet — re-run/failure recorded, cohort stays open"
-            (hash-ref s 'sha "?")
-            i))]
+          (cond
+            ;; v1.00.28 W8: in a CLOSED cohort a SHA cell with no
+            ;; successful run is a hard cohort error or a named
+            ;; reliability strike — never silence.  An accumulating
+            ;; (open) cohort keeps recording attempts and stays open.
+            [(equal? (hash-ref manifest 'cohort-status #f) "closed")
+             (err!
+              (format
+               "closed-cohort SHA ~a (index ~a) records no final-success run — a cohort SHA cell with no successful run is a cohort error or a named reliability strike, never silence"
+               (hash-ref s 'sha "?")
+               i))]
+            [else
+             (warn!
+              (format
+               "SHA ~a (index ~a) has no final-success timing sample yet — re-run/failure recorded, cohort stays open"
+               (hash-ref s 'sha "?")
+               i))])]
          [else
           (err!
            (format
@@ -1497,6 +1509,23 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
 
 (define final-claim-required-fields pr-elapsed-required-fields)
 
+;; ============================================================
+;; v1.00.28 W8: final campaign verdict vocabulary
+;;
+;; The cohort decision record ends in EXACTLY one of these three strings —
+;; spelled byte-identically, never abbreviated, never re-worded, and never
+;; extended.  Every emitted final verdict is checked against this
+;; vocabulary: an out-of-vocabulary verdict is a programming error, never
+;; a silent new string.
+;; ============================================================
+
+(define final-verdict-achieved "ACHIEVED")
+(define final-verdict-not-achieved "NOT ACHIEVED")
+(define final-verdict-partial "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED")
+
+(define allowed-final-verdicts
+  (list final-verdict-achieved final-verdict-not-achieved final-verdict-partial))
+
 (define final-claim-gate-text
   (string-append "Final-claim verdict over every roadmap §8 row against the FIXED thresholds"
                  " (fast p50 ≤ 115 s / p95 ≤ 135 s; PR CI p50 ≤ 588 s / p95 ≤ 735 s;"
@@ -1754,28 +1783,100 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
 
   (define row-results (map evaluate-row final-claim-rows))
   (define all-pass (andmap (lambda (r) (equal? (hash-ref r 'verdict) "pass")) row-results))
-  (hasheq 'mode
-          "final-claim"
-          'gate-text
-          final-claim-gate-text
-          'cohort-status
-          status
-          'unique-head-shas
-          (length shas)
-          'expected-count
-          expected
-          'rows
-          row-results
-          'reliability
-          (cohort-attempts-summary manifest)
-          'reliability-baseline
-          (hash-ref manifest 'reliability-baseline #f)
-          'reliability-non-regression
-          reliability-ok?
-          'prepared-env
-          pe-stats
-          'overall-verdict
-          (if all-pass "verified" "target not achieved")))
+
+  ;; v1.00.28 W8: Class A work-mass delta (W0 vs W7 census artifacts),
+  ;; reported alongside — never compared against — the fixed Class B–D §8
+  ;; rows.  The delta comes from the checksummed census comparison artifact
+  ;; named in the manifest; a missing or unmeasurable delta is
+  ;; "unverified", never silently treated as improved.  The fixed
+  ;; thresholds are untouched: Class A is a different measure class with
+  ;; its own negative-is-better semantics.
+  (define work-mass-delta (hash-ref manifest 'work-mass-delta #f))
+  (define class-a-row
+    (and (hash? work-mass-delta)
+         (hasheq 'id
+                 "class-a-fast-work-mass-delta"
+                 'measure
+                 "Class A fast work-mass delta W0→W7 (census ms; negative = workload reduced)"
+                 'threshold
+                 0.0
+                 'comparison
+                 "<"
+                 'observed
+                 (hash-ref work-mass-delta 'delta-pct #f)
+                 'samples
+                 #f
+                 'expected
+                 expected
+                 'guards
+                 (hasheq 'entries '() 'satisfied #t 'reliability-satisfied #t)
+                 'verdict
+                 (let ([d (hash-ref work-mass-delta 'delta-pct #f)])
+                   (cond
+                     [(not (real? d)) "unverified"]
+                     [(< d 0) "pass"]
+                     [else "target not achieved"]))
+                 'reasons
+                 '()
+                 'next-lever
+                 #f)))
+  (define rows-with-class-a
+    (if class-a-row
+        (cons class-a-row row-results)
+        row-results))
+
+  ;; v1.00.28 W8: the final campaign verdict.  Emission is restricted to
+  ;; allowed-final-verdicts.  Mapping: Class A improved AND a closed cohort
+  ;; passing every fixed row with its guards => ACHIEVED; Class A improved
+  ;; but the fixed claim not fully verified => PARTIAL WORKLOAD REDUCTION;
+  ;; FINAL TARGET NOT ACHIEVED; no measured work-mass improvement =>
+  ;; NOT ACHIEVED.  A measure-class miss is a verdict input, never a
+  ;; threshold revision.
+  (define overall-final-verdict
+    (and class-a-row
+         (cond
+           [(not (equal? (hash-ref class-a-row 'verdict) "pass")) final-verdict-not-achieved]
+           [(and (equal? status "closed") all-pass) final-verdict-achieved]
+           [else final-verdict-partial])))
+  (when (and overall-final-verdict (not (member overall-final-verdict allowed-final-verdicts)))
+    (error 'final-claim-gate
+           "internal: overall verdict ~s is outside the allowed final-verdict vocabulary"
+           overall-final-verdict))
+
+  (define base-gate
+    (hasheq 'mode
+            "final-claim"
+            'gate-text
+            final-claim-gate-text
+            'cohort-status
+            status
+            'unique-head-shas
+            (length shas)
+            'expected-count
+            expected
+            'rows
+            row-results
+            'reliability
+            (cohort-attempts-summary manifest)
+            'reliability-baseline
+            (hash-ref manifest 'reliability-baseline #f)
+            'reliability-non-regression
+            reliability-ok?
+            'prepared-env
+            pe-stats
+            'overall-verdict
+            (if all-pass "verified" "target not achieved")))
+  ;; Pre-v1.00.28 manifests carry no work-mass-delta: their gate hash is
+  ;; returned unchanged so stored C3 artifacts regenerate byte-identically.
+  (if class-a-row
+      (hash-set* base-gate
+                 'rows
+                 rows-with-class-a
+                 'class-a-work-mass-delta
+                 work-mass-delta
+                 'overall-final-verdict
+                 overall-final-verdict)
+      base-gate))
 
 ;; C3 (final-claim) decision document: one explicit verdict per §8 row with
 ;; the observed numbers, the guard evidence, and — for every non-passing
@@ -1852,6 +1953,16 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
   (out "")
   (out "Reviewer: coordinator (delivery) — verified against .planning/VALIDATION.")
   (out "")
+  (when (hash-has-key? gate 'overall-final-verdict)
+    (out "## Final campaign verdict (v1.00.28)")
+    (out "")
+    (out (string-append
+          "The decision record ends in exactly one allowed verdict; the Class A work-mass"
+          " delta row is reported alongside the fixed Class B–D rows and the incompatible"
+          " measure classes are never compared against each other."))
+    (out "")
+    (out "~a" (hash-ref gate 'overall-final-verdict))
+    (out ""))
   (string-join lines "\n"))
 
 (define (decision-report-jsexpr manifest)
@@ -2426,11 +2537,13 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
 ;; ============================================================
 
 (module+ main
+  (require racket/path)
   (define manifest-path #f)
   (define out-json #f)
   (define out-md #f)
   (define decision-path #f)
   (define check? #f)
+  (define positional '())
 
   (command-line
    #:program "cohort-report"
@@ -2438,17 +2551,26 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
    [("--out-json") p "Write report JSON to path" (set! out-json p)]
    [("--out-md") p "Write report markdown to path" (set! out-md p)]
    [("--decision") p "Write the promotion decision markdown to path" (set! decision-path p)]
-   [("--check") "Regenerate from manifest and compare to stored report" (set! check? #t)])
+   [("--check") "Regenerate from manifest and compare to stored report" (set! check? #t)]
+   ;; v1.00.28 W8: --check also accepts a single positional report path;
+   ;; the manifest then defaults to the canonical sibling cohort.json.
+   #:args leftover-args
+   (set! positional leftover-args))
 
   (cond
-    [(not manifest-path)
+    [(and (not manifest-path) (not check?))
      (displayln "error: --manifest <path> is required")
      (exit 1)]
     [check?
-     (unless out-json
-       (displayln "error: --check requires --out-json (the report to compare against)")
+     (define report-path (or out-json (and (= (length positional) 1) (car positional))))
+     (unless report-path
+       (displayln "error: --check requires --out-json or exactly one positional report path")
        (exit 1))
-     (define-values (ok reason) (cohort-check manifest-path out-json))
+     (define check-manifest-path
+       (or manifest-path
+           (path->string (build-path (or (path-only report-path) (current-directory))
+                                     "cohort.json"))))
+     (define-values (ok reason) (cohort-check check-manifest-path report-path))
      (cond
        [ok
         (displayln (format "CHECK PASS: ~a" reason))
