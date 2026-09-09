@@ -1836,7 +1836,12 @@ required-check window — queue wait alone is not accepted as the PR elapsed mea
     (and class-a-row
          (cond
            [(not (equal? (hash-ref class-a-row 'verdict) "pass")) final-verdict-not-achieved]
-           [(and (equal? status "closed") all-pass) final-verdict-achieved]
+           [(and (equal? status "closed")
+                 all-pass
+                 ;; fail-safe: the closed tag alone is not evidence; the
+                 ;; cohort must actually contain expected unique SHAs.
+                 (= (length shas) expected))
+            final-verdict-achieved]
            [else final-verdict-partial])))
   (when (and overall-final-verdict (not (member overall-final-verdict allowed-final-verdicts)))
     (error 'final-claim-gate
