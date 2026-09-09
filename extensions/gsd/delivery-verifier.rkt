@@ -58,6 +58,7 @@
          current-gsd-delivery-verify-command
          current-gsd-delivery-verify-timeout-sec
          current-gsd-delivery-branch-context
+         current-gsd-git-runner
          make-branch-delivery-context
          branch-delivery-context?
          branch-delivery-context-ref
@@ -178,12 +179,12 @@
       (let ()
         (define root (branch-delivery-context-ref ctx 'repo-root))
         (define result
-          (run-git* root
-                    (list "diff"
-                          "--name-only"
-                          (format "~a...~a"
-                                  (branch-delivery-context-ref ctx 'base-commit)
-                                  (branch-delivery-context-ref ctx 'branch)))))
+          (run-git root
+                   (list "diff"
+                         "--name-only"
+                         (format "~a...~a"
+                                 (branch-delivery-context-ref ctx 'base-commit)
+                                 (branch-delivery-context-ref ctx 'branch)))))
         (define out (and (car result) (eq? (car result) 0) (string-split (cadr result) "\n")))
         (for/set ([p (in-list (or out '()))]
                   #:when (not (string=? (string-trim p) "")))
@@ -210,6 +211,31 @@
             #f))))
   (list exit-code (get-output-string stdout) (get-output-string stderr)))
 
+;; W3 tier-ownership split: injectable Git-facts adapter. Delivery DECISION
+;; logic (branch matching, changed-file detection, verify-gate combination)
+;; is exercised on SYNTHETIC Git facts via this parameter; the default (#f)
+;; binds the real run-git* over the process. The minimum real-Git contract
+;; set (diff semantics, committed/untracked/merged-to-main detection,
+;; absent-repository fail-closed) keeps running against real git in
+;; tests/test-gsd-delivery-verifier.rkt — retiering the decision tests never
+;; removed the boundary contract itself.
+(define current-gsd-git-runner
+  (make-parameter
+   #f
+   (lambda (v)
+     (unless (or (not v) (and (procedure? v) (procedure-arity-includes? v 2)))
+       (raise-argument-error 'current-gsd-git-runner "(or/c #f (procedure-arity-includes/c 2))" v))
+     v)))
+
+;; Sole internal dispatch point: every Git-facts read goes through here so
+;; that a parameterized fake replaces the whole boundary at once. Result
+;; shape is run-git*'s: (list exit-code stdout stderr).
+(define (run-git git-root args)
+  (define runner (current-gsd-git-runner))
+  (if runner
+      (runner git-root args)
+      (run-git* git-root args)))
+
 (define (git-exit-ok? result)
   (and result (eq? (car result) 0)))
 
@@ -222,10 +248,10 @@
   (define root (git-root-for base-dir))
   (and root
        (directory-exists? root)
-       (git-exit-ok? (run-git* root (list "rev-parse" "--is-inside-work-tree")))))
+       (git-exit-ok? (run-git root (list "rev-parse" "--is-inside-work-tree")))))
 
 (define (current-branch git-root)
-  (define result (run-git* git-root (list "rev-parse" "--abbrev-ref" "HEAD")))
+  (define result (run-git git-root (list "rev-parse" "--abbrev-ref" "HEAD")))
   (and (git-exit-ok? result)
        (let ([b (string-trim (git-stdout result))]) (and (not (string=? b "")) b))))
 
@@ -285,7 +311,7 @@
      (define root (branch-delivery-context-ref ctx 'repo-root))
      (define expected (branch-delivery-context-ref ctx 'branch))
      (define branch
-       (and (git-exit-ok? (run-git* root (list "rev-parse" "--verify" expected))) expected))
+       (and (git-exit-ok? (run-git root (list "rev-parse" "--verify" expected))) expected))
      (define detail (format "branch=~a expected=~a (isolated)" (or branch #f) expected))
      (cons "branch"
            (if branch
@@ -337,7 +363,7 @@
   ;; delivery changes. Prefers origin/main (the integration branch); falls
   ;; back to local main. Returns #f when neither resolves.
   (for/or ([ref (in-list '("origin/main" "main"))]
-           #:when (git-exit-ok? (run-git* git-root (list "rev-parse" "--verify" ref))))
+           #:when (git-exit-ok? (run-git git-root (list "rev-parse" "--verify" ref))))
     ref))
 
 (define (changed-files-set base-dir git-root [campaign-created-at #f])
@@ -349,13 +375,13 @@
   ;; campaign base (merged-to-main delivery: once a wave's PR is merged, HEAD
   ;; == origin/main so the base-relative diff is empty, but the target files
   ;; DID change during the campaign).
-  (define diff-result (run-git* git-root (list "diff" "--name-only" "HEAD")))
-  (define untracked-result (run-git* git-root (list "ls-files" "--others" "--exclude-standard")))
+  (define diff-result (run-git git-root (list "diff" "--name-only" "HEAD")))
+  (define untracked-result (run-git git-root (list "ls-files" "--others" "--exclude-standard")))
   (define committed-result
     (let ([base (base-branch-ref git-root)])
       (if base
           ;; Three-dot diff: changes introduced on HEAD since diverging from base.
-          (run-git* git-root (list "diff" "--name-only" (format "~a...HEAD" base)))
+          (run-git git-root (list "diff" "--name-only" (format "~a...HEAD" base)))
           (list 1 "" ""))))
   (define campaign-result
     (if (and campaign-created-at (exact-integer? campaign-created-at))
@@ -364,12 +390,12 @@
         ;; commits between that base and HEAD are delivery evidence for waves
         ;; whose work was merged to main.
         (let ([base-commit
-               (run-git*
+               (run-git
                 git-root
                 (list "rev-list" "-1" "--before" (number->string campaign-created-at) "HEAD"))])
           (if (git-exit-ok? base-commit)
-              (run-git* git-root
-                        (list "diff" "--name-only" (string-trim (git-stdout base-commit)) "HEAD"))
+              (run-git git-root
+                       (list "diff" "--name-only" (string-trim (git-stdout base-commit)) "HEAD"))
               (list 1 "" "")))
         (list 1 "" "")))
   (define paths
