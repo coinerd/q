@@ -268,8 +268,12 @@
       ;; current-gsd-timeout-now-ms (SERVICE_HANDLE, injected clock probe).
       ;; Production defaults preserve current-inexact-milliseconds and
       ;; sync/timeout semantics; tests rebind for determinism.
+      ;; +1 — W3 architecture review: current-gsd-git-runner
+      ;; (extensions/gsd/delivery-verifier.rkt) (SERVICE_HANDLE, injectable
+      ;; Git-facts runner so verifier decision-logic tests substitute the
+      ;; whole boundary at once; #f keeps real git in production).
       (check-equal? (length inventory-entries)
-                    229
+                    230
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
