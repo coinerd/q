@@ -417,13 +417,14 @@
     (dynamic-wind void usage (lambda () (exit 2))))
   (define doc (compare-files baseline-path post-path (load-removals post-path removals-path)))
   (define full
-    (hash-union
-     doc
-     (hasheq
-      'schema
-      "work-mass-comparison/v1"
-      'generated_from
-      (hasheq 'baseline_census (path->string baseline-path) 'post_census (path->string post-path)))))
+    (hash-union doc
+                (hasheq 'schema
+                        "work-mass-comparison/v1"
+                        'generated_from
+                        (hasheq 'baseline_census
+                                (path->string (simplify-path baseline-path))
+                                'post_census
+                                (path->string (simplify-path post-path))))))
   (with-output-to-file out-path (lambda () (write-json full)) #:exists 'replace)
   (define summary (hash-ref doc 'summary))
   (printf "work mass ~a -> ~a ms (~a%); verdict: ~a\n"
