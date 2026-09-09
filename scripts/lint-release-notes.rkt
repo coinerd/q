@@ -248,6 +248,116 @@
      (remove-duplicates (filter values errors))]))
 
 ;; ---------------------------------------------------------------------------
+;; Release-campaign integrity (W9)
+;;
+;; For a version that carries a final-claim contract, the release entry must
+;; (1) name the exact verdict recorded in the decision record, (2) bind every
+;; measurement claim to an artifact path, and (3) cite only threshold values
+;; from the fixed contract. All expectations are derived from the decision
+;; record itself; the lint fails closed when the record is missing.
+;; ---------------------------------------------------------------------------
+
+(define allowed-verdict-strings
+  '("ACHIEVED" "NOT ACHIEVED" "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED"))
+
+;; Version (without prerelease suffix) -> decision-record path, relative to
+;; the changelog's directory (the git root).
+(define release-campaign-contracts
+  (hasheq "1.00.28" "artifacts/ci-baseline/v1.00.28-final/decision.md"))
+
+;; Test override: bypass the version table with an explicit decision path.
+(define contract-decision-path-override (make-parameter #f))
+
+(define (base-version ver)
+  (car (string-split ver "-")))
+
+;; Measurement-claim lines must reference a checked-in artifact. Backslash
+;; escape sequences are deliberately avoided below: literal dots and pipes
+;; use character classes, and word boundaries use lookarounds, so the source
+;; contains no regexp escape sequences at all.
+(define claim-rx
+  #px"(?i:(work[- ]?mass|(?<![a-z])p50(?![a-z])|(?<![a-z])p95(?![a-z])|verified[- ]?restore|(?<![a-z])cohort(?![a-z])|(?<![a-z])census(?![a-z])))")
+
+(define artifact-link-rx #px"(?:artifacts/[A-Za-z0-9._/-]+|docs/reports/[A-Za-z0-9._/-]+)")
+
+;; Threshold-style prose: "<= 115.0 s" / "under 135 seconds" / ">= 95 %"
+;; (ASCII release prose only; no unicode comparators in release notes).
+(define threshold-time-rx
+  #px"(?:<=|at most|under|no more than) *([0-9]+(?:[.][0-9]+)?) *(?:s|seconds)(?![a-z])")
+
+(define threshold-percent-rx #px"(?:>=|at least) *([0-9]+(?:[.][0-9]+)?) *(?:%|percent)")
+
+;; Fixed-target cells in the decision table: "| <= 115.0 |".
+(define decision-target-rx #px"[|] *(?:<=|>=|<|>) *([0-9]+(?:[.][0-9]+)?) *[|]")
+
+(define (normalize-verdict-line line)
+  (string-trim (regexp-replace* #px"[*]" (string-trim line) "")))
+
+(define (verdict-line-count text verdict)
+  (count (λ (line) (string=? (normalize-verdict-line line) verdict)) (string-split text "\n")))
+
+(define (mentioned-thresholds block)
+  (append (map string->number (regexp-match* threshold-time-rx block #:match-select cadr))
+          (map string->number (regexp-match* threshold-percent-rx block #:match-select cadr))))
+
+(define (contract-decision-path version changelog-path)
+  (cond
+    [(contract-decision-path-override)]
+    [else
+     (define rel (hash-ref release-campaign-contracts (base-version version) #f))
+     (and rel
+          (cond
+            [(and changelog-path (path-only changelog-path))
+             =>
+             (λ (dir) (simplify-path (build-path dir rel)))]
+            [else (simplify-path rel)]))]))
+
+(define (validate-release-campaign block version [decision-path #f])
+  (define contract-path (or decision-path (contract-decision-path version #f)))
+  (cond
+    [(not contract-path) '()]
+    [(not (file-exists? contract-path))
+     (list (format "release-campaign: decision record not found: ~a (fail-closed)" contract-path))]
+    [else
+     (define text (file->string contract-path))
+     (define errors '())
+     (define recorded
+       (filter (λ (v) (positive? (verdict-line-count text v))) allowed-verdict-strings))
+     (unless (= (length recorded) 1)
+       (set!
+        errors
+        (cons
+         (format "release-campaign: decision record must end in exactly one allowed verdict; found ~a"
+                 (length recorded))
+         errors)))
+     (when (= (length recorded) 1)
+       (define verdict (car recorded))
+       (unless (string-contains? block verdict)
+         (set! errors
+               (cons (format "release-campaign: entry must name the exact recorded verdict: ~a"
+                             verdict)
+                     errors))))
+     (define targets (map string->number (regexp-match* decision-target-rx text #:match-select cadr)))
+     (for ([line (in-list (string-split block "\n"))]
+           #:when (regexp-match? claim-rx line)
+           #:unless (regexp-match? artifact-link-rx line))
+       (set! errors
+             (cons (format "release-campaign: claim without artifact link: ~a" (string-trim line))
+                   errors)))
+     (for ([n (in-list (mentioned-thresholds block))]
+           #:unless (member n targets))
+       (set!
+        errors
+        (cons
+         (format
+          "release-campaign: threshold ~a in prose does not match the fixed contract (~a; see ~a)"
+          n
+          (string-join (map ~a targets) ", ")
+          contract-path)
+         errors)))
+     (reverse errors)]))
+
+;; ---------------------------------------------------------------------------
 ;; Main entry points (for programmatic use and CLI)
 ;; ---------------------------------------------------------------------------
 
@@ -256,7 +366,11 @@
   (define block (extract-version-block text version))
   (cond
     [(not block) (list (format "Version '~a' not found in ~a" version changelog-path))]
-    [else (append (validate-release-notes block) (validate-bug-refs block))]))
+    [else
+     (append
+      (validate-release-notes block)
+      (validate-bug-refs block)
+      (validate-release-campaign block version (contract-decision-path version changelog-path)))]))
 
 ;; CLI -----------------------------------------------------------------------
 
@@ -314,4 +428,8 @@
          required-section-patterns
          validate-bug-refs
          bug-registry-path
-         parse-bug-registry)
+         parse-bug-registry
+         validate-release-campaign
+         release-campaign-contracts
+         allowed-verdict-strings
+         contract-decision-path-override)
