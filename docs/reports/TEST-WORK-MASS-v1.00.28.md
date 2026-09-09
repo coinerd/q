@@ -224,36 +224,38 @@ sample floor, and checksummed artifacts; `compiled/` purged before the run so th
 census measures the checked-out sources). Baseline = the W0 census
 (`artifacts/test-runtime/v1.00.28-census/fast-runtime-census.json`, checksummed in
 §15); post = `artifacts/test-runtime/v1.00.28-w7/fast-runtime-census.json`.
-Comparison tool: `tests/test-runtime-census.rkt` (asserts inventory equality — a
-file present in W0 but silently absent in W7 is a red error) and the percentage
-math is checked against the stored medians.
+Comparison tool: `scripts/run-tests/work-mass-comparison.rkt`
+(`--baseline` / `--post` / `--out`, with `removed-since-baseline.json` as the
+removals manifest; it asserts inventory equality — a file present in W0 but
+silently absent in W7 is a red error) and the percentage math is checked
+against the stored medians by `tests/test-work-mass-comparison.rkt`.
 
 ### 17.1 Comparison rows (W0 → W7)
 
 | Row | W0 baseline | W7 post | Δ | Δ % |
 |-----|-------------|---------|---|-----|
-| Fast work mass (ms) | 980,465 | 933,816 | −46,649 | **−4.76 %** |
-| Top 1 contribution (ms) | 39,208 | 38,606 | −602 | −1.54 % |
-| Top 10 contribution (ms) | 147,403 | 147,403 | 0 | 0 % |
-| Top 25 contribution (ms) | 234,054 | 232,394 | −1,660 | −0.71 % |
-| Top 50 contribution (ms) | 313,225 | 305,505 | −7,720 | −2.46 % |
-| Top 100 contribution (ms) | 403,953 | 390,359 | −13,594 | −3.37 % |
-| Bucket < 250 ms (files) | 37 | 63 | +26 | — |
-| Bucket 250 ms–1 s (files) | 951 | 959 | +8 | — |
-| Bucket 1–2 s (files) | 117 | 88 | −29 | — |
+| Fast work mass (ms) | 980,465 | 927,785 | −52,680 | **−5.37 %** |
+| Top 1 contribution (ms) | 39,208 | 38,582 | −626 | −1.60 % |
+| Top 10 contribution (ms) | 147,403 | 146,171 | −1,232 | −0.84 % |
+| Top 25 contribution (ms) | 234,054 | 230,191 | −3,863 | −1.65 % |
+| Top 50 contribution (ms) | 313,225 | 299,820 | −13,405 | −4.28 % |
+| Top 100 contribution (ms) | 403,953 | 382,883 | −21,070 | −5.22 % |
+| Bucket < 250 ms (files) | 37 | 75 | +38 | — |
+| Bucket 250 ms–1 s (files) | 951 | 948 | −3 | — |
+| Bucket 1–2 s (files) | 117 | 89 | −28 | — |
 | Bucket 2–5 s (files) | 45 | 41 | −4 | — |
-| Bucket 5–10 s (files) | 14 | 13 | −1 | — |
+| Bucket 5–10 s (files) | 14 | 12 | −2 | — |
 | Bucket > 10 s (files) | 7 | 8 | +1 | — |
 | Total process launches | unknown | unknown | unknown | unknown |
 | Git command launches | unknown | unknown | unknown | unknown |
 | Fixture constructions | unknown | unknown | unknown | unknown |
 | Total requested real sleep (ms) | unknown | unknown | unknown | unknown |
-| Grouped-safe share (% of fast mass / files) | 42.78 % (710 files, 419,427 ms) | 43.70 % (711 files, 408,113 ms) | +0.92 pp | — |
+| Grouped-safe share (% of fast mass / files) | 42.78 % (710 files, 419,427 ms) | 43.84 % (711 files, 406,778 ms) | +1.06 pp | — |
 
 The four runtime counters stay `unknown` on both sides on purpose: W0 and W7 use
 the identical method, and instrumenting launch counters mid-series would make the
 rows non-comparable. The W0 static triage stands as the only available proxy:
-wait-pattern matches 1,609 (706 files) at W0 vs 1,628 (709 files) at W7
+wait-pattern matches 1,609 (706 files) at W0 vs 1,630 (710 files) at W7
 (`static_scan` aggregate) — no material movement, consistent with the W1 finding
 that asked-for sleeps are not where fast-lane time goes.
 
@@ -261,11 +263,13 @@ Inventory equality holds: 2 files present at W0 are absent at W7, both explicit
 old-campaign residue removals recorded in
 `artifacts/test-runtime/v1.00.28-w7/removed-since-baseline.json`
 (`tests/test-browser-audit-w1-v0984.rkt`, `tests/test-browser-audit-w2-v0983.rkt`).
-No silent drops.
+No silent drops. In the other direction, 5 files exist at W7 that were absent at
+W0; each carries an explicit added row in the census (4 new campaign tests plus
+`tests/test-deterministic-clock.rkt`, recorded as a collection-failure row).
 
 ### 17.2 Workload verdict (intermediate decision guide)
 
-Fast work mass improved **4.76 %** (980,465 → 933,816 ms). Per the intermediate
+Fast work mass improved **5.37 %** (980,465 → 927,785 ms). Per the intermediate
 guide (< 10 % insufficient; 10–25 % partial; 25–40 % meaningful; ≥ 40 % strong):
 **INSUFFICIENT**. This is an intermediate result against the intermediate guide
 only; it does not replace or relax the fixed final gate of this campaign.
@@ -274,11 +278,11 @@ only; it does not replace or relax the fixed final gate of this campaign.
 
 Work mass did **not** improve materially, so the next lever is **another targeted
 test-design pass** on the remaining hotspot mass — specifically the top-10 files,
-which are unchanged at 147,403 ms (15.8 % of the post mass; W1–W6 remediations
-bought −4.76 % overall but left the head of the Pareto curve frozen). Scheduling,
-sharding, and worker-count changes are explicitly NOT the accepted next step:
-more workers would only hide an unchanged workload. Candidate targets for the next
-remediation round, in order: `tests/test-runner-scheduler-characterization.rkt`
-(38,606 ms, still the single largest file), the unchanged top-10 block, and the
-eight > 10 s files (129,342 ms post).
+which are barely moved at 146,171 ms (15.7 % of the post mass; W1–W6 remediations
+bought −5.37 % overall but left the head of the Pareto curve nearly frozen).
+Scheduling, sharding, and worker-count changes are explicitly NOT the accepted
+next step: more workers would only hide an unchanged workload. Candidate targets
+for the next remediation round, in order:
+`tests/test-runner-scheduler-characterization.rkt` (38,582 ms, still the single
+largest file), the top-10 block, and the eight > 10 s files (128,186 ms post).
 

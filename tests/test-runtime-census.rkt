@@ -30,6 +30,7 @@
          (only-in "../scripts/run-tests/hotspot-benchmark.rkt"
                   hotspot-manifest-errors
                   current-hotspot-sample-floor)
+         (only-in "../scripts/run-tests/sha256.rkt" sha256-hex)
          (only-in "../scripts/run-tests/runtime-census.rkt"
                   census-record
                   census-record-required-fields
@@ -438,3 +439,25 @@
                 "floor honors its parameter value, not the default")
     (check-true (pair? (hotspot-manifest-errors (mk-floor-manifest 4)))
                 "floor rejects samples below its parameter value")))
+
+(test-case "sha256: padding is exact for the 55-mod-64 length class (W7 regression)"
+  ;; Reference digests computed with an independent SHA-256 implementation
+  ;; (hashlib) over (make-bytes len 97). The 55-mod-64 class is the exact
+  ;; boundary where 0x80 + 8 length bytes already complete a 64-byte block,
+  ;; so pad-len must be 0 — the pre-W7 formula emitted a spurious full zero
+  ;; block there and every artifact of that size hashed incorrectly.
+  (define reference-vectors
+    (list (list 0 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+          (list 55 "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318")
+          (list 56 "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a")
+          (list 63 "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34")
+          (list 64 "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb")
+          (list 119 "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb")
+          (list 183 "a88d44a2940a3a2fc363304926d263bf271afb562bab5640cb0e81f5e84320a3")
+          (list 3383 "9023b4ee0a49cf59455f36a11d9141620f062417be671d40d0652af41236aa39")))
+  (for ([vec (in-list reference-vectors)])
+    (define len (car vec))
+    (define expected (cadr vec))
+    (check-equal? (sha256-hex (make-bytes len 97))
+                  expected
+                  (format "sha256-hex digest wrong for ~a-byte input" len))))
