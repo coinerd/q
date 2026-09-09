@@ -31,22 +31,27 @@
   ],
   "remediated-families": [
     {
-      "file": "tests/test-browser-audit-w2-v0983.rkt",
-      "change": "(sleep 0.1) settle replaced by (thread-wait dead-thread)",
-      "class": "B",
-      "benchmark": "artifacts/test-runtime/v1.00.28-w1/benchmarks/browser-audit-w2.json"
-    },
-    {
-      "file": "tests/test-browser-audit-w1-v0984.rkt",
-      "change": "fixed (sleep 1.0) settle replaced by bounded polling until the heartbeat acts on mutated state (2s worst case)",
-      "class": "B",
-      "benchmark": "artifacts/test-runtime/v1.00.28-w1/benchmarks/browser-audit-w1.json"
-    },
-    {
       "file": "tests/test-wave3-extension-polish.rkt",
       "change": "fixed (sleep 0.1) bridge settle replaced by bounded polling until buf contains ui.confirm (1s worst case)",
       "class": "B",
-      "benchmark": "artifacts/test-runtime/v1.00.28-w1/benchmarks/wave3-extension-polish.json"
+      "benchmark": "artifacts/test-runtime/v1.00.28-w1/benchmarks/test-wave3-extension-polish-after.json",
+      "benchmark-before": "artifacts/test-runtime/v1.00.28-w1/benchmarks/test-wave3-extension-polish-before.json"
+    }
+  ],
+  "residue-purged": [
+    {
+      "file": "tests/test-browser-audit-w1-v0984.rkt",
+      "suite": "unit-fast",
+      "occurrences": 4,
+      "disposition": "purged-with-file",
+      "note": "leftover from an older browser-audit campaign, not a v1.00.28 W1 target; test file and its stray benchmark JSON removed by this wave, so its scan rows left raw-sleep-files"
+    },
+    {
+      "file": "tests/test-browser-audit-w2-v0983.rkt",
+      "suite": "unit-fast",
+      "occurrences": 1,
+      "disposition": "purged-with-file",
+      "note": "leftover from an older browser-audit campaign, not a v1.00.28 W1 target; test file and its stray benchmark JSON removed by this wave, so its scan row left raw-sleep-files"
     }
   ],
   "raw-sleep-files": {
@@ -247,53 +252,6 @@
           "class": "C",
           "disposition": "retained-canary",
           "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
-        }
-      ]
-    },
-    "tests/test-browser-audit-w1-v0984.rkt": {
-      "suite": "unit-fast",
-      "occurrences": [
-        {
-          "line": 24,
-          "text": "(thread (lambda () (sleep 1000)))))",
-          "class": "C",
-          "disposition": "retained-canary",
-          "reason": "long-lived victim thread (sleep 1000): terminated via custodian or thread teardown; zero wall-clock cost"
-        },
-        {
-          "line": 27,
-          "text": "(thread (lambda () (sleep 1000)))))",
-          "class": "C",
-          "disposition": "retained-canary",
-          "reason": "long-lived victim thread (sleep 1000): terminated via custodian or thread teardown; zero wall-clock cost"
-        },
-        {
-          "line": 28,
-          "text": "(define live-reader (thread (lambda () (sleep 1000))))",
-          "class": "C",
-          "disposition": "retained-canary",
-          "reason": "long-lived victim thread (sleep 1000): terminated via custodian or thread teardown; zero wall-clock cost"
-        },
-        {
-          "line": 53,
-          "text": "(sleep 0.05)",
-          "class": "B",
-          "disposition": "remediated",
-          "remediation": "fixed settle sleep replaced by bounded observation polling on the observable completion predicate (W1)",
-          "reason": "poll-interval sleep inside the W1 remediation: bounded, exits on first observable completion"
-        }
-      ]
-    },
-    "tests/test-browser-audit-w2-v0983.rkt": {
-      "suite": "unit-fast",
-      "occurrences": [
-        {
-          "line": 40,
-          "text": ";; W1 wait-audit (v1.00.28): the fixed (sleep 0.1) settle is replaced by a",
-          "class": "B",
-          "disposition": "remediated",
-          "remediation": "fixed settle sleep replaced by bounded observation polling on the observable completion predicate (W1)",
-          "reason": "poll-interval sleep inside the W1 remediation: bounded, exits on first observable completion"
         }
       ]
     },
@@ -2077,9 +2035,12 @@
   },
   "summary": {
     "total-occurrences": 228,
-    "unit-fast-files": 36,
-    "unit-fast-occurrences": 100,
-    "remediated-occurrences-w1": 3,
-    "unjustified-unit-fast-sleeps": 0
+    "unit-fast-files": 34,
+    "unit-fast-occurrences": 95,
+    "remediated-occurrences-w1": 1,
+    "purged-residue-files": 2,
+    "purged-residue-occurrences": 5,
+    "unjustified-unit-fast-sleeps": 0,
+    "note": "the three declared target families were already remediated in earlier campaigns (verified-clean rows above); the one in-tree W1 remediation is test-wave3-extension-polish; the two browser-audit residue files are counted under purged-residue-*"
   }
 }
