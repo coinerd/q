@@ -1,0 +1,1 @@
+{"family": "test-wave3-extension-polish", "mean_ms": 3150.1, "method": "wall-clock ms of `racket tests/test-wave3-extension-polish.rkt` at detached worktree of origin/main, 10 sequential successful runs, identical invocation each run", "ref": "origin/main", "runs": 10, "samples_ms": [3175, 3070, 3103, 3134, 3133, 3213, 3123, 3189, 3187, 3174], "side": "before"}
