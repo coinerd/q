@@ -49,7 +49,16 @@
          (only-in "helpers/pristine-git-fixture.rkt"
                   pristine-git-baseline-root!
                   pristine-git-instance!
-                  pristine-git-instance-dir))
+                  pristine-git-instance-dir
+                  materialize-private-hardlinks!))
+
+;; This CI Racket lacks file-or-directory-permissions 'link; stat(1) is a
+;; coreutils given everywhere git is.
+(define (link-count p)
+  (define out (open-output-bytes))
+  (parameterize ([current-output-port out])
+    (system*/exit-code (find-executable-path "stat") "-c" "%h" (path->string p)))
+  (string->number (string-trim (bytes->string/utf-8 (get-output-bytes out)))))
 
 ;; When this suite runs under `git commit` (pre-commit hook), git exports
 ;; GIT_INDEX_FILE/GIT_DIR/GIT_WORK_TREE etc. into our process environment.
@@ -237,6 +246,52 @@
       (check-equal? (tree-snapshot (pristine-git-baseline-root!))
                     baseline-digest
                     "baseline must stay pristine after concurrent stress"))
+
+    ;; W2 hard gate H1: an adversarial hardlink attack on the instance
+    ;; object store must be silently defused — bytes preserved, but the
+    ;; materialized file is a private regular file (link count 1), never a
+    ;; hardlink into a shared store.
+    (test-case "H1: adversarial hardlink attack on instance objects is defused"
+      (define fx (make-private-git-fixture! #:tag "hardlink-attack"))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define repo (private-git-fixture-repo fx))
+         (define victim (build-path repo ".git" "objects" "aa" "attackblob"))
+         (make-directory* (path-only victim))
+         (with-output-to-file victim
+                              #:exists 'replace
+                              (lambda () (display #"pristine attack-surface probe")))
+         (define defended (materialize-private-hardlinks! (list victim)))
+         (check-equal? (length defended) 1 "the attacked path must be defended")
+         (check-equal? (file->bytes victim)
+                       #"pristine attack-surface probe"
+                       "object bytes must be preserved")
+         (check-equal? (link-count victim) 1 "materialized object must have link count 1")
+         (check-true (file-exists? victim)))
+       (lambda () (private-fixture-cleanup! fx))))
+
+    ;; G6 cleanup completeness: after destroy, the parent work area holds
+    ;; nothing of the instance (instance dirs were #f-prefixed) and the
+    ;; caller's working directory is untouched.
+    (test-case "G6: cleanup removes every instance trace; work dir untouched"
+      (define parent (make-temporary-file "q-cleanup-parent~a" 'directory))
+      (define (defuse-hardlink! path)
+        (define tmp (path-add-extension path #".private"))
+        (copy-file path tmp)
+        (delete-file path)
+        (rename-file-or-directory tmp path))
+      (define pre-existing (make-temporary-file "q-pre~a" 'directory parent))
+      (parameterize ([current-git-fixture-strategy 'pristine-copy])
+        (define fx (make-private-git-fixture! #:tag "cleanup" #:parent-root parent))
+        (define root (private-fixture-root fx))
+        (private-fixture-cleanup! fx)
+        (check-equal? (directory-list parent #:build? #t)
+                      (list pre-existing)
+                      "destroyed instance must leave no trace in parent")
+        (check-false (directory-exists? root)))
+      (check-true (directory-exists? pre-existing)
+                  "pre-existing sibling fixture must survive cleanup"))
 
     (test-case "G8: strategy switch selects legacy clone through the same constructor"
       (check-false (false? (current-git-fixture-strategy)) "strategy parameter must be bound")

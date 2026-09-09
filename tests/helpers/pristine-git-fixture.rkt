@@ -28,7 +28,8 @@
          make-pristine-fixture
          make-pristine-git-fixture-instance!
          pristine-git-instance!
-         pristine-git-instance-dir)
+         pristine-git-instance-dir
+         materialize-private-hardlinks!)
 
 ;; Convenience alias + repo-path accessor used by the safety suite.
 (define (pristine-git-instance! #:tag [tag "git"] #:branch [branch #f])
@@ -37,6 +38,17 @@
   (hash-ref (private-fixture-meta fx) 'repo))
 
 (define-runtime-path module-dir ".")
+
+;; Hardlink defense: rewrite each existing path as a private regular file
+;; (link count 1), preserving bytes. Returns the defended paths.
+(define (materialize-private-hardlinks! paths)
+  (for/list ([p (in-list paths)]
+             #:when (file-exists? p))
+    (define tmp (path-add-extension p #".private-copied"))
+    (copy-file p tmp)
+    (delete-file p)
+    (rename-file-or-directory tmp p)
+    p))
 
 ;; ---------------------------------------------------------------------------
 ;; Baseline construction (once per process)
