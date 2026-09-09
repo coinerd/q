@@ -1,0 +1,25 @@
+{
+  "schema": "test-consolidation-candidates/1",
+  "wave": "v1.00.28-w5",
+  "census_source": "W0 census (shared @covers / fixture builders / stimulus sequences)",
+  "groups": [
+    {
+      "id": "G1",
+      "family": "gsd-delivery-verifier",
+      "evidence": {
+        "covers": "extensions/gsd/delivery-verifier.rkt",
+        "members": [
+          "tests/test-gsd-delivery-verifier.rkt (24 tests)",
+          "tests/test-gsd-github-port.rkt (14 tests)"
+        ],
+        "shared_stimulus": "each suite constructs a fake delivery-verification child process (exit status + branch state) and drives the verifier gate end-to-end"
+      },
+      "finding": "complementary assertion families over the same gate stimulus; both suites are green, disjoint in assertions, and unit-vs-port scoped",
+      "policy_decision": "keep both (preference order step 3: detection power ambiguous — merging port tests into unit tests would couple module boundary to wire-format assertions)",
+      "consolidation": "none applied; candidates recorded with evidence links before touching anything"
+    }
+  ],
+  "groups_detected": 1,
+  "tests_consolidated": 0,
+  "notes": "No duplication with identical stimulus AND overlapping assertions was found; the delivery-verifier suite exercises the sync gate, the github-port suite exercises the port adapter. Consolidation would reduce detection power."
+}

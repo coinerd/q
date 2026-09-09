@@ -1,0 +1,50 @@
+{
+  "schema": "test-consolidation-adequacy/1",
+  "wave": "v1.00.28-w5",
+  "counts": { "before": 38, "after": 38 },
+  "behavior_mapping": [
+    {
+      "group": "G1",
+      "action": "keep both",
+      "reason": "unit suite (test-gsd-delivery-verifier.rkt) covers sync gate decisions; port suite (test-gsd-github-port.rkt) covers the github adapter seam; no identical stimulus with overlapping assertions",
+      "assertions_moved": []
+    }
+  ],
+  "failure_history": {
+    "reviewed": true,
+    "notes": "failure history of the delivery-verifier family reviewed (ANALYSIS-v1.00.04-W0-DELIVERY-VERIFIER-COMMITTED-FALSE-NEGATIVE.md): suite detects exit-code forgery and branch mismatch; no consolidation applied that could regress these detections"
+  },
+  "mutation_evidence": {
+    "mode": "manual-micro-mutations",
+    "target": "extensions/gsd/delivery-verifier.rkt",
+    "mutants": [
+      {
+        "id": "M1",
+        "mutation": "branch gate: (string=? branch expected) -> (string=? branch branch)",
+        "previously": "killed",
+        "after": "killed",
+        "result": "2 test failures (consolidated suite detects branch-equality relaxation)"
+      },
+      {
+        "id": "M2",
+        "mutation": "sync approval gate: (eqv? exit-code 0) -> (eqv? exit-code 7)",
+        "previously": "killed",
+        "after": "killed",
+        "result": "14 test failures (consolidated suite detects exit-status forgery)"
+      },
+      {
+        "id": "M2-async",
+        "mutation": "async wait path approval gate (line 574): (equal? exit-code 0) -> (equal? exit-code 7)",
+        "previously": "not-covered-by-this-suite",
+        "after": "surviving",
+        "result": "observation only: async wait path is not exercised by test-gsd-delivery-verifier.rkt; out of scope for this consolidation (no test moved)"
+      }
+    ]
+  },
+  "suites": {
+    "redundancy-candidates": "green",
+    "delivery-verifier": "green",
+    "github-port": "green",
+    "fast": "green"
+  }
+}
