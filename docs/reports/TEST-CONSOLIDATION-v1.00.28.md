@@ -3,28 +3,35 @@
 ## Scope
 
 Family: gsd-delivery-verifier (`extensions/gsd/delivery-verifier.rkt`), covered by
-`tests/test-gsd-delivery-verifier.rkt` (24 tests) and `tests/test-gsd-github-port.rkt` (14 tests).
+`tests/test-gsd-delivery-verifier.rkt` (24 tests) and the adjacent adapter seam
+`tests/test-gsd-github-port.rkt` (19 tests, covers `extensions/gsd/github-port.rkt`).
 
 ## Candidate detection
 
-Candidate group **G1** was detected from the W0 census (shared `@covers` target, shared
-fake-delivery-verification stimulus: child process exit status + branch state) and recorded in
+Candidate group **G1** was recorded from the W0 census as a family pair (the github port is
+the delivery-verification side-effect seam of the verifier) and written to
 `artifacts/test-consolidation/v1.00.28-w5/candidates.json` with evidence links **before** any
-change was made.
+change was made. The static detector (`scripts/run-tests/redundancy-candidates.rkt`, re-run
+during review) reports **no** same-covers group and no shared-fixture group joining the two
+suites: they carry distinct `@covers` keys and distinct stimuli (fake delivery-verification
+child process with exit status + branch state vs fake github adapter). The candidate was
+evaluated and resolved to keep-both rather than merged.
 
 ## Policy decision (preference order applied)
 
-1. Share setup without merging tests — suites already share the fake-stimulus construction
-   pattern; no new shared fixture builder is introduced (each suite pins its own module-local
-   stimulus; introducing one would couple the unit suite to the port adapter).
+1. Share setup without merging tests — not applicable across the pair: each suite pins its own
+   module-local stimulus (a shared fixture builder would couple the unit suite to the port
+   adapter); within each suite setup is already module-local.
 2. Merge complementary assertions with same stimulus — not applicable: the unit suite asserts
-   sync gate decisions; the port suite asserts the adapter seam. Stimulus is *similar*, not
-   identical (different module boundaries).
+   sync gate decisions over a fake child process; the port suite asserts the adapter seam over
+   a fake github adapter. Stimulus is adjacent, not identical (different module boundaries,
+   different `@covers` keys).
 3. **Keep both when detection power is ambiguous** — APPLIED. Merging would reduce the
    independent detection of exit-status forgery (unit) vs wire-format drift (port).
 4. Delete with adequacy evidence — not applicable.
 
-Result: no test deleted, no test merged. Counts unchanged: before 38, after 38.
+Result: no test deleted, no test merged. Counts unchanged: before 43, after 43
+(24 + 19 test cases).
 
 ## Adequacy evidence
 

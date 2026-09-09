@@ -1,0 +1,25 @@
+;; Wave evidence: v1.00.28 W5 — semantic redundancy and shared-stimulus consolidation
+;; Record-only companion to gsd-wave-reviews/v1.00.28-w5.rktd
+;; and gsd-wave-validation/v1.00.28-w5.rktd.
+(
+(wave . "v1.00.28-w5")
+(ticket . "#9593")
+(implementation-sha . "a9bffb76ade3aac315b1942eb9578f6c63dfc428")
+(delivery . "branch campaign/v1.00.28-w5; squash-merge PR owned by the coordinator binds this trio to the merge SHA")
+(scope . "scripts/run-tests/redundancy-candidates.rkt (new), tests/test-redundancy-candidates.rkt (new), tests/test-gsd-delivery-verifier.rkt (reviewed; unchanged — no merge applied), tests/test-gsd-github-port.rkt (reviewed; unchanged — no merge applied), artifacts/test-consolidation/v1.00.28-w5/{candidates.json,adequacy.json,SHA256SUMS}, docs/reports/TEST-CONSOLIDATION-v1.00.28.md, docs/reports/gsd-wave-evidence|reviews|validation/v1.00.28-w5.rktd")
+(what-was-done
+  (detection "scripts/run-tests/redundancy-candidates.rkt pairs tests by @covers identity, fixture-builder reuse, and stimulus-sequence overlap from the W0 census; the suite test-redundancy-candidates.rkt (16 checks) asserts the pairing rules, evidence-link emission, and preference-order policy decisions")
+  (candidate-groups "artifacts/test-consolidation/v1.00.28-w5/candidates.json records the detected groups with evidence links before any consolidation: group G1 (gsd-delivery-verifier family) pairs tests/test-gsd-delivery-verifier.rkt (24 tests) and tests/test-gsd-github-port.rkt (19 tests) via family adjacency from the W0 census (the github port is the delivery-verification side-effect seam); the static detector reports no same-covers pairing (distinct @covers keys: delivery-verifier.rkt vs github-port.rkt) and no shared fixture, and the stimulus is not shared (fake delivery-verification child process vs fake github adapter)")
+  (policy-decision "G1 resolves to keep both (preference-order step 3): the unit suite covers sync gate decisions, the port suite covers the github adapter seam; different @covers, different stimulus, disjoint assertions — there is no identical stimulus to share or merge, so merging would couple the module boundary to wire-format assertions and reduce detection power; counts stay before=43 after=43 (24 + 19)")
+  (adequacy "artifacts/test-consolidation/v1.00.28-w5/adequacy.json carries before/after counts, a behavior mapping for G1, the failure-history review (ANALYSIS-v1.00.04-W0-DELIVERY-VERIFIER-COMMITTED-FALSE-NEGATIVE.md: suite detects exit-code forgery and branch mismatch; no consolidation applied that could regress these detections), and manual micro-mutation evidence on extensions/gsd/delivery-verifier.rkt: M1 (branch-equality relaxation) previously killed, still killed → 2 failures; M2 (sync approval gate exit-code forgery) previously killed, still killed → 14 failures; M2-async (async wait path) not covered by this suite, out of scope, no test moved")
+  (report "docs/reports/TEST-CONSOLIDATION-v1.00.28.md documents groups, decisions, and adequacy evidence; SHA256SUMS covers candidates.json, adequacy.json, and the report with repo-root-relative paths"))
+(focused-results
+  (test-redundancy-candidates . "racket tests/test-redundancy-candidates.rkt → 16 success(es) 0 failure(s) 0 error(s), exit 0")
+  (test-gsd-delivery-verifier . "racket tests/test-gsd-delivery-verifier.rkt → 24 success(es) 0 failure(s) 0 error(s), exit 0")
+  (test-gsd-github-port . "racket tests/test-gsd-github-port.rkt → exit 0, green")
+  (adequacy-check . "racket scripts/run-tests/mutation-pilot.rkt --check artifacts/test-consolidation/v1.00.28-w5/adequacy.json → adequacy --check: OK (test-consolidation-adequacy/1, evidence complete)")
+  (checksums . "sha256sum -c artifacts/test-consolidation/v1.00.28-w5/SHA256SUMS → candidates.json: OK, adequacy.json: OK, TEST-CONSOLIDATION-v1.00.28.md: OK")
+  (branch . "campaign/v1.00.28-w5 checked out; not main"))
+(prior-failure-addressed . "the previous attempt failed delivery verification because artifacts/test-consolidation/v1.00.28-w5/adequacy.json was missing at verify time (open-input-file: cannot open input file; errno=2); the adequacy artifact now exists on the delivery branch, parses as test-consolidation-adequacy/1, and mutation-pilot --check reports OK (evidence complete); the wave's SHA256SUMS, consolidation report, and the declared evidence trio (this record plus reviews and validation) are committed so every declared wave target is present at HEAD")
+(security-semantics . "untouched: no execute-* check, isolation root, worker-security contract, or gate semantics modified; the wave adds a detection script, its tests, and consolidation governance artifacts only, and applies no test merge or deletion")
+(result . "candidate groups detected with evidence links; the single ambiguous group G1 resolved to keep-both per the policy preference order; adequacy evidence shows no detection regression (both previously killed mutants still killed); checksummed artifacts and the evidence trio are committed; all wave-scoped checks green"))

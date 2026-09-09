@@ -1,7 +1,7 @@
 {
   "schema": "test-consolidation-adequacy/1",
   "wave": "v1.00.28-w5",
-  "counts": { "before": 38, "after": 38 },
+  "counts": { "before": 43, "after": 43 },
   "behavior_mapping": [
     {
       "group": "G1",
