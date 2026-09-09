@@ -162,6 +162,28 @@
     (set-box! git-template-root-box root))
   (unbox git-template-root-box))
 
+;; ---------------------------------------------------------------------------
+;; Fixture construction census (v1.00.28 W2)
+;; ---------------------------------------------------------------------------
+
+;; Stands in for the (unmerged) W0 fixture counters: when
+;; Q_FIXTURE_CENSUS_LOG names a file, every fixture construction appends one
+;; tab-separated census line "<family>\t<unix-ms>\t<duration-ms>\t<strategy>".
+;; Fail-open by design — no env var means no I/O and no behavior change.
+(define (log-fixture-construction! family start-ms strategy)
+  (define path (getenv "Q_FIXTURE_CENSUS_LOG"))
+  (when path
+    (with-handlers ([exn:fail? void])
+      (call-with-output-file path
+                             (lambda (out)
+                               (fprintf out
+                                        "~a\t~a\t~a\t~a\n"
+                                        family
+                                        (current-milliseconds)
+                                        (- (current-milliseconds) start-ms)
+                                        strategy))
+                             #:exists 'append))))
+
 ;; Repo-local hermetic identity: never touches global env or ~/.gitconfig.
 ;; Append the three fixed keys in one filesystem operation. Spawning three
 ;; separate `git config` processes per clone made fixture-heavy fast tests
@@ -203,13 +225,18 @@
                                    #:branch [branch #f])
   (unless (git-available?)
     (error 'make-private-git-fixture! "git unavailable"))
-  (case (current-git-fixture-strategy)
-    [(pristine-copy)
-     ((dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!)
-      #:parent-root parent-root
-      #:tag tag
-      #:branch branch)]
-    [else (legacy-clone-git-fixture! #:parent-root parent-root #:tag tag #:branch branch)]))
+  (define start-ms (current-milliseconds))
+  (define strategy (current-git-fixture-strategy))
+  (define fx
+    (case strategy
+      [(pristine-copy)
+       ((dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!)
+        #:parent-root parent-root
+        #:tag tag
+        #:branch branch)]
+      [else (legacy-clone-git-fixture! #:parent-root parent-root #:tag tag #:branch branch)]))
+  (log-fixture-construction! (format "git:~a" tag) start-ms strategy)
+  fx)
 
 (define (legacy-clone-git-fixture! #:parent-root [parent-root #f]
                                    #:tag [tag "git"]
@@ -267,6 +294,7 @@
 ;; session id, and rewrite the copied JSONL meta so no two instances share an
 ;; id or file bytes. The template itself is never written.
 (define (make-private-session-fixture! #:parent-root [parent-root #f] #:tag [tag "session"])
+  (define start-ms (current-milliseconds))
   (define parent (or parent-root (make-temporary-file "q-fx-sess-host-~a" 'directory)))
   (define root (allocate-unique-root! parent tag))
   (define new-id (fresh-session-id!))
@@ -278,9 +306,12 @@
   (define text (file->string jsonl))
   (define rewritten (string-replace text tmpl-session-id new-id))
   (with-output-to-file jsonl (lambda () (write-string rewritten)) #:exists 'replace)
-  (private-fixture 'session
-                   root
-                   (hash 'root root 'session-id new-id 'session-dir dst-dir 'jsonl jsonl)))
+  (define fx
+    (private-fixture 'session
+                     root
+                     (hash 'root root 'session-id new-id 'session-dir dst-dir 'jsonl jsonl)))
+  (log-fixture-construction! (format "session:~a" tag) start-ms 'template-copy)
+  fx)
 
 (define (private-session-fixture-session-dir fx)
   (hash-ref (private-fixture-meta fx) 'session-dir))
