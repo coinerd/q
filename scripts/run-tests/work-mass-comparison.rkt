@@ -28,12 +28,13 @@
          racket/hash
          racket/list
          racket/match
+         racket/path
          racket/string)
 
 (provide (contract-out (struct exn:fail:work-mass-comparison
                                ([message string?] [continuation-marks continuation-mark-set?]))
                        [work-mass-verdict (-> real? string?)]
-                       [work-mass-compare (-> hash? hash? hash?)]
+                       [work-mass-compare (->* (hash? hash?) (#:removed-since-baseline hash?) hash?)]
                        [compare-files (-> path-string? path-string? hash?)]
                        [main (-> (listof string?) any)]))
 
@@ -205,8 +206,10 @@
 
 ;; ----------------------------------------------------------------- compare
 
-(define (work-mass-compare baseline post)
+(define (work-mass-compare baseline post #:removed-since-baseline [removal-manifest #hash()])
   ;; §W7.2 inventory equality first: fail loudly on silent removals.
+  ;; Removals declared in the manifest (path -> reason) become explicit
+  ;; inventory rows; anything else absent from the post census stays red.
   (define baseline-by-path
     (for/hash ([rec (in-list (hash-ref baseline 'records))])
       (values (record-path rec) rec)))
@@ -218,11 +221,24 @@
                      #:unless (hash-has-key? post-by-path p))
             p)
           string<?))
-  (unless (null? removed)
+  (define explicit-removal-rows
+    (for/list ([p (in-list removed)]
+               #:when (hash-has-key? removal-manifest p))
+      (hasheq 'path
+              p
+              'reason
+              (hash-ref removal-manifest p)
+              'baseline_median_ms
+              (record-median (hash-ref baseline-by-path p)))))
+  (define silent
+    (for/list ([p (in-list removed)]
+               #:unless (hash-has-key? removal-manifest p))
+      p))
+  (unless (null? silent)
     (comparison-error
      "inventory mismatch: ~a file(s) present in the baseline census are silently absent from the post census; first: ~a"
-     (length removed)
-     (car removed)))
+     (length silent)
+     (car silent)))
 
   (define added
     (for/list ([p (in-list (sort (for/list ([pth (in-hash-keys post-by-path)]
@@ -306,7 +322,7 @@
   (hasheq 'rows
           rows
           'inventory
-          (hasheq 'removed removed 'added added)
+          (hasheq 'removed explicit-removal-rows 'added added)
           'summary
           (hasheq 'work_mass_baseline
                   baseline-mass
@@ -342,20 +358,45 @@
     [(< improvement-pct 40) "meaningful"]
     [else "strong"]))
 
-(define (compare-files baseline-path post-path)
-  (work-mass-compare (read-census baseline-path) (read-census post-path)))
+(define (compare-files baseline-path post-path [removals #hash()])
+  (work-mass-compare (read-census baseline-path)
+                     (read-census post-path)
+                     #:removed-since-baseline removals))
+
+;; Removals sidecar: JSON object path -> reason, sibling of the post census
+;; by default. Absent file => empty manifest (silent removals stay red).
+(define (load-removals post-path removals-path)
+  (define path
+    (cond
+      [removals-path removals-path]
+      [else
+       (define sibling
+         (build-path (path-only (simplify-path post-path)) "removed-since-baseline.json"))
+       (if (file-exists? sibling) sibling #f)]))
+  (cond
+    [(not path) #hash()]
+    [else
+     (define doc (with-input-from-file path read-json))
+     (unless (hash? doc)
+       (comparison-error "removals manifest ~a must be a JSON object" path))
+     (for/hash ([(k v) (in-hash doc)])
+       (values (format "~a" k)
+               (cond
+                 [(string? v) v]
+                 [else (format "~a" v)])))]))
 
 ;; -------------------------------------------------------------------- main
 
 (define (usage)
   (eprintf
-   "usage: racket scripts/run-tests/work-mass-comparison.rkt --baseline <census.json> --post <census.json> --out <comparison.json>\n")
+   "usage: racket scripts/run-tests/work-mass-comparison.rkt --baseline <census.json> --post <census.json> --out <comparison.json> [--removals <removed-since-baseline.json>]\n")
   2)
 
 (define (main args)
   (define baseline-path #f)
   (define post-path #f)
   (define out-path #f)
+  (define removals-path #f)
   (let loop ([args args])
     (match args
       ['() (void)]
@@ -368,10 +409,13 @@
       [(list "--out" p rest ...)
        (set! out-path p)
        (loop rest)]
+      [(list "--removals" p rest ...)
+       (set! removals-path p)
+       (loop rest)]
       [else (comparison-error "unexpected argument: ~a" (car args))]))
   (unless (and baseline-path post-path out-path)
     (dynamic-wind void usage (lambda () (exit 2))))
-  (define doc (compare-files baseline-path post-path))
+  (define doc (compare-files baseline-path post-path (load-removals post-path removals-path)))
   (define full
     (hash-union
      doc
@@ -390,4 +434,4 @@
   0)
 
 (module+ main
-  (exit (main (current-command-line-arguments))))
+  (exit (main (vector->list (current-command-line-arguments)))))

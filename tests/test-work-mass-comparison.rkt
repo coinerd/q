@@ -143,6 +143,45 @@
 (check-false (null? (hash-ref (hash-ref comparison 'inventory) 'added)))
 (check-equal? (hash-ref (hash-ref comparison 'inventory) 'removed) '())
 
+;; §W7.2 explicit removals: a removals manifest turns a would-be silent
+;; absence into an explicit row; any absence still unlisted stays a red
+;; error. (tests/b.rkt exists only in the baseline fixture.)
+(define post-without-b
+  (make-census (list (make-record "tests/a.rkt" 800)
+                     (make-record "tests/c.rkt" 200)
+                     (make-record "tests/d.rkt" 300)
+                     (make-record "tests/new-e.rkt" 100))
+               #:buckets (list (hasheq 'label "<250 ms" 'file_count 3 'mass_ms 600)
+                               (hasheq 'label "250 ms-1 s" 'file_count 2 'mass_ms 1250))
+               #:work-type-totals (hasheq 'subprocesses
+                                          8
+                                          'racket_subprocesses
+                                          1
+                                          'git_commands
+                                          1
+                                          'git_fixtures
+                                          0
+                                          'session_fixtures
+                                          2
+                                          'sleep_requested_ms
+                                          250)
+               #:q7 (list "tests/a.rkt" "tests/c.rkt" "tests/new-e.rkt")))
+(define explicit-removals (hash "tests/b.rkt" "removed in v1.00.28 W1 remediation (commit 999beadb)"))
+(define explicit-compare
+  (work-mass-compare baseline-census post-without-b #:removed-since-baseline explicit-removals))
+(define removed-rows (hash-ref (hash-ref explicit-compare 'inventory) 'removed))
+(check-equal? (length removed-rows) 1)
+(check-equal? (hash-ref (car removed-rows) 'path) "tests/b.rkt")
+(check-equal? (hash-ref (car removed-rows) 'reason)
+              "removed in v1.00.28 W1 remediation (commit 999beadb)")
+(check-equal? (hash-ref (car removed-rows) 'baseline_median_ms) 500)
+;; A manifest entry that does not cover the absence is still silent.
+(check-exn exn:fail:work-mass-comparison?
+           (lambda ()
+             (work-mass-compare baseline-census
+                                post-without-b
+                                #:removed-since-baseline (hash "tests/other.rkt" "wrong manifest"))))
+
 ;; Collection failures on both sides are retained as explicit rows too.
 (define post-with-new-failure
   (make-census (list (make-record "tests/a.rkt" 800)
