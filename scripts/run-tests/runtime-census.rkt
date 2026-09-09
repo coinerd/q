@@ -518,17 +518,22 @@
   (make-directory* cdir)
   (define marker (build-path (current-directory) ".q-census-counters"))
   (with-output-to-file marker (lambda () (displayln (path->string cdir))) #:exists 'replace)
+  ;; BUG-0031 (real fix): each subprocess is retained by its custodian
+  ;; (status-pipe fd included) until custodian shutdown — collect-garbage
+  ;; alone is NOT sufficient (observed 2026-09: errno=24 at ~1000 attempts
+  ;; despite a GC per attempt → spurious 0ms collection-failures mid-census).
+  ;; Spawn each attempt under a dedicated custodian and shut it down
+  ;; deterministically outside the timing window. The stdout port still must
+  ;; close on every path, including spawn failures.
+  (define attempt-cust (make-custodian))
   (define started (current-inexact-milliseconds))
   (define status
-    ;; stdout port must close on every path, including spawn failures —
-    ;; a per-attempt fd leak exhausts the process fd limit mid-census
-    ;; (BUG-0031: 3531 files x 3 rounds leaked ~10k fds and cascaded into
-    ;; spurious 0ms collection-failures + a static-scan directory-list crash).
     (let ([stdout-p (open-output-file "/dev/null" #:exists 'append)])
       (dynamic-wind void
                     (lambda ()
                       (define-values (proc _i _o _e)
-                        (subprocess stdout-p #f (current-error-port) racket-path target))
+                        (parameterize ([current-custodian attempt-cust])
+                          (subprocess stdout-p #f (current-error-port) racket-path target)))
                       (define ready (sync/timeout timeout-s proc))
                       (unless ready
                         (with-handlers ([exn:fail? void])
@@ -539,13 +544,10 @@
                         [else "timeout"]))
                     (lambda () (close-output-port stdout-p)))))
   (define duration (inexact->exact (floor (- (current-inexact-milliseconds) started))))
-  ;; BUG-0031 residual: Racket releases a subprocess's internal status-pipe
-  ;; fds only when the subprocess object is garbage collected. The stdout-port
-  ;; close above is necessary but not sufficient: without a GC here the
-  ;; process accumulates one pipe fd per attempt (~1000 attempts exhausts the
-  ;; 1024-fd limit and every later spawn fails instantly with 0ms
-  ;; collection-failures). GC outside the timing window so durations stay honest.
-  (collect-garbage)
+  ;; Deterministic fd reaping: closes the exited subprocess's status-pipe fds
+  ;; (and kills any straggler) without relying on GC timing. Instant for an
+  ;; exited process; outside the timing window so durations stay honest.
+  (custodian-shutdown-all attempt-cust)
   (with-handlers ([exn:fail? void])
     (delete-file marker))
   (define counters (read-attempt-counters cdir))
