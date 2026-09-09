@@ -670,3 +670,122 @@
              (and (list? v) (pair? v) (andmap (λ (g) (and (string? g) (non-empty-string? g))) v))
              (and (string? v) (non-empty-string? v))))
        (format "row ~a column ~a is empty or non-string" (jref row "test") key)))))
+
+;; ════════════════════════════════════════════════════════════════════
+;; W3 (v1.00.28): inventory-reconciliation validation.
+;; A moved/removed behavior must have a destination test AND a named
+;; required gate; nothing may vanish silently from the inventory.
+;; ════════════════════════════════════════════════════════════════════
+
+(define validate-inventory-reconciliation (dynamic-script 'validate-inventory-reconciliation))
+
+(define (beh id path)
+  (hash 'behavior_id id 'path path))
+
+(define w3-before
+  (list (beh "b1" "tests/unit-a.rkt") (beh "b2" "tests/integ-b.rkt") (beh "b3" "tests/integ-c.rkt")))
+
+(test-case "reconciliation: green exact-match with owned move"
+  (check-equal? (validate-inventory-reconciliation (hash 'schema
+                                                         "q.tier-ownership.inventory-reconciliation/1"
+                                                         'before
+                                                         w3-before
+                                                         'after
+                                                         (list (beh "b1" "tests/unit-a.rkt")
+                                                               (beh "b2" "tests/integ-b.rkt")
+                                                               (beh "b3" "tests/unit-c.rkt"))
+                                                         'moves
+                                                         (list (hash 'behavior_id
+                                                                     "b3"
+                                                                     'destination_test
+                                                                     "tests/unit-c.rkt"
+                                                                     'destination_gate
+                                                                     "fast suite shard (test (0..2))"
+                                                                     'required_gate_owner
+                                                                     "fast"))))
+                '()))
+
+(test-case "reconciliation: schema mismatch is red"
+  (check-equal? (length (validate-inventory-reconciliation
+                         (hash 'schema "bogus/0" 'before w3-before 'after w3-before 'moves '())))
+                1))
+
+(test-case "reconciliation: silent drop is red"
+  ;; b3 disappears from after with no move record naming it.
+  (define errs
+    (validate-inventory-reconciliation (hash 'schema
+                                             "q.tier-ownership.inventory-reconciliation/1"
+                                             'before
+                                             w3-before
+                                             'after
+                                             (list (beh "b1" "tests/unit-a.rkt")
+                                                   (beh "b2" "tests/integ-b.rkt"))
+                                             'moves
+                                             '())))
+  (check-equal? (length errs) 1)
+  (check-true (string-contains? (first errs) "b3")
+              (format "drop error must name the behavior: ~a" (first errs))))
+
+(test-case "reconciliation: moved behavior without destination test is red"
+  ;; destination_test does not appear in the after inventory.
+  (define errs
+    (validate-inventory-reconciliation (hash 'schema
+                                             "q.tier-ownership.inventory-reconciliation/1"
+                                             'before
+                                             w3-before
+                                             'after
+                                             (list (beh "b1" "tests/unit-a.rkt")
+                                                   (beh "b2" "tests/integ-b.rkt")
+                                                   (beh "b3" "tests/integ-c.rkt"))
+                                             'moves
+                                             (list (hash 'behavior_id
+                                                         "b3"
+                                                         'destination_test
+                                                         "tests/never-added.rkt"
+                                                         'destination_gate
+                                                         "fast suite shard (test (0..2))"
+                                                         'required_gate_owner
+                                                         "fast")))))
+  (check-equal? (length errs) 1)
+  (check-true (string-contains? (first errs) "destination")
+              (format "must complain about destination: ~a" (first errs))))
+
+(test-case "reconciliation: moved behavior without named required gate is red"
+  (define errs
+    (validate-inventory-reconciliation (hash 'schema
+                                             "q.tier-ownership.inventory-reconciliation/1"
+                                             'before
+                                             w3-before
+                                             'after
+                                             (list (beh "b1" "tests/unit-a.rkt")
+                                                   (beh "b2" "tests/integ-b.rkt")
+                                                   (beh "b3" "tests/unit-c.rkt"))
+                                             'moves
+                                             (list (hash 'behavior_id
+                                                         "b3"
+                                                         'destination_test
+                                                         "tests/unit-c.rkt"
+                                                         'destination_gate
+                                                         ""
+                                                         'required_gate_owner
+                                                         "")))))
+  (check-equal? (length errs) 1)
+  (check-true (string-contains? (first errs) "gate")
+              (format "must complain about missing gate: ~a" (first errs))))
+
+(test-case "reconciliation: unaccounted addition is red"
+  (define errs
+    (validate-inventory-reconciliation (hash 'schema
+                                             "q.tier-ownership.inventory-reconciliation/1"
+                                             'before
+                                             w3-before
+                                             'after
+                                             (list (beh "b1" "tests/unit-a.rkt")
+                                                   (beh "b2" "tests/integ-b.rkt")
+                                                   (beh "b3" "tests/integ-c.rkt")
+                                                   (beh "b9" "tests/surprise.rkt"))
+                                             'moves
+                                             '())))
+  (check-equal? (length errs) 1)
+  (check-true (string-contains? (first errs) "surprise.rkt")
+              (format "must name the unaccounted path: ~a" (first errs))))
