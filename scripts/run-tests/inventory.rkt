@@ -8,6 +8,7 @@
 
 (require racket/string
          racket/path
+         (only-in "../../util/version.rkt" q-version)
          (only-in "classify.rkt"
                   base-dir
                   slow-file?
@@ -1647,9 +1648,9 @@
             'schema
             "tier-ownership-matrix/v1"
             'milestone
-            "v1.00.27"
+            (string-append "v" q-version)
             'wave
-            "W0"
+            (string-append "v" q-version "-w0")
             'columns
             (map symbol->string tier-matrix-columns)
             'families
@@ -1668,7 +1669,7 @@
   (displayln "    --metadata-quality   metadata tag quality report (missing/invalid/explicit)")
   (displayln "    --unit-fast-audit    unit-fast grouped-execution eligibility audit")
   (displayln "    --ownership-map      production-area test ownership map (md + json)")
-  (displayln "      [--tier-matrix P]  generate the v1.00.27 tier-ownership matrix")
+  (displayln "      [--tier-matrix P]  generate the current (v<q-version>-w0) tier-ownership matrix")
   (displayln "                         (eight columns per family, tier-ownership-matrix/v1)")
   (displayln "      [--check P]        red-on-drift check of a tier matrix vs the current tree")
   (displayln
