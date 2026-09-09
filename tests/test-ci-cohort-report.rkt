@@ -1697,33 +1697,6 @@
       (check-false (validation-ok? (validate-cohort m)))
       (check-true (has-error-matching? (validate-cohort m) #rx"names no reference")))
 
-    (test-case "BUG-0065 diagnostic dump: fully-guarded closed cohort gate state"
-      ;; CI-only divergence (release test lane: verdicts collapse to
-      ;; "unverified"; passes everywhere locally). This case always succeeds;
-      ;; its captured stdout carries the full gate state into the per-file
-      ;; diagnostics so a CI-only failure names the flipped row/guard.
-      (define m
-        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
-                                   (make-fc-sha i #:elapsed 100.0))))
-      (define gate (final-claim-gate m))
-      (printf "BUG-0065: q-version=~s now=~a guard-evidence-count=~a keys=~s~n"
-              q-version
-              (current-seconds)
-              (hash-count (hash-ref m 'guard-evidence))
-              (hash-keys (hash-ref m 'guard-evidence)))
-      (printf "BUG-0065: guard provided? ~s~n"
-              (for/list ([g (in-list (hash-keys fc-full-guards))])
-                (cons g (final-claim-guard-provided? m g))))
-      (for ([r (in-list (hash-ref gate 'rows))])
-        (printf "BUG-0065 row ~s: verdict=~s satisfied=~s reliability=~s observed=~s reasons=~s~n"
-                (hash-ref r 'id)
-                (hash-ref r 'verdict)
-                (hash-ref (hash-ref r 'guards) 'satisfied)
-                (hash-ref (hash-ref r 'guards) 'reliability-satisfied)
-                (hash-ref r 'observed #f)
-                (hash-ref r 'reasons #f)))
-      (check-true (hash? gate)))
-
     (test-case "final-claim manifests require the guard-evidence object"
       (define m (hash-remove (make-fc-manifest) 'guard-evidence))
       (check-false (validation-ok? (validate-cohort m)))
