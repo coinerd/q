@@ -1,0 +1,1 @@
+{"family":"test-auto-retry","mean_ms":5976.8,"method":"wall-clock ms of `racket tests/test-auto-retry.rkt` at detached worktree of origin/main, 10 sequential successful runs, identical invocation each run","ref":"origin/main","runs":10,"samples_ms":[3915,4715,5104,3849,11259,5160,11086,6147,3961,4572],"side":"before"}
