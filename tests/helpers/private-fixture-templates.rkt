@@ -35,9 +35,14 @@
          make-private-session-fixture!
          make-private-git-fixture!
          private-git-fixture-repo
+         current-git-fixture-strategy
          private-session-fixture-session-dir
          private-session-fixture-session-id
          git-available?
+         (struct-out private-fixture)
+         allocate-unique-root!
+         git-quiet!
+         hermetic-identity!
          call-with-private-git-environment
          with-private-git-repo
          private-session-template-dir
@@ -183,11 +188,32 @@
 ;; - `refs/heads/origin/main` stand-in is recreated inside the clone's own
 ;;   .git so offline `worktree add <p> origin/main` keeps working.
 ;; Keyword `#:branch` creates and checks out an initial feature branch.
+;; Fixture strategy selector (W2): 'pristine-copy builds instances by copying
+;; an immutable pristine baseline directory (helpers/pristine-git-fixture.rkt);
+;; 'legacy-clone uses the historical `git clone --no-local` path. Rollback to
+;; the legacy strategy is this single default edit.
+(define current-git-fixture-strategy (make-parameter 'pristine-copy))
+
+;; Sibling module path resolved relative to THIS source file; a bare string in
+;; `dynamic-require` would resolve against (current-directory) instead.
+(define-runtime-path pristine-git-fixture-module "pristine-git-fixture.rkt")
+
 (define (make-private-git-fixture! #:parent-root [parent-root #f]
                                    #:tag [tag "git"]
                                    #:branch [branch #f])
   (unless (git-available?)
     (error 'make-private-git-fixture! "git unavailable"))
+  (case (current-git-fixture-strategy)
+    [(pristine-copy)
+     ((dynamic-require pristine-git-fixture-module 'make-pristine-git-fixture-instance!)
+      #:parent-root parent-root
+      #:tag tag
+      #:branch branch)]
+    [else (legacy-clone-git-fixture! #:parent-root parent-root #:tag tag #:branch branch)]))
+
+(define (legacy-clone-git-fixture! #:parent-root [parent-root #f]
+                                   #:tag [tag "git"]
+                                   #:branch [branch #f])
   (define tmpl (ensure-git-template!))
   (define parent (or parent-root (make-temporary-file "q-fx-git-host-~a" 'directory)))
   (define root (allocate-unique-root! parent tag))
