@@ -1,0 +1,85 @@
+{
+  "level": "L0",
+  "description": "positional single-file runs during red-green iterations",
+  "command": "racket scripts/run-tests.rkt <file>",
+  "samples": [
+    {
+      "file": "tests/test-version.rkt",
+      "elapsed_seconds": 1.28,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-ansi.rkt",
+      "elapsed_seconds": 1.165,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-agent-state.rkt",
+      "elapsed_seconds": 1.166,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-agent-queue.rkt",
+      "elapsed_seconds": 1.093,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-agent-registry.rkt",
+      "elapsed_seconds": 0.941,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-adaptive-retry.rkt",
+      "elapsed_seconds": 4.17,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-actions-red-run-classifier.rkt",
+      "elapsed_seconds": 1.491,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-abstraction-audit.rkt",
+      "elapsed_seconds": 2.041,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-arch-boundaries.rkt",
+      "elapsed_seconds": 1.689,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-approval-broker.rkt",
+      "elapsed_seconds": 1.318,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-agent-memory-decoupling.rkt",
+      "elapsed_seconds": 1.431,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    },
+    {
+      "file": "tests/test-agent-session-pure.rkt",
+      "elapsed_seconds": 1.943,
+      "verdict": "pass",
+      "selection_reason": "positional-file:L0-direct"
+    }
+  ],
+  "stats": {
+    "n": 12,
+    "p50_seconds": 1.375,
+    "p90_seconds": 2.041,
+    "max_seconds": 4.17
+  }
+}
