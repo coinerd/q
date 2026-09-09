@@ -25,6 +25,7 @@
 (require rackunit
          racket/list
          racket/string
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/run-tests/work-mass-comparison.rkt"
                   exn:fail:work-mass-comparison?
                   work-mass-compare
@@ -166,14 +167,16 @@
                                           'sleep_requested_ms
                                           250)
                #:q7 (list "tests/a.rkt" "tests/c.rkt" "tests/new-e.rkt")))
-(define explicit-removals (hash "tests/b.rkt" "removed in v1.00.28 W1 remediation (commit 999beadb)"))
+(define explicit-removals
+  (hash "tests/b.rkt"
+        (format "removed in v~a W1 remediation (commit 999beadb)" q-version)))
 (define explicit-compare
   (work-mass-compare baseline-census post-without-b #:removed-since-baseline explicit-removals))
 (define removed-rows (hash-ref (hash-ref explicit-compare 'inventory) 'removed))
 (check-equal? (length removed-rows) 1)
 (check-equal? (hash-ref (car removed-rows) 'path) "tests/b.rkt")
 (check-equal? (hash-ref (car removed-rows) 'reason)
-              "removed in v1.00.28 W1 remediation (commit 999beadb)")
+              (format "removed in v~a W1 remediation (commit 999beadb)" q-version))
 (check-equal? (hash-ref (car removed-rows) 'baseline_median_ms) 500)
 ;; A manifest entry that does not cover the absence is still silent.
 (check-exn exn:fail:work-mass-comparison?

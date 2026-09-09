@@ -28,6 +28,8 @@ Scheduler savings are never reported as work-mass reduction
 never reported as hosted PR latency reduction without the hosted measurement
 (artifacts/ci-baseline/v1.00.28-final/decision.md).
 
+### Test workload reduction: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED
+
 ### Features
 - Two-part test-workload census (docs/reports/TEST-WORK-MASS-v1.00.28.md)
   with a drift guard and per-suite runner timings, pinned by governance tests.

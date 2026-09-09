@@ -420,7 +420,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v1.00.28** — Test Workload Reduction (final verdict: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED — prepared-environment lever fully verified, 5 of 7 fixed targets not achieved; see [CHANGELOG](CHANGELOG.md) and [SERIES-COMPLETION](docs/reports/SERIES-COMPLETION-v1.00.28.md))
+**v1.00.28** — Test workload reduction: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED
 
 **v1.00.27** — Features
 
