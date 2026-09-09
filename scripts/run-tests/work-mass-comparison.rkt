@@ -388,8 +388,9 @@
 ;; -------------------------------------------------------------------- main
 
 (define (usage)
-  (eprintf
-   "usage: racket scripts/run-tests/work-mass-comparison.rkt --baseline <census.json> --post <census.json> --out <comparison.json> [--removals <removed-since-baseline.json>]\n")
+  (eprintf "usage: racket scripts/run-tests/work-mass-comparison.rkt")
+  (eprintf " --baseline <census.json> --post <census.json>")
+  (eprintf " --out <comparison.json> [--removals <removed-since-baseline.json>]\n")
   2)
 
 (define (main args)
