@@ -1,0 +1,15 @@
+path|suite|speed|boundary|isolation|mutates|side-effect|decision|mass-ms|reason
+tests/test-context-assembly-budgeting.rkt|default|fast|unit|none|none|none|GROUP-SAFE|642|parity-complete-unit-no-global-mutation
+tests/test-approval-channel.rkt|security|fast|unit|none|none|none|GROUP-SAFE|472|parity-complete-unit-no-global-mutation
+tests/test-arch-composition-root.rkt|arch|fast|unit|none|none|none|GROUP-SAFE|449|parity-complete-unit-no-global-mutation
+tests/test-compaction-command.rkt|runtime|fast|unit|none|none|none|GROUP-SAFE|998|parity-complete-unit-no-global-mutation
+tests/test-ci-package-setup-policy.rkt|fast|fast|unit|none|none|none|GROUP-SAFE|471|parity-complete-unit-no-global-mutation
+tests/test-goal-loop-scenarios.rkt|default|fast|unit|none|none|none|ISOLATED|989|zero-parsed-output
+tests/test-iteration-steering.rkt|runtime|fast|unit|none|none|none|ISOLATED|624|zero-parsed-output
+tests/test-provider-scenarios.rkt|default|fast|unit|none|none|none|ISOLATED|488|zero-parsed-output
+tests/test-shell-tokenizer-progress.rkt|default|fast|unit|none|none|none|ISOLATED|386|zero-parsed-output
+tests/test-test-lint.rkt|default|fast|unit|sandboxed-home|none|none|ISOLATED|2893|declared-mutation
+tests/test-check-deps.rkt|default|slow|integration|process|fs|none|ISOLATED|18202|declared-process-isolation-or-fs-mutation
+tests/test-metrics-readme-sync.rkt|default|slow|integration|process|fs|none|ISOLATED|8060|declared-process-isolation-or-fs-mutation
+tests/test-pre-commit.rkt|default|slow|integration|process|fs|none|ISOLATED|83110|declared-process-isolation-or-fs-mutation
+tests/test-agent-loop-fsm.rkt|default|fast|unit|none|none|none|ISOLATED|322|runner-gate-missing-module-plus-test-form
