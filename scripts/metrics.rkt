@@ -25,6 +25,20 @@
          racket/system
          "metrics-helpers.rkt")
 
+;; Canonicalize cwd to this script's repository root (the parent of its own
+;; directory). Documented usage is `cd q/ && racket scripts/metrics.rkt …`;
+;; making the script self-locating keeps counts identical when a caller
+;; (e.g. the root-level verification lane) invokes it from outside q/.
+;; variable-reference->resolved-module-path returns a fully resolved path,
+;; so this also works when reached through a compatibility symlink.
+(current-directory
+ (simplify-path
+  (build-path (let-values ([(base _name _dir?) (split-path (resolved-module-path-name
+                                                            (variable-reference->resolved-module-path
+                                                             (#%variable-reference))))])
+                base)
+              'up)))
+
 (define args (vector->list (current-command-line-arguments)))
 (define run-tests? (member "--tests" args))
 (define lint? (member "--lint" args))
