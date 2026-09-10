@@ -90,6 +90,13 @@
                               (current-gsd-wave-verification-repair-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retry-delay . TURN_LOCAL)
+                              ;; BUG-0067: slow-lane patience/backoff knobs —
+                              ;; settings-driven configuration; the slow-delay
+                              ;; shape is an injectable seam like retry-delay.
+                              (current-gsd-campaign-infra-patience . CONFIGURATION)
+                              (current-gsd-campaign-infra-max-delay . CONFIGURATION)
+                              (current-gsd-campaign-infra-slow-delay . TURN_LOCAL)
+                              (current-gsd-campaign-infra-wait-chunk-secs . CONFIGURATION)
                               (current-gsd-wave-timeout-retries . CONFIGURATION)
                               (current-gsd-wave-timeout-seconds . CONFIGURATION)
                               (current-gsd-wave-failure-context . TURN_LOCAL)

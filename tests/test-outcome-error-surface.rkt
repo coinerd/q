@@ -111,6 +111,42 @@
       (check-true (string-contains? (first (transcript-texts next))
                                     "provider/network failure persisted")))
 
+    ;; ── BUG-0067: worker-side events cross the JSON IPC boundary ──
+    ;;
+    ;; JSON objects have no keyword keys, so a worker-emitted outcome
+    ;; error arrives with STRING keys. The keyword-only hash-ref used to
+    ;; render every such event as "wave outcome: unknown" — the exact
+    ;; confusion from the 2026-09-10 launch-day incidents. Both key
+    ;; shapes must render kind + message.
+
+    (test-case "BUG-0067: string-keyed (JSON IPC) payloads render kind + message"
+      (define st (fresh-state))
+      (define next
+        (apply-event-to-state
+         st
+         (make-test-event "gsd.wave.outcome-error"
+                          (hasheq "wave"
+                                  2
+                                  "kind"
+                                  "infra-failed"
+                                  "level"
+                                  "error"
+                                  "message"
+                                  "provider/network failure persisted after 3 automatic retries"))))
+      (check-equal? (transcript-types next) '(system-error))
+      (define text (first (transcript-texts next)))
+      (check-true (string-contains? text "infra-failed")
+                  "string-keyed kind must surface, not fall back to unknown")
+      (check-false (string-contains? text "wave outcome: unknown")
+                   "the confusing unknown fallback must be gone for IPC payloads")
+      (check-true (string-contains? text "provider/network failure persisted")))
+
+    (test-case "BUG-0067: genuinely missing kind still degrades honestly"
+      (define st (fresh-state))
+      (define next (apply-event-to-state st (make-test-event "gsd.wave.outcome-error" (hasheq))))
+      (check-equal? (transcript-types next) '(system-error))
+      (check-true (string-contains? (first (transcript-texts next)) "unknown")))
+
     (test-case "done-class outcomes are unaffected: no error entry appears"
       (define st (fresh-state))
       (define next
