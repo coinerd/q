@@ -10,8 +10,11 @@
 
 (require rackunit
          racket/string
+         racket/runtime-path
          "../scripts/lint-release-notes.rkt"
          (only-in "../util/version.rkt" q-version))
+
+(define-runtime-path repo-root "..")
 
 ;; ===========================================================================
 ;; Helpers
@@ -350,3 +353,106 @@
   ;; The pre-release heading must not be captured as its bare base version.
   (check-false (extract-version-block prerelease-entry q-version)
                "base version alone must not match the pre-release heading"))
+
+;; ===========================================================================
+;; W9: release-campaign integrity. For a version that carries a final-claim
+;; contract, the release entry must name the exact recorded verdict, bind
+;; every measurement claim to an artifact, and cite only fixed-contract
+;; threshold values. Everything is derived from the decision record — no
+;; release-version literal appears in this file (BUG-0009).
+;; ===========================================================================
+
+(define w9-tmp-dir (make-temporary-file "lint-release-notes-w9-~a" 'directory))
+
+(define (w9-write-tmp name content)
+  (define p (build-path w9-tmp-dir name))
+  (call-with-output-file p (λ (o) (display content o)) #:exists 'replace)
+  (path->string p))
+
+;; Minimal final-claim decision-record fixture: table rows carry fixed
+;; targets; the record ends in exactly one allowed verdict.
+(define w9-decision-fixture
+  (string-append
+   "# Final-claim decision\n\n"
+   "| Row | Measure | Target | Observed | Verdict |\n"
+   "|---|---|---|---|---|\n"
+   "| class-a-fast-work-mass-delta | Class A work-mass delta | < 0.0 | -5.37 | **pass** |\n"
+   "| fast-p50 | fast p50 | <= 115.0 | 282.5 | **target not achieved** |\n"
+   "| prepared-env-verified-restores | verified-restore rate | >= 95.0 | 100.0 | **pass** |\n"
+   "\n"
+   "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED\n"))
+
+(define w9-decision-path (w9-write-tmp "decision.md" w9-decision-fixture))
+
+(define w9-base-sections
+  (string-append "### User-Visible Changes\n"
+                 "### Breaking / Behavior Changes\nnone\n"
+                 "### Migration Notes\nnone\n"
+                 "### Testing\n"
+                 "### Operational / Release\n"))
+
+(define w9-good-campaign-lines
+  (string-append "### User-Visible Changes\n"
+                 "The workload-reduction campaign closed with the recorded verdict "
+                 "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED.\n"
+                 "- work mass reduced 5.37 percent on the W0 to W7 census medians"
+                 (format " (artifacts/test-runtime/v~a-census/)\n" q-version)
+                 "- fast p50 observed 282.5 s against the fixed <= 115.0 s target;"
+                 " verified-restore 100 percent (>= 95.0 %)"
+                 (format " (artifacts/ci-baseline/v~a-final/report.json)\n" q-version)))
+
+(parameterize ([contract-decision-path-override w9-decision-path])
+  (test-case "w9: good campaign entry passes its contract"
+    (check-equal? (validate-release-campaign w9-good-campaign-lines "9.9.9-test") '())))
+
+(parameterize ([contract-decision-path-override w9-decision-path])
+  (test-case "w9: entry missing the exact recorded verdict fails"
+    (define block
+      (string-append "### User-Visible Changes\n"
+                     "the campaign achieved a real workload reduction\n"
+                     (format "- work mass reduced 5.37 percent (artifacts/test-runtime/v~a-census/)\n"
+                             q-version)))
+    (define errors (validate-release-campaign block "9.9.9-test"))
+    (check-not-false (ormap (λ (e) (string-contains? e "exact recorded verdict")) errors)
+                     "missing-verdict error must be named")))
+
+(parameterize ([contract-decision-path-override (build-path w9-tmp-dir "missing.md")])
+  (test-case "w9: missing decision record fails closed"
+    (define errors (validate-release-campaign w9-good-campaign-lines "9.9.9-test"))
+    (check-not-false (ormap (λ (e) (string-contains? e "decision record not found")) errors))))
+
+(parameterize ([contract-decision-path-override w9-decision-path])
+  (test-case "w9: claim line without an artifact link is red"
+    (define block
+      (string-append "### User-Visible Changes\n"
+                     "verdict PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED\n"
+                     "- work mass reduced 5.37 percent on the census medians\n"))
+    (define errors (validate-release-campaign block "9.9.9-test"))
+    (check-not-false (ormap (λ (e) (string-contains? e "claim without artifact link")) errors))))
+
+(parameterize ([contract-decision-path-override w9-decision-path])
+  (test-case "w9: prose threshold off the fixed contract is red"
+    (define block
+      (string-append "### User-Visible Changes\n"
+                     "verdict PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED\n"
+                     "- fast p50 observed 282.5 s against the fixed <= 120.0 s target"
+                     (format " (artifacts/ci-baseline/v~a-final/report.json)\n" q-version)))
+    (define errors (validate-release-campaign block "9.9.9-test"))
+    (check-not-false (ormap (λ (e) (string-contains? e "does not match the fixed contract"))
+                            errors))))
+
+(parameterize ([contract-decision-path-override w9-decision-path])
+  (test-case "w9: decision record must end in exactly one allowed verdict"
+    (define two-verdicts (string-append w9-decision-fixture "NOT ACHIEVED\n"))
+    (define two-path (w9-write-tmp "two-verdicts.md" two-verdicts))
+    (parameterize ([contract-decision-path-override two-path])
+      (define errors (validate-release-campaign w9-good-campaign-lines "9.9.9-test"))
+      (check-not-false (ormap (λ (e) (string-contains? e "exactly one allowed verdict")) errors)))))
+
+;; Integration: the real changelog entry for the current version must pass
+;; its real release-campaign contract (contract resolved from the version
+;; table relative to the changelog's directory).
+(test-case "w9: current release entry satisfies its release-campaign contract"
+  (define changelog-path (path->string (build-path repo-root "CHANGELOG.md")))
+  (define errors (lint-changelog changelog-path q-version))
+  (check-equal? errors '() (string-join errors "\n")))

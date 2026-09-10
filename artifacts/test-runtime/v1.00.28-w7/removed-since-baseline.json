@@ -1,0 +1,4 @@
+{
+  "tests/test-browser-audit-w1-v0984.rkt": "old-campaign residue purge (v1.00.27 W1 residue reclassification); absent from main after the W0 baseline census; explicitly recorded, not silently dropped",
+  "tests/test-browser-audit-w2-v0983.rkt": "old-campaign residue purge (v1.00.27 W1 residue reclassification); absent from main after the W0 baseline census; explicitly recorded, not silently dropped"
+}

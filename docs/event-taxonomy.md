@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.27 -->
+<!-- verified-against: 1.00.28 -->
 # Q Event Taxonomy Reference
 
 Complete reference for all event types in .00.17.

@@ -1697,33 +1697,6 @@
       (check-false (validation-ok? (validate-cohort m)))
       (check-true (has-error-matching? (validate-cohort m) #rx"names no reference")))
 
-    (test-case "BUG-0065 diagnostic dump: fully-guarded closed cohort gate state"
-      ;; CI-only divergence (release test lane: verdicts collapse to
-      ;; "unverified"; passes everywhere locally). This case always succeeds;
-      ;; its captured stdout carries the full gate state into the per-file
-      ;; diagnostics so a CI-only failure names the flipped row/guard.
-      (define m
-        (make-fc-manifest #:shas (for/list ([i (in-range 20)])
-                                   (make-fc-sha i #:elapsed 100.0))))
-      (define gate (final-claim-gate m))
-      (printf "BUG-0065: q-version=~s now=~a guard-evidence-count=~a keys=~s~n"
-              q-version
-              (current-seconds)
-              (hash-count (hash-ref m 'guard-evidence))
-              (hash-keys (hash-ref m 'guard-evidence)))
-      (printf "BUG-0065: guard provided? ~s~n"
-              (for/list ([g (in-list (hash-keys fc-full-guards))])
-                (cons g (final-claim-guard-provided? m g))))
-      (for ([r (in-list (hash-ref gate 'rows))])
-        (printf "BUG-0065 row ~s: verdict=~s satisfied=~s reliability=~s observed=~s reasons=~s~n"
-                (hash-ref r 'id)
-                (hash-ref r 'verdict)
-                (hash-ref (hash-ref r 'guards) 'satisfied)
-                (hash-ref (hash-ref r 'guards) 'reliability-satisfied)
-                (hash-ref r 'observed #f)
-                (hash-ref r 'reasons #f)))
-      (check-true (hash? gate)))
-
     (test-case "final-claim manifests require the guard-evidence object"
       (define m (hash-remove (make-fc-manifest) 'guard-evidence))
       (check-false (validation-ok? (validate-cohort m)))
@@ -1787,6 +1760,95 @@
       (check-true (string-contains? md "never revised"))
       (check-true (string-contains? md "Next lever")))))
 
+;; W8: the decision record ends in exactly one allowed verdict —
+;; ACHIEVED, NOT ACHIEVED, or PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT
+;; ACHIEVED — and the Class A work-mass delta row is reported alongside the
+;; fixed Class B–D rows without ever comparing the incompatible measure
+;; classes.  The verification vocabulary grep over decision.md must match
+;; exactly one line: the final-verdict line itself (per-row verdicts are
+;; lowercase and the gate text names no uppercase vocabulary).
+(define (verify-vocabulary-line-count md)
+  (length (filter (lambda (l) (regexp-match? #rx"ACHIEVED|NOT ACHIEVED|PARTIAL WORKLOAD REDUCTION" l))
+                  (string-split md "\n" #:trim? #f))))
+(define (md-last-content-line md)
+  (last (filter (lambda (l) (non-empty-string? (string-trim l))) (string-split md "\n"))))
+
+(define w8-final-verdict-suite
+  (test-suite "W8 final 20-SHA cohort verdict vocabulary"
+
+    (test-case "open cohort with an improving Class A row ends in the PARTIAL verdict, exactly once"
+      (define m
+        (hash-set (make-fc-manifest #:cohort-status "open")
+                  'work-mass-delta
+                  (hasheq 'delta-pct
+                          -5.37
+                          'basis-of-comparison
+                          "class-a-fast-work-mass-delta"
+                          'basis
+                          "checksummed W0→W7 census comparison artifact")))
+      (define md (final-claim-decision-md-string m))
+      (check-true (string-contains? md "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED"))
+      (check-equal? (verify-vocabulary-line-count md) 1)
+      (check-true (string-contains? md "class-a-fast-work-mass-delta"))
+      ;; the verdict line is the last content of the decision record
+      (check-equal? (md-last-content-line md)
+                    "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED"))
+
+    (test-case "a closed cohort passing every fixed row with an improving Class A row ends in ACHIEVED"
+      (define m
+        (hash-set (make-fc-manifest #:shas (for/list ([i (in-range 20)])
+                                             (make-fc-sha i #:elapsed 100.0))
+                                    #:cohort-status "closed")
+                  'work-mass-delta
+                  (hasheq 'delta-pct
+                          -5.37
+                          'basis-of-comparison
+                          "class-a-fast-work-mass-delta"
+                          'basis
+                          "checksummed W0→W7 census comparison artifact")))
+      (define md (final-claim-decision-md-string m))
+      (check-true (string-contains? md "ACHIEVED"))
+      (check-equal? (verify-vocabulary-line-count md) 1)
+      (check-equal? (md-last-content-line md) "ACHIEVED"))
+
+    (test-case "a closed tag with fewer SHAs than expected can never claim ACHIEVED"
+      (define short
+        (hash-set (make-fc-manifest #:shas (for/list ([i (in-range 19)])
+                                             (make-fc-sha i #:elapsed 100.0))
+                                    #:cohort-status "closed")
+                  'work-mass-delta
+                  (hasheq 'delta-pct
+                          -5.37
+                          'basis-of-comparison
+                          "class-a-fast-work-mass-delta"
+                          'basis
+                          "checksummed W0→W7 census comparison artifact")))
+      (define short-md (final-claim-decision-md-string short))
+      (check-equal? (md-last-content-line short-md)
+                    "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED")
+      (check-false (for/or ([l (in-lines (open-input-string short-md))])
+                     (equal? (string-trim l) "ACHIEVED"))))
+
+    (test-case "no measured work-mass improvement ends in NOT ACHIEVED, never PARTIAL"
+      (define m
+        (hash-set (make-fc-manifest)
+                  'work-mass-delta
+                  (hasheq 'delta-pct
+                          2.5
+                          'basis-of-comparison
+                          "class-a-fast-work-mass-delta"
+                          'basis
+                          "checksummed W0→W7 census comparison artifact")))
+      (define md (final-claim-decision-md-string m))
+      (check-equal? (verify-vocabulary-line-count md) 1)
+      (check-true (string-contains? md "NOT ACHIEVED"))
+      (check-false (string-contains? md "PARTIAL WORKLOAD REDUCTION")))
+
+    (test-case "pre-bump manifests keep their decision records unchanged"
+      (define md (final-claim-decision-md-string (make-fc-manifest)))
+      (check-false (string-contains? md "Final campaign verdict"))
+      (check-false (string-contains? md "class-a-fast-work-mass-delta")))))
+
 ;; ============================================================
 ;; Run
 ;; ============================================================
@@ -1795,7 +1857,8 @@
 (define c2-failures (run-tests c2-suite))
 (define pr-elapsed-failures (run-tests pr-elapsed-suite))
 (define final-claim-failures (run-tests final-claim-suite))
+(define w8-failures (run-tests w8-final-verdict-suite))
 
 (module+ main
-  (when (positive? (+ failures c2-failures pr-elapsed-failures final-claim-failures))
+  (when (positive? (+ failures c2-failures pr-elapsed-failures final-claim-failures w8-failures))
     (exit 1)))

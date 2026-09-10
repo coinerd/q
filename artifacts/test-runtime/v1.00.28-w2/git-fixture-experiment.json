@@ -1,0 +1,252 @@
+{
+  "wave": "v1.00.28-w2",
+  "artifact": "git-fixture-experiment.json",
+  "purpose": "Sanctioned Git-fixture experiment: current 'git clone --no-local' fixtures vs a physical filesystem copy of a pristine fully self-contained repository.",
+  "method": "Interleaved A/B via the shared constructor make-private-git-fixture!; one sample = construct + 'git rev-parse --verify HEAD' first-use assertion + cleanup; 2 uncounted warmups per strategy; 14 interleaved rounds; identical method for both arms; strategies: legacy 'clone' (git clone --no-local) and 'pristine-copy' (physical copy of the immutable pristine baseline built once per process). No third strategy was needed: the two armed strategies bracket the decision and the cheaper one already wins.",
+  "raw": {
+    "clock": "current-inexact-milliseconds wall clock",
+    "clone": {
+      "median-construct-ms": 38.76708984375,
+      "median-first-use-ms": 4.494873046875,
+      "median-total-ms": 43.505615234375,
+      "samples": [
+        {
+          "construct-ms": 40.474365234375,
+          "first-use-ms": 4.1787109375,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 44.653076171875
+        },
+        {
+          "construct-ms": 41.291015625,
+          "first-use-ms": 4.4580078125,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 45.7490234375
+        },
+        {
+          "construct-ms": 31.10205078125,
+          "first-use-ms": 4.494873046875,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 35.596923828125
+        },
+        {
+          "construct-ms": 38.6982421875,
+          "first-use-ms": 4.50830078125,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 43.20654296875
+        },
+        {
+          "construct-ms": 38.044677734375,
+          "first-use-ms": 4.221923828125,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 42.2666015625
+        },
+        {
+          "construct-ms": 38.584716796875,
+          "first-use-ms": 4.12841796875,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 42.713134765625
+        },
+        {
+          "construct-ms": 38.76708984375,
+          "first-use-ms": 4.738525390625,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 43.505615234375
+        },
+        {
+          "construct-ms": 55.373046875,
+          "first-use-ms": 5.2685546875,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 60.6416015625
+        },
+        {
+          "construct-ms": 40.880859375,
+          "first-use-ms": 4.7802734375,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 45.6611328125
+        },
+        {
+          "construct-ms": 38.53955078125,
+          "first-use-ms": 4.457763671875,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 42.997314453125
+        },
+        {
+          "construct-ms": 31.714599609375,
+          "first-use-ms": 4.348876953125,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 36.0634765625
+        },
+        {
+          "construct-ms": 31.708740234375,
+          "first-use-ms": 4.2919921875,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 36.000732421875
+        },
+        {
+          "construct-ms": 43.042236328125,
+          "first-use-ms": 4.693115234375,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 47.7353515625
+        },
+        {
+          "construct-ms": 39.978759765625,
+          "first-use-ms": 4.582275390625,
+          "ok": true,
+          "strategy": "clone",
+          "total-ms": 44.56103515625
+        }
+      ],
+      "strategy": "clone",
+      "successful-samples": 14
+    },
+    "method": "interleaved A/B via shared constructor make-private-git-fixture!; sample = construct + git rev-parse --verify HEAD first-use assert + cleanup; 2 uncounted warmups each; 14 interleaved rounds",
+    "pristine-copy": {
+      "median-construct-ms": 143.94873046875,
+      "median-first-use-ms": 4.239013671875,
+      "median-total-ms": 148.523193359375,
+      "samples": [
+        {
+          "construct-ms": 144.793212890625,
+          "first-use-ms": 4.1630859375,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 148.956298828125
+        },
+        {
+          "construct-ms": 144.2431640625,
+          "first-use-ms": 4.280029296875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 148.523193359375
+        },
+        {
+          "construct-ms": 143.94873046875,
+          "first-use-ms": 4.740478515625,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 148.689208984375
+        },
+        {
+          "construct-ms": 143.052734375,
+          "first-use-ms": 4.17578125,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 147.228515625
+        },
+        {
+          "construct-ms": 144.865478515625,
+          "first-use-ms": 4.125244140625,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 148.99072265625
+        },
+        {
+          "construct-ms": 141.9853515625,
+          "first-use-ms": 4.12060546875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 146.10595703125
+        },
+        {
+          "construct-ms": 145.954345703125,
+          "first-use-ms": 4.398681640625,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 150.35302734375
+        },
+        {
+          "construct-ms": 145.413818359375,
+          "first-use-ms": 4.06103515625,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 149.474853515625
+        },
+        {
+          "construct-ms": 142.38037109375,
+          "first-use-ms": 4.239013671875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 146.619384765625
+        },
+        {
+          "construct-ms": 147.107421875,
+          "first-use-ms": 4.831298828125,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 151.938720703125
+        },
+        {
+          "construct-ms": 142.9609375,
+          "first-use-ms": 4.639892578125,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 147.600830078125
+        },
+        {
+          "construct-ms": 143.773193359375,
+          "first-use-ms": 4.3046875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 148.077880859375
+        },
+        {
+          "construct-ms": 143.46533203125,
+          "first-use-ms": 4.213623046875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 147.678955078125
+        },
+        {
+          "construct-ms": 141.556396484375,
+          "first-use-ms": 4.1875,
+          "ok": true,
+          "strategy": "pristine-copy",
+          "total-ms": 145.743896484375
+        }
+      ],
+      "strategy": "pristine-copy",
+      "successful-samples": 14
+    }
+  },
+  "gate-evaluation": {
+    "isolation-tests-pass": {
+      "value": true,
+      "note": "pristine-fixture safety suite green (no hardlinks, no alternates, no shared object store, no shared mutable refs, no inherited hooks, repo-local identity; byte-level isolation under concurrent creation/destruction)"
+    },
+    "parallel-stress-pass": {
+      "value": true,
+      "note": "12 concurrent instances per strategy all ok, pristine baseline byte-integrity unchanged (see stress-evidence.json)"
+    },
+    "median-improves-materially": {
+      "value": false,
+      "note": "pristine-copy is ~3.7x SLOWER than the legacy clone: median construct 143.95 ms vs 38.77 ms (total 148.52 ms vs 43.51 ms). Required direction is not met."
+    },
+    "no-consumer-behavior-changes": {
+      "value": true,
+      "note": "all three consuming suites green through the same constructor contract (campaign-repository 33/33, delivery-verifier 25/25, wave-worktree 10/10, fresh runs on this branch)"
+    },
+    "rollback-one-edit": {
+      "value": true,
+      "note": "rollback is flipping the constructor strategy parameter back to the legacy implementation; contract-tested in the same PR (legacy-contract test)"
+    }
+  },
+  "decision": {
+    "verdict": "HOLD",
+    "activated-strategy": "clone (legacy; unchanged default)",
+    "pristine-copy-role": "retained as the immutable per-process baseline backing the W2 safety suite and stress evidence; NOT made the default construction path",
+    "rationale": "The activation gate requires a material median improvement before/after. The measured medians go the other way (pristine-copy ~3.7x slower on construct, ~3.4x slower total), so activating would regress fixture construction. Per the gate contract the truthful hold is recorded and the legacy strategy is kept; no consuming suite behavior changes."
+  }
+}

@@ -1,3 +1,83 @@
+## v1.00.28 — 2026-09-09
+
+Released 2026-09-09.
+
+> v1.00.28: test workload reduction — measure the CI test workload, cut it, and
+> report the honest final verdict against the fixed targets.
+
+The campaign instrumented the workload before touching it: per-file census
+(docs/reports/TEST-WORK-MASS-v1.00.28.md) with a drift guard plus per-suite
+runner timings, shipped behind governance tests. The wait audit, the
+fixture-amplification experiment, the fast-integration review, and the
+consolidation program then cut real work. The W8 measured rows, each bound
+to the decision record (artifacts/ci-baseline/v1.00.28-final/decision.md),
+returned the exact verdict **PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED**:
+
+- fast p50 282.5 s / p95 294.95 s against <= 115.0 s / <= 135.0 s — not achieved (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- PR CI p50 820.5 s / p95 850.3 s against <= 588.0 s / <= 735.0 s — not achieved (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- security runner p50 709.0 s against <= 240.0 s — not achieved (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- workflows runner p50 715.5 s against <= 220.0 s — not achieved (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- Class A fast-suite work-mass delta -5.37 % W0→W7 — pass (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- prepared-env verified-restore rate 100.0 % against >= 95.0 % — pass (artifacts/ci-baseline/v1.00.28-final/decision.md)
+- The W8 cohort (artifacts/ci-baseline/v1.00.28-final/decision.md) closed at
+  8 of 20 eligible SHAs observed; the shortfall is recorded in the decision,
+  not silently widened.
+
+Scheduler savings are never reported as work-mass reduction
+(artifacts/ci-baseline/v1.00.28-final/decision.md), and work-mass reduction is
+never reported as hosted PR latency reduction without the hosted measurement
+(artifacts/ci-baseline/v1.00.28-final/decision.md).
+
+Scheduler states for this release are explicit (milestone #893). Activated in
+this release: the grouped-lane production gate with fail-closed eligibility and
+the census measurement tooling, both shipped behind governance tests
+(scripts/run-tests/grouped-config.rkt, docs/reports/TEST-WORK-MASS-v1.00.28.md).
+Not activated in this release: every sharding or scheduling lever named by the
+decision — shard fan-out, prepared-env cache reuse, tail-shard rebalancing,
+moving slow required gates off the mergeable critical path, and
+security/workflows suite sharding — each requires a separate reviewed decision,
+and a timing miss alone implies no queue rollback
+(artifacts/ci-baseline/v1.00.28-final/decision.md).
+
+### Test workload reduction: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED
+
+### Features
+- Two-part test-workload census (docs/reports/TEST-WORK-MASS-v1.00.28.md)
+  with a drift guard and per-suite runner timings, pinned by governance tests.
+- Grouped-lane production gating with fail-closed eligibility, parity proofs,
+  and group-safe share reporting
+  (docs/reports/GROUPED-PRODUCTION-CHARACTERIZATION-v1.00.28.md).
+- Release-notes lint binds release entries to the recorded campaign verdict,
+  per-claim artifact links, and fixed-contract thresholds
+  (scripts/lint-release-notes.rkt, tests/test-lint-release-notes.rkt).
+
+### Breaking / Behavior Changes
+- None. Test infrastructure and measurement tooling changed; product and CLI
+  behavior is unchanged.
+
+### Migration Notes
+- No action required. Test authors keep the existing inventory files; grouped
+  eligibility decides fail-closed and names the blocking reason.
+
+### Testing
+- Wait audit, fixture-amplification experiment, fast-integration review,
+  grouped characterization, consolidation adequacy, and local TDD latency
+  review checksummed under docs/reports/
+  (docs/reports/TEST-WAIT-AUDIT-v1.00.28.md,
+  docs/reports/TEST-FIXTURE-AMPLIFICATION-v1.00.28.md,
+  docs/reports/TEST-FAST-INTEGRATION-REVIEW-v1.00.28.md,
+  docs/reports/GROUPED-PRODUCTION-CHARACTERIZATION-v1.00.28.md,
+  docs/reports/TEST-CONSOLIDATION-v1.00.28.md,
+  docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md).
+- The W8 cohort artifacts and per-row decision are checksummed at the observed
+  values above (artifacts/ci-baseline/v1.00.28-final/decision.md).
+
+### Operational / Release
+- Series-completion record binds the W0–W8 artifacts, decisions, and the final
+  verdict (docs/reports/SERIES-COMPLETION-v1.00.28.md).
+- Integrated gates green at the release SHA; readiness (`--strict --context
+  tag-publish`) runs post-merge at the merge SHA per the coordinator contract.
+
 ## v1.00.27 — 2026-09-08
 
 Released 2026-09-08.

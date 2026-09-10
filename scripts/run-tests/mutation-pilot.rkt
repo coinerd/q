@@ -37,6 +37,11 @@
 ;;     timeout is recorded `timeout` and counted separately from kills.
 ;;   - Findings are INFORMATIONAL. Exit code 0 for completed AND
 ;;     budget-aborted runs; only usage errors exit non-zero (exit 2).
+;;   - EXCEPTION — W5 --check mode: validates a test-consolidation adequacy
+;;     artifact fail-closed (before/after counts, behavior mapping, reviewed
+;;     failure history, mutation evidence whose mutants are all still killed,
+;;     green suites). Runs NO mutants and needs no scope; exit 1 on any
+;;     missing/invalid evidence, 0 when valid — here the check IS the gate.
 ;;
 ;; DETERMINISM: site enumeration order (operator table order, then ascending
 ;; source offset), module order (sorted), and killing-test order (as supplied
@@ -56,7 +61,7 @@
          racket/string
          json)
 
-(define pilot-version "1.00.03")
+(define pilot-version "1.00.04")
 
 ;; Planning (pure)
 (provide mutation-operators
@@ -86,6 +91,8 @@
          ensure-clean-state!
          restore-all!
          budget-exhausted?
+         ;; Adequacy artifact validation (W5, fail-closed)
+         validate-adequacy
          ;; CLI
          main)
 
@@ -565,6 +572,65 @@
                        #:exists 'replace))
 
 ;; ---------------------------------------------------------------------------
+;; Adequacy artifact validation (W5, fail-closed)
+;; ---------------------------------------------------------------------------
+
+;; validate-adequacy : jsexpr? -> (hash/c symbol? any/c)
+;; → (hasheq 'ok boolean? 'reasons (listof string?))
+;; Fails closed: any missing or invalid evidence is a failure. For a changed
+;; test count (after != before) the artifact must carry:
+;;   - a non-empty behavior_mapping (what was merged into what, which
+;;     assertions moved where),
+;;   - a reviewed failure_history,
+;;   - mutation evidence (mutation-pilot run or reviewed manual
+;;     micro-mutations) whose mutants are ALL still killed after the
+;;     consolidation — a previously killed mutant surviving the consolidated
+;;     suite is RED,
+;;   - every recorded suite green.
+;; An unchanged count does not require a behavior mapping.
+(define (validate-adequacy js)
+  (define reasons '())
+  (define (reject! fmt . args)
+    (set! reasons (cons (apply format fmt args) reasons)))
+  (define schema (hash-ref js 'schema #f))
+  (unless (equal? schema "test-consolidation-adequacy/1")
+    (reject! "unknown schema: ~a (expected test-consolidation-adequacy/1)" schema))
+  (define counts (hash-ref js 'counts #f))
+  (define before (and (hash? counts) (hash-ref counts 'before #f)))
+  (define after (and (hash? counts) (hash-ref counts 'after #f)))
+  (unless (and (exact-nonnegative-integer? before) (exact-nonnegative-integer? after))
+    (reject! "counts.before and counts.after must be non-negative integers"))
+  (when (and before after (> after before))
+    (reject! "counts.after (~a) exceeds counts.before (~a)" after before))
+  (define changed (and before after (not (= before after))))
+  (when changed
+    (unless (pair? (hash-ref js 'behavior_mapping '()))
+      (reject! "changed test count requires a non-empty behavior_mapping"))
+    (unless (eq? (hash-ref (hash-ref js 'failure_history (hasheq)) 'reviewed #f) #t)
+      (reject! "changed test count requires failure_history.reviewed = true"))
+    (define me (hash-ref js 'mutation_evidence #f))
+    (unless (hash? me)
+      (reject! "changed test count requires mutation_evidence"))
+    (when (hash? me)
+      (unless (member (hash-ref me 'mode #f) '("mutation-pilot" "manual-micro-mutations"))
+        (reject! "mutation_evidence.mode must be mutation-pilot or manual-micro-mutations"))
+      (define mutants (hash-ref me 'mutants '()))
+      (when (null? mutants)
+        (reject! "mutation_evidence.mutants must be non-empty"))
+      (for ([m (in-list mutants)])
+        (when (hash? m)
+          (when (equal? (hash-ref m 'previously #f) "killed")
+            (unless (equal? (hash-ref m 'after #f) "killed")
+              (reject!
+               "mutant ~a: previously killed but ~a after consolidation — no previously killed mutant may survive the consolidated suite"
+               (hash-ref m 'id "?")
+               (hash-ref m 'after "unknown")))))))
+    (for ([(name verdict) (in-hash (hash-ref js 'suites (hasheq)))])
+      (unless (equal? verdict "green")
+        (reject! "suite ~a is ~a (must be green)" name verdict))))
+  (hasheq 'ok (null? reasons) 'reasons (reverse reasons)))
+
+;; ---------------------------------------------------------------------------
 ;; CLI
 ;; ---------------------------------------------------------------------------
 
@@ -604,6 +670,7 @@
   (define global-tests '())
   (define tests-for-specs '())
   (define dry-run #f)
+  (define check-path #f)
   (define root (path->string (current-directory)))
   (command-line
    #:program "mutation-pilot"
@@ -626,6 +693,10 @@
    [("--out") dir "artifact directory (default reports/mutation-pilot)" (set! out-dir dir)]
    [("--root") dir "repo root (default cwd)" (set! root dir)]
    [("--dry-run") "plan only: enumerate sites, write plan, execute nothing" (set! dry-run #t)]
+   [("--check")
+    path
+    "validate a test-consolidation adequacy JSON artifact (fail-closed) and run NO mutants (v1.00.28 W5)"
+    (set! check-path path)]
    [("--from-diff")
     base
     "mutate changed .rkt modules from git diff BASE (no repo-wide path)"
@@ -642,6 +713,26 @@
             spec
             "module=test1,test2 — explicit killing tests (repeatable)"
             (set! tests-for-specs (cons spec tests-for-specs))])
+  ;; W5 --check: fail-closed adequacy validation. Runs NO mutants and needs
+  ;; no module scope; exit 0 = valid evidence, exit 1 = fail closed.
+  (when check-path
+    (define verdict
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (hasheq 'ok
+                                           #f
+                                           'reasons
+                                           (list (format "unreadable adequacy artifact ~a: ~a"
+                                                         check-path
+                                                         (exn-message e)))))])
+        (validate-adequacy (string->jsexpr (file->string check-path)))))
+    (if (hash-ref verdict 'ok)
+        (begin
+          (displayln "adequacy --check: OK (test-consolidation-adequacy/1, evidence complete)")
+          (exit 0))
+        (begin
+          (for ([r (in-list (hash-ref verdict 'reasons))])
+            (fprintf (current-error-port) "adequacy --check: FAIL: ~a\n" r))
+          (exit 1))))
   (define modules
     (cond
       [modules-spec (filter non-empty-string? (string-split modules-spec ","))]

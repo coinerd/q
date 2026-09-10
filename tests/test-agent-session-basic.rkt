@@ -103,8 +103,22 @@
 ;; Helpers
 ;; ============================================================
 
+;; W3 split (fast-tier review): behavior cases share ONE real
+;; session base-dir per process run. Sessions keep unique generated ids, so
+;; each still owns its own subdirectory — isolation is preserved — while
+;; per-case directory churn (17x mkdir + rm -rf per run) disappears from the
+;; fast tier. The filesystem session-store boundary stays fully real: log
+;; appends, index writes and resume all go through the same on-disk store.
+;; The two persistence cases (resume-across-objects, log-survives-recreation)
+;; keep exercising a dedicated create/resume/recreate lifecycle, still real,
+;; inside the shared root. Lazily created so a bare require creates nothing.
+(define shared-root-handle #f)
+
 (define (make-temp-dir)
-  (make-temporary-file "q-agent-session-test-~a" 'directory))
+  (or shared-root-handle
+      (let ([root (make-temporary-file "q-agent-session-test-root-~a" 'directory)])
+        (set! shared-root-handle root)
+        root)))
 
 (define (with-permissive-permissions config)
   (hash-set config 'permission-config (make-permissive-permission-config)))
@@ -767,4 +781,8 @@
   ;; loader decided (0 even on rackunit failures). Propagate the failure count
   ;; so the wave verify chain actually gates on this suite.
   (define exit-code (run-tests test-agent-session-basic-suite))
+  ;; W3: remove the shared session-test root after the run (temp hygiene).
+  (when shared-root-handle
+    (with-handlers ([exn:fail? (λ (_) (void))])
+      (delete-directory/files shared-root-handle #:must-exist? #f)))
   (exit (if (zero? exit-code) 0 1)))

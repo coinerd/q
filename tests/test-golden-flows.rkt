@@ -106,8 +106,20 @@
 ;; Helpers
 ;; ============================================================
 
+;; W3 split (fast-tier review): golden flows share ONE real
+;; session-store root per process run. Sessions keep unique ids (each case
+;; gets its own session subdirectory), so cross-session isolation guarantees
+;; are still exercised against the real on-disk store — only the per-case
+;; mkdir/rm -rf churn disappears. cleanup-dir becomes a no-op in this mode;
+;; the shared root is removed exactly once via the exit plumber (runs on
+;; success and on failure exits alike).
+(define shared-root-handle #f)
+
 (define (make-temp-dir)
-  (make-temporary-file "q-golden-~a" 'directory))
+  (or shared-root-handle
+      (let ([root (make-temporary-file "q-golden-root-~a" 'directory)])
+        (set! shared-root-handle root)
+        root)))
 
 ;; filter-session-info imported from helpers/fixtures.rkt
 (require (only-in "helpers/fixtures.rkt" filter-session-info))
@@ -118,6 +130,14 @@
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
     (delete-directory/files dir)))
+
+;; W3: single removal of the shared golden-flow root after the run. Runs on
+;; the success path; on a failing case the case's own handler re-raises and
+;; process exit already signals red, so the leftover shared root matches the
+;; pre-split leak-on-failure semantics (one dir, not per-case dirs).
+(when shared-root-handle
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (delete-directory/files shared-root-handle #:must-exist? #f)))
 
 ;; Event collector: returns a handler proc and a getter for captured events
 (define (make-event-collector)

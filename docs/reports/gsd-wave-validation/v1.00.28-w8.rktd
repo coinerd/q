@@ -1,0 +1,18 @@
+;; Wave validation: v1.00.28 W8 — Final 20-SHA cohort and release decision
+;; Record-only companion to gsd-wave-evidence/v1.00.28-w8.rktd.
+(
+(wave . "v1.00.28-w8")
+(validated-sha . "faec39a2130806389b2a18ef0e754265215b3efc")
+(checks
+  (branch . "campaign/v1.00.28-w8 checked out (not main); base origin/main 04637d835d33f887a29846a2f3c1855146151985; the branch carries W1-W7 campaign content plus the W8 checkpoints (extended cohort-report tooling and its suite, the v1.00.28-final cohort manifest, report, and decision record)")
+  (tests . "racket tests/test-ci-cohort-report.rkt -> green, exit 0: 74 cases in the cohort-report group plus 9/20/24/5 across the four companion regression groups (132 total), including fixed-threshold-literal, fail-closed, Class A row, closed-cohort no-success strictness, and --check positional-form coverage")
+  (cohort-check . "racket scripts/run-tests/cohort-report.rkt --check artifacts/ci-baseline/v1.00.28-final/report.json -> CHECK PASS: match (report.json byte-identical to the regeneration from cohort.json)")
+  (checksums . "sha256sum -c artifacts/ci-baseline/v1.00.28-final/SHA256SUMS -> cohort.json, report.json, decision.md OK")
+  (decision-vocabulary . "grep -cE 'ACHIEVED|NOT ACHIEVED|PARTIAL WORKLOAD REDUCTION' artifacts/ci-baseline/v1.00.28-final/decision.md -> 1, the single final-verdict line PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED")
+  (threshold-immutability . "report.json and decision.md carry the fixed v1.00.27 literals 115/135/588/735/240/220/95; no target revised inside the wave; independently confirmed by the reviewer channel")
+  (review-signature . "independent reviewer channel (fresh-context reviewer agent, read-only, distinct from the implementing executor): 8/8 review checks PASS at reviewed-sha faec39a2130806389b2a18ef0e754265215b3efc, including exact median recomputation (fast 282.5, security 709.0), cohort integrity (8 unique SHAs, 4 named lane-failed exclusions disjoint from the cohort, shortfall 12), and guard presence; review-verdict APPROVE recorded in docs/reports/gsd-wave-reviews/v1.00.28-w8.rktd")
+  (cohort-status . "the accumulation window closed at 8 of 20 expected unique eligible PR head SHAs; cohort-status open, window-eligible-count 8, shortfall-count 12 explicit; failures and cancellations ingested (4 named exclusions, reason lane-run-failed, with run links); no SHA dropped or requalified to improve numbers")
+  (verdict-consistency . "decision.md's 8 per-row verdicts match report.json exactly; the final verdict PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED is the fail-safe mapping of the Class A pass (-5.37 %, own measure class) plus the six fixed-threshold timing misses; each miss row names a next lever and a timing miss alone implies no queue rollback")
+  (declared-files . "all declared wave files exist: q/scripts/run-tests/cohort-report.rkt, q/tests/test-ci-cohort-report.rkt, q/artifacts/ci-baseline/v1.00.28-final/{report.json,decision.md,SHA256SUMS}, docs/reports/gsd-wave-{evidence,reviews,validation}/v1.00.28-w8.rktd")
+  (verify-lane . "the declared Verify command is coordinator-owned and runs at return; each of its conjuncts was exercised individually on this branch and passed (test suite, cohort-report --check, sha256sum -c, decision.md grep count 1, branch campaign/v1.00.28-w8 != main)"))
+(validation-verdict . "PASS: the final-claim decision record is present, checksummed, byte-reproducible from the cohort manifest, threshold-faithful, honestly short of the 20-SHA cohort target, ended in exactly one allowed verdict, and signed by an independent reviewer channel"))

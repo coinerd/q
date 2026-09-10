@@ -1,0 +1,109 @@
+{
+  "level": "L1",
+  "description": "impact selection on branch diff, executing the selected set",
+  "command": "racket scripts/run-tests.rkt --changed-base origin/main --changed-head HEAD",
+  "selection_reason": "impact:changed-test-file (manifest maps tests/test-run-tests-script.rkt -> self)",
+  "escalation_fallback": "escalated_broad=false; fail-open fallback not triggered (manifest loaded, mapping source: self)",
+  "selected_set": [
+    "tests/test-run-tests-script.rkt"
+  ],
+  "selected_count": 1,
+  "samples": [
+    {
+      "run": "L1:origin-main..HEAD#1",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 57.182,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#2",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 42.143,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#3",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 47.188,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#4",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 50.973,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#5",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 52.711,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#6",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 50.399,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#7",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 49.289,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#8",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 47.262,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#9",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 29.25,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    },
+    {
+      "run": "L1:origin-main..HEAD#10",
+      "diff": "origin/main..HEAD",
+      "elapsed_seconds": 29.09,
+      "verdict": "pass",
+      "selected_count": 1,
+      "selection_reason": "impact:changed-test-file",
+      "escalation_fallback": "n/a "
+    }
+  ],
+  "stats": {
+    "n": 10,
+    "p50_seconds": 48.276,
+    "p90_seconds": 52.711,
+    "max_seconds": 57.182
+  }
+}

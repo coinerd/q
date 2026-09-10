@@ -414,4 +414,12 @@
       ("extensions/loader.rkt"
        (risk
         . "Extension discovery/reload with wide compiled/ purge + in-process fresh-namespace reload (BUG-0047, v1.00.22 W3); grew with bytecode-recovery seam; score 59920")
-       (owner . "extensions"))))))
+       (owner . "extensions"))
+      ("scripts/run-tests/inventory.rkt"
+       (risk
+        . "Fast-lane file inventory with ownership matrix reconciliation and tier semantics; grew with the v1.00.28 workload census and grouped-lane governance; score ~21192")
+       (owner . "tools"))
+      ("scripts/run-tests/cohort-report.rkt"
+       (risk
+        . "Test cohort measurement report builder (census/final-cohort aggregation, per-row verdict binding); grew with the v1.00.28 measurement campaign; score ~20888")
+       (owner . "tools"))))))

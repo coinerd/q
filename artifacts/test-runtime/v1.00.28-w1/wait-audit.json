@@ -1,0 +1,2058 @@
+{
+  "wave": "v1.00.28-w1",
+  "kind": "wait-audit",
+  "source-scan": {
+    "branch": "campaign/v1.00.28-w0",
+    "path": "artifacts/test-runtime/v1.00.28-census/static-wait-scan.json",
+    "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166",
+    "note": "W0 static scan triage plus a targeted live grep at W1 implementation time; text matches are never automatic defects"
+  },
+  "classifier": "unit-fast iff @suite unit-fast OR (@speed fast AND @boundary unit AND NOT @mutates); fast otherwise when @speed fast AND NOT @mutates",
+  "dispositions": "remediated (changed in W1) | retained-canary (real-clock wait kept with a named behavioral reason) | not-a-test-sleep (text match is fixture source or comment) | verified-clean (no matches at all)",
+  "target-families": [
+    {
+      "file": "tests/test-agent-session-basic.rkt",
+      "raw-sleep-count": 0,
+      "disposition": "verified-clean",
+      "evidence": "zero raw (sleep) matches; the (current-seconds) occurrence is a telemetry timestamp, not a wait; async coordination uses sync/timeout seams (earlier campaign)"
+    },
+    {
+      "file": "tests/test-auto-retry.rkt",
+      "raw-sleep-count": 0,
+      "disposition": "verified-clean",
+      "evidence": "zero raw (sleep) matches; backoff and cancellation asserted via #:now-proc fake clock, #:on-retry semaphore sync points and sync/timeout on thread-dead-evt (F5a, PN-7)"
+    },
+    {
+      "file": "tests/test-retry-iteration.rkt",
+      "raw-sleep-count": 0,
+      "disposition": "verified-clean",
+      "evidence": "zero raw (sleep) matches; pure hash and payload semantics tests"
+    }
+  ],
+  "remediated-families": [
+    {
+      "file": "tests/test-wave3-extension-polish.rkt",
+      "change": "fixed (sleep 0.1) bridge settle replaced by bounded polling until buf contains ui.confirm (1s worst case)",
+      "class": "B",
+      "benchmark": "artifacts/test-runtime/v1.00.28-w1/benchmarks/test-wave3-extension-polish-after.json",
+      "benchmark-before": "artifacts/test-runtime/v1.00.28-w1/benchmarks/test-wave3-extension-polish-before.json"
+    }
+  ],
+  "residue-purged": [
+    {
+      "file": "tests/test-browser-audit-w1-v0984.rkt",
+      "suite": "unit-fast",
+      "occurrences": 4,
+      "disposition": "purged-with-file",
+      "note": "leftover from an older browser-audit campaign, not a v1.00.28 W1 target; test file and its stray benchmark JSON removed by this wave, so its scan rows left raw-sleep-files"
+    },
+    {
+      "file": "tests/test-browser-audit-w2-v0983.rkt",
+      "suite": "unit-fast",
+      "occurrences": 1,
+      "disposition": "purged-with-file",
+      "note": "leftover from an older browser-audit campaign, not a v1.00.28 W1 target; test file and its stray benchmark JSON removed by this wave, so its scan row left raw-sleep-files"
+    }
+  ],
+  "raw-sleep-files": {
+    "tests/fixtures/grouped-mode/f09-timeout.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 8,
+          "text": "(sleep 60)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/fixtures/grouped-mode/timeout.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 8,
+          "text": "(sleep 600))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/helpers/fast-fixtures.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 37,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/helpers/tmux-q-harness.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 1921,
+          "text": "(sleep (/ poll-ms 1000.0))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/helpers/tui-scenarios.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 63,
+          "text": "(sleep 0.001)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/mock-worker.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 80,
+          "text": "(sleep secs)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 84,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/reproducers/mock-fin-server.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 129,
+          "text": "(sleep 0.05) ; give the frames time to reach the wire before the FIN",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        },
+        {
+          "line": 141,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 147,
+          "text": "(sleep 0.4)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 166,
+          "text": "(sleep 0.03)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 173,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-agent-session-context.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 347,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-approval-channel-teardown.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 49,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 70,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 87,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 129,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-audit-v09945-w9-extension.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 371,
+          "text": "(sleep 5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-blackboard-subscriber.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 269,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-blackboard.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 136,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-browser-audit-w2.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 122,
+          "text": "(sleep 0.1) ; ensure thread finishes",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        }
+      ]
+    },
+    "tests/test-compact-correlation-isolation.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 87,
+          "text": "(sleep 0.8) ; allow async subscriber threads",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        },
+        {
+          "line": 122,
+          "text": "(sleep 0.8)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-conn-pool.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 137,
+          "text": "(sleep 1.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 229,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 371,
+          "text": "(sleep 3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 534,
+          "text": "(sleep 1.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 560,
+          "text": "(sleep 1.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-distributed-execution-e2e.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 82,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 93,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 105,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 126,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 135,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 164,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 179,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 190,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 203,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 223,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 235,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 251,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 261,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 276,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 319,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-execute-command-hook.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 81,
+          "text": "(sleep 0.1) ; way longer than 1ms",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        },
+        {
+          "line": 114,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-execution-plane-characterization.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 42,
+          "text": "(sleep 0.2) ; let worker initialize",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 51,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 63,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 70,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 76,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 86,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 90,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 101,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 113,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 124,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 128,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 136,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-execution-plane-e2e.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 312,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 340,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-executor-server.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 116,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 134,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 152,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 171,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 189,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 209,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 230,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 243,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-file-mutation-queue.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 37,
+          "text": "(sleep 0.01) ;; simulate latency to make races more likely",
+          "class": "A",
+          "disposition": "retained-canary",
+          "reason": "logical-timing canary: bounded delay creates the deterministic ordering or overlap window the assertion observes"
+        },
+        {
+          "line": 117,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-filesystem-mutation-serialization.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 135,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 162,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 168,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-full-regression-quarantine-expiry.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 56,
+          "text": "(write-text! (scratch-path \"w8-timeout-fixture.rkt\") '(\"#lang racket/base\" \"(sleep 30)\")))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        }
+      ]
+    },
+    "tests/test-gateway-bridge-remote.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 103,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gateway-ipc-concurrent.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 50,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 64,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 88,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 103,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 129,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 158,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        },
+        {
+          "line": 181,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "subprocess mock startup settle: runtime gateway API exposes no readiness predicate; bounded 0.2-0.3s wait before the first request; readiness-poll seam queued for W2 (wait-queue Q4)"
+        }
+      ]
+    },
+    "tests/test-gateway-ipc.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 58,
+          "text": "(sleep 0.1) ; let process die",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        },
+        {
+          "line": 77,
+          "text": "(sleep 0.1) ; let worker start",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 87,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 95,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 107,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 120,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 130,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 141,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 145,
+          "text": "(sleep 0.1) ; allow stderr drain",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        },
+        {
+          "line": 155,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 170,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 173,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 204,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 216,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gateway-write-timeout.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 38,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-context-factory.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 152,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-delivery-verifier.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 550,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 716,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-go-orchestrator.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 602,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 622,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-transaction-contract.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 112,
+          "text": "(sleep 0.1)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleep must exceed current-hook-timeout-ms=1 for the block path to trigger"
+        },
+        {
+          "line": 129,
+          "text": "(sleep 0.1)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleep must exceed current-hook-timeout-ms=1 for the block path to trigger"
+        }
+      ]
+    },
+    "tests/test-gsd-wave-executor-isolation.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 128,
+          "text": "(sleep 30)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 152,
+          "text": "(sleep 30)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 178,
+          "text": "(sleep 30)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 314,
+          "text": "(sleep 30)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-wave-runner-port.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 160,
+          "text": "(sleep 10)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-gsd-wave-timeout-canary.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 37,
+          "text": "(sleep (/ sleep-ms 1000.0))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-hitl-approval-integration.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 40,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 84,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-hook-dispatch-transitions.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 60,
+          "text": "(sleep 0.1) ; way longer than 10ms",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleep exceeds the 10ms hook timeout so dispatch timeout paths E1-E3 are exercised"
+        },
+        {
+          "line": 76,
+          "text": "(sleep 0.1)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleep exceeds the 10ms hook timeout so dispatch timeout paths E1-E3 are exercised"
+        },
+        {
+          "line": 91,
+          "text": "(sleep 0.1)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleep exceeds the 10ms hook timeout so dispatch timeout paths E1-E3 are exercised"
+        }
+      ]
+    },
+    "tests/test-hook-expansion.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 71,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 86,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-interrupt-lifecycle.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 223,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 388,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-ls.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 162,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-memory-context-observe.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 183,
+          "text": "(sleep 0.5) ; Sleep longer than timeout",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: backend slower than the memory observe timeout exercises the F5 fail-closed path"
+        }
+      ]
+    },
+    "tests/test-memory-external-policy.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 184,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-midstream-stall.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 143,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-observable-bridge.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 95,
+          "text": "(sleep 0.2) ; allow async processing",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        }
+      ]
+    },
+    "tests/test-parallel-tools.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 36,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-parameter-dynamic-context.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 134,
+          "text": "(sleep 0.05)))))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 135,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-process-extension-command.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 171,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 222,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-provider-contract-golden-matrix.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 350,
+          "text": "(call-with-request-timeout (lambda () (sleep 10)) #:timeout 0.05)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        }
+      ]
+    },
+    "tests/test-provider-response-cleanup.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 161,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-registry-watcher.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 63,
+          "text": "(sleep 0.1) ; let it init",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 68,
+          "text": "(sleep 2.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 94,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 96,
+          "text": "(sleep 1.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 101,
+          "text": "(sleep 2.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-remote-executor-security.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 171,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 182,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 198,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 221,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 240,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-remote-ipc-resilience.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 144,
+          "text": "(sleep 0.15)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 151,
+          "text": "(sleep 0.15)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 160,
+          "text": "(sleep 0.15)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 181,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 196,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 208,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 221,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 234,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 237,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 250,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 268,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 279,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-remote-ipc.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 84,
+          "text": "(sleep (/ delay-ms 1000.0)))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-runner-scheduler-characterization.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 111,
+          "text": "\"(sleep 10)\\n\"",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 229,
+          "text": "(define aaa (write-fixture! dir \"aaa-slow.rkt\" \"#lang racket/base\\n(sleep 0.5)\\n\"))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 231,
+          "text": "(define ccc (write-fixture! dir \"ccc-med.rkt\" \"#lang racket/base\\n(sleep 0.3)\\n\"))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 243,
+          "text": "(write-fixture! dir \"timeout-file.rkt\" \"#lang racket/base\\n;; @timeout 1\\n(sleep 30)\\n\"))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        },
+        {
+          "line": 258,
+          "text": "(write-fixture! dir \"timeout.rkt\" \"#lang racket/base\\n;; @timeout 1\\n(sleep 30)\\n\"))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        }
+      ]
+    },
+    "tests/test-runner-work-queue.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 94,
+          "text": "(define fixture-sleep30 \"#lang racket/base\\n;; @timeout 1\\n(sleep 30)\\n\")",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        },
+        {
+          "line": 126,
+          "text": "(define aaa (write-fixture! dir \"aaa-slow.rkt\" \"#lang racket/base\\n(sleep 0.5)\\n\"))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 208,
+          "text": "(list (write-fixture! dir \"explicit-timeout.rkt\" \"#lang racket/base\\n(sleep 30)\\n\"))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        },
+        {
+          "line": 272,
+          "text": "(define sleepy (write-fixture! dir \"sleepy.rkt\" \"#lang racket/base\\n(sleep 30)\\n\"))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 275,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 283,
+          "text": "(define sleepy (write-fixture! dir \"sleepy.rkt\" \"#lang racket/base\\n(sleep 30)\\n\"))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-runtime-census.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 270,
+          "text": "(sleep 30)",
+          "class": "D",
+          "disposition": "not-a-test-sleep",
+          "reason": "sleep term is a string literal written into a census-scan fixture file to exercise the scanner; no live sleep executes in this test"
+        }
+      ]
+    },
+    "tests/test-sandbox-evaluator.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 45,
+          "text": "(define result (eval-in-sandbox \"(sleep 3)\" #:timeout 1))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        }
+      ]
+    },
+    "tests/test-sandbox-limits.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 142,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-sandbox-security.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 138,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-scheduler-failure-symmetry.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 83,
+          "text": "(sleep 0.03)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-scheduler-hooks.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 347,
+          "text": "(sleep 0.01) ; simulate work",
+          "class": "A",
+          "disposition": "retained-canary",
+          "reason": "10ms overlap window so concurrent writers actually overlap for the max-concurrency assertion"
+        }
+      ]
+    },
+    "tests/test-scheduler.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 101,
+          "text": "(sleep 0.05) ; 50ms delay",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 530,
+          "text": "(sleep 0.05) ; small delay to force contention",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-sdk.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 290,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-session-cleanup.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 180,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 217,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-stream-liveness-classification.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 160,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-stream.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 347,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 390,
+          "text": "(sleep 0.02)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 609,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 681,
+          "text": "(sleep 0.1) ;; Sleep past the 50ms deadline (10x margin for slow CI)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-subprocess-edge-cases.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 58,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 222,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 246,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-subprocess.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 30,
+          "text": "(sleep 1.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-commands.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 110,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 163,
+          "text": "(sleep 3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-context-memory.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 100,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-gsd.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 77,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 112,
+          "text": "(sleep 10)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-resize-cleanup.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 50,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 79,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 108,
+          "text": "(sleep 3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-session-artifacts.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 78,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 114,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 131,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 147,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 162,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tmux-tui-tools-approval.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 72,
+          "text": "(sleep 5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 99,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 102,
+          "text": "(sleep 3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tool-call-freeze.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 101,
+          "text": "(sleep 0.2))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 132,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tool-coordinator-duration.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 34,
+          "text": "(sleep (/ delay-ms 1000.0))",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-truncation-overflow.rkt": {
+      "suite": "fast",
+      "occurrences": [
+        {
+          "line": 84,
+          "text": "(sleep 0.002)) ; ensure different timestamps",
+          "class": "A",
+          "disposition": "retained-canary",
+          "reason": "logical-timing canary: bounded delay creates the deterministic ordering or overlap window the assertion observes"
+        }
+      ]
+    },
+    "tests/test-tui-approval-keyhandler.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 244,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-tui-event-channel.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 52,
+          "text": "(sleep 0.1) ; let subscribers process",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "settle canary: bounded wait for an observable side effect that exposes no completion event; flagged for W2 sync/timeout seam adoption"
+        },
+        {
+          "line": 62,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 70,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 84,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 111,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 126,
+          "text": "(sleep 0.05)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 140,
+          "text": "(sleep 0.2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 150,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 166,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-ui-render-hooks.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 99,
+          "text": "(sleep 0.5)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleeps beyond the 50ms render-hook timeout; the sleeping thread is abandoned when the timeout returns"
+        },
+        {
+          "line": 110,
+          "text": "(sleep 0.5)",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: handler sleeps beyond the 50ms render-hook timeout; the sleeping thread is abandoned when the timeout returns"
+        }
+      ]
+    },
+    "tests/test-verification-job-lifecycle.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 181,
+          "text": "(sleep 0.3)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 345,
+          "text": "(sleep 0.01)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/test-wave3-extension-polish.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 144,
+          "text": "(sleep 0.01)",
+          "class": "B",
+          "disposition": "remediated",
+          "remediation": "fixed settle sleep replaced by bounded observation polling on the observable completion predicate (W1)",
+          "reason": "poll-interval sleep inside the W1 remediation: bounded, exits on first observable completion"
+        }
+      ]
+    },
+    "tests/test-working-set.rkt": {
+      "suite": "unit-fast",
+      "occurrences": [
+        {
+          "line": 58,
+          "text": "(sleep 1.1)",
+          "class": "A",
+          "disposition": "retained-canary",
+          "reason": "ws-entry-timestamp uses (current-seconds) (second granularity): the refresh assertion requires more than 1s of monotonic advance; no injectable clock seam yet (wait-queue Q4 follow-up)"
+        }
+      ]
+    },
+    "tests/workflows/extensions/test-extension-execution-hardening.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 202,
+          "text": "(sleep 0.1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        }
+      ]
+    },
+    "tests/workflows/fixtures/test-workflow-timeout-cleanup.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 31,
+          "text": "(sleep 1)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+        },
+        {
+          "line": 68,
+          "text": "(with-workflow-timeout (lambda () (sleep 1)) #:timeout-ms 50 #:context \"test-context\"))))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        },
+        {
+          "line": 72,
+          "text": "(with-workflow-timeout (lambda () (sleep 1))",
+          "class": "B",
+          "disposition": "retained-canary",
+          "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total-occurrences": 229,
+    "unit-fast-files": 34,
+    "unit-fast-occurrences": 95,
+    "remediated-occurrences-w1": 1,
+    "purged-residue-files": 2,
+    "purged-residue-occurrences": 5,
+    "unjustified-unit-fast-sleeps": 0,
+    "note": "the three declared target families were already remediated in earlier campaigns (verified-clean rows above); the one in-tree W1 remediation is test-wave3-extension-polish; the two browser-audit residue files are counted under purged-residue-*"
+  }
+}

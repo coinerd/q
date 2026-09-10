@@ -1,0 +1,16 @@
+;; Wave validation: v1.00.28 W6 — TDD loop enforcement and developer ergonomics
+;; Record-only companion to gsd-wave-evidence/v1.00.28-w6.rktd.
+(
+(wave . "v1.00.28-w6")
+(validated-sha . "2edc3f8e1ea05c7d673cd67c5e9e51d04fce72c4")
+(checks
+  (branch . "campaign/v1.00.28-w6 checked out (not main); base origin/main 04637d83; this attempt's checkpoints include 2edc3f8e (measured samples + latency report + checksums + metrics ledger re-sync) on top of the earlier test-side acceptance commits on this branch")
+  (checksums . "sha256sum -c artifacts/test-runtime/v1.00.28-w6/SHA256SUMS -> l0-samples.json and l1-samples.json OK at the validated SHA")
+  (acceptance . "racket tests/test-run-tests-script.rkt -> 12/12 green, exit 0: every documented command form (positional file, --changed-base/--changed-head, --impact-dry-run with and without --explain, --suite fast) executes against the real CLI; no documented flag is rejected by the runner")
+  (samples . "artifacts/test-runtime/v1.00.28-w6/l0-samples.json retains 12 L0 runs and l1-samples.json retains 10 L1 runs plus 10 L2 selection-only walks; each entry records elapsed, selected set, and selection/fallback/escalation reason; per-level p50/p90/max in docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md: L0 1.375/2.041/4.170 s (<= 5 s CONFIRMED), L1 48.276/52.711/57.182 s (<= 30 s MISS, attributed to selected-file runtime, no target edit), L2 7.957/7.986/8.046 s selection-only (<= 120 s CONFIRMED)")
+  (declared-files . "all declared wave files exist at HEAD: docs/TDD-TEST-STRATEGY-PLAN.md (measured L0/L1/L2 sections), docs/testing.md (new quick-start), scripts/run-tests/cli.rkt (unchanged — no flag gap found, so no new flag), tests/test-run-tests-script.rkt (extended acceptance coverage), artifacts/test-runtime/v1.00.28-w6/{l0,l1}-samples.json + SHA256SUMS, docs/reports/LOCAL-TDD-LATENCY-v1.00.28.md, and the gsd-wave-{evidence,reviews,validation}/v1.00.28-w6.rktd trio")
+  (strategy-doc . "grep 'L0' docs/TDD-TEST-STRATEGY-PLAN.md hits; the 'scoped unknown — not yet measured' L0/L1/L2 rows are gone, replaced by measured rows with numbers, caveats, owner, and remeasure dates; no target number was edited")
+  (metrics-sync . "racket scripts/metrics.rkt --sync-all ran in the same PR after the wave's test-side additions; the pre-commit metrics hook (expected 264387 lines / 40315 assertions) passes at the checkpoint commit 2edc3f8e")
+  (no-security-delta . "no execute-* check, isolation root, worker-security contract, gate semantics, or scheduler variable modified; the wave ships documentation, measurement artifacts, and test-side acceptance coverage only"))
+(prior-failure-addressed . "the previous attempt failed delivery verification; the concrete gap found this attempt was a stale metrics ledger (expected 264387 lines / 40315 assertions vs 264345/40311 found) that blocked the pre-commit checkpoint of the wave's sample/report work — resolved by running scripts/metrics.rkt --sync-all per wave rule 7 and committing checkpoint 2edc3f8e; this attempt also completed the previously missing strategy-doc measured-status rewrite, docs/testing.md quick-start, and the full evidence trio, so every declared target exists at HEAD on the delivery branch")
+(result . "all wave-scoped checks green at validated-sha; the declared Verify command is coordinator-owned and runs at return"))

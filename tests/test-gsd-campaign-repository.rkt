@@ -18,6 +18,11 @@
 ;;   7. load-or-migrate-campaign! composes migrate-seed + load; a corrupted
 ;;      existing record fails closed instead of silently re-migrating.
 
+;; W2 fixture census finding: this suite contains NO git fixtures —
+;; every fixture here is a plain rktd/planning-tree layout (write-fixture!,
+;; seed-plan-dir!). The pristine-git strategy switch is therefore not
+;; observable in this suite; no fixture migration was required.
+
 (require rackunit
          rackunit/text-ui
          racket/file

@@ -58,6 +58,10 @@
          milestone-lifecycle-states
          milestone-lifecycle-next
          milestone-valid-transition?
+
+         ;; W3 (v1.00.28): inventory-reconciliation validation
+         reconciliation-schema-id
+         validate-inventory-reconciliation
          can-close-milestone?
          milestone-lifecycle-transition-result
 
@@ -403,6 +407,62 @@
                                             #f
                                             (format "CI verdict ~a blocks closing" ci-verdict))]
     [else (milestone-lifecycle-transition-result 'ci_green 'closed #t "all gates passed")]))
+
+;; ── W3 (v1.00.28): inventory-reconciliation validation ────────────────
+;; A retiered behavior must land with a destination test AND a named
+;; required gate + owner in the SAME commit; nothing may vanish from the
+;; fast+integration inventory without an accounted move.
+
+(define reconciliation-schema-id "q.tier-ownership.inventory-reconciliation/1")
+
+(define (reconciliation-paths side)
+  (for/list ([b (in-list side)])
+    (hash-ref b 'path)))
+
+(define (validate-inventory-reconciliation doc)
+  ;; → list of error strings; '() means the reconciliation is green.
+  (define schema (hash-ref doc 'schema #f))
+  (define before (hash-ref doc 'before #f))
+  (define after (hash-ref doc 'after #f))
+  (define moves (hash-ref doc 'moves #f))
+  (cond
+    [(not (equal? schema reconciliation-schema-id))
+     (list (format "schema: expected ~a, got ~a" reconciliation-schema-id schema))]
+    [(or (not (list? before)) (not (list? after)) (not (list? moves)))
+     (list "shape: before/after/moves must all be lists")]
+    [else
+     (let ([before-paths (reconciliation-paths before)]
+           [after-paths (reconciliation-paths after)]
+           [moved-ids (for/list ([m (in-list moves)])
+                        (hash-ref m 'behavior_id))]
+           [dest-tests (for/list ([m (in-list moves)])
+                         (hash-ref m 'destination_test))])
+       (append
+        ;; Rule 1: no silent drops — every before behavior survives in
+        ;; after or is covered by an accounted move.
+        (for/list ([b (in-list before)]
+                   #:unless (or (member (hash-ref b 'path) after-paths)
+                                (member (hash-ref b 'behavior_id) moved-ids)))
+          (format "silent drop: behavior ~a (path ~a) missing from after inventory"
+                  (hash-ref b 'behavior_id)
+                  (hash-ref b 'path)))
+        ;; Rule 2: no unaccounted additions.
+        (for/list ([b (in-list after)]
+                   #:unless (or (member (hash-ref b 'path) before-paths)
+                                (member (hash-ref b 'path) dest-tests)))
+          (format "unaccounted addition: path ~a absent from before inventory" (hash-ref b 'path)))
+        ;; Rule 3: every move names a destination test present in the
+        ;; after inventory AND a non-empty required gate + owner.
+        (for/list ([m (in-list moves)]
+                   #:unless
+                   (and (let ([dt (hash-ref m 'destination_test #f)])
+                          (and (string? dt) (member dt after-paths)))
+                        (let ([g (hash-ref m 'destination_gate #f)]
+                              [o (hash-ref m 'required_gate_owner #f)])
+                          (and (string? g) (non-empty-string? g) (string? o) (non-empty-string? o)))))
+          (format
+           "move: behavior ~a must name a destination test present in the after inventory and a non-empty required gate + owner"
+           (hash-ref m 'behavior_id)))))]))
 
 (define (main)
   (unless milestone-number

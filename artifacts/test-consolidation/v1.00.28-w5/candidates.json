@@ -1,0 +1,25 @@
+{
+  "schema": "test-consolidation-candidates/1",
+  "wave": "v1.00.28-w5",
+  "census_source": "W0 census (shared @covers / fixture builders / stimulus sequences)",
+  "groups": [
+    {
+      "id": "G1",
+      "family": "gsd-delivery-verifier",
+      "evidence": {
+        "covers": {
+          "tests/test-gsd-delivery-verifier.rkt": "extensions/gsd/delivery-verifier.rkt",
+          "tests/test-gsd-github-port.rkt": "extensions/gsd/github-port.rkt"
+        },
+        "pairing_signal": "family adjacency from the W0 census (the github port is the delivery-verification side-effect seam of the verifier); NOT a same-covers pairing: the two suites carry distinct @covers keys, and the static detector (scripts/run-tests/redundancy-candidates.rkt, re-run during review: 93 same-covers groups, 333 shared-fixture groups repo-wide) reports no same-covers group and no shared-fixture group joining them",
+        "stimulus": "not shared: the unit suite drives the verifier gate through a fake delivery-verification child process (exit status + branch state); the port suite drives the github adapter seam through a fake github adapter (correlated commands, external dedup, dry-run default, token redaction)"
+      },
+      "finding": "complementary assertion families over adjacent seams (verifier gate vs github port adapter); different @covers, different stimulus, disjoint assertions, both suites green",
+      "policy_decision": "keep both (preference order step 3: detection power ambiguous — there is no identical stimulus to share or merge; folding port assertions into unit tests would couple the module boundary to wire-format assertions)",
+      "consolidation": "none applied; candidates recorded with evidence links before touching anything"
+    }
+  ],
+  "groups_detected": 1,
+  "tests_consolidated": 0,
+  "notes": "No duplication with identical stimulus AND overlapping assertions was found. The delivery-verifier suite exercises the sync gate (24 test cases); the github-port suite exercises the port adapter (19 test cases); family total 43. Consolidation would reduce detection power, so no test was shared, merged, or deleted."
+}

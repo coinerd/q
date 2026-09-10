@@ -75,7 +75,9 @@
           (hasheq 'cpu-count 12 'load-1 0.5 'load-5 0.4 'load-15 0.3 'platform "unix" 'racket "8.x")
           'grouped-config
           (hasheq 'source
-                  (string-append "artifacts/tier-ownership/v" q-version "-w3/grouped-expansion.json")
+                  ;; The governed expansion artifact is pinned to the W3 of the
+                  ;; tier-ownership campaign (v1.00.27), not the current release.
+                  "artifacts/tier-ownership/v1.00.27-w3/grouped-expansion.json"
                   'default-mode
                   "subprocess"
                   'areas

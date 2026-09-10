@@ -242,4 +242,72 @@
                       '()
                       "the checksummed matrix must match reality: no drift")))))
 
+;; ============================================================
+;; census guards (W0 — RUNTIME-AUDIT-SPEC §2/§3)
+;; schema, unknown-counter canonicalization, inventory completeness
+;; ============================================================
+
+(require (prefix-in census:
+                    (only-in "../scripts/run-tests/runtime-census.rkt"
+                             census-record-required-fields
+                             census-instrumentation-unknown
+                             census-completeness-errors
+                             census-canonical-bytes)))
+
+(define census-guard-tests
+  (test-suite "runtime-census schema and inventory guards"
+
+    (test-case "census §2 contract: every required per-test field is declared"
+      ;; census-record-required-fields is a list constant (§2 + §3 all_attempts)
+      (define fields census:census-record-required-fields)
+      (for ([f (in-list '(path speed
+                               suite
+                               boundary
+                               covers
+                               samples_ms
+                               median_ms
+                               p95_ms
+                               status
+                               all_attempts
+                               instrumentation))])
+        (check-not-false (member f fields) (format "required field missing: ~a" f))))
+
+    (test-case "unknown counters serialize as null, never 0"
+      (define unknown (census:census-instrumentation-unknown))
+      (check-true (hash? unknown) "unknown instrumentation must be a hash")
+      (for ([v (in-hash-values unknown)])
+        (check-true (eq? v 'unknown) "unknown counters use the 'unknown sentinel, not 0"))
+      (define bytes-unknown
+        (bytes->string/utf-8 (census:census-canonical-bytes (hasheq 'instrumentation unknown))))
+      (check-true (string-contains? bytes-unknown "null")
+                  "canonical bytes encode the unknown sentinel as JSON null")
+      (check-false (string-contains? bytes-unknown "unknown")
+                   "the unknown sentinel must not leak into canonical JSON")
+      (check-false (string-contains? bytes-unknown ":0")
+                   "unknown counters must never encode as zero"))
+
+    (test-case "completeness: fast file absent from the census is an error"
+      (define errs
+        (census:census-completeness-errors (list "tests/test-a.rkt" "tests/test-b.rkt")
+                                           (list (hasheq 'path "tests/test-a.rkt" 'status "pass"))))
+      (check-true (pair? errs) "a disk file with no census record is a red case")
+      (check-true (ormap (lambda (e) (string-contains? e "test-b.rkt")) errs)))
+
+    (test-case "completeness: census record absent from fast inventory is an error"
+      (define errs
+        (census:census-completeness-errors
+         (list "tests/test-a.rkt")
+         (list (hasheq 'path "tests/test-a.rkt" 'status "pass")
+               (hasheq 'path "tests/test-ghost.rkt" 'status "pass"))))
+      (check-true (pair? errs) "a census record with no fast-inventory file is drift")
+      (check-true (ormap (lambda (e) (string-contains? e "test-ghost.rkt")) errs)))
+
+    (test-case "completeness: failures and timeouts are retained records"
+      (define errs
+        (census:census-completeness-errors
+         (list "tests/test-f.rkt")
+         (list (hasheq 'path "tests/test-f.rkt" 'status "timeout"))))
+      (check-equal? errs '() "a retained timeout record satisfies completeness"))))
+
 (run-tests metadata-discovery-tests)
+(run-tests census-guard-tests)

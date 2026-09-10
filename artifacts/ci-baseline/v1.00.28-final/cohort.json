@@ -1,0 +1,374 @@
+{
+ "schema-version": 2,
+ "cohort-id": "v1.00.28-final",
+ "cohort-mode": "final-claim",
+ "cohort-status": "open",
+ "cohort-status-reason": "v1.00.28-final cohort at wave close: 8 of 20 unique eligible merged-PR head SHAs have accumulated since the C3 window (4 further lane-failed SHAs are named mechanical exclusions; window-eligible supply 8).  The accumulation window closed with the supply short of 20, so the cohort stays open and the gate stays evidence-pending for the missing rows; every observed SHA is fully measured on the integrated topology (fast/queue/lpt, four workers, prepared-env cutover).  The shortfall is reported, never papered over.",
+ "expected-count": 20,
+ "window-eligible-count": 8,
+ "shortfall-count": 12,
+ "start-sha": "439f732c6f9375727671ce8bda3f33afedaca545",
+ "selection": "all completed ci.yml runs with run_started_at > 2026-09-07T06:46:51Z on coinerd/q excluding the 20 SHAs already consumed by v1.00.27-c3; eligible SHA = at least one successful ci.yml run; cohort = 20 newest eligible SHAs; failed SHAs are named mechanical exclusions, never dropped; SHAs are unique, eligible, in merge order, never dropped to improve numbers",
+ "evidence-sources": {
+  "runs-api": "repos/coinerd/q/actions/workflows/ci.yml/runs",
+  "jobs-api": "repos/coinerd/q/actions/runs/<id>/jobs",
+  "artifacts": [
+   "metadata-inventory-<sha>",
+   "prepared-env-records-<run>-<shard>",
+   "prepared-env-report-<run>"
+  ]
+ },
+ "inventory-digest-basis": "metadata-inventory-<sha> artifact file_list_digest of the final successful run per SHA",
+ "timing-basis": "fast-shard-max: max wall-clock duration among successful `test (N)` shard jobs; pr-elapsed: first-check-start-at..last-required-check-end-at over required jobs of the final successful run per SHA (Actions jobs API)",
+ "regeneration-command": "python3 tmp/w8-build-cohort.py (scratch generator; see SHA256SUMS for the ingested artifact set)",
+ "work-mass-delta": {
+  "basis": "artifacts/test-runtime/v1.00.28-w7/comparison.json (W0 fast-runtime census vs W7 post-remediation census; identical measurement method)",
+  "baseline-ms": 980465,
+  "post-ms": 927785,
+  "delta-ms": -52680,
+  "delta-pct": -5.37,
+  "measure-class": "Class A (census work mass; negative = workload reduced); never compared against the fixed Class B-D thresholds",
+  "verdict-guide": "work-mass-verdict: <10% insufficient; 10-25% partial; 25-40% meaningful; >=40% strong",
+  "verdict": "insufficient"
+ },
+ "reliability-baseline": {
+  "failures": 0,
+  "cancelled": 0,
+  "reruns": 0,
+  "basis": "v1.00.27-c3 attempts summary (cohort window 2026-09-04..2026-09-07)"
+ },
+ "guard-evidence": {
+  "inventory-accounted": {
+   "provided": true,
+   "reference": "artifacts/ci-baseline/v1.00.28-final/cohort.json (per-SHA inventory-digests validated non-empty and re-derived from metadata-inventory artifacts)"
+  },
+  "reliability-non-regression": {
+   "provided": true,
+   "reference": "artifacts/ci-baseline/v1.00.27-c3/cohort.json attempts summary as the recorded baseline; v1.00.28-final attempts summary computed in report.json"
+  },
+  "semantic-gate-equivalence": {
+   "provided": true,
+   "reference": "docs/reports/gsd-wave-evidence/v1.00.28-w2.rktd and v1.00.27-w2.rktd (gate semantics independent of grouped vs ungrouped invocation; carried through v1.00.28 W2 fixture lanes)"
+  },
+  "failure-truth": {
+   "provided": true,
+   "reference": "docs/reports/gsd-wave-evidence/v1.00.27-w4.rktd (failure-truth telemetry carried on main) + tests/test-ci-cohort-report.rkt (no-silence rule: a cohort SHA cell with no successful run is an error or a named strike)"
+  },
+  "shared-state-permission-isolation": {
+   "provided": true,
+   "reference": "docs/reports/gsd-wave-evidence/v1.00.27-w2.rktd (worker permission isolation suite, unchanged on main)"
+  },
+  "four-worker-isolation-proof": {
+   "provided": true,
+   "reference": "docs/reports/gsd-wave-evidence/v1.00.27-w3.rktd (four-worker fast shards isolated; v1.00.28 W3 review kept the split business-as-usual)"
+  },
+  "prepared-env-no-bypass": {
+   "provided": true,
+   "reference": ".github/workflows/ci.yml (guarded prepared-environment: auto input, prepared-env-report required job) + artifacts/ci-baseline/v1.00.28-final/cohort.json prepared-env-restore-stats"
+  }
+ },
+ "shas": [
+  {
+   "sha": "439f732c6f9375727671ce8bda3f33afedaca545",
+   "pr": 9637,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34326377989,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34326377989",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-09T07:55:49Z",
+     "first-check-start-at": "2026-09-09T07:55:52Z",
+     "last-required-check-end-at": "2026-09-09T08:08:10Z",
+     "pr-elapsed-seconds": 738.0,
+     "fast-execution-seconds": 250.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 702.0,
+     "workflows-runner-seconds": 637.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-b468a6a3869fd52654ecb46a90d7448d89321d97"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "b468a6a3869fd52654ecb46a90d7448d89321d97",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34326377989
+  },
+  {
+   "sha": "584681684d522ea1f5d630dad7af4eaae3748291",
+   "pr": 9636,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34304416015,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34304416015",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-09T02:44:30Z",
+     "first-check-start-at": "2026-09-09T02:44:33Z",
+     "last-required-check-end-at": "2026-09-09T02:58:04Z",
+     "pr-elapsed-seconds": 811.0,
+     "fast-execution-seconds": 263.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 564.0,
+     "workflows-runner-seconds": 707.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-0f9316ac9d1d6421bac3d124477e83800f11bac8"
+    }
+   ],
+   "inventory-digest": "ad167e064283d964918866be275dd27d7d8289949f14626459ae84849c3f1f1e",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "0f9316ac9d1d6421bac3d124477e83800f11bac8",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34304416015
+  },
+  {
+   "sha": "04637d835d33f887a29846a2f3c1855146151985",
+   "pr": 9624,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34244649098,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34244649098",
+     "event": "push",
+     "result": "success",
+     "run-started-at": "2026-09-08T15:25:26Z",
+     "first-check-start-at": "2026-09-08T15:25:29Z",
+     "last-required-check-end-at": "2026-09-08T15:39:40Z",
+     "pr-elapsed-seconds": 851.0,
+     "fast-execution-seconds": 293.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 663.0,
+     "workflows-runner-seconds": 721.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-04637d835d33f887a29846a2f3c1855146151985"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<sha> artifact file_list_digest of the final successful run",
+   "prepared-env": "match",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34244649098
+  },
+  {
+   "sha": "db46eda2674a55a4c507b17fdcbfe91fbeb815ec",
+   "pr": 9624,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34242932412,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34242932412",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-08T15:09:27Z",
+     "first-check-start-at": "2026-09-08T15:09:30Z",
+     "last-required-check-end-at": "2026-09-08T15:22:57Z",
+     "pr-elapsed-seconds": 807.0,
+     "fast-execution-seconds": 288.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 697.0,
+     "workflows-runner-seconds": 674.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-10ded24049915f817e50b5f736da3a5ca4c2cfcf"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "10ded24049915f817e50b5f736da3a5ca4c2cfcf",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34242932412
+  },
+  {
+   "sha": "02b9120dc2f22fd5ddb30adc392c9c55fa5f6a48",
+   "pr": 9623,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34235915933,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34235915933",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-08T14:04:20Z",
+     "first-check-start-at": "2026-09-08T14:04:22Z",
+     "last-required-check-end-at": "2026-09-08T14:18:31Z",
+     "pr-elapsed-seconds": 849.0,
+     "fast-execution-seconds": 277.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 718.0,
+     "workflows-runner-seconds": 710.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-658d8ce3fe30259f8f7acd000ff5f3b72948e8f1"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "658d8ce3fe30259f8f7acd000ff5f3b72948e8f1",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34235915933
+  },
+  {
+   "sha": "02c1d43b47c613349809656104852996cb90483a",
+   "pr": 9621,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34212051951,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34212051951",
+     "event": "push",
+     "result": "success",
+     "run-started-at": "2026-09-08T09:48:37Z",
+     "first-check-start-at": "2026-09-08T09:48:39Z",
+     "last-required-check-end-at": "2026-09-08T10:02:29Z",
+     "pr-elapsed-seconds": 830.0,
+     "fast-execution-seconds": 288.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 741.0,
+     "workflows-runner-seconds": 737.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-02c1d43b47c613349809656104852996cb90483a"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<sha> artifact file_list_digest of the final successful run",
+   "prepared-env": "match",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34212051951
+  },
+  {
+   "sha": "87d3265e22f3ecf9d6817e338717d6a3c735f3ac",
+   "pr": 9621,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34210442594,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34210442594",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-08T09:31:11Z",
+     "first-check-start-at": "2026-09-08T09:31:14Z",
+     "last-required-check-end-at": "2026-09-08T09:44:28Z",
+     "pr-elapsed-seconds": 794.0,
+     "fast-execution-seconds": 296.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 782.0,
+     "workflows-runner-seconds": 731.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-99e30fe09d4c5d7ef6eb64879743d35b80ae0393"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "99e30fe09d4c5d7ef6eb64879743d35b80ae0393",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34210442594
+  },
+  {
+   "sha": "fc2b3f8afcc880344028a28b30c183480db54147",
+   "pr": 0,
+   "scheduler": "fast/queue/lpt",
+   "ordering": "lpt",
+   "attempts": [
+    {
+     "run-id": 34183835935,
+     "run-url": "https://github.com/coinerd/q/actions/runs/34183835935",
+     "event": "pull_request",
+     "result": "success",
+     "run-started-at": "2026-09-08T03:32:00Z",
+     "first-check-start-at": "2026-09-08T03:32:18Z",
+     "last-required-check-end-at": "2026-09-08T03:46:18Z",
+     "pr-elapsed-seconds": 840.0,
+     "fast-execution-seconds": 273.0,
+     "timing-basis": "fast-shard-max",
+     "fast-shard-count": 3,
+     "security-runner-seconds": 716.0,
+     "workflows-runner-seconds": 830.0,
+     "prepared-env-report-job": "success",
+     "timing-sample": true,
+     "inventory-artifact": "metadata-inventory-6b68a6b458c957f454d79f5d2186b46a07093138"
+    }
+   ],
+   "inventory-digest": "1c553240893f5aca34db81cd807742033d16fd1f83660688d48d663d13c7585b",
+   "inventory-digest-basis": "metadata-inventory-<checkout-sha> artifact file_list_digest of the final successful run (pull_request runs check out the merge commit)",
+   "prepared-env": "match",
+   "merge-sha": "6b68a6b458c957f454d79f5d2186b46a07093138",
+   "prepared-env-record-outcomes": [
+    "verified"
+   ],
+   "_final_run_id": 34183835935
+  }
+ ],
+ "exclusions": [
+  {
+   "sha": "28355279a483575248fc3803c4431bd922b3efe7",
+   "reason": "lane-run-failed",
+   "detail": "required-lane run failure; timing artifacts never produced (run 34324798601 https://github.com/coinerd/q/actions/runs/34324798601)"
+  },
+  {
+   "sha": "03e111767433aef6daa5b605d0765f5a7ed03bf5",
+   "reason": "lane-run-failed",
+   "detail": "required-lane run failure; timing artifacts never produced (run 34237558359 https://github.com/coinerd/q/actions/runs/34237558359)"
+  },
+  {
+   "sha": "433660e0542a097a068648442fa10cd1286bf1ff",
+   "reason": "lane-run-failed",
+   "detail": "required-lane run failure; timing artifacts never produced (run 34233374601 https://github.com/coinerd/q/actions/runs/34233374601)"
+  },
+  {
+   "sha": "031bd1021f509260429f8c9025f8990060892242",
+   "reason": "lane-run-failed",
+   "detail": "required-lane run cancelled; timing artifacts never produced (run 34183243851 https://github.com/coinerd/q/actions/runs/34183243851)"
+  }
+ ],
+ "prepared-env-restore-stats": {
+  "verified": 24,
+  "total": 24,
+  "fallback": 0,
+  "records-observed": 24,
+  "window": "ci.yml runs with run_started_at > 2026-09-07T06:46:51Z (v1.00.28-final window)",
+  "per-sha-match-count": 8,
+  "basis": "prepared-env-records-<run>-<shard> artifacts of the final successful ci.yml run per cohort SHA"
+ },
+ "milestone": 893
+}

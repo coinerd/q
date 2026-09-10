@@ -31,6 +31,11 @@
          rackunit
          rackunit/text-ui
          "../extensions/gsd/wave-executor.rkt"
+         ;; W2 fixture census finding: this suite consumes git fixtures
+         ;; exclusively through the shared `make-private-git-fixture!` constructor and
+         ;; inherits the activated 'pristine-copy strategy transparently (the pristine
+         ;; baseline recreates the offline `refs/heads/origin/main` stand-in that the
+         ;; worktree tests below require). No fixture-specific edits were needed.
          (only-in "helpers/private-fixture-templates.rkt"
                   make-private-git-fixture!
                   private-fixture-root

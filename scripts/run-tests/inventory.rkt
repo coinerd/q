@@ -8,6 +8,7 @@
 
 (require racket/string
          racket/path
+         (only-in "../../util/version.rkt" q-version)
          (only-in "classify.rkt"
                   base-dir
                   slow-file?
@@ -30,6 +31,7 @@
          run-unit-fast-audit
          run-ownership-map
          gate-membership
+         resolved-fast-inventory
          v124-behavior-table
          gate-ownership-rows
          gate-ownership-errors
@@ -679,6 +681,27 @@
 (require "sha256.rkt")
 
 (define v124-gate-names '("fast" "platform" "security" "workflows" "unit-fast" "slow/L4"))
+
+;; Resolved canonical `fast` inventory with per-file metadata, exposed for
+;; the v1.00.28 runtime census (RUNTIME-AUDIT-SPEC §1/§2). Each record:
+;; path (repo-relative string), speed/suite/boundary (string or #f → null
+;; at JSON time), covers (list of strings). Unknown metadata stays #f so
+;; the census can serialize it as null, never 0.
+(define (resolved-fast-inventory)
+  (for/list ([f (in-list (collect-test-files 'fast))])
+    (define m
+      (with-handlers ([exn:fail? (lambda (_) (hash))])
+        (get-file-metadata f)))
+    (hasheq 'path
+            f
+            'speed
+            (hash-ref m 'speed #f)
+            'suite
+            (hash-ref m 'suite #f)
+            'boundary
+            (hash-ref m 'boundary #f)
+            'covers
+            (hash-ref m 'covers '()))))
 
 ;; Gate name -> sorted list of selected test files (repository walk).
 (define (gate-membership)
@@ -1625,9 +1648,9 @@
             'schema
             "tier-ownership-matrix/v1"
             'milestone
-            "v1.00.27"
+            (string-append "v" q-version)
             'wave
-            "W0"
+            (string-append "v" q-version "-w0")
             'columns
             (map symbol->string tier-matrix-columns)
             'families
@@ -1646,7 +1669,7 @@
   (displayln "    --metadata-quality   metadata tag quality report (missing/invalid/explicit)")
   (displayln "    --unit-fast-audit    unit-fast grouped-execution eligibility audit")
   (displayln "    --ownership-map      production-area test ownership map (md + json)")
-  (displayln "      [--tier-matrix P]  generate the v1.00.27 tier-ownership matrix")
+  (displayln "      [--tier-matrix P]  generate the current (v<q-version>-w0) tier-ownership matrix")
   (displayln "                         (eight columns per family, tier-ownership-matrix/v1)")
   (displayln "      [--check P]        red-on-drift check of a tier matrix vs the current tree")
   (displayln

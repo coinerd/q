@@ -2,6 +2,16 @@
 ;; @covers extensions/gsd/delivery-verifier.rkt
 ;; @speed fast  ;; @suite extensions
 ;; @boundary integration
+;; @timeout 300  ;; git-fixture-heavy suite: ~123s standalone, over the 120s default
+;; W3 tier-ownership split: this file runs in the FAST tier but now contains
+;; two suites. (1) The decision suite exercises verifier DECISION logic
+;; (branch matching, changed-file detection, gate verdicts) over SYNTHETIC
+;; Git facts injected via current-gsd-git-runner — zero git subprocesses,
+;; deterministic, and safely parallelizable. (2) The contract suite keeps
+;; the MINIMUM real-Git boundary contract set: diff semantics, committed /
+;; untracked / merged-to-main detection, absent-repository fail-closed —
+;; real git, private fixture. Retiering decision tests never removed the
+;; boundary contract itself; the contract suite stays a required canary.
 ;; tests/test-gsd-delivery-verifier.rkt — structured delivery verification for /go
 ;;
 ;; TDD tests for the delivery verifier that replaces the hardcoded fail-closed
@@ -24,9 +34,12 @@
          racket/path
          racket/string
          racket/system
+         racket/match
          (only-in "helpers/private-fixture-templates.rkt"
                   call-with-private-git-environment
                   make-private-git-fixture!
+                  current-git-fixture-strategy
+                  private-fixture-kind
                   private-fixture-root
                   private-git-fixture-repo)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
@@ -37,7 +50,8 @@
                   delivery-verification-evidence
                   delivery-verification-message
                   current-gsd-delivery-verify-command
-                  current-gsd-delivery-verify-timeout-sec)
+                  current-gsd-delivery-verify-timeout-sec
+                  current-gsd-git-runner)
          (only-in "../extensions/gsd/events.rkt"
                   make-event-collector
                   set-gsd-event-bus!
@@ -181,11 +195,106 @@
   (delete-directory/files dir #:must-exist? #f))
 
 ;; ============================================================
+;; W3 tier-ownership split: synthetic Git facts (decision suite)
+;; ============================================================
+
+;; Minimal base-dir + q/ git-root scaffold for decision-logic tests: ONE
+;; `git init` so find-git-root-dir resolves the two-tier layout; every Git
+;; fact itself comes from the injected fake runner — no branches, no
+;; commits, no working-tree churn, no git subprocess per assertion.
+(define (make-synthetic-repo)
+  (define base (make-temporary-file "dv-synth-~a" 'directory))
+  (make-directory* (build-path base ".planning" "waves"))
+  (make-directory* (build-path base "q" "ui-core"))
+  (call-with-output-file (build-path base "q" "ui-core" "preferences.rkt")
+                         (lambda (out)
+                           (display "#lang racket/base\n(provide foo)\n(define foo 1)\n" out))
+                         #:exists 'truncate)
+  (parameterize ([current-directory (build-path base "q")])
+    (unless (zero? (system*/exit-code GIT "init" "-q" "."))
+      (error 'make-synthetic-repo "git init failed")))
+  base)
+
+;; Standard synthetic campaign fixture: plan + W0 wave doc + STATE.md issue
+;; row over a synthetic repo (same shape as setup-standard-campaign! but
+;; with no branch/commit working-tree manipulation).
+(define (make-synthetic-campaign!)
+  (define base (make-synthetic-repo))
+  (write-plan! base 0 "Wave Zero" "zero")
+  (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "raco make q/ui-core/preferences.rkt")
+  (write-state! base 0 "42")
+  base)
+
+;; Injectable run-git* replacement. Dispatches on the git subcommand the
+;; verifier probes; every fact is synthetic. Unknown invocations fail
+;; closed (exit 1) so a fake can never silently approve an unplanned
+;; boundary read. Result shape matches run-git*: (list exit-code stdout
+;; stderr).
+(define (fake-git-facts #:branch [branch "feature/issue-42-wave"]
+                        #:inside-work-tree? [inside? #t]
+                        #:head-changed [head-changed '("q/ui-core/preferences.rkt")]
+                        #:untracked [untracked '()]
+                        #:committed [committed '("q/ui-core/preferences.rkt")]
+                        #:base-ref [base-ref "main"])
+  (lambda (git-root args)
+    (match args
+      [(list "rev-parse" "--is-inside-work-tree")
+       (list (if inside? 0 128) (if inside? "true\n" "false\n") "")]
+      [(list "rev-parse" "--abbrev-ref" "HEAD") (list 0 (string-append branch "\n") "")]
+      [(list "rev-parse" "--verify" _) (list 0 (string-append base-ref "\n") "")]
+      [(list "rev-parse" _ ...) (list 0 "deadbeef\n" "")]
+      [(list "diff" "--name-only" "HEAD")
+       (list 0 (string-append (string-join head-changed "\n") "\n") "")]
+      [(list "diff" "--name-only" _) (list 0 (string-append (string-join committed "\n") "\n") "")]
+      [(list "ls-files" "--others" "--exclude-standard")
+       (list 0
+             (if (null? untracked)
+                 ""
+                 (string-append (string-join untracked "\n") "\n"))
+             "")]
+      [(list "rev-list" _ ...) (list 0 "deadbeef\n" "")]
+      [_
+       (list 1
+             ""
+             (string-append "fake-git-facts: unhandled "
+                            (string-join (map (lambda (a) (format "~a" a)) args) " ")
+                            "\n"))])))
+
+;; ============================================================
 ;; Tests
 ;; ============================================================
 
 (define (delivery-suite)
   (test-suite "delivery-verifier"
+
+    ;; W2: this suite consumes git fixtures exclusively through the
+    ;; shared `make-private-git-fixture!` constructor contract, so the
+    ;; activated 'pristine-copy strategy must be invisible to every consumer.
+    ;; Contract test: both strategies yield the same consumer-visible shape
+    ;; (kind, repo dir, resolvable HEAD, self-contained object store).
+    (test-case "git fixture constructor contract is strategy-agnostic"
+      (define (shape)
+        (define tmp (make-temporary-file "dv-strategy-~a" 'directory))
+        (define fx (make-private-git-fixture! #:parent-root tmp #:tag "dv-shape"))
+        (define repo (private-git-fixture-repo fx))
+        (begin0 (list (private-fixture-kind fx)
+                      (path? (private-fixture-root fx))
+                      (directory-exists? (build-path repo ".git" "objects"))
+                      (zero? (system*/exit-code (find-executable-path "git")
+                                                "-C"
+                                                (path->string repo)
+                                                "rev-parse"
+                                                "--verify"
+                                                "HEAD")))
+          (delete-directory/files tmp #:must-exist? #f)))
+      (define pristine-shape
+        (parameterize ([current-git-fixture-strategy 'pristine-copy])
+          (shape)))
+      (define legacy-shape
+        (parameterize ([current-git-fixture-strategy 'legacy-clone])
+          (shape)))
+      (check-equal? pristine-shape legacy-shape)
+      (check-equal? pristine-shape (list 'git #t #t #t)))
 
     (test-case "approves when branch + files changed + verify passes"
       (define base (setup-standard-campaign!))

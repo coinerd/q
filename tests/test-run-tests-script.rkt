@@ -8,7 +8,9 @@
 
 ;; tests/test-run-tests-script.rkt — Tests for scripts/run-tests.rkt
 ;;
-;; NOTE: Only tests script metadata (exists, compiles, help).
+;; NOTE: Tests script metadata (exists, compiles, help) AND the documented
+;; one-command L0–L3 workflow forms from docs/TDD-TEST-STRATEGY-PLAN.md
+;; (W6): a documented flag the runner rejects is a red test here.
 ;; Does NOT invoke full test suite (that would be recursive and slow).
 ;; @boundary unit  ;; @mutates fs
 
@@ -72,6 +74,46 @@
           (system*/exit-code
            (find-executable-path "racket")
            (path->string (build-path project-root "tests" "test-ui-action-adapters.rkt"))))
-        (check-equal? exit-code 0)))))
+        (check-equal? exit-code 0)))
+
+    ;; ── W6: documented L0–L3 one-command workflows ──
+    ;; Every command form documented in docs/TDD-TEST-STRATEGY-PLAN.md must
+    ;; execute against the real CLI. Using an undocumented/invented flag or
+    ;; dropping a documented one makes one of these tests red.
+
+    ;; L0 — current test: racket scripts/run-tests.rkt <file>
+    (test-case "L0 documented form: direct file argument executes (W6)"
+      (define exit-code (q-system/cmd "racket scripts/run-tests.rkt tests/test-version.rkt 2>&1"))
+      (check-equal? exit-code 0))
+
+    ;; L1 — direct impact:
+    ;;   racket scripts/run-tests.rkt --changed-base <base> --changed-head HEAD
+    ;; Exercised with --impact-dry-run --explain so this unit test performs
+    ;; selection only (no selected-test execution); the flags themselves are
+    ;; the documented surface and must be accepted by the real parser.
+    (test-case "L1 documented form: --changed-base/--changed-head accepted (W6)"
+      (define exit-code
+        (q-system/cmd
+         "racket scripts/run-tests.rkt --changed-base origin/main --changed-head HEAD --impact-dry-run --explain 2>&1"))
+      (check-equal? exit-code 0))
+
+    ;; L2 — transitive impact: the implemented impact selector already walks
+    ;; transitive dependents and escalates on graph uncertainty, so the
+    ;; documented L2 command uses the same selection flags; they must be
+    ;; accepted identically (level difference is workflow timing, not syntax).
+    ;; --explain (selection-only) keeps the form diff-state independent: a
+    ;; bare --impact-dry-run on an empty selection is refused with exit 3.
+    (test-case "L2 documented form: same selection flags accepted (W6)"
+      (define exit-code
+        (q-system/cmd
+         "racket scripts/run-tests.rkt --changed-base origin/main --changed-head HEAD --impact-dry-run --explain 2>&1"))
+      (check-equal? exit-code 0))
+
+    ;; L3 — broad fast: racket scripts/run-tests.rkt --suite fast.
+    ;; The full fast suite is out of scope for this unit test; the documented
+    ;; flag pair must still be accepted by the real parser.
+    (test-case "L3 documented form: --suite fast accepted (W6)"
+      (define exit-code (q-system/cmd "racket scripts/run-tests.rkt --suite fast --help 2>&1"))
+      (check-equal? exit-code 0))))
 
 (run-tests run-tests-script-tests)
