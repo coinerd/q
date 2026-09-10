@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; Pristine Git fixture (v1.00.28 W2 — fixture amplification reduction).
+;; Pristine Git fixture (W2 — fixture amplification reduction).
 ;;
 ;; Builds ONE immutable, fully self-contained baseline repository per process
 ;; (single commit, repo-local identity, no hooks, no alternates, no shared

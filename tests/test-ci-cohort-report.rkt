@@ -1760,7 +1760,7 @@
       (check-true (string-contains? md "never revised"))
       (check-true (string-contains? md "Next lever")))))
 
-;; W8 (v1.00.28): the decision record ends in exactly one allowed verdict —
+;; W8: the decision record ends in exactly one allowed verdict —
 ;; ACHIEVED, NOT ACHIEVED, or PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT
 ;; ACHIEVED — and the Class A work-mass delta row is reported alongside the
 ;; fixed Class B–D rows without ever comparing the incompatible measure
@@ -1844,7 +1844,7 @@
       (check-true (string-contains? md "NOT ACHIEVED"))
       (check-false (string-contains? md "PARTIAL WORKLOAD REDUCTION")))
 
-    (test-case "pre-v1.00.28 manifests keep their decision records unchanged"
+    (test-case "pre-bump manifests keep their decision records unchanged"
       (define md (final-claim-decision-md-string (make-fc-manifest)))
       (check-false (string-contains? md "Final campaign verdict"))
       (check-false (string-contains? md "class-a-fast-work-mass-delta")))))

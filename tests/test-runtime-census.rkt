@@ -5,10 +5,10 @@
 ;; @boundary unit
 ;; @covers scripts/run-tests/runtime-census.rkt
 
-;; tests/test-runtime-census.rkt — v1.00.28 W0: contract tests for the
+;; tests/test-runtime-census.rkt — W0: contract tests for the
 ;; repository-wide fast-tier runtime census.
 ;;
-;; RUNTIME-AUDIT-SPEC-v1.00.28.md contracts exercised here:
+;; RUNTIME-AUDIT-SPEC contracts exercised here:
 ;; §2  — per-test record schema; unknown counters serialize as null, never 0;
 ;; §3  — sampling floor (>= 3 successful samples), failures/timeouts retained;
 ;; §4  — aggregates (work mass, Pareto, buckets, boundary split, counters);

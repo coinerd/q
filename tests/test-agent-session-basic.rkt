@@ -103,7 +103,7 @@
 ;; Helpers
 ;; ============================================================
 
-;; W3 split (v1.00.28 fast-tier review): behavior cases share ONE real
+;; W3 split (fast-tier review): behavior cases share ONE real
 ;; session base-dir per process run. Sessions keep unique generated ids, so
 ;; each still owns its own subdirectory — isolation is preserved — while
 ;; per-case directory churn (17x mkdir + rm -rf per run) disappears from the

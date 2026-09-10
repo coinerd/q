@@ -10,7 +10,7 @@
 ;;
 ;; NOTE: Tests script metadata (exists, compiles, help) AND the documented
 ;; one-command L0–L3 workflow forms from docs/TDD-TEST-STRATEGY-PLAN.md
-;; (W6, v1.00.28): a documented flag the runner rejects is a red test here.
+;; (W6): a documented flag the runner rejects is a red test here.
 ;; Does NOT invoke full test suite (that would be recursive and slow).
 ;; @boundary unit  ;; @mutates fs
 
@@ -76,7 +76,7 @@
            (path->string (build-path project-root "tests" "test-ui-action-adapters.rkt"))))
         (check-equal? exit-code 0)))
 
-    ;; ── W6 (v1.00.28): documented L0–L3 one-command workflows ──
+    ;; ── W6: documented L0–L3 one-command workflows ──
     ;; Every command form documented in docs/TDD-TEST-STRATEGY-PLAN.md must
     ;; execute against the real CLI. Using an undocumented/invented flag or
     ;; dropping a documented one makes one of these tests red.

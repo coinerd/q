@@ -243,7 +243,7 @@
                       "the checksummed matrix must match reality: no drift")))))
 
 ;; ============================================================
-;; census guards (v1.00.28 W0 — RUNTIME-AUDIT-SPEC §2/§3)
+;; census guards (W0 — RUNTIME-AUDIT-SPEC §2/§3)
 ;; schema, unknown-counter canonicalization, inventory completeness
 ;; ============================================================
 

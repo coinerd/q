@@ -1,5 +1,5 @@
 #lang racket/base
-;; tests/test-redundancy-candidates.rkt — W5 semantic-redundancy TDD (v1.00.28)
+;; tests/test-redundancy-candidates.rkt — W5 semantic-redundancy TDD
 ;; @covers scripts/run-tests/redundancy-candidates.rkt
 ;; @covers scripts/run-tests/mutation-pilot.rkt
 ;; @speed fast
@@ -27,6 +27,7 @@
                   detect-redundancy-groups
                   candidates-json
                   preference-rank)
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/run-tests/mutation-pilot.rkt" validate-adequacy))
 
 ;; ---------- helpers ----------
@@ -175,11 +176,13 @@ EOF
       (define a (parse-test-file (build-path root "tests" "a.rkt")))
       (define d (parse-test-file (build-path root "tests" "d.rkt")))
       (define e (parse-test-file (build-path root "tests" "e.rkt")))
-      (define js1 (candidates-json (detect-redundancy-groups (list a d e)) "v1.00.28-w5"))
-      (define js2 (candidates-json (detect-redundancy-groups (list a d e)) "v1.00.28-w5"))
+      (define js1
+        (candidates-json (detect-redundancy-groups (list a d e)) (format "v~a-w5" q-version)))
+      (define js2
+        (candidates-json (detect-redundancy-groups (list a d e)) (format "v~a-w5" q-version)))
       (check-equal? js1 js2)
       (check-equal? (hash-ref js1 'schema) "redundancy-candidates/1")
-      (check-equal? (hash-ref js1 'package) "v1.00.28-w5")
+      (check-equal? (hash-ref js1 'package) (format "v~a-w5" q-version))
       (define evidence
         (string-join (for/list ([g (in-list (hash-ref js1 'same_covers_groups))])
                        (hash-ref g 'evidence))
@@ -209,7 +212,7 @@ EOF
   (hasheq 'schema
           "test-consolidation-adequacy/1"
           'package
-          "v1.00.28-w5"
+          (format "v~a-w5" q-version)
           'counts
           (hasheq 'before before 'after after)
           'behavior_mapping

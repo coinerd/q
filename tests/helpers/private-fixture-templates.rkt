@@ -168,7 +168,7 @@
   (unbox git-template-root-box))
 
 ;; ---------------------------------------------------------------------------
-;; Fixture construction census (v1.00.28 W2)
+;; Fixture construction census (W2)
 ;; ---------------------------------------------------------------------------
 
 ;; Stands in for the (unmerged) W0 fixture counters: when
@@ -218,7 +218,7 @@
 ;; Fixture strategy selector (W2): 'pristine-copy builds instances by copying
 ;; an immutable pristine baseline directory (helpers/pristine-git-fixture.rkt);
 ;; 'clone is the legacy `git clone --no-local` path. W2 ACTIVATION GATE: HELD —
-;; the checksummed interleaved benchmark (artifacts/test-runtime/v1.00.28-w2/
+;; the checksummed interleaved benchmark (artifacts/test-runtime/<campaign>-w2/
 ;; git-fixture-experiment.json) measured pristine-copy at ~155ms median total
 ;; vs legacy-clone ~44ms (>=3x slower on this environment), so the strategy was
 ;; NOT activated as default. Rollback/activation is this single default edit:

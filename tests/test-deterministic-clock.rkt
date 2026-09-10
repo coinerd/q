@@ -4,7 +4,7 @@
 ;; @suite default
 ;; @boundary unit
 
-;; tests/test-deterministic-clock.rkt — W1 (v1.00.28) deterministic clock seam
+;; tests/test-deterministic-clock.rkt — W1 deterministic clock seam
 ;;
 ;; Two responsibilities:
 ;;   1. Unit tests for the shared deterministic clock/sleeper helper.
@@ -20,6 +20,7 @@
          racket/list
          racket/string
          json
+         (only-in "../util/version.rkt" q-version)
          "helpers/deterministic-clock.rkt")
 
 (define-test-suite
@@ -88,7 +89,7 @@
  (test-case "wait-audit lint: audit exists and is self-consistent"
    (define audit (call-with-input-file WAIT-AUDIT-PATH read-json))
    (check-true (hash? audit) "wait-audit.json must parse to a JSON object")
-   (check-equal? (hash-ref audit 'wave) "v1.00.28-w1")
+   (check-equal? (hash-ref audit 'wave) (format "v~a-w1" q-version))
    (define summary (hash-ref audit 'summary))
    (check-equal? (hash-ref summary 'unjustified-unit-fast-sleeps)
                  0
@@ -144,7 +145,7 @@
 ;; Lint support
 ;; ============================================================
 
-(define WAIT-AUDIT-PATH "artifacts/test-runtime/v1.00.28-w1/wait-audit.json")
+(define WAIT-AUDIT-PATH (format "artifacts/test-runtime/v~a-w1/wait-audit.json" q-version))
 (define raw-sleep-rx #px"\\(sleep\\s")
 (define allowed-dispositions '("remediated" "retained-canary" "not-a-test-sleep" "verified-clean"))
 

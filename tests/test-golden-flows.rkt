@@ -106,7 +106,7 @@
 ;; Helpers
 ;; ============================================================
 
-;; W3 split (v1.00.28 fast-tier review): golden flows share ONE real
+;; W3 split (fast-tier review): golden flows share ONE real
 ;; session-store root per process run. Sessions keep unique ids (each case
 ;; gets its own session subdirectory), so cross-session isolation guarantees
 ;; are still exercised against the real on-disk store — only the per-case

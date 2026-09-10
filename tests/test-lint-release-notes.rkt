@@ -396,10 +396,10 @@
                  "The workload-reduction campaign closed with the recorded verdict "
                  "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED.\n"
                  "- work mass reduced 5.37 percent on the W0 to W7 census medians"
-                 " (artifacts/test-runtime/v1.00.28-census/)\n"
+                 (format " (artifacts/test-runtime/v~a-census/)\n" q-version)
                  "- fast p50 observed 282.5 s against the fixed <= 115.0 s target;"
                  " verified-restore 100 percent (>= 95.0 %)"
-                 " (artifacts/ci-baseline/v1.00.28-final/report.json)\n"))
+                 (format " (artifacts/ci-baseline/v~a-final/report.json)\n" q-version)))
 
 (parameterize ([contract-decision-path-override w9-decision-path])
   (test-case "w9: good campaign entry passes its contract"
@@ -410,7 +410,8 @@
     (define block
       (string-append "### User-Visible Changes\n"
                      "the campaign achieved a real workload reduction\n"
-                     "- work mass reduced 5.37 percent (artifacts/test-runtime/v1.00.28-census/)\n"))
+                     (format "- work mass reduced 5.37 percent (artifacts/test-runtime/v~a-census/)\n"
+                             q-version)))
     (define errors (validate-release-campaign block "9.9.9-test"))
     (check-not-false (ormap (λ (e) (string-contains? e "exact recorded verdict")) errors)
                      "missing-verdict error must be named")))
@@ -435,7 +436,7 @@
       (string-append "### User-Visible Changes\n"
                      "verdict PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED\n"
                      "- fast p50 observed 282.5 s against the fixed <= 120.0 s target"
-                     " (artifacts/ci-baseline/v1.00.28-final/report.json)\n"))
+                     (format " (artifacts/ci-baseline/v~a-final/report.json)\n" q-version)))
     (define errors (validate-release-campaign block "9.9.9-test"))
     (check-not-false (ormap (λ (e) (string-contains? e "does not match the fixed contract"))
                             errors))))

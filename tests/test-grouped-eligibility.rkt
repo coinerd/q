@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; tests/test-grouped-eligibility.rkt — v1.00.28 W4 contract tests
+;; tests/test-grouped-eligibility.rkt — W4 contract tests
 ;;
 ;; Covers the production grouped-execution eligibility layer:
 ;;   1. strict classification parser (tests/metadata/classification format),

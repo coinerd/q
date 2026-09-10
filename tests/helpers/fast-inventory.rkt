@@ -6,7 +6,7 @@
 ;; BOUNDARY: integration
 
 ;; tests/helpers/fast-inventory.rkt — canonical resolved `fast` inventory for
-;; v1.00.28 W0 (RUNTIME-AUDIT-SPEC §1: the fast tier is the governing
+;; W0 (RUNTIME-AUDIT-SPEC §1: the fast tier is the governing
 ;; optimization scope). Thin adapter over scripts/run-tests/classify.rkt so
 ;; the census, its tests, and reports all cite one inventory source.
 

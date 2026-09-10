@@ -3,13 +3,13 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
-;; W3 tier-ownership split (v1.00.28): the cheap, deterministic CWD
+;; W3 tier-ownership split: the cheap, deterministic CWD
 ;; pattern assertions below stay unit-fast. The ONE real executable/CWD
 ;; probe (RA-4 W1, subprocess spawn of tests/fixtures/cwd-invocation-probe.rkt
 ;; from an isolated private temp directory) moved to the small required
 ;; integration canary tests/workflows/test-cwd-invocation-canary.rkt,
 ;; owned by the required `workflows` lane (destination gate signoff:
-;; PLAN-v1.00.28 §W3). A moved behavior never lost its owner — the canary
+;; the active plan §W3). A moved behavior never lost its owner — the canary
 ;; is required in CI via the workflows suite.
 
 ;; BOUNDARY: unit

@@ -266,7 +266,7 @@
 (define (delivery-suite)
   (test-suite "delivery-verifier"
 
-    ;; v1.00.28 W2: this suite consumes git fixtures exclusively through the
+    ;; W2: this suite consumes git fixtures exclusively through the
     ;; shared `make-private-git-fixture!` constructor contract, so the
     ;; activated 'pristine-copy strategy must be invisible to every consumer.
     ;; Contract test: both strategies yield the same consumer-visible shape

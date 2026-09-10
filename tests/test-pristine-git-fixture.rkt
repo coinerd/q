@@ -2,7 +2,7 @@
 ;; @speed fast
 ;; @suite testing
 
-;; q/tests/test-pristine-git-fixture.rkt — W2 (v1.00.28) safety gate for the
+;; q/tests/test-pristine-git-fixture.rkt — W2 safety gate for the
 ;; pristine physical-copy git fixture strategy.
 ;;
 ;; Replaces the per-instance `git clone --no-local` transport with a
@@ -151,7 +151,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define pristine-suite
-  (test-suite "pristine git fixture safety gate (v1.00.28 W2)"
+  (test-suite "pristine git fixture safety gate (W2)"
 
     (test-case "G3a: baseline exists once, is self-contained, digest stable across re-derivation"
       (check-true (git-ok?) "git binary must be available for this suite")

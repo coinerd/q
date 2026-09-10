@@ -6,7 +6,7 @@
 
 ;; tests/helpers/deterministic-clock.rkt — shared deterministic clock/sleeper seam
 ;;
-;; W1 of v1.00.28 (test workload reduction): logical timing semantics in tests
+;; W1 of the test-workload-reduction campaign: logical timing semantics in tests
 ;; must run on deterministic clock/sleeper seams instead of real wall-clock
 ;; waits. This helper is the canonical seam for remediated families:
 ;;   - a fake clock records every requested logical delay (labelled, ordered)

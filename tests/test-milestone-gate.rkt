@@ -672,7 +672,7 @@
        (format "row ~a column ~a is empty or non-string" (jref row "test") key)))))
 
 ;; ════════════════════════════════════════════════════════════════════
-;; W3 (v1.00.28): inventory-reconciliation validation.
+;; W3: inventory-reconciliation validation.
 ;; A moved/removed behavior must have a destination test AND a named
 ;; required gate; nothing may vanish silently from the inventory.
 ;; ════════════════════════════════════════════════════════════════════

@@ -31,7 +31,7 @@
          rackunit
          rackunit/text-ui
          "../extensions/gsd/wave-executor.rkt"
-         ;; v1.00.28 W2 fixture census finding: this suite consumes git fixtures
+         ;; W2 fixture census finding: this suite consumes git fixtures
          ;; exclusively through the shared `make-private-git-fixture!` constructor and
          ;; inherits the activated 'pristine-copy strategy transparently (the pristine
          ;; baseline recreates the offline `refs/heads/origin/main` stand-in that the

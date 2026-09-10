@@ -136,7 +136,7 @@
   (define resp-ch (make-channel))
   (define req (ui-request 'confirm resp-ch "Do you want to proceed?"))
   (thread (lambda () (channel-put ui-ch req)))
-  ;; W1 wait-audit (v1.00.28): the fixed 0.1s bridge settle is replaced by
+  ;; W1 wait-audit: the fixed 0.1s bridge settle is replaced by
   ;; bounded observation polling — exit as soon as the bridge has processed the
   ;; request (notification visible in buf), with a 1s worst-case ceiling.
   (let poll ([attempts 100])
