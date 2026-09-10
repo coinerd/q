@@ -9,7 +9,14 @@
          racket/file
          racket/runtime-path
          racket/string
-         "../scripts/gsd-wave-gate.rkt")
+         (only-in "../extensions/gsd/campaign-state.rkt"
+                  migrate-campaign!
+                  campaign-plan-id
+                  campaign-record-waves
+                  campaign-wave-index
+                  campaign-wave-status)
+         "../scripts/gsd-wave-gate.rkt"
+         "../extensions/gsd/go-orchestrator.rkt")
 
 (define-runtime-path ci-workflow "../.github/workflows/ci.yml")
 (define-runtime-path governance-doc "../docs/gsd-process-governance.md")
@@ -400,3 +407,88 @@
                              "--truth-digest FULL64"
                              "Milestone truth"))])
     (check-true (string-contains? governance contract) contract)))
+
+;; ============================================================
+;; BUG-0064 (v1.00.29 W1, #9620): end-to-end campaign governance —
+;; a campaign must refuse to advance to wave N while wave N-1 lacks
+;; its Delivery-Contract merge-SHA binding (the v1.00.27 failure mode:
+;; W0→W6 advanced with zero merges). Refusal is auditable; the only
+;; escape is explicit operator intent (#:advance-override?) which is
+;; logged; binding the evidence trio to the merge SHA unblocks.
+;; ============================================================
+
+(define (gov-wave-status rec idx)
+  (for/first ([w (campaign-record-waves rec)]
+              #:when (= (campaign-wave-index w) idx))
+    (campaign-wave-status w)))
+
+(define (make-gov-tmp-campaign-dir n-waves)
+  (define dir (make-temporary-file "gov-advance-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                         (lambda (out)
+                           (display "# Plan: Governance Campaign\n\n## Waves\n\n" out)
+                           (for ([i (in-range n-waves)])
+                             (fprintf out "- [Inbox] W~a: Wave ~a → waves/W~a-wave.md\n" i i i)))
+                         #:exists 'truncate)
+  ;; BUG-0052: every referenced wave document must exist.
+  (for ([i (in-range n-waves)])
+    (call-with-output-file
+     (build-path dir ".planning" "waves" (format "W~a-wave.md" i))
+     (lambda (out) (fprintf out "# Wave ~a\n\nGoal: wave ~a\n\n## Verify\n\nraco test .\n" i i))
+     #:exists 'truncate))
+  dir)
+
+(define (bind-gov-merge-sha! dir plan-id wave-idx)
+  (define evidence-dir (build-path dir "docs" "reports" "gsd-wave-evidence"))
+  (make-parent-directory* (build-path evidence-dir "x"))
+  (call-with-output-file
+   (build-path evidence-dir (format "~a-w~a.rktd" plan-id wave-idx))
+   (lambda (out) (fprintf out "(proof-bundle (wave ~a) (merge-sha ~a))\n" wave-idx valid-sha))
+   #:exists 'truncate))
+
+(test-case "campaign advance to W1 is refused while W0 lacks its Delivery-Contract merge SHA"
+  (define dir (make-gov-tmp-campaign-dir 2))
+  (define rec (migrate-campaign! dir))
+  ;; W0 itself is never gated (no predecessor) and completes with stubs.
+  (check-eq? (campaign-result-status
+              (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+             'wave-done)
+  (check-eq? (gov-wave-status rec 0) 'done)
+  ;; Advancing to W1 without W0's merge-SHA proof is refused.
+  (define result (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+  (check-eq? (campaign-result-status result) 'wave-blocked)
+  ;; Auditable refusal: names the missing proof and the operator escape.
+  (check-true (string-contains? (campaign-result-message result) "no Delivery-Contract merge SHA"))
+  (check-true (string-contains? (campaign-result-message result) "#:advance-override? #t"))
+  ;; The refused wave stays pending — the campaign never silently advances.
+  (check-false (eq? (gov-wave-status rec 1) 'done))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "campaign advance proceeds once the predecessor evidence trio is bound to a merge SHA"
+  (define dir (make-gov-tmp-campaign-dir 2))
+  (define rec (migrate-campaign! dir))
+  (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
+  (check-false (wave-merge-sha dir (campaign-plan-id rec) 0))
+  (bind-gov-merge-sha! dir (campaign-plan-id rec) 0)
+  (check-equal? (wave-merge-sha dir (campaign-plan-id rec) 0) valid-sha)
+  (define result (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+  (check-eq? (campaign-result-status result) 'wave-done)
+  (check-eq? (gov-wave-status rec 1) 'done)
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "explicit operator override advances under an open wave and is logged for audit"
+  (define dir (make-gov-tmp-campaign-dir 2))
+  (define rec (migrate-campaign! dir))
+  (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
+  ;; No evidence binding — advance is only possible with explicit intent.
+  (define result
+    (run-campaign-wave dir
+                       rec
+                       1
+                       #:runner (lambda (_) 'ok)
+                       #:verifier (lambda (_) #t)
+                       #:advance-override? #t))
+  (check-eq? (campaign-result-status result) 'wave-done)
+  (check-eq? (gov-wave-status rec 1) 'done)
+  (delete-directory/files dir #:must-exist? #f))
