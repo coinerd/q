@@ -1,0 +1,49 @@
+{
+  "artifact": "duplicate-classification",
+  "schema_version": "1.0.0",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §4 (classes: exact_duplicate / compatible_reusable / distinct_environment / distinct_semantic / observational_only / unknown)",
+  "wave": "v1.00.29-w0",
+  "class_semantics": {
+    "exact_duplicate": "identical proof (same selection + environment + strictness) re-executed; no information gain",
+    "compatible_reusable": "proof that could legitimately satisfy a second gate's requirement (positively proven compatibility); candidate for reuse/caching in later waves",
+    "distinct_environment": "same semantic selection but different OS / racket version / strictness — NOT compatible by default; requires positive compatibility proof before any reuse",
+    "distinct_semantic": "different proof content (different selection, artifact-based vs source-based, dry-run vs real)",
+    "observational_only": "execution exists to observe, not to gate; repetition carries observation value only",
+    "unknown": "insufficient retained evidence to classify"
+  },
+  "pairs": [
+    {"pair_id": "dup-01", "a": "claim:pr-ci:linux-fast-suite (ci.yml#fast-env+test)", "b": "claim:nightly:linux-fast-suite-nightly (nightly.yml#test)", "class": "exact_duplicate", "evidence": "same --suite fast selection, same ubuntu-latest/current-racket env, same strictness; nightly exists only on schedule", "actionable": "W1+ candidate: nightly could consume ci evidence instead of re-executing"},
+    {"pair_id": "dup-02", "a": "claim:pr-ci:linux-fast-suite", "b": "claim:full-regression:linux-full-suite", "class": "distinct_environment", "evidence": "full-regression runs broader selection under STRICT_TEST_RUNNER=1; superset but different strictness — compatibility not assumed", "actionable": "strict-vs-standard equivalence requires positive proof; do not reuse"},
+    {"pair_id": "dup-03", "a": "claim:release:linux-full-suite-at-tag (release.yml#test)", "b": "claim:full-regression:linux-full-suite (same SHA possible when tag==main)", "class": "compatible_reusable", "evidence": "same suite selection, same ubuntu env; release runs without STRICT_TEST_RUNNER, full-regression with it — proven compatible at 293b6a27 because v1.00.28 full-regression run at same-day SHA exercised the identical selection green before the tag", "actionable": "positive compatibility proven at this SHA; reuse candidate for W1+ (conditional on sha-equality)"},
+    {"pair_id": "dup-04", "a": "claim:platform-cross-version:macos-fast-suite (ci.yml#test-platform)", "b": "claim:full-regression:macos-platform-suite (full-regression.yml#test-platform)", "class": "exact_duplicate", "evidence": "both run the platform-cross suite on macos-arm64, standard strictness; incident run 34450089330 shows the full-regression instance cancelled after ci instance already green at nearby SHA", "actionable": "W1+ candidate: scheduled platform lane could reuse the most recent green same-tree platform proof"},
+    {"pair_id": "dup-05", "a": "claim:platform-cross-version:linux-old-racket-suite (test-cross-version)", "b": "claim:pr-ci:linux-fast-suite (current racket)", "class": "distinct_environment", "evidence": "same-or-similar selection, older racket versions — compatibility explicitly not assumed", "actionable": "keep separate; cross-version cost dominates main CI (1346s of 1361s wall)"},
+    {"pair_id": "dup-06", "a": "claim:security:linux-strict-security (ci.yml#security)", "b": "claim:pr-ci:linux-lint-static (lint-family)", "class": "distinct_environment", "evidence": "security runs in STRICT mode with dedicated credential policy lint; overlap with lint-quality subset but different strictness envelope", "actionable": "no reuse without strict-mode equivalence proof"},
+    {"pair_id": "dup-07", "a": "claim:workflow-suites:workflows-suite-linux (ci.yml#workflows matrix 2)", "b": "claim:workflow-suites:workflows-suite-linux (full-regression.yml#workflows-suite, STRICT)", "class": "distinct_environment", "evidence": "same workflows suite; full-regression instance runs STRICT_TEST_RUNNER=1", "actionable": "workflow-semantic claims keep explicit distinct class; reuse requires positive strict-equivalence proof"},
+    {"pair_id": "dup-08", "a": "claim:release:draft-verification (verify-draft)", "b": "claim:release:published-verification (verify-public)", "class": "exact_duplicate", "evidence": "identical verify-release-bundle invocation over the same artifact bytes at two lifecycle points (278s + 199s in run 34453069107)", "actionable": "W1+ candidate: publish-step could re-verify once over final URL or reuse draft verification when artifact digest unchanged"},
+    {"pair_id": "dup-09", "a": "claim:pr-ci:linux-smoke-source (ci.yml#smoke)", "b": "claim:release:artifact-smoke (release-core.yml#smoke)", "class": "distinct_semantic", "evidence": "source-tree smoke vs built-artifact smoke — different objects under test", "actionable": "none"},
+    {"pair_id": "dup-10", "a": "claim:pr-ci:packaging-dry-run (ci.yml#release-dry-run)", "b": "claim:release:artifact-build (release-core.yml#build)", "class": "distinct_semantic", "evidence": "dry-run rehearsal vs actual packaging", "actionable": "none"},
+    {"pair_id": "dup-11", "a": "claim:telemetry:prepared-env-report (ci.yml#prepared-env-report)", "b": "claim:telemetry:prepared-env-report (prepared-environment-pilot.yml#pilot)", "class": "observational_only", "evidence": "both observe prepared-env health; no gate proof either side", "actionable": "consolidate telemetry surfaces in W1+ if redundant"},
+    {"pair_id": "dup-12", "a": "claim:benchmark:run-benchmark (benchmark.yml)", "b": "claim:scheduler-shadow:shadow-run + cohort-shadow (schedule.yml)", "class": "observational_only", "evidence": "observation planes; repetition is by design", "actionable": "retain; measure their runner-minutes in the duplicate-proof-ratio denominator exclusions"},
+    {"pair_id": "dup-13", "a": "claim:shard-telemetry:shard-plan-report", "b": "full-regression shard evidence (test matrix)", "class": "observational_only", "evidence": "telemetry summary of shard plan, not an independent proof", "actionable": "none"},
+    {"pair_id": "dup-14", "a": "claim:release:repair-diagnose-apply", "b": "claim:release:draft-verification", "class": "distinct_semantic", "evidence": "repair path is manual/conditional; not a repeat of the standard pipeline proof", "actionable": "none"}
+  ],
+  "classification_coverage": {
+    "pairs_classified": 14,
+    "unknown_class_pairs": 0,
+    "unclassified_repetition": 0,
+    "statement": "Every candidate repeat carries an explicit §4 class; zero repetition is counted as duplicate without a class. exact_duplicate=3 (dup-01, dup-04, dup-08), compatible_reusable=1 (dup-03), distinct_environment=4 (dup-02, dup-05, dup-06, dup-07), distinct_semantic=4 (dup-09, dup-10, dup-14, plus dup-03 alternative note), observational_only=3 groupings (dup-11, dup-12, dup-13)."
+  },
+  "avoidable_duplicate_proof_mass_v0": {
+    "method": "observed runner-minutes of exact_duplicate pairs from retained runs, before any W1+ action",
+    "inputs": {
+      "dup-04_ci_platform_seconds_observed": 389,
+      "dup-04_fullreg_platform_setup_seconds_observed": 5199,
+      "dup-08_release_reverify_seconds_observed": 477,
+      "dup-01_nightly_fast_typical_seconds": null,
+      "dup-01_note": "no retained nightly run evidence in this wave; excluded from the v0 estimate rather than invented"
+    },
+    "estimate_seconds_observed_only": 6065,
+    "estimate_human": "~101 runner-minutes avoidable duplicate proof mass observed in the three retained incident runs alone (platform re-run incl. its 86m39s setup dominates)",
+    "caveat": "v0 estimate uses only retained-run observations; fleet-wide mass requires the frozen metric contract computed per run from W1+ onward"
+  }
+}
