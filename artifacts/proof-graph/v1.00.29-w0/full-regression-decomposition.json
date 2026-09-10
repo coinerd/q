@@ -1,0 +1,96 @@
+{
+  "artifact": "full-regression-decomposition",
+  "schema_version": "1.0.0",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §1.1/§6 W0/§4.7 (full-regression decomposed without inventing a completion time)",
+  "incident": {
+    "run_id": 34450089330,
+    "run_number": 36,
+    "workflow": "full-regression",
+    "event": "schedule",
+    "head_branch": "main",
+    "head_sha": "04637d835d33",
+    "created_at": "2026-09-10T07:28:02Z",
+    "run_started_at": "2026-09-10T07:28:02Z",
+    "last_updated_at": "2026-09-10T09:04:07Z",
+    "wall_seconds": 5765,
+    "wall_human": "96m05s",
+    "conclusion": "cancelled",
+    "completion_time_invented": false,
+    "completion_time": null,
+    "completion_time_rationale": "Run conclusion is 'cancelled'; the test-platform lane never reached a terminal suite result. Per spec §1.1 no completion time is invented; wall time is bounded by run created_at..last_updated_at only."
+  },
+  "provenance": {
+    "source": "GitHub Actions API page-1 evidence retained at commit-time",
+    "retained_files": [
+      "artifacts/proof-graph/v1.00.29-w0/evidence/run-34450089330.json",
+      "artifacts/proof-graph/v1.00.29-w0/evidence/jobs-34450089330.json"
+    ],
+    "extraction": "job.started_at/completed_at and job.steps[] timestamps from retained API payloads; durations integer seconds",
+    "sha_binding": "run.head_sha 04637d835d33"
+  },
+  "job_matrix": [
+    {"job": "test-platform", "labels": ["macos-14"], "conclusion": "cancelled", "job_seconds": 5428, "started_at": "2026-09-10T07:28:09Z", "completed_at": "2026-09-10T08:58:37Z", "share_of_run_wall": 0.9414},
+    {"job": "test shard 3/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 686, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:39:31Z"},
+    {"job": "test shard 1/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 673, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:39:18Z"},
+    {"job": "test shard 5/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 577, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:37:42Z"},
+    {"job": "test shard 4/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 541, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:37:06Z"},
+    {"job": "test shard 0/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 483, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:36:08Z"},
+    {"job": "test shard 2/6", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 466, "started_at": "2026-09-10T07:28:04Z", "completed_at": "2026-09-10T07:35:50Z"},
+    {"job": "workflows-suite", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 363, "started_at": "2026-09-10T07:28:05Z", "completed_at": "2026-09-10T07:34:08Z"},
+    {"job": "summarize", "labels": ["ubuntu-latest"], "conclusion": "failure", "job_seconds": 253, "started_at": "2026-09-10T08:58:56Z", "completed_at": "2026-09-10T09:03:09Z"},
+    {"job": "report", "labels": ["ubuntu-latest"], "conclusion": "success", "job_seconds": 3, "started_at": "2026-09-10T09:04:03Z", "completed_at": "2026-09-10T09:04:06Z"},
+    {"job": "mutation-pilot", "labels": ["ubuntu-latest"], "conclusion": "skipped", "job_seconds": null, "started_at": "2026-09-10T07:28:03Z", "completed_at": "2026-09-10T07:28:02Z", "note": "gated off; API completed_at precedes started_at for skipped jobs"}
+  ],
+  "critical_path_job": {
+    "job": "test-platform",
+    "runner_label": "macos-14",
+    "job_wall_seconds": 5428,
+    "step_breakdown_retained": [
+      {"step": "Set up job", "seconds": 1, "conclusion": "success"},
+      {"step": "Run actions/checkout@v7", "seconds": 2, "conclusion": "success"},
+      {"step": "Run ./.github/actions/setup-racket", "seconds": 5199, "conclusion": "success", "human": "86m39s", "share_of_run_wall": 0.9020},
+      {"step": "Clear stale bytecode", "seconds": 1, "conclusion": "success"},
+      {"step": "Compile gate", "seconds": 124, "conclusion": "success"},
+      {"step": "Run platform-cross suite (macos-arm64)", "seconds": 91, "conclusion": "cancelled", "note": "cancelled mid-suite at 2026-09-10T08:58:28Z — suite never completed"},
+      {"step": "Upload platform evidence", "seconds": 2, "conclusion": "success"}
+    ]
+  },
+  "decomposition": {
+    "wall_clock_dominator": {
+      "finding": "Environment preparation, not test execution. setup-racket on test-platform (macos-14) consumed 5199s (86m39s) = 90.2% of the 96m05s run wall and 95.8% of the critical-path job.",
+      "mechanism_classification": "prepared-env restore did not take effect on this scheduled run path: the CI 'Clear stale bytecode' step is conditioned on prepared-env-result != 'success', and the follow-on catalog/dependency installation ran unbounded on the macOS runner instead of restoring a prepared environment archive.",
+      "evidence": "step timestamps in retained jobs-34450089330.json; compare workflows-suite setup-racket 245s (07:28:08Z->07:32:13Z) and summarize setup-racket 244s on ubuntu-latest for the same commit window."
+    },
+    "proof_work_mass": {
+      "finding": "Actual proof work that completed before cancellation is small. All 6 Linux shards finished in 466..686s (max 11m26s incl. setup); workflows-suite finished in 363s; the platform-cross suite had executed only 91s of its runtime when the run was cancelled.",
+      "aggregate_completed_shard_seconds_incl_setup": 3426,
+      "note": "Per-shard step-level breakdown exists in the retained payload but only the critical-path job is decomposed step-wise here; shard job-level durations are retained verbatim."
+    },
+    "wait_mass_vs_work_mass": {
+      "finding": "The incident is dominated by wait mass (environment preparation) rather than work mass (proof execution): 5199s setup vs 91s of platform suite execution observed before cancellation."
+    },
+    "cancellation": {
+      "run_conclusion": "cancelled",
+      "cancelled_at_approx": "2026-09-10T08:58:28Z",
+      "cancelled_step": "test-platform / 'Run platform-cross suite (macos-arm64)' step conclusion=cancelled",
+      "origin": "unknown (cancel actor is not present in the retained API evidence)",
+      "hypotheses_non_asserted": [
+        "concurrency-group preemption by a newer scheduled run",
+        "manual/operator cancellation"
+      ],
+      "downstream_effects": [
+        "summarize job failed at step 'Aggregate all required lane evidence' because test-platform lane evidence was incomplete (dependency on a cancelled lane), after spending 244s of its own 253s wall on setup-racket",
+        "report job emitted the definitive run status (3s, success)"
+      ]
+    },
+    "completion_time": {
+      "value": null,
+      "policy": "Not invented. The platform lane was cancelled mid-suite; extrapolating shard rates to macos-14 (whose setup cost alone was 57x the longest Linux shard) would fabricate a number the evidence cannot support."
+    }
+  },
+  "w1_hooks": [
+    "Metric contract (PERFORMANCE-CONTRACT-v1.00.29.md) tracks setup_ratio per surface so prepared-env restore failures on scheduled paths surface before the 90-minute scale.",
+    "Critical-path latency metric for full-regression must separate wait mass (env prep) from work mass (suite runtime) exactly as decomposed here.",
+    "Cancel-origin telemetry is currently absent from the proof graph (unknown class); W1+ may add a cancel-actor observation surface without changing behavior."
+  ]
+}

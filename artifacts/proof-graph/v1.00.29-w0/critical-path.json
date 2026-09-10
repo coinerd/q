@@ -1,0 +1,95 @@
+{
+  "artifact": "critical-path",
+  "schema_version": "1.0.0",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §1.1/§4.7/§7.2 (per-surface critical paths incl. main 22m41s + release 74m01s incidents)",
+  "method": "Per surface: wall = run.created_at..run.updated_at from retained API payloads; critical path = longest start-to-finish dependency chain among jobs (chain edges follow needs:/gate sequencing inferred from job start timestamps); step-level decomposition only where retained evidence includes steps[] for the critical-path job.",
+  "provenance_root": "artifacts/proof-graph/v1.00.29-w0/evidence/",
+  "surfaces": [
+    {
+      "surface": "main-ci (ci.yml, push to main)",
+      "run_id": 34450964386,
+      "run_number": 7180,
+      "head_sha": "293b6a271aa1",
+      "head_branch": "main",
+      "event": "push",
+      "created_at": "2026-09-10T07:38:24Z",
+      "last_updated_at": "2026-09-10T08:01:05Z",
+      "wall_seconds": 1361,
+      "wall_human": "22m41s",
+      "conclusion": "success",
+      "reconciliation": "This retained run IS the plan §1.1 'observed successful merge-SHA run 22m 41s' observation (push event on the v1.00.28 release SHA).",
+      "critical_path": {
+        "dominator_job": "test-cross-version",
+        "dominator_job_seconds": 1346,
+        "dominator_share_of_wall": 0.989,
+        "started_at": "2026-09-10T07:38:39Z",
+        "completed_at": "2026-09-10T08:01:05Z",
+        "chain_note": "Run ended when test-cross-version ended; no other job outlasts it. Longest gate-sequenced chain: lint-quality (345s, 07:38:27->07:44:12) -> test (2) (293s, 07:44:11->07:49:04) -> test-aggregate (4s) -> prepared-env-report (260s, 07:49:06->07:53:26) = 899s (14m59s), fully shadowed by the cross-version lane.",
+        "second_longest_job": {"job": "security", "seconds": 734}
+      },
+      "top_jobs_seconds": {
+        "test-cross-version": 1346, "security": 734, "workflows (1)": 597, "workflows (0)": 568,
+        "test-platform": 389, "lint-quality": 345, "smoke (ubuntu-latest)": 344, "abstraction-audit": 335,
+        "fast-env": 329, "test (2)": 293, "test (0)": 275, "prepared-env-report": 260, "test (1)": 244,
+        "release-dry-run": 237, "gsd-governance": 225, "lint": 8, "test-aggregate": 4, "workflows-aggregate": 3,
+        "release-readiness": 0
+      }
+    },
+    {
+      "surface": "release (release.yml, tag push v1.00.28)",
+      "run_id": 34453069107,
+      "run_number": 734,
+      "head_sha": "293b6a271aa1",
+      "head_branch": "v1.00.28",
+      "event": "push",
+      "created_at": "2026-09-10T08:02:57Z",
+      "last_updated_at": "2026-09-10T09:16:58Z",
+      "wall_seconds": 4441,
+      "wall_human": "74m01s",
+      "conclusion": "success",
+      "same_sha_note": "Runs 34450964386 (main CI) and 34453069107 (release) executed the identical tree SHA 293b6a271aa1 — the plan's 'same-SHA' comparison is exact.",
+      "critical_path": {
+        "pre_job_wait_seconds": 374,
+        "pre_job_wait_human": "6m14s",
+        "pre_job_wait_note": "08:02:57Z run creation -> 08:09:11Z first job start; queue/protected-environment wait, not job work.",
+        "chain_seconds_job_work": 3612,
+        "chain_human_job_work": "60m12s",
+        "chain": [
+          {"job": "preflight", "seconds": 261, "window": "08:09:11->08:13:32"},
+          {"job": "test", "seconds": 1427, "window": "08:13:35->08:37:22"},
+          {"job": "prepare", "seconds": 255, "window": "08:39:03->08:43:18"},
+          {"job": "release-core / build", "seconds": 267, "window": "08:46:19->08:50:46"},
+          {"job": "release-core / smoke", "seconds": 333, "window": "08:53:33->08:59:06"},
+          {"job": "release-core / draft", "seconds": 11, "window": "08:59:09->08:59:20"},
+          {"job": "release-core / verify-draft", "seconds": 278, "window": "08:59:22->09:04:00"},
+          {"job": "release-core / publish", "seconds": 289, "window": "09:08:47->09:13:36"},
+          {"job": "release-core / verify-public", "seconds": 199, "window": "09:13:38->09:16:57"}
+        ],
+        "inter_job_gaps_seconds": 455,
+        "reconciliation": "374s pre-job wait + 3612s sequential job work + 455s inter-job gaps (prepare/build/smoke gate spacing incl. draft-approval steps) = 4441s = 74m01s. The plan §1.1 'same-SHA release run 74m 01s' observation is reconciled exactly."
+      },
+      "top_jobs_seconds": {
+        "test": 1427, "release-core / smoke": 333, "release-core / publish": 289,
+        "release-core / verify-draft": 278, "release-core / build": 267, "preflight": 261,
+        "prepare": 255, "release-core / verify-public": 199, "release-core / draft": 11
+      }
+    },
+    {
+      "surface": "full-regression (scheduled)",
+      "run_id": 34450089330,
+      "run_number": 36,
+      "head_sha": "04637d835d33",
+      "wall_seconds": 5765,
+      "wall_human": "96m05s",
+      "conclusion": "cancelled",
+      "critical_path_reference": "artifacts/proof-graph/v1.00.29-w0/full-regression-decomposition.json",
+      "critical_path_summary": "test-platform (macos-14) 5428s, of which setup-racket 5199s (86m39s, 90.2% of run wall); platform suite executed only 91s before cancellation."
+    }
+  ],
+  "incident_binding": {
+    "main_22m41s": {"run_id": 34450964386, "sha": "293b6a271aa1", "verified": true},
+    "release_74m01s": {"run_id": 34453069107, "sha": "293b6a271aa1", "verified": true},
+    "full_regression_96m05s_cancelled": {"run_id": 34450089330, "sha": "04637d835d33", "verified": true}
+  },
+  "north_star_mapping": "Stage gates for these surfaces are frozen in PERFORMANCE-CONTRACT-v1.00.29.md (main p50 <= 10m, release wall <= 45m target trajectory; see contract for exact formulas and gate bands)."
+}

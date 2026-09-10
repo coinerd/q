@@ -1,0 +1,127 @@
+{
+  "artifact": "workflow-inventory",
+  "wave": "v1.00.29-w0",
+  "generated_at": "2026-09-10",
+  "base_commit": "293b6a271aa1",
+  "scope": "Every proof-producing workflow/job at v1.00.28 clean slate. Proof-producing = executes tests, compilation, packaging, security verification, release validation, or observational replicas.",
+  "surfaces": [
+    {
+      "workflow": "ci.yml", "triggers": ["push:main", "pull_request:main", "workflow_dispatch"],
+      "gate_role": "required (PR + main)",
+      "jobs": [
+        {"job": "lint", "proof": "lint", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 8000},
+        {"job": "lint-quality", "proof": "lint", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 345000},
+        {"job": "fast-env", "proof": "test/fast-suite", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 329000},
+        {"job": "test", "proof": "test/shards", "status": "required", "env": "ubuntu-latest", "matrix": 3, "evidence_ms_34450964386": [244000, 275000, 293000]},
+        {"job": "test-aggregate", "proof": "gate/aggregate", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 4000},
+        {"job": "test-platform", "proof": "test/platform", "status": "required", "env": "macos-arm64", "evidence_ms_34450964386": 389000},
+        {"job": "test-cross-version", "proof": "test/cross-version", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 1346000, "note": "main CI wall dominator"},
+        {"job": "security", "proof": "security/strict", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 734000},
+        {"job": "release-dry-run", "proof": "packaging/dry-run", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 237000},
+        {"job": "smoke", "proof": "test/smoke", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 344000},
+        {"job": "workflows", "proof": "test/workflows-suite", "status": "required", "env": "ubuntu-latest", "matrix": 2, "evidence_ms_34450964386": [568000, 597000]},
+        {"job": "workflows-aggregate", "proof": "gate/aggregate", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 3000},
+        {"job": "gsd-governance", "proof": "governance", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 225000},
+        {"job": "abstraction-audit", "proof": "architecture-audit", "status": "required", "env": "ubuntu-latest", "evidence_ms_34450964386": 335000},
+        {"job": "prepared-env-report", "proof": "telemetry/prepared-env", "status": "observational", "env": "ubuntu-latest", "evidence_ms_34450964386": 260000},
+        {"job": "release-readiness", "proof": "gate/release-readiness", "status": "required-on-main (skipped on PR)", "env": "ubuntu-latest", "evidence_ms_34450964386": "skipped"}
+      ],
+      "concurrency": {"group": "defined", "cancel_in_progress": true}
+    },
+    {
+      "workflow": "full-regression.yml", "triggers": ["schedule:daily", "workflow_dispatch"],
+      "gate_role": "required (scheduled main regression; needs-attention gate)",
+      "jobs": [
+        {"job": "test", "proof": "test/shards", "status": "required", "env": "ubuntu-latest", "matrix": 6, "note": "STRICT_TEST_RUNNER=1 --suite full"},
+        {"job": "workflows-suite", "proof": "test/workflows-suite", "status": "required", "env": "ubuntu-latest", "note": "--suite workflows --jobs 4"},
+        {"job": "test-platform", "proof": "test/platform", "status": "required", "env": "macos-arm64", "note": "incident blocker in run 34450089330"},
+        {"job": "summarize", "proof": "gate/needs-attention", "status": "required", "env": "ubuntu-latest"},
+        {"job": "report", "proof": "telemetry/report", "status": "observational", "env": "ubuntu-latest"},
+        {"job": "mutation-pilot", "proof": "observational/mutation", "status": "observational", "env": "ubuntu-latest", "conditional": true}
+      ],
+      "concurrency": {"cancel_in_progress": false}
+    },
+    {
+      "workflow": "nightly.yml", "triggers": ["schedule", "workflow_dispatch"],
+      "gate_role": "observational",
+      "jobs": [
+        {"job": "test", "proof": "test/fast-suite + lint", "status": "observational", "env": "ubuntu-latest", "note": "--suite fast; duplicate of ci fast surface"}
+      ]
+    },
+    {
+      "workflow": "release.yml", "triggers": ["push:tags"],
+      "gate_role": "required (release)",
+      "jobs": [
+        {"job": "preflight", "proof": "release/preflight", "status": "required", "env": "ubuntu-latest", "evidence_ms_34453069107": 261000},
+        {"job": "test", "proof": "test/full-suite", "status": "required", "env": "ubuntu-latest", "evidence_ms_34453069107": 1427000},
+        {"job": "prepare", "proof": "release/prepare", "status": "required", "env": "ubuntu-latest", "evidence_ms_34453069107": 255000},
+        {"job": "release-core (reusable -> release-core.yml)", "proof": "release/pipeline", "status": "required", "jobs": ["build", "smoke", "draft", "verify-draft", "publish", "verify-public"], "evidence_ms_34453069107": [267000, 333000, 11000, 278000, 289000, 199000]}
+      ]
+    },
+    {
+      "workflow": "release-core.yml", "triggers": ["workflow_call"],
+      "gate_role": "required (release component)",
+      "jobs": [
+        {"job": "build", "proof": "packaging/build", "status": "required", "env": "ubuntu-latest"},
+        {"job": "smoke", "proof": "test/artifact-smoke", "status": "required", "env": "ubuntu-latest"},
+        {"job": "draft", "proof": "release/draft", "status": "required", "env": "ubuntu-latest"},
+        {"job": "verify-draft", "proof": "release/verify-draft", "status": "required", "env": "ubuntu-latest"},
+        {"job": "publish", "proof": "release/publish", "status": "required", "env": "ubuntu-latest"},
+        {"job": "verify-public", "proof": "release/verify-public", "status": "required", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "release-repair.yml", "triggers": ["workflow_dispatch"],
+      "gate_role": "manual",
+      "jobs": [
+        {"job": "diagnose", "proof": "release-repair/diagnose", "status": "required-when-invoked", "env": "ubuntu-latest"},
+        {"job": "apply", "proof": "release-repair/apply", "status": "required-when-invoked", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "benchmark.yml", "triggers": ["push:tags", "workflow_dispatch"],
+      "gate_role": "observational",
+      "jobs": [
+        {"job": "benchmark", "proof": "observational/benchmark", "status": "observational", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "test-scheduler-shadow.yml", "triggers": ["schedule", "workflow_dispatch"],
+      "gate_role": "observational",
+      "jobs": [
+        {"job": "shadow-run", "proof": "observational/scheduler-shadow", "status": "observational", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "test-scheduler-cohort-c1.yml", "triggers": ["push:main", "workflow_dispatch"],
+      "gate_role": "observational",
+      "jobs": [
+        {"job": "cohort-plan", "proof": "observational/cohort-plan", "status": "observational", "env": "ubuntu-latest"},
+        {"job": "cohort-shadow", "proof": "observational/cohort-shadow", "status": "observational", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "shard-plan-telemetry.yml", "triggers": ["schedule", "workflow_dispatch"],
+      "gate_role": "observational",
+      "jobs": [
+        {"job": "shard-plan-report", "proof": "telemetry/shard-plan", "status": "observational", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "prepared-environment-pilot.yml", "triggers": ["workflow_dispatch", "pull_request"],
+      "gate_role": "observational (pilot)",
+      "jobs": [
+        {"job": "pilot", "proof": "observational/prepared-env-pilot", "status": "observational", "env": "ubuntu-latest"}
+      ]
+    },
+    {
+      "workflow": "project-automation.yml", "triggers": ["pull_request", "pull_request_review"],
+      "gate_role": "non-proof (status bookkeeping)",
+      "jobs": [
+        {"job": "update-project-status", "proof": null, "status": "non-proof-producing", "env": "ubuntu-latest"}
+      ]
+    }
+  ],
+  "coverage_statement": "12/12 workflows inventoried, 36 jobs total: 24 required proof-producing, 11 observational/telemetry proof-producing, 1 non-proof. 100% of required proof-producing jobs represented; none unknown/uninstrumented at job level.",
+  "limitations": "Step-level inventory only for jobs touched by incident decomposition (full-regression.yml). Runner-class per job recorded at workflow env level; per-job runner labels not retained for every historical run."
+}

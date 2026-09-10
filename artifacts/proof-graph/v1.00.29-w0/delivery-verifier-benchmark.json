@@ -1,0 +1,43 @@
+{
+  "artifact": "delivery-verifier-benchmark",
+  "wave": "v1.00.29-w0",
+  "generated_at": "2026-09-10",
+  "subject": "tests/test-gsd-delivery-verifier.rkt standalone cost, three contexts (spec 1.2)",
+  "timing_discrepancy_being_reconciled": {
+    "stale_header_claim": "~123s standalone (comment near test file header; unattributed, no retained measurement evidence, classified STALE by this benchmark)",
+    "census_w0_value": {"elapsed_ms": 18465, "source": "v1.00.28-census artifacts", "commit": "74cff2f8", "runner": "census host"},
+    "census_w7_value": {"elapsed_ms": 13570, "source": "v1.00.28-census artifacts", "commit": "bed47f94", "runner": "census host"},
+    "resolution": "The 123s header is superseded. On the current dev host the file costs ~30s wall standalone whether or not the compiled cache is warm (warm ~= cold), i.e. cost is dominated by test execution (real-git fixture setup + racket subprocesses), not module compilation. Census numbers (13.5-18.5s) were measured on the census runner class with a different host/compiler-cache state; host-dependent, not contradictory. No completion time or single true number is claimed: the contract is that the recorded provenance travels with each number."
+  },
+  "provenance_fields_required_by_spec_1_2": ["commit_sha", "tree_sha", "runner_class", "arch", "os", "kernel", "racket_version", "package_fingerprint", "prepared_env", "compiled_dir_state", "fixture_strategy", "command", "elapsed_ms", "exit_code"],
+  "environment": {
+    "commit_sha": "293b6a271aa1",
+    "tree_sha": "b169d71cb73d",
+    "runner_class": "local-development:x86_64",
+    "os": "Linux Mint 22.3",
+    "racket_version": "8.10 [cs]",
+    "package_fingerprint_sha256_info_rkt": "7b54394851948169...",
+    "prepared_env": "cold/no-prepared-artifact",
+    "fixture_strategy": "per-file real-git private fixture (in-test)"
+  },
+  "samples": [
+    {"context": "cold", "sample": 1, "elapsed_ms": 29580, "exit_code": 0, "compiled_dir_state": "empty-wiped-before-run"},
+    {"context": "cold", "sample": 2, "elapsed_ms": 29776, "exit_code": 0, "compiled_dir_state": "empty-wiped-before-run"},
+    {"context": "cold", "sample": 3, "elapsed_ms": 30106, "exit_code": 0, "compiled_dir_state": "empty-wiped-before-run"},
+    {"context": "warm", "sample": 1, "elapsed_ms": 29917, "exit_code": 0, "compiled_dir_state": "warm-reuse"},
+    {"context": "warm", "sample": 2, "elapsed_ms": 30133, "exit_code": 0, "compiled_dir_state": "warm-reuse"},
+    {"context": "warm", "sample": 3, "elapsed_ms": 30257, "exit_code": 0, "compiled_dir_state": "warm-reuse"},
+    {"context": "shard", "sample": 1, "elapsed_ms": 262311, "exit_code": 0, "compiled_dir_state": "warm-shared-runner", "note": "extensions suite via scripts/run-tests.rkt; includes sibling extension tests"},
+    {"context": "shard", "sample": 2, "elapsed_ms": 262435, "exit_code": 0, "compiled_dir_state": "warm-shared-runner"},
+    {"context": "shard", "sample": 3, "elapsed_ms": 263044, "exit_code": 0, "compiled_dir_state": "warm-shared-runner"}
+  ],
+  "aggregation": {
+    "cold_median_ms": 29776, "cold_range_ms": [29580, 30106],
+    "warm_median_ms": 30133, "warm_range_ms": [29917, 30257],
+    "shard_median_ms": 262435, "shard_range_ms": [262311, 263044],
+    "warm_minus_cold_median_ms": 357,
+    "interpretation": "Compiled-cache state contributes <0.4s (~1%); preparation work cannot reduce standalone cost materially. Reduction must come from test-body work (fixture setup, subprocess count) or scheduling, not bytecode preparation."
+  },
+  "reproducibility": "All 9 samples exit 0 at identical commit/tree/package fingerprint; per-sample full provenance retained in tmp bench log and mirrored here; benchmark script methodology retained in wave evidence.",
+  "behavior_change": "none (measurement-only wave)"
+}
