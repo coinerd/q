@@ -51,7 +51,8 @@
                   delivery-verification-message
                   current-gsd-delivery-verify-command
                   current-gsd-delivery-verify-timeout-sec
-                  current-gsd-git-runner)
+                  current-gsd-git-runner
+                  normalize-declared-verify)
          (only-in "../extensions/gsd/events.rkt"
                   make-event-collector
                   set-gsd-event-bus!
@@ -266,6 +267,24 @@
 
 (define (delivery-suite)
   (test-suite "delivery-verifier"
+
+    ;; BUG-0068 secondary finding 2: markdown-decorated Verify criteria
+    ;; (prose bullets + inline-code spans) must normalize into runnable
+    ;; commands; canonical declarations pass through byte-for-byte.
+    (test-case "normalize-declared-verify extracts code spans from prose bullets"
+      (check-equal?
+       (normalize-declared-verify
+        "- `racket tests/test-shell-risk.rkt`, `racket tests/test-tool-bash-security.rkt` green.")
+       "racket tests/test-shell-risk.rkt && racket tests/test-tool-bash-security.rkt"))
+    (test-case "normalize-declared-verify joins one-command-per-bullet with &&"
+      (check-equal? (normalize-declared-verify "- `racket a.rkt`\n- `racket b.rkt`")
+                    "racket a.rkt && racket b.rkt"))
+    (test-case "normalize-declared-verify passes canonical commands through unchanged"
+      (define canonical "cd <project-base>/q && racket scripts/metrics.rkt --lint")
+      (check-equal? (normalize-declared-verify canonical) canonical))
+    (test-case "normalize-declared-verify passes plain commands through unchanged"
+      (check-equal? (normalize-declared-verify "racket tests/test-foo.rkt")
+                    "racket tests/test-foo.rkt"))
 
     ;; W2: this suite consumes git fixtures exclusively through the
     ;; shared `make-private-git-fixture!` constructor contract, so the
