@@ -85,7 +85,8 @@
                   current-gsd-wave-verification-repair-retries
                   current-gsd-wave-failure-context
                   current-gsd-campaign-infra-retries
-                  current-gsd-campaign-infra-retry-delay))
+                  current-gsd-campaign-infra-retry-delay
+                  current-gsd-campaign-infra-patience))
 
 ;; ============================================================
 ;; Helpers
@@ -583,6 +584,9 @@ check-equal? actual 14 expected 12")
       (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define result
         (parameterize ([current-gsd-campaign-infra-retries 0]
+                       ;; BUG-0067: patience 0 pins the legacy fail-closed
+                       ;; stop — default patience would enter the slow lane.
+                       [current-gsd-campaign-infra-patience 0]
                        [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
           (execute-campaign-request! request
                                      (lambda (_) (make-loop-result '() 'empty-response (hasheq))))))

@@ -80,6 +80,11 @@
           [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-backstop (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
+          [gsd-campaign-infra-retries (-> (or/c q-settings? #f) (or/c exact-nonnegative-integer? #f))]
+          [gsd-campaign-infra-patience
+           (-> (or/c q-settings? #f) (or/c exact-nonnegative-integer? #f))]
+          [gsd-campaign-infra-max-delay
+           (-> (or/c q-settings? #f) (or/c exact-nonnegative-integer? #f))]
           [gsd-campaign-max-cost (-> (or/c q-settings? #f) (or/c (and/c real? positive?) #f))]
           [gsd-campaign-max-tokens (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-notify-desktop-command (-> (or/c q-settings? #f) (or/c string? #f))]
@@ -234,6 +239,42 @@
 
 (define (gsd-stall-backstop settings)
   (stall-threshold-value '(gsd stall backstop) settings STALL-BACKSTOP-LIMIT-DEFAULT))
+
+;; ============================================================
+;; GSD campaign infra-retry settings (BUG-0067)
+;; Config keys: gsd.campaign-infra-retries (documented in policy.rkt
+;; since v1.00.22 but never wired until BUG-0067),
+;; gsd.campaign-infra-patience, gsd.campaign-infra-max-delay.
+;;
+;; Same never-crash semantics as the stall keys: absent (or #f
+;; settings — nothing could be loaded) → #f (the resolver falls back
+;; to the canonical parameter default); exact non-negative int → that
+;; value; #f → #f; anything else → #f + a warning. A typo'd settings
+;; file must NEVER crash a campaign mid-wave.
+;; ============================================================
+
+(define (infra-retry-setting-value key-path settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define raw (setting-ref* settings key-path #f))
+     (cond
+       [(eq? raw #f) #f]
+       [(exact-nonnegative-integer? raw) raw]
+       [else
+        (log-warning "gsd.campaign-infra: key ~a has invalid value ~s — using the built-in default"
+                     (string-join (map symbol->string key-path) ".")
+                     raw)
+        #f])]))
+
+(define (gsd-campaign-infra-retries settings)
+  (infra-retry-setting-value '(gsd campaign-infra-retries) settings))
+
+(define (gsd-campaign-infra-patience settings)
+  (infra-retry-setting-value '(gsd campaign-infra-patience) settings))
+
+(define (gsd-campaign-infra-max-delay settings)
+  (infra-retry-setting-value '(gsd campaign-infra-max-delay) settings))
 
 ;; ============================================================
 ;; GSD campaign budget ceilings (v1.00.22 W5 — BUG-0039)

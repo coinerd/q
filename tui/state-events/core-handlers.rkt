@@ -384,9 +384,25 @@
 ;; the outcome text — the conversation/message surface no longer repeats it.
 (define (handle-gsd-wave-outcome-error state evt)
   (define payload (event-payload evt))
-  (define kind (hash-ref payload 'kind 'unknown))
-  (define message (hash-ref payload 'message ""))
-  (define wave-idx (hash-ref payload 'wave #f))
+  ;; BUG-0067: payloads that crossed the worker↔host JSON IPC boundary
+  ;; carry STRING keys (JSON objects have no keyword keys), and the host
+  ;; reads symbol keys — on a hasheq (eq?-based) a string-key lookup with
+  ;; a fresh string literal NEVER matches, so every worker-side outcome
+  ;; error rendered as "wave outcome: unknown" — alarming and
+  ;; unactionable (2026-09-10 launch-day incidents). Normalize an
+  ;; all-string-keyed payload to symbol keys; in-process keyword-keyed
+  ;; payloads pass through unchanged.
+  (define payload*
+    (if (and (hash? payload)
+             (> (hash-count payload) 0)
+             (for/and ([k (in-list (hash-keys payload))])
+               (string? k)))
+        (for/hash ([(k v) (in-hash payload)])
+          (values (string->symbol k) v))
+        payload))
+  (define kind (hash-ref payload* 'kind 'unknown))
+  (define message (hash-ref payload* 'message ""))
+  (define wave-idx (hash-ref payload* 'wave #f))
   (define text
     (cond
       [(and (not (string=? message "")) wave-idx) (format "wave ~a [~a]: ~a" wave-idx kind message)]

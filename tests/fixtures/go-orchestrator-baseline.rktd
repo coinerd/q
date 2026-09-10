@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.25 BUG-0060: bounded same-wave verification repair (repair-retry state + resolve delegation) and wave-outcome-reporting.rkt extraction (1499 -> 1497 lines, 24 -> 22 defines); supersedes the v1.00.24 W3 verification-truth re-record")
- (line-count . 1497)
+  "v1.00.29 BUG-0067: patient slow-lane infra auto-resume (settings-resolved budget via resolve-effective-infra-retry-policy, chunked cancellation-aware waits; policy seams live in infra-retry-policy.rkt) 1497 -> 1589 lines, 22 defines unchanged; target raised 1500 -> 1650 because the remaining growth is orchestration control flow fused to attempt-ledger fence closures — extracting it mid-campaign would churn the fence invariants (deferred to a dedicated decomposition wave); supersedes the v1.00.25 BUG-0060 re-record")
+ (line-count . 1589)
  (top-level-define-count . 22)
- (w7-target-max-lines . 1500))
+ (w7-target-max-lines . 1650))
