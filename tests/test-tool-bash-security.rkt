@@ -37,6 +37,8 @@
          (only-in "../tools/builtins/bash-safety.rkt"
                   destructive-reason
                   destructive-diagnostic
+                  process-kill-refusal?
+                  process-kill-diagnostic
                   sanctioned-scratch-root)
          (only-in "../tools/tool.rkt" tool-result-is-error? tool-result-content)
          (only-in "../runtime/safe-mode.rkt"
@@ -419,3 +421,49 @@
   (check-true (destructive-command? "command sed -Eni.bak s/x/y/ target.txt"))
   (check-false (destructive-command? "sed -n s/x/y/ target.txt"))
   (check-false (destructive-command? "sed -- -input.txt")))
+
+;; ============================================================
+;; BUG-0066 (v1.00.29 W1, #9635): process-kill guard
+;;   Killing by name or by an unpinned pattern is the one command
+;;   class that can kill the agent host itself (v1.00.28 W0 crash:
+;;   `kill $(pgrep -x racket)` matched q's own Racket VM). The guard
+;;   must refuse kill-by-name forms and name the safe recorded-PID
+;;   alternative; pidfile / literal recorded-PID kills stay allowed.
+;; ============================================================
+
+(test-case "BUG-0066: kill-by-name commands are refused"
+  (check-not-false (process-kill-refusal? "pkill -x racket"))
+  (check-not-false (process-kill-refusal? "killall racket"))
+  (check-not-false (process-kill-refusal? "pkill -f q-agent"))
+  (check-not-false (process-kill-refusal? "kill $(pgrep -f q-agent)")))
+
+(test-case "BUG-0066: the exact v1.00.28 W0 crash command is refused"
+  (check-not-false (process-kill-refusal? "for p in $(pgrep -x racket); do kill \"$p\"; done")))
+
+(test-case "BUG-0066: bracket-trick pgrep variant does not bypass the guard"
+  (check-not-false (process-kill-refusal? "kill $(pgrep -x '[r]acket')"))
+  (check-not-false (process-kill-refusal? "for p in $(pgrep -x '[r]acket'); do kill \"$p\"; done")))
+
+(test-case "BUG-0066: pidfile and recorded-PID kills are allowed"
+  (check-false (process-kill-refusal? "kill \"$(cat /tmp/app.pid)\""))
+  (check-false (process-kill-refusal? "kill 12345"))
+  (check-false (process-kill-refusal?
+                "echo $! > /tmp/worker.pid && kill \"$(cat /tmp/worker.pid)\"")))
+
+(test-case "BUG-0066: diagnostic names the safe recorded-PID pattern"
+  (define diag (process-kill-diagnostic "pkill -x racket"))
+  (check-true (string? diag))
+  (check-true (string-contains? diag "recorded PID"))
+  (check-true (string-contains? diag "pidfile"))
+  (check-true (string-contains? diag "pkill -x racket")
+              "diagnostic must echo the refused command for the audit trail"))
+
+(test-case "BUG-0066: tool-bash refuses kill-by-name end-to-end"
+  (parameterize ([current-bash-execution-config (make-bash-execution-config #:policy 'warn
+                                                                            #:block? #t)])
+    (define result (tool-bash (hasheq 'command "pkill -x racket")))
+    (check-true (tool-result-is-error? result))
+    (define txt (hash-ref (car (tool-result-content result)) 'text ""))
+    (check-true (string-contains? txt "Refused: destructive process")
+                "refusal must come from the process-kill guard")
+    (check-true (string-contains? txt "recorded PID") "refusal must name the safe alternative")))
