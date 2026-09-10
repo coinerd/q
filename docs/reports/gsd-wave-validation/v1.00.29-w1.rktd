@@ -1,10 +1,10 @@
 ;; GSD Wave Validation — v1.00.29 W1: Campaign-integrity hardening
-;; Bound to implementation SHA: 42415692 (branch campaign/v1.00.29-w1)
+;; Bound to implementation SHA: 4921c400 (branch campaign/v1.00.29-w1)
 ;; Date: 2026-09-10 (validation re-run, same session as evidence)
 
 (validation
  (wave v1.00.29-w1)
- (implementation-sha 42415692)
+  (implementation-sha 4921c400)
  (branch campaign/v1.00.29-w1)
   (verify-command "racket tests/test-shell-risk.rkt && racket tests/test-tool-bash-security.rkt && racket tests/test-tool-bash-security-edges.rkt && racket tests/test-gsd-go-orchestrator.rkt && racket tests/test-gsd-governance-workflow.rkt && racket scripts/metrics.rkt --lint")
  (results
@@ -29,6 +29,15 @@
   ((criterion "preflight fmt-canonical excludes deleted files")
    (command "manual replay v1.00.27..v1.00.28 + source check")
    (result "PASS: .pi/extensions/q-release/index.ts:143 uses git diff --name-only --diff-filter=ACMR with existsSync guard (mirrors scripts/pre-commit.rkt:143 file-exists?); replay: old enumeration 45 .rkt paths (2 deleted) → ACMR 43, 0 absent from tree")))
+ (second-attempt-repair
+  (trigger "coordinator delivery verification exit 1: open-input-file cannot open module file tests/test-shell-risk.rkt — the verify lane runs from the PROJECT ROOT, where the previous attempt had not provisioned root-level relative paths")
+  (root-cause "the declared Verify chain uses root-relative paths (tests/…, scripts/…); with cwd at the project root, racket resolved root/tests/* symlinks only after they were provisioned, and scripts/metrics.rkt — a symlink to q/scripts/metrics.rkt — resolved its relative (require \"metrics-helpers.rkt\") against root/scripts/ because Racket does not readlink module paths")
+  (fixes
+   ("root-level tests/ symlinks provisioned (tests→q/tests) so all five test files resolve from the project root")
+   ("scripts/metrics-helpers.rkt: new root-level delegating module re-exporting q/scripts/metrics-helpers.rkt via (file …), giving the symlinked metrics.rkt a resolvable relative require")
+   ("q/scripts/metrics.rkt: repo-root anchor made invocation-shape-aware — direct q/ invocation anchors at script-dir/up; root-symlink invocation (no README.md at script-dir/up) anchors at script-dir/up/q (README.md presence discriminates)"))
+  (note "root-level shim/launcher files live in PROJECT-ROOT scripts/ (outside the q/ git root); the durable product changes are in q/scripts/metrics.rkt (committed) — root shim provisioned per this session's lane contract")
+  (revalidation "full declared chain re-run from project root: 14/14 shell-risk, bash-security, 14/14 edges (crash fixture), go-orchestrator 68/68, governance workflow, metrics lint 'All 5 static metrics match README.md' — exit 0 (W1-CHAIN-GREEN)"))
  (prior-attempt-failure-disposition
   (reason "delivery verify harness exited 2 with /bin/sh: 0: Illegal option - (dash rejected the '- `racket ...`' bullet list as a command), not a product failure")
    (disposition "wave-doc Verify declaration repaired to the canonical single-shell-command &&-chain (delivery-verifier.rkt:683 canonical contract: decorated declarations are normalized, undecorated pass through byte-for-byte — the old prose bullet list failed raw under /bin/sh and would normalize to an unsafe code-span chain); the non-runnable semantic criteria are carried by the in-chain regression fixture (test-tool-bash-security-edges.rkt), the advance-gate suites, and this report's fmt-canonical replay; all six chain commands re-run green on this tree"))
