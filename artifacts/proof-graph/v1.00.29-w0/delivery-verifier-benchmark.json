@@ -1,0 +1,75 @@
+{
+  "artifact": "delivery-verifier-benchmark",
+  "schema_version": "2.0.0",
+  "wave": "v1.00.29-w0",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §1.2 (named three-context benchmark; stale 123s header MUST NOT be the baseline)",
+  "subject": "tests/test-gsd-delivery-verifier.rkt standalone cost, three contexts: standalone cold, standalone warm, selected fast-shard context",
+  "timing_discrepancy_being_reconciled": {
+    "observations": [
+      {"id": "stale-header", "value_s": 123, "provenance": "comment near delivery-verifier header; unattributed, no retained measurement evidence", "classification": "STALE — superseded; must not be used as numerical baseline"},
+      {"id": "v1.00.28-census-w0", "value_ms": 18465, "provenance": "v1.00.28-census artifacts, commit 74cff2f8, census runner class", "classification": "VALID-PRIOR (different host/context)"},
+      {"id": "v1.00.28-census-w7", "value_ms": 13570, "provenance": "v1.00.28-census artifacts, commit bed47f94, census runner class", "classification": "VALID-PRIOR (different host/context)"}
+    ],
+    "resolution": "The three observations are not interchangeable because each carries a different (host, runner class, cache state, experiment) context. The controlling numbers are the ones recorded below with full §1.2 provenance. The stale 123s header is superseded by this benchmark and flagged for header correction in a later wave (behavior-change-free wave here: no code edit)."
+  },
+  "wave_branch_run": {
+    "generated_at_utc": "2026-09-10T12:15:01Z",
+    "commit_sha": "dc99df55ad604925f2897eed7be206f69b216fbb",
+    "tree_sha": "920783c3873bc248824b728c10077c4e8810b133",
+    "branch": "campaign/v1.00.29-w0",
+    "runner_class": "local executor (x86_64, Linux)",
+    "arch": "x86_64",
+    "os": "Linux Mint 22.3 (Ubuntu noble base)",
+    "kernel": "Linux user-A620M-HDV-M-2",
+    "racket_version": "Welcome to Racket v8.10 [cs].",
+    "package_fingerprint": {
+      "info_rkt_sha256": "7b54394851948169c8ea83384b718bcd613488f9d550d0da6fbdc3470ef130a8",
+      "pkg_lock": "n/a (Racket package, no lockfile)"
+    },
+    "prepared_env": "cold/no-prepared-artifact (local executor; CI prepared-env archive not applicable)",
+    "fixture_strategy": "none — subject module executes against repo sources with its own in-test real-git fixture; runner JSON emitted to /tmp (not retained as wave evidence)",
+    "runner_revision": "dc99df55ad604925f2897eed7be206f69b216fbb scripts/run-tests.rkt (shard context)",
+    "bytecode_clear_command": "find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +  (same as ci.yml 'Clear stale bytecode' step)",
+    "sample_count": 9,
+    "aggregation_method": "all samples retained verbatim; aggregate = median; ranges reported",
+    "samples": [
+      {"context": "standalone_cold", "sample": 1, "elapsed_ms": 35787, "exit_code": 0, "compiled_dir_state": "cleared-before-run (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "standalone_cold", "sample": 2, "elapsed_ms": 37321, "exit_code": 0, "compiled_dir_state": "cleared-before-run (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "standalone_cold", "sample": 3, "elapsed_ms": 36139, "exit_code": 0, "compiled_dir_state": "cleared-before-run (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "standalone_warm", "sample": 1, "elapsed_ms": 37067, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "standalone_warm", "sample": 2, "elapsed_ms": 36617, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "standalone_warm", "sample": 3, "elapsed_ms": 36630, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "fast_shard_context", "sample": 1, "elapsed_ms": 38483, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket scripts/run-tests.rkt --suite fast --sequential --json-out /tmp/w0-bench-shard.json tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "fast_shard_context", "sample": 2, "elapsed_ms": 38671, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket scripts/run-tests.rkt --suite fast --sequential --json-out /tmp/w0-bench-shard.json tests/test-gsd-delivery-verifier.rkt"},
+      {"context": "fast_shard_context", "sample": 3, "elapsed_ms": 38652, "exit_code": 0, "compiled_dir_state": "no persisted compiled dirs observed (0 dirs)", "command": "racket scripts/run-tests.rkt --suite fast --sequential --json-out /tmp/w0-bench-shard.json tests/test-gsd-delivery-verifier.rkt"}
+    ],
+    "aggregation": {
+      "standalone_cold_median_ms": 36139, "standalone_cold_range_ms": [35787, 37321],
+      "standalone_warm_median_ms": 36630, "standalone_warm_range_ms": [36617, 37067],
+      "fast_shard_context_median_ms": 38652, "fast_shard_context_range_ms": [38483, 38671],
+      "warm_minus_cold_median_ms": 491,
+      "interpretation": "Cold ≈ warm (Δmedian <0.5s, ~1.4%): the verifier's standalone cost is dominated by test-body work (in-test real-git fixture setup + subprocess execution), not bytecode preparation. Prepared-env restoration cannot materially reduce it; verifier-split justification rests on ownership/proof-design semantics per §1.2, and any future latency gate must key on the test-body, not preparation."
+    }
+  },
+  "baseline_run_prior_attempt_v1_00_28": {
+    "note": "Retained from prior (infra-failed) W0 attempt: benchmark executed at the v1.00.28 baseline SHA before any wave changes — host- and commit-dependent, retained as baseline evidence.",
+    "commit_sha": "293b6a271aa1",
+    "tree_sha": "b169d71cb73d",
+    "runner_class": "local-development:x86_64",
+    "os": "Linux Mint 22.3",
+    "racket_version": "8.10 [cs]",
+    "prepared_env": "cold/no-prepared-artifact",
+    "samples_summary": {
+      "cold_median_ms": 29776, "cold_range_ms": [29580, 30106],
+      "warm_median_ms": 30133, "warm_range_ms": [29917, 30257],
+      "extensions_suite_shard_median_ms": 262435,
+      "note": "shard context in the baseline run used the extensions suite via scripts/run-tests.rkt (includes sibling extension tests); superseded by the wave-branch run's explicit fast-shard single-subject context"
+    }
+  },
+  "cross_run_comparison": [
+    {"context_pair": "stale-header vs wave-branch cold", "delta": "123s vs 36.1s median — header value is ~3.4x current observed standalone cost on this host; unattributed provenance; classified STALE"},
+    {"context_pair": "census-w0 (18.465s) vs wave-branch cold (36.139s)", "delta": "different host + compiler-cache state + commit; both retained with provenance; neither is universal"}
+  ],
+  "reproducibility": "Wave-branch run: 9/9 samples exit 0 at identical commit/tree/package fingerprint. Benchmark methodology (tmp/bench.py harness, perf_counter timing, sanctioned bytecode-clear between cold samples) is preserved in the wave evidence log; artifact regenerates from retained samples.",
+  "behavior_change": "none (measurement-only wave; no source edits)"
+}
