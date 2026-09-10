@@ -2,6 +2,7 @@
 ;; @covers extensions/gsd/delivery-verifier.rkt
 ;; @speed fast  ;; @suite extensions
 ;; @boundary integration
+;; @timeout 300  ;; git-fixture-heavy suite: ~123s standalone, over the 120s default
 ;; W3 tier-ownership split: this file runs in the FAST tier but now contains
 ;; two suites. (1) The decision suite exercises verifier DECISION logic
 ;; (branch matching, changed-file detection, gate verdicts) over SYNTHETIC
