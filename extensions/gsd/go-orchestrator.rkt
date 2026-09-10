@@ -520,7 +520,9 @@
       'wave-blocked
       '()
       (format
-       "wave ~a blocked: predecessor wave ~a has no Delivery-Contract merge SHA; bind the evidence trio to the squash-merge SHA first, or relaunch with #:advance-override? #t (logged override)"
+       (string-append
+        "wave ~a blocked: predecessor wave ~a has no Delivery-Contract merge SHA; bind the"
+        " evidence trio to the squash-merge SHA first, or relaunch with #:advance-override? #t (logged override)")
        wave-idx
        (sub1 wave-idx)))]
     ;; Audit trail when the gate is overridden; falls through to launch.

@@ -639,10 +639,11 @@
     (add!
      'process-kill
      (kill-target-severity t)
-     (format
-      "Process kill without recorded-PID provenance: ~a ~a; record the PID (pidfile or $!) and kill \"$(cat <file>.pid)\" instead of killing by name or unpinned pattern"
-      (kill-target-verb t)
-      (kill-target-pattern t))
+     (format (string-append
+              "Process kill without recorded-PID provenance: ~a ~a; record the PID (pidfile or $!)"
+              " and kill \"$(cat <file>.pid)\" instead of killing by name or unpinned pattern")
+             (kill-target-verb t)
+             (kill-target-pattern t))
      (kill-target-position t)))
 
   (reverse findings))
