@@ -272,8 +272,16 @@
       ;; (extensions/gsd/delivery-verifier.rkt) (SERVICE_HANDLE, injectable
       ;; Git-facts runner so verifier decision-logic tests substitute the
       ;; whole boundary at once; #f keeps real git in production).
+      ;; +4 — BUG-0067 patient slow-lane infra auto-resume
+      ;; (extensions/gsd/policy.rkt): current-gsd-campaign-infra-patience /
+      ;; current-gsd-campaign-infra-max-delay (CONFIGURATION,
+      ;; settings-driven slow-lane knobs),
+      ;; current-gsd-campaign-infra-slow-delay (TURN_LOCAL, injectable
+      ;; backoff shape like retry-delay) and
+      ;; current-gsd-campaign-infra-wait-chunk-secs (CONFIGURATION,
+      ;; cancellation-check granularity for long waits).
       (check-equal? (length inventory-entries)
-                    230
+                    234
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

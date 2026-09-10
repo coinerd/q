@@ -2043,6 +2043,18 @@
           "reason": "timeout-race canary: the handler must occupy real time beyond the configured timeout for the timeout path to be exercised"
         }
       ]
+    },
+    "tests/test-gsd-campaign-infra-retry.rkt": {
+      "suite": "extensions",
+      "occurrences": [
+        {
+          "line": 487,
+          "text": "(sleep 0.5)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "BUG-0067 async cancellation writer: the /stop must land DURING the slow-lane chunked backoff to pin prompt cancellation detection; the test asserts detection at the next 1s chunk"
+        }
+      ]
     }
   },
   "summary": {

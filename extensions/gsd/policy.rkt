@@ -25,6 +25,10 @@
          current-gsd-wave-failure-context
          current-gsd-campaign-infra-retries
          current-gsd-campaign-infra-retry-delay
+         current-gsd-campaign-infra-patience
+         current-gsd-campaign-infra-max-delay
+         current-gsd-campaign-infra-slow-delay
+         current-gsd-campaign-infra-wait-chunk-secs
          current-gsd-wave-max-iterations
          current-gsd-max-consecutive-tool-calls
          current-gsd-release-check
@@ -122,7 +126,9 @@
 ;; attempt is NOT consumed by an automatic retry (D8 semantics preserved —
 ;; the attempt-count rollback in the infra branch keeps it so). Only bound
 ;; exhaustion stops the campaign, with an aggregated message listing all
-;; failure timestamps. Settings key: gsd.campaign-infra-retries.
+;; failure timestamps. Settings key: gsd.campaign-infra-retries (wired
+;; through the settings-query seam by BUG-0067 — the key was documented
+;; here since v1.00.22 but never actually read until then).
 (define current-gsd-campaign-infra-retries
   (make-parameter 3 (nonnegative-integer-guard 'current-gsd-campaign-infra-retries)))
 
@@ -135,6 +141,50 @@
         value
         (raise-argument-error who "(-> exact-positive-integer? real?)" value))))
 
+;; BUG-0067: patient slow-lane patience horizon (seconds of TOTAL slow-lane
+;; backoff after the fast budget exhausts). The fast budget (3 × 30/60/120s)
+;; is sized for short transients; bursty provider outages routinely outlast
+;; it, and stopping the campaign for a transient-class failure costs a
+;; manual /retry. The slow lane keeps re-attempting with increasing backoff
+;; until this horizon is consumed; the attempt is never consumed either way.
+;; 0 disables the slow lane and restores the v1.00.22–v1.00.28 fail-closed
+;; stop verbatim. Settings key: gsd.campaign-infra-patience.
+(define current-gsd-campaign-infra-patience
+  (make-parameter 7200 (nonnegative-integer-guard 'current-gsd-campaign-infra-patience)))
+
+;; BUG-0067: upper bound (seconds) for a single slow-lane backoff. Settings
+;; key: gsd.campaign-infra-max-delay.
+(define current-gsd-campaign-infra-max-delay
+  (make-parameter 900 (nonnegative-integer-guard 'current-gsd-campaign-infra-max-delay)))
+
+;; BUG-0067: slow-lane backoff shape (attempt-index → seconds). Default:
+;; exponential continuation 30·2^(n-1) capped by the max-delay parameter,
+;; so after the fast lane's 30/60/120 the waits keep doubling (240/480/
+;; 900/900…) instead of flattening at 120s — waiting out an outage requires
+;; waits LONGER than the outage, not more 120s hammering. Parameterized as
+;; a function so tests pin it to small deterministic values.
+(define current-gsd-campaign-infra-slow-delay
+  (make-parameter (lambda (attempt-index)
+                    (min (current-gsd-campaign-infra-max-delay)
+                         (* 30 (expt 2 (max 0 (sub1 attempt-index))))))
+                  (infra-retry-delay-guard 'current-gsd-campaign-infra-slow-delay)))
+
+;; BUG-0067: the slow lane sleeps in chunks of this many seconds so a
+;; durable /stop cancellation (persisted to the campaign record) ends the
+;; wait promptly instead of after a full backoff window (up to max-delay).
+;; Strictly positive: a 0s chunk would spin the cancellation-check loop
+;; forever without ever decrementing the remaining wait.
+(define current-gsd-campaign-infra-wait-chunk-secs
+  (make-parameter 15
+                  (let ([who 'current-gsd-campaign-infra-wait-chunk-secs])
+                    (lambda (v)
+                      (if (and (exact-integer? v) (positive? v))
+                          v
+                          (raise-argument-error who "exact-positive-integer?" v))))))
+
+;; Backoff delay (seconds) for the Nth automatic infra retry (1-based).
+;; Default: 30s → 60s → 120s → flat 120s. Parameterized as a function so
+;; tests pin it to 0 and keep the retry loop deterministic.
 (define (default-infra-retry-delay attempt)
   (min 120 (* 30 (expt 2 (max 0 (sub1 attempt))))))
 
