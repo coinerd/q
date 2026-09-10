@@ -8,7 +8,7 @@
 ;; then re-exports the public API.
 
 (require racket/contract
-         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query)
+         (only-in "../runtime/gsd-query.rkt" current-gsd-mode-query current-gsd-campaign-active-query)
          (only-in "../util/event/event.rkt" event?)
          "state-types.rkt"
          "state-events/registry.rkt"
@@ -17,6 +17,7 @@
          "state-events/goal-handlers.rkt")
 
 (provide current-gsd-mode-query
+         current-gsd-campaign-active-query
          (contract-out [apply-event-to-state (-> ui-state? event? ui-state?)]
                        [register-event-reducer! (-> string? procedure? void?)]
                        [call-with-test-registry (-> procedure? any)]

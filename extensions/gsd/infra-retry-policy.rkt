@@ -281,12 +281,22 @@
 ;; lane alike) emits gsd.campaign.infra-retry (payload: wave idx, attempt,
 ;; delay seconds, phase 'fast|'slow). A bus failure must never break the
 ;; retry loop itself.
-(define (emit-infra-retry-event! wave-idx attempt delay-secs #:phase [phase 'fast])
+(define (emit-infra-retry-event! wave-idx
+                                 attempt
+                                 delay-secs
+                                 #:phase [phase 'fast]
+                                 ;; BUG-0069: slow-lane callers pass the
+                                 ;; remaining patience so the TUI can show
+                                 ;; the horizon, not just this wait.
+                                 #:patience [patience #f])
   (with-handlers ([exn:fail? (lambda (e)
                                (log-warning "gsd: infra-retry event emission failed: ~a"
                                             (exn-message e)))])
-    (emit-gsd-event! 'gsd.campaign.infra-retry
-                     (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs 'phase phase))))
+    (emit-gsd-event!
+     'gsd.campaign.infra-retry
+     (if patience
+         (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs 'phase phase 'patience patience)
+         (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs 'phase phase)))))
 
 ;; =============================================================
 ;; v1.00.22 W7 (BUG-0042): budget/backoff/exhaustion-message seams,
