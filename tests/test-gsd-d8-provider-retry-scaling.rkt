@@ -30,7 +30,8 @@
                   campaign-result-message)
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-campaign-infra-retries
-                  current-gsd-campaign-infra-retry-delay)
+                  current-gsd-campaign-infra-retry-delay
+                  current-gsd-campaign-infra-patience)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-wave
                   make-campaign-record
@@ -179,8 +180,11 @@
                   ;; BUG-0024 (W3): pin the campaign-level infra
                   ;; retry bound to 0 so this stays the deterministic
                   ;; legacy fail-closed path (bound exhaustion → stop).
+                  ;; BUG-0067: patience 0 too — default patience would
+                  ;; enter the patient slow lane instead of stopping.
                   (define result
                     (parameterize ([current-gsd-campaign-infra-retries 0]
+                                   [current-gsd-campaign-infra-patience 0]
                                    [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
                       (run-campaign-wave
                        dir

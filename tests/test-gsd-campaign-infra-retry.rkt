@@ -32,6 +32,15 @@
 ;; ATTEMPT CONTEXT and gsd.campaign.infra-retry events. Test (6) below
 ;; pins the campaign-level contract: a stall kill must never surface as
 ;; a terminal campaign stop.
+;;
+;; BUG-0067 (2026-09-10): fast-budget exhaustion no longer stops the
+;; campaign by default — it enters the patient slow lane (backoff keeps
+;; doubling: 240/480/900/900…, capped) until the total patience horizon
+;; (gsd.campaign-infra-patience, default 7200s) is consumed. The legacy
+;; fail-closed stop is preserved verbatim under patience 0, so every
+;; exhaustion-path test below pins [current-gsd-campaign-infra-patience
+;; 0]; the slow lane itself is pinned by tests (7)/(8) below and in
+;; tests/test-gsd-infra-retry-slow-lane.rkt.
 
 (require rackunit
          racket/file
@@ -46,12 +55,19 @@
                   campaign-wave-index
                   campaign-wave-status
                   campaign-wave-attempt-count
-                  campaign-wave-attempt-context)
-         (only-in "../extensions/gsd/campaign-repository.rkt" load-or-migrate-campaign!)
+                  campaign-wave-attempt-context
+                  make-campaign-cancellation
+                  set-campaign-cancellation!)
+         (only-in "../extensions/gsd/campaign-repository.rkt"
+                  load-or-migrate-campaign!
+                  persist-campaign!)
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
          (only-in "../extensions/gsd/policy.rkt"
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay
+                  current-gsd-campaign-infra-patience
+                  current-gsd-campaign-infra-slow-delay
+                  current-gsd-campaign-infra-wait-chunk-secs
                   current-gsd-wave-failure-context)
          (only-in "../extensions/gsd/prompts.rkt" wave-attempt-context-block)
          (only-in "../extensions/gsd/events.rkt"
@@ -152,6 +168,10 @@
      (define runs (box 0))
      (define result
        (parameterize ([current-gsd-campaign-infra-retries 2]
+                      ;; BUG-0067: patience 0 pins the legacy fail-closed
+                      ;; stop — without it this scenario enters the slow
+                      ;; lane and keeps re-attempting.
+                      [current-gsd-campaign-infra-patience 0]
                       [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
          (run-campaign-wave dir
                             rec
@@ -187,6 +207,10 @@
                   (define runs (box 0))
                   (define result
                     (parameterize ([current-gsd-campaign-infra-retries 0]
+                                   ;; BUG-0067: patience 0 = legacy
+                                   ;; deterministic stop (the point of
+                                   ;; this D8 back-compat pin).
+                                   [current-gsd-campaign-infra-patience 0]
                                    [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
                       (run-campaign-wave
                        dir
@@ -267,6 +291,9 @@
      (define events-box (box '()))
      (set-gsd-event-bus! (lambda args (set-box! events-box (cons args (unbox events-box)))))
      (parameterize ([current-gsd-campaign-infra-retries 2]
+                    ;; BUG-0067: patience 0 pins the legacy exhaustion
+                    ;; count — exactly 2 fast-lane events, no slow lane.
+                    [current-gsd-campaign-infra-patience 0]
                     [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
        (run-campaign-wave
         dir
@@ -371,3 +398,113 @@
    (lambda ()
      (set-gsd-event-bus! void)
      (cleanup-tmp dir))))
+
+;; ============================================================
+;; (7) BUG-0067: fast-budget exhaustion enters the patient slow lane
+;; ============================================================
+
+;; v1.00.29 launch day (campaign 6ae3ac51): two provider bursts outlasted
+;; the fast budget (3 × 30/60/120s) and stopped the campaign for a
+;; transient-class failure — manual /retry each time. With patience
+;; remaining, exhaustion must keep re-attempting (backoff doubling past
+;; the 120s cap) until the horizon is consumed, and only then fail
+;; closed — with the attempt never consumed either way.
+(test-case "BUG-0067: fast-budget exhaustion auto-resumes in the slow lane until the patience horizon"
+  (define dir (make-campaign-base))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (load-or-migrate dir))
+     (define runs (box 0))
+     (define result
+       (parameterize ([current-gsd-campaign-infra-retries 1]
+                      [current-gsd-campaign-infra-patience 3]
+                      ;; 1s slow waits keep the test fast while still
+                      ;; exercising the full consume/re-enter cycle.
+                      [current-gsd-campaign-infra-slow-delay (lambda (_idx) 1)]
+                      [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+         (run-campaign-wave dir
+                            rec
+                            0
+                            #:runner (lambda (idx)
+                                       (set-box! runs (add1 (unbox runs)))
+                                       (wave-execution-outcome 'infra-failed
+                                                               "connection reset by peer"))
+                            #:verifier (lambda (_) #t))))
+     (check-eq? (campaign-result-status result) 'wave-cancelled)
+     ;; 1 initial run + 1 fast retry + 3 slow-lane retries (patience 3
+     ;; at 1s each) = 5 executor runs before the horizon is consumed.
+     (check-equal? (unbox runs) 5)
+     (check-true (string-contains? (campaign-result-message result)
+                                   "after 1 automatic + 3 patient slow-lane retries")
+                 "terminal message must account for the slow lane")
+     (check-true (string-contains? (campaign-result-message result) "attempt not consumed"))
+     ;; Fail-closed but re-attemptable: pending, attempt NOT consumed,
+     ;; context preserved for the next /go.
+     (define after (load-or-migrate dir))
+     (check-eq? (wave-status* after 0) 'pending)
+     (check-equal? (wave-attempt-count* after 0) 0)
+     (check-true (positive? (string-length (wave-attempt-context* after 0)))))
+   (lambda () (cleanup-tmp dir))))
+
+;; ============================================================
+;; (8) BUG-0067: a durable /stop cancellation ends slow-lane backoff
+;; ============================================================
+
+;; The slow lane may wait minutes (up to the max-delay cap) between
+;; re-attempts. /stop persists a cancellation into the campaign record;
+;; the chunked wait must notice it promptly instead of sleeping through
+;; the full backoff, and surface the cancellation — not an infra stop.
+(test-case "BUG-0067: /stop during slow-lane backoff cancels promptly"
+  (define dir (make-campaign-base))
+  (dynamic-wind void
+                (lambda ()
+                  (define rec (load-or-migrate dir))
+                  (define runs (box 0))
+                  (define result
+                    (parameterize ([current-gsd-campaign-infra-retries 0]
+                                   [current-gsd-campaign-infra-patience 600]
+                                   ;; One nominal 30s backoff — the cancellation must
+                                   ;; end the wait after ~1 chunk, not 30s.
+                                   [current-gsd-campaign-infra-slow-delay (lambda (_idx) 30)]
+                                   [current-gsd-campaign-infra-wait-chunk-secs 1]
+                                   [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
+                      (run-campaign-wave
+                       dir
+                       rec
+                       0
+                       #:runner
+                       (lambda (idx)
+                         (set-box! runs (add1 (unbox runs)))
+                         ;; Operator types /stop ~0.5s AFTER the
+                         ;; attempt dies: the cancellation lands
+                         ;; DURING the slow-lane backoff (the infra
+                         ;; arm's own attempt-boundary cancellation
+                         ;; check races the 0.5s writer and sees
+                         ;; nothing yet), so the chunked wait is
+                         ;; what must notice it.
+                         (thread (lambda ()
+                                   (sleep 0.5)
+                                   (define live (load-or-migrate dir))
+                                   (set-campaign-cancellation!
+                                    live
+                                    (make-campaign-cancellation "operator /stop" (current-seconds)))
+                                   (persist-campaign! dir live)))
+                         (wave-execution-outcome 'infra-failed "connection reset by peer"))
+                       #:verifier (lambda (_) #t))))
+                  (check-eq? (campaign-result-status result) 'wave-cancelled)
+                  (check-true (string-contains? (campaign-result-message result)
+                                                "campaign cancelled during infra-retry backoff"))
+                  ;; The wait ended on cancellation, not after the full 30s backoff:
+                  ;; exactly one executor run happened.
+                  (check-equal? (unbox runs) 1)
+                  (define after (load-or-migrate dir))
+                  ;; The wave stays PENDING (re-attemptable): the infra arm's
+                  ;; rollback already cleared the attempt lease, so
+                  ;; persist-current-status!'s fence guard skips the
+                  ;; 'interrupted stamp — pending + a durable cancellation in
+                  ;; the record is the honest state (next /go is refused at
+                  ;; the entry gate until the cancellation is cleared).
+                  (check-eq? (wave-status* after 0) 'pending)
+                  (check-equal? (wave-attempt-count* after 0) 0))
+                (lambda () (cleanup-tmp dir))))

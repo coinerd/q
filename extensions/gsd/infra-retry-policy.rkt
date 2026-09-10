@@ -12,6 +12,7 @@
 ;; module directly.
 
 (require racket/string
+         racket/control
          "../../util/loop-result.rkt"
          (only-in "wave-runner-port.rkt" wave-execution-outcome)
          (only-in "wave-executor.rkt"
@@ -23,7 +24,15 @@
          (only-in "stall-policy.rkt" stall-cause-message?)
          (only-in "policy.rkt"
                   current-gsd-campaign-infra-retries
-                  current-gsd-campaign-infra-retry-delay))
+                  current-gsd-campaign-infra-retry-delay
+                  current-gsd-campaign-infra-patience
+                  current-gsd-campaign-infra-max-delay
+                  current-gsd-campaign-infra-slow-delay
+                  current-gsd-campaign-infra-wait-chunk-secs)
+         (only-in "../../runtime/settings-query.rkt"
+                  gsd-campaign-infra-retries
+                  gsd-campaign-infra-patience
+                  gsd-campaign-infra-max-delay))
 
 (provide infra-failure?
          prompt-run-result->outcome
@@ -268,15 +277,16 @@
     (log-warning "gsd: ~a" warning))
   warning)
 
-;; Best-effort observability: every automatic retry emits
-;; gsd.campaign.infra-retry (payload: wave idx, attempt, delay seconds).
-;; A bus failure must never break the retry loop itself.
-(define (emit-infra-retry-event! wave-idx attempt delay-secs)
+;; Best-effort observability: every automatic retry (fast lane and slow
+;; lane alike) emits gsd.campaign.infra-retry (payload: wave idx, attempt,
+;; delay seconds, phase 'fast|'slow). A bus failure must never break the
+;; retry loop itself.
+(define (emit-infra-retry-event! wave-idx attempt delay-secs #:phase [phase 'fast])
   (with-handlers ([exn:fail? (lambda (e)
                                (log-warning "gsd: infra-retry event emission failed: ~a"
                                             (exn-message e)))])
     (emit-gsd-event! 'gsd.campaign.infra-retry
-                     (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs))))
+                     (hasheq 'wave wave-idx 'attempt attempt 'delay delay-secs 'phase phase))))
 
 ;; =============================================================
 ;; v1.00.22 W7 (BUG-0042): budget/backoff/exhaustion-message seams,
@@ -310,6 +320,91 @@
                          "(attempt not consumed); re-run /go when the provider is healthy. "
                          "Failures: ~a")
           (current-gsd-campaign-infra-retries)
-          (string-join (for/list ([f (cdr (unbox state))])
-                         (format "attempt ~a at ~a" (car f) (cadr f)))
-                       "; ")))
+          (infra-failure-ledger-string state)))
+
+;; Shared aggregation of the recorded failure timestamps (attempt, when).
+(define (infra-failure-ledger-string state)
+  (string-join (for/list ([f (cdr (unbox state))])
+                 (format "attempt ~a at ~a" (car f) (cadr f)))
+               "; "))
+
+;; Per-invocation slow-lane ledger (BUG-0067): remaining patience
+;; seconds, slow retries spent, total slow backoff seconds.
+(struct infra-slow-lane-state (patience-box retries-box spent-box) #:transparent)
+(define (make-infra-slow-lane-state patience)
+  (infra-slow-lane-state (box patience) (box 0) (box 0)))
+
+;; =============================================================
+;; BUG-0067: patient slow lane — bounded auto-resume past the fast
+;; budget. The fast budget (3 × 30/60/120s) is sized for short
+;; transients, but bursty provider outages routinely outlast it
+;; (v1.00.29 W0/W1, 2026-09-10: three stops in one afternoon; the
+;; provider answered 10/10 clean probes between bursts). When the fast
+;; budget exhausts with patience remaining, the coordinator keeps
+;; re-attempting with backoff that keeps DOUBLING past the fast lane's
+;; 120s cap (240/480/900/900… capped at the max-delay parameter) until
+;; the total patience horizon is consumed. The attempt is never
+;; consumed either way; patience 0 restores the legacy fail-closed stop
+;; verbatim. Waits are chunked so a durable /stop cancellation ends
+;; them promptly.
+;; =============================================================
+
+(provide infra-slow-lane-backoff-secs
+         infra-patience-consume!
+         infra-patience-exhausted-message
+         resolve-effective-infra-retry-policy
+         infra-slow-lane-state
+         infra-slow-lane-state?
+         make-infra-slow-lane-state
+         infra-slow-lane-state-patience-box
+         infra-slow-lane-state-retries-box
+         infra-slow-lane-state-spent-box)
+
+;; Backoff (seconds) for the slow-lane retry after fast-budget
+;; exhaustion. attempt-index continues the fast lane's 1-based numbering
+;; (4 after a budget of 3). Delegates to the slow-delay parameter
+;; (default: exponential continuation capped at max-delay).
+(define (infra-slow-lane-backoff-secs attempt-index)
+  ((current-gsd-campaign-infra-slow-delay) attempt-index))
+
+;; Spend delay-secs of the patience horizon; returns the remaining
+;; patience. Floors at 0 — a backoff larger than what is left is
+;; truncated by the caller before consuming.
+(define (infra-patience-consume! patience-box delay-secs)
+  (set-box! patience-box (max 0 (- (unbox patience-box) delay-secs)))
+  (unbox patience-box))
+
+;; Terminal message once the patience horizon is consumed. Keeps the
+;; legacy exhausted-message prefix ("provider/network failure persisted
+;; after … (attempt not consumed); re-run /go when the provider is
+;; healthy.") and adds the slow-lane accounting so an operator reading
+;; the stop can tell a fast-budget stop from a patient-horizon stop.
+(define (infra-patience-exhausted-message state slow-retries total-slow-backoff patience-horizon)
+  (format (string-append "provider/network failure persisted after ~a automatic + ~a patient "
+                         "slow-lane retries (~as backoff within the ~as patience horizon; "
+                         "attempt not consumed); re-run /go when the provider is healthy. "
+                         "Failures: ~a")
+          (current-gsd-campaign-infra-retries)
+          slow-retries
+          total-slow-backoff
+          patience-horizon
+          (infra-failure-ledger-string state)))
+
+;; Composition root (BUG-0044 pattern): resolve the effective infra-retry
+;; policy for one campaign run. Precedence: keyword override > settings key
+;; > canonical parameter default. Pure in `settings`; accessors already
+;; warn-and-default on invalid values so a typo'd settings file can never
+;; crash a campaign mid-wave.
+(define (resolve-effective-infra-retry-policy settings
+                                              #:retries [retries 'unset]
+                                              #:patience [patience 'unset]
+                                              #:max-delay [max-delay 'unset])
+  (values (if (eq? retries 'unset)
+              (or (gsd-campaign-infra-retries settings) (current-gsd-campaign-infra-retries))
+              retries)
+          (if (eq? patience 'unset)
+              (or (gsd-campaign-infra-patience settings) (current-gsd-campaign-infra-patience))
+              patience)
+          (if (eq? max-delay 'unset)
+              (or (gsd-campaign-infra-max-delay settings) (current-gsd-campaign-infra-max-delay))
+              max-delay)))

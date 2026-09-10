@@ -91,7 +91,10 @@
                      [gsd-stall-soft-limit gsd-stall-soft-limit]
                      [gsd-stall-hard-limit gsd-stall-hard-limit]
                      [gsd-stall-window gsd-stall-window]
-                     [gsd-stall-backstop gsd-stall-backstop])
+                     [gsd-stall-backstop gsd-stall-backstop]
+                     [gsd-campaign-infra-retries gsd-campaign-infra-retries]
+                     [gsd-campaign-infra-patience gsd-campaign-infra-patience]
+                     [gsd-campaign-infra-max-delay gsd-campaign-infra-max-delay])
          sandbox-enabled?
          sandbox-timeout
          sandbox-memory-limit

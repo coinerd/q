@@ -43,6 +43,7 @@
                   current-gsd-max-consecutive-tool-calls
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay
+                  current-gsd-campaign-infra-wait-chunk-secs
                   current-gsd-release-check)
          (only-in "prompts.rkt"
                   wave-failure-context-block
@@ -462,6 +463,12 @@
                                         #:hard stall-hard-limit
                                         #:window stall-window
                                         #:backstop stall-backstop))
+  ;; BUG-0067: infra-retry composition root — settings keys
+  ;; gsd.campaign-infra-* win, absent keys fall back to the canonical
+  ;; parameters (3 fast retries / 7200s patience / 900s slow cap);
+  ;; accessors warn-and-default on typos, never crash a campaign.
+  (define-values (effective-infra-retries effective-infra-patience effective-infra-max-delay)
+    (resolve-effective-infra-retry-policy (load-project-settings-silently base-dir)))
   ;; Startup visibility (BUG-0044 action 3): operators see the EFFECTIVE
   ;; thresholds in the wave log without reading source.
   (log-info "wave ~a: effective stall thresholds soft=~a hard=~a window=~a backstop=~a"
@@ -492,11 +499,14 @@
      ;; verdict. Bounded + at-least-once: a crash mid-retry leaves the
      ;; durable wave status 'pending (re-attemptable), never lost.
      ;; BUG-0024 W3: campaign-level infra-retry state, closed over by run-once*
-     ;; across recursive re-attempts. car = automatic retries left (initial
-     ;; current-gsd-campaign-infra-retries, default 3); cdr = accumulated failure
-     ;; descriptors ((attempt unix-timestamp) ...) for the aggregated stop
-     ;; message once the bound is exhausted.
-     (define infra-retry-state (box (cons (current-gsd-campaign-infra-retries) '())))
+     ;; across recursive re-attempts. car = automatic retries left; cdr =
+     ;; accumulated failure descriptors ((attempt unix-timestamp) ...) for
+     ;; the aggregated stop message once the bound is exhausted.
+     ;; BUG-0067: per-invocation scope shared across waves (documented
+     ;; choice — the slow lane makes exhaustion non-terminal, so sharing
+     ;; stays safe); infra-slow carries the patience ledger.
+     (define infra-retry-state (box (cons effective-infra-retries '())))
+     (define infra-slow (make-infra-slow-lane-state effective-infra-patience))
      ;; BUG-0060: head SHA at the last same-wave verification repair. A
      ;; second repair attempt on an unchanged head proves the executor
      ;; cannot repair and stops instead of burning the remaining budget.
@@ -1059,18 +1069,100 @@
                                 wt-box
                                 keep-branch-box
                                 attempt-id-box)))
-                 ;; Bound exhausted: fail closed with an aggregated message
-                 ;; listing every failure timestamp (attempt not consumed —
-                 ;; the durable wave stays pending and re-attemptable).
-                 ;; BUG-0043 (W2): the terminal infra-failure text rides the
-                 ;; typed error transcript event.
-                 (begin
-                   (emit-wave-outcome-error! wave-idx
-                                             'infra-failed
-                                             (wave-execution-outcome-message run-result))
-                   (campaign-result 'wave-cancelled
-                                    '()
-                                    (infra-retry-exhausted-message infra-retry-state))))]
+                 ;; Fast budget exhausted. BUG-0067: a budget sized for
+                 ;; short transients must not stop the campaign when the
+                 ;; failure class is transient-by-definition — enter the
+                 ;; patient slow lane and keep re-attempting with backoff
+                 ;; that keeps DOUBLING (240/480/900/900…, capped at
+                 ;; effective-infra-max-delay) until the total patience
+                 ;; horizon is consumed. The attempt stays unconsumed
+                 ;; either way; patience 0 restores the v1.00.22–v1.00.28
+                 ;; fail-closed stop verbatim.
+                 (cond
+                   [(positive? (unbox (infra-slow-lane-state-patience-box infra-slow)))
+                    (define slow-index
+                      (+ effective-infra-retries
+                         1
+                         (unbox (infra-slow-lane-state-retries-box infra-slow))))
+                    (define delay-secs (infra-slow-lane-backoff-secs slow-index))
+                    ;; Never sleep longer than the patience that remains.
+                    (define effective-delay
+                      (min delay-secs (unbox (infra-slow-lane-state-patience-box infra-slow))))
+                    (infra-patience-consume! (infra-slow-lane-state-patience-box infra-slow)
+                                             effective-delay)
+                    (set-box! (infra-slow-lane-state-retries-box infra-slow)
+                              (add1 (unbox (infra-slow-lane-state-retries-box infra-slow))))
+                    (set-box! (infra-slow-lane-state-spent-box infra-slow)
+                              (+ (unbox (infra-slow-lane-state-spent-box infra-slow))
+                                 effective-delay))
+                    (log-info
+                     "gsd: wave ~a infra failure — slow-lane retry ~a in ~as (~as patience left) (attempt not consumed)"
+                     wave-idx
+                     (unbox (infra-slow-lane-state-retries-box infra-slow))
+                     effective-delay
+                     (unbox (infra-slow-lane-state-patience-box infra-slow)))
+                    (emit-infra-retry-event! wave-idx
+                                             (or failed-attempt 0)
+                                             effective-delay
+                                             #:phase 'slow)
+                    ;; Chunked wait (current-gsd-campaign-infra-wait-chunk-secs):
+                    ;; a durable /stop cancellation — persisted to the campaign
+                    ;; record, re-read here via observe — ends the wait promptly
+                    ;; instead of after a full backoff window (up to ~15 min at
+                    ;; the default cap).
+                    (let/ec slow-cancel
+                      (let chunk-loop ([left effective-delay])
+                        (when (> left 0)
+                          (sleep (min (current-gsd-campaign-infra-wait-chunk-secs) left))
+                          (let* ([chunk-used (min (current-gsd-campaign-infra-wait-chunk-secs) left)]
+                                 [observed-record (observe)]
+                                 [cancel-pending? (and observed-record
+                                                       (campaign-record-cancellation observed-record)
+                                                       #t)])
+                            (if cancel-pending?
+                                (slow-cancel (interrupt-current!
+                                              "campaign cancelled during infra-retry backoff"))
+                                (chunk-loop (- left chunk-used))))))
+                      ;; Wait completed without cancellation — re-enter
+                      ;; run-once* for the SAME wave with the same attempt
+                      ;; budget. The prior-attempt context block rides the
+                      ;; existing current-gsd-wave-failure-context prompt
+                      ;; plumbing — no parallel state (identical to the fast
+                      ;; lane re-entry).
+                      (parameterize ([current-gsd-wave-failure-context
+                                      (wave-attempt-context-block
+                                       (and infra-wave (campaign-wave-attempt-context infra-wave)))])
+                        (run-once* no-change-retries-left
+                                   repair-retries-left
+                                   wt-box
+                                   keep-branch-box
+                                   attempt-id-box)))]
+                   [else
+                    ;; Patience horizon consumed (or the slow lane disabled
+                    ;; with patience 0): fail closed with an aggregated
+                    ;; message listing every failure timestamp (attempt not
+                    ;; consumed — the durable wave stays pending and
+                    ;; re-attemptable). BUG-0043 (W2): the terminal
+                    ;; infra-failure text rides the typed error transcript
+                    ;; event.
+                    (emit-wave-outcome-error! wave-idx
+                                              'infra-failed
+                                              (wave-execution-outcome-message run-result))
+                    (campaign-result
+                     'wave-cancelled
+                     '()
+                     (parameterize ([current-gsd-campaign-infra-retries effective-infra-retries])
+                       (if (zero? (unbox (infra-slow-lane-state-retries-box infra-slow)))
+                           ;; Legacy byte-for-byte stop (no
+                           ;; slow-lane retries spent —
+                           ;; patience disabled or a horizon
+                           ;; smaller than one backoff).
+                           (infra-retry-exhausted-message infra-retry-state)
+                           (infra-patience-exhausted-message
+                            infra-retry-state
+                            (unbox (infra-slow-lane-state-retries-box infra-slow))
+                            (unbox (infra-slow-lane-state-spent-box infra-slow))
+                            effective-infra-patience))))]))]
             [(cancelled interrupted)
              (mark-attempt-artifact-terminal! base-dir
                                               (campaign-plan-id active)
