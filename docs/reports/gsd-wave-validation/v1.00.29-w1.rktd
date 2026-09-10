@@ -6,7 +6,7 @@
  (wave v1.00.29-w1)
  (implementation-sha 42415692)
  (branch campaign/v1.00.29-w1)
- (verify-command "racket tests/test-shell-risk.rkt; racket tests/test-tool-bash-security.rkt; racket tests/test-tool-bash-security-edges.rkt; racket tests/test-gsd-go-orchestrator.rkt; racket tests/test-gsd-governance-workflow.rkt; racket scripts/metrics.rkt --lint")
+  (verify-command "racket tests/test-shell-risk.rkt && racket tests/test-tool-bash-security.rkt && racket tests/test-tool-bash-security-edges.rkt && racket tests/test-gsd-go-orchestrator.rkt && racket tests/test-gsd-governance-workflow.rkt && racket scripts/metrics.rkt --lint")
  (results
   ((criterion "shell-risk kill-risk classifier green")
    (command "racket tests/test-shell-risk.rkt")
@@ -31,7 +31,7 @@
    (result "PASS: .pi/extensions/q-release/index.ts:143 uses git diff --name-only --diff-filter=ACMR with existsSync guard (mirrors scripts/pre-commit.rkt:143 file-exists?); replay: old enumeration 45 .rkt paths (2 deleted) → ACMR 43, 0 absent from tree")))
  (prior-attempt-failure-disposition
   (reason "delivery verify harness exited 2 with /bin/sh: 0: Illegal option - (dash rejected the '- `racket ...`' bullet list as a command), not a product failure")
-  (disposition "verify declaration formatting owned by coordinator lane; product criteria re-validated individually above — all PASS on implementation SHA 42415692"))
+   (disposition "wave-doc Verify declaration repaired to the canonical single-shell-command &&-chain (delivery-verifier.rkt:683 canonical contract: decorated declarations are normalized, undecorated pass through byte-for-byte — the old prose bullet list failed raw under /bin/sh and would normalize to an unsafe code-span chain); the non-runnable semantic criteria are carried by the in-chain regression fixture (test-tool-bash-security-edges.rkt), the advance-gate suites, and this report's fmt-canonical replay; all six chain commands re-run green on this tree"))
  (issues-delivered ((id "#9635") (title "bash guard must reject self-matching process-kill patterns") (wave-deliverable "kill-risk classifier + destructive-process guard + regression fixture"))
                    ((id "#9620") (title "/go advances waves with no Delivery-Contract PR") (wave-deliverable "go-orchestrator wave-advance gate + override audit"))
                    ((id "#9651") (title "preflight fmt-canonical deleted-file false positive") (wave-deliverable "--diff-filter=ACMR + existsSync guard (tool-side, campaign base)"))))
