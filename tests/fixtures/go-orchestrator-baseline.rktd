@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.29 W1 merge: BUG-0064 wave-advance delivery gate (checkpoint 9f6b3ae7/cf2e0320 lineage) + BUG-0067 patient slow-lane infra auto-resume (settings-resolved budget via resolve-effective-infra-retry-policy, chunked cancellation-aware waits; policy seams in infra-retry-policy.rkt) 1589 -> 1653 lines, 22 -> 23 defines; target raised 1650 -> 1700 — both features are orchestration control flow fused to attempt-ledger fence closures; extracting the attempt-preservation block is deferred to a dedicated decomposition wave; supersedes the v1.00.29 BUG-0067 re-record")
- (line-count . 1653)
+  "v1.00.29 W1 merge 2: BUG-0064 wave-advance delivery gate + BUG-0067 patient slow-lane + BUG-0069 slow-lane event patience payload 1653 -> 1657 lines, 23 defines unchanged; target stays 1700 — growth is orchestration control flow fused to attempt-ledger fence closures; extracting the attempt-preservation block is deferred to a dedicated decomposition wave; supersedes the W1 merge-1 re-record")
+ (line-count . 1657)
  (top-level-define-count . 23)
  (w7-target-max-lines . 1700))

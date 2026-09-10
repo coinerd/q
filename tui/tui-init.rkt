@@ -25,6 +25,7 @@
          (only-in "../util/message/message.rkt" message)
          "../util/event/event-bus.rkt"
          "../runtime/agent-session.rkt"
+         (only-in "../runtime/gsd-query.rkt" current-gsd-campaign-active-query)
          "../runtime/session/session-types.rkt"
          "../runtime/session/executor-inheritance.rkt"
          "../runtime/provider/provider-factory.rkt"
@@ -164,6 +165,13 @@
 
   ;; Wire GSD mode query callback — defaults to 'idle
   ;; Caller (main.rkt) sets current-gsd-mode-query to gsm-ctx-current (via current-gsd-mode-query) if GSD is loaded
+
+  ;; BUG-0069: Let the error-hint layer ask whether a campaign currently
+  ;; owns the session. The lambda reads current-gsd-campaign-owner's DYNAMIC
+  ;; value at call time (bound by call-with-gsd-campaign-ownership around
+  ;; the whole campaign), so during a wave the "/retry to resubmit" advice
+  ;; is replaced by the truthful automatic-resume message.
+  (current-gsd-campaign-active-query (lambda () (if (current-gsd-campaign-owner) #t #f)))
 
   ;; Create one dedicated execution session per wave. The zero-argument
   ;; factory is called by the campaign adapter for each isolated prompt while

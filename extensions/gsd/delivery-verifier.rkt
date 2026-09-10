@@ -66,7 +66,10 @@
          check-git-available
          check-branch-matches
          check-wave-files-changed
-         check-verify-command)
+         check-verify-command
+         ;; BUG-0068 secondary 2: pure criteria-decoration normalizer,
+         ;; provided for the TDD suite (see tests/test-gsd-delivery-verifier.rkt)
+         normalize-declared-verify)
 
 ;; ============================================================
 ;; Structured verification result
@@ -671,6 +674,31 @@
       (let ([wave (and plan (plan-wave-ref plan wave-idx))])
         (and wave (non-empty (gsd-wave-verify wave))))))
 
+;; BUG-0068 secondary finding 2 (live: W0 14:26, W1 21:17/23:59 — every
+;; verification of a v1.00.29 wave died with `/bin/sh: 0: Illegal option -`):
+;; wave documents declare Verify criteria as markdown prose bullets —
+;; "- `racket tests/a.rkt`, `racket tests/b.rkt` green." — but the verifier
+;; ran the raw section text as ONE shell command, bullets, backticks,
+;; commas and prose included. Normalize before running:
+;;  - a declaration without markdown decoration (leading "- "/"* "/"+ "
+;;    bullets or backticks) is passed through byte-for-byte (the canonical
+;;    single-shell-command contract, e.g. W0's && chain);
+;;  - otherwise the code spans ARE the declared commands: extract them in
+;;    order and join with && so every declared command must be green —
+;;    the surrounding prose is documentation, not shell.
+(define (normalize-declared-verify declaration)
+  (define (decorated? s)
+    (regexp-match? #px"(^|\n)\\s*[-*+]\\s" s))
+  (define (has-code-span? s)
+    (regexp-match? #rx"`[^`]+`" s))
+  (define trimmed (string-trim declaration))
+  (if (or (not (decorated? trimmed)) (not (has-code-span? trimmed)))
+      trimmed
+      (string-join
+       (for/list ([span (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))])
+         (string-trim span))
+       " && ")))
+
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
   (define explicit (current-gsd-delivery-verify-command))
@@ -724,7 +752,9 @@
      (cond
        ;; the wave's DECLARED verify command is authoritative
        [(and declared (non-empty-string? declared))
-        (run-cmd (expand-project-base declared base-dir) (declared-verify-cwd base-dir) "")]
+        (run-cmd (expand-project-base (normalize-declared-verify declared) base-dir)
+                 (declared-verify-cwd base-dir)
+                 "")]
        ;; genuinely EMPTY verify declaration: the derived compile gate is a
        ;; separately described FALLBACK — never a silent substitute
        [else

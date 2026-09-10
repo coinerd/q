@@ -20,7 +20,9 @@
                   event-turn-id
                   event?)
          "../state-types.rkt"
-         (only-in "../../runtime/gsd-query.rkt" current-gsd-mode-query)
+         (only-in "../../runtime/gsd-query.rkt"
+                  current-gsd-mode-query
+                  current-gsd-campaign-active-query)
          ;; W7 v0.99.35: Pure helpers extracted from this module
          "handler-helpers.rkt"
          "helpers.rkt"
@@ -304,7 +306,11 @@
      (define retries-attempted (hash-ref payload 'retries-attempted #f))
      (define error-history (hash-ref payload 'errorHistory '()))
      (define history-types (remove-duplicates error-history))
-     (define hint (format-error-hint error-type retries-attempted history-types))
+     (define hint
+       (format-error-hint error-type
+                          retries-attempted
+                          history-types
+                          #:campaign-active? ((current-gsd-campaign-active-query))))
      (define streamed (ui-state-streaming-text state))
      (define s0
        (if (and streamed (> (string-length (string-trim streamed)) 0))
@@ -418,6 +424,35 @@
   (define payload (event-payload evt))
   (define path (hash-ref payload 'path "?"))
   (append-entry state (make-entry 'system (format "[archived] ~a" path) (event-time evt) (hash))))
+
+;; BUG-0069: The campaign coordinator's infra-retry lanes (fast: BUG-0024
+;; W3; slow: BUG-0067) emit gsd.campaign.infra-retry before each automatic
+;; re-attempt, but no TUI reducer consumed the event — the retry/resume
+;; happened silently while the transcript's last line still read "Type
+;; /retry to resubmit.", so the user could not know the session would
+;; resume (2026-09-10 live report, session V8CFZB5N → VXMB369Z). Surface
+;; the lane, delay, and attempt-not-consumed guarantee as a system entry.
+(define (handle-gsd-campaign-infra-retry state evt)
+  (define payload (event-payload evt))
+  (define wave (hash-ref payload 'wave #f))
+  (define delay (hash-ref payload 'delay 0))
+  (define phase (hash-ref payload 'phase 'fast))
+  (define lane
+    (if (eq? phase 'slow)
+        (let ([patience (hash-ref payload 'patience #f)])
+          (if patience
+              (format "slow-lane retry in ~as (~as patience left)" delay patience)
+              (format "slow-lane retry in ~as" delay)))
+        (format "fast-lane auto-retry in ~as" delay)))
+  (define text
+    (if wave
+        (format "[wave ~a] infra failure — ~a; attempt not consumed, resuming automatically"
+                wave
+                lane)
+        (format "infra failure — ~a; attempt not consumed, resuming automatically" lane)))
+  (append-entry
+   state
+   (make-entry 'system text (event-time evt) (hasheq 'infra-retry #t 'phase phase 'wave wave))))
 
 ;; ============================================================
 ;; Verification event handlers (W6 v0.99.5)
@@ -602,6 +637,7 @@
 (register-event-reducer! "gsd.plan.archived" handle-gsd-plan-archived)
 ;; BUG-0043 (W2): non-'done wave-execution-outcomes → [SYS] [ERROR] transcript entries.
 (register-event-reducer! "gsd.wave.outcome-error" handle-gsd-wave-outcome-error)
+(register-event-reducer! "gsd.campaign.infra-retry" handle-gsd-campaign-infra-retry)
 (register-event-reducer! "context.mid-turn-over-budget" handle-context-mid-turn-over-budget)
 (register-event-reducer! "session.compact.started" handle-compaction-lifecycle)
 (register-event-reducer! "session.compact.completed" handle-compaction-lifecycle)

@@ -79,6 +79,25 @@
 
 (define-test-suite
  format-error-hint-tests
+ (test-case "campaign-active hint replaces /retry advice with auto-resume truth (BUG-0069)"
+   (define feh (h-ref 'format-error-hint))
+   (define hint (feh 'provider-error 5 '() #:campaign-active? #t))
+   (check-true (string-contains? hint "will re-attempt")
+               "campaign-active hint must state the automatic re-attempt")
+   (check-true (string-contains? hint "5 retries") "campaign-active hint keeps the retry count")
+   (check-true (string-contains? hint "attempt not consumed")
+               "campaign-active hint carries the attempt-not-consumed guarantee")
+   (check-false (string-contains? hint "Type /retry")
+                "campaign-active hint must NOT advise manual /retry"))
+ (test-case "campaign-active without retry count stays truthful"
+   (define feh (h-ref 'format-error-hint))
+   (define hint (feh 'provider-error #f '() #:campaign-active? #t))
+   (check-true (string-contains? hint "will re-attempt"))
+   (check-false (string-contains? hint "Type /retry")))
+ (test-case "default keyword preserves legacy hints byte-for-byte"
+   (define feh (h-ref 'format-error-hint))
+   (check-equal? (feh 'provider-error 5 '())
+                 "Error persisted after 5 retries. Type /retry to resubmit."))
  (test-case "timeout hint without retries"
    (define feh (h-ref 'format-error-hint))
    (check-equal? (feh 'timeout #f '()) "Provider timed out. Type /retry to resubmit your prompt."))
@@ -250,12 +269,63 @@
            (check-eq? st0 st1 "unregistered event in test registry returns identity")))))
 
 ;; ============================================================
+;; Suite: gsd.campaign.infra-retry reducer (BUG-0069 — the event existed
+;; since the BUG-0024-W3 fast lane but had NO TUI consumer; retries were
+;; invisible while the transcript still said "Type /retry to resubmit")
+;; ============================================================
+
+(define-test-suite
+ infra-retry-event-tests
+ (test-case "fast-lane infra-retry event surfaces as system entry"
+   (define apply-fn (se-ref 'apply-event-to-state))
+   (define st0 (initial-ui-state))
+   (define st1
+     (apply-fn st0
+               (make-evt "gsd.campaign.infra-retry"
+                         (hasheq 'wave 1 'attempt 2 'delay 30 'phase 'fast))))
+   (check-not-eq? st0 st1 "infra-retry event must append a transcript entry")
+   (define entries (ui-state-transcript st1))
+   (define last (and (pair? entries) (car (reverse entries))))
+   (check-true (and last (eq? (transcript-entry-kind last) 'system)) "entry kind must be system")
+   (check-true (string-contains? (transcript-entry-text last) "[wave 1]"))
+   (check-true (string-contains? (transcript-entry-text last) "fast-lane auto-retry in 30s"))
+   (check-true (string-contains? (transcript-entry-text last) "attempt not consumed"))
+   (check-true (hash-ref (transcript-entry-meta last) 'infra-retry #f)))
+ (test-case "slow-lane event shows delay and remaining patience"
+   (define apply-fn (se-ref 'apply-event-to-state))
+   (define st1
+     (apply-fn (initial-ui-state)
+               (make-evt "gsd.campaign.infra-retry"
+                         (hasheq 'wave 2 'attempt 1 'delay 480 'phase 'slow 'patience 6720))))
+   (define entries (ui-state-transcript st1))
+   (define last (car (reverse entries)))
+   (check-true (string-contains? (transcript-entry-text last) "slow-lane retry in 480s"))
+   (check-true (string-contains? (transcript-entry-text last) "6720s patience left"))
+   (check-true (string-contains? (transcript-entry-text last) "resuming automatically")))
+ (test-case "slow-lane without patience degrades gracefully"
+   (define apply-fn (se-ref 'apply-event-to-state))
+   (define st1
+     (apply-fn (initial-ui-state)
+               (make-evt "gsd.campaign.infra-retry"
+                         (hasheq 'wave 1 'attempt 4 'delay 900 'phase 'slow))))
+   (define last (car (reverse (ui-state-transcript st1))))
+   (check-true (string-contains? (transcript-entry-text last) "slow-lane retry in 900s"))
+   (check-false (string-contains? (transcript-entry-text last) "patience left")))
+ (test-case "missing wave still renders (defensive)"
+   (define apply-fn (se-ref 'apply-event-to-state))
+   (define st1 (apply-fn (initial-ui-state) (make-evt "gsd.campaign.infra-retry" (hasheq 'delay 60))))
+   (define last (car (reverse (ui-state-transcript st1))))
+   (check-true (string-contains? (transcript-entry-text last) "infra failure"))
+   (check-false (string-contains? (transcript-entry-text last) "[wave"))))
+
+;; ============================================================
 ;; Run all tests
 ;; ============================================================
 
 (define-test-suite all-tui-event-boundary-tests
                    classify-error-type-tests
                    format-error-hint-tests
+                   infra-retry-event-tests
                    truncate-status-msg-tests
                    dedup-logic-tests
                    handler-thinness-tests
