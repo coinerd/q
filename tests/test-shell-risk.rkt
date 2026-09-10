@@ -198,9 +198,9 @@
   (define s (shell-risk-summary risks))
   (check-false (hash-ref s 'critical?)))
 
-;; ── BUG-0066 (v1.00.29 W1, #9635): process-kill classification ──
+;; ── BUG-0066 (W1, #9635): process-kill classification ──
 ;; Killing by interpreter name or by an unpinned pgrep pattern is the one
-;; command class that kills the agent host itself (the v1.00.28 W0 crash:
+;; command class that kills the agent host itself (the 2026-09-08 W0 crash:
 ;; `for p in $(pgrep -x racket); do kill "$p"; done`). Kills carrying
 ;; recorded-PID provenance — a literal PID, $!, a pidfile substitution,
 ;; pgrep -F/--pidfile, or --pid PIN — stay legal.

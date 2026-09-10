@@ -1175,7 +1175,7 @@ check-equal? actual 14 expected 12")
       (cleanup-tmp dir))))
 
 ;; ============================================================
-;; BUG-0064 wave-advance gate suite (v1.00.29 W1, #9620)
+;; BUG-0064 wave-advance gate suite (W1, #9620)
 ;; ============================================================
 
 (define BUG-0064-FAKE-SHA "0123456789abcdef0123456789abcdef01234567")

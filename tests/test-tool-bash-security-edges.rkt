@@ -66,11 +66,11 @@
       (check-true (hash-has-key? s 'critical?) "summary must have critical?"))
 
     ;; ============================================================
-    ;; BUG-0066 (v1.00.29 W1, #9635): process-kill regression fixtures
+    ;; BUG-0066 (W1, #9635): process-kill regression fixtures
     ;; ============================================================
 
     (test-case "BUG-0066 regression: the exact 2026-09-08 crash command is critical"
-      ;; v1.00.28 W0 crash: the executor's kill loop matched the agent's
+      ;; 2026-09-08 W0 crash: the executor's kill loop matched the agent's
       ;; own Racket VM and terminated q. The classifier must rate this
       ;; command class critical so the bash-safety guard refuses it.
       (define crash-cmd "for p in $(pgrep -x racket); do kill \"$p\"; done")

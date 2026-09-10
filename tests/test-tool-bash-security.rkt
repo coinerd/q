@@ -423,9 +423,9 @@
   (check-false (destructive-command? "sed -- -input.txt")))
 
 ;; ============================================================
-;; BUG-0066 (v1.00.29 W1, #9635): process-kill guard
+;; BUG-0066 (W1, #9635): process-kill guard
 ;;   Killing by name or by an unpinned pattern is the one command
-;;   class that can kill the agent host itself (v1.00.28 W0 crash:
+;;   class that can kill the agent host itself (2026-09-08 W0 crash:
 ;;   `kill $(pgrep -x racket)` matched q's own Racket VM). The guard
 ;;   must refuse kill-by-name forms and name the safe recorded-PID
 ;;   alternative; pidfile / literal recorded-PID kills stay allowed.
@@ -437,7 +437,7 @@
   (check-not-false (process-kill-refusal? "pkill -f q-agent"))
   (check-not-false (process-kill-refusal? "kill $(pgrep -f q-agent)")))
 
-(test-case "BUG-0066: the exact v1.00.28 W0 crash command is refused"
+(test-case "BUG-0066: the exact 2026-09-08 W0 crash command is refused"
   (check-not-false (process-kill-refusal? "for p in $(pgrep -x racket); do kill \"$p\"; done")))
 
 (test-case "BUG-0066: bracket-trick pgrep variant does not bypass the guard"
