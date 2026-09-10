@@ -89,8 +89,23 @@
                 [_ 'provider-error]))))
 
 ;; M-09: Extracted error hint generation (pure function)
-(define (format-error-hint error-type retries-attempted history-types)
+;; BUG-0069: campaign-active? — when a GSD campaign owns the session, a
+;; failed turn is re-attempted automatically by the campaign's infra-retry
+;; lanes (BUG-0024 W3 fast lane, BUG-0067 slow lane); telling the user to
+;; "type /retry to resubmit" is wrong advice and hid that the session had
+;; already resumed on its own (2026-09-10 live report). The campaign-active
+;; branch states the truth; every other branch stays byte-for-byte.
+(define (format-error-hint error-type
+                           retries-attempted
+                           history-types
+                           #:campaign-active? [campaign-active? #f])
   (cond
+    [campaign-active?
+     (if (and retries-attempted (> retries-attempted 0))
+         (format
+          "Error persisted after ~a retries. The campaign will re-attempt this wave automatically (attempt not consumed) — no /retry needed."
+          retries-attempted)
+         "The campaign will re-attempt this wave automatically (attempt not consumed) — no /retry needed.")]
     [(and retries-attempted (> retries-attempted 0))
      (cond
        [(and (member 'timeout history-types) (member 'rate-limit history-types))

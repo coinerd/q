@@ -1104,7 +1104,11 @@
                     (emit-infra-retry-event! wave-idx
                                              (or failed-attempt 0)
                                              effective-delay
-                                             #:phase 'slow)
+                                             #:phase 'slow
+                                             ;; BUG-0069: surface the remaining
+                                             ;; patience horizon in the TUI.
+                                             #:patience
+                                             (unbox (infra-slow-lane-state-patience-box infra-slow)))
                     ;; Chunked wait (current-gsd-campaign-infra-wait-chunk-secs):
                     ;; a durable /stop cancellation — persisted to the campaign
                     ;; record, re-read here via observe — ends the wait promptly
