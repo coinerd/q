@@ -77,7 +77,8 @@
                   gsd-ctx-set-state!
                   gsd-ctx-set-history!
                   current-gsd-ctx)
-         (only-in "../../util/loop-result.rkt" make-loop-result))
+         (only-in "../../util/loop-result.rkt" make-loop-result)
+         (only-in "gsd-test-helpers.rkt" bind-test-wave-merge-sha!))
 
 ;; ============================================================
 ;; Trace record
@@ -277,6 +278,8 @@
                              (format "prompt-W~a" wave-idx))
                            (lambda (wave-idx)
                              (gsm-ctx-transition-to! ctx 'verifying)
+                             (when approve?
+                               (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-idx))
                              approve?)))
   (define outcome-box (box 0))
   (execute-campaign-request! request
