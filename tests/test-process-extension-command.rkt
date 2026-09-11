@@ -12,7 +12,8 @@
          "../tui/commands.rkt"
          "../tui/state-types.rkt"
          (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
-         (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
+         (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign! campaign-plan-id)
+         (only-in "helpers/gsd-test-helpers.rkt" bind-test-wave-merge-sha!)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   make-campaign-request
                   register-campaign-request!)
@@ -105,7 +106,12 @@
         #:exists 'truncate))
      (define rec (migrate-campaign! dir))
      (define request
-       (make-campaign-request dir rec (lambda (idx) (format "isolated-W~a" idx)) (lambda (_) #t)))
+       (make-campaign-request dir
+                              rec
+                              (lambda (idx) (format "isolated-W~a" idx))
+                              (lambda (idx)
+                                (bind-test-wave-merge-sha! dir (campaign-plan-id rec) idx)
+                                #t)))
      (define token (register-campaign-request! request))
      (define prompt-channel (make-channel))
      (define factory-count 0)

@@ -22,7 +22,8 @@
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
          "../tui/state.rkt"
-         "../tui/commands.rkt")
+         "../tui/commands.rkt"
+         (only-in "helpers/test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir))
 
 ;; ============================================================
 ;; Helpers
@@ -141,41 +142,29 @@
     ;; /reload command shows success message in transcript
     ;; ----------------------------------------------------------
     (test-case "/reload command shows success message in transcript"
-      (define tmp-dir (make-temporary-file "q-reload-cmd-~a" 'directory))
-      (cleanup! tmp-dir)
+      (with-test-sandbox (lambda (sandbox)
+                           (define project-dir (test-sandbox-project-dir sandbox))
+                           (define reg (make-extension-registry))
+                           ;; Pre-register so we have something to unload before discovery.
+                           (register-extension! reg (extension "demo-ext" "0.1" "1" (hash)))
+                           (define cctx (make-test-cctx #:ext-reg reg))
+                           (define local-ext-dir (build-path project-dir ".q" "extensions"))
+                           (write-ext-file! local-ext-dir "demo-ext")
 
-      ;; Write extension file
-      (write-ext-file! tmp-dir "demo-ext")
+                           (unregister-extension! reg "demo-ext")
+                           (register-extension! reg (extension "demo-ext" "0.1" "1" (hash)))
 
-      (define reg (make-extension-registry))
-      ;; Pre-register so we have something to reload
-      (register-extension! reg (extension "demo-ext" "0.1" "1" (hash)))
+                           (define result (process-slash-command cctx 'reload))
+                           (check-equal? result 'continue)
 
-      (define cctx (make-test-cctx #:ext-reg reg))
-
-      ;; Parameterize current-directory so reload finds extensions in tmp-dir
-      ;; We place extensions directly in a .q/extensions/ subdir
-      (define local-ext-dir (build-path tmp-dir ".q" "extensions"))
-      (write-ext-file! local-ext-dir "demo-ext")
-
-      (parameterize ([current-directory tmp-dir])
-        ;; Clear the registry and register directly so reload has something to unload
-        (unregister-extension! reg "demo-ext")
-        (register-extension! reg (extension "demo-ext" "0.1" "1" (hash)))
-
-        (define result (process-slash-command cctx 'reload))
-        (check-equal? result 'continue)
-
-        ;; Check transcript for success message
-        (define state (unbox (cmd-ctx-state-box cctx)))
-        (define transcript (ui-state-transcript state))
-        (check-true (not (null? transcript)) "transcript has entries")
-        (define last-entry (car (reverse transcript)))
-        (check-true (string-contains? (transcript-entry-text last-entry) "reload complete")
-                    (format "transcript contains 'reload complete': ~a"
-                            (transcript-entry-text last-entry))))
-
-      (cleanup! tmp-dir))
+                           (define state (unbox (cmd-ctx-state-box cctx)))
+                           (define transcript (ui-state-transcript state))
+                           (check-true (not (null? transcript)) "transcript has entries")
+                           (define last-entry (car (reverse transcript)))
+                           (check-true (string-contains? (transcript-entry-text last-entry)
+                                                         "reload complete")
+                                       (format "transcript contains 'reload complete': ~a"
+                                               (transcript-entry-text last-entry))))))
 
     ;; ----------------------------------------------------------
     ;; /reload with no registry shows appropriate message

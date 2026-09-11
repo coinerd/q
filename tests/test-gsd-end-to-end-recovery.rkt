@@ -57,7 +57,8 @@
                   gsd-github-command-result-external-id
                   gsd-github-command-result-already-done?)
          (only-in "../extensions/gsd/github-port.rkt" make-github-port)
-         (only-in "helpers/gsd-port-fakes.rkt" make-fake-github-adapter fake-github-call-count))
+         (only-in "helpers/gsd-port-fakes.rkt" make-fake-github-adapter fake-github-call-count)
+         (only-in "helpers/gsd-test-helpers.rkt" bind-test-wave-merge-sha!))
 
 ;; ============================================================
 ;; Fixture: deterministic 4-wave campaign project
@@ -87,7 +88,10 @@
 (define (read-text p)
   (call-with-input-file p port->string))
 
-(define approve-wave (lambda (_) #t))
+(define (make-approve-wave dir rec)
+  (lambda (wave-index)
+    (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-index)
+    #t))
 
 ;; ============================================================
 ;; Recovery helper (mirrors run-campaign! startup + W2/W5 reconcile)
@@ -157,7 +161,7 @@
            (run-campaign! dir
                           rec1
                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))
-                          #:verifier approve-wave))
+                          #:verifier (make-approve-wave dir rec1)))
          (check-eq? (campaign-result-status r1) 'wave-failed)
          (check-eq? (wave-status* rec1 0) 'done)
          (check-eq? (wave-status* rec1 1) 'failed)
@@ -185,7 +189,7 @@
            (run-campaign! dir
                           rec2
                           #:runner (lambda (idx) (if (= idx 2) 'cancelled 'ok))
-                          #:verifier approve-wave))
+                          #:verifier (make-approve-wave dir rec2)))
          (check-eq? (campaign-result-status r2) 'wave-cancelled)
          (check-eq? (wave-status* rec2 0) 'done)
          (check-eq? (wave-status* rec2 1)
@@ -202,7 +206,8 @@
          ;; --- Process 3 (restart): interrupted W2 is retried and succeeds;
          ;; W3 succeeds -> campaign complete ---
          (define rec3 (load-or-migrate-campaign! dir))
-         (define r3 (run-campaign! dir rec3 #:runner (lambda (_) 'ok) #:verifier approve-wave))
+         (define r3
+           (run-campaign! dir rec3 #:runner (lambda (_) 'ok) #:verifier (make-approve-wave dir rec3)))
          (check-eq? (campaign-result-status r3) 'campaign-complete)
          (check-equal? (campaign-result-completed-waves r3) '(2 3))
          (check-eq? (wave-status* rec3 0) 'done)
@@ -293,29 +298,33 @@
 
     (test-case "crash after interrupted persist: durable-only, projections stay pending"
       (define dir (make-e2e-project))
-      (dynamic-wind
-       void
-       (lambda ()
-         (define rec (migrate-campaign! dir))
-         (begin-wave-persisted! dir rec 0)
-         (set-campaign-wave-status! (wave* rec 0) 'interrupted)
-         (persist-campaign! dir rec)
-         (define-values (oa pp) (recover-fresh! dir rec))
-         (check-equal? oa 0 "interrupted wave emits no completion event")
-         (define durable (load-campaign-record dir (campaign-plan-id rec)))
-         (check-eq? (wave-status* durable 0) 'interrupted)
-         (check-equal? (load-outbox dir (campaign-plan-id rec))
-                       '()
-                       "no phantom event for interrupted wave")
-         ;; Projections: interrupted is not a terminal plan status; PLAN.md
-         ;; keeps the Inbox marker (durable truth is the record, not the marker).
-         (check-true (string-contains? (read-text (build-path dir ".planning" "PLAN.md"))
-                                       "- [Inbox] W0"))
-         ;; Restart retries the interrupted wave.
-         (define r (run-campaign! dir durable #:runner (lambda (_) 'ok) #:verifier approve-wave))
-         (check-eq? (campaign-result-status r) 'campaign-complete)
-         (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0) 'done))
-       (lambda () (cleanup! dir))))
+      (dynamic-wind void
+                    (lambda ()
+                      (define rec (migrate-campaign! dir))
+                      (begin-wave-persisted! dir rec 0)
+                      (set-campaign-wave-status! (wave* rec 0) 'interrupted)
+                      (persist-campaign! dir rec)
+                      (define-values (oa pp) (recover-fresh! dir rec))
+                      (check-equal? oa 0 "interrupted wave emits no completion event")
+                      (define durable (load-campaign-record dir (campaign-plan-id rec)))
+                      (check-eq? (wave-status* durable 0) 'interrupted)
+                      (check-equal? (load-outbox dir (campaign-plan-id rec))
+                                    '()
+                                    "no phantom event for interrupted wave")
+                      ;; Projections: interrupted is not a terminal plan status; PLAN.md
+                      ;; keeps the Inbox marker (durable truth is the record, not the marker).
+                      (check-true (string-contains? (read-text (build-path dir ".planning" "PLAN.md"))
+                                                    "- [Inbox] W0"))
+                      ;; Restart retries the interrupted wave.
+                      (define r
+                        (run-campaign! dir
+                                       durable
+                                       #:runner (lambda (_) 'ok)
+                                       #:verifier (make-approve-wave dir durable)))
+                      (check-eq? (campaign-result-status r) 'campaign-complete)
+                      (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0)
+                                 'done))
+                    (lambda () (cleanup! dir))))
 
     (test-case "crash after done commit before outbox: reconcile rebuilds event + projections"
       (define dir (make-e2e-project))
@@ -372,7 +381,7 @@
            (run-campaign! dir
                           rec
                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))
-                          #:verifier approve-wave))
+                          #:verifier (make-approve-wave dir rec)))
          (check-eq? (campaign-result-status r) 'wave-failed)
          (define durable (load-or-migrate-campaign! dir))
          (recover-fresh! dir durable)

@@ -874,22 +874,27 @@
         }
       ]
     },
-    "tests/test-gsd-delivery-verifier.rkt": {
-      "suite": "fast",
+    "tests/test-gsd-delivery-verifier-e2e.rkt": {
+      "suite": "other",
       "occurrences": [
         {
-          "line": 550,
-          "text": "(sleep 2)",
-          "class": "C",
-          "disposition": "retained-canary",
-          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
-        },
-        {
-          "line": 716,
+          "line": 176,
           "text": "(sleep 0.02)",
           "class": "C",
           "disposition": "retained-canary",
-          "reason": "bounded settle wait preceding an observable assertion; no completion event exposed yet; flagged for W2 seam adoption"
+          "reason": "bounded polling interval while waiting for the owned verification job to become observable; the loop exits on registry ownership or thread termination and carries a hard 5s bound"
+        }
+      ]
+    },
+    "tests/test-gsd-delivery-verifier-git-contract.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 176,
+          "text": "(sleep 2)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "timestamp-separation canary: Git delivery evidence must be committed after campaign creation, and the production contract compares second-granularity timestamps"
         }
       ]
     },
