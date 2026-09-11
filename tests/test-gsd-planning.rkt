@@ -341,12 +341,19 @@
   (define hooks (extension-hooks gsd-planning-extension))
   (when (hash-has-key? hooks 'register-shortcuts)
     (define handler (hash-ref hooks 'register-shortcuts))
-    (handler ctx)
-    ;; Commands should be registered
-    (define cmd (ext-lookup-command ctx "/plan"))
-    (check-pred values cmd)
-    (check-pred values (ext-lookup-command ctx "/state"))
-    (check-pred values (ext-lookup-command ctx "/handoff"))))
+    ;; BUG-0068: register-shortcuts runs with a plain payload hash (no ctx);
+    ;; the handler amends 'commands with palette descriptor hashes.
+    (define result (handler (hasheq)))
+    (check-eq? (hook-result-action result) 'amend)
+    (define cmds (hash-ref (hook-result-payload result) 'commands))
+    (define names (map (lambda (c) (hash-ref c 'name)) cmds))
+    (check-not-false (member "/plan" names) "/plan registered")
+    (check-not-false (member "/state" names) "/state registered")
+    (check-not-false (member "/handoff" names) "/handoff registered")
+    (check-not-false (member "/go" names) "/go registered")
+    (for ([c cmds])
+      (check-true (hash? c) "command descriptor is a hash")
+      (check-true (string? (hash-ref c 'summary)) "descriptor carries a summary"))))
 
 (test-case "registered planning-read tool is callable"
   (with-temp-dir (lambda (dir)

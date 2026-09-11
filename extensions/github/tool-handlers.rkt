@@ -210,8 +210,37 @@
    "gh-wave-finish is quarantined and always fails before mutation after validating required arguments; use the external authenticated PR workflow.")
   (hook-pass #f))
 
-(define (register-github-commands ctx)
-  (ext-register-command! ctx "/milestone" "Quick milestone status" 'general '() '("ms"))
-  (ext-register-command! ctx "/issue" "Quick issue info" 'general '() '("i"))
-  (ext-register-command! ctx "/pr" "Quick PR status" 'general '())
-  (hook-pass #f))
+(define (register-github-commands payload)
+  ;; BUG-0068: payload-amend protocol (see gsd command-handlers note).
+  (hook-amend (hash-set payload
+                        'commands
+                        (list (hasheq 'name
+                                      "/milestone"
+                                      'summary
+                                      "Quick milestone status"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '("ms"))
+                              (hasheq 'name
+                                      "/issue"
+                                      'summary
+                                      "Quick issue info"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '("i"))
+                              (hasheq 'name
+                                      "/pr"
+                                      'summary
+                                      "Quick PR status"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '())))))

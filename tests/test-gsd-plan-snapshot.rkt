@@ -149,6 +149,47 @@
       (write-text! wave-path "# Wave 0\nStatus: DONE\n\nmalicious edit\n")
       (check-exn exn:fail? (lambda () (restore-plan-from-snapshot! dir campaign-id)))
       (check-regexp-match #rx"malicious edit" (file->string wave-path))
+      (delete-directory/files dir))
+
+    (test-case "classify-snapshot-drift distinguishes missing from content drift"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (delete-file (build-path dir ".planning" "waves" "W0-alpha.md"))
+      (write-text! (build-path dir ".planning" "waves" "W1-beta.md")
+                   "# Wave 1\n\nexternally edited body\n")
+      (define classified (classify-snapshot-drift dir campaign-id))
+      (check-not-false (member (list "waves/W0-alpha.md" 'missing) classified)
+                       "missing file classified")
+      (check-not-false (member (list "waves/W1-beta.md" 'content-drift) classified)
+                       "edited file classified as content drift")
+      (delete-directory/files dir))
+
+    (test-case "override restore rewrites existing drift with snapshot content"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (define wave-path (build-path dir ".planning" "waves" "W0-alpha.md"))
+      ;; The BUG-0068 incident shape: a self-authored wave-doc annotation
+      ;; blocks resume; the sanctioned remedy must be executable.
+      (write-text! wave-path (string-append wave-0 "\nAnnotated: attempt bookkeeping\n"))
+      (check-equal? (snapshot-drift? dir campaign-id) '("waves/W0-alpha.md"))
+      (check-exn exn:fail? (lambda () (restore-plan-from-snapshot! dir campaign-id)))
+      (define restored (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t))
+      (check-equal? restored '("waves/W0-alpha.md"))
+      (check-equal? (file->string wave-path) wave-0)
+      (check-equal? (snapshot-drift? dir campaign-id) '())
+      (delete-directory/files dir))
+
+    (test-case "override restore still refuses symlink boundaries"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (define live-plan (build-path dir ".planning" "PLAN.md"))
+      (define outside (build-path dir "outside-plan.md"))
+      (delete-file live-plan)
+      (make-file-or-directory-link outside live-plan)
+      (check-exn exn:fail?
+                 (lambda ()
+                   (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t)))
+      (check-false (file-exists? outside))
       (delete-directory/files dir))))
 
 (void (run-tests plan-snapshot-suite))

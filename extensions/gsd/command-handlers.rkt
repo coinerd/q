@@ -83,7 +83,7 @@
          (only-in "../../agent/state.rkt" current-empty-response-nudge))
 
 (provide (contract-out
-          [register-gsd-commands (-> extension-ctx? hook-result?)]
+          [register-gsd-commands (-> hash? hook-result?)]
           [handle-execute-command (-> hash? hook-result?)]
           [handle-go-command (-> (or/c path-string? #f) string? hook-result?)]
           [build-single-wave-prompt (-> path-string? gsd-plan? exact-nonnegative-integer? string?)]
@@ -94,8 +94,9 @@
           ;; BUG-0023 residual (v1.00.22 W1): exported so the inline-format
           ;; enforcement test can pin the /go precedence seam directly.
           [validate-plan-for-go
-           (-> path-string? (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?)
-                                  (list/c 'error string?)))])
+           (-> path-string?
+               (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?)
+                     (list/c 'error string?)))])
          extract-task-summary
          extract-last-failure)
 
@@ -134,16 +135,27 @@
                                     #:error (or err ""))
        (make-gsd-mode-changed-event #:session-id (current-gsd-session-id) #:turn-id 0 #:mode mode))))
 
-;; R6: Iterate gsd-command-specs for registration (single source of truth)
-(define (register-gsd-commands ctx)
-  (for ([spec (in-list gsd-command-specs)])
-    (ext-register-command! ctx
-                           (gsd-command-spec-canonical spec)
-                           (gsd-command-spec-description spec)
-                           'general
-                           '()
-                           (map (lambda (a) (substring a 1)) (gsd-command-spec-aliases spec))))
-  (hook-pass #f))
+;; R6: Iterate gsd-command-specs for registration (single source of truth).
+;; BUG-0068: register-shortcuts hooks run from wiring/extension-setup.rkt with
+;; a plain payload hash and NO extension ctx — the ctx-based
+;; ext-register-command! path contract-violated on every TUI startup and was
+;; silently swallowed. The payload-amend protocol is the wiring contract:
+;; amend 'commands with descriptor hashes the palette consumes.
+(define (register-gsd-commands payload)
+  (hook-amend (hash-set payload
+                        'commands
+                        (for/list ([spec (in-list gsd-command-specs)])
+                          (hasheq 'name
+                                  (gsd-command-spec-canonical spec)
+                                  'summary
+                                  (gsd-command-spec-description spec)
+                                  'category
+                                  'general
+                                  'args-spec
+                                  '()
+                                  'aliases
+                                  (map (lambda (a) (substring a 1))
+                                       (gsd-command-spec-aliases spec)))))))
 
 ;; ============================================================
 ;; Command dispatch
@@ -272,8 +284,7 @@
     [_
      (define kernel (validate-plan-artifacts base-dir))
      (cond
-       [(not (hash-ref kernel 'ok?))
-        (list 'error (hash-ref kernel 'error-message))]
+       [(not (hash-ref kernel 'ok?)) (list 'error (hash-ref kernel 'error-message))]
        [else
         (define plan (hash-ref kernel 'plan))
         (events:ctx-emit-gsd-event! (current-gsd-ctx)
@@ -295,7 +306,8 @@
                                        (make-gsd-plan-normalized-event
                                         #:session-id (current-gsd-session-id)
                                         #:turn-id 0
-                                        #:wave-count (length (gsd-normalized-plan-waves norm-result))))
+                                        #:wave-count
+                                        (length (gsd-normalized-plan-waves norm-result))))
            (define validation (validate-normalized-plan norm-result))
            (define validated-plan? (gsd-validated-plan? validation))
            (events:ctx-emit-gsd-event! (current-gsd-ctx)
@@ -308,9 +320,10 @@
                                         #:error-count (if validated-plan?
                                                           0
                                                           (length (validation-errors validation)))
-                                        #:warning-count (if validated-plan?
-                                                            0
-                                                            (length (validation-warnings validation)))))
+                                        #:warning-count
+                                        (if validated-plan?
+                                            0
+                                            (length (validation-warnings validation)))))
            (match validated-plan?
              [#f
               (list 'error
