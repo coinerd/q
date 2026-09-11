@@ -285,6 +285,17 @@
     (test-case "normalize-declared-verify passes plain commands through unchanged"
       (check-equal? (normalize-declared-verify "racket tests/test-foo.rkt")
                     "racket tests/test-foo.rkt"))
+    (test-case "BUG-0070: ignores prose identifiers and extracts late executable spans"
+      (check-equal?
+       (normalize-declared-verify
+        (string-append
+         "- unknown stays `unknown`; classification is `distinct_*`.\n"
+         "- criteria two; criteria three; criteria four; criteria five; criteria six.\n"
+         "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green."))
+       (string-append "racket scripts/run-tests.rkt --suite fast"
+                      " && racket scripts/metrics.rkt --lint")))
+    (test-case "BUG-0070: prose-only bullets do not become shell"
+      (check-equal? (normalize-declared-verify "- unknown stays `unknown`.") ""))
 
     ;; W2: this suite consumes git fixtures exclusively through the
     ;; shared `make-private-git-fixture!` constructor contract, so the
@@ -781,11 +792,11 @@
       (delete-file marker)
       (cleanup-tmp base))
 
-    (test-case "declared verify command runs from the base-dir project root"
-      ;; Declared commands are authored against the PLAN.md/.planning layout
-      ;; ("q/…"-prefixed targets), so the two-tier checkout must resolve them
-      ;; from base-dir even though the git root is <base>/q.
-      ;; Include spaces so placeholder expansion must shell-quote the path.
+    (test-case "BUG-0070: declared verify command runs from the q git root"
+      ;; Repo-relative Verify commands such as `racket scripts/...` are
+      ;; authored against q's Git root. They must work when base-dir is the
+      ;; parent planning root and worktree isolation is disabled.
+      ;; Include spaces so root resolution also covers quoted paths.
       (define base (make-temporary-file "dv cwd ~a" 'directory))
       (make-directory* (build-path base ".planning" "waves"))
       (make-directory* (build-path base "q" "scripts" "run-tests"))
@@ -815,13 +826,13 @@
                        0
                        "zero"
                        '("scripts/run-tests/reporting.rkt")
-                       "cd <project-base>/q && test -f scripts/run-tests/reporting.rkt")
+                       "test -f scripts/run-tests/reporting.rkt")
       (define plan (load-plan** base '("scripts/run-tests/reporting.rkt")))
       (define result
         (parameterize ([current-gsd-verification-registry (make-verification-registry)])
           (run-delivery-verification base plan 0)))
       (check-true (delivery-verification-approved? result)
-                  (format "base-dir cwd must resolve the <project-base>/q declaration: ~a"
+                  (format "declared command must run from the q Git root: ~a"
                           (delivery-verification-message result)))
       (cleanup-tmp base))
 
@@ -888,6 +899,17 @@
       (check-true (string-contains? msg "exit=3") msg)
       (check-true (string-contains? msg "state=failed") msg)
       (check-true (string-contains? msg "log=") msg)
+      (cleanup-tmp base))
+
+    (test-case "BUG-0070: prose-only Verify declaration fails closed without shell launch"
+      (define base (setup-standard-campaign!))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "- unknown stays `unknown`.")
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-false (delivery-verification-approved? result))
+      (check-true (string-contains? (delivery-verification-message result) "refusing prose-as-shell"))
       (cleanup-tmp base))
 
     (test-case "default delivery verify deadline is 14400s (bounded, multi-hour)"

@@ -631,9 +631,17 @@
 ;; isolation (the delivered tree as committed); otherwise the base-dir
 ;; project root the declaration was authored against (the PLAN.md/.planning
 ;; layout, where "q/…"-prefixed targets resolve).
-(define (declared-verify-cwd base-dir)
+(define (declared-verify-cwd base-dir command)
   (define ctx (current-gsd-delivery-branch-context))
-  (or (and ctx (branch-delivery-context-ref ctx 'worktree-path)) base-dir))
+  ;; BUG-0070: current declarations are Git-root-relative (`scripts/...`,
+  ;; `tests/...`), while historical declarations explicitly carry `q/...`
+  ;; paths authored against the parent planning root. Preserve both; an
+  ;; isolated worktree always wins because its checkout root is q.
+  (define explicitly-parent-relative? (regexp-match? #px"(^|[[:space:]])q/" command))
+  (or (and ctx (branch-delivery-context-ref ctx 'worktree-path))
+      (and explicitly-parent-relative? base-dir)
+      (git-root-for base-dir)
+      base-dir))
 
 ;; Wave documents use the project-base placeholder deliberately so one plan
 ;; can run in both the shared two-tier checkout (<base>/q) and an isolated
@@ -680,23 +688,52 @@
 ;; "- `racket tests/a.rkt`, `racket tests/b.rkt` green." — but the verifier
 ;; ran the raw section text as ONE shell command, bullets, backticks,
 ;; commas and prose included. Normalize before running:
-;;  - a declaration without markdown decoration (leading "- "/"* "/"+ "
-;;    bullets or backticks) is passed through byte-for-byte (the canonical
-;;    single-shell-command contract, e.g. W0's && chain);
-;;  - otherwise the code spans ARE the declared commands: extract them in
-;;    order and join with && so every declared command must be green —
-;;    the surrounding prose is documentation, not shell.
+;;  - a declaration without Markdown bullets is passed through byte-for-byte
+;;    (the canonical single-shell-command contract);
+;;  - otherwise only command-shaped inline-code spans are executable. Prose
+;;    identifiers (`unknown`, `distinct_*`, filenames, examples) are ignored;
+;;  - executable spans retain document order and join with &&. If none exist,
+;;    verification fails closed instead of launching prose through /bin/sh.
 (define (normalize-declared-verify declaration)
   (define (decorated? s)
     (regexp-match? #px"(^|\n)\\s*[-*+]\\s" s))
-  (define (has-code-span? s)
-    (regexp-match? #rx"`[^`]+`" s))
+  (define executable-prefixes
+    '("racket " "raco "
+                "bash "
+                "sh "
+                "python "
+                "python3 "
+                "pytest "
+                "npm "
+                "pnpm "
+                "yarn "
+                "make "
+                "git "
+                "cd "
+                "env "
+                "./"
+                "<project-base>"))
+  (define (executable-span? span)
+    (for/or ([prefix (in-list executable-prefixes)])
+      (string-prefix? span prefix)))
+  (define (canonicalize-span span)
+    ;; Campaign criteria historically abbreviate this one repository command.
+    ;; Turn the shorthand into the executable form rather than asking /bin/sh
+    ;; to find a non-executable metrics.rkt on PATH.
+    (cond
+      [(string-prefix? span "metrics.rkt ") (string-append "racket scripts/" span)]
+      [(string-prefix? span "scripts/metrics.rkt ") (string-append "racket " span)]
+      [else span]))
   (define trimmed (string-trim declaration))
-  (if (or (not (decorated? trimmed)) (not (has-code-span? trimmed)))
+  (if (not (decorated? trimmed))
       trimmed
       (string-join
-       (for/list ([span (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))])
-         (string-trim span))
+       (for/list ([raw (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))]
+                  #:do [(define span (string-trim raw))]
+                  #:when (or (executable-span? span)
+                             (string-prefix? span "metrics.rkt ")
+                             (string-prefix? span "scripts/metrics.rkt ")))
+         (canonicalize-span span))
        " && ")))
 
 (define (check-verify-command base-dir wave-idx plan)
@@ -752,9 +789,16 @@
      (cond
        ;; the wave's DECLARED verify command is authoritative
        [(and declared (non-empty-string? declared))
-        (run-cmd (expand-project-base (normalize-declared-verify declared) base-dir)
-                 (declared-verify-cwd base-dir)
-                 "")]
+        (define normalized (normalize-declared-verify declared))
+        (if (non-empty-string? normalized)
+            (run-cmd (expand-project-base normalized base-dir)
+                     (declared-verify-cwd base-dir normalized)
+                     "")
+            (cons
+             "verify"
+             (cons
+              #f
+              "declared Verify section contains no executable command; refusing prose-as-shell")))]
        ;; genuinely EMPTY verify declaration: the derived compile gate is a
        ;; separately described FALLBACK — never a silent substitute
        [else
