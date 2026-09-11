@@ -1,23 +1,36 @@
 ;; GSD Wave Evidence — v1.00.29 W2: Delivery-verifier boundary extraction
-;; Bound to implementation SHA: 3ba797c3 (branch campaign/v1.00.29-w2)
+;; Bound to verified checkpoint: de877a478b52384a5afd2953f6b94c111803f8f4
 ;; Date: 2026-09-11
 
 (evidence
  (wave v1.00.29-w2)
- (implementation-sha 3ba797c3)
+ (implementation-sha de877a478b52384a5afd2953f6b94c111803f8f4)
+ (branch campaign/v1.00.29-w2)
+ (ticket "#9590")
+ (deliverable
+  "Split the former delivery-verifier monolith into decision, real-Git contract, and end-to-end execution-plane owners without changing production behavior or increasing timeout policy.")
  (commits
-  ((sha 3ba797c3) (scope "repair verifier split drift + report + evidence trio (#9590)")
-   (detail "coverage-manifest entries repointed from the deleted monolith to the three owners (manifest duplication flagged by tests-gate; repoint, not suppression); W0 SHA256SUMS resynced (73197452…, working-tree artifact, frozen benchmark contract unchanged); provenance comments reworded to drop the hard-coded release literal (BUG-0009 lint); DELIVERY-VERIFIER-SPLIT-v1.00.29.md written with the machine-checkable claim map")))
- (tests
-  ((file tests/test-gsd-delivery-verifier-decision.rkt) (result "green standalone (unit-fast owner; cold 7.2s / warm 7.2s vs legacy whole-file ~123s — 17x under; 120s default cap kept, no timeout increase)"))
-  ((file tests/test-gsd-delivery-verifier-git-contract.rkt) (result "green standalone (required real-Git fail-closed canaries retained; cold 51.5s)"))
-  ((file tests/test-gsd-delivery-verifier-e2e.rkt) (result "green standalone (verify-gate execution plane + coordinator composition; cold 27.8s)"))
-  ((file scripts/run-tests/inventory.rkt --ownership-map --check) (result "PASS: tests/tier-ownership-matrix.json three delivery-verifier rows (decision / git-contract / e2e), eight columns per family, zero drift vs W0 frozen matrix"))
-  ((env GSD_DELIVERY_PARITY=1) (result "sampled parity 12/12 identical verdicts; adversarial parity 5/5 fail-closed on both pre- and post-split decision procedure"))
-  ((file scripts/ci-local.rkt) (result "18/18 lint checks PASS post-fix (version-expectations, metrics-sync, metrics-lint, tests, ivg incl.)"))
-  ((file scripts/metrics.rkt --lint) (result "green: static metrics match README.md")))
- (preflight-fix
-  (issue "mid-wave checkpoint commit initially refused by the version-expectations lint (BUG-0009): the provenance comments in all three new owners hard-coded the canonical release string; the lint counts comments as literals by design")
-  (change "reworded the three provenance sentences to cite the a2a10b9d pin as '(predecessor release)'; the full historical identification (release + SHA) lives in DELIVERY-VERIFIER-SPLIT-v1.00.29.md, which the lint does not scan")
-  (verification "check-version-expectations PASSED — 1480 test files scanned, 0 hard-coded literals; decision owner re-run green; contract/e2e owners re-parsed (module+ main guard)"))
- (issues-referenced (#9590)))
+  ((sha 3ba797c3) (scope "split drift repair, coverage-manifest repoint, provenance cleanup"))
+  ((sha 10d53bf9) (scope "final delivery-verifier ownership split, report, and metric synchronization"))
+  ((sha ba41101e) (scope "integrate BUG-0071 Wave A from protected main; refresh W2 wait-audit and ownership matrix"))
+  ((sha de877a47) (scope "post-verification README metrics synchronization")))
+ (ownership
+  ((file tests/test-gsd-delivery-verifier-decision.rkt) (boundary "pure decision and evidence interpretation"))
+  ((file tests/test-gsd-delivery-verifier-git-contract.rkt) (boundary "real-Git fail-closed contract canaries"))
+  ((file tests/test-gsd-delivery-verifier-e2e.rkt) (boundary "verification execution plane and coordinator composition")))
+ (recovery
+  (bug "BUG-0071 / #9662")
+  (mainline-fix-pr "#9663")
+  (mainline-fix-merge-sha db0c2053d57b137637d5132c30f9edd2e42abce1)
+  (detail
+   "The corrected verifier exposed deterministic mainline fast-gate drift. After #9663 merged, W2 integrated fresh main, replaced the deleted monolith's wait-audit row with rows for both split owners carrying live sleeps, and regenerated the governed tier-ownership matrix."))
+ (verification
+  ((command "racket scripts/run-tests.rkt tests/test-gsd-delivery-verifier-decision.rkt tests/test-gsd-delivery-verifier-git-contract.rkt tests/test-gsd-delivery-verifier-e2e.rkt tests/test-deterministic-clock.rkt tests/test-run-tests-metadata-discovery.rkt tests/test-milestone-gate.rkt tests/test-arch-parameters.rkt tests/test-gsd-end-to-end-recovery.rkt tests/test-process-extension-command.rkt tests/test-reload-command.rkt tests/test-hotspot-report.rkt")
+   (result "PASS: 11/11 files, 164/164 assertions"))
+  ((command "racket scripts/run-tests/inventory.rkt --ownership-map --check artifacts/tier-ownership/v1.00.28-w0/ownership-matrix.json")
+   (result "PASS: eight columns per family, zero drift"))
+  ((command "racket scripts/run-tests.rkt --suite fast && racket scripts/metrics.rkt --lint")
+   (result "PASS: 1183/1183 files, 17,505/17,505 assertions, zero failures/timeouts; all five metrics match README"))
+  ((command "racket /tmp/q-resume-w2-verify.rkt")
+   (result "PASS: status=wave-done completed=(2) message=wave completed; verifier log /var/tmp/gsd-verification-vj-1-1789128681640.7952.log")))
+ (issues-referenced ("#9590" "#9662")))
