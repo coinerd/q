@@ -11,10 +11,11 @@
 ;; its artifact (manifest tuple: repository, git SHA, source digest,
 ;; lock digest — verified by consumers on restore).
 ;;
-;; History: at 04637d83 (v1.00.28 release lane) the prepared-env RESTORE
-;; lane was observed skipping the stale-bytecode purge — restored .zo
+;; History: at 04637d83 (the release-lane BUG-0065 fix, immediately preceding
+;; this campaign) the prepared-env RESTORE lane was observed skipping the
+;; stale-bytecode purge — restored .zo
 ;; files carried extraction mtimes NEWER than the fresh checkout, so
-;; Racket executed producer-era bytecode (a v1.00.28-era suite ran
+;; Racket executed producer-era bytecode (a producer-era suite ran
 ;; against the v1.00.27 tag: the cohort-report failure). 04637d83 fixed
 ;; that single lane locally; W4 makes the invariant SYSTEMIC:
 ;;

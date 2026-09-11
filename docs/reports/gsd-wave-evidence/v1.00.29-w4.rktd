@@ -1,0 +1,42 @@
+;; GSD Wave Evidence — v1.00.29 W4: Systemic prepared-env bytecode pinning (BUG-0065)
+;; Bound to branch head: 17c9bca9 (campaign/v1.00.29-w4; docs/evidence commit follows)
+;; Date: 2026-09-11
+
+(evidence
+ (wave v1.00.29-w4)
+ (implementation-sha 17c9bca9)
+ (branch campaign/v1.00.29-w4)
+ (base a80d4abf)
+ (ticket "BUG-0065 (#9622) — systemic prepared-env bytecode pinning")
+ (commits
+  ((sha a2c91336) (scope "shared purge/verify step in setup-racket action (if: always(), fail-closed, loud+counted, RUNNER_TEMP stamp); release lane migrated off the bespoke 04637d83 step; ci/nightly/pilot lane comments; new tests/test-workflow-purge-contract.rkt (repo-wide fail-closed scan + BUG-0065 repro + negative fixture)"))
+  ((sha 17c9bca9) (scope "release-workflow contract extended: shared-action pins, release bespoke-step-absent pins, ci/nightly lane pins")))
+ (deliverables
+  ((file .github/actions/setup-racket/action.yml)
+   (detail "step 'Purge and verify workspace bytecode (BUG-0065, every path)' with if: always(): runs on every action path including a SUCCESSFUL prepared-env restore (the previously unpinned restore-success lane); counts workspace .zo outside the frozen fixture, deletes + removes compiled/ dirs, verifies zero remain (::error + exit 1 if not), reports ::notice with before/after counts + prepared-env outcome + step-summary block, stamps RUNNER_TEMP/bug-0065-purge-stamp.json (never the repo tree — strict tag-publish readiness keeps its clean-workspace guarantee)"))
+  ((file .github/workflows/release.yml)
+   (detail "bespoke 04637d83 purge step REMOVED; lane comment binds the test job to the shared invariant; the shared action purges before any test step (composite actions complete before subsequent job steps)"))
+  ((file .github/workflows/ci.yml)
+   (detail "BUG-0065 systemic lane comments on the PR/main restore paths and the legacy local-purge site (line 258) — all 7 setup-racket jobs inherit the shared purge; no inline bytecode deletion"))
+  ((file .github/workflows/nightly.yml)
+   (detail "lane comment: consumes no prepared restore today; covered anyway via the shared action (defense in depth)"))
+  ((file .github/workflows/prepared-environment-pilot.yml)
+   (detail "producer workflow: artifact carries the manifest tuple (repository, git SHA, source digest, lock digest); consumer jobs use the shared action"))
+  ((file tests/test-workflow-purge-contract.rkt)
+   (detail "NEW, 458 lines: full workflow-graph scan — every .github/workflows/*.yml parsed; every job with a prepared-env restore input must be purge-covered (own purge step, shared setup-racket action, or explicit lane-exempt comment); fail-closed on any future unpatched lane; negative fixture (inline hypothetical unpatched workflow turns the scan red via the same scan function); BUG-0065 regression — a restored workspace seeded with mtime-newer stale .zo executes post-purge CURRENT bytecode (v1.00.27 cohort-report repro, producer stamp verified on restore); rackunit-failure-exit discipline documented (output-checked, not exit-code-checked)"))
+  ((file tests/test-release-workflow-contract.rkt)
+   (detail "extended: the pre-migration local-step pin (which FAILED post-migration) replaced by shared-mechanism pins — action step name, if: always(), name '*.zo', fixture preservation, post_purge fail-closed check, ::notice counting, bug-0065-purge-stamp.json; release.yml bespoke-step pins pinned ABSENT (cannot silently return); release test job pin consumes the shared action; ci/nightly lane pins"))
+  ((file docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md)
+   (detail "root cause (extraction-timestamped .zo mtimes newer than checkout -> Racket trusts producer bytecode), systemic invariant, mechanism (consumer fail-closed purge+verify on every path; producer stamping; verified-restore metric preserved >=95%), full lane inventory table, before/after, contract-test map, local tooling guidance with the canonical purge commands")))
+ (tests
+  ((file tests/test-workflow-purge-contract.rkt)
+   (result "GREEN (output-checked: 0 FAILURE lines; direct run exits 0 but rackunit failures do not set exit status, so verdict is output-based): workflow-graph scan over all workflow files, restore-input jobs all purge-covered, negative fixture red, BUG-0065 repro green, loud/counted pins green"))
+  ((file tests/test-release-workflow-contract.rkt)
+   (result "GREEN (output-checked: 0 FAILURE lines) — including the extended BUG-0065 systemic pins; NOTE the pre-extension pin failed post-migration and was the false-green motivator for output-based verdicts"))
+  ((command "raco fmt -i tests/test-workflow-purge-contract.rkt tests/test-release-workflow-contract.rkt && git diff --exit-code -- .")
+   (result "PASS: zero formatting deltas; pre-commit hook (compile + affected-tests lint) clean on all three implementation commits"))
+  ((command "racket scripts/run-tests.rkt --suite fast && racket scripts/metrics.rkt --lint")
+   (result "NOT run in the wave lane (runtime rule: owned verification lane only) — declared Verify is executed by the coordinator; the two touched contract tests run green standalone as above")))
+ (residual
+  "Independent reviewer subagent timed out twice (infra, consistent with this session's provider degradation); the review record documents the orchestrator checklist review instead, with the reviewer timeout recorded. Coordinator-owned verification (declared Verify through its lane) remains the authoritative gate. Issue #9622 closure comment binds to the merge SHA after squash (coordinator step).")
+ (issues-referenced ("BUG-0065" "#9622" "v1.00.29 W6 precondition")))
