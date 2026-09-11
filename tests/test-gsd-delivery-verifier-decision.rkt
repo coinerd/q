@@ -1,6 +1,7 @@
 #lang racket/base
 ;; @covers extensions/gsd/delivery-verifier.rkt
-;; @speed fast  ;; @suite unit-fast
+;; @speed fast
+;; @suite unit-fast
 ;; @boundary unit
 ;; @timeout 120  ;; per-owner cap: measured cold median ~3s (v1.00.29 W0 benchmark), 120s = default cap
 ;;

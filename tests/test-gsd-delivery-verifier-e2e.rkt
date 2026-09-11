@@ -1,6 +1,7 @@
 #lang racket/base
 ;; @covers extensions/gsd/delivery-verifier.rkt
-;; @speed slow  ;; @suite extensions
+;; @speed slow
+;; @suite extensions
 ;; @boundary e2e
 ;; @timeout 180  ;; per-owner cap: measured cold median ~25s (v1.00.29 W2 measurement), includes 2s-sleep attach test
 ;;
