@@ -33,13 +33,18 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/file
+         racket/path
          racket/string
+         racket/system
          (only-in "helpers/private-fixture-templates.rkt" call-with-private-git-environment)
          (only-in "helpers/delivery-fixtures.rkt"
+                  GIT
                   make-tmp-git-repo
                   write-wave-doc!
                   write-state!
                   load-plan*
+                  load-plan**
                   make-git-branch!
                   make-git-file-change!
                   write-plan!
@@ -110,6 +115,48 @@
       (check-eq? (campaign-result-status result) 'wave-failed)
       (cleanup-tmp base))
 
+    (test-case "BUG-0070: declared verify command runs from the q git root"
+      ;; Repo-relative Verify commands such as `racket scripts/...` are
+      ;; authored against q's Git root. They must work when base-dir is the
+      ;; parent planning root and worktree isolation is disabled.
+      (define base (make-temporary-file "dv cwd ~a" 'directory))
+      (make-directory* (build-path base ".planning" "waves"))
+      (make-directory* (build-path base "q" "scripts" "run-tests"))
+      (define (sh . args)
+        (define exit
+          (parameterize ([current-directory (build-path base "q")])
+            (apply system*/exit-code GIT args)))
+        (unless (zero? exit)
+          (error 'cwd-pin "command failed: ~a" (cons 'sh args))))
+      (sh "init" "-q" ".")
+      (sh "config" "user.email" "test@example.com")
+      (sh "config" "user.name" "Test")
+      (sh "checkout" "-q" "-b" "main")
+      (call-with-output-file (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+                             (lambda (out)
+                               (display "#lang racket/base\n(provide w)\n(define w 1)\n" out))
+                             #:exists 'truncate)
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "baseline")
+      (call-with-output-file (build-path base "q" "scripts" "run-tests" "reporting.rkt")
+                             (lambda (out)
+                               (display "#lang racket/base\n(provide w)\n(define w 2)\n" out))
+                             #:exists 'truncate)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("scripts/run-tests/reporting.rkt")
+                       "test -f scripts/run-tests/reporting.rkt")
+      (define plan (load-plan** base '("scripts/run-tests/reporting.rkt")))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-true (delivery-verification-approved? result)
+                  (format "declared command must run from the q Git root: ~a"
+                          (delivery-verification-message result)))
+      (cleanup-tmp base))
+
     (test-case "verify executes through the bound registry: duplicates attach, never launch twice"
       ;; The owned-singleton lane: while one declared verify is running, a
       ;; duplicate verifier call for the same wave+command+checkout attaches
@@ -173,6 +220,17 @@
       (check-true (string-contains? msg "exit=3") msg)
       (check-true (string-contains? msg "state=failed") msg)
       (check-true (string-contains? msg "log=") msg)
+      (cleanup-tmp base))
+
+    (test-case "BUG-0070: prose-only Verify declaration fails closed without shell launch"
+      (define base (setup-standard-campaign!))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "- unknown stays `unknown`.")
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-false (delivery-verification-approved? result))
+      (check-true (string-contains? (delivery-verification-message result) "refusing prose-as-shell"))
       (cleanup-tmp base))))
 
 (module+ main

@@ -164,6 +164,17 @@
     (test-case "normalize-declared-verify passes plain commands through unchanged"
       (check-equal? (normalize-declared-verify "racket tests/test-foo.rkt")
                     "racket tests/test-foo.rkt"))
+    (test-case "BUG-0070: ignores prose identifiers and extracts late executable spans"
+      (check-equal?
+       (normalize-declared-verify
+        (string-append
+         "- unknown stays `unknown`; classification is `distinct_*`.\n"
+         "- criteria two; criteria three; criteria four; criteria five; criteria six.\n"
+         "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green."))
+       (string-append "racket scripts/run-tests.rkt --suite fast"
+                      " && racket scripts/metrics.rkt --lint")))
+    (test-case "BUG-0070: prose-only bullets do not become shell"
+      (check-equal? (normalize-declared-verify "- unknown stays `unknown`.") ""))
 
     (test-case "default delivery verify deadline is 14400s (bounded, multi-hour)"
       ;; Declared gates legitimately run for hours; the default deadline must
