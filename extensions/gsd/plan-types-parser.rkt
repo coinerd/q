@@ -103,26 +103,34 @@
 ;; Parse structured fields from wave document content.
 (define (parse-wave-content content)
   (define lines (string-split content "\n"))
-  (define n (length lines))
   (define root-cause "")
   (define files '())
   (define verify-cmd "")
   (define done-criteria '())
   (define in-files-section #f)
-  (for ([line lines]
-        [i (in-naturals)])
+  ;; BUG-0070: a Verify section is structural Markdown, not an arbitrary
+  ;; four-line lookahead window. Capture every nonblank, non-fence line up
+  ;; to the next level-2 heading so executable declarations late in a list
+  ;; cannot be silently truncated.
+  (define heading-verify-lines
+    (let find-heading ([remaining lines])
+      (cond
+        [(null? remaining) '()]
+        [(string-prefix? (string-trim (car remaining)) "## Verify")
+         (for/list ([candidate (in-list (cdr remaining))]
+                    #:break (regexp-match? #rx"^## " (string-trim candidate))
+                    #:when (and (not (string=? (string-trim candidate) ""))
+                                (not (string-contains? candidate "```"))))
+           (string-trim candidate))]
+        [else (find-heading (cdr remaining))])))
+  (for ([line lines])
     (define trimmed (string-trim line))
     (when (regexp-match? #rx"^## " trimmed)
       (set! in-files-section (string-prefix? trimmed "## Files")))
     (cond
       [(string-prefix? trimmed "## Verify")
-       (define after
-         (for/list ([j (in-range (add1 i) (min n (+ i 5)))]
-                    #:when (and (> (string-length (string-trim (list-ref lines j))) 0)
-                                (not (string-contains? (list-ref lines j) "```"))))
-           (string-trim (list-ref lines j))))
-       (when (and (string=? verify-cmd "") (not (null? after)))
-         (set! verify-cmd (string-join after "; ")))]
+       (when (and (string=? verify-cmd "") (not (null? heading-verify-lines)))
+         (set! verify-cmd (string-join heading-verify-lines "; ")))]
       [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
        =>
        (lambda (m) (set! root-cause (string-trim (cadr m))))]

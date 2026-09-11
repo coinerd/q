@@ -256,6 +256,25 @@
   ;; raco test is captured (not a fence line), fence lines are skipped
   (check-equal? (hash-ref result 'verify) "raco test"))
 
+(test-case "BUG-0070: parse-wave-content captures the complete Verify section"
+  (define content
+    (string-append
+     "## Verify\n"
+     "- criterion one\n"
+     "- criterion two\n"
+     "- criterion three\n"
+     "- criterion four\n"
+     "- criterion five\n"
+     "- criterion six\n"
+     "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green.\n"
+     "\n## Done\n- delivered\n"))
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'verify)
+                (string-append
+                 "- criterion one; - criterion two; - criterion three; - criterion four; "
+                 "- criterion five; - criterion six; "
+                 "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green.")))
+
 (test-case "W2: parse-wave-content empty content returns empty fields"
   (define result (parse-wave-content ""))
   (check-equal? (hash-ref result 'root-cause) "")
