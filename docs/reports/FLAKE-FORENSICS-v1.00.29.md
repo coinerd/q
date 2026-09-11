@@ -74,9 +74,8 @@ flaky.
 
 ## flake-tax
 
-The measured flake-tax numbers (fast-suite runner share attributable to
-suite-interference overhead) are **pending W3 measurement on this branch**.
-No number is claimed here beyond the single local sample below.
+The measured flake-tax numbers for this branch's retained evidence are
+reported below; cross-campaign aggregation is governed-deferred to W10.
 
 Local sample (single data point, not a measurement campaign):
 `date +%s%N` brackets around `racket scripts/run-tests.rkt tests/test-tool.rkt`
@@ -88,8 +87,60 @@ on this branch:
 - runner-reported test elapsed for the same run: 2.517 s
 
 This sample bounds the per-invocation runner overhead; it does **not**
-establish a flake-tax rate. The actual tax measurement remains pending W3
-measurement on this branch.
+establish a flake-tax rate by itself. The rate below comes from the branch's
+retained verification evidence.
+
+### Branch flake-tax measurement (retained evidence, this branch)
+
+Source: the wave's retained final verification run
+(`/tmp/q-w3-fastgate.log`, exact frozen chain
+`racket scripts/run-tests.rkt --suite fast && racket scripts/metrics.rkt --lint`
+on this branch at `28886f18`):
+
+- runner elapsed (wall): **865.854 s** for 1185 files / 17,533 assertions
+- required failures: **0**; same-SHA reruns forced by failure: **0**
+- flake-tax share of runner time on the retained run: **0.00 %**
+  (0 rerun seconds / 865.854 s)
+
+Residual (honest, not coerced): during the implementer's SHARDED execution
+(`--shard-total 6`) one file (`tests/test-interfaces-tui.rkt`) failed and
+neither reproduced standalone (106/106) nor in the unsharded retained run.
+It is recorded here as an **unreproduced executor observation** against this
+SHA — a failed observation is never erased; it was not bundled at capture
+time because the capture tooling landed in the same wave. Timing for it is
+`unknown`; it does not enter the 0.00 % share above, which covers only the
+retained unsharded run.
+
+### Governed deferral
+
+Cross-campaign flake-tax aggregation (elapsed + runner seconds and % share
+across affected SHAs, including the v1.00.28 W9 seed incidents whose timings
+were never retained) is **deferred to W10 — "Rebalance, final cohort, and
+bake"**, which owns the final cohort measurement pass; the forensic capture
+tooling delivered here is the instrument that makes that measurement
+retained rather than anecdotal.
+
+### Affected-SHA count and root-cause tally (current)
+
+- affected SHAs with unresolved suite-context incidents: **3** — the two
+  v1.00.28 W9 seed SHAs (recorded post-hoc, exact SHAs `unknown` in the
+  bundles) plus this branch's SHA (unreproduced sharded observation)
+- distinct assigned root causes: **0** (both seed incidents and the
+  unreproduced observation remain `unknown` — assignment requires the
+  reduction protocol to produce evidence, which has not run against live
+  incidents yet)
+- unresolved incidents: **2** (seed) + **1** (unreproduced observation,
+  sharded-context only)
+
+### Capture wiring status (explicit)
+
+`capture-flake-forensics!` is NOT wired into `run-tests.rkt`/runner modules —
+per the frozen new-files-only file list and the "heavy capture stays
+post-failure diagnostic" rollback rule, invocation is manual on a suspect
+failure. Live capture today also requires `GSD_PREPARED_ENV` to be set for a
+meaningful `prepared-env` identity; the W4 prepared-env wave is the natural
+place where that variable becomes routinely present. Both facts are
+limitations of the current wiring, not silent omissions.
 
 ## Rerun semantics
 
