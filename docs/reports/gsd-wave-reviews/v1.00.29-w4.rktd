@@ -36,3 +36,23 @@
  (verdict
    .
    "APPROVE for coordinator-owned delivery verification: systemic invariant in place on every restore-consuming lane, fail-closed and loud, release lane migrated with the bespoke step pinned absent, both contract tests green output-checked, repro green, lane inventory truthful against the workflow graph"))
+
+;; --- Independent reviewer gate (post-repair, kimi-coding/kimi-for-coding, read-only) ---
+;; Job v10029-w4-review, 2026-09-11, head fc8261e3. Previous subagent attempts timed out
+;; (recorded above); this run completed.
+(independent-review
+ (reviewer "kimi-coding/kimi-for-coding (read-only subagent, structural verification; no shell available — hashes verified structurally, not recomputed)")
+ (verdict "APPROVED (with non-blocking findings)")
+ (confirmed ("fail-closed purge action.yml:142-171 (set -euo pipefail, recount, ::error+exit 1 on survivors)"
+             "if: always() reaches the restore-success lane; tamper test (test-workflow-purge-contract.rkt:183-193) detects regression"
+             "fixture exemption correct at every find (./tests/metadata-discovery/fixture/*)"
+             "release migration real; bespoke 04637d83 step pinned absent in both contract tests"
+             "re-stamped pin chain closed and mutually consistent; test-ci-runtime-contract.rkt:654-656 digests the live action against the checkpoint so a stale re-stamp cannot pass"
+             "no live pin sites retain old hashes 1a7b517f/0c18bf7d (only historical period-record docs)"))
+ (findings-nonblocking
+  ((n 1) (sev medium) (site "artifacts/ci-topology/v1.00.26-w2/dag-checkpoint.json:44 (+ test-ci-runtime-contract.rkt:648, test-w9:368)") (text "checkpoint note still says byte-identical to pre-W2 values while the recorded hash is post-W4 — self-contradictory prose; recommend re-stamped_by provenance annotation (follow-up: touching the checkpoint requires re-stamping SHA256SUMS + test-ci-runtime-contract pin again)"))
+  ((n 2) (sev low-medium) (site "gsd-wave-evidence/v1.00.29-w4.rktd") (text "evidence overclaims 'no inline bytecode deletion' — 12 setup-racket call sites, 7 inline deletion-only belt steps remain in ci.yml (no BUG-0065 exposure, but claim inaccurate) — corrected in evidence doc"))
+  ((n 3) (sev low) (site "gsd-wave-evidence/v1.00.29-w4.rktd") (text "ownership-matrix re-stamp rationale misrecorded (matrix holds no action hash; real reason = new test file changes tier-inventory reality) — corrected in evidence doc"))
+  ((n 4) (sev low) (site "test-release-workflow-contract.rkt:560") (text "inline-deletion pin is literal-grep evadable via quoting variants (follow-up hygiene)"))
+  ((n 5) (sev low) (site "test-workflow-purge-contract.rkt:96") (text "job-key regex narrow; quoted/space keys would evade the fail-closed scan (follow-up hygiene)"))
+  ((n 6) (sev note) (site "n/a") (text "reviewer could not execute tests; GREEN claims assessed structurally; coordinator Verify lane remains authoritative"))))

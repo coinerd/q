@@ -29,3 +29,10 @@
  (validation-verdict
    .
    "All wave-lane checks green under output-checked discipline; wave ready for coordinator-owned verification. Prior-attempt failure cause addressed: delivery is now real (7 target files changed on campaign/v1.00.29-w4, two green contract tests, checkpoint commits a2c91336/17c9bca9 + sealing commit) — not the prior attempt's plan-only/false-green state."))
+
+;; --- Coordinator verification history (owned lane) ---
+(coordinator-verify-history
+ (attempt-1 (lane "gsd-verification-vj-2") (result "REJECTED") (cause "two stale checksum-pin families: dag-checkpoint.json/SHA256SUMS and ownership-matrix pins + test-ci-runtime-contract.rkt:603 byte pin") (remedy "commit e19602e5"))
+ (attempt-2 (lane "gsd-verification-vj-3 (1789157053442)") (result "REJECTED — 1185/1186, 17553/17553 assertions") (cause "third pin family: tests/test-w9-ci-workflow-verification.rkt:372 pinned setup_action_sha256 at 1a7b517f… (pre-W4 action)") (remedy "commit fc8261e3 — literal moved to re-stamped 4d9372…; original rejection preserved at /var/tmp/gsd-verification-vj-3-1789157053442.044.log"))
+ (attempt-3 (lane "coordinator repair chain /var/tmp/q-w4-repair-chain.log") (result "PASS — 1186/1186 files, 17553/17553 assertions, metrics 5/5") (head "fc8261e3"))
+ (final "Frozen chain green on fc8261e3 after two documented rejections; both rejections substantive (stale pins), both remedies sanctioned re-stamp paths"))

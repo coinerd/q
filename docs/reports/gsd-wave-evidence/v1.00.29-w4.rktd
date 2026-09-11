@@ -1,23 +1,25 @@
 ;; GSD Wave Evidence — v1.00.29 W4: Systemic prepared-env bytecode pinning (BUG-0065)
-;; Bound to branch head: 17c9bca9 (campaign/v1.00.29-w4; docs/evidence commit follows)
+;; Bound to branch head: fc8261e3 (campaign/v1.00.29-w4; docs/evidence commit follows)
 ;; Date: 2026-09-11
 
 (evidence
  (wave v1.00.29-w4)
- (implementation-sha 17c9bca9)
+ (implementation-sha fc8261e3)
  (branch campaign/v1.00.29-w4)
  (base a80d4abf)
  (ticket "BUG-0065 (#9622) — systemic prepared-env bytecode pinning")
  (commits
   ((sha a2c91336) (scope "shared purge/verify step in setup-racket action (if: always(), fail-closed, loud+counted, RUNNER_TEMP stamp); release lane migrated off the bespoke 04637d83 step; ci/nightly/pilot lane comments; new tests/test-workflow-purge-contract.rkt (repo-wide fail-closed scan + BUG-0065 repro + negative fixture)"))
-  ((sha 17c9bca9) (scope "release-workflow contract extended: shared-action pins, release bespoke-step-absent pins, ci/nightly lane pins")))
+  ((sha 17c9bca9) (scope "release-workflow contract extended: shared-action pins, release bespoke-step-absent pins, ci/nightly lane pins"))
+  ((sha e19602e5) (scope "repair attempt 1: coordinator verification (vj-2 lane) rejected on stale checksum pins — re-stamped artifacts/ci-topology/v1.00.26-w2/dag-checkpoint.json + SHA256SUMS to the new action hash 4d9372…; re-stamped artifacts/tier-ownership/v1.00.28-w0/ownership-matrix.json + SHA256SUMS because the wave's new test file (test-workflow-purge-contract) changes tier-inventory reality (families 1379→1382; the milestone-gate drift check enforces matrix↔reality — the matrix holds no action hash); moved the recorded byte pin in tests/test-ci-runtime-contract.rkt:603 (0c18bf7d… → 3cd242…); sanctioned update: the checkpoint was legitimately re-stamped by this wave"))
+  ((sha fc8261e3) (scope "repair attempt 2: coordinator verification (vj-3 lane, 1185/1186) rejected on the third pin family — tests/test-w9-ci-workflow-verification.rkt:372 pinned setup-racket action at 1a7b517f…; moved the literal to the re-stamped 4d9372…; same sanctioned path as attempt 1")))
  (deliverables
   ((file .github/actions/setup-racket/action.yml)
    (detail "step 'Purge and verify workspace bytecode (BUG-0065, every path)' with if: always(): runs on every action path including a SUCCESSFUL prepared-env restore (the previously unpinned restore-success lane); counts workspace .zo outside the frozen fixture, deletes + removes compiled/ dirs, verifies zero remain (::error + exit 1 if not), reports ::notice with before/after counts + prepared-env outcome + step-summary block, stamps RUNNER_TEMP/bug-0065-purge-stamp.json (never the repo tree — strict tag-publish readiness keeps its clean-workspace guarantee)"))
   ((file .github/workflows/release.yml)
    (detail "bespoke 04637d83 purge step REMOVED; lane comment binds the test job to the shared invariant; the shared action purges before any test step (composite actions complete before subsequent job steps)"))
   ((file .github/workflows/ci.yml)
-   (detail "BUG-0065 systemic lane comments on the PR/main restore paths and the legacy local-purge site (line 258) — all 7 setup-racket jobs inherit the shared purge; no inline bytecode deletion"))
+   (detail "BUG-0065 systemic lane comments on the PR/main restore paths and the legacy local-purge site (line 258) — all 12 setup-racket call sites in ci.yml inherit the shared purge via the composite action; 7 pre-existing deletion-only belt steps remain on non-restore lanes (ci.yml 266/434/518/592/709/750/889) — deletion-only, fixture-exempt, post-purge, no BUG-0065 exposure; single-purge-mechanism consolidation deferred to follow-up hygiene (review finding 4/5)"))
   ((file .github/workflows/nightly.yml)
    (detail "lane comment: consumes no prepared restore today; covered anyway via the shared action (defense in depth)"))
   ((file .github/workflows/prepared-environment-pilot.yml)
@@ -38,5 +40,5 @@
   ((command "racket scripts/run-tests.rkt --suite fast && racket scripts/metrics.rkt --lint")
    (result "NOT run in the wave lane (runtime rule: owned verification lane only) — declared Verify is executed by the coordinator; the two touched contract tests run green standalone as above")))
  (residual
-  "Independent reviewer subagent timed out twice (infra, consistent with this session's provider degradation); the review record documents the orchestrator checklist review instead, with the reviewer timeout recorded. Coordinator-owned verification (declared Verify through its lane) remains the authoritative gate. Issue #9622 closure comment binds to the merge SHA after squash (coordinator step).")
+  "Attempt-1 repair (e19602e5) fixed the vj-2 rejection; the vj-3 coordinator lane then rejected 1185/1186 on the third pin family (test-w9), fixed by fc8261e3 — original rejections preserved as evidence above. Independent reviewer subagent timed out twice during the first attempt (infra); review record documents the orchestrator checklist review with the reviewer timeout recorded; a kimi-coding reviewer retry was run post-repair (see reviews record). Coordinator-owned verification (declared Verify through its lane) remains the authoritative gate. Issue #9622 closure comment binds to the merge SHA after squash (coordinator step).")
  (issues-referenced ("BUG-0065" "#9622" "v1.00.29 W6 precondition")))
