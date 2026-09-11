@@ -99,7 +99,7 @@
                                "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(git make-param mkdir path-ops parameterize)
+               '(fs-read git make-param mkdir path-ops parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
@@ -332,9 +332,14 @@
                'transition-logic
                '(parameterize)
                '()
-               '("racket/match" "attempt-artifacts" "campaign-repository"
-                                 "campaign-state" "delivery-verifier" "events"
-                                 "policy" "prompts" "wave-executor"))
+               '("racket/match" "attempt-artifacts"
+                                "campaign-repository"
+                                "campaign-state"
+                                "delivery-verifier"
+                                "events"
+                                "policy"
+                                "prompts"
+                                "wave-executor"))
    ;; BUG-0042 size discipline: terminal runner outcome reporting extracted
    ;; from go-orchestrator (typed error-surface event + honest reason).
    (make-entry "wave-outcome-reporting.rkt"
