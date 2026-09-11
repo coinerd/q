@@ -310,6 +310,10 @@
        (risk
         . "TUI composition root with session startup, extension wiring, and campaign command integration")
        (owner . "tui"))
+      ("tui/state-events/core-handlers.rkt"
+       (risk
+        . "Central TUI event reducer dispatch with campaign, verification, and lifecycle integration")
+       (owner . "tui"))
       ("runtime/session/session-store-tree.rkt"
        (cycle-resolved . "v0.74.1")
        (risk

@@ -280,8 +280,11 @@
       ;; backoff shape like retry-delay) and
       ;; current-gsd-campaign-infra-wait-chunk-secs (CONFIGURATION,
       ;; cancellation-check granularity for long waits).
+      ;; +1 — BUG-0069 campaign auto-retry visibility
+      ;; (runtime/gsd-query.rkt): current-gsd-campaign-active-query
+      ;; (SERVICE_HANDLE, injectable runtime campaign-state query).
       (check-equal? (length inventory-entries)
-                    234
+                    235
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================
