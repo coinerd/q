@@ -30,7 +30,7 @@
          racket/contract
          "campaign-state.rkt"
          (only-in "plan-snapshot.rkt" snapshot-dir load-snapshot-manifest snapshot-manifest-digest)
-         (only-in "plan-snapshot.rkt" snapshot-drift?))
+         (only-in "plan-snapshot.rkt" classify-snapshot-drift))
 
 ;; ============================================================
 ;; Public API
@@ -668,15 +668,22 @@
      (corrupt! "multiple active durable campaigns require explicit resolution")]
     [(pair? active)
      (define rec (car active))
-     (define drifted
+     (define classified
        (if (campaign-record-plan-snapshot-path rec)
-           (snapshot-drift? base-dir (campaign-plan-id rec))
+           (classify-snapshot-drift base-dir (campaign-plan-id rec))
            '()))
-     (unless (null? drifted)
+     (unless (null? classified)
+       (define drifted (map car classified))
+       (define has-content-drift? (memq 'content-drift (map cadr classified)))
        (corrupt!
         (string-append
          "live planning content drifted from campaign snapshot: ~a; "
-         "restore missing files with restore-plan-from-snapshot!, or explicitly replan/archive authored changes")
+         (if has-content-drift?
+             (string-append "recovery: (restore-plan-from-snapshot! <project-root> "
+                            "<campaign-id> #:override-existing-drift? #t) restores snapshot "
+                            "content (logged), or explicitly replan/archive the changes")
+             (string-append "recovery: (restore-plan-from-snapshot! <project-root> <campaign-id>) "
+                            "reconstructs the missing files from the snapshot")))
         drifted))
      rec]
     [else

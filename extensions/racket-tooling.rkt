@@ -129,11 +129,40 @@
    handle-racket-codemod)
   (hook-pass ctx))
 
-(define (register-racket-commands ctx)
-  (ext-register-command! ctx "/fmt" "Format a Racket file" 'general '() '("f"))
-  (ext-register-command! ctx "/check" "Compile-check a Racket file" 'general '() '("c"))
-  (ext-register-command! ctx "/expand" "Expand a Racket file" 'general '() '("e"))
-  (hook-pass ctx))
+(define (register-racket-commands payload)
+  ;; BUG-0068: payload-amend protocol (see gsd command-handlers note).
+  (hook-amend (hash-set payload
+                        'commands
+                        (list (hasheq 'name
+                                      "/fmt"
+                                      'summary
+                                      "Format a Racket file"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '("f"))
+                              (hasheq 'name
+                                      "/check"
+                                      'summary
+                                      "Compile-check a Racket file"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '("c"))
+                              (hasheq 'name
+                                      "/expand"
+                                      'summary
+                                      "Expand a Racket file"
+                                      'category
+                                      'general
+                                      'args-spec
+                                      '()
+                                      'aliases
+                                      '("e"))))))
 
 (define (handle-racket-command payload)
   (define cmd (hash-ref payload 'command #f))

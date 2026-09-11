@@ -303,7 +303,11 @@
   (parameterize ([current-hook-timeout-ms #f])
     (define result (dispatch-hooks 'tool-call "payload" reg #:ctx ctx))
     (check-eq? (hook-result-action result) 'block)
-    (check-equal? (hook-result-payload result) "handler crasher failed for critical hook tool-call")))
+    ;; BUG-0068: the block payload now carries the underlying exception so
+    ;; the TUI error surface shows the real cause, not just the hook name.
+    (check-regexp-match #rx"^handler crasher failed for critical hook tool-call: "
+                        (hook-result-payload result))
+    (check-true (string-contains? (hook-result-payload result) "boom in ctx handler"))))
 
 ;; ============================================================
 ;; 1b. extension-ctx new fields (FEAT-58)

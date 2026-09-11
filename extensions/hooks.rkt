@@ -117,11 +117,23 @@
      (lambda () (call-handler handler payload ctx))
      #:on-timeout
      (lambda ()
-       (log-debug "hook ~a/~a timed out after ~ams" ext-name hook-point (or timeout-ms 1000))
-       (error-default-thunk))
-     #:on-error (lambda (e)
-                  (log-debug "hook ~a/~a error: ~a" ext-name hook-point (exn-message e))
-                  (error-default-thunk))))
+       ;; BUG-0068: timeout/error evidence belongs on the default-level log
+       ;; AND in the surfaced block message — log-debug alone hid /go
+       ;; failures behind an unobservable channel.
+       (log-error "hook ~a/~a timed out after ~ams" ext-name hook-point (or timeout-ms 1000))
+       (if (critical-hook? hook-point)
+           (hook-block (format "handler ~a failed for critical hook ~a: timed out after ~ams"
+                               ext-name
+                               hook-point
+                               (or timeout-ms 1000)))
+           (hook-pass payload)))
+     #:on-error
+     (lambda (e)
+       (log-error "hook ~a/~a error: ~a" ext-name hook-point (exn-message e))
+       (if (critical-hook? hook-point)
+           (hook-block
+            (format "handler ~a failed for critical hook ~a: ~a" ext-name hook-point (exn-message e)))
+           (hook-pass payload)))))
   ;; Validate hook result
   (with-hook-validation ext-name hook-point raw-result error-default-thunk))
 ;; ============================================================

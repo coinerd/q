@@ -39,6 +39,7 @@
          seed-and-bind-plan-snapshot!
          load-snapshot-manifest
          snapshot-drift?
+         classify-snapshot-drift
          restore-plan-from-snapshot!
          plan-references->wave-doc-paths
          exn:fail:gsd-missing-wave-doc
@@ -332,36 +333,73 @@
 ;; (content changed, file missing, or untrusted symlink boundary). Empty list
 ;; means no drift. Symlinks are classified before any content read.
 (define (snapshot-drift? base-dir campaign-id)
-  (define m (load-snapshot-manifest base-dir campaign-id))
-  (for/list ([f (in-list (plan-snapshot-manifest-files m))]
-             #:when (let* ([rel (snapshot-file-path f)]
-                           [live (build-path base-dir ".planning" rel)])
-                      (or (live-path-has-link? base-dir rel)
-                          (not (file-exists? live))
-                          (not (equal? (normalized-file-hash rel (file->string live))
-                                       (snapshot-file-sha256 f))))))
-    (snapshot-file-path f)))
+  (map car (classify-snapshot-drift base-dir campaign-id)))
 
-;; Restore missing live .planning documents from the verified snapshot.
-;; Existing authored-content drift raises before any write; mutable status
-;; projections are preserved. Returns restored paths; never modifies snapshot.
-(define (restore-plan-from-snapshot! base-dir campaign-id)
+;; Per-file drift classification for actionable resume diagnostics.
+;; Returns a list of (list <rel-path> <kind>) with kind one of:
+;;   'symlink       — live path crosses the symlink trust boundary
+;;   'missing       — live file absent (recoverable from the snapshot)
+;;   'content-drift — live content differs beyond normalized projection state
+;; Ordered: symlink first (fail-closed), then missing, then content drift.
+(define (classify-snapshot-drift base-dir campaign-id)
+  (define m (load-snapshot-manifest base-dir campaign-id))
+  (reverse (for/fold ([acc '()]) ([f (in-list (plan-snapshot-manifest-files m))])
+             (define rel (snapshot-file-path f))
+             (define live (build-path base-dir ".planning" rel))
+             (define kind
+               (cond
+                 [(live-path-has-link? base-dir rel) 'symlink]
+                 [(not (file-exists? live)) 'missing]
+                 [(not (equal? (normalized-file-hash rel (file->string live))
+                               (snapshot-file-sha256 f)))
+                  'content-drift]
+                 [else #f]))
+             (if kind
+                 (cons (list rel kind) acc)
+                 acc))))
+
+;; Restore drifted live .planning documents from the verified snapshot.
+;; Default: existing content drift raises before any write — the operator must
+;; decide (replan/archive or an explicit override). With
+;; #:override-existing-drift? the sanctioned remedy becomes executable: every
+;; existing drifted file is restored to snapshot content, with a logged
+;; warning naming each overwritten path (audit trail for the post-hoc
+;; forensics BUG-0068 called for). Symlink boundaries are always refused,
+;; even under override. Returns restored paths; never modifies snapshot.
+(define (restore-plan-from-snapshot! base-dir campaign-id #:override-existing-drift? [override? #f])
   ;; Verify the snapshot and classify all drift before writing anything.
-  (define drifted (snapshot-drift? base-dir campaign-id))
-  (for ([rel (in-list drifted)])
-    (when (live-path-has-link? base-dir rel)
-      (snapshot-fail "plan-snapshot: refusing symlinked live restore boundary: ~a" rel)))
+  (define classified (classify-snapshot-drift base-dir campaign-id))
+  (for ([item (in-list classified)])
+    (when (eq? (cadr item) 'symlink)
+      (snapshot-fail "plan-snapshot: refusing symlinked live restore boundary: ~a" (car item))))
   (define existing-drift
-    (filter (lambda (rel) (file-exists? (build-path base-dir ".planning" rel))) drifted))
-  (unless (null? existing-drift)
-    (raise (make-exn:fail (format "plan-snapshot: refusing to overwrite live content drift: ~a"
-                                  existing-drift)
-                          (current-continuation-marks))))
-  ;; Missing files are safe to reconstruct. Existing status projections are
-  ;; preserved verbatim rather than reset to capture-time markers.
-  (for/list ([rel (in-list drifted)])
+    (for/list ([item (in-list classified)]
+               #:when (and (not (eq? (cadr item) 'symlink))
+                           (file-exists? (build-path base-dir ".planning" (car item)))))
+      (car item)))
+  (unless (or (null? existing-drift) override?)
+    (raise (make-exn:fail
+            (format (string-append
+                     "plan-snapshot: refusing to overwrite live content drift: ~a; "
+                     "recovery: (restore-plan-from-snapshot! base campaign-id "
+                     "#:override-existing-drift? #t), or explicitly replan/archive the changes")
+                    existing-drift)
+            (current-continuation-marks))))
+  (when (and override? (pair? existing-drift))
+    (log-warning "plan-snapshot: operator-overridden restore overwriting ~a drifted file(s): ~a"
+                 (length existing-drift)
+                 existing-drift))
+  ;; Missing files are safe to reconstruct. Overridden drift is reset to the
+  ;; capture-time snapshot content (the durable campaign record, not the doc,
+  ;; remains authoritative for wave status).
+  (for/list ([item (in-list classified)]
+             #:when (memq (cadr item) '(missing content-drift)))
+    (define rel (car item))
     (define src (build-path (snapshot-dir base-dir campaign-id) rel))
     (define dest (build-path base-dir ".planning" rel))
     (make-directory* (path-only dest))
+    ;; Overridden drift replaces the existing (non-symlink) live file.
+    (when (and (eq? (cadr item) 'content-drift) (file-exists? dest))
+      (delete-file dest))
     (copy-file src dest)
     rel))
