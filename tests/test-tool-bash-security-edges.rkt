@@ -63,6 +63,33 @@
       (define s (summary-for "ls"))
       (check-true (hash-has-key? s 'count) "summary must have count")
       (check-true (hash-has-key? s 'max-severity) "summary must have max-severity")
-      (check-true (hash-has-key? s 'critical?) "summary must have critical?"))))
+      (check-true (hash-has-key? s 'critical?) "summary must have critical?"))
+
+    ;; ============================================================
+    ;; BUG-0066 (W1, #9635): process-kill regression fixtures
+    ;; ============================================================
+
+    (test-case "BUG-0066 regression: the exact 2026-09-08 crash command is critical"
+      ;; 2026-09-08 W0 crash: the executor's kill loop matched the agent's
+      ;; own Racket VM and terminated q. The classifier must rate this
+      ;; command class critical so the bash-safety guard refuses it.
+      (define crash-cmd "for p in $(pgrep -x racket); do kill \"$p\"; done")
+      (check-true (sev-in? crash-cmd '(critical)) "the crash loop must be critical severity")
+      (check-true (> (for/sum ([f (in-list (classify-shell-risks (tokenize-shell-command crash-cmd)))]
+                               #:when (eq? (shell-risk-finding-type f) 'process-kill))
+                              1)
+                     0)
+                  "the crash loop must carry a process-kill finding"))
+
+    (test-case "BUG-0066: unpinned pgrep-loop kill against the agent name is critical"
+      (check-true (sev-in? "kill $(pgrep -f racket)" '(critical)))
+      (check-true (sev-in? "pkill -x racket" '(critical))))
+
+    (test-case "BUG-0066: recorded-PID kill carries no kill-by-name finding"
+      (define cmd "kill \"$(cat /tmp/app.pid)\"")
+      (check-true (zero? (for/sum ([f (in-list (classify-shell-risks (tokenize-shell-command cmd)))]
+                                   #:when (eq? (shell-risk-finding-type f) 'process-kill))
+                                  1))
+                  "recorded-PID kill must not be classified as kill-by-name"))))
 
 (run-tests security-edge-tests)

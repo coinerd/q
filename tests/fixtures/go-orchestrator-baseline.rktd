@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.29 BUG-0069: infra-retry event gains the remaining-patience payload (emit-infra-retry-event! #:patience at the slow-lane call site) so the TUI can show the retry horizon 1589 -> 1593 lines, 22 defines unchanged; within the existing 1650 target — no target change; supersedes the v1.00.29 BUG-0067 re-record")
- (line-count . 1593)
- (top-level-define-count . 22)
- (w7-target-max-lines . 1650))
+  "v1.00.29 W1 merge 2: BUG-0064 wave-advance delivery gate + BUG-0067 patient slow-lane + BUG-0069 slow-lane event patience payload 1653 -> 1657 lines, 23 defines unchanged; target stays 1700 — growth is orchestration control flow fused to attempt-ledger fence closures; extracting the attempt-preservation block is deferred to a dedicated decomposition wave; supersedes the W1 merge-1 re-record")
+ (line-count . 1657)
+ (top-level-define-count . 23)
+ (w7-target-max-lines . 1700))

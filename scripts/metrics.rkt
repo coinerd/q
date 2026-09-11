@@ -25,6 +25,26 @@
          racket/system
          "metrics-helpers.rkt")
 
+;; Canonicalize cwd to this script's repository root. Documented usage is
+;; `cd q/ && racket scripts/metrics.rkt …`; making the script self-locating
+;; keeps counts identical when a caller (e.g. the root-level verification
+;; lane) invokes it from outside q/.
+;; The module path can be reached in two ways:
+;;   1. directly as q/scripts/metrics.rkt            → repo root is base/up
+;;   2. via the root-level symlink scripts/metrics.rkt → the symlink path
+;;      becomes the resolved module path (Racket does not readlink module
+;;      paths), so base/up is the PROJECT root and the repo root is
+;;      base/up/q. Discriminate on the presence of README.md, which exists
+;;      only at the q/ repo root.
+(define metrics:script-dir
+  (let-values ([(base _name _dir?) (split-path (resolved-module-path-name
+                                                (variable-reference->resolved-module-path
+                                                 (#%variable-reference))))])
+    base))
+(current-directory (simplify-path (if (file-exists? (build-path metrics:script-dir 'up "README.md"))
+                                      (build-path metrics:script-dir 'up)
+                                      (build-path metrics:script-dir 'up "q"))))
+
 (define args (vector->list (current-command-line-arguments)))
 (define run-tests? (member "--tests" args))
 (define lint? (member "--lint" args))

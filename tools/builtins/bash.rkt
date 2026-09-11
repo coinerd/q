@@ -46,7 +46,9 @@
                   destructive-command?
                   destructive-diagnostic-message
                   high-risk-command?
-                  structured-destructive-command?)
+                  structured-destructive-command?
+                  process-kill-refusal?
+                  process-kill-diagnostic)
          (only-in "../shell-risk.rkt"
                   tokenize-shell-command
                   classify-shell-risks
@@ -245,6 +247,11 @@
         (make-error-result (format "Blocked destructive command (~a): ~a"
                                    (destructive-diagnostic-message command)
                                    command))]
+       ;; BUG-0066: process-kill patterns (kill-by-name, unpinned
+       ;; pkill/pgrep loops, self-matching interpreter kills) are refused
+       ;; outright with the recorded-PID safe alternative.
+       [(and block-destructive? (process-kill-refusal? command))
+        (make-error-result (process-kill-diagnostic command))]
        [else
         ;; Optional warning. Prefer structured classifier for user-visible warning-only UX:
         ;; benign command substitutions such as name=$(basename "$f") should not alarm users

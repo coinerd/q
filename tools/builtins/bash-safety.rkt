@@ -46,7 +46,8 @@
                   tokenize-shell-command
                   classify-shell-risks
                   shell-risk-finding-type
-                  shell-risk-finding-severity))
+                  shell-risk-finding-severity
+                  shell-risk-finding-message))
 
 (provide destructive-patterns
          destructive-command?
@@ -57,7 +58,9 @@
          high-risk-patterns
          high-risk-command?
          structured-destructive-command?
-         structured-critical-command?)
+         structured-critical-command?
+         process-kill-refusal?
+         process-kill-diagnostic)
 
 ;; ── Destructive command patterns (SEC-03, #449) ──
 ;; Each pattern uses anchors (^|[&;|\n]) or word boundaries to avoid
@@ -576,3 +579,38 @@
   (for/or ([f (in-list findings)])
     (and (eq? (shell-risk-finding-severity f) 'critical)
          (not (eq? (shell-risk-finding-type f) 'command-substitution)))))
+
+;; BUG-0066 (v1.00.29 W1): process-kill guard. Killing by name or by an
+;; unpinned pattern is the one command class that can kill the agent host
+;; itself (the v1.00.28 W0 crash: `kill $(pgrep -x racket)` matched q's own
+;; Racket VM). Refuse every high/critical process-kill finding; the safe
+;; alternative is killing a recorded PID (pidfile, or the PID captured at
+;; spawn time), never a pattern matched at kill time.
+(define (process-kill-findings command)
+  (for/list ([f (in-list (classify-shell-risks (tokenize-shell-command command)))]
+             #:when (eq? (shell-risk-finding-type f) 'process-kill))
+    f))
+
+(define (process-kill-refusal? command)
+  (for/or ([f (in-list (process-kill-findings command))])
+    (memq (shell-risk-finding-severity f) '(high critical))))
+
+(define (process-kill-diagnostic command)
+  (define findings (process-kill-findings command))
+  (define worst
+    (for/fold ([acc "high"]) ([f (in-list findings)])
+      (if (eq? (shell-risk-finding-severity f) 'critical) "critical" acc)))
+  (define reason
+    (cond
+      [(for/or ([f (in-list findings)])
+         (regexp-match? #rx"self-match" (shell-risk-finding-message f)))
+       "matches the running agent's own process (self-match)"]
+      [else "kills by name or unpinned pattern rather than a recorded PID"]))
+  (format
+   "Refused: destructive process command (~a risk) — ~a.\n\
+           Kill by a recorded PID instead: save the PID at spawn time \
+           (e.g. `echo $! > pidfile`), then `kill \"$(cat pidfile)\"`.\n\
+           Command: ~a"
+   worst
+   reason
+   command))

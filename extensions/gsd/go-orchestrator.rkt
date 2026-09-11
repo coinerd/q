@@ -410,6 +410,28 @@
        (equal? (campaign-attempt-id attempt) attempt-id)
        wave))
 
+;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract merge-SHA provenance.
+;; The durable binding lives in the wave's evidence trio
+;; (docs/reports/gsd-wave-evidence/<plan-id>-w<N>.rktd) as a merge-sha
+;; entry carrying the full 40-hex squash-merge SHA. A missing file or a
+;; missing entry means the wave has no Delivery-Contract PR proof —
+;; exactly the v1.00.27 failure mode (W0→W6 advanced with zero merges).
+;; Returns the sha string, or #f when the wave is not merged-proven.
+(define (wave-merge-sha base-dir plan-id wave-idx)
+  (define trio-name (format "~a-w~a.rktd" plan-id wave-idx))
+  (define direct (build-path base-dir "docs" "reports" "gsd-wave-evidence" trio-name))
+  (define candidate
+    (cond
+      [(file-exists? direct) direct]
+      ;; compat: package-root layout (<base>/q/...) in some checkouts.
+      [else
+       (define alt (build-path base-dir "q" "docs" "reports" "gsd-wave-evidence" trio-name))
+       (and (file-exists? alt) alt)]))
+  (and candidate
+       (let ([m (regexp-match #px"merge-sha[^0-9a-f]*([0-9a-f]{40})" (file->string candidate))])
+         ;; file->string input ⇒ string captures (never bytes).
+         (and m (cadr m)))))
+
 (define (run-campaign-wave base-dir
                            rec
                            wave-idx
@@ -440,7 +462,12 @@
                            ;; falls back to current-gsd-worktree-isolation
                            ;; (default OFF). Precedence documented at
                            ;; resolve-worktree-isolation (wave-executor.rkt).
-                           #:isolate? [isolate-arg 'auto])
+                           #:isolate? [isolate-arg 'auto]
+                           ;; BUG-0064 (v1.00.29 W1, #9620): explicit,
+                           ;; auditable operator escape from the
+                           ;; Delivery-Contract wave-advance gate below.
+                           #:advance-override? [advance-override? #f])
+
   ;; BUG-0028 S1 (v1.00.19 W2): composition-root settings wiring — the
   ;; gsd.worktree-isolation key drives isolation from here on.
   ;; isolate-arg is the explicit caller choice; 'auto defers to settings.
@@ -489,7 +516,33 @@
          (memq (campaign-wave-status initial-wave) '(done deferred))
          (<= fence (campaign-fence-token active)))
      (campaign-result 'wave-cancelled '() "stale campaign request ignored")]
+    ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract wave-advance gate.
+    ;; A wave may launch only when its predecessor carries a merge-SHA
+    ;; binding in its evidence trio. W0 (no predecessor) is never gated.
+    ;; Explicit operator override proceeds but is logged for audit.
+    [(and (>= wave-idx 1)
+          (not advance-override?)
+          (not (wave-merge-sha base-dir (campaign-plan-id active) (sub1 wave-idx))))
+     (campaign-result
+      'wave-blocked
+      '()
+      (format
+       (string-append
+        "wave ~a blocked: predecessor wave ~a has no Delivery-Contract merge SHA; bind the"
+        " evidence trio to the squash-merge SHA first, or relaunch with #:advance-override? #t (logged override)")
+       wave-idx
+       (sub1 wave-idx)))]
+    ;; Audit trail when the gate is overridden; falls through to launch.
+    ;; BUG-0064 (v1.00.29 W1): operator override audit line. Emitted when a
+    ;; wave launches without its predecessor's merge-SHA proof because the
+    ;; caller explicitly passed #:advance-override? #t.
     [else
+     (when (and (>= wave-idx 1)
+                advance-override?
+                (not (wave-merge-sha base-dir (campaign-plan-id active) (sub1 wave-idx))))
+       (log-info
+        "BUG-0064 OVERRIDE: wave ~a launched without predecessor merge-SHA proof (operator advance-override)"
+        wave-idx))
      ;; #9515 (v1.00.17 W3): run-once is re-entered at most
      ;; #:no-change-retries times when the delivery verifier rejects with
      ;; "no wave target files changed". Each re-entry re-runs the
@@ -1419,6 +1472,14 @@
                    (campaign-result (campaign-result-status result)
                                     (reverse completed)
                                     (campaign-result-message result))]
+                  ;; v1.00.29 W1 (BUG-0064): a blocked advance is a clean,
+                  ;; auditable stop — NOT a coordinator error. The operator
+                  ;; binds the missing Delivery-Contract merge SHA, then /go
+                  ;; resumes.
+                  [(wave-blocked)
+                   (campaign-result 'wave-blocked
+                                    (reverse completed)
+                                    (campaign-result-message result))]
                   [else
                    (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
          ;; v1.00.21 W5 (BUG-0029 action 3): the campaign ended (success OR
@@ -1502,6 +1563,9 @@
          campaign-result-status
          campaign-result-completed-waves
          campaign-result-message
+         ;; v1.00.29 W1 (BUG-0064, #9620): Delivery-Contract merge-SHA
+         ;; provenance + wave-advance gate.
+         wave-merge-sha
          run-campaign-wave
          run-campaign!
          prompt-run-result->outcome

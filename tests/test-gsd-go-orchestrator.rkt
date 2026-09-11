@@ -50,6 +50,7 @@
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
+                  wave-merge-sha
                   run-campaign!
                   assert-go-n
                   campaign-result-status
@@ -244,7 +245,16 @@
     (test-case "all waves succeed → campaign-complete"
       (define dir (make-tmp-campaign-dir 3))
       (define rec (load-or-migrate dir))
-      (define result (run-campaign! dir rec #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+      ;; BUG-0064: the coordinator binds the Delivery-Contract merge SHA when a
+      ;; wave lands (post-verify in this fixture). Advances without it are
+      ;; blocked — covered by advance-gate-suite.
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:runner (lambda (_) 'ok)
+                       #:verifier (lambda (idx)
+                                    (bind-merge-sha! dir (campaign-plan-id rec) idx)
+                                    #t)))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? (campaign-result-completed-waves result) '(0 1 2))
       (cleanup-tmp dir))
@@ -259,7 +269,9 @@
                        #:runner (lambda (idx)
                                   (set! call-count (add1 call-count))
                                   (if (= idx 1) 'error 'ok))
-                       #:verifier (lambda (_) #t)))
+                       #:verifier (lambda (idx)
+                                    (bind-merge-sha! dir (campaign-plan-id rec) idx)
+                                    #t)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-equal? call-count 2 "runner called for W0 and W1 only")
       (check-eq? (wave-status* rec 0) 'done)
@@ -367,7 +379,9 @@ check-equal? actual 14 expected 12")
           (run-campaign! dir
                          rec
                          #:runner (lambda (_) 'ok)
-                         #:verifier (lambda (idx) (not (= idx 1))))))
+                         #:verifier (lambda (idx)
+                                      (bind-merge-sha! dir (campaign-plan-id rec) idx)
+                                      (not (= idx 1))))))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-eq? (wave-status* rec 0) 'done)
       (check-false (eq? (wave-status* rec 1) 'done))
@@ -527,10 +541,16 @@ check-equal? actual 14 expected 12")
       (define prompts '())
       (define request
         (make-campaign-request dir rec (lambda (idx) (format "ONLY-W~a" idx)) (lambda (_) #t)))
+      ;; BUG-0064: the coordinator binds the Delivery-Contract merge SHA when
+      ;; a wave's PR lands. The stub simulates that binding for W0 so the
+      ;; W0→W1 advance satisfies the gate (unbound advance is covered by
+      ;; advance-gate-suite).
       (define result
         (execute-campaign-request! request
                                    (lambda (prompt)
                                      (set! prompts (append prompts (list prompt)))
+                                     (when (equal? prompt "ONLY-W0")
+                                       (bind-merge-sha! dir (campaign-plan-id rec) 0))
                                      (make-loop-result '() 'completed (hasheq)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? prompts '("ONLY-W0" "ONLY-W1"))
@@ -1159,6 +1179,78 @@ check-equal? actual 14 expected 12")
       (cleanup-tmp dir))))
 
 ;; ============================================================
+;; BUG-0064 wave-advance gate suite (W1, #9620)
+;; ============================================================
+
+(define BUG-0064-FAKE-SHA "0123456789abcdef0123456789abcdef01234567")
+
+(define (bind-merge-sha! dir plan-id wave-idx)
+  (define evidence-dir (build-path dir "docs" "reports" "gsd-wave-evidence"))
+  (make-directory* evidence-dir)
+  (call-with-output-file
+   (build-path evidence-dir (format "~a-w~a.rktd" plan-id wave-idx))
+   (lambda (out) (fprintf out "(proof-bundle (wave ~a) (merge-sha ~a))\n" wave-idx BUG-0064-FAKE-SHA))
+   #:exists 'truncate))
+
+(define advance-gate-suite
+  (test-suite "BUG-0064 delivery-contract wave-advance gate"
+    (test-case "wave 1 is blocked while wave 0 lacks its merge-SHA binding"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (check-eq? (campaign-result-status
+                  (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+                 'wave-done)
+      (define result
+        (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-blocked)
+      (check-true (string-contains? (campaign-result-message result)
+                                    "no Delivery-Contract merge SHA"))
+      (check-false (eq? (wave-status* rec 1) 'done) "blocked advance must not mark the wave done")
+      (cleanup-tmp dir))
+
+    (test-case "wave 1 proceeds once the predecessor merge-SHA is bound"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
+      (bind-merge-sha! dir (campaign-plan-id rec) 0)
+      (check-true (string? (wave-merge-sha dir (campaign-plan-id rec) 0)))
+      (define result
+        (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-done)
+      (cleanup-tmp dir))
+
+    (test-case "explicit override launches the wave and is audited"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           1
+                           #:runner (lambda (_) 'ok)
+                           #:verifier (lambda (_) #t)
+                           #:advance-override? #t))
+      (check-eq? (campaign-result-status result) 'wave-done)
+      (check-eq? (wave-status* rec 1) 'done)
+      (cleanup-tmp dir))
+
+    (test-case "wave-merge-sha returns #f for absent evidence and malformed files"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (check-false (wave-merge-sha dir (campaign-plan-id rec) 0))
+      (bind-merge-sha! dir (campaign-plan-id rec) 0)
+      (check-equal? (wave-merge-sha dir (campaign-plan-id rec) 0) BUG-0064-FAKE-SHA)
+      (cleanup-tmp dir))
+
+    (test-case "W0 has no predecessor and is never gated"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define result
+        (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+      (check-eq? (campaign-result-status result) 'wave-done)
+      (cleanup-tmp dir))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -1171,6 +1263,7 @@ check-equal? actual 14 expected 12")
     request-suite
     git-root-suite
     freshness-guard-suite
-    failure-reason-suite))
+    failure-reason-suite
+    advance-gate-suite))
 
 (void (run-tests all-tests))

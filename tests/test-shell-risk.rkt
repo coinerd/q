@@ -197,3 +197,57 @@
   (define risks (classify-shell-risks tokens))
   (define s (shell-risk-summary risks))
   (check-false (hash-ref s 'critical?)))
+
+;; ── BUG-0066 (W1, #9635): process-kill classification ──
+;; Killing by interpreter name or by an unpinned pgrep pattern is the one
+;; command class that kills the agent host itself (the 2026-09-08 W0 crash:
+;; `for p in $(pgrep -x racket); do kill "$p"; done`). Kills carrying
+;; recorded-PID provenance — a literal PID, $!, a pidfile substitution,
+;; pgrep -F/--pidfile, or --pid PIN — stay legal.
+
+(define (kill-findings cmd)
+  (filter (lambda (f) (eq? (shell-risk-finding-type f) 'process-kill))
+          (classify-shell-risks (tokenize-shell-command cmd))))
+
+(define (kill-has-severity? cmd sev)
+  (for/or ([f (in-list (kill-findings cmd))])
+    (eq? (shell-risk-finding-severity f) sev)))
+
+(test-case "BUG-0066: pkill by interpreter name is critical"
+  (check-true (kill-has-severity? "pkill -x racket" 'critical))
+  (check-true (kill-has-severity? "pkill -f racket" 'critical)))
+
+(test-case "BUG-0066: unpinned pkill by foreign name is high"
+  (check-true (kill-has-severity? "pkill -f nginx" 'high))
+  (check-false (kill-has-severity? "pkill -f nginx" 'critical)))
+
+(test-case "BUG-0066: pgrep-substitution kill is critical"
+  (check-true (kill-has-severity? "kill $(pgrep -f racket)" 'critical))
+  (check-true (kill-has-severity? "kill $(pgrep -x racket)" 'critical))
+  (check-true (kill-has-severity? "kill $(pgrep -f 'q-agent')" 'critical)))
+
+(test-case "BUG-0066: killall by name is critical"
+  (check-true (kill-has-severity? "killall racket" 'critical))
+  (check-true (kill-has-severity? "killall q-agent" 'critical)))
+
+(test-case "BUG-0066: bracket-trick pkill cannot dodge classification"
+  (check-true (kill-has-severity? "pkill -f \"[r]acket\"" 'critical)))
+
+(test-case "BUG-0066: the W0 crash loop classifies critical"
+  (check-true (kill-has-severity? "for p in $(pgrep -x racket); do kill \"$p\"; done" 'critical)))
+
+(test-case "BUG-0066: ps|grep|awk|xargs kill pipeline is flagged"
+  (check-true (kill-has-severity? "ps aux | grep racket | awk '{print $2}' | xargs kill" 'high)))
+
+(test-case "BUG-0066: literal-PID kills carry no process-kill finding"
+  (check-equal? (kill-findings "kill 1234") '())
+  (check-equal? (kill-findings "kill -9 777") '())
+  (check-equal? (kill-findings "kill -0 1234") '()))
+
+(test-case "BUG-0066: $! provenance carries no process-kill finding"
+  (check-equal? (kill-findings "kill $!") '()))
+
+(test-case "BUG-0066: pidfile kills carry no process-kill finding"
+  (check-equal? (kill-findings "kill \"$(cat q.pid)\"") '())
+  (check-equal? (kill-findings "pkill -F q.pid") '())
+  (check-equal? (kill-findings "pkill --pid 1234") '()))
