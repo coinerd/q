@@ -1,0 +1,5 @@
+((wave . "v1.00.29-w2")
+ (source-evidence . "docs/reports/gsd-wave-evidence/v1.00.29-w2.rktd")
+ (delivery . "campaign/v1.00.29-w2 squash-merged after 20/20 protected checks passed")
+ (merge-sha . "c77899338f15f9e424eac751d03beef5a8cd40fc")
+ (merge-pr . "#9664"))
