@@ -107,22 +107,66 @@ runs:
           echo "- Restore outcome: success (manifest verified against this job's tuple; lock digest \`${LOCK_DIGEST}\`)"
           echo "- Restore wall clock: ${RESTORE_MS:-n/a} ms"
           echo "- Racket install + package-visible compile skipped per the ubuntu fast-gate lane split (docs/reports/CI-RACKET-CACHE-POLICY.md); the restore's four read-only health checks replace them."
+          echo "- Restored workspace bytecode is PURGED + verified before tests run (BUG-0065 systemic invariant, v1.00.29 W4): the fast suite lazily compiles from THIS checkout."
         } >> "$GITHUB_STEP_SUMMARY"
 
-    # The steps below are the FULL path. They are skipped only when the
-    # guarded restore above succeeded for this job; every other run —
-    # including every exact addon-cache hit — still compiles.
-    - name: Clean stale q workspace bytecode
-      if: steps.prepared-env.outcome != 'success'
+    # ------------------------------------------------------------------
+    # BUG-0065 systemic invariant (v1.00.29 W4): EVERY path through this
+    # action — full install+compile, flagged fallback, AND a successful
+    # prepared-environment restore — purges workspace bytecode before any
+    # test can execute. A restored prepared artifact materializes q
+    # compiled/ output whose .zo mtimes are NEWER than this fresh
+    # checkout (artifact extraction timestamps the restored files after
+    # the checkout), so Racket would trust and execute producer-era
+    # bytecode instead of the checked-out sources — the v1.00.27
+    # cohort-report release-lane failure. Mtimes are NOT a freshness
+    # signal, so the invariant is purge-based, not compare-based: this
+    # workspace must hold no .zo that predates this job. After the purge
+    # the step verifies that zero .zo remain outside the frozen
+    # metadata-discovery fixture and FAILS CLOSED otherwise. The purge is
+    # loud and counted (step summary + ::notice + RUNNER_TEMP stamp),
+    # never silent; the stamp lands in RUNNER_TEMP because strict
+    # tag-publish readiness requires a clean workspace.
+    # Producer-side counterpart: the prepared artifact is stamped with
+    # its manifest tuple (repository, git SHA, source digest, lock
+    # digest) by prepare-racket-environment; consumers verify that tuple
+    # on restore AND purge workspace bytecode unconditionally, so a stale
+    # or unmatched artifact can never place executable producer bytecode.
+    # Pinned repo-wide by tests/test-workflow-purge-contract.rkt and
+    # docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md.
+    # ------------------------------------------------------------------
+    - name: Purge and verify workspace bytecode (BUG-0065, every path)
+      if: always()
       shell: bash
       run: |
         set -euo pipefail
         # The frozen discovery fixture (tests/metadata-discovery/fixture/)
         # keeps a TRACKED stray .rkt inside a compiled/ directory as pinned
         # input for tests/ci/metadata-discovery-test.rkt — never wipe it.
+        zo_before=$(find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' | wc -l | tr -d ' ')
         find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' -delete
         find . -depth -type d -name compiled -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +
+        zo_after=$(find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' | wc -l | tr -d ' ')
+        if [ "$zo_after" -ne 0 ]; then
+          echo "::error::BUG-0065 workspace bytecode purge FAILED: ${zo_after} .zo file(s) remain outside the frozen fixture"
+          find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' | head -20
+          exit 1
+        fi
+        echo "::notice::BUG-0065 workspace bytecode purge: removed ${zo_before} stale .zo file(s); post-purge verification: 0 .zo outside the frozen fixture (prepared-env outcome: ${{ steps.prepared-env.outcome }})"
+        printf '{"purged_zo": %s, "post_purge_zo": %s, "prepared_env_outcome": "%s"}\n' \
+          "$zo_before" "$zo_after" '${{ steps.prepared-env.outcome }}' \
+          > "$RUNNER_TEMP/bug-0065-purge-stamp.json"
+        {
+          echo "## Workspace bytecode purge (BUG-0065 systemic invariant)"
+          echo "- Prepared-environment outcome for this job: \`${{ steps.prepared-env.outcome }}\`"
+          echo "- Stale workspace .zo removed: **${zo_before}**; post-purge verification: 0 .zo outside the frozen metadata-discovery fixture"
+          echo "- Restored prepared-artifact bytecode is never trusted by mtime; tests execute code compiled from THIS checkout (docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md)"
+        } >> "$GITHUB_STEP_SUMMARY"
 
+    # The steps below are the FULL path (install + compile). They are
+    # skipped only when the guarded restore above succeeded for this job;
+    # every other run — including every exact addon-cache hit — still
+    # compiles. The BUG-0065 purge above runs on EVERY path regardless.
     # Racket’s default macOS user store is ~/Library/Racket/<version>, while
     # Linux uses a different default. Make the cacheable store explicit so the
     # same composite action owns it on every runner, without caching source

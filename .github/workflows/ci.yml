@@ -12,6 +12,10 @@ name: CI
 # (v1.00.10 release condition). Rollback switch: repository variable
 # RACKET_PREPARED_ARTIFACT=off restores exactly the per-job path with no
 # change to test selection or L4 semantics.
+# BUG-0065 systemic (v1.00.29 W4): every lane consuming a restored or
+# freshly prepared workspace purges + verifies workspace bytecode inside
+# setup-racket BEFORE tests execute — restored .zo mtimes are never a
+# freshness signal (docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md).
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -251,14 +255,22 @@ jobs:
           path: prepared-env-records/
           if-no-files-found: error
 
-      - name: Clear stale bytecode
-        if: steps.setup.outputs.prepared-env-result != 'success'
+      # BUG-0065 systemic (v1.00.29 W4): the shared purge inside
+      # setup-racket now runs on EVERY path — including a successful
+      # prepared-environment restore, whose .zo extraction timestamps are
+      # newer than this checkout (the v1.00.27 cohort-report root cause).
+      # This job-level purge is a fail-closed belt between setup and the
+      # test run; the invariant is pinned repo-wide by
+      # tests/test-workflow-purge-contract.rkt.
+      - name: Clear stale bytecode (belt; shared purge lives in setup-racket)
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       # On the prepared-env path the restore action's read-only health
       # checks (racket --version, lock verify, (require quickcheck fmt),
-      # raco fmt --help) replace this gate; recompiling against fresh
-      # checkout mtimes would defeat the restore.
+      # raco fmt --help) replace this gate; the purged workspace is
+      # lazily recompiled from THIS checkout by the fast suite itself
+      # (BUG-0065 systemic invariant — the accepted v1.00.28 release-lane
+      # tradeoff, extended to every lane in v1.00.29 W4).
       - name: Compile gate (shared deps)
         if: steps.setup.outputs.prepared-env-result != 'success'
         run: raco make main.rkt
