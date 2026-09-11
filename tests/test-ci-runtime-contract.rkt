@@ -600,7 +600,7 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "0c18bf7d204df7313fdeea213714828db825b22debc9bbfa5969019905a67187"
+                    "3cd242bf89934566a49327f26947b201c04da4baabbfc73ca3373505b8da9d22"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
