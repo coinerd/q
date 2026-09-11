@@ -25,8 +25,8 @@
 ;; docs/reports/DELIVERY-VERIFIER-SPLIT-v1.00.29.md.
 ;;
 ;; Timing provenance: the stale whole-file `@timeout 300` / `~123s` note from
-;; v1.00.28 (a2a10b9d) is superseded by per-owner caps derived from W0/W2
-;; repeatable measurements. No global timeout increase.
+;; the a2a10b9d pin (predecessor release) is superseded by per-owner caps
+;; derived from W0/W2 repeatable measurements. No global timeout increase.
 ;;
 ;; tests/test-gsd-delivery-verifier-e2e.rkt — e2e execution-plane + coordinator
 ;; composition suite for the /go delivery verifier.

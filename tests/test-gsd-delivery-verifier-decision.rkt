@@ -22,9 +22,10 @@
 ;;     + coordinator composition (e2e lane)
 ;;
 ;; Timing provenance: the stale whole-file `@timeout 300` / `~123s` note from
-;; v1.00.28 (a2a10b9d) is superseded. This owner's cap is the 120s default,
-;; derived from the v1.00.29 W0 benchmark contract (repeatable cold/warm
-;; runs), not from the legacy observation. No global timeout increase.
+;; the a2a10b9d pin (predecessor release) is superseded. This owner's cap is
+;; the 120s default, derived from the v1.00.29 W0 benchmark contract
+;; (repeatable cold/warm runs), not from the legacy observation. No global
+;; timeout increase.
 ;;
 ;; tests/test-gsd-delivery-verifier-decision.rkt — synthetic decision suite
 ;; for the /go delivery verifier (fail-closed structured delivery evidence).
