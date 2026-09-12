@@ -5,9 +5,27 @@
 ;; @speed fast  ;; @suite fast
 ;; @boundary integration
 
-;; tests/test-proof-bundle-consume.rkt — v1.00.29 W9: the consumer boundary
-;; for q.proof-bundle/1 reuse (dup-04: scheduled full-regression platform lane
-;; consuming the ci.yml#test-platform proof at the same SHA).
+;; tests/test-proof-bundle-consume.rkt — v1.00.29 W9 REWORK: the consumer
+;; boundary for q.proof-bundle/1 reuse, re-aimed at the SAME-ENVIRONMENT
+;; pair dup-01 (scheduled nightly.yml#test consuming the ci.yml fast-suite
+;; proof at the same SHA) after review round 1 REQUEST_CHANGES:
+;;
+;;   B1  dup-04 (ci.yml#test-platform -> full-regression.yml platform lane)
+;;       is NOT a legitimate removal: ci.yml's platform job runs on
+;;       ubuntu-latest while the full-regression lane runs on macos-14, so
+;;       under the current topology dup-04 is distinct_environment and the
+;;       wave contract forbids removing distinct_environment proofs. The
+;;       dup-04 wiring is REVERTED (full-regression.yml macos suite
+;;       unconditional again; ci.yml#test-platform carries no producer
+;;       steps) — pin (c)/(d) below IS the regression protection.
+;;   B3  consuming another workflow's artifacts needs actions: read —
+;;       pinned at workflow level in nightly.yml.
+;;   N2  producer claim templates must substitute REAL counts and fail on
+;;       non-clean aggregates — pinned at the test-aggregate producer.
+;;   N4  the consumer's expected-run-attempt must be derived from the gh
+;;       API response, never copied from the bundle — pinned in nightly.yml
+;;       and exercised by the fixture (request attempt vs producer
+;;       attempt).
 ;;
 ;; §9 threat model AT THE CONSUMER BOUNDARY — every rejection path below ends
 ;; in a consume exit of 3 (not-reusable) or 4 (invalid), i.e. the consuming
@@ -34,11 +52,14 @@
 ;; spelled the way JSON spells them ("commit", "required") so the adapter's
 ;; request normalization is exercised.
 ;;
-;; The workflow-contract section pins the W9 wiring textually (precedent:
-;; tests/test-w9-ci-workflow-verification.rkt): ci.yml#test-platform still
-;; runs the suite unconditionally AND uploads the bundle;
-;; full-regression.yml's macos lane retains the suite step behind the
-;; `bundle_ok != 'true'` fallback condition; release.yml stays untouched.
+;; The workflow-contract section pins the REWORKED W9 wiring textually
+;; (precedent: tests/test-w9-ci-workflow-verification.rkt): ci.yml
+;; #test-aggregate produces proof-bundle-fast over real aggregated counts;
+;; nightly.yml carries actions: read, the consume step with the API-derived
+;; run attempt and the bundle_ok fallback gate; full-regression.yml's macos
+;; suite is UNCONDITIONAL with zero proof-bundle wiring (distinct_environment
+;; protection); ci.yml#test-platform has no producer steps; release.yml
+;; stays untouched.
 ;;
 ;; No sleeps, no threads, no network.
 
@@ -83,7 +104,7 @@
   (hash-ref (json->symbols (call-with-input-file path read-json)) field))
 
 ;; ---------------------------------------------------------------------------
-;; Deterministic producer-side constants (the ci.yml#test-platform stand-in)
+;; Deterministic producer-side constants (the ci.yml#test-aggregate stand-in)
 ;; ---------------------------------------------------------------------------
 
 (define wf-rev "3f7a1c2b9d4e5f60718293a4b5c6d7e8f90a1b2c")
@@ -111,18 +132,19 @@
 (define d-attestation "sha256:5252525252525252525252525252525252525252525252525252525252525252")
 
 ;; The claim/context document the CI producer step would write (symbol keys,
-;; exactly what read-json yields from the claim.json on disk).
+;; exactly what read-json yields from the claim.json on disk). Fixture is the
+;; dup-01 producer: ci.yml#test-aggregate claiming the linux fast suite.
 (define (claims-doc)
   (hasheq 'created_at
           "2026-09-12T10:00:00Z"
           'workflow_path
           ".github/workflows/ci.yml"
           'environment_class
-          "linux-racket-8.10-platform"
+          "linux-racket-8.10-fast"
           'attestation_digest
           d-attestation
           'allowed_consumers
-          (list "workflow:full-regression.yml:test-platform")
+          (list "workflow:nightly.yml:test")
           'denied_consumers
           (list)
           'release_reusable
@@ -133,9 +155,9 @@
                   'run_attempt
                   1
                   'job_id
-                  "test-platform"
+                  "test-aggregate"
                   'job_name
-                  "test-platform"
+                  "test-aggregate"
                   'event
                   "push"
                   'ref
@@ -144,13 +166,13 @@
                   "tier-1")
           'claims
           (list (hasheq 'claim_id
-                        "claim:platform-cross-version:macos-fast-suite"
+                        "claim:pr-ci:linux-fast-suite"
                         'claim_version
                         1
                         'proof_class
-                        "platform"
+                        "fast"
                         'required_environment_class
-                        "linux-racket-8.10-platform"
+                        "linux-racket-8.10-fast"
                         'gate_class
                         "required"
                         'result
@@ -167,14 +189,25 @@
                   'selected_count
                   12
                   'selection_mode
-                  "suite:platform"
+                  "suite:fast"
                   'selector_revision_sha
                   d-runner-rev
                   'explanation_artifact_digest
                   d-log)
           'command
           (hasheq 'argv
-                  (list "racket" "scripts/run-tests.rkt" "--suite" "platform")
+                  (list "racket"
+                        "scripts/run-tests.rkt"
+                        "--suite"
+                        "fast"
+                        "--jobs"
+                        "4"
+                        "--shard-index"
+                        "<shard>"
+                        "--shard-total"
+                        "<total>"
+                        "--json-out"
+                        "test-results.json")
                   'cwd_contract
                   "repo-root"
                   'flags_digest
@@ -206,7 +239,7 @@
                   "UTC")
           'policy
           (hasheq 'test_profile
-                  "platform"
+                  "fast"
                   'security_profile
                   "strict"
                   'sandbox_profile
@@ -253,19 +286,7 @@
                   d-result-summary)
           'artifacts
           (list (hasheq 'name
-                        "platform-tests-log"
-                        'media_type
-                        "text/plain"
-                        'digest
-                        d-log
-                        'size_bytes
-                        1024
-                        'store
-                        "evidence-store"
-                        'store_object_id
-                        "test-platform-macos@run-2468")
-                (hasheq 'name
-                        "platform-test-results"
+                        "fast-suite-results-summary"
                         'media_type
                         "application/json"
                         'digest
@@ -275,18 +296,21 @@
                         'store
                         "evidence-store"
                         'store_object_id
-                        "test-results-platform@run-2468"))))
+                        "fast-suite-results-summary@run-2468"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Consumer request: what the consuming gate independently expects (§5.17
-;; request vocabulary, JSON spelling for the enum fields)
+;; request vocabulary, JSON spelling for the enum fields). Mirrors the
+;; nightly.yml consumer: the expected-run-attempt stands for the value
+;; derived from the gh API response (N4), the environment expectations stand
+;; for the nightly lane's own pinned values.
 ;; ---------------------------------------------------------------------------
 
 (define (base-request)
   (hasheq 'expected-repository
           "coinerd/q"
           'expected-producer-identity
-          "ci.yml:test-platform"
+          "ci.yml:test-aggregate"
           'expected-workflow-revision-sha
           wf-rev
           'expected-commit-sha
@@ -321,7 +345,7 @@
           'expected-security-profile
           "strict"
           'expected-test-profile
-          "platform"
+          "fast"
           'expected-sandbox-profile
           "none"
           'expected-feature-flags-digest
@@ -341,7 +365,7 @@
           ;; as symbol keys and the adapter must translate them back to the
           ;; validator's string-keyed vocabulary
           'expected-artifacts
-          (hasheq 'platform-tests-log d-log 'platform-test-results d-result-summary)
+          (hasheq 'fast-suite-results-summary d-result-summary)
           'expected-result-summary-digest
           d-result-summary
           'expected-prepared-env-artifact-digest
@@ -351,11 +375,11 @@
           'minimum-retention-until
           "2026-09-12T11:00:00Z"
           'consumer-id
-          "workflow:full-regression.yml:test-platform"
+          "workflow:nightly.yml:test"
           'consumer-mode
           "regular"
           'required-claim-ids
-          (list "claim:platform-cross-version:macos-fast-suite")
+          (list "claim:pr-ci:linux-fast-suite")
           'claim-gate-class
           "required"
           'expected-run-attempt
@@ -372,7 +396,7 @@
     (list "--claims-json"
           (path->string claims-file)
           "--producer-identity"
-          "ci.yml:test-platform"
+          "ci.yml:test-aggregate"
           "--workflow-revision-sha"
           wf-rev
           "--commit-sha"
@@ -507,8 +531,8 @@
       (check-equal? (hash-ref rec 'decision) "reusable")
       (check-equal? (hash-ref rec 'reason) #f)
       (check-equal? (hash-ref rec 'bundle_id) (read-bundle-field bundle-file 'bundle_id))
-      (check-equal? (hash-ref rec 'consumer-id) "workflow:full-regression.yml:test-platform")
-      (check-equal? (hash-ref rec 'consumer_id) "workflow:full-regression.yml:test-platform")
+      (check-equal? (hash-ref rec 'consumer-id) "workflow:nightly.yml:test")
+      (check-equal? (hash-ref rec 'consumer_id) "workflow:nightly.yml:test")
       (check-equal? (hash-ref rec 'consumer_mode) "regular")
       (check-equal? (hash-ref rec 'validated_steps) 15)
       ;; the zero-tests-run statement: reuse means the suite did NOT run
@@ -519,9 +543,8 @@
       (check-true (regexp-match? rfc3339-rx (hash-ref rec 'decided-at)))
       (check-equal? (hash-ref rec 'request-current-time) "2026-09-12T11:00:00Z")
       (check-equal? (hash-ref rec 'source-sha) commit-sha)
-      (check-equal? (hash-ref rec 'affected-claim-set)
-                    (list "claim:platform-cross-version:macos-fast-suite"))
-      (check-equal? (hash-ref rec 'claim_ids) (list "claim:platform-cross-version:macos-fast-suite")))
+      (check-equal? (hash-ref rec 'affected-claim-set) (list "claim:pr-ci:linux-fast-suite"))
+      (check-equal? (hash-ref rec 'claim_ids) (list "claim:pr-ci:linux-fast-suite")))
 
     (test-case "(a) tampered bundle (byte flipped in an artifact digest) -> invalid -> exit 4 -> fallback"
       (define tampered (tampered-bundle-file!))
@@ -543,6 +566,36 @@
       (check-equal? (hash-ref rec 'decision) "not-reusable")
       (check-equal? (hash-ref rec 'reason) "not-reusable:subject-mismatch")
       (check-equal? (hash-ref rec 'normal-proof-executed) #t))
+
+    (test-case "(b2) stale producer attempt vs the API-derived expected attempt -> not-reusable (N4)"
+      ;; The nightly consumer derives expected-run-attempt from `gh run list
+      ;; --json ... runAttempt`; a bundle left over from an earlier attempt
+      ;; of the resolved run must be rejected (fallback: run the suite).
+      (define stale-attempt (hash-set (base-request) 'expected-run-attempt 2))
+      (define result (consume! bundle-file (request-file! stale-attempt) "decision-b2.json"))
+      (check-equal? (car result) 3)
+      (define rec (decision-record (cdr result)))
+      (check-equal? (hash-ref rec 'decision) "not-reusable")
+      (check-equal? (hash-ref rec 'reason) "not-reusable:stale-attempt")
+      (check-equal? (hash-ref rec 'normal-proof-executed) #t))
+
+    (test-case "(b3) environment mismatch on the pinned expectations -> not-reusable (dup-01 protection)"
+      ;; A bundle whose producer ran somewhere else (here: a different
+      ;; racket binary) must never satisfy the nightly lane's pinned
+      ;; environment — this is the same-environment guarantee that makes
+      ;; dup-01 reusable and keeps dup-04-style cross-env pairs
+      ;; distinct_environment.
+      (define cross-env
+        (hash-set
+         (base-request)
+         'expected-environment
+         (hash-set (hash-ref (base-request) 'expected-environment)
+                   'racket_executable_digest
+                   "sha256:7777777777777777777777777777777777777777777777777777777777777777")))
+      (define result (consume! bundle-file (request-file! cross-env) "decision-b3.json"))
+      (check-equal? (car result) 3)
+      (check-equal? (hash-ref (decision-record (cdr result)) 'reason)
+                    "not-reusable:environment-mismatch:racket_executable_digest"))
 
     (test-case "(c) expired retention (current-time past retain_until) -> rejected -> exit 3"
       (define expired
@@ -620,23 +673,26 @@
                  'claim-gate-class
                  "required"
                  'expected-artifacts
-                 (hasheq 'platform-test-results
+                 (hasheq 'fast-suite-results-summary
                          "sha256:5050505050505050505050505050505050505050505050505050505050505050"))))
       (check-equal? (hash-ref normalized 'subject-binding) 'commit)
       (check-equal? (hash-ref normalized 'claim-gate-class) 'required)
       (check-equal? (hash-keys (hash-ref normalized 'expected-artifacts))
-                    (list "platform-test-results")))))
+                    (list "fast-suite-results-summary")))))
 
 ;; ---------------------------------------------------------------------------
-;; W9 workflow-contract pins (textual; precedent:
+;; W9 rework workflow-contract pins (textual; precedent:
 ;; tests/test-w9-ci-workflow-verification.rkt)
 ;; ---------------------------------------------------------------------------
 
 (define ci-yml-path (build-path repo-root ".github" "workflows" "ci.yml"))
 (define fr-yml-path (build-path repo-root ".github" "workflows" "full-regression.yml"))
+(define nightly-yml-path (build-path repo-root ".github" "workflows" "nightly.yml"))
 (define release-yml-path (build-path repo-root ".github" "workflows" "release.yml"))
 (define dup-json-path
   (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w0" "duplicate-classification.json"))
+(define removals-json-path
+  (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w9" "removals.json"))
 
 ;; Extracts a top-level (2-space indented) job section from workflow text.
 (define (job-section text job-name)
@@ -652,6 +708,28 @@
             (string-join (reverse acc) "\n")]
            [else (loop (cdr rest) (cons (car rest) acc))]))))
 
+;; The step's own lines: from its "- name:" line up to (excluding) the next
+;; step. Used to prove a suite step carries no `if:` gating.
+(define (step-lines section step-name)
+  (define lines (string-split section "\n"))
+  (define start
+    (for/first ([l (in-list lines)]
+                [i (in-naturals)]
+                #:when (string-prefix? l (string-append "      - name: " step-name)))
+      i))
+  (and start
+       (let loop ([rest (list-tail lines start)])
+         (cond
+           [(null? (cdr rest)) (list (car rest))]
+           [(string-prefix? (cadr rest) "      - name:") (list (car rest))]
+           [else (cons (car rest) (loop (cdr rest)))]))))
+
+(define (unconditional-step? section step-name)
+  (define ls (step-lines section step-name))
+  (and ls
+       (not (for/or ([l (in-list ls)])
+              (string-prefix? (string-trim l) "if:")))))
+
 ;; 0-based index of the first line containing NEEDLE (#f when absent).
 (define (index-of-line text needle)
   (for/first ([l (in-list (string-split text "\n"))]
@@ -660,96 +738,193 @@
     i))
 
 (define workflow-suite
-  (test-suite "W9 workflow contracts (dup-04 wiring, no silent skip anywhere)"
+  (test-suite "W9 rework workflow contracts (dup-01 reuse, dup-04 protected, no silent skip anywhere)"
 
-    (test-case "ci.yml test-platform still produces the bundle AND runs the suite unconditionally"
+    ;; (a) producer pin
+    (test-case "ci.yml test-aggregate produces proof-bundle-fast over REAL aggregated counts"
+      (define text (file->string ci-yml-path))
+      (define section (job-section text "test-aggregate"))
+      (check-true (and section #t) "test-aggregate job must exist")
+      (check-true (string-contains? section "needs: [test, test-platform]")
+                  "the producer must stay behind the full green aggregate")
+      (check-true (string-contains? section "Produce fast-suite proof bundle"))
+      (check-true (string-contains? section "scripts/proof-bundle/consume.rkt write"))
+      (check-true (string-contains? section "--producer-identity \"ci.yml:test-aggregate\""))
+      (check-true (string-contains? section "claim:pr-ci:linux-fast-suite"))
+      (check-true (string-contains? section "workflow:nightly.yml:test")
+                  "allowed_consumers must name exactly the nightly consumer")
+      (check-true (string-contains? section "release_reusable\": false"))
+      (check-true (string-contains? section "linux-racket-8.10-fast")
+                  "environment_class must be pinned to the REAL producer env")
+      (check-true (string-contains? section "test-results-fast-*"))
+      (check-true (string-contains? section "fast-suite-results-summary.json"))
+      (check-true (string-contains? section "proof-bundle-fast"))
+      (check-true (string-contains? section "actions/upload-artifact@v7"))
+      (check-true (string-contains? section "retention-days: 14"))
+      ;; N2: real counts are aggregated per shard and the producer FAILS on
+      ;; any non-clean aggregate (zero skips, failures, timeouts).
+      (check-true (string-contains? section "SKIP_TOTAL")
+                  "the zero-skip assertion must read the aggregated skip count")
+      (check-true (string-contains? section "FAIL_TOTAL"))
+      (check-true (string-contains? section
+                                    "refusing to write a proof bundle over a non-clean aggregate"))
+      ;; the producer job itself never gates on bundle_ok and never consumes
+      (check-false (string-contains? section "bundle_ok"))
+      (check-false (string-contains? section "consume.rkt consume"))
+      ;; the fast shards still run unconditionally: the producer is evidence
+      ;; wiring and must never gate shard execution
+      (check-true (unconditional-step? (job-section text "test") "Run test shard")
+                  "the ci.yml fast-suite shard step must run unconditionally"))
+
+    ;; (b) consumer pin
+    (test-case "nightly.yml: actions: read, consume step, API-derived attempt, fail-safe bundle_ok gate"
+      (define text (file->string nightly-yml-path))
+      ;; B3: consuming another workflow's artifacts needs Actions read
+      (check-true (string-contains? text "permissions:"))
+      (check-true (string-contains? text "actions: read"))
+      (check-true (string-contains? text "contents: read"))
+      (check-true (string-contains? text "Resolve + consume fast-suite proof bundle"))
+      (check-true (string-contains? text "scripts/proof-bundle/consume.rkt consume"))
+      (check-true (string-contains? text "-n proof-bundle-fast"))
+      (check-true (string-contains? text "GH_TOKEN: ${{ github.token }}"))
+      ;; N4: the expected attempt is derived from the gh API response ...
+      (check-true (string-contains? text "--json databaseId,runAttempt"))
+      (check-true (string-contains? text "--argjson attempt \"$RUN_ATTEMPT\""))
+      (check-true (string-contains? text "\"expected-run-attempt\": $attempt"))
+      ;; ... never copied from the bundle
+      (check-false (string-contains? text "producer.run_attempt")
+                   "the expected run attempt must NOT be copied from the bundle (N4)")
+      ;; the environment expectation is pinned to the nightly lane, not copied
+      (check-false (string-contains? text "\"expected-environment\": $b[0].environment"))
+      (check-true (string-contains? text "\"racket_version\": \"8.10\""))
+      (check-true (string-contains? text "required-claim-ids"))
+      (check-true (string-contains? text "claim:pr-ci:linux-fast-suite"))
+      ;; the suite is skipped ONLY on a fail-closed reusable decision
+      (check-true (string-contains? text "if: steps.consume.outputs.bundle_ok != 'true'")
+                  "ANY consume failure must fall back to running the suite")
+      (define suite-idx (index-of-line text "- name: Run full test suite"))
+      (define if-idx (index-of-line text "steps.consume.outputs.bundle_ok != 'true'"))
+      (define consume-idx (index-of-line text "Resolve + consume fast-suite proof bundle"))
+      (check-not-false suite-idx)
+      (check-not-false if-idx)
+      (check-not-false consume-idx)
+      (when (and suite-idx if-idx consume-idx)
+        (check-true
+         (< consume-idx suite-idx if-idx)
+         "consume precedes the suite step; the fallback condition is the suite step's own if:"))
+      ;; the decision record is uploaded for every run (§11.3)
+      (check-true (string-contains? text "name: reuse-decision-fast"))
+      (check-true (regexp-match? #px"if: always\\(\\)" text))
+      ;; a skipped suite is recorded (zero-tests-run statement)
+      (check-true (string-contains? text "Record proof reuse"))
+      ;; the suite keeps its explicit timeout; lint still runs on every nightly
+      (check-true (string-contains? text "timeout-minutes: 15"))
+      (check-true (string-contains? text "racket scripts/run-tests.rkt --suite fast"))
+      (check-true (string-contains? text "racket scripts/lint-all.rkt"))
+      ;; the BUG-0065 purge comment block stays intact
+      (check-true (string-contains? text "runs on EVERY"))
+      ;; no exit masking in this workflow
+      (check-false (regexp-match? #px"\\|\\s*true\\s*$" text)))
+
+    ;; (c) the distinct_environment protection
+    (test-case "full-regression.yml macos suite is UNCONDITIONAL and has NO proof-bundle wiring"
+      (define text (file->string fr-yml-path))
+      ;; the reverted dup-04 wiring must stay reverted (B1): under the
+      ;; current topology ci.yml's platform job runs on ubuntu-latest while
+      ;; this lane runs on macos-14, so the pair is distinct_environment and
+      ;; may never be wired for reuse
+      (check-false
+       (string-contains? text "proof-bundle")
+       "dup-04 is distinct_environment under the current topology: no reuse wiring allowed here")
+      (check-false (string-contains? text "bundle_ok"))
+      (check-false (string-contains? text "consume.rkt"))
+      (check-false (string-contains? text "actions: read"))
+      ;; the macos suite step is unconditional: no `if:` on it
+      (check-true (unconditional-step? text "Run platform-cross suite (macos-arm64)")
+                  "the macos suite must run unconditionally (distinct_environment protection)")
+      (define ls (step-lines text "Run platform-cross suite (macos-arm64)"))
+      (check-true (and ls (pair? ls)))
+      (when (and ls (>= (length ls) 2))
+        (check-true (string-prefix? (list-ref ls 1) "        run:")
+                    "the macos suite step must be directly followed by run:")))
+
+    ;; (d) producer-side revert pin
+    (test-case "ci.yml test-platform has no producer steps (B1 revert)"
       (define text (file->string ci-yml-path))
       (define section (job-section text "test-platform"))
       (check-true (and section #t) "test-platform job must exist")
-      (check-true (string-contains? section "Produce proof bundle"))
-      (check-true (string-contains? section "scripts/proof-bundle/consume.rkt write"))
-      (check-true (string-contains? section "proof-bundle-platform"))
-      (check-true (string-contains? section "retention-days: 14"))
-      (check-true (string-contains? section "actions/upload-artifact@v7"))
-      (check-true (string-contains? section "claim:platform-cross-version:macos-fast-suite"))
-      ;; the producer job consumes nothing and never gates on bundle_ok
-      (check-false (string-contains? section "bundle_ok"))
-      ;; the suite step is unconditional: no `if:` between its name and the
-      ;; next step
-      (define lines (string-split section "\n"))
-      (define start
-        (for/first ([l (in-list lines)]
-                    [i (in-naturals)]
-                    #:when (string-prefix? l "      - name: Run platform-cross suite"))
-          i))
-      (check-true (and start #t) "the platform suite step must still exist in ci.yml")
-      (define step-lines
-        (let loop ([rest (list-tail lines start)])
-          (cond
-            [(null? (cdr rest)) (list (car rest))]
-            [(string-prefix? (cadr rest) "      - name:") (list (car rest))]
-            [else (cons (car rest) (loop (cdr rest)))])))
-      (check-false (for/or ([l (in-list step-lines)])
-                     (string-prefix? (string-trim l) "if:"))
-                   "the ci.yml suite step must run unconditionally"))
-
-    (test-case "full-regression.yml retains the macos suite step behind the fallback condition"
-      (define text (file->string fr-yml-path))
-      (check-true (string-contains? text "Resolve + consume proof bundle"))
-      (check-true (string-contains? text "scripts/proof-bundle/consume.rkt consume"))
-      (check-true (string-contains? text "-n proof-bundle-platform"))
-      (check-true (string-contains? text "reuse-decision-platform"))
-      (check-true (string-contains? text "test-results-platform"))
-      (check-true (string-contains? text "if: steps.consume.outputs.bundle_ok != 'true'")
-                  "ANY consume failure must fall back to running the suite")
-      (define suite-idx (index-of-line text "Run platform-cross suite (macos-arm64)"))
-      (define if-idx (index-of-line text "steps.consume.outputs.bundle_ok != 'true'"))
-      (define resolve-idx (index-of-line text "Resolve + consume proof bundle"))
-      (check-not-false suite-idx)
-      (check-not-false if-idx)
-      (check-not-false resolve-idx)
-      (when (and suite-idx if-idx resolve-idx)
-        ;; the condition is the suite step's own `if:` (it follows the step
-        ;; name) and it comes after the consume step
-        (check-true
-         (< resolve-idx suite-idx if-idx)
-         "consume precedes the suite step; the fallback condition is the suite step's own if:")))
-
-    (test-case "full-regression.yml resolves the bundle against the SAME commit only"
-      (define text (file->string fr-yml-path))
-      (check-true (string-contains? text "gh run list --workflow ci.yml --commit \"$GITHUB_SHA\""))
-      (check-true (string-contains? text "git rev-parse \"$GITHUB_SHA\":.github/workflows/ci.yml"))
-      ;; §11.3: the decision artifact is uploaded for every run
-      (check-true (string-contains? text "name: Upload reuse decision (always; §11.3)"))
-      ;; no exit masking in this workflow (mirrors the test-ci-workflows pin)
-      (check-false (regexp-match? #px"\\|\\s*true" text)))
+      (check-false (string-contains? section "Produce proof bundle"))
+      (check-false (string-contains? section "proof-bundle"))
+      (check-false (string-contains? section "consume.rkt"))
+      ;; the platform suite step itself stays unconditional
+      (check-true (unconditional-step? section "Run platform-cross suite")
+                  "the platform suite step must run unconditionally"))
 
     (test-case "release.yml stays untouched by the W9 reuse wiring"
       (define text (file->string release-yml-path))
       (check-false (string-contains? text "proof-bundle"))
       (check-false (string-contains? text "bundle_ok")))
 
-    (test-case "W0 accounting input pins dup-04 as the removed exact duplicate"
+    (test-case "W0 accounting inputs pin dup-01 as the removed pair and dup-04 as reclassified"
       (define dup (json->symbols (call-with-input-file dup-json-path read-json)))
-      (define dup04
+      (define (pair-of id)
         (for/first ([p (in-list (hash-ref dup 'pairs))]
-                    #:when (equal? (hash-ref p 'pair_id) "dup-04"))
+                    #:when (equal? (hash-ref p 'pair_id) id))
           p))
-      (check-true (and dup04 #t) "dup-04 must exist")
+      (define dup01 (pair-of "dup-01"))
+      (check-true (and dup01 #t) "dup-01 must exist")
+      (check-equal? (hash-ref dup01 'class) "exact_duplicate")
+      (check-true (string-contains? (hash-ref dup01 'a) "claim:pr-ci:linux-fast-suite"))
+      (check-true (string-contains? (hash-ref dup01 'b) "claim:nightly:linux-fast-suite-nightly"))
+      (define dup04 (pair-of "dup-04"))
+      (check-true (and dup04 #t) "dup-04 must exist (W0 classification stays frozen)")
       (check-equal? (hash-ref dup04 'class) "exact_duplicate")
-      (check-true (string-contains? (hash-ref dup04 'a)
-                                    "claim:platform-cross-version:macos-fast-suite"))
       (check-true (string-contains? (hash-ref dup04 'b) "claim:full-regression:macos-platform-suite"))
       (define inputs (hash-ref (hash-ref dup 'avoidable_duplicate_proof_mass_v0) 'inputs))
       (check-equal? (hash-ref inputs 'dup-04_ci_platform_seconds_observed) 389)
-      (check-equal? (hash-ref inputs 'dup-04_fullreg_platform_setup_seconds_observed) 5199))))
+      (check-equal? (hash-ref inputs 'dup-04_fullreg_platform_setup_seconds_observed) 5199)
+      (check-not-false (memq (hash-ref inputs 'dup-01_nightly_fast_typical_seconds #f)
+                             (list 'null #f))
+                       "W0 recorded null for the dup-01 nightly seconds (no retained run)")
+      (check-equal? (hash-ref (hash-ref dup 'avoidable_duplicate_proof_mass_v0)
+                              'estimate_seconds_observed_only)
+                    6065))
+
+    (test-case "W9 ledger: exactly one removal (dup-01) and one disqualification (dup-04)"
+      (define ledger (json->symbols (call-with-input-file removals-json-path read-json)))
+      (define removals (hash-ref ledger 'removals))
+      (check-equal? (length removals) 1 "exactly one removal: dup-01")
+      (define dup01 (car removals))
+      (check-equal? (hash-ref dup01 'pair_id) "dup-01")
+      (check-equal? (hash-ref dup01 'w0_class) "exact_duplicate")
+      (check-equal? (hash-ref dup01 'node_removed) "claim:nightly:linux-fast-suite-nightly")
+      (check-true (string-contains? (hash-ref dup01 'node_reused) "claim:pr-ci:linux-fast-suite"))
+      (check-true (string-contains? (hash-ref dup01 'node_reused) "q.proof-bundle/1"))
+      (check-true (string-contains? (hash-ref dup01 'bundle_ref) "proof-bundle-fast"))
+      (check-equal? (hash-ref dup01 'seconds_saved_observed_proxy) 1282.561)
+      (check-true (string-contains? (hash-ref dup01 'proxy_basis) "PROXY")
+                  "the proxy figure must stay labeled PROXY")
+      (check-true (string-contains? (hash-ref dup01 'rollback) "git revert"))
+      (check-true (string-prefix? (hash-ref dup01 'sha256) "sha256:"))
+      (define disqualifications (hash-ref ledger 'disqualifications))
+      (check-equal? (length disqualifications) 1 "exactly one disqualification: dup-04")
+      (define dup04 (car disqualifications))
+      (check-equal? (hash-ref dup04 'pair_id) "dup-04")
+      (check-true (string-contains? (hash-ref dup04 'disposition) "NOT REMOVED")
+                  "dup-04 must be recorded as NOT REMOVED")
+      (check-true (string-contains? (hash-ref dup04 'disposition) "distinct_environment")
+                  "the disqualification must record the reclassification")
+      (check-true (string-contains? (hash-ref dup04 'evidence) "ubuntu-latest"))
+      (check-true (string-contains? (hash-ref dup04 'evidence) "macos-14"))
+      (check-true (string-contains? (hash-ref dup04 'evidence) "linux-racket-8.10-platform"))
+      (check-equal? (hash-ref dup04 'wiring_reverted) #t))))
 
 ;; ---------------------------------------------------------------------------
 ;; Runner wiring
 ;; ---------------------------------------------------------------------------
 
 (define all-consume-tests
-  (test-suite "q.proof-bundle/1 consumer boundary (W9 dup-04 reuse)"
+  (test-suite "q.proof-bundle/1 consumer boundary (W9 rework: dup-01 reuse)"
     write-suite
     consume-suite
     adapter-suite
