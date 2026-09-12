@@ -269,87 +269,93 @@
         (error 'write-command "created_at must be an RFC3339 UTC timestamp: ~s" created-at)))
   (define retain-until (seconds->rfc3339-z (+ created-seconds (* 86400 retention-days))))
   (finalize-proof-bundle
-   (hasheq
-    'schema
-    "q.proof-bundle/1"
-    'bundle_id
-    ""
-    'created_at
-    created-at
-    'producer
-    (hash-set producer-doc 'workflow_path (required-doc-key doc 'workflow_path "§5.3 workflow_path"))
-    'subject
-    (hasheq 'subject_mode
-            (or (hash-ref doc 'subject_mode #f) "commit")
-            'commit_sha
-            commit-sha
-            'tree_sha
-            tree-sha
-            'dirty
-            (hash-ref doc 'subject_dirty #f))
-    'claims
-    claims
-    'selection
-    (section-or-error doc 'selection)
-    'command
-    (section-or-error doc 'command)
-    'environment
-    (section-or-error doc 'environment)
-    'policy
-    (section-or-error doc 'policy)
-    'prepared_environment
-    (section-or-error doc 'prepared_environment)
-    'result
-    (section-or-error doc 'result)
-    'artifacts
-    (required-doc-key doc 'artifacts "§5.12 artifacts")
-    'provenance
-    (hasheq 'attestation_format
-            (or (hash-ref doc 'attestation_format #f) "q.attestation/1")
-            'attestation_digest
-            attestation-digest
-            'producer_identity
-            producer-identity
-            'source_repository
-            repository
-            'source_workflow_revision_sha
-            workflow-revision-sha
-            'verification_method
-            "repo-owned-validator"
-            'verification_key_or_identity
-            (or (hash-ref doc 'verification_key_or_identity #f) "policy:q/release-evidence-v1"))
-    'retention
-    (hasheq 'policy_id
-            retention-id
-            'created_at
-            created-at
-            'retain_until
-            retain-until
-            'immutable
-            #t
-            'store
-            "evidence-store"
-            'retention_verified_at
-            created-at)
-    'authorization
-    (hasheq 'allowed_consumers
-            allowed-consumers
-            'denied_consumers
-            (hash-ref doc 'denied_consumers '())
-            'release_reusable
-            (hash-ref doc 'release_reusable #f))
-    'compatibility
-    (hasheq 'compatibility_policy_version
-            1
-            'environment_class
-            environment-class
-            'satisfies_classes
-            (or (hash-ref doc 'satisfies_classes #f) (list environment-class))
-            'subject_scope
-            "exact-commit"
-            'notes
-            (or (hash-ref doc 'compatibility_notes #f)
-                "q.proof-bundle spec 5.16; no implicit close-enough comparison")))))
+   (hasheq 'schema
+           "q.proof-bundle/1"
+           'bundle_id
+           ""
+           'created_at
+           created-at
+           'producer
+           (hash-set* producer-doc
+                      'workflow_path
+                      (required-doc-key doc 'workflow_path "§5.3 workflow_path")
+                      'repository
+                      repository
+                      'workflow_revision_sha
+                      workflow-revision-sha)
+           'subject
+           (hasheq 'subject_mode
+                   (or (hash-ref doc 'subject_mode #f) "commit")
+                   'commit_sha
+                   commit-sha
+                   'tree_sha
+                   tree-sha
+                   'dirty
+                   (hash-ref doc 'subject_dirty #f))
+           'claims
+           claims
+           'selection
+           (section-or-error doc 'selection)
+           'command
+           (section-or-error doc 'command)
+           'environment
+           (section-or-error doc 'environment)
+           'policy
+           (section-or-error doc 'policy)
+           'prepared_environment
+           (section-or-error doc 'prepared_environment)
+           'result
+           (section-or-error doc 'result)
+           'artifacts
+           (required-doc-key doc 'artifacts "§5.12 artifacts")
+           'provenance
+           (hasheq 'attestation_format
+                   (or (hash-ref doc 'attestation_format #f) "q.attestation/1")
+                   'attestation_digest
+                   attestation-digest
+                   'producer_identity
+                   producer-identity
+                   'source_repository
+                   repository
+                   'source_workflow_revision_sha
+                   workflow-revision-sha
+                   'verification_method
+                   "repo-owned-validator"
+                   'verification_key_or_identity
+                   (or (hash-ref doc 'verification_key_or_identity #f)
+                       "policy:q/release-evidence-v1"))
+           'retention
+           (hasheq 'policy_id
+                   retention-id
+                   'created_at
+                   created-at
+                   'retain_until
+                   retain-until
+                   'immutable
+                   #t
+                   'store
+                   "evidence-store"
+                   'retention_verified_at
+                   created-at)
+           'authorization
+           (hasheq 'allowed_consumers
+                   allowed-consumers
+                   'denied_consumers
+                   (hash-ref doc 'denied_consumers '())
+                   'release_reusable
+                   (hash-ref doc 'release_reusable #f))
+           'compatibility
+           (hasheq 'compatibility_policy_version
+                   1
+                   'environment_class
+                   environment-class
+                   'satisfies_classes
+                   (or (hash-ref doc 'satisfies_classes #f) (list environment-class))
+                   'subject_scope
+                   "exact-commit"
+                   'notes
+                   (or (hash-ref doc 'compatibility_notes #f)
+                       "q.proof-bundle spec 5.16; no implicit close-enough comparison")))))
 
 (define (write-command args)
   (define claims-path (flag-lookup args "--claims-json"))
@@ -366,9 +372,10 @@
        string->number]
       [else 14]))
   (unless (and claims-path producer-identity workflow-revision-sha commit-sha tree-sha repository out)
-    (usage-error
-     "write"
-     "requires --claims-json F --producer-identity S --workflow-revision-sha S --commit-sha S --tree-sha S --repository S --out F [--retention-days N]"))
+    (usage-error "write"
+                 (string-append
+                  "requires --claims-json F --producer-identity S --workflow-revision-sha S"
+                  " --commit-sha S --tree-sha S --repository S --out F [--retention-days N]")))
   (unless (and retention-days (exact-positive-integer? retention-days))
     (usage-error "write" "--retention-days must be a positive integer"))
   (define doc (read-json-file claims-path "claims document"))

@@ -482,6 +482,232 @@ jobs:
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
+      # v1.00.29 W9 (dup-04 removal): after the suite passed, produce a
+      # q.proof-bundle/1 evidence bundle for the platform-cross claim so the
+      # scheduled full-regression platform lane can REUSE this proof at the
+      # same SHA (validator steps 1-15) instead of re-executing the identical
+      # selection on an identical environment (W0 exact_duplicate dup-04,
+      # 389s observed). The bundle is evidence, not a cached exit code: the
+      # consumer re-validates it fail-closed and falls back to running the
+      # suite on ANY consume failure — never a silent skip (§11.3). Digests
+      # are computed over named real inputs; each recipe is recorded in the
+      # claim JSON's digest_sources map (annotations only — consume.rkt
+      # ignores unknown keys, the validator's closed shapes are untouched).
+      # This step runs only on a green suite (no 'if: always()'): a failed
+      # or cancelled run must never yield a reusable bundle.
+      - name: Produce proof bundle
+        run: |
+          set -euo pipefail
+          mkdir -p proof-bundle artifacts-run
+          WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
+          TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
+          CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          COMPLETED_AT="$CREATED_AT"
+          RESULT_SHA="sha256:$(sha256sum test-results.json | cut -d' ' -f1)"
+          LOG_SHA="sha256:$(sha256sum test-output.log | cut -d' ' -f1)"
+          ELAPSED_MS="$(jq '(.run_summary.wall_clock_seconds * 1000) | floor' test-results.json)"
+          LOG_SIZE="$(stat -c%s test-output.log)"
+          RESULT_SIZE="$(stat -c%s test-results.json)"
+          TESTS_PASSED="$(jq '.run_summary.pass' test-results.json)"
+          TESTS_FAILED="$(jq '.run_summary.fail' test-results.json)"
+          TESTS_SKIPPED="$(jq '.run_summary.skip' test-results.json)"
+          FILE_COUNT="$(jq '.run_summary.file_count' test-results.json)"
+          START_EPOCH="$(( $(date -u +%s) - ( (ELAPSED_MS + 999) / 1000 ) ))"
+          STARTED_AT="$(date -u -d "@${START_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')"
+          INVENTORY_SHA="sha256:$(git ls-files tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
+          METADATA_SHA="sha256:$(sha256sum artifacts-run/metadata-inventory.json | cut -d' ' -f1)"
+          COVERS_SHA="sha256:$(git grep -h '@covers' -- tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          SELECTED_SHA="sha256:$(jq -r '.files[].path' test-results.json | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          RUNNER_REV="$(git rev-parse "$GITHUB_SHA":scripts/run-tests.rkt)"
+          FLAGS_SHA="sha256:$(printf '%s' '--suite platform --jobs 4 --json-out test-results.json' | sha256sum | cut -d' ' -f1)"
+          LOCK_SHA="sha256:$(sha256sum ci/racket-package-lock.rktd | cut -d' ' -f1)"
+          RACKET_BIN="$(readlink -f "$(command -v racket)")"
+          RACKET_EXEC_SHA="sha256:$(sha256sum "$RACKET_BIN" | cut -d' ' -f1)"
+          RECIPE_SHA="sha256:$(sha256sum .github/actions/setup-racket/action.yml | cut -d' ' -f1)"
+          PKGSET_SHA="sha256:$( { raco pkg ls 2>/dev/null || echo pkg-ls-unavailable; } | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          FEATFLAGS_SHA="sha256:$(printf '%s' "${STRICT_TEST_RUNNER}" | sha256sum | cut -d' ' -f1)"
+          RELENV_SHA="sha256:$(cat /etc/os-release | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          CHECKOUT_SHA="sha256:$(git ls-files | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          COMPILED_SHA="sha256:$(find . -name '*.zo' -type f -not -path './tests/metadata-discovery/fixture/*' -printf '%p %s\n' 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          cat > artifacts-run/claim.json <<'JSON_EOF'
+          {
+            "created_at": "@@CREATED_AT@@",
+            "workflow_path": ".github/workflows/ci.yml",
+            "environment_class": "linux-racket-8.10-platform",
+            "attestation_digest": "@@CHECKOUT_SHA@@",
+            "allowed_consumers": ["workflow:full-regression.yml:test-platform"],
+            "denied_consumers": [],
+            "release_reusable": false,
+            "producer": {
+              "run_id": "@@RUN_ID@@",
+              "run_attempt": @@RUN_ATTEMPT@@,
+              "job_id": "@@JOB_ID@@",
+              "job_name": "test-platform",
+              "event": "@@EVENT@@",
+              "ref": "@@REF@@",
+              "trust_tier": "tier-1"
+            },
+            "claims": [
+              {
+                "claim_id": "claim:platform-cross-version:macos-fast-suite",
+                "claim_version": 1,
+                "proof_class": "platform",
+                "required_environment_class": "linux-racket-8.10-platform",
+                "gate_class": "required",
+                "result": "pass"
+              }
+            ],
+            "selection": {
+              "inventory_digest": "@@INVENTORY_SHA@@",
+              "metadata_manifest_digest": "@@METADATA_SHA@@",
+              "covers_manifest_digest": "@@COVERS_SHA@@",
+              "selected_manifest_digest": "@@SELECTED_SHA@@",
+              "selected_count": @@FILE_COUNT@@,
+              "selection_mode": "suite:platform",
+              "selector_revision_sha": "@@RUNNER_REV@@",
+              "explanation_artifact_digest": "@@LOG_SHA@@"
+            },
+            "command": {
+              "argv": ["racket", "scripts/run-tests.rkt", "--suite", "platform", "--jobs", "4"],
+              "cwd_contract": "repo-root",
+              "flags_digest": "@@FLAGS_SHA@@",
+              "runner_revision_sha": "@@RUNNER_REV@@"
+            },
+            "environment": {
+              "os": "linux",
+              "os_version": "24.04",
+              "runner_image": "ubuntu-24.04",
+              "architecture": "x86_64",
+              "racket_version": "8.10",
+              "racket_executable_digest": "@@RACKET_EXEC_SHA@@",
+              "racket_installer_digest": "@@RECIPE_SHA@@",
+              "package_lock_digest": "@@LOCK_SHA@@",
+              "resolved_package_set_digest": "@@PKGSET_SHA@@",
+              "locale": "C.UTF-8",
+              "timezone": "UTC"
+            },
+            "policy": {
+              "test_profile": "platform",
+              "security_profile": "strict",
+              "sandbox_profile": "none",
+              "feature_flags_digest": "@@FEATFLAGS_SHA@@",
+              "relevant_environment_digest": "@@RELENV_SHA@@"
+            },
+            "prepared_environment": {
+              "mode": "cold",
+              "artifact_digest": "@@CHECKOUT_SHA@@",
+              "build_recipe_digest": "@@RECIPE_SHA@@",
+              "verification_status": "verified",
+              "compiled_cache_digest": "@@COMPILED_SHA@@"
+            },
+            "result": {
+              "status": "pass",
+              "started_at": "@@STARTED_AT@@",
+              "completed_at": "@@COMPLETED_AT@@",
+              "elapsed_ms": @@ELAPSED_MS@@,
+              "tests_passed": @@TESTS_PASSED@@,
+              "tests_failed": 0,
+              "tests_skipped": 0,
+              "allowed_skip_reasons": [],
+              "timeouts": 0,
+              "cancelled": false,
+              "retry_count": 0,
+              "result_summary_digest": "@@RESULT_SHA@@"
+            },
+            "artifacts": [
+              {
+                "name": "platform-tests-log",
+                "media_type": "text/plain",
+                "digest": "@@LOG_SHA@@",
+                "size_bytes": @@LOG_SIZE@@,
+                "store": "evidence-store",
+                "store_object_id": "test-platform-macos@@RUN_ID@@"
+              },
+              {
+                "name": "platform-test-results",
+                "media_type": "application/json",
+                "digest": "@@RESULT_SHA@@",
+                "size_bytes": @@RESULT_SIZE@@,
+                "store": "evidence-store",
+                "store_object_id": "test-results-platform@@RUN_ID@@"
+              }
+            ],
+            "digest_sources": {
+              "note": "annotations for auditors; consume.rkt write ignores unknown claim-document keys",
+              "inventory_digest": "sha256 over `git ls-files tests | sort`",
+              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify-metadata.rkt --metadata-inventory-json",
+              "covers_manifest_digest": "sha256 over sorted `git grep -h '@covers' -- tests` lines",
+              "selected_manifest_digest": "sha256 over the executed selection: sorted .files[].path of test-results.json",
+              "runner_revision_sha": "blob sha of scripts/run-tests.rkt at GITHUB_SHA",
+              "racket_executable_digest": "sha256 of the resolved racket executable bytes",
+              "racket_installer_digest": "sha256 of .github/actions/setup-racket/action.yml (the pinned provisioning recipe)",
+              "package_lock_digest": "sha256 of ci/racket-package-lock.rktd",
+              "resolved_package_set_digest": "sha256 over sorted `raco pkg ls` output",
+              "feature_flags_digest": "sha256 of the STRICT_TEST_RUNNER value",
+              "relevant_environment_digest": "sha256 over sorted /etc/os-release content",
+              "prepared_environment.artifact_digest": "cold mode: sha256 over `git ls-files | sort` — the workspace was purged (W4) and rebuilt from THIS checkout by the compile gate + suite",
+              "compiled_cache_digest": "sha256 over sorted '*.zo' path+size lines (fixture dir excluded)",
+              "attestation_digest": "sha256 over `git ls-files | sort` (checkout manifest attestation)"
+            }
+          }
+          JSON_EOF
+          sed -i \
+            -e "s|@@CREATED_AT@@|${CREATED_AT}|g" \
+            -e "s|@@CHECKOUT_SHA@@|${CHECKOUT_SHA}|g" \
+            -e "s|@@RUN_ID@@|${GITHUB_RUN_ID}|g" \
+            -e "s|@@RUN_ATTEMPT@@|${GITHUB_RUN_ATTEMPT}|g" \
+            -e "s|@@JOB_ID@@|${GITHUB_JOB}|g" \
+            -e "s|@@EVENT@@|${GITHUB_EVENT_NAME}|g" \
+            -e "s|@@REF@@|${GITHUB_REF}|g" \
+            -e "s|@@INVENTORY_SHA@@|${INVENTORY_SHA}|g" \
+            -e "s|@@METADATA_SHA@@|${METADATA_SHA}|g" \
+            -e "s|@@COVERS_SHA@@|${COVERS_SHA}|g" \
+            -e "s|@@SELECTED_SHA@@|${SELECTED_SHA}|g" \
+            -e "s|@@FILE_COUNT@@|${FILE_COUNT}|g" \
+            -e "s|@@TESTS_PASSED@@|${TESTS_PASSED}|g" \
+            -e "s|@@TESTS_FAILED@@|${TESTS_FAILED}|g" \
+            -e "s|@@TESTS_SKIPPED@@|${TESTS_SKIPPED}|g" \
+            -e "s|@@RUNNER_REV@@|${RUNNER_REV}|g" \
+            -e "s|@@LOG_SHA@@|${LOG_SHA}|g" \
+            -e "s|@@FLAGS_SHA@@|${FLAGS_SHA}|g" \
+            -e "s|@@RACKET_EXEC_SHA@@|${RACKET_EXEC_SHA}|g" \
+            -e "s|@@RECIPE_SHA@@|${RECIPE_SHA}|g" \
+            -e "s|@@LOCK_SHA@@|${LOCK_SHA}|g" \
+            -e "s|@@PKGSET_SHA@@|${PKGSET_SHA}|g" \
+            -e "s|@@FEATFLAGS_SHA@@|${FEATFLAGS_SHA}|g" \
+            -e "s|@@RELENV_SHA@@|${RELENV_SHA}|g" \
+            -e "s|@@COMPILED_SHA@@|${COMPILED_SHA}|g" \
+            -e "s|@@STARTED_AT@@|${STARTED_AT}|g" \
+            -e "s|@@COMPLETED_AT@@|${COMPLETED_AT}|g" \
+            -e "s|@@ELAPSED_MS@@|${ELAPSED_MS}|g" \
+            -e "s|@@RESULT_SHA@@|${RESULT_SHA}|g" \
+            -e "s|@@LOG_SIZE@@|${LOG_SIZE}|g" \
+            -e "s|@@RESULT_SIZE@@|${RESULT_SIZE}|g" \
+            artifacts-run/claim.json
+          racket scripts/proof-bundle/consume.rkt write \
+            --claims-json artifacts-run/claim.json \
+            --producer-identity "ci.yml:test-platform" \
+            --workflow-revision-sha "$WF_REVISION" \
+            --commit-sha "$GITHUB_SHA" \
+            --tree-sha "$TREE_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --retention-days 14 \
+            --out proof-bundle/bundle.json
+          cp artifacts-run/claim.json proof-bundle/claim.json
+          echo "proof bundle: $(jq -r '.bundle_id' proof-bundle/bundle.json)"
+
+      - name: Upload proof bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-bundle-platform
+          path: |
+            proof-bundle/bundle.json
+            proof-bundle/claim.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Test results summary
         if: always()
         run: |
