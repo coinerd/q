@@ -175,6 +175,39 @@
       (check-true (unbox hook-called?) "tool-call-pre hook should be called")
       (check-equal? (unbox captured-name) "test-tool" "payload should contain tool name"))
 
+    ;; ---- Hook 3b: BUG-0072 seam regression — payload must be a hash ----
+    (test-case "tool-call-pre payload is a hash (BUG-0072 seam contract)"
+      (define captured-payload (box #f))
+      (define reg
+        (make-test-extension-registry (list 'tool-call-pre
+                                            (lambda (payload)
+                                              (set-box! captured-payload payload)
+                                              (hook-pass payload)))))
+      (define hook-dispatcher (make-hook-dispatcher reg))
+
+      (define test-tool
+        (make-tool "hash-check-tool"
+                   "A test tool"
+                   (hasheq 'type "object" 'properties (hasheq))
+                   (lambda (args exec-ctx) (make-success-result "ok"))))
+
+      (define tc (make-tool-call "tc-3b" "hash-check-tool" (hasheq 'command "ls")))
+      (define registry (make-tool-registry))
+      (register-tool! registry test-tool)
+
+      (run-tool-batch (list tc)
+                      registry
+                      #:hook-dispatcher hook-dispatcher
+                      #:exec-context (make-exec-context #:permission-config
+                                                        (make-permissive-permission-config)))
+
+      (define payload (unbox captured-payload))
+      (check-true (hash? payload)
+                  "BUG-0072: tool-call-pre payload must be a hash (hash-ref handlers must not raise)")
+      (check-equal? (hash-ref payload 'tool-name #f) "hash-check-tool")
+      (check-equal? (hash-ref payload 'tool-call-id #f) "tc-3b")
+      (check-equal? (hash-ref payload 'tool-arguments #f) (hasheq 'command "ls")))
+
     ;; ---- Hook 4: tool-result-post (in scheduler) ----
     (test-case "tool-result-post hook is dispatched after tool execution"
       (define hook-called? (box #f))
