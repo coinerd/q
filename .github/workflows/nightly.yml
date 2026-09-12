@@ -10,6 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # BUG-0065 systemic (v1.00.29 W4): this lane consumes no
+      # prepared-environment restore (prepared-environment defaults to
+      # 'off'), and the shared purge inside setup-racket runs on EVERY
+      # path regardless — workspace bytecode is purged + verified before
+      # the suite executes. Pinned by tests/test-workflow-purge-contract.rkt.
       - name: Install Racket
         uses: ./.github/actions/setup-racket
       - name: Run full test suite
