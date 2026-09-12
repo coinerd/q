@@ -111,14 +111,32 @@
   (check-true (string-contains? content "Per-file failure output")
               "failure summary must include per-file failure output"))
 
-(test-case "release.yml test job purges restored workspace bytecode (BUG-0065 root cause)"
+;; BUG-0065 systemic (v1.00.29 W4): the release lane no longer carries a
+;; bespoke purge step — the shared setup-racket action purges + verifies
+;; workspace bytecode on EVERY path (if: always()), including a
+;; successful prepared-environment restore whose .zo mtimes are newer
+;; than this checkout (the v1.00.27 cohort-report root cause). The
+;; bespoke step is pinned ABSENT so it cannot silently return beside
+;; the shared fail-closed mechanism; repo-wide lane coverage is pinned
+;; by tests/test-workflow-purge-contract.rkt.
+(test-case "release.yml delegates the BUG-0065 purge to the shared setup-racket step"
   (define content (read-release-yml))
-  (check-true
+  (check-false
    (string-contains? content "Purge restored workspace bytecode")
-   "the test job must purge restored .zo files: prepared-env snapshots carry\nmtimes newer than the checkout, so Racket executes producer bytecode")
-  (check-true (string-contains? content "name '*.zo'") "purge must remove stale .zo files")
-  (check-true (string-contains? content "tests/metadata-discovery/fixture")
-              "purge must preserve the frozen discovery fixture"))
+   "the bespoke release-lane purge step must not return; the shared action owns the invariant")
+  (check-false
+   (string-contains? content "find . -type f -name '*.zo'")
+   "release.yml must not inline bytecode deletion; the shared step is fail-closed and counted")
+  (check-true (string-contains? content ".github/actions/setup-racket")
+              "the release test job must run the shared setup-racket action")
+  (check-true (string-contains? content "BUG-0065 systemic migration")
+              "the migration comment must bind this lane to the shared BUG-0065 invariant"))
+
+(test-case "release.yml test job consumes the shared purge (no local purge step)"
+  (define content (read-release-yml))
+  (define test-job (bounded-section content "  test:" "  prepare:"))
+  (check-true (string-contains? test-job ".github/actions/setup-racket")
+              "the test job must invoke the shared setup-racket action (which purges on every path)"))
 
 (test-case "release.yml release-core depends on prepare"
   (define content (read-release-yml))
@@ -501,3 +519,50 @@
     "W7 target: go-orchestrator.rkt (~a lines) must stay below ~a lines — extract a module instead of growing it"
     (go-orchestrator-line-count)
     (dict-ref fixture 'w7-target-max-lines))))
+
+;; ============================================================
+;; BUG-0065 systemic invariant (v1.00.29 W4): the shared setup-racket
+;; action is the single purge/verify mechanism; every lane that could
+;; execute bytecode in a restored/prepared workspace goes through it.
+;; The per-workflow purge-step scan over ALL workflow files (including
+;; future lanes, fail-closed) lives in tests/test-workflow-purge-
+;; contract.rkt; the pins here bind the named lanes to the shared step.
+;; ============================================================
+
+(define-runtime-path setup-racket-action-path "../.github/actions/setup-racket/action.yml")
+(define-runtime-path nightly-yml-path "../.github/workflows/nightly.yml")
+
+(define (read-setup-racket-action)
+  (file->string setup-racket-action-path))
+(define (read-nightly-yml)
+  (file->string nightly-yml-path))
+
+(test-case "setup-racket action purges + verifies workspace bytecode on EVERY path (BUG-0065)"
+  (define content (read-setup-racket-action))
+  (check-true (string-contains? content "Purge and verify workspace bytecode (BUG-0065, every path)")
+              "the shared purge/verify step must exist in the composite action")
+  (check-true (string-contains? content "if: always()")
+              "the purge must run on every action path, including a successful prepared-env restore")
+  (check-true (string-contains? content "name '*.zo'") "the purge must remove stale .zo files")
+  (check-true (string-contains? content "tests/metadata-discovery/fixture")
+              "the purge must preserve the frozen discovery fixture")
+  (check-true (string-contains? content "post_purge")
+              "the step must verify zero .zo remain after the purge (fail-closed)")
+  (check-true (string-contains? content "::notice::BUG-0065 workspace bytecode purge")
+              "purge events must be loud and counted, never silent")
+  (check-true (string-contains? content "bug-0065-purge-stamp.json")
+              "purge outcomes must be stamped to RUNNER_TEMP for post-run forensics"))
+
+(test-case "ci.yml restore lanes consume the shared purge via setup-racket"
+  (define content (read-ci-yml))
+  (check-true (string-contains? content "BUG-0065 systemic")
+              "ci.yml must bind its restore lanes to the BUG-0065 systemic invariant")
+  (check-false (string-contains? content "find . -type f -name '*.zo'")
+               "ci.yml must not inline bytecode deletion; the shared step owns it"))
+
+(test-case "nightly.yml consumes the shared purge via setup-racket"
+  (define content (read-nightly-yml))
+  (check-true (string-contains? content ".github/actions/setup-racket")
+              "nightly must invoke the shared setup-racket action")
+  (check-false (string-contains? content "find . -type f -name '*.zo'")
+               "nightly must not inline bytecode deletion; the shared step owns it"))

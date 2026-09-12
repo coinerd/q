@@ -119,6 +119,15 @@ jobs:
       # -----------------------------------------------------------------
       # Consumers (only for tuples whose consumers may be validated).
       # -----------------------------------------------------------------
+      # BUG-0065 PURGE-EXEMPT (v1.00.29 W4): REPORT-ONLY lane. This
+      # direct restore validates the prepared-environment contract itself
+      # (manifest verification + negative tamper cases against the
+      # downloaded artifact) and never executes the q test suite in the
+      # restored workspace, so it carries no test-facing purge step. Any
+      # NEW restore-consuming lane that executes tests must go through
+      # setup-racket (shared BUG-0065 purge on every path) or purge
+      # explicitly — enforced fail-closed by
+      # tests/test-workflow-purge-contract.rkt.
       - name: Restore and run all four health checks
         id: restore
         if: steps.lock-gate.outputs.supported == 'true' && matrix.role == 'full'
