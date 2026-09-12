@@ -81,7 +81,7 @@
   ;; v1.00.29 W9 CI incident: CI jobs export Q_PREPARED_ENV_* via
   ;; GITHUB_ENV for their own downstream steps; a test that means to
   ;; simulate ABSENT telemetry must scrub those ambient variables,
-  ;; otherwise the subprocess inherits them and classifies from real CI
+  ;; otherwise the child process inherits them and classifies from real CI
   ;; telemetry (the failure was masked-green in PR CI by the missing
   ;; pipefail in the shard steps — BUG-0073 — and invisible locally).
   (string-append "env -u Q_PREPARED_ENV_STATE -u Q_PREPARED_ENV_RESTORE_MS"
@@ -89,11 +89,11 @@
 
 (define (run-script args [envs '()])
   ;; Run the report tool from the repo root with optional environment
-  ;; assignments; return (values exit-code combined-output). The subprocess
-  ;; environment starts from the ambient environment SCRUBBED of the
-  ;; Q_PREPARED_ENV_* telemetry variables and then applies the explicit
-  ;; per-case assignments — each test case sees exactly the telemetry it
-  ;; declares, never ambient CI state.
+  ;; assignments; return (values exit-code combined-output). The child
+  ;; process environment starts from the ambient environment SCRUBBED of
+  ;; the Q_PREPARED_ENV_* telemetry variables and then applies the
+  ;; explicit per-case assignments — each test case sees exactly the
+  ;; telemetry it declares, never ambient CI state.
   (define out (open-output-string))
   (define code
     (parameterize ([current-directory project-root]
