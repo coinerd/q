@@ -372,7 +372,7 @@
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
      "a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784"
-     "the guarded restore action must stay byte-identical (re-stamped by v1.00.29 W6 for the identity-manifest expansion; the purge and restore steps stayed byte-identical)")
+     "the guarded restore action must stay byte-identical (re-stamped by v1.00.29 W6; purge and restore steps unchanged)")
     (check-true (string-contains? ci-text "needs.fast-env.result")
                 "test shards must keep gating PREPARED_ENV on the fast-env result")
     ;; same-SHA timing shape (topology checkpoint, not a cohort)

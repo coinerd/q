@@ -958,7 +958,8 @@ usage:
             (when (equal? activation "activated")
               (unless (and (hash? profile) (equal? profile producer-profile))
                 (violate
-                 "consumer ~a: activated with an env-profile distinct from the producer — distinct Racket/platform/policy environments must stay deferred or separate"
+                 "consumer ~a: activated with an env-profile distinct from the producer — distinct"
+                 "Racket/platform/policy environments must stay deferred or separate"
                  name))
               (unless (equal? (hash-ref c 'artifact-identity #f)
                               (hash-ref producer 'artifact-identity #f))

@@ -173,7 +173,10 @@
                        #:artifact-digest [artifact digest-d]
                        #:base [base "prepared-env-fast"])
   (format
-   "--identity-emit --out ~a --os ~a --os-image ~a --arch ~a --racket-version ~a --racket-executable-digest ~a --lock-digest ~a --resolved-set-digest ~a --precompile-recipe-revision ~a --policy-fingerprint ~a --artifact-digest ~a --artifact-name-base ~a"
+   (string-append "--identity-emit --out ~a --os ~a --os-image ~a --arch ~a --racket-version ~a"
+                  " --racket-executable-digest ~a --lock-digest ~a --resolved-set-digest ~a"
+                  " --precompile-recipe-revision ~a --policy-fingerprint ~a"
+                  " --artifact-digest ~a --artifact-name-base ~a")
    (path->string out)
    os
    os-image
