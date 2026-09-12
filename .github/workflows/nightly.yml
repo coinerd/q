@@ -5,6 +5,13 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
+# v1.00.29 W9 rework (dup-01 reuse; review round 1 finding B3): consuming
+# another workflow's proof bundle requires the Actions read scope — the
+# consume step runs `gh run list` / `gh run download` against ci.yml runs.
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,8 +24,182 @@ jobs:
       # the suite executes. Pinned by tests/test-workflow-purge-contract.rkt.
       - name: Install Racket
         uses: ./.github/actions/setup-racket
+
+      # v1.00.29 W9 rework (dup-01 removal): reuse the fast-suite proof the
+      # ci.yml#test-aggregate job produced for THIS commit instead of
+      # re-executing the identical suite (same selection, same
+      # ubuntu-latest/racket-8.10 environment, same strictness — W0
+      # exact_duplicate dup-01). The bundle is evidence, never a cached exit
+      # code: it is re-validated fail-closed (validator steps 1-15) by
+      # scripts/proof-bundle/consume.rkt; ANY failure — no matching ci run,
+      # missing artifact, tampered bundle, stale commit, expired retention,
+      # unauthorized consumer, wrong claim, environment mismatch — sets
+      # bundle_ok=false and the suite below RUNS. Fallback causes are
+      # recorded per run (§11.3 no-silent-fallback); the decision artifact
+      # is always uploaded. Exit contract: 0 = reusable (only then may the
+      # suite be skipped), 3 = not-reusable, 4 = invalid/unreadable.
+      #
+      # The step itself never fails the job (fail-safe): every hiccup
+      # records the fallback and leaves bundle_ok=false, so the worst case
+      # is exactly the pre-W9 behavior — the suite runs.
+      - name: Resolve + consume fast-suite proof bundle
+        id: consume
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p proof-bundle-decision
+          DECISION="proof-bundle-decision/reuse-decision.json"
+          CONSUMER_ID="workflow:nightly.yml:test"
+          REQUIRED_CLAIM="claim:pr-ci:linux-fast-suite"
+          PRODUCER_ID="ci.yml:test-aggregate"
+          # Fail-closed default: a decision record exists for EVERY run; a
+          # path that cannot reach the validator keeps this one.
+          printf '{"schema":"q.reuse-decision/1","decision":"not-reusable","reason":"consume-not-run","consumer-id":"%s","zero-tests-run":false,"normal-proof-executed":true}\n' "$CONSUMER_ID" > "$DECISION"
+
+          run_consume() {
+            set -euo pipefail
+            BUNDLE_OK=false
+            RUN_ID=""
+            RUN_ATTEMPT=""
+            # Resolve the latest successful ci.yml run for THIS commit. N4
+            # (review round 1): the expected run attempt is derived from the
+            # API response's runAttempt — never copied from the bundle.
+            if gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success --json databaseId,runAttempt --limit 5 > proof-bundle-decision/candidate-runs.json; then
+              RUN_ID="$(jq -r '.[0].databaseId // empty' proof-bundle-decision/candidate-runs.json)"
+              RUN_ATTEMPT="$(jq -r '.[0].runAttempt // empty' proof-bundle-decision/candidate-runs.json)"
+            else
+              echo "resolve: gh run list unavailable (fallback: run the suite)" | tee proof-bundle-decision/fallback-cause.txt
+            fi
+            if [ -n "$RUN_ID" ] && [ -n "$RUN_ATTEMPT" ] && gh run download "$RUN_ID" -n proof-bundle-fast -D /tmp/pb; then
+              BUNDLE="/tmp/pb/bundle.json"
+              WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
+              TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
+              NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              # Review round 1 (dup-01): the environment expectation is
+              # PINNED to THIS lane's real environment — ubuntu-latest +
+              # Racket 8.10 via the setup-racket action — and its own
+              # digest recipes; it is never copied from the bundle. A
+              # producer that did not run on this same environment class
+              # fails validator step 9 here and the suite runs.
+              RACKET_BIN="$(readlink -f "$(command -v racket)")"
+              jq -n \
+                --arg repo "$GITHUB_REPOSITORY" \
+                --arg commit "$GITHUB_SHA" \
+                --arg tree "$TREE_SHA" \
+                --arg wfrev "$WF_REVISION" \
+                --arg now "$NOW" \
+                --arg consumer "$CONSUMER_ID" \
+                --arg producer "$PRODUCER_ID" \
+                --arg claim "$REQUIRED_CLAIM" \
+                --arg racket_exec "sha256:$(sha256sum "$RACKET_BIN" | cut -d' ' -f1)" \
+                --arg racket_inst "sha256:$(sha256sum .github/actions/setup-racket/action.yml | cut -d' ' -f1)" \
+                --arg lock "sha256:$(sha256sum ci/racket-package-lock.rktd | cut -d' ' -f1)" \
+                --arg pkgset "sha256:$( { raco pkg ls 2>/dev/null || echo pkg-ls-unavailable; } | LC_ALL=C sort | sha256sum | cut -d' ' -f1)" \
+                --arg relenv "sha256:$(cat /etc/os-release | LC_ALL=C sort | sha256sum | cut -d' ' -f1)" \
+                --argjson attempt "$RUN_ATTEMPT" \
+                --slurpfile b "$BUNDLE" \
+                '{
+                  "expected-repository": $repo,
+                  "expected-producer-identity": $producer,
+                  "expected-workflow-revision-sha": $wfrev,
+                  "expected-commit-sha": $commit,
+                  "expected-tree-sha": $tree,
+                  "subject-binding": "commit",
+                  "expected-environment": {
+                    "os": "linux",
+                    "os_version": "24.04",
+                    "runner_image": "ubuntu-24.04",
+                    "architecture": "x86_64",
+                    "racket_version": "8.10",
+                    "racket_executable_digest": $racket_exec,
+                    "racket_installer_digest": $racket_inst,
+                    "package_lock_digest": $lock,
+                    "resolved_package_set_digest": $pkgset,
+                    "locale": "C.UTF-8",
+                    "timezone": "UTC"
+                  },
+                  "expected-security-profile": $b[0].policy.security_profile,
+                  "expected-test-profile": $b[0].policy.test_profile,
+                  "expected-sandbox-profile": $b[0].policy.sandbox_profile,
+                  "expected-feature-flags-digest": $b[0].policy.feature_flags_digest,
+                  "expected-relevant-environment-digest": $relenv,
+                  "expected-selection-digests": {
+                    "inventory_digest": $b[0].selection.inventory_digest,
+                    "metadata_manifest_digest": $b[0].selection.metadata_manifest_digest,
+                    "covers_manifest_digest": $b[0].selection.covers_manifest_digest,
+                    "selected_manifest_digest": $b[0].selection.selected_manifest_digest
+                  },
+                  "expected-artifacts": ($b[0].artifacts | map({key: .name, value: .digest}) | from_entries),
+                  "expected-result-summary-digest": $b[0].result.result_summary_digest,
+                  "expected-prepared-env-artifact-digest": $b[0].prepared_environment.artifact_digest,
+                  "current-time": $now,
+                  "minimum-retention-until": $now,
+                  "consumer-id": $consumer,
+                  "consumer-mode": "regular",
+                  "required-claim-ids": [$claim],
+                  "claim-gate-class": "required",
+                  "expected-run-attempt": $attempt
+                }' > proof-bundle-decision/request.json
+              set +e
+              racket scripts/proof-bundle/consume.rkt consume \
+                --bundle "$BUNDLE" \
+                --request-json proof-bundle-decision/request.json \
+                --out "$DECISION"
+              CONSUME_RC=$?
+              set -e
+              if [ "$CONSUME_RC" -eq 0 ]; then
+                BUNDLE_OK=true
+              else
+                echo "consume: validator rejected the bundle (exit $CONSUME_RC; fallback: run the suite)" | tee proof-bundle-decision/fallback-cause.txt
+              fi
+            else
+              echo "resolve: no ci.yml fast-suite proof bundle for $GITHUB_SHA (fallback: run the suite)" | tee proof-bundle-decision/fallback-cause.txt
+            fi
+            echo "bundle_ok=$BUNDLE_OK" >> "$GITHUB_OUTPUT"
+          }
+
+          # A consume hiccup must never fail the nightly (fail-safe): the
+          # suite step below keys off bundle_ok, which is only true on a
+          # validator 'reusable' decision. The subshell guarantees that ANY
+          # abort inside run_consume — including unbound variables under
+          # set -u — is contained and the step still exits 0.
+          ( run_consume ) || echo "consume: unexpected failure (fallback: run the suite)" | tee -a proof-bundle-decision/fallback-cause.txt
+          exit 0
+
+      - name: Upload reuse decision (always; §11.3)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reuse-decision-fast
+          path: proof-bundle-decision/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Run full test suite
+        # The suite is skipped ONLY on a fail-closed 'reusable' consume
+        # decision (exit 0). Any other consume outcome — missing artifact,
+        # tampered bundle, stale commit, expired retention, authorization
+        # failure, validator rejection — runs the suite. NEVER a silent
+        # skip.
+        if: steps.consume.outputs.bundle_ok != 'true'
         run: racket scripts/run-tests.rkt --suite fast
         timeout-minutes: 15
+
+      - name: Record proof reuse (suite skipped; zero tests run)
+        if: steps.consume.outputs.bundle_ok == 'true'
+        run: |
+          {
+            echo "## Fast-suite proof reused (dup-01)"
+            echo ""
+            echo "The fail-closed validator accepted the ci.yml fast-suite"
+            echo "proof bundle for commit \`$GITHUB_SHA\` (decision: reusable)."
+            echo "**Zero tests were run by this workflow for the suite claim**;"
+            echo "the proof was executed by ci.yml#test-aggregate for the same"
+            echo "commit and re-validated (steps 1-15). The retained"
+            echo "q.reuse-decision/1 record carries the statement:"
+            echo "\`zero-tests-run: true\`. The lint step below still ran."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run lint
         run: racket scripts/lint-all.rkt
