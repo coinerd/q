@@ -229,6 +229,32 @@
       (check-equal? (hash-ref rec 'sha-context) "aaaa1111")
       (check-false (hash-has-key? rec 'fallback-cause)))
 
+    (test-case "emit: identity mismatch NEVER classifies as verified (W6 review finding)"
+      (define out (tmp-path "emit-identity-mismatch.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--wall-clock-seconds 210.5 --fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+       '(("Q_PREPARED_ENV_STATE" . "restored") ("Q_PREPARED_ENV_RESTORE_MS" . "12000")
+                                               ("Q_PREPARED_ENV_IDENTITY_RESULT" . "mismatch")))
+      (define rec (read-jsexpr out))
+      (check-equal? (hash-ref rec 'outcome)
+                    "rebuilt"
+                    "an identity-mismatch cold fallback is rebuilt, never verified")
+      (check-equal? (hash-ref rec 'fallback-cause) "identity-mismatch")
+      (check-not-equal? (hash-ref rec 'outcome) "verified"))
+
+    (test-case "emit: identity verified keeps verified classification"
+      (define out (tmp-path "emit-identity-verified.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--wall-clock-seconds 210.5 --fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+       '(("Q_PREPARED_ENV_STATE" . "restored") ("Q_PREPARED_ENV_IDENTITY_RESULT" . "verified")))
+      (define rec (read-jsexpr out))
+      (check-equal? (hash-ref rec 'outcome) "verified")
+      (check-false (hash-has-key? rec 'fallback-cause)))
+
     (test-case "emit: no telemetry -> outcome unknown, durations unknown (never zero)"
       (define out (tmp-path "emit-local.json"))
       (script-succeeds

@@ -119,8 +119,17 @@
 ;; ---------------------------------------------------------------------------
 
 (define (classify-outcome state producer-result prepared-env-mode)
+  ;; W6 review finding: an identity-mismatch cold fallback re-runs the full
+  ;; path but the restore step's outcome is still "success", so the raw state
+  ;; alone would classify it as `verified` — silently inflating the
+  ;; verified-restore rate. The setup action publishes its identity verdict;
+  ;; a mismatch is classified as `rebuilt` with a NAMED cause, never verified.
+  (define identity-result (getenv "Q_PREPARED_ENV_IDENTITY_RESULT"))
   (cond
-    [(equal? state "restored") (values "verified" #f)]
+    [(equal? state "restored")
+     (if (equal? identity-result "mismatch")
+         (values "rebuilt" "identity-mismatch")
+         (values "verified" #f))]
     [(equal? state "rebuilt") (values "rebuilt" "restore-mismatch-or-failure")]
     [(or (equal? state "unavailable") (equal? prepared-env-mode "off"))
      (cond

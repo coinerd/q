@@ -249,6 +249,10 @@ jobs:
         shell: bash
         run: |
           echo "Q_PREPARED_ENV_STATE=${{ steps.setup.outputs.prepared-env-state }}" >> "$GITHUB_ENV"
+          # W6 review fix: an identity mismatch reroutes to the cold path; the
+          # restore-record classifier must see the verdict so the fallback is
+          # counted as `rebuilt`/identity-mismatch and never as `verified`.
+          echo "Q_PREPARED_ENV_IDENTITY_RESULT=${{ steps.setup.outputs.prepared-env-identity-result }}" >> "$GITHUB_ENV"
           echo "Q_PREPARED_ENV_RESTORE_MS=${{ steps.setup.outputs.prepared-env-restore-ms }}" >> "$GITHUB_ENV"
           echo "Q_PREPARED_ENV_FALLBACK_MS=${{ steps.setup.outputs.prepared-env-fallback-ms }}" >> "$GITHUB_ENV"
 
