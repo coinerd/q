@@ -58,11 +58,7 @@
          racket/date
          racket/file
          racket/string
-         (only-in "bundle-writer.rkt"
-                  finalize-proof-bundle
-                  proof-bundle->string
-                  proof-bundle-id
-                  write-proof-bundle!)
+         (only-in "bundle-writer.rkt" finalize-proof-bundle write-proof-bundle!)
          (only-in "bundle-validator.rkt" reuse-decision-record validate-proof-bundle-file))
 
 ;; Named contract bound at column 0 so scripts/check-deps.rkt's textual
@@ -73,7 +69,9 @@
 (provide (contract-out
           (write-command (-> (listof string?) integer?))
           (consume-command (-> (listof string?) integer?))
-          (decision-exit-code (-> decision-contract integer?))
+          ;; any/c on purpose: anything unanticipated must still fail closed
+          ;; (exit 4), which is exactly what the function guarantees.
+          (decision-exit-code (-> any/c integer?))
           (normalize-request (-> hash? hash?))
           (augmented-decision-record (-> (or/c string? hash?) hash? decision-contract hash?))
           (rfc3339-z->seconds (-> string? (or/c exact-integer? #f)))
@@ -394,34 +392,39 @@
        =>
        string->number]
       [else 14]))
-  (unless (and claims-path producer-identity workflow-revision-sha commit-sha tree-sha repository out)
-    (usage-error "write"
-                 (string-append
-                  "requires --claims-json F --producer-identity S --workflow-revision-sha S"
-                  " --commit-sha S --tree-sha S --repository S --out F [--retention-days N]")))
-  (unless (and retention-days (exact-positive-integer? retention-days))
-    (usage-error "write" "--retention-days must be a positive integer"))
-  (define doc (read-json-file claims-path "claims document"))
-  (unless (hash? doc)
-    (usage-error "write"
-                 (format "claims document ~a is unreadable or not a JSON object" claims-path)))
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (fprintf (current-error-port)
-                              "consume.rkt write: refusing to write an unprovable bundle: ~a~n"
-                              (exn-message e))
-                     1)])
-    (define finalized
-      (assemble-bundle-spec doc
-                            #:producer-identity producer-identity
-                            #:workflow-revision-sha workflow-revision-sha
-                            #:commit-sha commit-sha
-                            #:tree-sha tree-sha
-                            #:repository repository
-                            #:retention-days retention-days))
-    (write-proof-bundle! finalized #:path out)
-    (displayln (hash-ref finalized 'bundle_id))
-    0))
+  ;; Usage guards abort with exit 2: a partially-understood invocation must
+  ;; never fall through into assembly.
+  (cond
+    [(not
+      (and claims-path producer-identity workflow-revision-sha commit-sha tree-sha repository out))
+     (usage-error "write"
+                  (string-append
+                   "requires --claims-json F --producer-identity S --workflow-revision-sha S"
+                   " --commit-sha S --tree-sha S --repository S --out F [--retention-days N]"))]
+    [(not (and retention-days (exact-positive-integer? retention-days)))
+     (usage-error "write" "--retention-days must be a positive integer")]
+    [else
+     (define doc (read-json-file claims-path "claims document"))
+     (unless (hash? doc)
+       (usage-error "write"
+                    (format "claims document ~a is unreadable or not a JSON object" claims-path)))
+     (with-handlers ([exn:fail?
+                      (lambda (e)
+                        (fprintf (current-error-port)
+                                 "consume.rkt write: refusing to write an unprovable bundle: ~a~n"
+                                 (exn-message e))
+                        1)])
+       (define finalized
+         (assemble-bundle-spec doc
+                               #:producer-identity producer-identity
+                               #:workflow-revision-sha workflow-revision-sha
+                               #:commit-sha commit-sha
+                               #:tree-sha tree-sha
+                               #:repository repository
+                               #:retention-days retention-days))
+       (write-proof-bundle! finalized #:path out)
+       (displayln (hash-ref finalized 'bundle_id))
+       0)]))
 
 ;; ---------------------------------------------------------------------------
 ;; `consume` subcommand
@@ -431,18 +434,24 @@
   (define bundle (flag-lookup args "--bundle"))
   (define request-path (flag-lookup args "--request-json"))
   (define out (flag-lookup args "--out"))
-  (unless (and bundle request-path out)
-    (usage-error "consume" "requires --bundle F --request-json F --out F"))
-  (define raw-request (read-json-file request-path "consumer request"))
-  (unless (hash? raw-request)
-    ;; An unreadable consumer request can never authorize a skip: record a
-    ;; fail-closed invalid decision and exit 4.
-    (define record
-      (augmented-decision-record "" (hasheq) (list 'invalid 'invalid:unreadable-consumer-request)))
-    (write-json-file out record)
-    (printf "consume: decision=invalid reason=invalid:unreadable-consumer-request exit=4~n")
-    4)
-  (define request (normalize-request raw-request))
+  (cond
+    [(not (and bundle request-path out))
+     (usage-error "consume" "requires --bundle F --request-json F --out F")]
+    [else
+     (define raw-request (read-json-file request-path "consumer request"))
+     (unless (hash? raw-request)
+       ;; An unreadable consumer request can never authorize a skip: record a
+       ;; fail-closed invalid decision and exit 4.
+       (define record
+         (augmented-decision-record "" (hasheq) (list 'invalid 'invalid:unreadable-consumer-request)))
+       (write-json-file out record)
+       (printf "consume: decision=invalid reason=invalid:unreadable-consumer-request exit=4~n"))
+     (if (hash? raw-request)
+         (consume-bundle! bundle (normalize-request raw-request) out)
+         4)]))
+
+;; Validation core of the consume subcommand (request already normalized).
+(define (consume-bundle! bundle request out)
   (define-values (decision bundle-text)
     (with-handlers ([exn:fail? (lambda (_) (values (list 'invalid 'invalid:unreadable-bundle) ""))])
       (define text
