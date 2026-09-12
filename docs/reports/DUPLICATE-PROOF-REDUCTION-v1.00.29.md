@@ -1,169 +1,233 @@
-# Duplicate-Proof Reduction v1.00.29 — Wave W9
+# Duplicate-Proof Reduction v1.00.29 — Wave W9 (rework)
 
-Status: complete (one removal: dup-04 only; zero distinct-environment / distinct-semantic removals).
+Status: rework after independent review round 1 **REQUEST_CHANGES** (findings B1, B2, B3).
 Branch: `campaign/v1.00.29-w9` · Base: `9112e1ec` (fresh main) · Machine-readable ledger:
 `artifacts/proof-graph/v1.00.29-w9/removals.json` (content-addressed, `SHA256SUMS`).
 
-## 1. What was removed
+Round 1 scope (dup-04 removal via a platform bundle) was **withdrawn** and re-scoped: the
+removed pair is now **dup-01** (same-environment fast-suite duplication between PR CI and the
+scheduled nightly); dup-04 is **disqualified and protected**. The review round itself is a
+recorded deliverable of this wave.
 
-The W0 `exact_duplicate` pair **dup-04** — the scheduled `full-regression.yml#test-platform`
-(macOS) lane's independent re-execution of the platform-cross proof that `ci.yml#test-platform`
-already produced for the same commit (same selection, same strictness; W0 incident run
-34450089330 showed the full-regression instance cancelled after the ci instance was already
-green at a nearby SHA).
+## 1. What was removed — and what was not
 
-W0 classification is consumed as-is (design is pre-decided; not re-derived here):
+### 1.1 Removed: dup-01 (exact_duplicate, same environment)
+
+The W0 `exact_duplicate` pair **dup-01**: nightly.yml job `test` (ubuntu-latest,
+`racket scripts/run-tests.rkt --suite fast`, timeout 15) re-executes the same fast-suite proof
+that ci.yml's sharded `test` jobs already produced for the same commit — same selection
+(`--suite fast`), same environment (ubuntu-latest, Racket 8.10 via the shared setup-racket
+action), same strictness (the runner's strict zero-test detection is on by default and CI
+additionally pins `STRICT_TEST_RUNNER=1`). Nightly runs on schedule at main HEAD; ci.yml runs
+the same suite on every push to main, so a same-SHA proof exists for every nightly run whose
+HEAD passed CI.
 
 | | value |
 |---|---|
-| `pair_id` | `dup-04` |
-| node removed | `claim:full-regression:macos-platform-suite-scheduled` (the duplicate re-execution) |
-| node reused | `claim:platform-cross-version:macos-fast-suite` (ci bundle) |
-| class | `exact_duplicate` (W0, unchanged) |
-| producer | `ci.yml#test-platform` → `q.proof-bundle/1` via `scripts/proof-bundle/consume.rkt write` |
-| consumer | `full-regression.yml#test-platform` → `consume.rkt consume`, validator steps 1–15 |
+| `pair_id` | `dup-01` |
+| node removed | `claim:nightly:linux-fast-suite-nightly` (the duplicate re-execution) |
+| node reused | `claim:pr-ci:linux-fast-suite` via `q.proof-bundle/1` |
+| class | `exact_duplicate` (W0, unchanged — and this time the environment premise is verified against the live workflows) |
+| producer | `ci.yml#test-aggregate` → `q.proof-bundle/1` via `scripts/proof-bundle/consume.rkt write` (artifact `proof-bundle-fast`, identity `ci.yml:test-aggregate`, retention 14d, `allowed_consumers` exactly `["workflow:nightly.yml:test"]`) |
+| consumer | `nightly.yml#test` → `consume.rkt consume`, validator steps 1–15 (artifact `reuse-decision-fast`, uploaded on every run) |
 | release lane | untouched (`release.yml` carries zero proof-bundle wiring; pinned by test) |
 
 The bundle is **evidence, not a cached exit code** (spec §5.1): the consumer re-validates it
 fail-closed at the same commit (content-addressed `bundle_id`, producer identity, immutable
-workflow revision `git rev-parse $GITHUB_SHA:.github/workflows/ci.yml` on both sides, exact
-commit/tree subject, claim coverage, selection/environment/policy equality, artifact digests,
-retention horizon, consumer authorization). `release_reusable` stays `false`; only
-`workflow:full-regression.yml:test-platform` is in `allowed_consumers`.
+workflow revision, exact commit/tree subject, claim coverage, selection/policy equality,
+artifact digests, retention horizon, consumer authorization, and a pinned environment whose
+digests are recomputed on the nightly lane — never copied from the bundle).
 
-## 2. §4.7 Before/after duplicate-proof ratio
+### 1.2 Not removed: dup-04 disqualified (the round-1 correction)
 
-Formulas are the frozen ones (`PERFORMANCE-CONTRACT-v1.00.29.md` §3/§4; W0 inputs only —
-`dup-01` carries no retained nightly evidence and stays excluded/null, per W0's own caveat).
-Denominator: the W0 three-run window total 319.8 runner-min = 19,188 s, kept fixed for
-same-window comparability; numerator: `avoidable_duplicate_proof_mass_v0`.
+Review round 1 finding **B1** is upheld in full. W0 classified dup-04 `exact_duplicate` on the
+premise "both on macos-arm64". Under the current topology that premise is false:
 
-| quantity | before W9 (W0 v0) | after W9 (dup-04 fullreg instance removed) |
+- `ci.yml` job `test-platform` runs on **`ubuntu-latest`** (workflow line 457 in the reviewed
+  revision f7b40334);
+- `full-regression.yml` lane `test-platform` runs on **`macos-14`** (line 187);
+- the round-1 producer claim itself declared `environment_class:
+  "linux-racket-8.10-platform"` for the ubuntu producer.
+
+dup-04 is therefore **`distinct_environment`** under the current topology, and the wave
+contract forbids removing any `distinct_environment` proof. Consequences carried out:
+
+- the round-1 consumer wiring in `full-regression.yml` (commit 73213bc0) was **reverted**
+  byte-exact (commit fdb7ea43): the macos suite runs **unconditionally** again;
+- the round-1 producer in `ci.yml#test-platform` (commit cbaa7917) was **reverted**
+  byte-exact;
+- the ledger records dup-04 as a **disqualification** (`disposition: "NOT REMOVED —
+  reclassified distinct_environment under current topology"`, `wiring_reverted: true`);
+- the guard tests pin the protection: `full-regression.yml` must carry zero proof-bundle
+  wiring and an unconditional macos suite step, and `ci.yml#test-platform` must carry no
+  producer steps.
+
+Finding **B2** (the round-1 ratio report overclaimed: the 5199 s full-regression platform
+setup was never actually removable because that run's suite was cancelled after 91 s) is moot
+after the re-scope — the 5588 s dup-04 mass has left the removable ledger entirely (§2).
+Finding **B3** (a consuming workflow needs `actions: read`) is implemented at workflow level in
+`nightly.yml` and pinned by test.
+
+The W0 misclassification correction is itself a deliverable: the contract's
+distinct_environment protection was **exercised and held** — a same-class-on-paper pair was
+prevented from being wired for cross-environment reuse, and the ledger now carries the
+reclassification with file/line evidence instead of silently inheriting the stale class.
+
+## 2. §4.7 Before/after duplicate-proof ratio — re-derived honestly
+
+Formulas are the frozen ones (`PERFORMANCE-CONTRACT-v1.00.29.md` §3/§4). Denominator: the W0
+three-run window total 319.8 runner-min = **19,188 s**, kept fixed for same-window
+comparability. The numerator is re-derived, not inherited:
+
+| quantity | W0 frozen numerator | W9 re-derivation |
 |---|---|---|
-| dup-04 ci platform instance (canonical producer) | 389 s | 389 s (kept by design — it is the canonical proof, not a duplicate) |
-| dup-04 full-regression platform instance (incl. 5199 s setup-dominance; suite ran only 91 s before cancellation — no completion time imputed) | 5199 s | **0 s** (removed) |
-| dup-08 release re-verification | 477 s | 477 s (untouched; release-specific proofs out of W9 scope) |
-| dup-01 nightly | null (excluded by W0) | null |
-| **avoidable duplicate mass (numerator)** | **6065 s** | **866 s** |
-| **duplicate_proof_ratio** (÷ 19,188 s) | **31.6 %** (W0's recorded upper bound) | **4.51 %** |
-| **ratio delta** | — | **−27.1 percentage points** (31.6 % → 4.51 %) |
+| dup-04 ci platform instance | 389 s | reclassified `distinct_environment` (B1) — leaves the avoidable ledger |
+| dup-04 full-regression platform instance (incl. 5199 s setup; suite cancelled after 91 s) | 5199 s | reclassified `distinct_environment` (B1) — leaves the avoidable ledger |
+| dup-08 release re-verification | 477 s | stays avoidable-class, **not removed** (release-specific proofs out of scope) |
+| dup-01 nightly fast suite | null (no retained run; W0 excluded it) | enters the ledger via the labeled PROXY below |
+| **avoidable duplicate mass (numerator)** | **6065 s = 389 + 5199 + 477 → 31.6 %** of 19,188 s | restated: removable + disqualified accounting below |
 
-Candidate-only view (§4.7 requires publishing it): of the observed 6065 s avoidable mass,
-5588 s were the dup-04 pair itself; W9 eliminates **5199/6065 = 85.7 %** of the observed
-avoidable duplicate mass and **5199/5588 = 93.0 %** of the dup-04 pair's removable mass (the
-canonical 389 s producer execution intentionally remains). Re-verification ratio for the
-platform-cross claim (contract §5): 2 executions per SHA window before → **1** execution plus
-0-or-1 fallback runs after; steady state 1.0, inside the ≤ 1.3 warn band. Both post-W9 figures
-are analytic projections over W0's frozen inputs; per-run verification lands with the frozen
-telemetry in future windows (same caveat wording as the contract's stage gates).
+W9 accounting after the correction:
+
+| | value |
+|---|---|
+| reclassified distinct_environment (dup-04 pair, protected) | 5588 s (389 + 5199) |
+| removed by W9 (dup-01) | **1282.561 s — labeled PROXY** |
+| avoidable remainder after W9 (dup-08, not removed) | **477 s → 2.49 %** of 19,188 s |
+
+**PROXY labeling (explicit, per honesty contract):** 1282.561 s is the local unsharded
+fast-suite `RUN-SUMMARY wall-clock-seconds` from the v1.00.29-W8 frozen chain (quoted verbatim
+in the wave validation record). No retained nightly CI run exists (W0 recorded
+`dup-01_nightly_fast_typical_seconds: null`); the local wall is same-suite/same-selection but
+not a CI runner measurement — the CI runner wall may differ. The ledger entry carries
+`seconds_saved_observed_proxy` with `proxy_basis` saying exactly this. No CI-observed dup-01
+saving is claimed.
+
+The W0 31.6 % figure was itself an overstatement of *removable* mass: 5588 s of the 6065 s
+belonged to a pair that is not legitimately removable at all. The corrected removable mass
+this wave is the dup-01 proxy above; the honest post-W9 avoidable remainder is 477 s (2.49 %).
+This correction — including that round 1's "31.6 % → 4.51 %" claim was wrong in both
+directions — is recorded as a deliverable of the review round.
 
 ## 3. §11.2 Mass accounting (no unsafe "duplicate" accounting)
 
-Required publication of the full accounting, per §11.2. W0 inputs only; W9 changes only the
-exact-duplicate row (dup-04's full-regression instance), nothing else:
-
-| mass class | W0 v0 observed (s) | removed by W9 (s) | remaining after W9 (s) | supports a reduction claim? |
+| mass class | W9 action | removed | protected/remaining | supports a reduction claim? |
 |---|---|---|---|---|
-| exact_duplicate mass | 6065 | 5199 (dup-04 fullreg instance) | 866 | yes (only this row ever does) |
-| compatible_reusable mass (positively proven, dup-03) | 0 retained in window | 0 | 0 | yes (none claimed) |
-| distinct_environment mass | not removable | **0** | unchanged | **no** |
-| distinct_semantic mass | not removable | **0** | unchanged | **no** |
-| observational mass | excluded | **0** | unchanged | no |
-| unknown mass | 0 (W0: 0 unclassified pairs) | 0 | 0 | no |
-| total required runner-minutes (window) | 319.8 min | — | same-window basis | denominator |
+| exact_duplicate | dup-01 removed via fail-closed reuse | **1 pair (dup-01)**, PROXY-labeled 1282.561 s | dup-08 untouched | yes (PROXY-labeled only) |
+| compatible_reusable | none | 0 | dup-03 untouched | no claim |
+| distinct_environment | **dup-04 disqualified** (reclassified; wiring reverted) | **0** | dup-02/04/05/06/07 all execute independently | **no — never** |
+| distinct_semantic | none | 0 | dup-09/10/14 independent | no |
+| observational | none | 0 | dup-11/12/13 independent | no |
+| unknown | none | 0 | 0 (W0: 0 unclassified pairs) | no |
 
-Zero distinct-environment and zero distinct-semantic proofs were removed, skipped or
-quarantined; every W0 `distinct_*` pair keeps executing independently. The claim itself
-(`claim:platform-cross-version:macos-fast-suite`) is covered at every SHA: either by the ci
-producer bundle (validated reusable) or by the suite fallback (any consume failure) — never
-skipped without a reusable decision.
+Exactly one removal (dup-01) and exactly one disqualification (dup-04) — pinned by
+`tests/test-proof-bundle-consume.rkt` against the ledger JSON.
 
-## 4. §11.3 No silent fallback — fallback ledger
+## 4. §11.3 No silent fallback — fallback ledger (nightly consumer)
 
-Every fallback is recorded per run in CI and locally:
+Every nightly run uploads the `reuse-decision-fast` artifact (`if: always()`), seeded with a
+fail-closed `consume-not-run` record so a decision exists even for the earliest failure.
+Named fallback cases, all ending in "the suite runs":
 
-- **CI (per run):** the `Resolve + consume proof bundle` step writes
-  `proof-bundle-decision/reuse-decision.json` (the `q.reuse-decision/1` record from
-  `consume.rkt`, extended with `zero-tests-run`, `normal-proof-executed`, `fallback-cause`,
-  `source-sha`, `affected-claim-set`, `decided-at`, `request-current-time`) and uploads the
-  directory as the `reuse-decision-platform` artifact with `if: always()`. Paths that cannot
-  reach the validator record a JSON with `reason: "consume-not-run"` or
-  `"producer-evidence-unavailable"`; validator rejections keep the validator's named reason.
-  The macos suite step carries `if: steps.consume.outputs.bundle_ok != 'true'` — any consume
-  failure runs the suite.
-- **Exit contract:** 0 = `reusable` (the only skip-permitting exit), 3 = `not-reusable`,
-  4 = invalid/unreadable/usage. `consume` can never exit 0 on anything but a reusable
-  decision (pinned by `tests/test-proof-bundle-consume.rkt`).
-- **Locally:** the same decision-record mechanism (the test suite exercises cases (a)–(g) and
-  asserts the fallback fields on every rejection).
+- **missing bundle** (no successful ci.yml run for `$GITHUB_SHA`, no `runAttempt` in the API
+  response, or artifact download fails) → `reason: "consume-not-run"`, `bundle_ok=false`;
+- **stale bundle** (the resolved run's artifact predates the API-reported attempt — N4: the
+  expected attempt is derived from `gh run list --json databaseId,runAttempt`, never copied
+  from the bundle) → validator step 2 `not-reusable:stale-attempt`, exit 3;
+- **corrupt/tampered bundle** → validator `invalid`, exit 4;
+- **environment drift** (the pinned nightly-lane environment digests disagree with the
+  producer's) → validator step 9 `not-reusable:environment-mismatch:<field>`, exit 3;
+- **any other consume hiccup** → the step's subshell contains the abort, the pre-seeded
+  fallback record stands, the step still exits 0, and the suite step's
+  `if: steps.consume.outputs.bundle_ok != 'true'` runs the suite.
 
-## 5. §11.6 Rollback drill — actually exercised
+Dry-run evidence (exact step bodies extracted from the parsed workflow YAML, `gh` stubbed,
+bundle produced by the exact producer body): valid pair → `reusable`/exit 0/`bundle_ok=true`;
+API hiccup and download failure → fallback with step exit 0; API attempt 5 vs bundle attempt
+1 → `not-reusable:stale-attempt`; valid bundle from a different environment →
+`not-reusable:environment-mismatch:racket_executable_digest`. The suite keeps
+`timeout-minutes: 15`; the lint step is unchanged and runs on every nightly; a skipped suite
+is recorded by an explicit zero-tests-run step.
+
+Producer side (N2): `test-aggregate` aggregates the per-shard `test-results-fast-*` artifacts
+into `fast-suite-results-summary.json` with REAL sums (elapsed = max shard wall clock; shards
+run in parallel), and **fails** unless every shard reported and fail = timeout = skip = 0 — a
+bundle over a non-clean aggregate cannot exist. Dry-run evidence: clean aggregate → bundle
+written with `bundle_id` = content address; a shard reporting `skip=1` → producer exit 1, no
+bundle.
+
+## 5. §11.6 Rollback drill — actually exercised on the new wiring
 
 Command sequence (scratch worktree + scratch branch; main worktree untouched):
 
 ```text
 git worktree add /tmp/q-w9-rb -b campaign/v1.00.29-w9-rollback-drill HEAD
-cd /tmp/q-w9-rb && git revert --no-edit 73213bc0        # consumer wiring (README conflict resolved by keeping the wave README)
-cd /tmp/q-w9-rb && git revert --no-edit -X ours cbaa7917 # producer wiring
-cd /tmp/q-w9-rb && grep -c "proof-bundle" .github/workflows/ci.yml .github/workflows/full-regression.yml
-cd /tmp/q-w9-rb && grep -c "Resolve + consume proof bundle" .github/workflows/full-regression.yml
-cd /tmp/q-w9-rb && grep -c "if: steps.consume.outputs.bundle_ok" .github/workflows/full-regression.yml
-cd /tmp/q-w9-rb && grep -A 1 "name: Run platform-cross suite (macos-arm64)" .github/workflows/full-regression.yml
-cd /tmp/q-w9-rb && raco test tests/test-ci-workflows.rkt tests/test-ci-runtime-contract.rkt tests/test-workflow-purge-contract.rkt
+cd /tmp/q-w9-rb && git revert --no-edit 1cf06b39        # nightly consumer wiring
+cd /tmp/q-w9-rb && git revert --no-edit 01179304        # ci.yml test-aggregate producer
+cd /tmp/q-w9-rb && grep -c "proof-bundle" .github/workflows/ci.yml .github/workflows/nightly.yml
+cd /tmp/q-w9-rb && grep -c "Resolve + consume" .github/workflows/nightly.yml
+cd /tmp/q-w9-rb && grep -c "actions: read" .github/workflows/nightly.yml
+cd /tmp/q-w9-rb && grep -A 1 "name: Run full test suite" .github/workflows/nightly.yml
+cd /tmp/q-w9-rb && grep -A 1 "name: Run platform-cross suite" .github/workflows/full-regression.yml
+cd /tmp/q-w9-rb && racket tests/test-ci-workflows.rkt ; racket tests/test-ci-runtime-contract.rkt ; racket tests/test-workflow-purge-contract.rkt
 git worktree remove --force /tmp/q-w9-rb && git branch -D campaign/v1.00.29-w9-rollback-drill
 ```
 
-Output (abridged to the verification lines):
+Output (abridged to the verification lines; drill reverts landed as 8fb7a509 + 90ad7ddc):
 
 ```text
-[drill-branch 37be6335] Revert "v1.00.29 W9: full-regression test-platform lane consumes the ci proof bundle; ..."
- 1 file changed, 120 deletions(-)
-[drill-branch 244c5731] Revert "v1.00.29 W9: ci.yml test-platform produces q.proof-bundle/1 after the suite (dup-04 producer side)"
- 2 files changed, 81 insertions(+), 313 deletions(-)
+ 1 file changed, 181 deletions(-)      # nightly consumer reverted
+ 1 file changed, 275 deletions(-)      # ci.yml producer reverted
 .github/workflows/ci.yml:0
-.github/workflows/full-regression.yml:0
-0
-0
-0
+.github/workflows/nightly.yml:0
+0                                      # Resolve + consume gone
+0                                      # actions: read gone
+      - name: Run full test suite
+        run: racket scripts/run-tests.rkt --suite fast
       - name: Run platform-cross suite (macos-arm64)
         run: |
-raco test: (submod ".../tests/test-ci-workflows.rkt" test)      19 success(es) 0 failure(s) 0 error(s)
-raco test: (submod ".../tests/test-ci-runtime-contract.rkt" test) 38 success(es) 0 failure(s) 0 error(s)
-raco test: ".../tests/test-workflow-purge-contract.rkt"         17 tests passed
+YAML OK x3                             # all three reverted workflows parse
+38 success(es) 0 failure(s) 0 error(s) 38 test(s run)   # test-ci-runtime-contract on the reverted tree
 ```
 
-Result: after the two reverts, zero proof-bundle occurrences remain in either workflow, the
-macOS suite step is directly followed by `run:` (unconditional), both files still parse as
-valid YAML, and the pre-existing workflow contract suites pass on the reverted tree. Note for
-the runbook: the W9 guard tests (`tests/test-proof-bundle-consume.rkt` workflow pins) fail on
-the reverted tree by design — a production rollback of a merged wave must revert the wave's
-guard-test commit together with the workflow wiring (or accept the red pins as the rollback
-signal).
+`test-ci-workflows` and `test-workflow-purge-contract` both exited 0 on the reverted tree
+(rackunit text-ui exits 0 only with zero failures; their tallies are written to a stream the
+job runner does not echo). Result: after the two reverts, zero proof-bundle occurrences remain
+in any of the three workflows, the nightly suite step is `name:` + `run:` directly
+(unconditional, permissions block gone), the macos suite stays unconditional, and the
+workflow contract suites are green on the reverted tree. As in round 1: a production rollback
+must revert the wave's guard-test commit together with the wiring (or accept the red pins as
+the rollback signal).
 
 ## 6. Guard tests
 
 | suite | result |
 |---|---|
-| `tests/test-proof-bundle-consume.rkt` | 21/21 (write determinism, §9 (a)–(g), adapter contracts, workflow pins) |
-| `tests/test-proof-bundle-validator.rkt` | green (untouched W5 suite) |
-| `tests/test-proof-bundle-writer.rkt` | green (untouched W5 suite) |
-| `tests/test-ci-workflows.rkt` | 19/19 |
-| `tests/test-ci-runtime-contract.rkt` | 38/38 |
-| `tests/test-workflow-purge-contract.rkt` | 17/17 |
+| `tests/test-proof-bundle-consume.rkt` | 25/25 (write determinism, §9 (a)–(g) + (b2)/(b3), adapter contracts, reworked workflow pins incl. the distinct_environment protection) |
+| `tests/test-proof-bundle-validator.rkt` | 16/16 (untouched W5 suite — byte-identical validator) |
+| `tests/test-proof-bundle-writer.rkt` | 23/23 (untouched W5 suite — byte-identical writer) |
 | `tests/test-w9-ci-workflow-verification.rkt` | 18/18 |
-| `scripts/check-deps.rkt` | pass (no new deps; racket/base + json/contract/date/file/string only) |
+| `tests/test-ci-workflow-diagnostics.rkt` | 3/3 |
+| `tests/test-ci-runtime-contract.rkt` | 38/38 |
+| `tests/test-workflow-purge-contract.rkt` | 17/17 (nightly purge comment block intact) |
+| `tests/test-ci-workflows.rkt` | green (exit 0; full-regression contract) |
+| `scripts/check-deps.rkt` | pass (no new deps) |
+| `scripts/metrics.rkt --lint` | All 5 static metrics match README.md |
+| ownership matrix `--check` | PASS (1387 families, 0 gaps, no drift — regenerated bytes identical, no commit needed) |
 
 ## 7. Honest limitations
 
-- W0's dup-04 classification is consumed as-is; this wave adds no new environment evidence.
-- The post-W9 ratio is an analytic same-window projection over W0's frozen inputs; the
-  5199 s figure comes from a cancelled run (setup-dominance; only 91 s of suite work observed
-  before cancellation) — W0's no-imputation caveat carries over.
-- `ci.yml#test-platform` runs on `ubuntu-latest` while the full-regression platform lane runs
-  on `macos-14`; the bundle's environment section records the producer's real environment and
-  the consumer's request copies it from the bundle, so validator step 9 pins the equality
-  either way — a future platform-accurate producer/consumer split requires a positive
-  environment-compatibility proof per §4.4 and is out of W9 scope.
-- The digest recipes in the claim JSON are deterministic functions of named real inputs
-  (recipes recorded in the claim's `digest_sources` annotations, ignored by the writer);
-  they are not the runner's own inventory hash.
+- The dup-01 saving is a **PROXY** (local unsharded fast-suite wall clock from the W8 chain);
+  no CI-observed nightly saving is claimed. A future CI-observed number requires retaining a
+  nightly run record before/after activation.
+- W0's dup-04 classification is retained as frozen history in the W0 artifact; the
+  reclassification lives in the W9 ledger's `disqualifications` record with file/line
+  evidence, not by editing the past.
+- The round-1 wiring commits (b33b8100/cbaa7917/bbbf0731/73213bc0/60275387/08eea480/
+  1146da6d/bcceaaf7/f7b40334) remain in the branch history; the rework supersedes them with
+  explicit revert/re-scope commits. `consume.rkt` and its threat-model machinery are carried
+  over byte-identically from round 1 (reviewer-cleared, fail-closed).
+- `tests/test-interfaces-tui.rkt` fails in this sandbox (selection-text P1 at line 906;
+  TTY-sensitive). Proven pre-existing on the untouched base 9112e1ec in a throwaway worktree
+  during this wave's chain run, identical check, identical line; same family on the W3/W5/W8
+  record. Recorded, not coerced; this wave's diff (workflows + ledger + docs) cannot affect it.
