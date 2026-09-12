@@ -68,18 +68,16 @@ jobs:
       - name: Version consistency check
         run: racket scripts/lint-version.rkt
 
-      - name: Purge restored workspace bytecode (BUG-0065)
-        run: |
-          set -euo pipefail
-          # The prepared-env restore lane skips setup-racket's stale-bytecode
-          # purge, and restored .zo files carry mtimes NEWER than the fresh
-          # checkout — Racket then executes the producer's bytecode instead
-          # of the checked-out sources (observed: a W5-era lowercase
-          # "(c3, v1.00.27 w5)" suite ran against the v1.00.27 tag). The
-          # release lane must test exactly what it checked out.
-          find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' -delete
-          find . -depth -type d -name compiled -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +
-
+      # BUG-0065 systemic migration (v1.00.29 W4): the local purge step
+      # introduced at 04637d83 moved into the shared setup-racket action,
+      # which now purges + verifies workspace bytecode on EVERY path —
+      # including a successful prepared-environment restore whose .zo
+      # extraction timestamps are newer than this checkout (the
+      # v1.00.27 cohort-report root cause: a producer-era suite ran
+      # against the v1.00.27 tag). The release lane must test exactly
+      # what it checked out. Pinned repo-wide by
+      # tests/test-workflow-purge-contract.rkt; see
+      # docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md.
       - name: Run tests (fast suite)
         id: fast-tests
         run: |
