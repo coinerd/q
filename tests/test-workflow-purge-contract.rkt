@@ -41,12 +41,14 @@
          racket/list
          racket/string
          racket/port
-         racket/runtime-path)
+         racket/runtime-path
+         json)
 
 ;; ── Path helpers ──
 
 (define-runtime-path workflows-dir "../.github/workflows")
 (define-runtime-path setup-racket-action-path "../.github/actions/setup-racket/action.yml")
+(define-runtime-path consumers-json-path "../artifacts/proof-graph/v1.00.29-w6/consumers.json")
 
 (define workflow-paths
   (sort (for/list ([p (in-directory workflows-dir)]
@@ -332,6 +334,142 @@ YAML
      "      - name: Restore prepared env directly"
      "      # BUG-0065 PURGE-EXEMPT: report-only, never executes the q test suite\n      - name: Restore prepared env directly"))
   (check-equal? (scan-workflow-text "hypothetical-exempt.yml" exempted) '()))
+
+;; ── W6 consumer-matrix purge coverage ──
+;;
+;; v1.00.29 W6 (spec §6 W4): the prepared-environment restore is expanded
+;; to every consumer whose env-profile is provably identical to the
+;; producer tuple (artifacts/proof-graph/v1.00.29-w6/consumers.json).
+;; EVERY consumer the matrix lists as `activated` must consume the
+;; restored workspace through the shared setup-racket action (which owns
+;; the always-on BUG-0065 purge/verify) and must carry its one-command
+;; rollback variable in the workflow, so the expansion can never create
+;; an unpatched lane: adding an activated consumer whose job bypasses the
+;; shared action turns this file RED.
+
+(define (consumers-doc)
+  (call-with-input-file consumers-json-path read-json))
+
+(define (workflow-file-name workflow)
+  ;; consumers.json stores the repo-relative workflow path.
+  (last (string-split workflow "/")))
+
+(define (activated-consumer-violations consumers)
+  ;; Scan every `activated` consumer's live job body; each violation is a
+  ;; (consumer workflow reason) record.
+  (for*/list ([consumer (in-list consumers)]
+              #:when (equal? (hash-ref consumer 'activation #f) "activated"))
+    (define name (hash-ref consumer 'consumer))
+    (define workflow (hash-ref consumer 'workflow))
+    (define job-key (hash-ref consumer 'job))
+    (define wf-path (build-path workflows-dir (workflow-file-name workflow)))
+    (cond
+      [(not (file-exists? wf-path))
+       (violation name workflow (format "workflow file ~a is missing" workflow))]
+      [else
+       (define jobs (workflow-jobs (file->string wf-path)))
+       (define job-body
+         (for/first ([j (in-list jobs)]
+                     #:when (string=? (car j) job-key))
+           (cadr j)))
+       (cond
+         [(not job-body)
+          (violation name
+                     workflow
+                     (format "activated consumer job ~a not found in ~a" job-key workflow))]
+         [(not (equal? 'via-shared-action (classify-job-body job-body)))
+          (violation
+           name
+           workflow
+           (format
+            "activated consumer ~a must consume the restored workspace via the shared ~a (which owns the always-on BUG-0065 purge), not a bypass"
+            name
+            shared-action-marker))]
+         [(not (string-contains? job-body
+                                 (format "~a != 'off'" (hash-ref consumer 'rollback-variable ""))))
+          (violation
+           name
+           workflow
+           (format
+            "activated consumer ~a must wire its §11.6 rollback variable ~a into its PREPARED_ENV expression"
+            name
+            (hash-ref consumer 'rollback-variable "")))]
+         [else #f])])))
+
+(define (non-false xs)
+  (for/list ([x (in-list xs)]
+             #:when x)
+    x))
+
+(test-case "W6: every activated consumer in the matrix carries the shared purge/verify + rollback wiring"
+  (define doc (consumers-doc))
+  (define activated
+    (for/list ([c (in-list (hash-ref doc 'consumers))]
+               #:when (equal? (hash-ref c 'activation #f) "activated"))
+      c))
+  (check-true (>= (length activated) 7)
+              "the W6 matrix must keep at least the seven activated consumers")
+  (define violations (non-false (activated-consumer-violations (hash-ref doc 'consumers))))
+  (unless (null? violations)
+    (for ([v violations])
+      (eprintf "W6 VIOLATION ~a / ~a: ~a\n"
+               (violation-workflow v)
+               (violation-job v)
+               (violation-reason v))))
+  (check-equal?
+   violations
+   '()
+   "every activated consumer must run the shared setup-racket action (BUG-0065 purge) and wire its rollback variable"))
+
+(test-case "W6: an activated consumer bypassing the shared action turns the matrix red"
+  ;; Negative fixture: a hypothetical activated consumer whose job calls
+  ;; the raw upstream Racket installer instead of the shared action.
+  (define bypass-job
+    #<<YAML
+jobs:
+  consume:
+    needs: [lint, fast-env]
+    runs-on: ubuntu-latest
+    env:
+      PREPARED_ENV: auto
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Racket directly (bypass)
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+YAML
+    )
+  (define bypass-consumer
+    (hasheq 'consumer
+            "hypothetical:bypass"
+            'workflow
+            ".github/workflows/hypothetical.yml"
+            'job
+            "consume"
+            'activation
+            "activated"
+            'rollback-variable
+            "RACKET_PREPARED_BYPASS"))
+  (define doc (consumers-doc))
+  ;; Patch the scanner inputs: point the fixture at a temp workflow file so
+  ;; the same live-file scan runs end to end.
+  (define tmp-wf-dir (make-temporary-file "q-w6-purge-matrix~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (define tmp-wf (build-path tmp-wf-dir "hypothetical.yml"))
+                  (call-with-output-file tmp-wf (lambda (o) (display bypass-job o)) #:exists 'replace)
+                  (define saved-workflows-dir workflows-dir)
+                  (set! workflows-dir tmp-wf-dir)
+                  (define violations
+                    (non-false (activated-consumer-violations (list bypass-consumer))))
+                  (set! workflows-dir saved-workflows-dir)
+                  ;; The scan short-circuits on the first contract breach:
+                  ;; the bypass (not routing through the shared purge-owning
+                  ;; action) is the reported violation.
+                  (check-equal? (length violations) 1)
+                  (check-true (string-contains? (violation-reason (car violations))
+                                                "shared ./.github/actions/setup-racket")
+                              "the bypass must be reported as a purge-contract violation"))
+                (lambda () (delete-directory/files tmp-wf-dir #:must-exist? #f))))
 
 ;; ── 5. Behavioral repro (v1.00.27 cohort-report root cause) ──
 ;;

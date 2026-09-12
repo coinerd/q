@@ -1,0 +1,125 @@
+{
+  "artifact": "prepared-env-setup-savings",
+  "schema": "prepared-env-setup-savings@1",
+  "wave": "v1.00.29-w6",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W4 (work item 5: record restore, verification, cold fallback, and setup savings)",
+  "generated_at": "2026-09-14",
+  "base_commit": "520805dae7d9ef286e7764b090f0aeb6c65ad41d",
+  "consumers-source": "artifacts/proof-graph/v1.00.29-w6/consumers.json",
+  "baseline-source": "artifacts/proof-graph/v1.00.29-w0/evidence/jobs-34450964386.json (retained main-CI run 34450964386 at head 293b6a271aa1; per-step 'Run ./.github/actions/setup-racket' wall-clock extracted from the retained jobs API payload)",
+  "baseline_derivation": {
+    "w0_full_path_class_baseline_seconds": 259.3,
+    "w0_full_path_class_members_seconds": {
+      "lint-quality": 273,
+      "workflows (0)": 245,
+      "workflows (1)": 246,
+      "release-dry-run": 225,
+      "security": 295,
+      "test-platform": 261,
+      "test-cross-version": 292,
+      "smoke (ubuntu-latest)": 243,
+      "gsd-governance": 217,
+      "abstraction-audit": 306,
+      "prepared-env-report": 249
+    },
+    "w0_restored_path_measured_seconds": {
+      "test (0)": 23,
+      "test (1)": 20,
+      "test (2)": 40
+    },
+    "restored_path_estimate_seconds": 23,
+    "restored_path_estimate_note": "median of the three measured restored-path setup steps in the same retained run; conservative because the restored path still pays the job-local runtime install inside that step",
+    "note": "Per-lane pre-W3 baselines for the already-restored test shards are NOT retained, so their baseline is the same-run full-path class mean (11 full-path Racket lanes of run 34450964386); this is stated rather than smoothed over."
+  },
+  "consumers": [
+    {
+      "consumer": "ci:test",
+      "job-instances": 3,
+      "measurement": "measured",
+      "activation-wave": "v1.00.16 W3 (verified by this wave's identity-manifest extension)",
+      "evidence": "retained run 34450964386 (jobs-34450964386.json): restored-path setup-racket steps of the three test shards measured at 23/20/40 s; baseline = same-run full-path class mean 259.3 s (the shards' own pre-W3 baseline is not retained — derivation stated in baseline_derivation)",
+      "w0-baseline-setup-seconds": 259.3,
+      "post-activation-setup-seconds": 27.7,
+      "saved-runner-minutes": 11.6,
+      "saved-runner-minutes-derivation": "per shard (259.3-23)/60 + (259.3-20)/60 + (259.3-40)/60 = 3.94 + 3.99 + 3.65 = 11.58 minutes per main-CI run, banked at the W3 activation"
+    },
+    {
+      "consumer": "ci:smoke",
+      "job-instances": 1,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 243,
+      "formula": "saved_seconds = own-lane w0 setup-racket step seconds (243, retained run 34450964386) - 23 s restored-path estimate (median measured restored-path step of the same run's test shards); no post-activation retained run exists, so this is a projection, never a measured number",
+      "saved-runner-minutes": 3.67,
+      "saved-runner-minutes-derivation": "(243-23)/60 = 3.67"
+    },
+    {
+      "consumer": "ci:workflows",
+      "job-instances": 2,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 245.5,
+      "formula": "saved_seconds = sum over both shards of (own-lane w0 setup-racket step seconds: 245 and 246, retained run 34450964386) - 2 x 23 s restored-path estimate; projection, never a measured number",
+      "saved-runner-minutes": 7.42,
+      "saved-runner-minutes-derivation": "(245-23)/60 + (246-23)/60 = 3.70 + 3.72 = 7.42"
+    },
+    {
+      "consumer": "ci:release-dry-run",
+      "job-instances": 1,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 225,
+      "formula": "saved_seconds = own-lane w0 setup-racket step seconds (225, retained run 34450964386) - 23 s restored-path estimate; projection, never a measured number",
+      "saved-runner-minutes": 3.37,
+      "saved-runner-minutes-derivation": "(225-23)/60 = 3.37"
+    },
+    {
+      "consumer": "ci:gsd-governance",
+      "job-instances": 1,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 217,
+      "formula": "saved_seconds = own-lane w0 setup-racket step seconds (217, retained run 34450964386) - 23 s restored-path estimate; projection, never a measured number; push-triggered runs only",
+      "saved-runner-minutes": 3.23,
+      "saved-runner-minutes-derivation": "(217-23)/60 = 3.23"
+    },
+    {
+      "consumer": "ci:abstraction-audit",
+      "job-instances": 1,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 306,
+      "formula": "saved_seconds = own-lane w0 setup-racket step seconds (306, retained run 34450964386) - 23 s restored-path estimate; projection, never a measured number",
+      "saved-runner-minutes": 4.72,
+      "saved-runner-minutes-derivation": "(306-23)/60 = 4.72"
+    },
+    {
+      "consumer": "ci:prepared-env-report",
+      "job-instances": 1,
+      "measurement": "projected-from-w0-baseline",
+      "activation-wave": "v1.00.29 W6",
+      "w0-baseline-setup-seconds": 249,
+      "formula": "saved_seconds = own-lane w0 setup-racket step seconds (249, retained run 34450964386) - 23 s restored-path estimate; projection, never a measured number",
+      "saved-runner-minutes": 3.77,
+      "saved-runner-minutes-derivation": "(249-23)/60 = 3.77"
+    }
+  ],
+  "totals": {
+    "activated-consumer-records": 7,
+    "activated-job-instances": 10,
+    "projected-saved-runner-minutes-per-main-ci-run-w6-activation": 26.2,
+    "banked-measured-saved-runner-minutes-w3-activation": 11.6,
+    "basis": "sum of the per-consumer rows above; the W6 column is a projection from the W0 baseline, the W3 column is measured on retained evidence"
+  },
+  "restore_and_fallback_observations": {
+    "restore-path-composition": "the guarded restore installs the job-local Racket runtime (pinned installer SHA-256), downloads the artifact, verifies the manifest tuple, materializes store + compiled output, runs four read-only health checks; the W6 identity-manifest compare adds sub-second tooling work after the restore",
+    "retained-restore-telemetry": "artifacts/ci-baseline/v1.00.26-prepared-env/report.json holds the warm-observation window (129 records, all fallback with restore-ms 'unknown' — the window predates activation, so no restore-ms telemetry exists there); the only retained measured restored-path setup numbers are the run-34450964386 test-shard setup steps (23/20/40 s)",
+    "fallback-observations": "cold fallback remains functional and loud: producer-skipped and restore-mismatch paths route to the full install+compile path with ::warning + REBUILT summary (W3), and the W6 identity compare adds the counted identity-mismatch fallback (::warning + counted record + RUNNER_TEMP stamp) — exercised at the tool level by tests/test-prepared-env-report.rkt (wrong racket digest / wrong OS profile / wrong lock digest all fail closed) and by the save-side identity manifest stamped on every full path",
+    "verified_restore_rate_gate": "threshold 95 percent; the post-activation observation window reopens with the W5 ci.yml wiring (emit-restore-record) which now also covers the six newly activated consumers via the same setup-racket outputs — the aggregated window report is the evidence vehicle, and this wave records no fabricated rate"
+  },
+  "honesty": {
+    "no-fabricated-measurements": "every W6-activation row is marked projected-from-w0-baseline with its formula; the only measured rows are the W3-activated test shards, whose retained evidence is cited",
+    "projection-is-an-upper-bound": "the projection subtracts only the measured restored-path estimate from the own-lane baseline; unmeasured restore-path overheads (artifact download variance) can only shrink the realized saving",
+    "unknown-values-are-strings": "wherever retained telemetry has no number, the value is the string 'unknown', never a fabricated zero"
+  }
+}

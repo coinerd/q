@@ -7,7 +7,7 @@
 
 ;; W5 (v1.00.25): prepared-environment restore evidence tooling.
 ;;
-;; Three modes (see tests/test-prepared-env-report.rkt for the contract):
+;; Modes (see tests/test-prepared-env-report.rkt for the contract):
 ;;
 ;;   --emit-restore-record   one machine-readable restore outcome per test
 ;;                           shard (ci.yml wiring). Reads the telemetry the
@@ -18,6 +18,20 @@
 ;;   --aggregate DIR         fold shard records into the committed report.
 ;;   --manifest F --check    the durable machine-checked gate; optionally
 ;;                           --write-checksums to (re)bind SHA256SUMS.
+;;
+;; W6 (v1.00.29): the prepared-environment IDENTITY MANIFEST (spec §6 W4):
+;;
+;;   --identity-emit         write one immutable identity manifest (OS
+;;                           image, arch, Racket version + executable
+;;                           digest, lock/resolved set, precompile recipe
+;;                           revision, policy knobs, artifact digest) and
+;;                           derive the artifact identity from it
+;;   --identity-compare      expected vs observed; ANY mismatch = loud,
+;;                           counted cold fallback (never silent)
+;;   --identity-fallback-record  the counted fallback record
+;;   --consumers-check       fail-closed consumers.json validation
+;;   --savings-check         fail-closed setup-savings.json validation
+;;   --rollback-drill        evaluate one consumer's §11.6 rollback
 ;;
 ;; Honesty rules enforced here: outcomes are exactly
 ;; verified | rebuilt | fallback | unknown; every non-verified outcome
@@ -34,7 +48,8 @@
          racket/list
          racket/path
          racket/port
-         racket/string)
+         racket/string
+         racket/format)
 
 ;; ---------------------------------------------------------------------------
 ;; Deterministic JSON output
@@ -104,8 +119,17 @@
 ;; ---------------------------------------------------------------------------
 
 (define (classify-outcome state producer-result prepared-env-mode)
+  ;; W6 review finding: an identity-mismatch cold fallback re-runs the full
+  ;; path but the restore step's outcome is still "success", so the raw state
+  ;; alone would classify it as `verified` — silently inflating the
+  ;; verified-restore rate. The setup action publishes its identity verdict;
+  ;; a mismatch is classified as `rebuilt` with a NAMED cause, never verified.
+  (define identity-result (getenv "Q_PREPARED_ENV_IDENTITY_RESULT"))
   (cond
-    [(equal? state "restored") (values "verified" #f)]
+    [(equal? state "restored")
+     (if (equal? identity-result "mismatch")
+         (values "rebuilt" "identity-mismatch")
+         (values "verified" #f))]
     [(equal? state "rebuilt") (values "rebuilt" "restore-mismatch-or-failure")]
     [(or (equal? state "unavailable") (equal? prepared-env-mode "off"))
      (cond
@@ -166,6 +190,16 @@ usage:
   [--wall-clock-seconds V] [--fast-env-producer-result R] [--prepared-artifact-name A] [--installer-sha256 H]
   prepared-env-report.rkt --aggregate DIR --out F [--filter-prefix P] [--campaign C]
   prepared-env-report.rkt --manifest F --check [--write-checksums]
+  prepared-env-report.rkt --identity-emit --out F --os OS --os-image IMG --arch A --racket-version V \
+  --racket-executable-digest D --lock-digest L --resolved-set-digest R --precompile-recipe-revision P \
+  --policy-fingerprint PF --artifact-digest AD [--artifact-name-base B]
+  prepared-env-report.rkt --identity-compare --expected F --observed F [--out VERDICT] [--consumer NAME]
+  prepared-env-report.rkt --identity-fallback-record --out F --consumer NAME --reason REASON \
+  [--identity-manifest F] [--created-at-utc T]
+  prepared-env-report.rkt --consumers-check PATH
+  prepared-env-report.rkt --savings-check PATH
+  prepared-env-report.rkt --rollback-drill --consumers F --consumer NAME [--vars K=V,K=V] \
+  [--event push|workflow_dispatch] [--producer-result success|skipped|failure]
 "
    message)
   2)
@@ -653,6 +687,494 @@ usage:
      1]))
 
 ;; ---------------------------------------------------------------------------
+;; W6 modes: the prepared-environment IDENTITY MANIFEST (spec §6 W4 work
+;; item 1: immutable identity = OS image, architecture, Racket version +
+;; executable digest, package lock/resolved set, precompile recipe
+;; revision, relevant policy, artifact digest).
+;;
+;;   --identity-emit          write one identity manifest (save side and
+;;                            expected-side derivation share this mode)
+;;   --identity-compare       compare expected vs observed; ANY mismatch is
+;;                            a loud, counted cold fallback (never silent)
+;;   --identity-fallback-record  emit the counted fallback record
+;;   --consumers-check        fail-closed validation of consumers.json
+;;   --savings-check          fail-closed validation of setup-savings.json
+;;   --rollback-drill         evaluate one consumer's one-command rollback
+;;
+;; Honesty rules: digest fields must be well-formed 64-hex SHA-256 values —
+;; a missing or malformed digest is a hard usage failure, never an invented
+;; value; distinct identity dimensions always derive distinct artifact
+;; identities, so a distinct environment can never cross-reuse an artifact
+;; by name; and the compare fails closed on missing fields.
+;; ---------------------------------------------------------------------------
+
+(define identity-dimensions
+  (list "os"
+        "os-image"
+        "arch"
+        "racket-version"
+        "racket-executable-digest"
+        "lock-digest"
+        "resolved-set-digest"
+        "precompile-recipe-revision"
+        "policy-fingerprint"))
+
+(define identity-digest-dimensions
+  (list "racket-executable-digest" "lock-digest" "resolved-set-digest" "artifact-digest"))
+
+(define (hex-digest? v)
+  (and (string? v) (regexp-match? #px"^[0-9a-f]{64}$" v)))
+
+(define (sha256-hex-of-string s)
+  (hex-encode (sha256 (string->bytes/utf-8 s))))
+
+;; Canonical identity string: the nine dimensions in their fixed order as
+;; k=v lines. The artifact identity is derived from this form, so ANY
+;; dimension difference (including one) yields a different artifact
+;; identity — distinct environments cannot share an artifact identity.
+(define (identity-canonical fields)
+  (string-join (for/list ([dim (in-list identity-dimensions)])
+                 (format "~a=~a" dim (hash-ref fields (string->symbol dim))))
+               "\n"))
+
+(define (identity-artifact-name base fields)
+  (format "~a-~a" base (substring (sha256-hex-of-string (identity-canonical fields)) 0 16)))
+
+(define (identity-manifest-json artifact-name-base fields)
+  (json-obj (cons 'schema "prepared-env-identity@1")
+            (cons 'artifact-name-base artifact-name-base)
+            (cons 'artifact-identity (identity-artifact-name artifact-name-base fields))
+            (cons 'fields
+                  (apply json-obj
+                         (for/list ([dim (in-list (append identity-dimensions
+                                                          (list "artifact-digest")))])
+                           (cons (string->symbol dim) (hash-ref fields (string->symbol dim))))))))
+
+(define (do-identity-emit args)
+  (define out (assoc-value args "--out"))
+  (unless (string? out)
+    (exit (usage-fail "--identity-emit requires --out F")))
+  (define artifact-base (or (assoc-value args "--artifact-name-base") "prepared-env"))
+  (define fields (make-hash))
+  (for ([dim (in-list identity-dimensions)])
+    (define flag (string-append "--" dim))
+    (define raw (assoc-value args flag))
+    (unless (string? raw)
+      (exit (usage-fail (string-append "--identity-emit requires " flag))))
+    (hash-set! fields (string->symbol dim) raw))
+  ;; The artifact digest is a manifest dimension but not part of the
+  ;; environment profile: two environments are distinct iff one of the nine
+  ;; profile dimensions differs. The digest must still be well-formed when
+  ;; provided — fail closed instead of inventing one.
+  (define artifact-digest (assoc-value args "--artifact-digest"))
+  (unless (and (string? artifact-digest) (hex-digest? artifact-digest))
+    (exit (usage-fail "--identity-emit requires a well-formed 64-hex --artifact-digest")))
+  (for ([dim (in-list identity-digest-dimensions)])
+    (unless (or (equal? dim "artifact-digest") (hex-digest? (hash-ref fields (string->symbol dim))))
+      (exit (usage-fail (format "--identity-emit: ~a must be a well-formed 64-hex digest" dim)))))
+  (for ([dim (in-list
+              (list "os" "arch" "racket-version" "precompile-recipe-revision" "policy-fingerprint"))])
+    (unless (positive? (string-length (hash-ref fields (string->symbol dim))))
+      (exit (usage-fail (format "--identity-emit: ~a must be a non-empty string" dim)))))
+  (hash-set! fields 'artifact-digest artifact-digest)
+  (write-json-file out (identity-manifest-json artifact-base fields))
+  (printf "prepared-env-report: identity manifest written to ~a (artifact identity: ~a)\n"
+          out
+          (identity-artifact-name artifact-base fields))
+  0)
+
+(define (read-identity-manifest! path)
+  (define doc
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (exit (die-usage
+                              (format "--identity-compare: cannot read identity manifest ~a: ~a"
+                                      path
+                                      (exn-message e)))))])
+      (with-input-from-file path read-json)))
+  (unless (and (hash? doc)
+               (equal? (hash-ref doc 'schema #f) "prepared-env-identity@1")
+               (hash? (hash-ref doc 'fields #f)))
+    (exit (die-usage (format "--identity-compare: ~a is not a prepared-env-identity@1 manifest"
+                             path))))
+  (define fields (hash-ref doc 'fields))
+  (for ([dim (in-list identity-dimensions)])
+    (unless (hash-has-key? fields (string->symbol dim))
+      ;; Fail closed: a manifest that does not fully describe the identity
+      ;; is never silently accepted.
+      (exit (die-usage (format "--identity-compare: manifest ~a is missing dimension ~a" path dim)))))
+  fields)
+
+(define (die-usage message)
+  (fprintf (current-error-port) "prepared-env-report: ~a\n" message)
+  2)
+
+(define (do-identity-compare args)
+  (define expected-path (assoc-value args "--expected"))
+  (define observed-path (assoc-value args "--observed"))
+  (define out (assoc-value args "--out"))
+  (define consumer (or (assoc-value args "--consumer") "unknown"))
+  (unless (and (string? expected-path) (string? observed-path))
+    (exit (usage-fail "--identity-compare requires --expected F and --observed F")))
+  (define expected (read-identity-manifest! expected-path))
+  (define observed (read-identity-manifest! observed-path))
+  (define mismatches
+    (for/list ([dim (in-list identity-dimensions)]
+               #:when (not (equal? (hash-ref expected (string->symbol dim))
+                                   (hash-ref observed (string->symbol dim)))))
+      (json-obj (cons 'field dim)
+                (cons 'expected (hash-ref expected (string->symbol dim)))
+                (cons 'observed (hash-ref observed (string->symbol dim))))))
+  (define artifact-name-expected (identity-artifact-name "prepared-env" expected))
+  (define artifact-name-observed (identity-artifact-name "prepared-env" observed))
+  (define mismatched?
+    (or (pair? mismatches) (not (equal? artifact-name-expected artifact-name-observed))))
+  (define warning
+    (format
+     "::warning::prepared-environment identity mismatch for ~a: ~a; falling back to the full cold setup path (counted, never silent)"
+     consumer
+     (if (null? mismatches)
+         (format "artifact identity ~a != ~a" artifact-name-expected artifact-name-observed)
+         (string-join (for/list ([m (in-list mismatches)])
+                        (format "~a: expected ~s, observed ~s"
+                                (cdr (assoc 'field (cdr m)))
+                                (cdr (assoc 'expected (cdr m)))
+                                (cdr (assoc 'observed (cdr m)))))
+                      "; "))))
+  (define verdict
+    (json-obj (cons 'schema "prepared-env-identity-verdict@1")
+              (cons 'consumer consumer)
+              (cons 'expected-artifact-identity artifact-name-expected)
+              (cons 'observed-artifact-identity artifact-name-observed)
+              (cons 'verdict (if mismatched? "mismatch" "verified"))
+              (cons 'mismatch-count (length mismatches))
+              (cons 'mismatches (apply json-arr mismatches))
+              (cons 'fallback
+                    (json-obj (cons 'required mismatched?)
+                              (cons 'kind "cold-full-path")
+                              (cons 'loud #t)
+                              (cons 'counted #t)
+                              (cons 'warning warning)
+                              (cons 'stamp "prepared-env-identity-fallback-stamp.json")))))
+  (when out
+    (write-json-file out verdict))
+  (when mismatched?
+    (displayln warning))
+  (printf "prepared-env-report: identity compare for ~a: ~a (~a mismatching dimension(s))\n"
+          consumer
+          (if mismatched? "MISMATCH" "verified")
+          (length mismatches))
+  (if mismatched? 1 0))
+
+(define (do-identity-fallback-record args)
+  (define out (assoc-value args "--out"))
+  (unless (string? out)
+    (exit (usage-fail "--identity-fallback-record requires --out F")))
+  (define consumer (or (assoc-value args "--consumer") "unknown"))
+  (define reason (assoc-value args "--reason"))
+  (unless (and (string? reason) (positive? (string-length reason)))
+    (exit (usage-fail
+           "--identity-fallback-record requires a non-empty --reason (never an unnamed fallback)")))
+  (define manifest (assoc-value args "--identity-manifest"))
+  (define observed-identity
+    (if manifest
+        (let ([fields (read-identity-manifest! manifest)])
+          (identity-artifact-name "prepared-env" fields))
+        "unknown"))
+  (write-json-file out
+                   (json-obj (cons 'schema "prepared-env-fallback-record@1")
+                             (cons 'consumer consumer)
+                             (cons 'fallback #t)
+                             (cons 'counted #t)
+                             (cons 'loud #t)
+                             (cons 'reason reason)
+                             (cons 'observed-artifact-identity observed-identity)
+                             (cons 'created-at-utc
+                                   (or (assoc-value args "--created-at-utc") "unknown"))))
+  (printf "prepared-env-report: counted fallback record written to ~a (consumer ~a, reason ~a)\n"
+          out
+          consumer
+          reason)
+  0)
+
+;; ---------------------------------------------------------------------------
+;; W6 modes: consumer matrix + savings honesty checks + rollback drill
+;; ---------------------------------------------------------------------------
+
+(define (consumers-violations doc)
+  (define violations '())
+  (define (violate fmt . vs)
+    (set! violations (cons (apply format fmt vs) violations)))
+  (cond
+    [(not (hash? doc))
+     (violate "consumers document is not a JSON object")
+     violations]
+    [else
+     (unless (equal? (hash-ref doc 'schema #f) "prepared-env-consumers@1")
+       (violate "schema must be prepared-env-consumers@1"))
+     (unless (non-empty-string? (hash-ref doc 'wave #f))
+       (violate "wave must be a non-empty string"))
+     (define dims (hash-ref doc 'identity-dimensions #f))
+     (unless (equal? dims identity-dimensions)
+       (violate "identity-dimensions must be exactly the nine canonical dimensions in order"))
+     (define producer (hash-ref doc 'producer #f))
+     (unless (and (hash? producer)
+                  (hash? (hash-ref producer 'env-profile #f))
+                  (non-empty-string? (hash-ref producer 'artifact-name #f)))
+       (violate "producer must carry an env-profile object and a non-empty artifact-name"))
+     (define producer-profile
+       (if (and producer (hash? producer))
+           (hash-ref producer 'env-profile (hash))
+           (hash)))
+     (define consumers (hash-ref doc 'consumers #f))
+     (unless (and (list? consumers) (pair? consumers))
+       (violate "consumers must be a non-empty list"))
+     (define seen (hash))
+     (when (list? consumers)
+       (for ([c (in-list consumers)]
+             [i (in-naturals)])
+         (cond
+           [(not (hash? c)) (violate "consumer ~a: not an object" i)]
+           [else
+            (define name (hash-ref c 'consumer #f))
+            (unless (non-empty-string? name)
+              (violate "consumer ~a: missing consumer name" i))
+            (when (and (string? name) (hash-has-key? seen name))
+              (violate "consumer ~a: duplicate consumer entry" name))
+            (when (string? name)
+              (set! seen (hash-set seen name #t)))
+            (unless (non-empty-string? (hash-ref c 'workflow #f))
+              (violate "consumer ~a: missing workflow" name))
+            (define profile (hash-ref c 'env-profile #f))
+            (unless (and (hash? profile)
+                         (for/and ([k (in-list (list 'os 'arch 'racket-version 'policy))])
+                           (non-empty-string? (hash-ref profile k #f))))
+              (violate "consumer ~a: env-profile must carry non-empty os/arch/racket-version/policy"
+                       name))
+            (define activation (hash-ref c 'activation #f))
+            (unless (member activation (list "activated" "deferred"))
+              (violate "consumer ~a: activation must be activated or deferred" name))
+            (unless (non-empty-string? (hash-ref c 'reason #f))
+              (violate "consumer ~a: every activation decision names its reason" name))
+            (define rollback (hash-ref c 'rollback #f))
+            (unless (and (string? rollback)
+                         (positive? (string-length rollback))
+                         (not (string-contains? rollback "\n")))
+              (violate "consumer ~a: rollback must be a one-command (single-line) string" name))
+            ;; The core no-cross-reuse invariant: only a PROVABLY identical
+            ;; env-profile may be activated, and a distinct profile must
+            ;; carry its own artifact identity (never the producer's).
+            (when (equal? activation "activated")
+              (unless (and (hash? profile) (equal? profile producer-profile))
+                (violate
+                 "consumer ~a: activated with an env-profile distinct from the producer — distinct"
+                 "Racket/platform/policy environments must stay deferred or separate"
+                 name))
+              (unless (equal? (hash-ref c 'artifact-identity #f)
+                              (hash-ref producer 'artifact-identity #f))
+                (violate
+                 "consumer ~a: activated consumer must reference the producer artifact identity"
+                 name)))
+            (when (and (hash? profile)
+                       (not (equal? profile producer-profile))
+                       (equal? (hash-ref c 'artifact-identity #f)
+                               (hash-ref producer 'artifact-identity #f)))
+              (violate
+               "consumer ~a: distinct env-profile shares the producer artifact identity — cross-environment reuse is prohibited"
+               name))]))
+       (define counts (hash-ref doc 'counts #f))
+       (unless (and (hash? counts)
+                    (equal? (hash-ref counts 'activated #f)
+                            (for/sum ([c
+                                       (in-list (if (list? consumers)
+                                                    consumers
+                                                    (list)))]
+                                      #:when (equal? (hash-ref c 'activation #f) "activated"))
+                                     1))
+                    (equal? (hash-ref counts 'deferred #f)
+                            (for/sum ([c
+                                       (in-list (if (list? consumers)
+                                                    consumers
+                                                    (list)))]
+                                      #:when (equal? (hash-ref c 'activation #f) "deferred"))
+                                     1)))
+         (violate "counts must state the exact activated/deferred tallies")))
+     (reverse violations)]))
+
+(define (do-consumers-check args)
+  (define path (assoc-value args "--consumers-check"))
+  (unless (string? path)
+    (exit (usage-fail "--consumers-check requires a consumers.json path")))
+  (define doc
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (fprintf (current-error-port)
+                                          "prepared-env-report: FAILED ~a (not parseable JSON: ~a)\n"
+                                          path
+                                          (exn-message e))
+                                 (exit 1))])
+      (with-input-from-file path read-json)))
+  (define violations (consumers-violations doc))
+  (cond
+    [(null? violations)
+     (printf "prepared-env-report: PASS consumers matrix ~a\n" path)
+     0]
+    [else
+     (fprintf (current-error-port) "prepared-env-report: FAILED consumers matrix ~a\n" path)
+     (for ([v (in-list violations)])
+       (fprintf (current-error-port) "  - ~a\n" v))
+     1]))
+
+(define (savings-violations doc)
+  (define violations '())
+  (define (violate fmt . vs)
+    (set! violations (cons (apply format fmt vs) violations)))
+  (cond
+    [(not (hash? doc))
+     (violate "savings document is not a JSON object")
+     violations]
+    [else
+     (unless (equal? (hash-ref doc 'schema #f) "prepared-env-setup-savings@1")
+       (violate "schema must be prepared-env-setup-savings@1"))
+     (unless (non-empty-string? (hash-ref doc 'baseline-source #f))
+       (violate "baseline-source must name the retained baseline"))
+     (define rows (hash-ref doc 'consumers #f))
+     (unless (and (list? rows) (pair? rows))
+       (violate "consumers must be a non-empty list of per-consumer rows"))
+     (when (list? rows)
+       (for ([row (in-list rows)]
+             [i (in-naturals)])
+         (cond
+           [(not (hash? row)) (violate "savings row ~a: not an object" i)]
+           [else
+            (define name (hash-ref row 'consumer #f))
+            (unless (non-empty-string? name)
+              (violate "savings row ~a: missing consumer" i))
+            (define measurement (hash-ref row 'measurement #f))
+            (unless (member measurement (list "measured" "projected-from-w0-baseline"))
+              (violate
+               "savings row ~a: measurement must be measured or projected-from-w0-baseline (never a fabricated number)"
+               name))
+            (cond
+              [(equal? measurement "measured")
+               (unless (non-empty-string? (hash-ref row 'evidence #f))
+                 (violate "savings row ~a: measured rows must cite their retained evidence" name))
+               (unless (real? (hash-ref row 'saved-runner-minutes #f))
+                 (violate "savings row ~a: measured rows must carry a numeric saved-runner-minutes"
+                          name))]
+              [else
+               (unless (non-empty-string? (hash-ref row 'formula #f))
+                 (violate "savings row ~a: projected rows must state their formula" name))
+               (define saved (hash-ref row 'saved-runner-minutes #f))
+               (unless (or (real? saved) (equal? saved "unknown"))
+                 (violate "savings row ~a: projected saved-runner-minutes must be numeric or unknown"
+                          name))])
+            (define baseline (hash-ref row 'w0-baseline-setup-seconds #f))
+            (unless (or (real? baseline) (equal? baseline "unknown"))
+              (violate "savings row ~a: w0-baseline-setup-seconds must be numeric or unknown"
+                       name))]))
+       ;; Every activated consumer needs a row; a row for a non-activated
+       ;; consumer is drift.
+       (define consumers-path (hash-ref doc 'consumers-source #f))
+       (when (and (string? consumers-path) (file-exists? consumers-path))
+         (define cdoc
+           (with-handlers ([exn:fail? (lambda (_) #f)])
+             (with-input-from-file consumers-path read-json)))
+         (when (hash? cdoc)
+           (define activated
+             (for/list ([c (in-list (hash-ref cdoc 'consumers (list)))]
+                        #:when (equal? (hash-ref c 'activation #f) "activated"))
+               (hash-ref c 'consumer)))
+           (define row-names
+             (for/list ([r (in-list (if (list? rows)
+                                        rows
+                                        (list)))]
+                        #:when (string? (hash-ref r 'consumer #f)))
+               (hash-ref r 'consumer)))
+           (for ([a (in-list activated)]
+                 #:unless (member a row-names))
+             (violate "activated consumer ~a has no savings row" a))
+           (for ([r (in-list row-names)]
+                 #:unless (member r activated))
+             (violate "savings row ~a does not correspond to an activated consumer" r)))))
+     (reverse violations)]))
+
+(define (do-savings-check args)
+  (define path (assoc-value args "--savings-check"))
+  (unless (string? path)
+    (exit (usage-fail "--savings-check requires a setup-savings.json path")))
+  (define doc
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (fprintf (current-error-port)
+                                          "prepared-env-report: FAILED ~a (not parseable JSON: ~a)\n"
+                                          path
+                                          (exn-message e))
+                                 (exit 1))])
+      (with-input-from-file path read-json)))
+  (define violations (savings-violations doc))
+  (cond
+    [(null? violations)
+     (printf "prepared-env-report: PASS setup-savings ~a\n" path)
+     0]
+    [else
+     (fprintf (current-error-port) "prepared-env-report: FAILED setup-savings ~a\n" path)
+     (for ([v (in-list violations)])
+       (fprintf (current-error-port) "  - ~a\n" v))
+     1]))
+
+;; Evaluate one consumer's prepared-path decision exactly as the ci.yml
+;; PREPARED_ENV expression evaluates it. This is the exercisable form of
+;; the §11.6 one-command rollback: setting the consumer's repository
+;; variable to off must pin that consumer to the legacy full path while
+;; the artifact producer stays available for everyone else.
+(define (do-rollback-drill args)
+  (define consumers-path (assoc-value args "--consumers"))
+  (define name (assoc-value args "--consumer"))
+  (unless (and (string? consumers-path) (string? name))
+    (exit (usage-fail "--rollback-drill requires --consumers F and --consumer NAME")))
+  (define doc
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (with-input-from-file consumers-path read-json)))
+  (unless (hash? doc)
+    (exit (die-usage (format "--rollback-drill: cannot read consumers matrix ~a" consumers-path))))
+  (define row
+    (for/first ([c (in-list (hash-ref doc 'consumers (list)))]
+                #:when (equal? (hash-ref c 'consumer #f) name))
+      c))
+  (unless (hash? row)
+    (exit (die-usage (format "--rollback-drill: consumer ~a is not in the matrix" name))))
+  (define rollback-var (hash-ref row 'rollback-variable #f))
+  (unless (non-empty-string? rollback-var)
+    (exit (die-usage (format "--rollback-drill: consumer ~a has no rollback-variable" name))))
+  (define (var v)
+    (define raw (assoc-value args "--vars"))
+    (define pairs
+      (if (string? raw)
+          (for/list ([kv (in-list (string-split raw ","))]
+                     #:when (string-contains? kv "="))
+            (apply cons (string-split kv "=")))
+          '()))
+    (cdr (or (assoc v pairs) (cons v ""))))
+  (define event (or (assoc-value args "--event") "push"))
+  (define producer-result (or (assoc-value args "--producer-result") "success"))
+  (define prepared?
+    (and (not (equal? (var "RACKET_PREPARED_ARTIFACT") "off"))
+         (not (equal? (var rollback-var) "off"))
+         (not (equal? event "workflow_dispatch"))
+         (equal? producer-result "success")))
+  (define decision
+    (json-obj (cons 'schema "prepared-env-rollback-drill@1")
+              (cons 'consumer name)
+              (cons 'rollback-variable rollback-var)
+              (cons 'rollback-command (format "gh variable set ~a --body off" rollback-var))
+              (cons 'event event)
+              (cons 'producer-result producer-result)
+              (cons 'prepared-path-in-play (if prepared? #t #f))
+              (cons 'effective-setup-path
+                    (if prepared? "verified prepared-env restore" "legacy full cold setup"))))
+  (displayln (json-value->string decision))
+  0)
+
+;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
@@ -662,6 +1184,12 @@ usage:
     [(has-flag? args "--emit-restore-record") (do-emit args)]
     [(has-flag? args "--aggregate") (do-aggregate args)]
     [(has-flag? args "--check") (do-check args)]
+    [(has-flag? args "--identity-emit") (do-identity-emit args)]
+    [(has-flag? args "--identity-compare") (do-identity-compare args)]
+    [(has-flag? args "--identity-fallback-record") (do-identity-fallback-record args)]
+    [(has-flag? args "--consumers-check") (do-consumers-check args)]
+    [(has-flag? args "--savings-check") (do-savings-check args)]
+    [(has-flag? args "--rollback-drill") (do-rollback-drill args)]
     [else (usage-fail "unknown arguments")]))
 
 (module+ main

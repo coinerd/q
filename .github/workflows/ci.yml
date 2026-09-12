@@ -16,6 +16,28 @@ name: CI
 # freshly prepared workspace purges + verifies workspace bytecode inside
 # setup-racket BEFORE tests execute — restored .zo mtimes are never a
 # freshness signal (docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md).
+# W6 prepared-environment EXPANSION (spec §6 W4): the verified restore is
+# expanded to every ci.yml consumer whose environment profile is provably
+# identical to the fast-env producer tuple (Linux/x64/Racket 8.10/CS/full,
+# same reviewed lock, same precompile recipe revision, same policy
+# knobs): smoke, the two workflows shards, release-dry-run,
+# gsd-governance, abstraction-audit and prepared-env-report join the
+# already-activated fast-gate test shards. Each consumer keeps the
+# guarded restore inside setup-racket (manifest verify + W6 identity
+# manifest compare; ANY identity mismatch = loud, counted cold fallback).
+# Distinct environments stay separate: macOS platform lanes, the Racket
+# 8.11 cross-version lane, the STRICT security queue and lint-quality
+# (which must stay parallel to fast-env per the W2 checkpoint) remain on
+# the full per-job path — see
+# artifacts/proof-graph/v1.00.29-w6/consumers.json for the full matrix.
+# Rollback (§11.6, one command per consumer): set the consumer's
+# repository variable (RACKET_PREPARED_SMOKE, RACKET_PREPARED_WORKFLOWS,
+# RACKET_PREPARED_RELEASE_DRY_RUN, RACKET_PREPARED_GSD_GOVERNANCE,
+# RACKET_PREPARED_ABSTRACTION_AUDIT, RACKET_PREPARED_ENV_REPORT) to off,
+# or RACKET_PREPARED_ARTIFACT=off for every consumer at once — each job
+# then evaluates its PREPARED_ENV expression to 'off' and runs exactly
+# the legacy full path. The producer stays available for the remaining
+# consumers.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -90,6 +112,11 @@ jobs:
           path: ~/.local/share/racket
           key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
           restore-keys: racket-pkgs-lint-
+      # W6: stays on the full per-job path BY DESIGN — the W2 topology
+      # checkpoint pins that lint-quality and fast-env have no ordering
+      # edge in either direction (lint-quality must never wait for the
+      # producer). Recorded as deferred in
+      # artifacts/proof-graph/v1.00.29-w6/consumers.json.
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
@@ -222,6 +249,10 @@ jobs:
         shell: bash
         run: |
           echo "Q_PREPARED_ENV_STATE=${{ steps.setup.outputs.prepared-env-state }}" >> "$GITHUB_ENV"
+          # W6 review fix: an identity mismatch reroutes to the cold path; the
+          # restore-record classifier must see the verdict so the fallback is
+          # counted as `rebuilt`/identity-mismatch and never as `verified`.
+          echo "Q_PREPARED_ENV_IDENTITY_RESULT=${{ steps.setup.outputs.prepared-env-identity-result }}" >> "$GITHUB_ENV"
           echo "Q_PREPARED_ENV_RESTORE_MS=${{ steps.setup.outputs.prepared-env-restore-ms }}" >> "$GITHUB_ENV"
           echo "Q_PREPARED_ENV_FALLBACK_MS=${{ steps.setup.outputs.prepared-env-fallback-ms }}" >> "$GITHUB_ENV"
 
@@ -349,15 +380,23 @@ jobs:
   # reserved for a later reviewed change.
   # ────────────────────────────────────────────────────────────
   prepared-env-report:
-    needs: [test]
+    needs: [test, fast-env]
+    # W6 expansion: this observational report lane now also consumes the
+    # verified prepared environment (same provably-identical tuple), with
+    # its own consumer-specific rollback switch (§11.6):
+    # RACKET_PREPARED_ENV_REPORT=off pins it to the legacy full path.
     if: ${{ !cancelled() && needs.test.result != 'skipped' }}
     runs-on: ubuntu-latest
+    env:
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_ENV_REPORT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: '8.10'
-          prepared-environment: 'off'
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
       - name: Download shard restore records
         continue-on-error: true
         uses: actions/download-artifact@v7
@@ -630,14 +669,25 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
-  # Gate 4: Release dry-run — depends on lint passing
+  # Gate 4: Release dry-run — depends on lint passing.
+  # W6 expansion: this lane consumes the same-run fast-env artifact when
+  # its environment profile is provably identical, runs via the fallback
+  # path whenever fast-env is skipped or failed (guarded restore + fallback
+  # marker in setup-racket make that visible), and carries a
+  # consumer-specific §11.6 rollback switch: setting the repository
+  # variable RACKET_PREPARED_RELEASE_DRY_RUN to off pins this job to the
+  # legacy full path without touching any other consumer.
   # ────────────────────────────────────────────────────────────
   release-dry-run:
-    needs: lint
+    needs: [lint, fast-env]
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_RELEASE_DRY_RUN != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       - name: Cache Racket packages
+        if: env.PREPARED_ENV != 'auto'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/racket
@@ -646,6 +696,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Build tarball (dry-run)
         run: |
@@ -687,14 +740,21 @@ jobs:
   # Gate 5: Smoke — depends on lint only (not test)
   # ────────────────────────────────────────────────────────────
   smoke:
-    needs: lint
+    needs: [lint, fast-env]
+    # W6: run via the fallback path whenever fast-env is skipped or failed.
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
     strategy:
       matrix:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # W6 expansion: consumer-specific rollback switch (§11.6) — set
+      # RACKET_PREPARED_SMOKE=off to pin this job to the legacy full path.
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_SMOKE != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       - name: Cache Racket packages
+        if: env.PREPARED_ENV != 'auto'
         uses: actions/cache@v6
         with:
           path: |
@@ -704,6 +764,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Clear stale bytecode
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
@@ -727,12 +790,19 @@ jobs:
   # Gate 6: Workflow integration suite (2-way sharded, parallel)
   # ────────────────────────────────────────────────────────────
   workflows:
-    needs: lint
+    needs: [lint, fast-env]
+    # W6: run via the fallback path whenever fast-env is skipped or failed.
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1]
     runs-on: ubuntu-latest
+    env:
+      # W6 expansion: consumer-specific rollback switch (§11.6) — set
+      # RACKET_PREPARED_WORKFLOWS=off to pin both shards to the legacy
+      # full path without touching any other consumer.
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_WORKFLOWS != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     # W4 (v1.00.26 §7) decision: HOLD. Workflow shards keep the product-default
     # batch scheduler. CI measurement on the wave branch (2 queue runs, one
     # 30-minute window) showed shard p50s ~9-25% above the 5-run batch baseline
@@ -745,6 +815,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Clear stale bytecode
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
@@ -816,9 +889,15 @@ jobs:
   # content digests cannot be reconstructed from the aggregate merge diff.
   # ────────────────────────────────────────────────────────────
   gsd-governance:
-    if: github.event_name == 'push'
-    needs: lint
+    # W6: run via the fallback path whenever fast-env is skipped or failed.
+    if: ${{ github.event_name == 'push' && !cancelled() && needs.lint.result == 'success' }}
+    needs: [lint, fast-env]
     runs-on: ubuntu-latest
+    env:
+      # W6 expansion: consumer-specific rollback switch (§11.6) — set
+      # RACKET_PREPARED_GSD_GOVERNANCE=off to pin this job to the legacy
+      # full path without touching any other consumer.
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_GSD_GOVERNANCE != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -826,6 +905,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Validate machine-checkable wave evidence
         shell: bash
@@ -870,12 +952,20 @@ jobs:
   # Runs on every push/PR — reports but does not fail the build.
   # ────────────────────────────────────────────────────────────
   abstraction-audit:
-    needs: lint
+    needs: [lint, fast-env]
+    # W6: run via the fallback path whenever fast-env is skipped or failed.
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      # W6 expansion: consumer-specific rollback switch (§11.6) — set
+      # RACKET_PREPARED_ABSTRACTION_AUDIT=off to pin this job to the
+      # legacy full path without touching any other consumer.
+      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_ABSTRACTION_AUDIT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       - name: Cache Racket packages
+        if: env.PREPARED_ENV != 'auto'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/racket
@@ -884,6 +974,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          prepared-environment: ${{ env.PREPARED_ENV }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
 
       - name: Clear stale bytecode
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true

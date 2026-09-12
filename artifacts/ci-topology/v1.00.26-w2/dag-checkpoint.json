@@ -40,7 +40,7 @@
     "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
     "prepare_action_sha256": "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d",
     "setup_action": ".github/actions/setup-racket/action.yml",
-    "setup_action_sha256": "4d93721474c14f9e396ce1ea4fd7e4c08732c8de9870d7cf6ac4662f2d6c396c",
+    "setup_action_sha256": "a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784",
     "pinned_dimensions": [
       "manifest.rkt emit",
       "manifest.rkt verify",
@@ -53,7 +53,11 @@
       "REBUILT",
       "needs.fast-env.result"
     ],
-    "note": "byte-identical to the pre-W2 values recorded here: the resequencing is a needs-edge change only and must not touch the producer or the guarded restore action"
+    "note": "byte-identical to the pre-W2 values recorded here: the resequencing is a needs-edge change only and must not touch the producer or the guarded restore action",
+    "w6_restamp": {
+      "wave": "v1.00.29-w6",
+      "note": "v1.00.29 W6 extended the shared setup-racket action with the prepared-environment identity-manifest steps (compare at restore + save-side manifest + loud counted cold fallback, spec §6 W4) and re-stamped setup_action_sha256 from the W4-era value 4d93721474c14f9e396ce1ea4fd7e4c08732c8de9870d7cf6ac4662f2d6c396c to a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784. The W4 BUG-0065 purge step and the guarded restore step are byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
+    }
   },
   "timing_checkpoint": {
     "label": "topology checkpoint — not a cohort",
