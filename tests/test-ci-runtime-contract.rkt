@@ -599,9 +599,10 @@
                     (format "v~a-w2" ci-topology-version)
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
-      (check-equal? (sha256-hex cp)
-                    "3cd242bf89934566a49327f26947b201c04da4baabbfc73ca3373505b8da9d22"
-                    "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
+      (check-equal?
+       (sha256-hex cp)
+       "2ee4c26a41beb38d53ffe78aa8988c0286efe50dc1877b77fc119a09c17249ff"
+       "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint (re-stamped by v1.00.29 W6 when the identity-manifest expansion changed setup_action_sha256 inside fast_env_verification_contract)")
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)

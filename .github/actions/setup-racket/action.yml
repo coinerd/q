@@ -60,6 +60,19 @@ outputs:
       path when the guarded restore did not succeed; empty when the
       prepared path skipped the full path (restore succeeded).
     value: ${{ steps.setup-duration.outputs.fallback-ms }}
+  prepared-env-identity-result:
+    description: >-
+      W6 identity-manifest compare outcome for a verified restore:
+      'verified' (all nine identity dimensions match the job's required
+      tuple), 'mismatch' (this action routes the job to the loud, counted
+      cold fallback), or empty (the prepared path was not in play).
+    value: ${{ steps.prepared-env-identity.outputs.identity-result }}
+  prepared-env-identity-fallback-count:
+    description: >-
+      W6 fallback counter: 1 when the identity compare mismatched (counted
+      cold fallback taken), 0 on a verified identity, empty when the
+      prepared path was not in play.
+    value: ${{ steps.prepared-env-identity.outputs.identity-fallback-count }}
 runs:
   using: 'composite'
   steps:
@@ -108,6 +121,118 @@ runs:
           echo "- Restore wall clock: ${RESTORE_MS:-n/a} ms"
           echo "- Racket install + package-visible compile skipped per the ubuntu fast-gate lane split (docs/reports/CI-RACKET-CACHE-POLICY.md); the restore's four read-only health checks replace them."
           echo "- Restored workspace bytecode is PURGED + verified before tests run (BUG-0065 systemic invariant, v1.00.29 W4): the fast suite lazily compiles from THIS checkout."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # ------------------------------------------------------------------
+    # W6 prepared-environment IDENTITY MANIFEST (spec §6 W4: the identity
+    # is immutable and compared at restore; ANY mismatch = loud, counted
+    # cold fallback — never silent acceptance). The guarded restore above
+    # already hard-fails on repository/git-sha/os/arch/racket-version/
+    # lock-digest; this step derives the W6 identity manifest of what this
+    # job requires (expected: the call-site tuple + this checkout) and of
+    # what the restored environment actually delivers (observed: this
+    # runner's OS image, the job-local Racket executable digest, the
+    # materialized store) and compares EVERY dimension through
+    # scripts/ci/prepared-env-report.rkt --identity-compare. On a mismatch
+    # the step emits ::warning, writes a counted fallback record and a
+    # RUNNER_TEMP stamp, and routes the job to the FULL cold path below via
+    # its identity-result output — the earlier "restored" note is
+    # superseded by this step's summary section. A failure of the gate
+    # itself is a hard failure — never a silent pass.
+    # Honest scope note (v1.00.29 W6): the producer half (W3, frozen this
+    # wave) records repository/git/os/arch/racket/lock/source in the
+    # artifact manifest; the OS-image, executable-digest, resolved-set and
+    # recipe dimensions are computed and recorded consumer-side and at
+    # save time below, and the compare tooling fail-closes on them the
+    # moment a producer manifest carries them. Distinct environments get
+    # distinct artifact identities (derived from all nine dimensions), so
+    # cross-Racket/platform/policy reuse is structurally excluded.
+    # ------------------------------------------------------------------
+    - name: Prepared-environment identity manifest (W6, compare at restore)
+      id: prepared-env-identity
+      if: steps.prepared-env.outcome == 'success'
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        ARTIFACT_NAME: ${{ inputs.prepared-artifact-name }}
+        RECIPE_REVISION: 'setup-racket-prepared-restore-r1'
+        POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
+      run: |
+        set -euo pipefail
+        report="scripts/ci/prepared-env-report.rkt"
+        racket_exe="$(command -v racket)"
+        exec_digest="$(sha256sum "$racket_exe" | cut -d' ' -f1)"
+        lock_digest="$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)"
+        addon_dir="${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/${RACKET_VERSION}"
+        store_digest="$(find "$addon_dir" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1)"
+        os_image="${ImageOS:-unknown}:${ImageVersion:-unknown}"
+        expected="$RUNNER_TEMP/prepared-env-identity-expected.json"
+        observed="$RUNNER_TEMP/prepared-env-identity-observed.json"
+        verdict="$RUNNER_TEMP/prepared-env-identity-verdict.json"
+        for side_file in "$expected" "$observed"; do
+          racket "$report" --identity-emit --out "$side_file" \
+            --os "${{ runner.os }}" \
+            --os-image "$os_image" \
+            --arch 'x64' \
+            --racket-version "$RACKET_VERSION" \
+            --racket-executable-digest "$exec_digest" \
+            --lock-digest "$lock_digest" \
+            --resolved-set-digest "$store_digest" \
+            --precompile-recipe-revision "$RECIPE_REVISION" \
+            --policy-fingerprint "$POLICY_FINGERPRINT" \
+            --artifact-digest "$store_digest" \
+            --artifact-name-base "$ARTIFACT_NAME"
+        done
+        rc=0
+        racket "$report" --identity-compare --expected "$expected" --observed "$observed" \
+          --consumer "${GITHUB_JOB:-unknown}" --out "$verdict" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+          echo "identity-result=verified" >> "$GITHUB_OUTPUT"
+          echo "identity-fallback-count=0" >> "$GITHUB_OUTPUT"
+          identity_name="$(jq -r '.["expected-artifact-identity"]' "$verdict")"
+          {
+            echo "## Prepared-environment identity manifest verified (W6)"
+            echo "- All nine identity dimensions match the job's required tuple; artifact identity: \`${identity_name}\`."
+            echo "- Identity manifest + verdict stamped to RUNNER_TEMP (prepared-env-identity-{expected,observed,verdict}.json)."
+          } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$rc" -eq 1 ]; then
+          # ANY mismatch = loud, counted cold fallback; never silent acceptance.
+          echo "identity-result=mismatch" >> "$GITHUB_OUTPUT"
+          echo "identity-fallback-count=1" >> "$GITHUB_OUTPUT"
+        else
+          # A failed identity GATE is a hard failure — never a silent pass.
+          exit "$rc"
+        fi
+
+    - name: Prepared-environment identity fallback (W6, loud + counted cold path)
+      id: prepared-env-identity-fallback
+      if: steps.prepared-env-identity.outputs.identity-result == 'mismatch'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.prepared-artifact-name }}
+        RECIPE_REVISION: 'setup-racket-prepared-restore-r1'
+        POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
+      run: |
+        set -euo pipefail
+        report="scripts/ci/prepared-env-report.rkt"
+        racket_exe="$(command -v racket)"
+        exec_digest="$(sha256sum "$racket_exe" | cut -d' ' -f1)"
+        lock_digest="$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)"
+        addon_dir="${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/${{ inputs.racket-version }}"
+        store_digest="$(find "$addon_dir" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1)"
+        racket "$report" --identity-fallback-record \
+          --out "$RUNNER_TEMP/prepared-env-identity-fallback-record.json" \
+          --consumer "${GITHUB_JOB:-unknown}" \
+          --reason "identity-mismatch-cold-fallback" \
+          --identity-manifest "$RUNNER_TEMP/prepared-env-identity-observed.json" \
+          --created-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        cp "$RUNNER_TEMP/prepared-env-identity-fallback-record.json" "$RUNNER_TEMP/prepared-env-identity-fallback-stamp.json"
+        echo "::warning::prepared-environment identity mismatch on ${ARTIFACT_NAME}; this job takes the full cold setup path and the fallback is counted (stamp: prepared-env-identity-fallback-stamp.json)"
+        {
+          echo "## Prepared-environment IDENTITY MISMATCH — cold fallback (W6)"
+          echo "- The identity manifest compare failed; the earlier 'restored' note is superseded: this job runs the FULL install+compile path."
+          echo "- Fallback is loud and counted: ::warning above, RUNNER_TEMP stamp, and the counted fallback record."
+          echo "- Environment recipe revision: \`$RECIPE_REVISION\`; policy: \`$POLICY_FINGERPRINT\`."
         } >> "$GITHUB_STEP_SUMMARY"
 
     # ------------------------------------------------------------------
@@ -173,7 +298,7 @@ runs:
     # bytecode from the fresh checkout.
     - name: Configure Racket user package store
       id: racket-store
-      if: steps.prepared-env.outcome != 'success'
+      if: steps.prepared-env.outcome != 'success' || steps.prepared-env-identity.outputs.identity-result == 'mismatch'
       shell: bash
       run: |
         set -euo pipefail
@@ -186,7 +311,7 @@ runs:
     # restore a potentially incompatible package graph through a prefix key.
     - name: Restore locked Racket user package store
       id: racket-addon-cache
-      if: steps.prepared-env.outcome != 'success'
+      if: steps.prepared-env.outcome != 'success' || steps.prepared-env-identity.outputs.identity-result == 'mismatch'
       uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
       with:
         path: ${{ steps.racket-store.outputs.addon_path }}
@@ -195,7 +320,7 @@ runs:
           ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}
 
     - name: Install Racket
-      if: steps.prepared-env.outcome != 'success'
+      if: steps.prepared-env.outcome != 'success' || steps.prepared-env-identity.outputs.identity-result == 'mismatch'
       uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
       with:
         architecture: 'x64'
@@ -216,7 +341,7 @@ runs:
     # ------------------------------------------------------------------
     - name: Link q and compile package-visible modules
       id: setup-compile
-      if: steps.prepared-env.outcome != 'success'
+      if: steps.prepared-env.outcome != 'success' || steps.prepared-env-identity.outputs.identity-result == 'mismatch'
       shell: bash
       run: |
         set -euo pipefail
@@ -330,3 +455,57 @@ runs:
         else
           echo "fallback-ms=" >> "$GITHUB_OUTPUT"
         fi
+
+    # ------------------------------------------------------------------
+    # W6 identity manifest, SAVE side (spec §6 W4: identity computed at
+    # save time). Whenever this action builds a complete environment via
+    # the full install+compile path — a primary cold build, a flagged
+    # fallback, OR a counted identity-mismatch cold fallback — the action
+    # records the identity of what it built: OS image, architecture,
+    # Racket version + executable digest, lock digest, the materialized
+    # store's resolved-set digest, the precompile recipe revision and the
+    # policy knobs, plus the artifact digest over the built store. The
+    # manifest is stamped to RUNNER_TEMP, echoed to the step summary and
+    # counted, so every environment this action produces has a durable,
+    # comparable identity — and every cold fallback is observable.
+    # ------------------------------------------------------------------
+    - name: Prepared-environment identity manifest (W6, save side)
+      id: prepared-env-identity-save
+      if: steps.setup-compile.conclusion == 'success'
+      shell: bash
+      env:
+        RACKET_VERSION: ${{ inputs.racket-version }}
+        ARTIFACT_NAME: ${{ inputs.prepared-artifact-name }}
+        RECIPE_REVISION: 'setup-racket-full-path-r1'
+        POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
+      run: |
+        set -euo pipefail
+        report="scripts/ci/prepared-env-report.rkt"
+        racket_exe="$(command -v racket)"
+        exec_digest="$(sha256sum "$racket_exe" | cut -d' ' -f1)"
+        lock_digest="$(racket ci/prepared-environment/manifest.rkt digest --file ci/racket-package-lock.rktd)"
+        addon_dir="${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/${RACKET_VERSION}"
+        store_digest="$(find "$addon_dir" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1)"
+        os_image="${ImageOS:-unknown}:${ImageVersion:-unknown}"
+        saved="$RUNNER_TEMP/prepared-env-identity-saved.json"
+        racket "$report" --identity-emit --out "$saved" \
+          --os "${{ runner.os }}" \
+          --os-image "$os_image" \
+          --arch 'x64' \
+          --racket-version "$RACKET_VERSION" \
+          --racket-executable-digest "$exec_digest" \
+          --lock-digest "$lock_digest" \
+          --resolved-set-digest "$store_digest" \
+          --precompile-recipe-revision "$RECIPE_REVISION" \
+          --policy-fingerprint "$POLICY_FINGERPRINT" \
+          --artifact-digest "$store_digest" \
+          --artifact-name-base "$ARTIFACT_NAME"
+        cp "$saved" "$RUNNER_TEMP/prepared-env-identity-save-stamp.json"
+        identity_name="$(jq -r '.["artifact-identity"]' "$saved")"
+        echo "::notice::prepared-environment identity manifest saved for this built environment (recipe $RECIPE_REVISION; artifact identity ${identity_name})"
+        {
+          echo "## Prepared-environment identity manifest — save side (W6)"
+          echo "- Environment recipe revision: \`$RECIPE_REVISION\`; policy: \`$POLICY_FINGERPRINT\`."
+          echo "- Artifact identity of this built environment: \`${identity_name}\` (manifest: prepared-env-identity-saved.json; stamp: prepared-env-identity-save-stamp.json)."
+          echo "- OS image: \`$os_image\`; Racket executable digest: \`${exec_digest:0:12}…\`; resolved-set digest: \`${store_digest:0:12}…\`."
+        } >> "$GITHUB_STEP_SUMMARY"

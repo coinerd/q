@@ -369,9 +369,10 @@
     (check-equal? (hash-ref contract 'prepare_action_sha256)
                   "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d"
                   "manifest/OS/Racket/lockfile verification steps must stay byte-identical")
-    (check-equal? (hash-ref contract 'setup_action_sha256)
-                  "4d93721474c14f9e396ce1ea4fd7e4c08732c8de9870d7cf6ac4662f2d6c396c"
-                  "the guarded restore action must stay byte-identical")
+    (check-equal?
+     (hash-ref contract 'setup_action_sha256)
+     "a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784"
+     "the guarded restore action must stay byte-identical (re-stamped by v1.00.29 W6 for the identity-manifest expansion; the purge and restore steps stayed byte-identical)")
     (check-true (string-contains? ci-text "needs.fast-env.result")
                 "test shards must keep gating PREPARED_ENV on the fast-env result")
     ;; same-SHA timing shape (topology checkpoint, not a cohort)
