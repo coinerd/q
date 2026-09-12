@@ -55,3 +55,4 @@
    (result
     "PASS: the only skip-permitting path in nightly.yml is consume exit 0 ('reusable); the decision record is pre-seeded fail-closed and ALWAYS uploaded (reuse-decision-fast, if: always()); the consumer step cannot fail the job (subshell containment + exit 0); the full-regression macos suite and the ci.yml shards/platform steps are unconditional and pinned so by tests")))
  (issues-delivered ((id "campaign v1.00.29 W9 (rework)") (title "Duplicate-proof reduction: dup-01 nightly fast-suite reuse; dup-04 disqualified") (wave-deliverable "dup-04 wiring revert (B1), ci.yml test-aggregate producer (N2), nightly.yml consumer with actions: read (B3) + API-derived attempt (N4) + pinned environment, §9 + workflow guard tests (25 checks), content-addressed dup-01 removal ledger + dup-04 disqualification, DUPLICATE-PROOF-REDUCTION report rewrite (honest §4.7 re-derivation), re-exercised rollback drill, wave evidence trio")))
+)
