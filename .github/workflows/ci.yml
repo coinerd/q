@@ -429,12 +429,287 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   # Gate 2b: Test aggregate — required gate that all shards passed
+  #
+  # v1.00.29 W9 rework (dup-01 removal, review round 1): this job is
+  # green only when every fast shard AND the platform checks passed, so
+  # it is the single producer of the fast-suite proof bundle. The
+  # scheduled nightly test job may then REUSE this proof at the same SHA
+  # (same selection, same ubuntu-latest/racket-8.10 environment, same
+  # strictness — W0 exact_duplicate dup-01) instead of re-executing the
+  # identical suite. The bundle is evidence, not a cached exit code: the
+  # consumer re-validates it fail-closed (validator steps 1-15) and runs
+  # the suite on ANY consume failure — never a silent skip (§11.3).
   # ────────────────────────────────────────────────────────────
   test-aggregate:
     needs: [test, test-platform]
     runs-on: ubuntu-latest
     steps:
       - run: echo "All test shards and platform checks passed."
+
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      # The fast shards upload their run-summary JSON as
+      # test-results-fast-<shard> (one file per artifact, so no
+      # merge-multiple: artifacts land in per-artifact subdirectories).
+      - name: Download fast-suite shard results
+        uses: actions/download-artifact@v7
+        with:
+          path: shard-results
+          pattern: test-results-fast-*
+
+      # Produces the q.proof-bundle/1 for claim:pr-ci:linux-fast-suite
+      # from the per-shard results. N2 (review round 1): the claim's
+      # tests_failed/tests_skipped are the REAL aggregated counts; the
+      # step FAILS unless every shard reported and the aggregate is clean
+      # (zero failures, timeouts and skips), so a bundle over a non-clean
+      # aggregate can never exist. Digests are computed over named real
+      # inputs; each recipe is recorded in the claim JSON's digest_sources
+      # map (annotations only — consume.rkt ignores unknown keys, the
+      # validator's closed shapes are untouched). This step only runs on a
+      # green aggregate (needs: [test, test-platform] with no always()),
+      # so a failed or cancelled shard can never yield a reusable bundle.
+      - name: Produce fast-suite proof bundle
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts-run proof-bundle
+          SHARD_JSONS="$(find shard-results -name test-results.json | LC_ALL=C sort)"
+          if [ -z "$SHARD_JSONS" ]; then
+            echo "producer: no shard results downloaded (refusing to write a bundle)" >&2
+            exit 1
+          fi
+          : > artifacts-run/shards.jsonl
+          for f in $SHARD_JSONS; do
+            jq -c --arg artifact "$(basename "$(dirname "$f")")" \
+              '{artifact: $artifact,
+                shard: .run_summary.shard,
+                file_count: .run_summary.file_count,
+                pass: .run_summary.pass,
+                fail: .run_summary.fail,
+                timeout: .run_summary.timeout,
+                skip: .run_summary.skip,
+                wall_clock_seconds: .run_summary.wall_clock_seconds}' "$f" >> artifacts-run/shards.jsonl
+          done
+          jq -s '{
+            suite: "fast",
+            sharded: true,
+            shards: (sort_by(.artifact)),
+            file_count: (map(.file_count) | add),
+            pass: (map(.pass) | add),
+            fail: (map(.fail) | add),
+            timeout: (map(.timeout) | add),
+            skip: (map(.skip) | add),
+            wall_clock_seconds: (map(.wall_clock_seconds) | max),
+            elapsed_ms_basis: "max shard wall_clock_seconds; shards execute in parallel so the suite completed when the slowest shard completed"
+          }' artifacts-run/shards.jsonl > artifacts-run/fast-suite-results-summary.json
+          SUMMARY="artifacts-run/fast-suite-results-summary.json"
+          FILE_TOTAL="$(jq '.file_count' "$SUMMARY")"
+          PASS_TOTAL="$(jq '.pass' "$SUMMARY")"
+          FAIL_TOTAL="$(jq '.fail' "$SUMMARY")"
+          TIMEOUT_TOTAL="$(jq '.timeout' "$SUMMARY")"
+          SKIP_TOTAL="$(jq '.skip' "$SUMMARY")"
+          if [ "$FILE_TOTAL" -eq 0 ] || [ "$FAIL_TOTAL" -ne 0 ] || [ "$TIMEOUT_TOTAL" -ne 0 ] || [ "$SKIP_TOTAL" -ne 0 ]; then
+            echo "producer: refusing to write a proof bundle over a non-clean aggregate (files=$FILE_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)" >&2
+            exit 1
+          fi
+          echo "producer: clean fast-suite aggregate (files=$FILE_TOTAL pass=$PASS_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)"
+          WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
+          TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
+          CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          COMPLETED_AT="$CREATED_AT"
+          RESULT_SHA="sha256:$(sha256sum "$SUMMARY" | cut -d' ' -f1)"
+          RESULT_SIZE="$(stat -c%s "$SUMMARY")"
+          ELAPSED_MS="$(jq '(.wall_clock_seconds * 1000) | floor' "$SUMMARY")"
+          START_EPOCH="$(( $(date -u +%s) - ( (ELAPSED_MS + 999) / 1000 ) ))"
+          STARTED_AT="$(date -u -d "@${START_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')"
+          INVENTORY_SHA="sha256:$(git ls-files tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
+          METADATA_SHA="sha256:$(sha256sum artifacts-run/metadata-inventory.json | cut -d' ' -f1)"
+          COVERS_SHA="sha256:$(git grep -h '@covers' -- tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          SELECTED_SHA="sha256:$(jq -s '[.[].files[].path] | unique | .[]' $SHARD_JSONS | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          RUNNER_REV="$(git rev-parse "$GITHUB_SHA":scripts/run-tests.rkt)"
+          FLAGS_SHA="sha256:$(printf '%s' '--suite fast --jobs 4 --shard-index <shard> --shard-total <total> --json-out test-results.json' | sha256sum | cut -d' ' -f1)"
+          LOCK_SHA="sha256:$(sha256sum ci/racket-package-lock.rktd | cut -d' ' -f1)"
+          RACKET_BIN="$(readlink -f "$(command -v racket)")"
+          RACKET_EXEC_SHA="sha256:$(sha256sum "$RACKET_BIN" | cut -d' ' -f1)"
+          RECIPE_SHA="sha256:$(sha256sum .github/actions/setup-racket/action.yml | cut -d' ' -f1)"
+          PKGSET_SHA="sha256:$( { raco pkg ls 2>/dev/null || echo pkg-ls-unavailable; } | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          FEATFLAGS_SHA="sha256:$(printf '%s' '1' | sha256sum | cut -d' ' -f1)"
+          RELENV_SHA="sha256:$(cat /etc/os-release | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          CHECKOUT_SHA="sha256:$(git ls-files | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          COMPILED_SHA="sha256:$(find . -name '*.zo' -type f -not -path './tests/metadata-discovery/fixture/*' -printf '%p %s\n' 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          cat > artifacts-run/claim.json <<'JSON_EOF'
+          {
+            "created_at": "@@CREATED_AT@@",
+            "workflow_path": ".github/workflows/ci.yml",
+            "environment_class": "linux-racket-8.10-fast",
+            "attestation_digest": "@@CHECKOUT_SHA@@",
+            "allowed_consumers": ["workflow:nightly.yml:test"],
+            "denied_consumers": [],
+            "release_reusable": false,
+            "producer": {
+              "run_id": "@@RUN_ID@@",
+              "run_attempt": @@RUN_ATTEMPT@@,
+              "job_id": "@@JOB_ID@@",
+              "job_name": "test-aggregate",
+              "event": "@@EVENT@@",
+              "ref": "@@REF@@",
+              "trust_tier": "tier-1"
+            },
+            "claims": [
+              {
+                "claim_id": "claim:pr-ci:linux-fast-suite",
+                "claim_version": 1,
+                "proof_class": "fast",
+                "required_environment_class": "linux-racket-8.10-fast",
+                "gate_class": "required",
+                "result": "pass"
+              }
+            ],
+            "selection": {
+              "inventory_digest": "@@INVENTORY_SHA@@",
+              "metadata_manifest_digest": "@@METADATA_SHA@@",
+              "covers_manifest_digest": "@@COVERS_SHA@@",
+              "selected_manifest_digest": "@@SELECTED_SHA@@",
+              "selected_count": @@FILE_TOTAL@@,
+              "selection_mode": "suite:fast",
+              "selector_revision_sha": "@@RUNNER_REV@@",
+              "explanation_artifact_digest": "@@RESULT_SHA@@"
+            },
+            "command": {
+              "argv": ["racket", "scripts/run-tests.rkt", "--suite", "fast", "--jobs", "4", "--shard-index", "<shard>", "--shard-total", "<total>", "--json-out", "test-results.json"],
+              "cwd_contract": "repo-root",
+              "flags_digest": "@@FLAGS_SHA@@",
+              "runner_revision_sha": "@@RUNNER_REV@@"
+            },
+            "environment": {
+              "os": "linux",
+              "os_version": "24.04",
+              "runner_image": "ubuntu-24.04",
+              "architecture": "x86_64",
+              "racket_version": "8.10",
+              "racket_executable_digest": "@@RACKET_EXEC_SHA@@",
+              "racket_installer_digest": "@@RECIPE_SHA@@",
+              "package_lock_digest": "@@LOCK_SHA@@",
+              "resolved_package_set_digest": "@@PKGSET_SHA@@",
+              "locale": "C.UTF-8",
+              "timezone": "UTC"
+            },
+            "policy": {
+              "test_profile": "fast",
+              "security_profile": "strict",
+              "sandbox_profile": "none",
+              "feature_flags_digest": "@@FEATFLAGS_SHA@@",
+              "relevant_environment_digest": "@@RELENV_SHA@@"
+            },
+            "prepared_environment": {
+              "mode": "cold",
+              "artifact_digest": "@@CHECKOUT_SHA@@",
+              "build_recipe_digest": "@@RECIPE_SHA@@",
+              "verification_status": "verified",
+              "compiled_cache_digest": "@@COMPILED_SHA@@"
+            },
+            "result": {
+              "status": "pass",
+              "started_at": "@@STARTED_AT@@",
+              "completed_at": "@@COMPLETED_AT@@",
+              "elapsed_ms": @@ELAPSED_MS@@,
+              "tests_passed": @@PASS_TOTAL@@,
+              "tests_failed": @@FAIL_TOTAL@@,
+              "tests_skipped": @@SKIP_TOTAL@@,
+              "allowed_skip_reasons": [],
+              "timeouts": @@TIMEOUT_TOTAL@@,
+              "cancelled": false,
+              "retry_count": 0,
+              "result_summary_digest": "@@RESULT_SHA@@"
+            },
+            "artifacts": [
+              {
+                "name": "fast-suite-results-summary",
+                "media_type": "application/json",
+                "digest": "@@RESULT_SHA@@",
+                "size_bytes": @@RESULT_SIZE@@,
+                "store": "evidence-store",
+                "store_object_id": "fast-suite-results-summary@@RUN_ID@@"
+              }
+            ],
+            "digest_sources": {
+              "note": "annotations for auditors; consume.rkt write ignores unknown claim-document keys",
+              "inventory_digest": "sha256 over `git ls-files tests | sort`",
+              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify-metadata.rkt --metadata-inventory-json",
+              "covers_manifest_digest": "sha256 over sorted `git grep -h '@covers' -- tests` lines",
+              "selected_manifest_digest": "sha256 over the executed selection: sorted union of .files[].path across all shard test-results.json",
+              "runner_revision_sha": "blob sha of scripts/run-tests.rkt at GITHUB_SHA",
+              "racket_executable_digest": "sha256 of the resolved racket executable bytes",
+              "racket_installer_digest": "sha256 of .github/actions/setup-racket/action.yml (the pinned provisioning recipe)",
+              "package_lock_digest": "sha256 of ci/racket-package-lock.rktd",
+              "resolved_package_set_digest": "sha256 over sorted `raco pkg ls` output",
+              "feature_flags_digest": "sha256 over the literal '1' — every shard executes with STRICT_TEST_RUNNER=1 (the runner's strict zero-test detection is also on by default)",
+              "relevant_environment_digest": "sha256 over sorted /etc/os-release content",
+              "flags_digest": "sha256 over the common per-shard argv template; only the <shard>/<total> placeholders vary per shard",
+              "prepared_environment.mode": "cold: the workspace was purged (W4) and rebuilt from THIS checkout by the shards' compile gates + suite; when the W3 prepared-environment restore was active it restored a manifest-verified identity-equivalent tuple (W6), so the cold annotation stays the conservative honest baseline",
+              "compiled_cache_digest": "sha256 over sorted '*.zo' path+size lines (fixture dir excluded)",
+              "attestation_digest": "sha256 over `git ls-files | sort` (checkout manifest attestation)",
+              "result_summary_digest": "sha256 of artifacts-run/fast-suite-results-summary.json (the aggregated per-shard counts uploaded as fast-suite-results-summary)"
+            }
+          }
+          JSON_EOF
+          sed -i \
+            -e "s|@@CREATED_AT@@|${CREATED_AT}|g" \
+            -e "s|@@CHECKOUT_SHA@@|${CHECKOUT_SHA}|g" \
+            -e "s|@@RUN_ID@@|${GITHUB_RUN_ID}|g" \
+            -e "s|@@RUN_ATTEMPT@@|${GITHUB_RUN_ATTEMPT}|g" \
+            -e "s|@@JOB_ID@@|${GITHUB_JOB}|g" \
+            -e "s|@@EVENT@@|${GITHUB_EVENT_NAME}|g" \
+            -e "s|@@REF@@|${GITHUB_REF}|g" \
+            -e "s|@@INVENTORY_SHA@@|${INVENTORY_SHA}|g" \
+            -e "s|@@METADATA_SHA@@|${METADATA_SHA}|g" \
+            -e "s|@@COVERS_SHA@@|${COVERS_SHA}|g" \
+            -e "s|@@SELECTED_SHA@@|${SELECTED_SHA}|g" \
+            -e "s|@@FILE_TOTAL@@|${FILE_TOTAL}|g" \
+            -e "s|@@PASS_TOTAL@@|${PASS_TOTAL}|g" \
+            -e "s|@@FAIL_TOTAL@@|${FAIL_TOTAL}|g" \
+            -e "s|@@TIMEOUT_TOTAL@@|${TIMEOUT_TOTAL}|g" \
+            -e "s|@@SKIP_TOTAL@@|${SKIP_TOTAL}|g" \
+            -e "s|@@RUNNER_REV@@|${RUNNER_REV}|g" \
+            -e "s|@@RESULT_SHA@@|${RESULT_SHA}|g" \
+            -e "s|@@RESULT_SIZE@@|${RESULT_SIZE}|g" \
+            -e "s|@@FLAGS_SHA@@|${FLAGS_SHA}|g" \
+            -e "s|@@RACKET_EXEC_SHA@@|${RACKET_EXEC_SHA}|g" \
+            -e "s|@@RECIPE_SHA@@|${RECIPE_SHA}|g" \
+            -e "s|@@LOCK_SHA@@|${LOCK_SHA}|g" \
+            -e "s|@@PKGSET_SHA@@|${PKGSET_SHA}|g" \
+            -e "s|@@FEATFLAGS_SHA@@|${FEATFLAGS_SHA}|g" \
+            -e "s|@@RELENV_SHA@@|${RELENV_SHA}|g" \
+            -e "s|@@COMPILED_SHA@@|${COMPILED_SHA}|g" \
+            -e "s|@@STARTED_AT@@|${STARTED_AT}|g" \
+            -e "s|@@COMPLETED_AT@@|${COMPLETED_AT}|g" \
+            -e "s|@@ELAPSED_MS@@|${ELAPSED_MS}|g" \
+            artifacts-run/claim.json
+          racket scripts/proof-bundle/consume.rkt write \
+            --claims-json artifacts-run/claim.json \
+            --producer-identity "ci.yml:test-aggregate" \
+            --workflow-revision-sha "$WF_REVISION" \
+            --commit-sha "$GITHUB_SHA" \
+            --tree-sha "$TREE_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --retention-days 14 \
+            --out proof-bundle/bundle.json
+          cp artifacts-run/claim.json proof-bundle/claim.json
+          echo "proof bundle: $(jq -r '.bundle_id' proof-bundle/bundle.json)"
+
+      - name: Upload proof bundle (fast)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-bundle-fast
+          path: |
+            proof-bundle/bundle.json
+            proof-bundle/claim.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   # v1.00.26 W3: the shard-plan-report job moved OFF the PR critical path.
   # The identical report-only job (same name, same artifact contract:
