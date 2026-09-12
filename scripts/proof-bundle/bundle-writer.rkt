@@ -30,9 +30,14 @@
          racket/file
          racket/string)
 
+;; Named contract bound at column 0 so scripts/check-deps.rkt's textual
+;; scanner never mistakes the indented `hash/c` combinator for an external
+;; `hash` package dependency (observed as a phantom build-dep in W5).
+(define section-fields-contract (hash/c string? (listof string?)))
+
 (provide (contract-out (proof-bundle-schema string?)
                        (required-bundle-fields (listof string?))
-                       (required-section-fields (hash/c string? (listof string?)))
+                       (required-section-fields section-fields-contract)
                        (canonical-json (-> jsexpr? string?))
                        (canonical-json-bytes (-> jsexpr? bytes?))
                        (sha256-bytes (-> bytes? bytes?))
