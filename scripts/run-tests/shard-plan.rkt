@@ -56,7 +56,18 @@
          load-duration-snapshot
          artifact-json-files
          inventory-preserved?
-         activation-recommendation)
+         activation-recommendation
+         ;; W10 (v1.00.29): starvation/tail checks + cohort-anchored plan
+         ;; regeneration + the --shard-plan measure duration model.
+         plan-mean-shard-seconds
+         starvation-check
+         tail-straddle-check
+         quantile-interpolated
+         load-cohort-wall-anchors
+         regenerate-plan-report
+         print-starvation-tail-report
+         starvation-max-ratio
+         tail-straddle-limit-ratio)
 
 ;; ---------------------------------------------------------------------------
 ;; Plan representation
@@ -95,7 +106,10 @@
 ;; the MAXIMUM observed duration wins (conservative — a slower re-run must not
 ;; under-estimate a shard).
 (define (artifact-json-files path-string)
-  (define src (if (path? path-string) (path->string path-string) path-string))
+  (define src
+    (if (path? path-string)
+        (path->string path-string)
+        path-string))
   (cond
     [(not src) '()]
     [(directory-exists? src)
@@ -110,6 +124,25 @@
 (define (entry-duration entry)
   (define d (hash-ref entry 'duration_seconds #f))
   (and (real? d) (>= d 0) (exact->inexact d)))
+
+;; W10: a retained fast-runtime census artifact (schema
+;; `q.census.fast-runtime/1`, v1.00.28 W0/W7 measurement waves) carries
+;; `records` with `path` + `median_ms` instead of `files` with
+;; `duration_seconds`. Map each record to duration_seconds = median_ms/1000
+;; so the census — the LATEST retained per-file duration evidence feeding the
+;; v1.00.28-final cohort decision — can drive the duration model directly.
+;; Returns #f when the artifact is not a census.
+(define (census-file-entries parsed)
+  (define records (hash-ref parsed 'records #f))
+  (and (list? records)
+       (for/list ([e (in-list records)]
+                  #:when (hash? e))
+         (define ms (hash-ref e 'median_ms #f))
+         (define f (hash-ref e 'path #f))
+         (and (string? f)
+              (real? ms)
+              (>= ms 0)
+              (hash 'path f 'duration_seconds (exact->inexact (/ ms 1000.0)))))))
 
 (define (load-duration-snapshot source)
   ;; → (values durations status)
@@ -134,18 +167,32 @@
             acc]
            [else
             (define entries (hash-ref parsed 'files #f))
-            (if (list? entries)
-                (for/fold ([acc* acc])
-                          ([e (in-list entries)]
-                           #:when (hash? e))
-                  (define f (or (hash-ref e 'path #f) (hash-ref e 'file #f)))
-                  (define d (entry-duration e))
-                  (if (and (string? f) d)
-                      (hash-set acc* f (max d (hash-ref acc* f 0.0)))
-                      acc*))
-                (begin
+            (cond
+              [(list? entries)
+               (for/fold ([acc* acc])
+                         ([e (in-list entries)]
+                          #:when (hash? e))
+                 (define f (or (hash-ref e 'path #f) (hash-ref e 'file #f)))
+                 (define d (entry-duration e))
+                 (if (and (string? f) d)
+                     (hash-set acc* f (max d (hash-ref acc* f 0.0)))
+                     acc*))]
+              ;; W10: census schema fallback (records/path/median_ms)
+              [else
+               (define census-entries (census-file-entries parsed))
+               (cond
+                 [(list? census-entries)
+                  (for/fold ([acc* acc])
+                            ([e (in-list census-entries)]
+                             #:when (hash? e))
+                    (define f (hash-ref e 'path #f))
+                    (define d (entry-duration e))
+                    (if (and (string? f) d)
+                        (hash-set acc* f (max d (hash-ref acc* f 0.0)))
+                        acc*))]
+                 [else
                   (set-box! corrupt? #t)
-                  acc))])))
+                  acc])])])))
      (values acc
              (cond
                [(unbox corrupt?) 'corrupt]
@@ -510,3 +557,284 @@
            (car rec)
            (cdr rec)
            (inventory-preserved? plan)))
+
+;; ---------------------------------------------------------------------------
+;; W10 (v1.00.29): starvation/tail checks + cohort-anchored regeneration
+;; ---------------------------------------------------------------------------
+;; The wave contract (PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W8: "tune
+;; shard count only if inventory is preserved ... and no starvation/tail
+;; regression appears") is operationalized here with two pre-registered,
+;; mechanical checks; the definitions below are FROZEN for the v1.00.29 W10
+;; regeneration and travel with every generated plan report:
+;;
+;; starvation — no shard's predicted duration may exceed
+;;   `starvation-max-ratio` (1.35) times the MEAN shard duration of the
+;;   plan. A shard heavier than that starves its own files relative to the
+;;   plan cadence and alone dominates the CI wall.
+;;
+;; tail-straddle — a file is predicted to straddle a shard-cadence boundary
+;;   when its effective weight exceeds the mean shard duration (it cannot
+;;   complete within one mean shard-length window). It straddles a boundary
+;;   TWICE when its weight exceeds `tail-straddle-limit-ratio` (2.0) times
+;;   the mean shard duration: such a file is file-bound — no rebalance of
+;;   shard counts can remove the tail it creates — and is recorded as a
+;;   violation. Files straddling exactly once are recorded informationally.
+
+(define STARVATION-MAX-RATIO 1.35)
+(define TAIL-STRADDLE-LIMIT-RATIO 2.0)
+
+(define (starvation-max-ratio)
+  STARVATION-MAX-RATIO)
+(define (tail-straddle-limit-ratio)
+  TAIL-STRADDLE-LIMIT-RATIO)
+
+;; Mean of the plan's predicted shard durations (inexact; 0.0 for a
+;; degenerate plan with no shards — never divides by zero).
+(define (plan-mean-shard-seconds plan)
+  (define preds (shard-plan-predicted plan))
+  (if (null? preds)
+      0.0
+      (exact->inexact (/ (for/sum ([p (in-list preds)]) p) (length preds)))))
+
+;; Starvation gate: every shard's predicted duration must be within the
+;; ratio limit of the mean. Returns a jsexpr-able hasheq; `ok` is #f when at
+;; least one shard offends.
+(define (starvation-check plan #:max-ratio [max-ratio STARVATION-MAX-RATIO])
+  (define mean (plan-mean-shard-seconds plan))
+  (define per-shard
+    (for/list ([p (in-list (shard-plan-predicted plan))]
+               [i (in-naturals)])
+      (hasheq 'index
+              i
+              'predicted_seconds
+              (exact->inexact p)
+              'ratio
+              (if (> mean 0.0)
+                  (exact->inexact (/ p mean))
+                  0.0))))
+  (define offending (filter (lambda (row) (> (hash-ref row 'ratio) max-ratio)) per-shard))
+  (hasheq 'ok
+          (null? offending)
+          'max_ratio_limit
+          (exact->inexact max-ratio)
+          'mean_shard_seconds
+          mean
+          'per_shard
+          per-shard
+          'offending
+          offending))
+
+;; Tail/straddle gate per the frozen definition above. `violations` lists
+;; files predicted to straddle a boundary twice (weight > 2×mean);
+;; `straddling_once` lists files straddling exactly once (informational).
+(define (tail-straddle-check plan #:limit-ratio [limit-ratio TAIL-STRADDLE-LIMIT-RATIO])
+  (define mean (plan-mean-shard-seconds plan))
+  (define weights (shard-plan-weights plan))
+  (define shard-of
+    (for/hash ([shard (in-list (shard-plan-shards plan))]
+               [i (in-naturals)]
+               #:when #t
+               [f (in-list shard)])
+      (values f i)))
+  (define (classify threshold)
+    (for/list ([f (in-list (sort (hash-keys weights) string<?))]
+               #:when (let ([w (hash-ref weights f 0.0)])
+                        (and (> mean 0.0) (> w (* threshold mean)))))
+      (hasheq 'path
+              f
+              'weight_seconds
+              (exact->inexact (hash-ref weights f 0.0))
+              'shard
+              (hash-ref shard-of f #f)
+              'ratio_to_mean
+              (if (> mean 0.0)
+                  (exact->inexact (/ (hash-ref weights f 0.0) mean))
+                  0.0))))
+  (define violations (classify limit-ratio))
+  (hasheq 'ok
+          (null? violations)
+          'mean_shard_seconds
+          mean
+          'straddle_limit_ratio
+          (exact->inexact limit-ratio)
+          'straddling_once
+          (classify 1.0)
+          'violations
+          violations))
+
+;; Linear-interpolation quantile with millisecond rounding (byte-stable
+;; regeneration): k = q·(n−1) over the ascending sample; empty → #f.
+(define (quantile-interpolated samples q)
+  (cond
+    [(null? samples) #f]
+    [(not (and (real? q) (<= 0.0 q 1.0)))
+     (raise-argument-error 'quantile-interpolated "quantile in [0,1]" q)]
+    [else
+     (define sorted (sort (map exact->inexact samples) <))
+     (define n (length sorted))
+     (define k (* q (sub1 n)))
+     (define lo (exact-floor k))
+     (define hi (min (sub1 n) (exact-ceiling k)))
+     (define frac (- k lo))
+     (define lo-v (list-ref sorted lo))
+     (define hi-v (list-ref sorted hi))
+     (define raw (+ lo-v (* frac (- hi-v lo-v))))
+     ;; round to milliseconds to keep regenerated artifacts byte-stable
+     (exact->inexact (/ (round (* raw 1000.0)) 1000.0))]))
+
+;; Retained CI wall anchors from a cohort seed (the machine-readable PR list
+;; the coordinator fetched from the GitHub API; JSON array of PR objects with
+;; `merged_at`, `ci_wall_seconds`, ...). RFC3339 Z timestamps compare
+;; correctly as strings (fixed-width UTC format in the seed), so ordering is
+;; a plain string sort — deterministic with no date library.
+;;
+;; Frozen W10 rules:
+;;  - post-W4 subset: merged_at >= post-w4 cutoff (default: the W4 prepared-env
+;;    expansion merge 2026-09-12T01:00:26Z, the topology change that added the
+;;    prepared-env purge+identity lanes and RAISED CI walls — disclosed, not hidden);
+;;  - the three retained CI wall time anchors: the three LATEST entries by
+;;    merged_at STRICTLY BEFORE the cutoff (pre-W4 topology, i.e. the wall the
+;;    fast-suite shard plan actually influences).
+(define DEFAULT-POST-W4-CUTOFF "2026-09-12T01:00:26Z")
+
+;; Defensive field access: read-json yields symbol keys in this tree, but
+;; accept string keys too (canonicalization variance across load paths).
+(define (hget h k [default #f])
+  (define v (hash-ref h k 'hget-miss))
+  (cond
+    [(not (eq? v 'hget-miss)) v]
+    [(symbol? k) (hash-ref h (symbol->string k) default)]
+    [(string? k) (hash-ref h (string->symbol k) default)]
+    [else default]))
+
+(define (load-cohort-wall-anchors seed-path #:post-w4-cutoff [cutoff DEFAULT-POST-W4-CUTOFF])
+  (define entries
+    (let ([j (with-handlers ([exn:fail? (lambda (_) #f)])
+               (call-with-input-file seed-path read-json))])
+      (cond
+        [(list? j)
+         (for/list ([e (in-list j)]
+                    #:when
+                    (and (hash? e) (real? (hget e 'ci_wall_seconds)) (string? (hget e 'merged_at))))
+           e)]
+        [else '()])))
+  (define pre
+    (sort (filter (lambda (e) (string<? (hget e 'merged_at) cutoff)) entries)
+          string<?
+          #:key (lambda (e) (hget e 'merged_at))))
+  (define post (filter (lambda (e) (not (string<? (hget e 'merged_at) cutoff))) entries))
+  (define (row e)
+    (hasheq 'number
+            (hget e 'number)
+            'merged_at
+            (hget e 'merged_at)
+            'ci_wall_seconds
+            (exact->inexact (hget e 'ci_wall_seconds))))
+  (define (walls es)
+    (map (lambda (e) (hget e 'ci_wall_seconds)) es))
+  (define three-anchors
+    (for/list ([e (in-list (take-right pre (min 3 (length pre))))])
+      (row e)))
+  (hasheq 'source
+          (path->string (simple-form-path seed-path))
+          'anchor_rule
+          "three latest pre-W4 merged PRs by merged_at (pre-topology-change CI walls)"
+          'post_w4_cutoff
+          cutoff
+          'entries_total
+          (length entries)
+          'three_anchors
+          three-anchors
+          'three_anchor_mean_seconds
+          (if (null? three-anchors)
+              'null
+              (exact->inexact (/ (for/sum ([a (in-list three-anchors)]) (hget a 'ci_wall_seconds))
+                                 (length three-anchors))))
+          'post_w4
+          (hasheq 'count
+                  (length post)
+                  'p50_seconds
+                  (or (quantile-interpolated (walls post) 0.5) 'null)
+                  'p95_seconds
+                  (or (quantile-interpolated (walls post) 0.95) 'null))
+          'full
+          (hasheq 'count
+                  (length entries)
+                  'p50_seconds
+                  (or (quantile-interpolated (walls entries) 0.5) 'null)
+                  'p95_seconds
+                  (or (quantile-interpolated (walls entries) 0.95) 'null))))
+
+;; W10 duration-aware plan regeneration: current fast-suite inventory +
+;; duration model + retained cohort anchors → one deterministic jsexpr with
+;; the plan, the starvation/tail checks, and the anchor statistics. This is
+;; the machine-readable form embedded in the W10 decision evidence.
+;;
+;; Duration model (pre-registered): per-shard predicted duration = Σ of its
+;; files' per-file durations. Per-file durations come from the LATEST
+;; retained v1.00.28-final cohort duration evidence (the W7 post-remediation
+;; fast-runtime census referenced by the v1.00.28-final decision) via
+;; `#:durations`, OR from a local `--shard-plan measure` snapshot; unmeasured
+;; files fall back to the conservative p95 default and are recorded.
+(define (regenerate-plan-report files
+                                shard-total
+                                #:durations [durations #f]
+                                #:duration-source [duration-source #f]
+                                #:seed-path [seed-path #f]
+                                #:post-w4-cutoff [cutoff DEFAULT-POST-W4-CUTOFF])
+  (define plan
+    (build-shard-plan/safe files shard-total #:durations durations #:duration-source duration-source))
+  (define starve (starvation-check plan))
+  (define tail (tail-straddle-check plan))
+  (hasheq
+   'schema
+   "shard-plan-regeneration/1"
+   'wave
+   "v1.00.29-w10"
+   'spec_reference
+   "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W8 (duration-aware plan regeneration; starvation/tail checks)"
+   'plan
+   (plan->jsexpr plan)
+   'checks
+   (hasheq 'starvation starve 'tail_straddle tail)
+   'checks_definitions
+   (hasheq
+    'starvation
+    "no shard predicted > 1.35× the mean shard duration"
+    'tail_straddle
+    "no file predicted to straddle a shard boundary twice (weight > 2× mean shard duration; files > 1× mean recorded informationally)")
+   'cohort_wall_anchors
+   (if seed-path
+       (load-cohort-wall-anchors seed-path #:post-w4-cutoff cutoff)
+       'null)))
+
+;; Human-readable starvation/tail report appended to --shard-plan report and
+;; measure output (report-only; changes nothing).
+(define (print-starvation-tail-report plan [port (current-output-port)])
+  (define starve (starvation-check plan))
+  (define tail (tail-straddle-check plan))
+  (fprintf port
+           ";; starvation: ~a (limit ≤ ~a× mean ~as; offending: ~a)~n"
+           (if (hash-ref starve 'ok) "ok" "VIOLATION")
+           (~r (hash-ref starve 'max_ratio_limit) #:precision '(= 2))
+           (~r (hash-ref starve 'mean_shard_seconds) #:precision '(= 1))
+           (length (hash-ref starve 'offending)))
+  (for ([o (in-list (hash-ref starve 'offending))])
+    (fprintf port
+             ";;   shard ~a/~a predicted ~as (~a× mean)~n"
+             (hash-ref o 'index)
+             (length (shard-plan-shards plan))
+             (~r (hash-ref o 'predicted_seconds) #:precision '(= 1))
+             (~r (hash-ref o 'ratio) #:precision '(= 3))))
+  (fprintf port
+           ";; tail-straddle: ~a (limit > ~a× mean; straddle-once files: ~a)~n"
+           (if (hash-ref tail 'ok) "ok" "VIOLATION")
+           (~r (hash-ref tail 'straddle_limit_ratio) #:precision '(= 2))
+           (length (hash-ref tail 'straddling_once)))
+  (for ([v (in-list (hash-ref tail 'violations))])
+    (fprintf port
+             ";;   file ~a straddles twice (~as = ~a× mean, shard ~a)~n"
+             (hash-ref v 'path)
+             (~r (hash-ref v 'weight_seconds) #:precision '(= 1))
+             (~r (hash-ref v 'ratio_to_mean) #:precision '(= 3))
+             (hash-ref v 'shard))))
