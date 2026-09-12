@@ -36,3 +36,19 @@
 ;; --- Gate-state record (verbatim, per wave contract) ---
 (gate-state
  (w8 . "OPEN, PENDING AMENDMENT REVIEW - the amendment proposal (SELECTOR-CI-GOVERNANCE-v1.00.29.md §8) is PROPOSED this wave; APPROVE -> W8 pilot proceeds (non-required, budgeted, broad gates unchanged); REJECT -> W8 skipped-with-decision, W9 proceeds with non-selector proof reuse only"))
+
+;; --- Independent reviewer gate (kimi-coding/kimi-for-coding, read-only) ---
+;; Job v10029-w7-review, 2026-09-12, head fee046c2. Static review (no exec
+;; capability); decision-rule tracing + arithmetic cross-checks.
+(independent-review
+ (reviewer "kimi-coding/kimi-for-coding (read-only static review)")
+ (verdict "APPROVED (2 low findings deferred to W8 pilot scope)")
+ (confirmed ("hard prohibition mechanical: zero workflow matches; no test-executing code path in evaluate.rkt; zero-test statements structural (finalize-record)"
+             "all 18 §10 classes traced to named broaden/fallback outcomes with the documented precedence; only sub-broad decision is selected/mapped-single-area reachable under zero-broadening conditions and selects the union (never smaller than the demonstrable obligation)"
+             "§11.3 record completeness on every finalize-record path; 21 broadening reasons exhaust the escape paths"
+             "replay arithmetic self-consistent (15 = 1+14+0; 177 files; 6.67%/93.3%; p50=1 p95=2 max=2; budget violations 0)"
+             "amendment proposal blockquoted PROPOSED-only; canonical TDD file untouched; W8 gate state verbatim"
+             "79-check count reconstructed exactly; honest trio with declared self-review"))
+ (findings-nonblocking
+  ((n 1) (sev low) (site "evaluate.rkt evaluate-impact") (text "budget checkpoints at four stage boundaries only — a pathological manifest could exceed budget with budget-ok:true; recommend a final check-budget! before finalize-record in the W8 pilot scope (never select-less regardless)"))
+  ((n 2) (sev low) (site "replay-results.json PR 7679d25e…") (text "affected_claims: 0 on a fallback:broad record should be annotated unknowable per governance §2 — cosmetic governance precision"))))
