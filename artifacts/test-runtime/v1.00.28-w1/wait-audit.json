@@ -2060,10 +2060,29 @@
           "reason": "BUG-0067 async cancellation writer: the /stop must land DURING the slow-lane chunked backoff to pin prompt cancellation detection; the test asserts detection at the next 1s chunk"
         }
       ]
+    },
+    "tests/test-tui-stderr-guard.rkt": {
+      "suite": "other",
+      "occurrences": [
+        {
+          "line": 47,
+          "text": "(sleep 0.15)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait letting the guard's receiver thread drain one log record before asserting; BUG-0072 stderr-guard test, fixed bound, no completion event exposed yet"
+        },
+        {
+          "line": 71,
+          "text": "(sleep 0.15)",
+          "class": "C",
+          "disposition": "retained-canary",
+          "reason": "bounded settle wait for post-restore logger propagation before asserting the original logger receives records again; fixed bound"
+        }
+      ]
     }
   },
   "summary": {
-    "total-occurrences": 229,
+    "total-occurrences": 231,
     "unit-fast-files": 34,
     "unit-fast-occurrences": 95,
     "remediated-occurrences-w1": 1,

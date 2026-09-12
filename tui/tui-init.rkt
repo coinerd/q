@@ -19,6 +19,7 @@
 
 (require racket/async-channel
          "../tui/terminal.rkt"
+         (only-in "../tui/stderr-guard.rkt" install-stderr-guard! restore-stderr-guard!)
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
          "../tui/render.rkt"
@@ -373,6 +374,21 @@
            'remove-all-extension-widgets
            remove-all-extension-widgets))
   (subscribe-runtime-events! ctx)
+  ;; BUG-0072: the TUI owns error-level logging from here on. The unparented
+  ;; guard logger keeps the default stderr pump out of the frame; records
+  ;; surface via the status line and a spill file instead of raw fd-2 text.
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-q-tui-init-warning
+                                "stderr guard install failed (frame corruption risk): ~a"
+                                (exn-message e)))])
+    (install-stderr-guard!
+     #:on-error-record
+     (lambda (msg)
+       (define b (tui-ctx-ui-state-box ctx))
+       (set-box! b
+                 (set-status-message (unbox b)
+                                     (format "error: ~a"
+                                             (substring msg 0 (min (string-length msg) 160))))))))
   (tui-ctx-init-terminal! ctx))
 
 ;; ============================================================
@@ -395,6 +411,9 @@
                   (save-scrollback transcript scrollback-path)))))
           (with-handlers
               ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
+            ;; BUG-0072: hand error-level logging back to the default pump
+            ;; before raising, so crash output still reaches the operator.
+            (restore-stderr-guard!)
             (disable-mouse-tracking)
             (tui-term-close (unbox (tui-ctx-term-box ctx))))
           (raise e))])
@@ -402,6 +421,8 @@
   ;; Cleanup terminal
   (with-handlers ([exn:fail? (lambda (e)
                                (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
+    ;; BUG-0072: normal-exit restore (see crash path above).
+    (restore-stderr-guard!)
     (disable-mouse-tracking)
     (tui-term-close (unbox (tui-ctx-term-box ctx))))
   ;; Save scrollback

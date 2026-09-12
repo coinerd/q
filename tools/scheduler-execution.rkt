@@ -140,8 +140,7 @@
     [(timeout)
      ;; WP3.5 (BUG-0056): distinguish a real shell command timeout from a
      ;; gateway queue timeout that cancelled the request before it ever ran.
-     (define class
-       (and details (hash? details) (hash-ref details 'error-class #f)))
+     (define class (and details (hash? details) (hash-ref details 'error-class #f)))
      (make-error-result
       (format "tool execution timed out: ~a~a"
               (or err-msg "")
@@ -160,12 +159,12 @@
        ;; metadata only (no command bodies) so the caller can retry or wait.
        [(eq? class 'worker-busy)
         (make-error-result
-         (format "worker-busy: execution plane is busy running another session's request (owner-tool ~a, owner-request ~a, busy ~a ms)"
-                 (hash-ref details 'owner-tool "unknown")
-                 (hash-ref details 'owner-request-id "unknown")
-                 (hash-ref details 'busy-elapsed-ms "?")))]
-       [(eq? class 'worker-crashed)
-        (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
+         (format
+          "worker-busy: execution plane is busy running another session's request (owner-tool ~a, owner-request ~a, busy ~a ms)"
+          (hash-ref details 'owner-tool "unknown")
+          (hash-ref details 'owner-request-id "unknown")
+          (hash-ref details 'busy-elapsed-ms "?")))]
+       [(eq? class 'worker-crashed) (make-error-result (format "worker crashed: ~a" (or err-msg "")))]
        [else
         (define stderr (and details (hash? details) (hash-ref details 'stderr #f)))
         (define exit-code (and details (hash? details) (hash-ref details 'exit-code #f)))
@@ -192,7 +191,13 @@
     (ev-pub "tool.execution.started"
             (hasheq 'tool-name tc-name 'tool-call-id tc-id 'start-ms tool-start-ms)))
 
-  (define pre-payload (tool-pre-hook-payload tc-name tc-args tc-id))
+  ;; BUG-0072: hook payloads at the tool-call-pre seam must be hashes.
+  ;; The registered handler (gsd-tool-guard) reads 'tool-name via hash-ref;
+  ;; dispatching the raw tool-pre-hook-payload struct raised a contract
+  ;; violation on EVERY scheduler tool call (silent before BUG-0068's
+  ;; log-error escalation, frame-corrupting in the TUI after it). The struct
+  ;; remains the internal plumbing shape; hooks see the hash projection.
+  (define pre-payload (hasheq 'tool-name tc-name 'tool-arguments tc-args 'tool-call-id tc-id))
 
   ;; Check if tool-call-pre hook blocks or amends
   (define pre-hook-result
