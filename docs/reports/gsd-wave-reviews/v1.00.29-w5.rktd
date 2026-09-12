@@ -35,3 +35,24 @@
  (verdict
    .
    "SELF-APPROVE with the tier-ownership resync declared: deliverables complete against the wave contract, fail-closed validator proven over 100% of the §9 corpus with named reasons, no-checksum-only acceptance proven, determinism pinned by tests, README metrics resynced, full fast suite green except the one pre-existing environment failure recorded above"))
+
+;; --- Independent reviewer gate (kimi-coding/kimi-for-coding, read-only) ---
+;; Job v10029-w5-review, 2026-09-12, head eb6393b5. Static review + hand-simulation
+;; of all 20 fixture paths (no exec capability in the gate; green-suite claims rest on
+;; the retained validation record). Coordinator later ran the UNSHARDED frozen chain:
+;; 1187/1187 files, 17,575/17,575 assertions + metrics 5/5 (/var/tmp/q-w5-chain.log).
+(independent-review
+ (reviewer "kimi-coding/kimi-for-coding (read-only static review)")
+ (verdict "APPROVED (low-severity findings only)")
+ (confirmed ("fail-closed: every step short-circuits to invalid:<reason>; shape-error rejects unknown keys at all levels; traced all 20 expected reasons to their steps"
+             "no checksum-only path: acceptance requires identity + immutable revision + subject + claims + selection + 11 environment fields + policy + result + digests + retention + authorization; self-consistent forgery rejected (dedicated test)"
+             "writer canonicalization: bundle_id over canonical JSON, sorted keys, no wall-clock in digest input, FIPS vectors pinned"
+             "fixture integrity: single-field isolation per case, exact named-reason assertions, discovery-symmetry test"
+             "honest trio: self-review declared, tier-ownership resync declared with W3 precedent, SHAs/base/branch match git metadata"
+             "scope: shadow only (validator referenced from tests/docs by grep); .planning/ gitignored; no consumer execution change"))
+ (findings-nonblocking
+  ((n 1) (sev low) (site "PROOF-BUNDLE-PROTOTYPE-v1.00.29.md:38") (text "shadow transcript bundle_id not the fixture's — CORRECTED in 0f3f6f0-era doc fix (now 6c792c90…)"))
+  ((n 2) (sev low) (site "PROOF-BUNDLE-PROTOTYPE-v1.00.29.md:101") (text "stale 1185 file count — CORRECTED (1187/1187 unsharded coordinator lane)"))
+  ((n 3) (sev low) (site "bundle-validator.rkt environment-step/policy-step") (text "malformed CONSUMER requests (missing subfield, unknown profile) raise instead of deciding invalid:incomplete-consumer-request — W9 hardening candidate"))
+  ((n 4) (sev low) (site "bundle-validator.rkt") (text "created_at / retention.created_at presence-checked but not RFC3339-validated — W9 hardening candidate"))
+  ((n 5) (sev trivial) (site "scripts/proof-bundle/tmp/") (text "empty untracked leftover dir — cosmetic, untracked"))))

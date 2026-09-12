@@ -35,7 +35,7 @@ A **later workflow** (a follow-up lane starting after the producer run) needs th
 
 (reuse-decision-record <bundle> <request> 'reusable)
 ;; => (hash 'schema "q.reuse-decision/1" 'decision 'reusable 'reason #f
-;;          'bundle_id "sha256:a3fdf3fab8e6a4a2a28f5abfb6084fd9330debcff35a8b1457cdad979d3ffc32"
+;;          'bundle_id "sha256:6c792c9095f58d71a6181d92685b7d22a0977808eea9638afcfe0efc7e2f2079"
 ;;          'consumer_id "gate:main-required" 'consumer_mode "regular"
 ;;          'claim_ids '("claim:unit:fast-gate")
 ;;          'subject_commit_sha "9c8b7a654321fedcba9876543210fedcba987654"
@@ -96,5 +96,5 @@ Additional adversarial checks: moving-ref-only provenance (`refs/heads/main` as 
 - `racket tests/test-proof-bundle-writer.rkt` — 23/23 checks green.
 - `racket tests/test-proof-bundle-validator.rkt` — 16/16 checks green (20/20 fixtures rejected with named reasons; `valid-base` → `reusable`).
 - `racket scripts/run-tests.rkt tests/test-proof-bundle-writer.rkt tests/test-proof-bundle-validator.rkt` — 2 files / 39 tests, 0 failures (RUN-SUMMARY retained in the wave validation file).
-- `racket scripts/run-tests.rkt --suite fast` — sharded 8× on this branch: 1185 fast-suite files discovered, all shards green except the pre-existing, TTY-sensitive `tests/test-interfaces-tui.rkt` failure recorded in the wave validation file (fails identically with only untracked files added; unrelated to this wave).
+- `racket scripts/run-tests.rkt --suite fast` — unsharded (coordinator-owned lane, /var/tmp/q-w5-chain.log): **1187/1187 files, 17,575/17,575 assertions PASS + metrics 5/5** on head `eb6393b5`. (The sharded 8× executor observation of a `tests/test-interfaces-tui.rkt` failure was NOT reproduced: the file passes standalone (exit 0) and in the unsharded chain — recorded as an unreproduced executor observation, consistent with the W3 precedent in FLAKE-FORENSICS-v1.00.29.md.)
 - `racket scripts/metrics.rkt --sync-all README.md && racket scripts/metrics.rkt --lint` — PASS (README metrics resynced).
