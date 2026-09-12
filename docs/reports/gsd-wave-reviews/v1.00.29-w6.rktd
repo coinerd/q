@@ -38,3 +38,30 @@
  (verdict
    .
    "SELF-APPROVE with declared deviations: deliverables complete against the wave contract; identity manifest fail-closed semantics test-proven for every mismatch class the task named; expansion limited to provably-identical profiles with all distinct environments deferred to separate identities; checksum re-stamps complete and verified; savings ledger honest (measured where retained evidence exists, projected-with-formula everywhere else); README metrics resynced; full fast gate green except the one pre-existing environment failure recorded above"))
+
+;; --- Independent reviewer gate (kimi-coding/kimi-for-coding, read-only) ---
+;; Job v10029-w6-review, 2026-09-12, heads 9cc9b370+fc5dc2c6. Static review;
+;; hashes verified for internal pin-site consistency (no exec capability).
+(independent-review
+ (reviewer "kimi-coding/kimi-for-coding (read-only static review)")
+ (verdict "REQUEST_CHANGES (1 moderate finding) -> ADDRESSED in a3a72381")
+ (confirmed ("fail-closed compare: rc=1 mismatch -> loud counted fallback, structural failure -> hard exit; 30 test cases recounted"
+             "W4 purge invariant byte-identical, markers pinned and green"
+             "checksum pins internally consistent at every site (action a8532d7c…, checkpoint 2ee4c26a…); machine-enforced by runtime tests"
+             "consumer matrix recounted by hand: 7 activated / 24 deferred / 9 excluded = 41 W0 jobs; activated profiles byte-equal to producer; 8.11/macos-arm64/strict reserved, unproduced"
+             "savings recomputed: full-path mean 259.3 ✓, per-row projections ✓, totals 26.18≈26.2 ✓, measured rows cite run 34450964386"
+             "ci.yml W2 topology pins unchanged; six new needs edges touch no recorded edge"
+             "honest trio: self-review declared, measured-vs-projected discipline genuine"))
+ (findings
+  ((n 1) (sev moderate) (site "action.yml prepared-env-state + ci.yml emit step + classify-outcome")
+   (text "identity-mismatch cold fallback recorded as VERIFIED restore in the durable evidence layer (state stays 'restored', emit ignores identity outputs) — would silently inflate the ≥95% gate")
+   (remedy "a3a72381: export Q_PREPARED_ENV_IDENTITY_RESULT in the telemetry step; classify-outcome maps restored+mismatch -> rebuilt/identity-mismatch; two regression tests pin both directions (mismatch NEVER verified; verified stays verified)"))
+  ((n 2) (sev low) (site "action.yml compare-at-restore wiring")
+   (text "expected/observed manifests emitted from identical inputs in the same step — tautological until the W3-frozen producer records the new dimensions; honestly declared in action comment/report §7/consumers.json identity_note")
+   (remedy "tracked, not fixable within the frozen producer scope; W9 must not treat these dimensions as cross-checked yet"))
+  ((n 3) (sev low) (site "suite contract")
+   (text "fast-suite 1184/1185 in the implementer's sharded sandbox (test-interfaces-tui) — coordinator's own verification: test-interfaces-tui passes standalone (exit 0) and the unsharded coordinator chain is the authority")
+   (remedy "recorded as unreproduced executor observation (W3/W5 precedent)"))
+  ((n 4) (sev cosmetic) (site "action.yml identity-fallback step; do-identity-compare name base")
+   (text "computed exec/lock/store digests unused in the fallback step; hard-coded 'prepared-env' name base in compare — harmless")
+   (remedy "noted for W9 hardening; no action this wave")))
