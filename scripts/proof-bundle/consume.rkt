@@ -160,13 +160,25 @@
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (json->symbols (call-with-input-file path read-json))))
 
+;; The decision vocabulary is symbol-valued ('reusable, 'not-reusable:<reason>,
+;; 'none); write-json accepts symbol KEYS but not symbol VALUES, so serialize
+;; symbols as strings (deep, deterministic).
+(define (json-safe v)
+  (cond
+    [(hash? v)
+     (for/hash ([(k val) (in-hash v)])
+       (values k (json-safe val)))]
+    [(list? v) (map json-safe v)]
+    [(symbol? v) (symbol->string v)]
+    [else v]))
+
 (define (write-json-file path record)
   (define-values (base _name _dir?) (split-path path))
   (when base
     (make-directory* base))
   (call-with-output-file path
                          (lambda (out)
-                           (write-json record out)
+                           (write-json (json-safe record) out)
                            (newline out))
                          #:exists 'replace))
 
@@ -174,21 +186,32 @@
 ;; Request normalization (JSON text -> the validator's request vocabulary)
 ;; ---------------------------------------------------------------------------
 
-;; The validator compares `subject-binding` and `claim-gate-class` against
-;; symbols ('commit / 'required / 'observational). JSON only has strings, so
-;; the adapter translates exactly those two enum fields — a faithful
-;; encoding, not a weakening: unknown strings stay unknown and fail closed
-;; inside the validator.
+;; The validator's in-memory request vocabulary (the one its own tests build
+;; with hasheq) is: symbol keys everywhere, EXCEPT the `expected-artifacts`
+;; map, whose keys are artifact names — DATA compared by `equal?` against the
+;; bundle's string-valued artifact names — plus symbol values for the two
+;; enum fields `subject-binding` and `claim-gate-class`. JSON has only
+;; strings, so the adapter translates exactly those positions. This is a
+;; faithful encoding of the validator's request contract, not a weakening:
+;; unknown enum strings stay unknown and fail closed inside the validator.
 (define (normalize-request request)
   (define (as-symbol v)
     (if (string? v)
         (string->symbol v)
         v))
+  (define (keys->strings h)
+    (for/hash ([(k v) (in-hash h)])
+      (values (if (symbol? k)
+                  (symbol->string k)
+                  k)
+              v)))
   (define overrides
     (hasheq 'subject-binding
             (as-symbol (hash-ref request 'subject-binding #f))
             'claim-gate-class
-            (as-symbol (hash-ref request 'claim-gate-class #f))))
+            (as-symbol (hash-ref request 'claim-gate-class #f))
+            'expected-artifacts
+            (keys->strings (hash-ref request 'expected-artifacts (hasheq)))))
   (for/hash ([(k v) (in-hash request)])
     (values k (hash-ref overrides k v))))
 
