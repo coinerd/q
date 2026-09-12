@@ -1,0 +1,75 @@
+{
+  "schema-version": 1,
+  "artifact": "aggregate metrics vs the frozen v1.00.29 §7.2 performance contract",
+  "cohort-id": "v1.00.29-final",
+  "wave": "v1.00.29-w10",
+  "contract": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §7.2 (frozen at W0; targets never revised inside the milestone)",
+  "quantile-method": "exact linear interpolation at k = q*(n-1), ms-rounded (cohort-quantile-exact estimator)",
+  "rows": [
+    {
+      "id": "l0-p90-local",
+      "measure": "Local L0: single test file, runner-reported per-file wall (scripts/run-tests.rkt, subprocess mode, sequential measurement via --shard-plan measure)",
+      "goal": "<= 5 s",
+      "measured": {"samples-seconds": [0.640, 0.676, 2.491], "max-seconds": 2.491, "sample": "tests/test-run-tests-shard-plan.rkt, tests/test-ansi.rkt, tests/test-tool.rkt", "p90-seconds": "unknown (never 0): p90 is not estimable from n=3"},
+      "verdict": "indicative pass — all 3 measured single-file samples <= 5 s; the p90 itself remains unknown at this sample size (single machine, cold-compiled state varies; PROXY for developer workstations)",
+      "sample-size-caveat": "n=3 files on one machine; not a distribution"
+    },
+    {
+      "id": "l1-p90-local",
+      "measure": "Local L1: small group (the same 3 files in one runner invocation), RUN-SUMMARY wall-clock",
+      "goal": "<= 30 s",
+      "measured": {"wall-clock-seconds": 2.61, "file-count": 3, "p90-seconds": "unknown (never 0): p90 is not estimable from n=1"},
+      "verdict": "indicative pass — the single measured group wall 2.61 s <= 30 s; the p90 itself remains unknown at this sample size",
+      "sample-size-caveat": "n=1 group on one machine"
+    },
+    {
+      "id": "pr-ci-p50",
+      "measure": "Required PR CI p50 over the final cohort (CI workflow run wall per head SHA, post-W4 topology subset; full-window value reported alongside)",
+      "goal": "<= 360 s",
+      "measured": {"post-w4-p50-seconds": 2558.0, "post-w4-samples": 11, "full-window-p50-seconds": 1329.0, "full-window-samples": 24, "source": "artifacts/ci-baseline/v1.00.29-final/cohort.json"},
+      "verdict": "target not achieved — 2558.0 s exceeds 360 s; the target is never revised",
+      "reasons": ["post-W4 p50 2558.0 s > 360 s goal", "even the mixed pre/post window p50 (1329.0 s) exceeds the goal"]
+    },
+    {
+      "id": "pr-ci-p95",
+      "measure": "Required PR CI p95 over the final cohort (CI workflow run wall per head SHA, post-W4 topology subset; full-window value reported alongside)",
+      "goal": "<= 480 s",
+      "measured": {"post-w4-p95-seconds": 3023.0, "post-w4-samples": 11, "full-window-p95-seconds": 2856.7, "full-window-samples": 24, "source": "artifacts/ci-baseline/v1.00.29-final/cohort.json"},
+      "verdict": "target not achieved — 3023.0 s exceeds 480 s; the target is never revised",
+      "reasons": ["post-W4 p95 3023.0 s > 480 s goal", "W4-increase attribution: post-W4 mean 2570.6 s vs pre-W4 mean 946.7 s (prepared-env purge+identity expansion raised the CI workflow wall)"]
+    },
+    {
+      "id": "duplicate-proof-ratio",
+      "measure": "Avoidable duplicate proof mass / total required runner seconds (§4.7, frozen W0 three-run window denominator 19,188 s for same-window comparability, per the W9 re-derivation)",
+      "goal": "<= 10%",
+      "measured": {"ratio": 0.0249, "avoidable-remainder-seconds": 477, "remainder-composition": "dup-08 release re-verification only (not removed; release-specific proofs out of scope)", "removed-this-milestone": {"pair": "dup-01", "seconds-saved-observed-proxy": 1282.561, "label": "PROXY (local unsharded fast-suite wall; no retained nightly CI run)"}, "source": "artifacts/proof-graph/v1.00.29-w9/removals.json"},
+      "verdict": "pass — 2.49% <= 10%; the removal that produced it is PROXY-labeled, and the W0 31.6% figure was itself overstated (5588 s of it was never legitimately removable)"
+    },
+    {
+      "id": "prepared-env-verified-restore",
+      "measure": "Prepared-environment verified-restore rate over the v1.00.29 post-W6 activation window (aggregated restore records from CI run artifacts)",
+      "goal": ">= 95%",
+      "measured": {"verified_restore_ratio": {"status": "pending-coordinator-fill"}, "note": "the coordinator states verified-restore counts exist in CI run logs since W6; they are not retrievable locally without network access, so the ratio is UNKNOWN here — never coerced to 0 or 100", "carried-baseline": {"rate": 1.0, "records": "24/24 verified", "source": "artifacts/ci-baseline/v1.00.28-final/cohort.json prepared-env-restore-stats (immediately preceding milestone, same guarded mechanism, pre-W6-expansion consumers)"}, "mismatch-behavior": "verified fail-closed locally: wrong racket digest / wrong OS profile / wrong lock digest fall back loudly (tests/test-prepared-env-report.rkt; W6 identity-manifest compare adds a counted identity-mismatch fallback)"},
+      "verdict": "unverified — pending coordinator fill; carried baseline is 100% (24/24) and the mismatch-never-silently-accepted half of the gate is test-verified, but the v1.00.29 window rate is not locally computable"
+    },
+    {
+      "id": "flake-tax-runner-share",
+      "measure": "Runner share of reruns triggered by required suite-context failures that do not reproduce standalone (PERFORMANCE-CONTRACT-v1.00.29.md §6)",
+      "goal": "<= 2% after known suite-interference causes are addressed",
+      "measured": {"rate": "unknown (never 0 by assumption)", "partial-evidence": {"single-retained-run-share": 0.0, "basis": "W3 retained frozen chain at 28886f18: 865.854 s runner wall, 0 required failures, 0 same-SHA forced reruns (docs/reports/FLAKE-FORENSICS-v1.00.29.md)", "w0-incidents": "zero eligible flake incidents in the W0 evidence set", "open-observations": "1 unreproduced sharded-context observation (tests/test-interfaces-tui.rkt) + 2 post-hoc v1.00.28 W9 seed incidents, root causes unresolved/unknown"}},
+      "verdict": "unknown with partial evidence — one retained run measured 0.00% and W0 recorded zero eligible incidents, but no fleet-wide v1.00.29 flake-tax rate is locally computable; reported unknown rather than 0"
+    },
+    {
+      "id": "selector-confirmed-relevant-omissions",
+      "measure": "Confirmed relevant omissions during a W6 selector pilot (§7.2: 0 if W6 runs)",
+      "goal": "0 (only if W6 runs)",
+      "measured": {"omissions": 0, "basis": "W6 was never activated: the W5 governance amendment gate was unmet and the W8 wave recorded the selector pilot CLOSED-SKIPPED (PR 9678); no selector execution exists in any required gate"},
+      "verdict": "not applicable — 0 by non-activation (no selector proof reduction happened, so no omission was possible)"
+    }
+  ],
+  "safety-gates-summary": "All 14 §7.1 rows decided explicitly in decision.md; none fails; one row (prepared-env ratio) is unverified-pending-coordinator-fill with carried baseline and test-verified fail-closed mismatch behavior; unknown metrics remain unknown.",
+  "draft-verdict": "PARTIAL — SAFE REDUCTION DELIVERED",
+  "draft-verdict-basis": "§13: safety gates pass (no distinct proof removed; reuse fail-closed; provenance/retention validated; rerun semantics intact; selector never replaced broad gates); measurable reductions delivered (verified duplicate removal with PROXY-labeled saving, avoidable mass 6065 s -> 477 s = 2.49%, prepared-env setup savings banked/projected per W6 evidence); one or more performance goals miss (PR CI p50/p95 far above goal post-W4; main/release north-stars unverifiable locally). Targets are not changed to avoid this verdict.",
+  "validation": {"errors": [], "ok": true},
+  "milestone": "v1.00.29"
+}
