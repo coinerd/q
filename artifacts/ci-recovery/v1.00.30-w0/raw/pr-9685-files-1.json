@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "21828ffc0d31dccf7ffd4f4f9ad020741bf24c77",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w11.rktd",
+    "status": "added",
+    "additions": 23,
+    "deletions": 0,
+    "changes": 23,
+    "blob_url": "https://github.com/coinerd/q/blob/abd45ef7d90bf8782040a0eb5f7125a527caf4c9/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w11.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/abd45ef7d90bf8782040a0eb5f7125a527caf4c9/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w11.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w11.rktd?ref=abd45ef7d90bf8782040a0eb5f7125a527caf4c9",
+    "patch": "@@ -0,0 +1,23 @@\n+;; GSD Wave Merge Binding \u2014 v1.00.29 W11 (BUG-0064 advance-gate evidence)\n+;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd\n+;; Wave: W11 \u2014 Bake and v1.00.29 release (wave issue #9650)\n+\n+(merge-binding\n+ (wave v1.00.29-w11)\n+ (plan-id \"6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f\")\n+ (merge-sha \"d31e533bb95277400a91a20aeabaee3eb4f530b1\")\n+ (merge-method \"squash-merge PR #9684 (protected main)\")\n+ (merged-at \"2026-09-13T09:05:00Z\")\n+ (wave-branch \"campaign/v1.00.29-w11\")\n+ (implementation-commits (\"e3f2af0b\" \"6a4b6951\" \"2b5212b4\" \"772048b7\" \"c92d198c\"))\n+ (verification\n+  ((frozen-chain \"1190/1190 files, 17737 assertions runner-version=1.00.29 + metrics 5/5 (cold compiled/ purge, exact release tree)\")\n+   (protected-checks \"green after one infra rerun (Racket mirror ETIMEDOUT, unrelated)\")\n+   (release-gates \"lint-release-notes --check PASSED; release-dry-run 6/6; check-version-expectations PASSED (0 literals); lint-doc-freshness PASSED; sync-readme-status OK\")\n+   (strict-gate \"FIRST campaign wave to satisfy the strict schema-2 gsd-wave-gate (content-digest bound; verified locally at 06ebb39b...)\")))\n+ (evidence\n+  (\"docs/reports/gsd-wave-evidence/v1.00.29-w11.rktd\"\n+   \"docs/reports/gsd-wave-reviews/v1.00.29-w11.rktd\"\n+   \"docs/reports/gsd-wave-validation/v1.00.29-w11.rktd\"\n+   \"docs/reports/SERIES-COMPLETION-v1.00.28-v1.00.29.md\"))\n+ (issues-closed (\"#9650\")))"
+  }
+]

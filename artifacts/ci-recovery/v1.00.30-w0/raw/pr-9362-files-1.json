@@ -1,0 +1,38 @@
+[
+  {
+    "sha": "803824c4615198387ad8c4f7146e70e803e718aa",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 6,
+    "changes": 12,
+    "blob_url": "https://github.com/coinerd/q/blob/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=06c5ffbba6840c38f9f4f2d7a6dfba7553437312",
+    "patch": "@@ -297,13 +297,13 @@ q/\n | Test files | 1365 |\n | Source modules | 843 |\n <<<<<<< HEAD\n-| Source lines | 154870 |\n-| Test lines | 242108 |\n-| Test assertions | 37207 |\n+| Source lines | 154880 |\n+| Test lines | 242151 |\n+| Test assertions | 37213 |\n =======\n-| Source lines | 154870 |\n-| Test lines | 242108 |\n-| Test assertions | 37207 |\n+| Source lines | 154880 |\n+| Test lines | 242151 |\n+| Test assertions | 37213 |\n >>>>>>> origin/main\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "d2f944dab2bd75ad28429698ec4bbe55b3eb72cb",
+    "filename": "extensions/gsd/go-orchestrator.rkt",
+    "status": "modified",
+    "additions": 14,
+    "deletions": 4,
+    "changes": 18,
+    "blob_url": "https://github.com/coinerd/q/blob/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/extensions%2Fgsd%2Fgo-orchestrator.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/extensions%2Fgsd%2Fgo-orchestrator.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fgo-orchestrator.rkt?ref=06c5ffbba6840c38f9f4f2d7a6dfba7553437312",
+    "patch": "@@ -67,12 +67,22 @@\n     (define port (open-output-file p #:exists 'can-update))\n     (if (port-try-file-lock? port 'exclusive)\n         (begin\n-          (file-position port 0)\n+          ;; S2a (#9358): the file may hold a LONGER lease from a previous\n+          ;; owner (e.g. \"01M0645J64E772Q0ZFNVGGEKK0\"). open-output-file\n+          ;; 'can-update does NOT truncate, so file-position 0 + write left\n+          ;; a stale tail after a shorter write \u2014 corrupting the lease\n+          ;; (observed: `\u2026VGGEKK0\") (pid \u2026)`). Truncate to zero before write.\n           ;; D4 (#9351): record the owning session id AND pid so a stale\n           ;; lock file names its holder (incident 81f9be4b: \"unknown\").\n-          (write (hasheq 'owner session-id 'pid (getpid) 'acquired (current-seconds)) port)\n-          (flush-output port)\n-          (campaign-lease p port (current-seconds) session-id))\n+          ;; S2a (#9358): never write an empty owner \u2014 a re-dispatch path\n+          ;; passed \"\" (observed in attempt-5), defeating D4 diagnostics.\n+          (let ([owner\n+                 (if (and (string? session-id) (not (string=? session-id \"\"))) session-id \"unknown\")])\n+            (file-truncate port 0)\n+            (file-position port 0)\n+            (write (hasheq 'owner owner 'pid (getpid) 'acquired (current-seconds)) port)\n+            (flush-output port)\n+            (campaign-lease p port (current-seconds) owner)))\n         (begin\n           (close-output-port port)\n           #f))))"
+  },
+  {
+    "sha": "929a3a7d9f067e3949d84d9928470f5aa6172438",
+    "filename": "tests/test-gsd-go-orchestrator.rkt",
+    "status": "modified",
+    "additions": 43,
+    "deletions": 0,
+    "changes": 43,
+    "blob_url": "https://github.com/coinerd/q/blob/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/tests%2Ftest-gsd-go-orchestrator.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/06c5ffbba6840c38f9f4f2d7a6dfba7553437312/tests%2Ftest-gsd-go-orchestrator.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-go-orchestrator.rkt?ref=06c5ffbba6840c38f9f4f2d7a6dfba7553437312",
+    "patch": "@@ -17,6 +17,7 @@\n (require rackunit\n          rackunit/text-ui\n          racket/file\n+         racket/port\n          racket/path\n          racket/string\n          racket/system\n@@ -291,6 +292,48 @@\n       (release-lease! lease)\n       (cleanup-tmp dir))\n \n+    (test-case \"S2a: lock file is truncated before rewrite (no stale tail)\"\n+      ;; Regression for #9358: a longer previous lease (e.g. a session-id\n+      ;; like 01M0645J64E772Q0ZFNVGGEKK0) left a stale tail after a shorter\n+      ;; rewrite because open-output-file 'can-update does not truncate.\n+      (define dir (make-tmp-campaign-dir 1))\n+      (define rec (load-or-migrate dir))\n+      (define lock-path\n+        (build-path dir \".planning\" \"campaigns\" (string-append (campaign-plan-id rec) \".lock\")))\n+      (make-directory* (path-only lock-path))\n+      ;; Simulate a previous longer lease content (the attempt-4 owner).\n+      (call-with-output-file\n+       lock-path\n+       (lambda (out)\n+         (write (hasheq 'owner \"01M0645J64E772Q0ZFNVGGEKK0\" 'pid 1194981 'acquired 1786912100) out))\n+       #:exists 'truncate)\n+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id \"short\"))\n+      (check-true (campaign-lease? lease))\n+      (release-lease! lease)\n+      ;; Rewriting with a shorter owner must NOT leave stale tail bytes.\n+      (define content (call-with-input-file lock-path (lambda (in) (port->string in))))\n+      (check-true (string-contains? content \"short\"))\n+      (check-false (string-contains? content \"01M0645J64E772Q0ZFNVGGEKK0\")\n+                   \"stale tail from previous longer owner must be truncated\")\n+      (check-false (string-contains? content \"VGGEKK0\")\n+                   \"no leftover fragment from the previous lease\")\n+      (cleanup-tmp dir))\n+\n+    (test-case \"S2a: empty session-id is sanitized to 'unknown' in lock owner\"\n+      ;; Regression for #9358: the re-dispatch path wrote (owner . \"\"),\n+      ;; defeating D4 diagnostics. Empty owner must fall back to \"unknown\".\n+      (define dir (make-tmp-campaign-dir 1))\n+      (define rec (load-or-migrate dir))\n+      (define lock-path\n+        (build-path dir \".planning\" \"campaigns\" (string-append (campaign-plan-id rec) \".lock\")))\n+      (make-directory* (path-only lock-path))\n+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id \"\"))\n+      (check-true (campaign-lease? lease))\n+      (release-lease! lease)\n+      (define content (call-with-input-file lock-path (lambda (in) (port->string in))))\n+      (check-true (string-contains? content \"unknown\") \"empty owner must fall back to 'unknown'\")\n+      (cleanup-tmp dir))\n+\n     (test-case \"run-campaign! threads lease-owner into the lease (D4, issue #9351)\"\n       ;; The wave runner executes while the coordinator holds the lease, so\n       ;; it can observe the lock-file owner written under the lease."
+  }
+]

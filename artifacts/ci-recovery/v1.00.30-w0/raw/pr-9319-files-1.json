@@ -1,0 +1,74 @@
+[
+  {
+    "sha": "739a88e57350418aa15309c88ca01e53ae82e41b",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -296,8 +296,8 @@ q/\n |--------|-------|\n | Test files | 1323 |\n | Source modules | 825 |\n-| Source lines | 142787 |\n-| Test lines | 231986 |\n+| Source lines | 142792 |\n+| Test lines | 231988 |\n | Test assertions | 36172 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "ad6f95bdc7b0d43814a3d2d54233286780c38ba3",
+    "filename": "gui/components/markdown-parser.rkt",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 5,
+    "changes": 15,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/gui%2Fcomponents%2Fmarkdown-parser.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/gui%2Fcomponents%2Fmarkdown-parser.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/gui%2Fcomponents%2Fmarkdown-parser.rkt?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -168,22 +168,27 @@\n           (define m (regexp-match #px\"^(#{1,6})\\\\s+(.*)\" line))\n           (define level (and m (string-length (cadr m))))\n           (set! result\n-                (append result (list (hash 'type 'header 'text (caddr m) 'level (or level 1)))))]\n+                (append result (list (hash 'type 'header 'text (caddr m) 'level (or level 1)))))\n+           (walk (add1 i))]\n          ;; List item detection: - or * followed by space\n          [(regexp-match? #rx\"^[-*] \" line)\n           (define m (regexp-match #rx\"^[-*] (.*)\" line))\n-          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))]\n+          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))\n+           (walk (add1 i))]\n          ;; Numbered list: 1. or 1)\n          [(regexp-match? #rx\"^[0-9]+[.)] \" line)\n           (define m (regexp-match #rx\"^[0-9]+[.)] (.*)\" line))\n-          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))]\n+          (set! result (append result (list (hash 'type 'list-item 'text (cadr m) 'indent 0))))\n+           (walk (add1 i))]\n          ;; Inline code: `code`\n          [(regexp-match? #rx\"`[^`]+`\" line)\n-          (set! result (append result (list (hash 'type 'inline-code 'text line))))]\n+          (set! result (append result (list (hash 'type 'inline-code 'text line))))\n+           (walk (add1 i))]\n          ;; Empty line\n          [(string=? (string-trim line) \"\")\n           (when (pair? result)\n-            (set! result (append result (list (hash 'type 'blank 'text \"\")))))]\n+            (set! result (append result (list (hash 'type 'blank 'text \"\")))))\n+           (walk (add1 i))]\n          ;; Plain text\n          [else (set! result (append result (list (hash 'type 'text 'text line))))\n                (walk (add1 i))])))"
+  },
+  {
+    "sha": "ecca8d914913f0554980292bd63dc8cb27fced3d",
+    "filename": "tests/test-command-parity.rkt",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-command-parity.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-command-parity.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-command-parity.rkt?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -53,6 +53,8 @@\n         \"/login\" ;; login (#5331)\n         \"/goal\"\n         \"/g\" ;; goal\n+        \"/toggle-detail\"\n+        \"/expand-reasoning\"\n         ))\n \n (define parity-suite"
+  },
+  {
+    "sha": "668e81d6117a0afbfe9cc2326908bf377cdbac0b",
+    "filename": "tests/test-lint-version-pure.rkt",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 3,
+    "changes": 6,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-lint-version-pure.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-lint-version-pure.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-lint-version-pure.rkt?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -46,17 +46,17 @@\n  ;; --- check-readme-content ---\n  (test-case \"check-readme-content: matching badge and verify\"\n    (define check (lv-ref 'check-readme-content))\n-   (define content \"badge/version-1.0.0 and q version 1.0.0\")\n+   (define content \"badge/version-1.0.0-blue and q version 1.0.0-blue\")\n    (check-equal? (check content \"1.0.0\") '()))\n  (test-case \"check-readme-content: mismatched badge\"\n    (define check (lv-ref 'check-readme-content))\n-   (define content \"badge/version-0.9.0 and q version 1.0.0\")\n+   (define content \"badge/version-0.9.0-blue and q version 1.0.0-blue\")\n    (define errors (check content \"1.0.0\"))\n    (check-equal? (length errors) 1)\n    (check-equal? (first (first errors)) 'README.md))\n  (test-case \"check-readme-content: mismatched verify snippet\"\n    (define check (lv-ref 'check-readme-content))\n-   (define content \"badge/version-1.0.0 and q version 0.9.0\")\n+   (define content \"badge/version-1.0.0-blue and q version 0.9.0-blue\")\n    (define errors (check content \"1.0.0\"))\n    (check-equal? (length errors) 1))\n  (test-case \"check-readme-content: no version strings in content\""
+  },
+  {
+    "sha": "660c646e75312e310c42e7eb95309264c822af4d",
+    "filename": "tests/test-typed-racket-pilot.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-typed-racket-pilot.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-typed-racket-pilot.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-typed-racket-pilot.rkt?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -26,7 +26,7 @@\n     ;; -------------------------------------------------------\n     (test-case \"typed-racket-pilot: q-version is a string\"\n       (check-pred string? q-version)\n-      (check-true (regexp-match? #rx\"^0\\\\.[0-9]+\\\\.\" q-version)))\n+      (check-true (regexp-match? #rx\"^[0-9]+\\\\.[0-9]+\\\\.\" q-version)))\n \n     ;; -------------------------------------------------------\n     ;; util/event-payloads.rkt \u2014 Typed Racket"
+  },
+  {
+    "sha": "9314e39608fcfd20f4ea21d0fd2c3c24da5c4aba",
+    "filename": "tests/test-util-reclassification.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-util-reclassification.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9/tests%2Ftest-util-reclassification.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-util-reclassification.rkt?ref=a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+    "patch": "@@ -15,7 +15,7 @@\n   (test-suite \"util/ Reclassification (T2-4)\"\n \n     (test-case \"core util modules load and export\"\n-      (check-regexp-match #rx\"^0\\\\.[0-9]+\\\\.[0-9]+$\" q-version)\n+      (check-regexp-match #rx\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\" q-version)\n       (check-true (procedure? generate-id)))))\n \n (run-tests suite)"
+  }
+]

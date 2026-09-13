@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "eb8d9716a3fa790968e05bea10ccc8e7f3b2294e",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 38,
+    "deletions": 0,
+    "changes": 38,
+    "blob_url": "https://github.com/coinerd/q/blob/a62686fd443c2325e48ad46a36bd7ca1ed309c6d/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/a62686fd443c2325e48ad46a36bd7ca1ed309c6d/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=a62686fd443c2325e48ad46a36bd7ca1ed309c6d",
+    "patch": "@@ -47,6 +47,44 @@ Released 2026-08-26.\n \n - (none)\n \n+### Breaking / Behavior Changes\n+\n+- The mutation-stall watchdog is repetition-shaped (identical\n+  tool-call signatures), not read-count-shaped: wide read-only\n+  exploration is never killed by count alone (the absolute backstop\n+  fires only on signature-cycling windows). Watchdog kills classify\n+  as retryable infrastructure failures \u2014 campaigns auto-resume with\n+  prior-attempt context instead of halting.\n+- `/go` and `/gsd` surface plan/wave status divergence as named\n+  warnings (advisory only, never blocking) with documented\n+  precedence: wave-doc header wins for progress statuses, the PLAN\n+  row wins only for `[DEFERRED]`.\n+- A process whose loaded build predates the checkout refuses\n+  tracked-file writes (staleness guard) and its denial names the\n+  stale PID to exit.\n+\n+### Migration Notes\n+\n+- Stall watchdog limits remain constants this release\n+  (soft 8 / hard 15 / window 30 / backstop 300, cycling-gated);\n+  operator-tunable settings keys are tracked as BUG-0044.\n+- `/reset` now reconciles orphaned campaign records in place \u2014\n+  inspect the orphan listing before pruning.\n+\n+### Testing\n+\n+- Fast suite 1141 files, 0 failures at the release SHA; stall\n+  suites (characterization 17, watchdog 24), session-hygiene 13,\n+  status-consistency 8, campaign infra-retry 25 \u2014 all green; live\n+  seven-gate bake evidence recorded in\n+  `docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md`.\n+\n+### Operational / Release\n+\n+- Tag `v1.00.20`; artifacts built by release-core.yml (tarball +\n+  manifest); coordinator hotfixes for BUG-0037 (PRs #9535\u2013#9538)\n+  merged ahead of the campaign delivery PR #9539.\n+\n ## v1.00.19 \u2014 2026-08-26\n \n Released 2026-08-26."
+  },
+  {
+    "sha": "50cb92579729bbf368276d5d823adcc93725ce1e",
+    "filename": "docs/reports/GSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md",
+    "status": "modified",
+    "additions": 20,
+    "deletions": 0,
+    "changes": 20,
+    "blob_url": "https://github.com/coinerd/q/blob/a62686fd443c2325e48ad46a36bd7ca1ed309c6d/docs%2Freports%2FGSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md",
+    "raw_url": "https://github.com/coinerd/q/raw/a62686fd443c2325e48ad46a36bd7ca1ed309c6d/docs%2Freports%2FGSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2FGSD-WORKFLOW-RELIABILITY-BAKE-v1.00.20.md?ref=a62686fd443c2325e48ad46a36bd7ca1ed309c6d",
+    "patch": "@@ -145,6 +145,26 @@ re-recorded at the release SHA; pre-commit 18/18; fast suite green;\n release-dry-run clean. Tag v1.00.20 annotated and pushed; bugs INDEX\n updated to fixed-in-v1.00.20.\n \n+### Release incident and repair (recorded live)\n+\n+The first release attempt was **not** clean: release run 33033137139\n+(tag v1.00.20 @ f7c7b04e) passed preflight and test, then FAILED in\n+the `prepare` job at \"Lint release notes (mandatory)\" \u2014 the squash\n+merge to main (#9539) dropped the four mandatory CHANGELOG sections\n+(Breaking / Behavior Changes, Migration Notes, Testing,\n+Operational / Release). No GitHub Release existed afterward.\n+\n+Repair: `chore/v10020-changelog-sections` restores the full section\n+set (content verified with `scripts/lint-release-notes.rkt\n+--version 1.00.20 --check` locally \u2014 PASS on this branch, ERROR on\n+f7c7b04e); merged to main, tag v1.00.20 moved (re-annotated) to the\n+repaired SHA and re-pushed; release run re-triggered and driven to\n+publication. Final evidence is recorded below at the FINAL SHA.\n+\n+Operational note (per W7 action 4): after merge, the campaign's own TUI\n+must restart q before any further `/go` \u2014 the v1.00.19 freshness guard\n+(BUG-0031) will refuse a stale build.\n+\n Operational note (per W7 action 4): after merge, the campaign's own TUI\n must restart q before any further `/go` \u2014 the v1.00.19 freshness guard\n (BUG-0031) will refuse a stale build."
+  }
+]

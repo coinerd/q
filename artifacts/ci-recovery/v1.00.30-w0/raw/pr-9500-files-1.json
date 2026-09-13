@@ -1,0 +1,74 @@
+[
+  {
+    "sha": "f6b697d847e2a96949a745cff248ea152296635b",
+    "filename": ".gitattributes",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 0,
+    "changes": 5,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/.gitattributes",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/.gitattributes",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.gitattributes?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -2,3 +2,8 @@\n .github/            export-ignore\n benchmarks/         export-ignore\n dist/               export-ignore\n+\n+# Frozen discovery fixture: repo-only pinned input (contains a deliberate\n+# symlink + compiled/ stray); excluded so release tarballs stay\n+# symlink-free per verify-release-bundle policy.\n+tests/metadata-discovery/fixture/ export-ignore"
+  },
+  {
+    "sha": "f65e2f72b61a58ce2c3fd88b71ef50811ef4d0c6",
+    "filename": ".github/actions/setup-racket/action.yml",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 2,
+    "changes": 7,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Factions%2Fsetup-racket%2Faction.yml?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -12,8 +12,11 @@ runs:\n       shell: bash\n       run: |\n         set -euo pipefail\n-        find . -type f -name '*.zo' -delete\n-        find . -depth -type d -name compiled -exec rm -rf {} +\n+        # The frozen discovery fixture (tests/metadata-discovery/fixture/)\n+        # keeps a TRACKED stray .rkt inside a compiled/ directory as pinned\n+        # input for tests/ci/metadata-discovery-test.rkt \u2014 never wipe it.\n+        find . -type f -name '*.zo' -not -path './tests/metadata-discovery/fixture/*' -delete\n+        find . -depth -type d -name compiled -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} +\n \n     # Racket\u2019s default macOS user store is ~/Library/Racket/<version>, while\n     # Linux uses a different default. Make the cacheable store explicit so the"
+  },
+  {
+    "sha": "837c095ef6b2dc086962fba3dddb635a56694cf3",
+    "filename": ".github/workflows/ci.yml",
+    "status": "modified",
+    "additions": 7,
+    "deletions": 7,
+    "changes": 14,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Fworkflows%2Fci.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Fworkflows%2Fci.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fci.yml?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -126,7 +126,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Compile gate (shared deps)\n         run: raco make main.rkt\n@@ -310,7 +310,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Compile gate\n         run: raco make main.rkt\n@@ -394,7 +394,7 @@ jobs:\n           racket-version: '8.11'\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Compile gate\n         run: raco make main.rkt\n@@ -460,7 +460,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Run security test suite (parallel)\n         run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log\n@@ -577,7 +577,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Version smoke check\n         run: |\n@@ -611,7 +611,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Workflow integration suite shard ${{ matrix.shard }}/2\n         run: |\n@@ -749,7 +749,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n \n       - name: Clear stale bytecode\n-        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true\n+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true\n \n       - name: Run abstraction audit (CI mode)\n         run: |"
+  },
+  {
+    "sha": "0c1ebe7f031bc56943c0e32f7bbf6e9be9dbddcc",
+    "filename": ".github/workflows/release-core.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 0,
+    "changes": 1,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Fworkflows%2Frelease-core.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/.github%2Fworkflows%2Frelease-core.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Frelease-core.yml?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -89,6 +89,7 @@ jobs:\n             --exclude='.git' \\\n             --exclude='compiled' \\\n             --exclude='*.zo' \\\n+            --exclude='q/tests/metadata-discovery/fixture' \\\n             -cf - q/ | gzip -n > \"${TARBALL_NAME}\"\n           ls -la \"${TARBALL_NAME}\"\n           echo \"TARBALL_NAME=${TARBALL_NAME}\" >> $GITHUB_OUTPUT"
+  },
+  {
+    "sha": "3b8abdaabcb9a35eb8f740102108337b314894ba",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 48,
+    "deletions": 2,
+    "changes": 50,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -7,7 +7,7 @@\n > boundary; connect/TTFB is bounded; held-request classification is\n > heartbeat-aware.\n \n-### Changed\n+### Features\n \n - **Centralized request-network policy (W1 #9461).** New\n   `llm/request-policy.rkt` is the single owner of provider-request lifecycle\n@@ -62,17 +62,63 @@\n   capped at `min(phase-idle, remaining-total)` \u2014 no more overshooting the\n   total deadline by a full phase window.\n \n+### Breaking / Behavior Changes\n+\n+All deltas are intentional outcomes of the unification (pinned by the\n+cross-adapter conformance suite):\n+\n+1. anthropic/azure/gemini streaming: thinking window 60 s \u2192\n+   `min(request, min(or thinking-idle 120, 300))`; stream total 600 s \u2192\n+   `max(600, 2\u00d7request)` when request > 300 s.\n+2. All adapters (incl. openai eager): non-streaming body reads honor the\n+   legacy `sse-read` (or explicit `body-read`) budget instead of the flat\n+   120 s fallback.\n+3. Connect+TTFB on every path bounded at `min(request, 120)` with\n+   structured phase `'connect/ttfb`.\n+4. Heartbeat-only initial stalls are live-but-no-content: they no longer\n+   trip the held-request circuit breaker; total deadline still bounds them.\n+5. Blocking stream reads capped at `min(phase-idle, remaining-total)`.\n+6. Retry delays derive from the structured `Retry-After` context\n+   (HTTP-date + delta-seconds), never from message text.\n+\n+### Migration Notes\n+\n+- Existing configs need no change: `request` + legacy `sse-read` resolve to\n+  the same effective windows as documented (DeepSeek `request=900`,\n+  `sse-read=600` \u2192 thinking 300 s; Kimi `sse-read=300` \u2192 honored).\n+- To widen a specific window, prefer the semantic keys\n+  `timeouts.models.<m>.thinking-idle` / `body-read`; explicit keys win over\n+  the legacy alias. `docs/provider-retry.md` carries the resolved-policy\n+  matrix and migration table.\n+\n+### Testing\n+\n+- New suites: `test-request-network-policy` (resolver contract + property\n+  sweep), `test-provider-network-policy-conformance` (identical mechanism\n+  arguments across all four adapters), `test-network-failure-context`\n+  (structured failure context + Retry-After parsing), \n+  `test-provider-response-cleanup` (close-once lifecycle matrix),\n+  `test-request-policy-architecture` (R1\u2013R5 ownership gate, empty\n+  allowlist), `test-stream-liveness-classification` (heartbeat matrix +\n+  W4 deadline matrix), `test-request-policy-migration` (DeepSeek/Kimi\n+  legacy-config proofs).\n+- All suites green in CI (fast/arch/workflows/tui + sharded regression);\n+  gate evidence recorded per release run.\n+\n ### Deprecated\n \n - **Legacy `sse-read` config key.** Still honored (feeds only thinking-idle\n   and body-read, with the documented caps and precedence); removal is\n   planned after v1.00.13. Docs: `docs/provider-retry.md`.\n \n-### Infrastructure\n+### Operational / Release\n \n - CI cold-runner repair (with #9488): `raco pkg show`-based package-presence\n   guard fixed in `setup-racket`/`prepare-racket-environment` actions; the\n   metadata-discovery fixture tree is excluded from repo-root test collection.\n+- Workspace bytecode wipes spare the frozen discovery fixture\n+  (tracked stray `.rkt` under `compiled/`); the release readiness gate now\n+  names dirty files when it fails.\n \n Released 2026-08-22.\n "
+  },
+  {
+    "sha": "a24755e983ac1fc50222dafde26cfa60785873e8",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/bac435f47749c0f39533c66aa04001cf221161f3/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/bac435f47749c0f39533c66aa04001cf221161f3/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=bac435f47749c0f39533c66aa04001cf221161f3",
+    "patch": "@@ -413,7 +413,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh\n \n \n \n-**v1.00.13** \u2014 Changed\n+**v1.00.13** \u2014 Features\n \n **v1.00.12** \u2014 Bug Fixes\n "
+  }
+]

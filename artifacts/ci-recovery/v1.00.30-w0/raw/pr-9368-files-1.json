@@ -1,0 +1,122 @@
+[
+  {
+    "sha": "9b65f46e5964a61ad71c05bb6089523326d7c5a3",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -296,8 +296,8 @@ q/\n |--------|-------|\n | Test files | 1333 |\n | Source modules | 831 |\n-| Source lines | 146320 |\n-| Test lines | 234215 |\n+| Source lines | 146323 |\n+| Test lines | 234209 |\n | Test assertions | 36498 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "f74f751543cdd7e4983936f399f9ab605f049d97",
+    "filename": "extensions/gsd/command-handlers.rkt",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fcommand-handlers.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fcommand-handlers.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fcommand-handlers.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -307,7 +307,7 @@\n                           (lambda ()\n                             (set-gsd-mode! 'executing)\n                             (emit-mode-change! 'executing)\n-                            (set-edit-limit! 1200)\n+                            (set-edit-limit! 2000)\n                             (define wis\n                               (for/list ([w (gsd-plan-waves plan)])\n                                 (gsd-wave-index w)))\n@@ -513,7 +513,7 @@\n     (set-pinned-dir! saved-dir))\n   (set-gsd-mode! 'planning)\n   (emit-mode-change! 'planning)\n-  (set-edit-limit! 500)\n+  (set-edit-limit! 2000)\n   ;; Auto-create STATE.md if missing (#2164)\n   (ensure-state-md! base-dir)\n   (define existing-plan (read-planning-artifact base-dir \"PLAN\"))"
+  },
+  {
+    "sha": "478358e50b9b1bdb7cd5bfb0ef29e25c0d1b84b7",
+    "filename": "extensions/gsd/core.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fcore.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fcore.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fcore.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -75,7 +75,7 @@\n   (unless (current-gsd-lifecycle-reset-suppressed?)\n     (reset-gsm!)\n     (set-pinned-dir! #f)\n-    (set-edit-limit! 500)\n+    (set-edit-limit! 2000)\n     (set-gsd-event-bus! #f)\n     (set-plan-data! #f)))\n "
+  },
+  {
+    "sha": "7295904f777e8129e54ce8d76595813593b37b3b",
+    "filename": "extensions/gsd/session-state.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fsession-state.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/extensions%2Fgsd%2Fsession-state.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fsession-state.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -39,7 +39,7 @@\n   (gsd-session-ctx (box (make-initial-gsd-state))\n                    (box #f)\n                    (box #f)\n-                   (box 500)\n+                   (box 2000)\n                    (box #f)\n                    (box '())\n                    (box #f)"
+  },
+  {
+    "sha": "e36dd5fc4ca609dd2ded0232bd7e57465006828b",
+    "filename": "tests/test-edit-balance-guard.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 4,
+    "changes": 8,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-edit-balance-guard.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-edit-balance-guard.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-edit-balance-guard.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -59,16 +59,16 @@\n                   (when (file-exists? path)\n                     (delete-file path)))))\n \n-(test-case \"default max-old-text-len is still 500\"\n-  (define original (format \"#lang racket/base\\n(define long-thing ~a)\\n\" (make-string 501 #\\x)))\n+(test-case \"default max-old-text-len is still 2000\"\n+  (define original (format \"#lang racket/base\\n(define long-thing ~a)\\n\" (make-string 2001 #\\x)))\n   (with-temp-rkt\n    original\n    (lambda (path)\n-     (define old-text (make-string 501 #\\x))\n+     (define old-text (make-string 2001 #\\x))\n      (define result (tool-edit (hasheq 'path path 'old-text old-text 'new-text \"\\\"short\\\"\")))\n      (check-true (tool-result-is-error? result))\n      (define msg (result-message result))\n-     (check-true (string-contains? msg \"500\") \"default limit should be reported\")\n+     (check-true (string-contains? msg \"2000\") \"default limit should be reported\")\n      (check-true (string-contains? msg \"max-old-text-len\") \"error should route to override\")\n      (check-true (string-contains? msg \"do not split\") \"error should warn against partial splits\")\n      (check-equal? (file->string path) original))))"
+  },
+  {
+    "sha": "2ce84298a4f96fc6df8c644aabaadb89a1dca444",
+    "filename": "tests/test-gsd-context-factory.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-context-factory.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-context-factory.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-context-factory.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -174,7 +174,7 @@\n \n (test-case \"edit-limit get/set roundtrip\"\n   (define ctx (make-gsd-context))\n-  (check-equal? (gsd-ctx-edit-limit ctx) 500 \"default edit limit\")\n+  (check-equal? (gsd-ctx-edit-limit ctx) 2000 \"default edit limit\")\n   (gsd-ctx-set-edit-limit! ctx 1000)\n   (check-equal? (gsd-ctx-edit-limit ctx) 1000))\n "
+  },
+  {
+    "sha": "4a1d36f139e43e018c77f332a95809ea1e997026",
+    "filename": "tests/test-gsd-planning-edit-limit.rkt",
+    "status": "modified",
+    "additions": 18,
+    "deletions": 24,
+    "changes": 42,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-edit-limit.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-edit-limit.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-planning-edit-limit.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -6,7 +6,7 @@\n \n ;; tests/test-gsd-planning-edit-limit.rkt \u2014 Dynamic edit limit tests\n ;;\n-;; Tests for v0.20.2 Wave 1: Dynamic edit limit (500 default, 1200 during /go).\n+;; Tests for the edit limit (2000 default = SAFE-MAX-OLD-TEXT-LEN).\n ;; Uses box-based current-max-old-text-len (not parameter) for thread safety.\n \n (require rackunit\n@@ -19,23 +19,23 @@\n ;; Box-based state tests\n ;; ============================================================\n \n-(test-case \"gsd-planning-edit-limit: current-max-old-text-len defaults to 500\"\n-  (check-equal? (current-max-old-text-len) 500))\n+(test-case \"gsd-planning-edit-limit: current-max-old-text-len defaults to 2000\"\n+  (check-equal? (current-max-old-text-len) 2000))\n \n (test-case \"current-max-old-text-len can be raised and restored\"\n   (define saved (current-max-old-text-len))\n-  (set-current-max-old-text-len! 1200)\n-  (check-equal? (current-max-old-text-len) 1200)\n+  (set-current-max-old-text-len! 2000)\n+  (check-equal? (current-max-old-text-len) 2000)\n   (set-current-max-old-text-len! saved)\n-  (check-equal? (current-max-old-text-len) 500))\n+  (check-equal? (current-max-old-text-len) 2000))\n \n (test-case \"current-max-old-text-len persists across threads\"\n   (define saved (current-max-old-text-len))\n-  (set-current-max-old-text-len! 1200)\n+  (set-current-max-old-text-len! 2000)\n   (define result-box (box #f))\n   (thread (lambda () (set-box! result-box (current-max-old-text-len))))\n   (sync (system-idle-evt))\n-  (check-equal? (unbox result-box) 1200)\n+  (check-equal? (unbox result-box) 2000)\n   (set-current-max-old-text-len! saved))\n \n ;; ============================================================\n@@ -60,18 +60,18 @@\n   (when (and dir (directory-exists? dir))\n     (delete-directory/files dir)))\n \n-(test-case \"edit rejects old-text > 500 at default limit\"\n-  (define f (make-temp-file (make-string 600 #\\x)))\n+(test-case \"edit rejects old-text > 2000 at default limit\"\n+  (define f (make-temp-file (make-string 2100 #\\x)))\n   (with-handlers ([exn:fail? (lambda (e)\n                                (cleanup-path f)\n                                (raise e))])\n     (define result\n-      (tool-edit (hasheq 'path (path->string f) 'old-text (make-string 501 #\\x) 'new-text \"new\")))\n+      (tool-edit (hasheq 'path (path->string f) 'old-text (make-string 2001 #\\x) 'new-text \"new\")))\n     (check-true (tool-result-is-error? result))\n     (cleanup-path f)))\n \n-(test-case \"edit accepts old-text \u2264 500 at default limit\"\n-  (define old (safe-old-text 500))\n+(test-case \"edit accepts old-text \u2264 2000 at default limit\"\n+  (define old (safe-old-text 2000))\n   (define f (make-temp-file (string-append \"prefix\" old \"suffix\")))\n   (with-handlers ([exn:fail? (lambda (e)\n                                (cleanup-path f)\n@@ -80,29 +80,23 @@\n     (check-false (tool-result-is-error? result))\n     (cleanup-path f)))\n \n-(test-case \"edit accepts old-text up to 1200 at raised limit\"\n-  (define long-text (safe-old-text 1000))\n+(test-case \"edit accepts old-text up to 2000 at default limit\"\n+  (define long-text (safe-old-text 1999))\n   (define f (make-temp-file (string-append \"prefix\" long-text \"suffix\")))\n   (with-handlers ([exn:fail? (lambda (e)\n                                (cleanup-path f)\n                                (raise e))])\n-    (define saved (current-max-old-text-len))\n-    (set-current-max-old-text-len! 1200)\n     (define result\n       (tool-edit (hasheq 'path (path->string f) 'old-text long-text 'new-text \"REPLACED\")))\n     (check-false (tool-result-is-error? result))\n-    (set-current-max-old-text-len! saved)\n     (cleanup-path f)))\n \n-(test-case \"edit rejects old-text > 1200 at raised limit\"\n-  (define f (make-temp-file (safe-old-text 1300)))\n+(test-case \"edit rejects old-text > 2000 at default limit\"\n+  (define f (make-temp-file (safe-old-text 2001)))\n   (with-handlers ([exn:fail? (lambda (e)\n                                (cleanup-path f)\n                                (raise e))])\n-    (define saved (current-max-old-text-len))\n-    (set-current-max-old-text-len! 1200)\n     (define result\n-      (tool-edit (hasheq 'path (path->string f) 'old-text (safe-old-text 1201) 'new-text \"new\")))\n+      (tool-edit (hasheq 'path (path->string f) 'old-text (safe-old-text 2001) 'new-text \"new\")))\n     (check-true (tool-result-is-error? result))\n-    (set-current-max-old-text-len! saved)\n     (cleanup-path f)))"
+  },
+  {
+    "sha": "75918e9c96702cb28f4baae298968d2e4b091123",
+    "filename": "tests/test-gsd-planning-integration.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 4,
+    "changes": 8,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-integration.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-integration.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-planning-integration.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -115,10 +115,10 @@\n                          (set-gsd-mode! #f))))))\n \n ;; ============================================================\n-;; Test 3: /go raises edit limit from default to 1200\n+;; Test 3: /go raises edit limit from default to 2000\n ;; ============================================================\n \n-(test-case \"/go raises edit limit from default to 1200\"\n+(test-case \"/go raises edit limit from default to 2000\"\n   (with-clean-state\n    (lambda ()\n      (with-temp-planning-dir\n@@ -130,10 +130,10 @@\n             \"# Plan: Integration\\n- [Inbox] W0: Test\\n## Wave 0: Test\\n- File: q/test.rkt\\n- Verify: raco test\\n\"\n             out))\n          #:exists 'truncate)\n-        (check-equal? (current-edit-limit) 500 \"default should be 500\")\n+        (check-equal? (current-edit-limit) 2000 \"default should be 2000\")\n         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))\n         (handler (hasheq 'command \"/go\" 'input \"/go\"))\n-        (check-equal? (current-edit-limit) 1200 \"should be raised to 1200 during /go\"))))))\n+        (check-equal? (current-edit-limit) 2000 \"should be 2000 during /go\"))))))\n \n ;; ============================================================\n ;; Test 4: reset-all-gsd-state! is idempotent"
+  },
+  {
+    "sha": "0a12afb7438a55ae1abfb47df367517f0576a8b9",
+    "filename": "tests/test-gsd-planning-state.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 4,
+    "changes": 8,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-state.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tests%2Ftest-gsd-planning-state.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-planning-state.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -86,14 +86,14 @@\n ;; current-max-old-text-len tests\n ;; ============================================================\n \n-(test-case \"gsd-planning-state: current-max-old-text-len defaults to 500\"\n+(test-case \"gsd-planning-state: current-max-old-text-len defaults to 2000\"\n   (reset-all-gsd-state!)\n-  (check-equal? (current-edit-limit) 500))\n+  (check-equal? (current-edit-limit) 2000))\n \n (test-case \"set-current-max-old-text-len! sets and reads back\"\n   (reset-all-gsd-state!)\n-  (set-edit-limit! 1200)\n-  (check-equal? (current-edit-limit) 1200))\n+  (set-edit-limit! 2000)\n+  (check-equal? (current-edit-limit) 2000))\n \n (test-case \"current-max-old-text-len visible across threads\"\n   (reset-all-gsd-state!)"
+  },
+  {
+    "sha": "ace997bdd51997dd522c309530f6d4c5e7eab7ff",
+    "filename": "tui/tui-init.rkt",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 2,
+    "changes": 7,
+    "blob_url": "https://github.com/coinerd/q/blob/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tui%2Ftui-init.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f/tui%2Ftui-init.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tui%2Ftui-init.rkt?ref=f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+    "patch": "@@ -41,7 +41,9 @@\n                   wire-ui-event-actions-from-config!)\n          (only-in \"../runtime/settings-query.rkt\" setting-ref*)\n          \"../util/config-paths.rkt\"\n-         (only-in \"../extensions/gsd/policy.rkt\" gsd-session-iteration-budget)\n+         (only-in \"../extensions/gsd/policy.rkt\"\n+                  gsd-session-iteration-budget\n+                  current-gsd-wave-max-iterations)\n          (only-in \"../extensions/gsd/core.rkt\"\n                   current-gsd-campaign-owner\n                   call-with-gsd-owned-session-switch))\n@@ -193,7 +195,8 @@\n       (run-prompt! campaign-sess\n                    prompt\n                    #:max-iterations\n-                   (gsd-session-iteration-budget (dict-ref rt-config 'max-iterations 50)))))\n+                   (gsd-session-iteration-budget\n+                    (dict-ref rt-config 'max-iterations (current-gsd-wave-max-iterations))))))\n \n   ;; v0.99.96: agent-session-box is defined BEFORE ctx so that the\n   ;; session-runner closure can read dynamically from it.  After /go"
+  }
+]

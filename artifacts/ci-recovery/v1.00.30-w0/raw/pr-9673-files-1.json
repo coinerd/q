@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "82818d59a4182169bb271bea39f3f5e3cde6d47f",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w5.rktd",
+    "status": "added",
+    "additions": 24,
+    "deletions": 0,
+    "changes": 24,
+    "blob_url": "https://github.com/coinerd/q/blob/0c360db854883b1ebbb543dcb204f85bcc9b5e33/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w5.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/0c360db854883b1ebbb543dcb204f85bcc9b5e33/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w5.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w5.rktd?ref=0c360db854883b1ebbb543dcb204f85bcc9b5e33",
+    "patch": "@@ -0,0 +1,24 @@\n+;; GSD Wave Merge Binding \u2014 v1.00.29 W5 (BUG-0064 advance-gate evidence)\n+;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd\n+;; Wave: W5 \u2014 Provenance-safe proof-bundle prototype (wave issue #9644)\n+\n+(merge-binding\n+ (wave v1.00.29-w5)\n+ (plan-id \"6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f\")\n+ (merge-sha \"520805dae7d9ef286e7764b090f0aeb6c65ad41d\")\n+ (merge-method \"squash-merge PR #9672 (protected main)\")\n+ (merged-at \"2026-09-12T04:20:00Z\")\n+ (wave-branch \"campaign/v1.00.29-w5\")\n+ (implementation-commits\n+  (\"77f84a10\" \"eb6393b5\" \"25ec59cb\" \"43fd9265\" \"02b6546b\" \"4c6c6231\"))\n+ (verification\n+  ((frozen-chain \"1187/1187 files, 17575/17575 assertions + metrics 5/5 (head eb6393b5, unsharded coordinator lane)\")\n+   (protected-checks \"19/19 green on final head 4c6c6231\")\n+   (reviewer \"APPROVED (kimi-coding/kimi-for-coding, read-only static review, job v10029-w5-review; low findings corrected or recorded as W9 candidates)\")\n+   (ci-incident \"first runs failed on a phantom `hash` build-dep (subagent-added; check-deps false-positive on indented hash/c + locked-install rejection) \u2014 fixed by 25ec59cb (slash-free named contract + dep removal)\")))\n+ (evidence\n+  (\"docs/reports/gsd-wave-evidence/v1.00.29-w5.rktd\"\n+   \"docs/reports/gsd-wave-reviews/v1.00.29-w5.rktd\"\n+   \"docs/reports/gsd-wave-validation/v1.00.29-w5.rktd\"\n+   \"docs/reports/PROOF-BUNDLE-PROTOTYPE-v1.00.29.md\"))\n+ (issues-closed (\"#9644\")))"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "90dd3edb4dfae092c0ff9393285e017db26db256",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w4.rktd",
+    "status": "added",
+    "additions": 24,
+    "deletions": 0,
+    "changes": 24,
+    "blob_url": "https://github.com/coinerd/q/blob/0fd693132d678b1517300a3e1c184fa1e8e6f423/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w4.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/0fd693132d678b1517300a3e1c184fa1e8e6f423/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w4.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w4.rktd?ref=0fd693132d678b1517300a3e1c184fa1e8e6f423",
+    "patch": "@@ -0,0 +1,24 @@\n+;; GSD Wave Merge Binding \u2014 v1.00.29 W4 (BUG-0064 advance-gate evidence)\n+;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd\n+;; Wave: W4 \u2014 Systemic prepared-env bytecode pinning (BUG-0065, issue #9622)\n+;; Wave issue: #9643\n+\n+(merge-binding\n+ (wave v1.00.29-w4)\n+ (plan-id \"6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f\")\n+ (merge-sha \"7679d25e239df40cd7013ee584393ac2fca8bfeb\")\n+ (merge-method \"squash-merge PR #9669 (protected main)\")\n+ (merged-at \"2026-09-11T22:52:00Z\")\n+ (wave-branch \"campaign/v1.00.29-w4\")\n+ (implementation-commits\n+  (\"a2c91336\" \"17c9bca9\" \"e19602e5\" \"fc8261e3\" \"7682489a\"))\n+ (verification\n+  ((frozen-chain \"1186/1186 files, 17553/17553 assertions + metrics 5/5 (head fc8261e3)\")\n+   (protected-checks \"23/23 green (incl. pilot-macos-8.10)\")\n+   (reviewer \"APPROVED (kimi-coding/kimi-for-coding, read-only, job v10029-w4-review; 6 non-blocking findings recorded)\")))\n+ (evidence\n+  (\"docs/reports/gsd-wave-evidence/v1.00.29-w4.rktd\"\n+   \"docs/reports/gsd-wave-reviews/v1.00.29-w4.rktd\"\n+   \"docs/reports/gsd-wave-validation/v1.00.29-w4.rktd\"\n+   \"docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md\"))\n+ (issues-closed (\"#9643\" \"#9622\")))"
+  }
+]

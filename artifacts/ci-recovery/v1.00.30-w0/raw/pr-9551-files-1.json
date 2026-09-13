@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "96e4cd3121ce473f65d273b2cc8bd4a0ca9a3d7a",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w3.rktd",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/299fe5d0292f52b85552fb020d0589a8d3dfcb4f/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/299fe5d0292f52b85552fb020d0589a8d3dfcb4f/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd?ref=299fe5d0292f52b85552fb020d0589a8d3dfcb4f",
+    "patch": "@@ -22,3 +22,5 @@\n    \"q/tests/test-runner-scheduler-order.rkt\"\n    \"q/tests/test-run-tests-shard-plan.rkt\"\n    \"q/docs/TEST_CONVENTIONS.md\")))\n+\n+; Follow-up PR validation: wave W3 evidence isolated for canonical governance checking."
+  }
+]

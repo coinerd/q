@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "c1db36be1bd04975c8c81e5483e705e238d2c7a1",
+    "filename": "docs/release-tracker-v1.00.01.md",
+    "status": "added",
+    "additions": 28,
+    "deletions": 0,
+    "changes": 28,
+    "blob_url": "https://github.com/coinerd/q/blob/15a5e01f572ffe64dae2ccd1ab4463402a4cafc1/docs%2Frelease-tracker-v1.00.01.md",
+    "raw_url": "https://github.com/coinerd/q/raw/15a5e01f572ffe64dae2ccd1ab4463402a4cafc1/docs%2Frelease-tracker-v1.00.01.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Frelease-tracker-v1.00.01.md?ref=15a5e01f572ffe64dae2ccd1ab4463402a4cafc1",
+    "patch": "@@ -0,0 +1,28 @@\n+# Release tracker (v1.00.01)\n+\n+Milestone #882 (open, 8 open issues), referred to here as (v1.00.01).\n+\n+Registry source of truth: `.planning/bugs/` (local, gitignored \u2014 this file is the\n+in-repo mirror of the tracker mapping so release tooling does not depend on the\n+local planning tree).\n+\n+| BUG-ID | Issue | Title (short) | Severity | Priority | Registry file |\n+|---|---|---|---|---|---|\n+| BUG-0007 | [#9322](https://github.com/coinerd/q/issues/9322) | Release pipeline no fail-fast before full suite | medium | medium | `BUG-0007-release-no-fail-fast.md` |\n+| BUG-0008 | [#9323](https://github.com/coinerd/q/issues/9323) | No release-readiness gate | high | high | `BUG-0008-no-release-readiness-gate.md` |\n+| BUG-0009 | [#9324](https://github.com/coinerd/q/issues/9324) | Pinned test expectations drift | medium | medium | `BUG-0009-pinned-expectations-drift.md` |\n+| BUG-0010 | [#9325](https://github.com/coinerd/q/issues/9325) | No standing agent merge path | high | high | `BUG-0010-no-standing-agent-merge-path.md` |\n+| BUG-0011 | [#9326](https://github.com/coinerd/q/issues/9326) | No auto-retry / idempotent resume | medium | medium | `BUG-0011-no-auto-retry-no-resume.md` |\n+| BUG-0012 | [#9327](https://github.com/coinerd/q/issues/9327) | Wave plans lack preconditions | medium | medium | `BUG-0012-wave-plans-no-preconditions.md` |\n+| BUG-0013 | [#9328](https://github.com/coinerd/q/issues/9328) | Planning artifacts no concurrency protocol | low | low | `BUG-0013-planning-artifacts-no-concurrency.md` |\n+| BUG-0014 | [#9329](https://github.com/coinerd/q/issues/9329) | Manual release close-out | low | low | `BUG-0014-manual-release-closeout.md` |\n+\n+All 8 registry rows are `in-progress` as of W0 (v1.00.01).\n+\n+## Notes\n+\n+- This PR lands via the agent merge path (branch off `origin/main`, squash merge)\n+  \u2014 dogfooding the procedure that BUG-0010 / issue #9325 will codify in W4,\n+  targeting (v1.00.01).\n+- BUG-0008's readiness gate and BUG-0014's close-out report consume this table;\n+  keep it in sync when issue numbers or statuses change for (v1.00.01)."
+  }
+]

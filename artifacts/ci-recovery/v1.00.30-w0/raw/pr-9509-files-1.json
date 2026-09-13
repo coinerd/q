@@ -1,0 +1,38 @@
+[
+  {
+    "sha": "acd74269c60f26be1c40072008068e9c4820fe8c",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 6,
+    "changes": 12,
+    "blob_url": "https://github.com/coinerd/q/blob/a98d3940e6524bbf86e4b1cede97d58248bb105c/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/a98d3940e6524bbf86e4b1cede97d58248bb105c/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=a98d3940e6524bbf86e4b1cede97d58248bb105c",
+    "patch": "@@ -297,13 +297,13 @@ q/\n | Test files | 1371 |\n | Source modules | 845 |\n <<<<<<< HEAD\n-| Source lines | 155813 |\n-| Test lines | 243334 |\n-| Test assertions | 37306 |\n+| Source lines | 155820 |\n+| Test lines | 243351 |\n+| Test assertions | 37310 |\n =======\n-| Source lines | 155813 |\n-| Test lines | 243334 |\n-| Test assertions | 37306 |\n+| Source lines | 155820 |\n+| Test lines | 243351 |\n+| Test assertions | 37310 |\n >>>>>>> origin/main\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "f14ce9538167a642db53791f8f052bc6484b0e1a",
+    "filename": "runtime/session/executor-inheritance.rkt",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 1,
+    "changes": 9,
+    "blob_url": "https://github.com/coinerd/q/blob/a98d3940e6524bbf86e4b1cede97d58248bb105c/runtime%2Fsession%2Fexecutor-inheritance.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a98d3940e6524bbf86e4b1cede97d58248bb105c/runtime%2Fsession%2Fexecutor-inheritance.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/runtime%2Fsession%2Fexecutor-inheritance.rkt?ref=a98d3940e6524bbf86e4b1cede97d58248bb105c",
+    "patch": "@@ -14,7 +14,14 @@\n          (only-in \"session-config.rkt\" session-config? session-config->hash explicit-model-override?))\n \n (provide (contract-out [inherit-coordinator-runtime-config\n-                        (-> dict? (or/c hash? #f) (or/c string? #f) any/c dict?)]))\n+                        (-> dict?\n+                            ;; BUG-0020: live sessions carry a session-config\n+                            ;; struct here (agent-session-config), not a raw\n+                            ;; hash; both shapes are accepted and normalized.\n+                            (or/c hash? session-config? #f)\n+                            (or/c string? #f)\n+                            any/c\n+                            dict?)]))\n \n ;; inherit-coordinator-runtime-config :\n ;;   rt-config prior-config prior-model-name prior-provider -> rt-config'"
+  },
+  {
+    "sha": "5f98d47ae2ecee85d5dbecf43e9f48c4ee8051b5",
+    "filename": "tests/test-executor-inheritance.rkt",
+    "status": "modified",
+    "additions": 17,
+    "deletions": 0,
+    "changes": 17,
+    "blob_url": "https://github.com/coinerd/q/blob/a98d3940e6524bbf86e4b1cede97d58248bb105c/tests%2Ftest-executor-inheritance.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/a98d3940e6524bbf86e4b1cede97d58248bb105c/tests%2Ftest-executor-inheritance.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-executor-inheritance.rkt?ref=a98d3940e6524bbf86e4b1cede97d58248bb105c",
+    "patch": "@@ -11,6 +11,7 @@\n ;; must be untouched when it is not (v1.00.13 semantics preserved).\n \n (require rackunit\n+         (only-in \"../runtime/session/session-config.rkt\" hash->session-config session-config?)\n          \"../runtime/session/executor-inheritance.rkt\")\n \n (test-case \"BUG-0018: executor inherits switched model + provider with override\"\n@@ -36,6 +37,22 @@\n   (define rt-config (hasheq 'model-name \"glm-5.3\"))\n   (check-equal? (inherit-coordinator-runtime-config rt-config #f #f #f) rt-config))\n \n+(test-case \"BUG-0020: live session-config struct accepted (contract regression)\"\n+  ;; The /go campaign runner passes agent-session-config, which at runtime is\n+  ;; a session-config STRUCT, not a raw hash. Before the contract fix this\n+  ;; raised 'contract violation expected (or/c hash? #f)' and killed the\n+  ;; campaign runner. Both shapes must be accepted and normalized.\n+  (define rt-config (hasheq 'provider 'startup-provider 'model-name \"glm-5.3\"))\n+  (define sess-cfg (hash->session-config (hasheq 'model-name \"ark-code-latest\" 'model-override #t)))\n+  (check-pred session-config? sess-cfg)\n+  (define inherited\n+    (inherit-coordinator-runtime-config rt-config sess-cfg \"ark-code-latest\" 'switched-provider))\n+  (check-equal? (hash-ref inherited 'provider) 'switched-provider)\n+  (check-equal? (hash-ref inherited 'model-name) \"ark-code-latest\")\n+  ;; session-config without override \u2192 untouched\n+  (define plain-cfg (hash->session-config (hasheq 'model-name \"glm-5.2\")))\n+  (check-equal? (inherit-coordinator-runtime-config rt-config plain-cfg \"glm-5.2\" 'p) rt-config))\n+\n (test-case \"BUG-0018: session-config struct prior config is honored\"\n   ;; explicit-model-override? accepts a session-config via its data hash; the\n   ;; helper normalizes both raw hashes and session-config structs."
+  }
+]

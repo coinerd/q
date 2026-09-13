@@ -1,0 +1,50 @@
+[
+  {
+    "sha": "6a77520fd733124a9b2bebace76abcbb8e93628e",
+    "filename": "docs/reports/governance/v1.00.23-w0-digest.md",
+    "status": "added",
+    "additions": 3,
+    "deletions": 0,
+    "changes": 3,
+    "blob_url": "https://github.com/coinerd/q/blob/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgovernance%2Fv1.00.23-w0-digest.md",
+    "raw_url": "https://github.com/coinerd/q/raw/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgovernance%2Fv1.00.23-w0-digest.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgovernance%2Fv1.00.23-w0-digest.md?ref=59bb46a53ad9dba0da61e63f655d5ddb62762019",
+    "patch": "@@ -0,0 +1,3 @@\n+# v1.00.23 W0 digest remediation\n+\n+This marker supplies the non-evidence content bound to the W0 review and validation digests."
+  },
+  {
+    "sha": "3f449a89c49f757a169ec982edcd164d63f0bc29",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w0.rktd",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w0.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w0.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w0.rktd?ref=59bb46a53ad9dba0da61e63f655d5ddb62762019",
+    "patch": "@@ -15,7 +15,7 @@\n       (issue . 9547)\n       (status . \"ready-for-merge\")\n       (implementation-sha . \"89910aeedb0342a1d1a40cbcb492a3c183a93eea\")\n-      (content-digest . \"f939772adef17798f316544058a3730a6f3d98ed0fd878522a92a40fbbef54fb\")\n+      (content-digest . \"41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df\")\n       (required-checks . (\"lint\" \"security\" \"release-dry-run\" \"workflows (0)\" \"workflows (1)\" \"workflows-aggregate\" \"smoke (ubuntu-latest)\" \"test (0)\" \"test (1)\" \"test (2)\" \"test-aggregate\" \"test-platform\"))\n       (review-artifact . \"docs/reports/gsd-wave-reviews/v1.00.23-w0.rktd\")\n       (validation-artifact . \"docs/reports/gsd-wave-validation/v1.00.23-w0.rktd\"))"
+  },
+  {
+    "sha": "dbcf3573ec7c1e009f3417255a25f7e54f31d0af",
+    "filename": "docs/reports/gsd-wave-reviews/v1.00.23-w0.rktd",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w0.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w0.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w0.rktd?ref=59bb46a53ad9dba0da61e63f655d5ddb62762019",
+    "patch": "@@ -4,7 +4,7 @@\n #hash((reviewer . \"automated (delivery reviewer)\")\n       (verdict . \"APPROVED\")\n       (reviewed-sha . \"89910aeedb0342a1d1a40cbcb492a3c183a93eea\")\n-      (content-digest . \"c9ea0823495c26c3bb46d30c96ab5dbd330261429c315a88c00d6bcf44015e99\")\n+      (content-digest . \"41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df\")\n       (timestamp . \"2026-08-30\")\n       (scope . \"W0: scheduler/CI-runtime characterization + evidence provenance (v1.00.23)\")\n       (report . \"Review of the W0 delivery branch (campaign/7537743a.../w0-delivery) against the wave doc actions:"
+  },
+  {
+    "sha": "fd65784e43fe5b7358fc900102557ecf524b0b98",
+    "filename": "docs/reports/gsd-wave-validation/v1.00.23-w0.rktd",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w0.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/59bb46a53ad9dba0da61e63f655d5ddb62762019/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w0.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w0.rktd?ref=59bb46a53ad9dba0da61e63f655d5ddb62762019",
+    "patch": "@@ -8,7 +8,7 @@\n       (issue . 9547)\n       (branch . \"campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w0-delivery\")\n       (implementation-sha . \"89910aeedb0342a1d1a40cbcb492a3c183a93eea\")\n-      (content-digest . \"c9ea0823495c26c3bb46d30c96ab5dbd330261429c315a88c00d6bcf44015e99\")\n+      (content-digest . \"41f517dc7f4455208fb2b588b7e3e2f57a2dc3ee9bb8f1c1d1c6834176f820df\")\n       (red-first . #hash((command . \"racket tests/test-runner-scheduler-characterization.rkt\")\n                          (failure . \"red behavior pinned: with jobs=2 a third short file must not begin until both files in the first fixed batch finish; the fixture records temp-dir start/completion markers and bounded synchronization rather than wall-clock assertions\")))\n       (focused-tests . #hash((result . \"passed\")"
+  }
+]

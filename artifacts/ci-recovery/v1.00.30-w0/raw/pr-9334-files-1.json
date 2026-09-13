@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "5644608e380cc82cfff0cf78b58c315dc04f0013",
+    "filename": "extensions/github/README.md",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 4,
+    "changes": 10,
+    "blob_url": "https://github.com/coinerd/q/blob/11e9b8cf12e5f76178d7d72a9e90448a70a5ba62/extensions%2Fgithub%2FREADME.md",
+    "raw_url": "https://github.com/coinerd/q/raw/11e9b8cf12e5f76178d7d72a9e90448a70a5ba62/extensions%2Fgithub%2FREADME.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgithub%2FREADME.md?ref=11e9b8cf12e5f76178d7d72a9e90448a70a5ba62",
+    "patch": "@@ -1,7 +1,7 @@\n # GitHub Extension (`extensions/github/`)\n \n-GitHub integration tools for the q agent, built on the `gh` CLI + git. Tools are\n-registered by `main.rkt`; all handlers live in `tool-handlers.rkt` and are plain\n+GitHub integration tools for the q agent, built on the `gh` CLI + git. All handlers\n+live in `tool-handlers.rkt` (with per-domain modules under `handlers/`) and are plain\n functions over argument hashes (they can be invoked standalone from Racket as well as\n through the q tool layer).\n \n@@ -73,6 +73,8 @@ hygiene for the readiness gate, board visibility) rather than the landing itself\n \n ## Files\n \n-- `main.rkt` \u2014 entry point; registers the six tools with the q tool layer.\n-- `tool-handlers.rkt` \u2014 all handlers + shared `gh`/git plumbing.\n+- `tool-handlers.rkt` \u2014 entry point; the six `handle-gh-*` tool handlers.\n+- `tool-schemas.rkt` \u2014 argument schemas for the six tools.\n+- `helpers.rkt` \u2014 shared `gh`/git plumbing (e.g. `gh-success-json`).\n+- `handlers/` \u2014 per-domain implementation modules (e.g. `pr-ops.rkt` for `gh-pr`).\n - `README.md` \u2014 this file."
+  }
+]

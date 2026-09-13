@@ -68,21 +68,27 @@
       (define lint-changelog (dynamic-require lint-mod 'lint-changelog))
       (define bug-registry-path (dynamic-require lint-mod 'bug-registry-path))
       ;; Deterministic registry fixture: the canonical entry cites
-      ;; BUG-0066..BUG-0072 as fixed. Pin it so this test never depends on
-      ;; a foreign planning tree discovered above the checkout.
+      ;; BUG-0064..BUG-0072 as fixed. Pin it so this test never depends on
+      ;; a foreign planning tree discovered above the checkout. The fixed-in
+      ;; column is derived from the canonical version surface (BUG-0009:
+      ;; never a hardcoded literal, so the fixture survives future bumps).
+      (define (fixture-row id severity)
+        (format "| ~a | 2026-09-08 | fixture | fixture | ~a | fixed | v~a | — |\n"
+                id
+                severity
+                canonical-version))
       (define fixture-registry
-        (string-append
-         "| BUG | Reported | Title | Component | Severity | Status | Fixed in | Ref |\n"
-         "|---|---|---|---|---|---|---|---|\n"
-         "| BUG-0064 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0065 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0066 | 2026-09-08 | fixture | fixture | critical | fixed | v1.00.29 | — |\n"
-         "| BUG-0067 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0068 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0069 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0070 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0071 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-         "| BUG-0072 | 2026-09-08 | fixture | fixture | critical | fixed | v1.00.29 | — |\n"))
+        (string-append "| BUG | Reported | Title | Component | Severity | Status | Fixed in | Ref |\n"
+                       "|---|---|---|---|---|---|---|---|\n"
+                       (fixture-row "BUG-0064" "high")
+                       (fixture-row "BUG-0065" "high")
+                       (fixture-row "BUG-0066" "critical")
+                       (fixture-row "BUG-0067" "high")
+                       (fixture-row "BUG-0068" "high")
+                       (fixture-row "BUG-0069" "high")
+                       (fixture-row "BUG-0070" "high")
+                       (fixture-row "BUG-0071" "high")
+                       (fixture-row "BUG-0072" "critical")))
       (define tmp-registry (make-temporary-file "release-entry-registry-~a.md"))
       (call-with-output-file tmp-registry (λ (out) (display fixture-registry out)) #:exists 'replace)
       (dynamic-wind (λ ()

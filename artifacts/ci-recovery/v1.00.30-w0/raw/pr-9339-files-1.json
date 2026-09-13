@@ -1,0 +1,50 @@
+[
+  {
+    "sha": "b8a9f909a760873284606b0233ce42db6ba1faaf",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 41,
+    "deletions": 0,
+    "changes": 41,
+    "blob_url": "https://github.com/coinerd/q/blob/cb84284c803a04804acdfcf3bf0fddd46516014a/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/cb84284c803a04804acdfcf3bf0fddd46516014a/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=cb84284c803a04804acdfcf3bf0fddd46516014a",
+    "patch": "@@ -1,3 +1,44 @@\n+## 1.00.01\n+\n+Released 2026-08-16.\n+\n+> Release-readiness milestone: the agent release/merge pipeline is automated end-to-end \u2014 fail-fast preflight, readiness gating, drift-proof test expectations, planning concurrency guards, an agent merge path, auto-retry with idempotent resume, and one-command release close-out. Eight registry bugs closed (BUG-0007 through BUG-0014).\n+\n+### Bug Fixes\n+\n+- The release workflow fails fast on cheap checks (tag/version/manifest) before the expensive full suite; malformed inputs no longer burn a full test run (BUG-0007).\n+- A strict release-readiness gate (tagged PRs, version consistency, manifest/CHANGELOG validation) runs in CI before tag publish, so tags cannot be cut on commits that predate required fixes (BUG-0008).\n+- Version/output-pinned test expectations are generated from the landed artifact rather than hand-edited, eliminating release-blocking RED when changes land in separate PRs (BUG-0009).\n+- Protected `main` has a standing automated merge path for agent-driven fixes (`gh-wave-start` \u2192 `gh-wave-finish` \u2192 `gh-pr` squash) instead of improvised per-wave procedures (BUG-0010).\n+- Transient turn/LLM/tool failures (network 5xx, timeouts, SSE stalls) are auto-retried with bounded exponential backoff; per-wave durable checkpoints in `.planning/STATE.md` make resumed runs skip completed steps, and `gh-pr create` / `gh-wave-finish` are idempotent \u2014 no operator double-checking after an interruption (BUG-0011).\n+- Wave plans declare applicability preconditions; the executor checks them against live STATE before running actions, so stale plans fail fast instead of misapplying (BUG-0012).\n+- Planning artifacts have an explicit concurrency protocol; registry counts and INDEX totals are derived consistently under concurrent edits (BUG-0013).\n+- Release close-out runs as one command (`racket scripts/release-closeout.rkt <tag>`) producing a full audit trail: notes, tag/workflow evidence, registry archive, and milestone close \u2014 no manual multi-system pagination (BUG-0014).\n+\n+### Breaking / Behavior Changes\n+\n+- Release tagging now requires the strict readiness gate to pass (previous behavior: tag-first, verify-later).\n+- Scratch bug-extraction files (`bugs.txt`, `bug_output.txt`) are removed; `.planning/bugs/` is the durable source.\n+- Transient agent failures are retried automatically before surfacing (previous behavior: first failure is terminal).\n+\n+### Migration Notes\n+\n+- If you kept local notes in `bugs.txt` / `bug_output.txt`, move anything still needed into `.planning/bugs/`; the repo-root scratch files are deleted and no longer read by any tooling.\n+- Operators no longer need to re-run milestone steps after an interruption: resume the run and completed steps are skipped from the `.planning/STATE.md` checkpoint.\n+- Release scripts: `release-closeout.rkt <tag>` supersedes the manual per-system close-out; `--dry-run` prints every stage with sources and performs no writes.\n+\n+### Testing\n+\n+- New tests next to existing ones for the touched modules: transient-classification and retry-policy cases in `test-provider-errors.rkt`, bounded turn-retry behavior in `test-loop-stream-retry.rkt`, PR idempotence (`gh-pr create` lookup-first, `gh-wave-finish` no-op) in `test-pr-ops-idempotence.rkt`.\n+- Registry/consistency suites extended for check-registry post-archive counts (`test-check-registry.rkt`) and close-out stage reporting (`test-release-closeout.rkt`).\n+- Fault-injection and interrupt/resume checks (scratch env) verified: mid-wave transient error auto-retried and the wave completes; interrupt-after-step-N resume skips steps 1..N; double `gh-pr create` for one head branch yields a single PR.\n+\n+### Operational / Release\n+\n+- Version stamped `1.00.01` via `scripts/bump-version.rkt` (`util/version.rkt`, `info.rkt`, README badge/verify snippet).\n+- Release close-out executed as one command: `racket scripts/release-closeout.rkt v1.00.01` (notes assembly \u2192 readiness re-proof \u2192 tag/workflow \u2192 registry archive \u2192 check-registry \u2192 milestone close), each stage reported `ok`/`FAIL`.\n+- Milestone v1.00.01 closed; registry rows for BUG-0007..BUG-0014 archived; `check-registry.rkt` exit 0.\n+\n ## 1.00.00\n \n Released 2026-08-15."
+  },
+  {
+    "sha": "1cb057f477c6d31cd4bdb732ac47e62af8de9ff4",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/cb84284c803a04804acdfcf3bf0fddd46516014a/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/cb84284c803a04804acdfcf3bf0fddd46516014a/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=cb84284c803a04804acdfcf3bf0fddd46516014a",
+    "patch": "@@ -297,7 +297,7 @@ q/\n | Test files | 1326 |\n | Source modules | 831 |\n | Source lines | 144859 |\n-| Test lines | 232395 |\n+| Test lines | 232406 |\n | Test assertions | 36254 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "240511d197c1d96c59129d43ccacfd3536bc019c",
+    "filename": "tests/test-self-hosting-deep.rkt",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 6,
+    "changes": 15,
+    "blob_url": "https://github.com/coinerd/q/blob/cb84284c803a04804acdfcf3bf0fddd46516014a/tests%2Ftest-self-hosting-deep.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/cb84284c803a04804acdfcf3bf0fddd46516014a/tests%2Ftest-self-hosting-deep.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-self-hosting-deep.rkt?ref=cb84284c803a04804acdfcf3bf0fddd46516014a",
+    "patch": "@@ -196,14 +196,17 @@\n   (define ver-path (build-path project-root \"q\" \"util\" \"version.rkt\"))\n   (check-true (file-exists? ver-path))\n   (define content (file->string ver-path))\n-  ;; Verify a valid semver is present (0.NN.NN format)\n-  (check-true (regexp-match? #rx\"0[.][0-9]+[.][0-9]+\" content)\n+  ;; Verify a valid semver is present (0.NN.NN or 1.NN.NN format \u2014 the\n+  ;; project crossed the 1.00 major line, W7/BUG-0014)\n+  (check-true (regexp-match? #rx\"[01][.][0-9]+[.][0-9]+\" content)\n               \"version.rkt must contain a valid semver string\")\n-  ;; Verify it's a recent version (>= 0.90)\n-  (define m (regexp-match #rx\"0[.]([0-9]+)[.]\" content))\n+  ;; Verify it's a recent version (>= 0.90, or on the 1.x line)\n+  (define m (regexp-match #rx\"([01])[.]([0-9]+)[.]\" content))\n   (when m\n-    (define minor (string->number (cadr m)))\n-    (check-true (and minor (>= minor 90)) (format \"version minor must be >= 90, got 0.~a.x\" minor))))\n+    (define major (string->number (cadr m)))\n+    (define minor (string->number (caddr m)))\n+    (check-true (or (equal? major 1) (and minor (>= minor 90)))\n+                (format \"version must be 1.x or >= 0.90, got ~a.~a.x\" major minor))))\n \n ;; ============================================================\n ;; Deep Test 10: Benchmark suite infrastructure"
+  },
+  {
+    "sha": "9a352f4ae2009e04e25281ad48b2333978766194",
+    "filename": "tests/test-test-lint.rkt",
+    "status": "modified",
+    "additions": 12,
+    "deletions": 4,
+    "changes": 16,
+    "blob_url": "https://github.com/coinerd/q/blob/cb84284c803a04804acdfcf3bf0fddd46516014a/tests%2Ftest-test-lint.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/cb84284c803a04804acdfcf3bf0fddd46516014a/tests%2Ftest-test-lint.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-test-lint.rkt?ref=cb84284c803a04804acdfcf3bf0fddd46516014a",
+    "patch": "@@ -1,14 +1,22 @@\n #lang racket/base\n \n-;; @speed fast\n-;; @suite default\n-\n ;; BOUNDARY: unit\n ;; @suite runtime\n ;; @boundary unit\n ;; @speed fast\n-;; @mutates none\n+;; @isolation subprocess\n+;; @mutates env\n ;; Tests for lint-tests.rkt v0.83.4 checks (#6748)\n+;;\n+;; Subprocess-isolation rationale (W7 / BUG-0014 release CI): the\n+;; \"lint-tests.rkt runs\" integration case below spawns\n+;; `racket scripts/lint-tests.rkt`, which enumerates and reads every file\n+;; under tests/. Under --jobs 4 the parallel workers are compiling/writing\n+;; test files at the same moment, so the scan intermittently observed a\n+;; half-written file and the lint crashed (exit 2) \u2192 ASSERTION_FAILURE in CI\n+;; while passing standalone. classify-filters.rkt's mutating-file? treats\n+;; subprocess isolation as serializing (F-7, v0.99.77), running this file in\n+;; the serial batch before any parallel worker starts.\n \n (require racket/string\n          racket/system"
+  }
+]

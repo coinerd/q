@@ -1,0 +1,50 @@
+{
+  "schema": "q.ci-recovery.required-claims/1",
+  "audit_id": "v1.00.30-w0-required-claims",
+  "frozen_at": "2026-09-14",
+  "source_raw": "artifacts/ci-recovery/v1.00.30-w0/raw/main-protection.json (GET /repos/coinerd/q/branches/main/protection, collected 2026-09-13 preflight)",
+  "purpose": "Frozen required-check/suite inventory and exact primary timing-field policy for W0-W8 comparisons. This file pre-registers what 'required PR-CI latency' means before any candidate sample is viewed; changes require an explicit reviewed plan amendment, never a quiet rewrite.",
+  "required_pr_checks_branch_protection": [
+    "lint",
+    "security",
+    "release-dry-run",
+    "smoke (ubuntu-latest)",
+    "test (0)",
+    "test (1)",
+    "test (2)",
+    "test-aggregate",
+    "test-platform",
+    "workflows (0)",
+    "workflows (1)",
+    "workflows-aggregate"
+  ],
+  "required_push_checks_main": ["gsd-governance", "lint", "security", "test (0)", "test (1)", "test (2)", "test-aggregate", "test-platform", "workflows (0)", "workflows (1)", "workflows-aggregate"],
+  "suite_membership_invariant": "The fast suite membership (tests/run-tests.rkt --suite fast) and its shard mapping to 'test (0)'..'test (2)' are frozen at W0; new regression tests are enumerated in each wave's evidence and may never silently change suite membership or claim inventory (PLAN invariant 14).",
+  "workflow_jobs_mapping": {
+    "ci.yml": ["lint", "security", "smoke (ubuntu-latest)", "test (0)", "test (1)", "test (2)", "test-aggregate", "test-platform"],
+    "workflows.yml": ["workflows (0)", "workflows (1)", "workflows-aggregate"],
+    "release.yml": ["release-dry-run"],
+    "gsd-governance.yml": ["gsd-governance (main push only)"]
+  },
+  "primary_timing_definition": {
+    "metric": "Required PR critical-path latency",
+    "run_start_field": "workflow run 'created_at'/'run_started_at' of the REQUIRED PR-CI workflow run (GET /repos/coinerd/q/actions/runs), earliest of the required parallel workflow runs on the head SHA",
+    "run_end_field": "'completed_at' of the LAST required check run to complete on the head SHA (GET /repos/coinerd/q/commits/{sha}/check-runs, filter status=completed and name in required_pr_checks_branch_protection), accounting for required parallel workflows by the latest required completion",
+    "check_name_policy": "Exact check-run names as declared in branch protection (contexts list above); no normalization, no prefix matching, no failed-run substitution",
+    "per_shard_duration_field": "check-run 'started_at' to 'completed_at' of the individual 'test (N)' check runs; setup/compile time is the 'Set up Racket'/prepared-environment step window inside the job and is reported separately, never substituted",
+    "excluded_from_primary": "trigger-to-mergeable elapsed, queue time, runner-minutes — reported separately (PLAN invariant 14), cannot substitute",
+    "quantile_helper": "sorted observations, linear interpolation at (n-1)*p, milliseconds retained until display; tests/test-ci-exit-truth.rkt pins the exact helper (legacy rounded/midpoint helper is not reused)"
+  },
+  "cohort_eligibility_policy_preregistered": {
+    "eligible_head": "distinct PR head SHA with a complete truthful run of every required check above; first-attempt completions only; later green attempts never erase an original failure",
+    "ineligible": "docs-only/no-execution-change exempt PRs (NOT_APPLICABLE guard result), manufactured/dummy PRs, masked historical greens (BUG-0073 era), heads outside the declared cohort window or compilation regime",
+    "disjointness": "R2 cohort (>=20 heads) strictly after W4 activation merge; final cohort (>=20 heads) strictly after W6 decision; mutually disjoint and disjoint from v1.00.28/v1.00.29 samples",
+    "traffic_basis": "artifacts/ci-recovery/v1.00.30-w0/traffic-feasibility.json — 155 execution-change-candidate heads/30d observed, 0 validated clean eligible (historical masking); projected 7.7 calendar days at 1 head/day for 40 heads, 31.0 days at 0.25 head/day; cohorts remain OPEN until real eligible heads exist"
+  },
+  "bootstrap_note": "W0/W1: no topology/compile-regime changes; existing security/result checks plus manual coordinator comparison apply until the pr-latency-guard is required (PLAN invariant 14).",
+  "integrity": {
+    "raw_sha256_file": "artifacts/ci-recovery/v1.00.30-w0/SHA256SUMS",
+    "verifier": "scripts/ci/verify-result-truth.rkt",
+    "truth_tests": ["tests/test-ci-exit-truth.rkt", "tests/test-release-workflow-contract.rkt", "tests/test-prepared-env-report.rkt"]
+  }
+}

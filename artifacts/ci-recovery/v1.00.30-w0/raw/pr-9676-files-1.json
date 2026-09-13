@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "b142768533c83287cf486a866fade0786424721d",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w7.rktd",
+    "status": "added",
+    "additions": 25,
+    "deletions": 0,
+    "changes": 25,
+    "blob_url": "https://github.com/coinerd/q/blob/7565db47351c8a0d71d200e236b4d737c56e8cf9/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w7.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/7565db47351c8a0d71d200e236b4d737c56e8cf9/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w7.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w7.rktd?ref=7565db47351c8a0d71d200e236b4d737c56e8cf9",
+    "patch": "@@ -0,0 +1,25 @@\n+;; GSD Wave Merge Binding \u2014 v1.00.29 W7 (BUG-0064 advance-gate evidence)\n+;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd\n+;; Wave: W7 \u2014 Selector governance and bounded shadow design (wave issue #9645)\n+\n+(merge-binding\n+ (wave v1.00.29-w7)\n+ (plan-id \"6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f\")\n+ (merge-sha \"719a7d195ac89f52dd8a36c10856ad0de63ac19b\")\n+ (merge-method \"squash-merge PR #9675 (protected main)\")\n+ (merged-at \"2026-09-12T10:35:00Z\")\n+ (wave-branch \"campaign/v1.00.29-w7\")\n+ (implementation-commits (\"6481184e\" \"fee046c2\" \"284d524c\"))\n+ (verification\n+  ((frozen-chain \"1189/1189 files, 17673/17673 assertions + metrics 5/5 (head 284d524c, unsharded coordinator lane)\")\n+   (protected-checks \"20/20 green\")\n+   (reviewer \"APPROVED (kimi-coding/kimi-for-coding, read-only static review, job v10029-w7-review; 2 low findings deferred to W8 pilot scope)\")\n+   (gate-state \"W8 = OPEN, PENDING AMENDMENT REVIEW (recorded verbatim in the trio + governance doc \u00a79)\")))\n+ (evidence\n+  (\"docs/reports/gsd-wave-evidence/v1.00.29-w7.rktd\"\n+   \"docs/reports/gsd-wave-reviews/v1.00.29-w7.rktd\"\n+   \"docs/reports/gsd-wave-validation/v1.00.29-w7.rktd\"\n+   \"docs/reports/SELECTOR-CI-GOVERNANCE-v1.00.29.md\"\n+   \"scripts/impact-selector/evaluate.rkt\"\n+   \"artifacts/proof-graph/v1.00.29-w7/replay-results.json\"))\n+ (issues-closed (\"#9645\")))"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "674f5b6e546a040e04793dbf86c9bb059bedd87d",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w2.rktd",
+    "status": "added",
+    "additions": 5,
+    "deletions": 0,
+    "changes": 5,
+    "blob_url": "https://github.com/coinerd/q/blob/38461677194ebca3652811d33180f862b3ff47cf/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w2.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/38461677194ebca3652811d33180f862b3ff47cf/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w2.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w2.rktd?ref=38461677194ebca3652811d33180f862b3ff47cf",
+    "patch": "@@ -0,0 +1,5 @@\n+((wave . \"v1.00.29-w2\")\n+ (source-evidence . \"docs/reports/gsd-wave-evidence/v1.00.29-w2.rktd\")\n+ (delivery . \"campaign/v1.00.29-w2 squash-merged after 20/20 protected checks passed\")\n+ (merge-sha . \"c77899338f15f9e424eac751d03beef5a8cd40fc\")\n+ (merge-pr . \"#9664\"))"
+  }
+]

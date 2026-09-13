@@ -1,0 +1,74 @@
+[
+  {
+    "sha": "c60ea6f8a211f7c714e48a6f0bc49a3af9cacf36",
+    "filename": ".github/workflows/benchmark.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fbenchmark.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fbenchmark.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fbenchmark.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -25,7 +25,7 @@ jobs:\n     timeout-minutes: 30\n \n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - uses: ./.github/actions/setup-racket\n \n       - name: Check API keys"
+  },
+  {
+    "sha": "26b7850234c6e2a49ac0badf15a62b7045b677bf",
+    "filename": ".github/workflows/ci.yml",
+    "status": "modified",
+    "additions": 13,
+    "deletions": 13,
+    "changes": 26,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fci.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fci.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fci.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -46,7 +46,7 @@ jobs:\n   lint:\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       - name: Protected governance controller tests\n         run: python3 -m unittest discover -s scripts/github -p 'test_*.py'\n@@ -125,7 +125,7 @@ jobs:\n     if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - uses: ./.github/actions/prepare-racket-environment\n         with:\n           racket-version: '8.10'\n@@ -170,7 +170,7 @@ jobs:\n       # version-override, rollback switch not off).\n       PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       # Legacy pre-W3 cache; only pays off on the full path.\n       - name: Cache Racket packages\n         if: env.PREPARED_ENV != 'auto'\n@@ -304,7 +304,7 @@ jobs:\n     if: always()\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - uses: ./.github/actions/setup-racket\n         with:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n@@ -404,7 +404,7 @@ jobs:\n     strategy:\n       fail-fast: false\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -488,7 +488,7 @@ jobs:\n     needs: lint\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -554,7 +554,7 @@ jobs:\n     needs: lint\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -613,7 +613,7 @@ jobs:\n     needs: lint\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -670,7 +670,7 @@ jobs:\n         os: [ubuntu-latest]\n     runs-on: ${{ matrix.os }}\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -711,7 +711,7 @@ jobs:\n         shard: [0, 1]\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - uses: ./.github/actions/setup-racket\n         with:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n@@ -790,7 +790,7 @@ jobs:\n     needs: lint\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n         with:\n           fetch-depth: 0\n       - uses: ./.github/actions/setup-racket\n@@ -844,7 +844,7 @@ jobs:\n     runs-on: ubuntu-latest\n     continue-on-error: true\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Cache Racket packages\n         uses: actions/cache@v6\n         with:\n@@ -877,7 +877,7 @@ jobs:\n     if: startsWith(github.ref, 'refs/tags/v')\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - uses: ./.github/actions/setup-racket\n         with:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}"
+  },
+  {
+    "sha": "98e303c2302519b18c6240a5c1bb2ed2be6f1eaf",
+    "filename": ".github/workflows/full-regression.yml",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 5,
+    "changes": 10,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Ffull-regression.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Ffull-regression.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Ffull-regression.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -78,7 +78,7 @@ jobs:\n       JOBS: ${{ github.event.inputs.jobs-per-shard || '4' }}\n       EXTRA_ARGS: ${{ github.event.inputs.extra-args }}\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       - uses: ./.github/actions/setup-racket\n         with:\n@@ -146,7 +146,7 @@ jobs:\n     runs-on: ubuntu-latest\n     timeout-minutes: 15\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       - uses: ./.github/actions/setup-racket\n         with:\n@@ -189,7 +189,7 @@ jobs:\n                         # must complete before the warm-run evidence permits a\n                         # measured budget reduction. The suite itself is ~15 min.\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       # The reusable setup action is the sole cache owner. It restores the\n       # locked, explicit PLTADDONDIR store and never caches workspace bytecode.\n@@ -237,7 +237,7 @@ jobs:\n     outputs:\n       status: ${{ steps.status.outputs.status }}\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       - uses: ./.github/actions/setup-racket\n         with:\n@@ -350,7 +350,7 @@ jobs:\n       group: mutation-pilot\n       cancel-in-progress: false\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n \n       - uses: ./.github/actions/setup-racket\n         with:"
+  },
+  {
+    "sha": "cda9c06302325a8f09af05d295567ff0aefb1a12",
+    "filename": ".github/workflows/nightly.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fnightly.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fnightly.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fnightly.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -9,7 +9,7 @@ jobs:\n   test:\n     runs-on: ubuntu-latest\n     steps:\n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n       - name: Install Racket\n         uses: ./.github/actions/setup-racket\n       - name: Run full test suite"
+  },
+  {
+    "sha": "1b1d81feb235fdcfd99225a0b6c97e30577c0106",
+    "filename": ".github/workflows/prepared-environment-pilot.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fprepared-environment-pilot.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Fprepared-environment-pilot.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fprepared-environment-pilot.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -68,7 +68,7 @@ jobs:\n             installer-sha: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'\n             role: full\n     steps:\n-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n \n       - name: Probe whether the lock supports this tuple (W1 gate)\n         id: lock-gate"
+  },
+  {
+    "sha": "7300e785386c74f7deb3659c2e19c823163d4d51",
+    "filename": ".github/workflows/test-scheduler-shadow.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Ftest-scheduler-shadow.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/2119fa5f21b1bc6e04d47dd69046fb02459aada9/.github%2Fworkflows%2Ftest-scheduler-shadow.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Ftest-scheduler-shadow.yml?ref=2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+    "patch": "@@ -79,7 +79,7 @@ jobs:\n           esac\n           echo \"scheduler=$SCHEDULER\" >> \"$GITHUB_OUTPUT\"\n \n-      - uses: actions/checkout@v7\n+      - uses: actions/checkout@v7.0.1\n         with:\n           ref: ${{ inputs.ref || 'main' }}\n "
+  }
+]
