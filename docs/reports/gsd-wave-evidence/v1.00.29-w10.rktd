@@ -39,7 +39,7 @@
  (measurements
   ((what "final cohort PR CI walls")
    (basis "q-w10-cohort-seed.json (coordinator's GitHub API fetch): ci_wall_seconds = CI workflow run wall (run_started_at→updated_at) per head SHA")
-   (numbers "post-W4 n=11: p50 2558.0s p95 3023.0s mean 2570.6s; pre-W4 n=13: p50 888.0s p95 1320.2s mean 946.7s; full n=24: p50 1329.0s p95 2856.7s; exact linear interpolation ms-rounded"))
+   (numbers "post-W4 n=11: p50 2558.0s p95 3023.0s mean 2569.7s; pre-W4 n=13: p50 890.0s p95 1320.2s mean 946.7s; full n=24: p50 1329.0s p95 2856.7s; exact linear interpolation ms-rounded"))
   ((what "L0 local single file")
    (basis "--shard-plan measure, sequential subprocess, runner-reported per-file wall (tests/test-run-tests-shard-plan.rkt, tests/test-ansi.rkt, tests/test-tool.rkt)")
    (numbers "0.640 / 0.676 / 2.491 s — all ≤ 5s goal; p90 UNKNOWN at n=3 (labeled, never 0)"))
@@ -50,7 +50,7 @@
    (basis "current fast inventory 1186 files (collect-test-files 'fast); W7 census durations (1180 known, 7 substituted at p95 default 2.014s); seed anchors = three latest pre-W4 walls 928/817/832s mean 859s")
    (numbers "predicted 309.326/309.492/309.495s; max 309.495s vs round-robin 374.320s (−17.3%); starvation ok (worst ratio ≈1.0002 ≤ 1.35); tail-straddle ok (zero files >1× mean); inventory preserved; recommendation activate — NOT activated (decision.md §4)")))
  (topology-disclosure
-  "The cohort spans W0→W9 topology evolution. W4 (PR 9669, merged 2026-09-12T01:00:26Z) added the prepared-env purge+identity lanes and RAISED the CI workflow wall from ~800–1400s (pre-W4 p50 888.0s mean 946.7s n=13) to ~2000–3200s (post-W4 p50 2558.0s mean 2570.6s n=11): +~1624s mean (+171%). Post-W4 PR CI p50 vs the frozen ≤360s goal is NOT MET — reported as progress-not-achieved with the W4-increase attribution, never hidden.")
+  "The cohort spans W0→W9 topology evolution. W4 (PR 9669, merged 2026-09-12T01:00:26Z) added the prepared-env purge+identity lanes and RAISED the CI workflow wall from ~800–1400s (pre-W4 p50 890.0s mean 946.7s n=13) to ~2000–3200s (post-W4 p50 2558.0s mean 2569.7s n=11): +~1624s mean (+171%). Post-W4 PR CI p50 vs the frozen ≤360s goal is NOT MET — reported as progress-not-achieved with the W4-increase attribution, never hidden.")
  (honesty
   "Unknowns stay unknown: flake-tax rate unknown (single retained run 0.00% at W3; W0 zero eligible incidents); L0/L1 p90 unknown at n=3/n=1 with measured maxima reported; main/release stage-gates evidence-pending (no post-W9 main-push or release-tag run retained locally); prepared-env v1.00.29 window ratio pending-coordinator-fill (carried baseline 24/24=100% at v1.00.28-final; mismatch fail-closed test-verified). The dup-01 saving stays PROXY-labeled (local W8-chain fast-suite wall; no retained nightly CI run exists).")
  (issues-referenced ("campaign v1.00.29 W10")))

@@ -26,8 +26,8 @@
   },
   "statistics-method": "Exact linear interpolation at rank k = q*(n-1) over ascending samples (same estimator as cohort-quantile-exact), millisecond-rounded; p50/p95 reported over BOTH the post-W4 topology subset and the full 24-entry window.",
   "statistics": {
-    "post-w4": {"count": 11, "p50-seconds": 2558.0, "p95-seconds": 3023.0, "mean-seconds": 2570.636},
-    "pre-w4": {"count": 13, "p50-seconds": 888.0, "p95-seconds": 1320.2, "mean-seconds": 946.692},
+    "post-w4": {"count": 11, "p50-seconds": 2558.0, "p95-seconds": 3023.0, "mean-seconds": 2569.727},
+    "pre-w4": {"count": 13, "p50-seconds": 890.0, "p95-seconds": 1320.2, "mean-seconds": 946.692},
     "full-window": {"count": 24, "p50-seconds": 1329.0, "p95-seconds": 2856.7},
     "w4-attribution": "post-W4 mean 2570.6s vs pre-W4 mean 946.7s: the W4 prepared-env purge+identity expansion RAISED the CI workflow wall by ~+1624s mean (+171%); post-W4 p50 2558.0s vs the frozen <=360s PR CI goal = NOT MET. This increase is honest north-star evidence and is attributed, not hidden."
   },
