@@ -1,23 +1,24 @@
-;; GSD Wave Merge Binding — v1.00.29 W11 (BUG-0064 advance-gate evidence)
-;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd
-;; Wave: W11 — Bake and v1.00.29 release (wave issue #9650)
-
-(merge-binding
- (wave v1.00.29-w11)
- (plan-id "6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f")
- (merge-sha "d31e533bb95277400a91a20aeabaee3eb4f530b1")
- (merge-method "squash-merge PR #9684 (protected main)")
- (merged-at "2026-09-13T09:05:00Z")
- (wave-branch "campaign/v1.00.29-w11")
- (implementation-commits ("e3f2af0b" "6a4b6951" "2b5212b4" "772048b7" "c92d198c"))
- (verification
-  ((frozen-chain "1190/1190 files, 17737 assertions runner-version=1.00.29 + metrics 5/5 (cold compiled/ purge, exact release tree)")
-   (protected-checks "green after one infra rerun (Racket mirror ETIMEDOUT, unrelated)")
-   (release-gates "lint-release-notes --check PASSED; release-dry-run 6/6; check-version-expectations PASSED (0 literals); lint-doc-freshness PASSED; sync-readme-status OK")
-   (strict-gate "FIRST campaign wave to satisfy the strict schema-2 gsd-wave-gate (content-digest bound; verified locally at 06ebb39b...)")))
- (evidence
-  ("docs/reports/gsd-wave-evidence/v1.00.29-w11.rktd"
-   "docs/reports/gsd-wave-reviews/v1.00.29-w11.rktd"
-   "docs/reports/gsd-wave-validation/v1.00.29-w11.rktd"
-   "docs/reports/SERIES-COMPLETION-v1.00.28-v1.00.29.md"))
- (issues-closed ("#9650")))
+;; W11 delivery binding, converted from the list at 54893112 (#9685).
+;; The schema-2 review/validation describe ONLY this metadata repair (#9695),
+;; not a re-performance or re-approval of the historical release implementation.
+#hasheq((schema-version . 2)
+ (milestone . 894)
+ (wave . "W11")
+ (issue . 9650)
+ (status . "ready-for-merge")
+ (implementation-sha . "548931121edb3d085f0a05b8c65467ce4d63ae0f")
+ (content-digest . "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+ (required-checks . ("lint" "lint-quality" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
+ (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.29-w11-binding-repair.rktd")
+ (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.29-w11-binding-repair.rktd")
+ (plan-id . "6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f")
+ (merge-sha . "d31e533bb95277400a91a20aeabaee3eb4f530b1")
+ (merge-method . "squash")
+ (delivery-pr . 9684)
+ (merged-at . "2026-09-13T08:35:13Z")
+ (delivery-head-sha . "c92d198cc6ca3dee507fd79dd4cbfe21571acbd5")
+ (wave-branch . "campaign/v1.00.29-w11")
+ (repair-issue . 9695)
+ (repair-scope . "Schema-only repair of W11 merge binding; exactly one changed wave-evidence file. Empty SHA256 is the actual non-governance diff under existing CI exclusions, not the historical W11 implementation digest. No gate/workflow/source/test change and no multi-record skip. Current repair validation is separate from preserved historical release evidence.")
+ (historical-evidence . ("docs/reports/gsd-wave-evidence/v1.00.29-w11.rktd" "docs/reports/gsd-wave-reviews/v1.00.29-w11.rktd" "docs/reports/gsd-wave-validation/v1.00.29-w11.rktd" "docs/reports/SERIES-COMPLETION-v1.00.28-v1.00.29.md"))
+ (history-note . "The original list binding remains in Git at 54893112. Its merged-at 09:05 timestamp was inaccurate: GitHub PR #9684 readback reports 08:35:13Z, recorded here. Public release success did not make main CI green: run 34749378379 failed on evidence-is-not-a-hash. This repair does not rewrite that failure or the archived campaign execution statuses."))
