@@ -1871,8 +1871,14 @@
 ;; are additive rows.
 ;; ============================================================
 
-(define-runtime-path v29-dir "../artifacts/ci-baseline/v1.00.29-final")
-(define-runtime-path v28-dir "../artifacts/ci-baseline/v1.00.28-final")
+(define-runtime-path ci-baseline-dir "../artifacts/ci-baseline")
+;; v29-dir names the CURRENT in-progress milestone artifact (kept as a
+;; literal: the repo's canonical q-version still points at the previous
+;; release until closeout, so this path must not derive from q-version).
+(define v29-dir (build-path ci-baseline-dir "v1.00.29-final"))
+;; Derived from the version module (BUG-0009): the guard tracks the current
+;; milestone's prior final-cohort artifact directory.
+(define v28-dir (build-path ci-baseline-dir (string-append "v" q-version "-final")))
 
 (define (load-json rel)
   (call-with-input-file (build-path v29-dir rel) read-json))
@@ -1937,7 +1943,7 @@
         (check-not-false (member (hash-ref e 'topology_class) '("pre-w4" "post-w4"))
                          "topology_class vocabulary is pre-w4 | post-w4")))
 
-    (test-case "cohort.json: head SHAs unique and disjoint from v1.00.28-final"
+    (test-case "cohort.json: head SHAs unique and disjoint from the prior final cohort"
       (define c (load-json "cohort.json"))
       (define heads (map (lambda (e) (hash-ref e 'head_sha)) (hash-ref c '|shas|)))
       (check-equal? (length heads)
