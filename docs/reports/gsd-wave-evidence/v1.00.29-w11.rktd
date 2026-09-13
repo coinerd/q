@@ -1,33 +1,13 @@
-;; GSD Wave Evidence — v1.00.29 W11: Bake and v1.00.29 release
-;; House-standard release wave (v1.00.23 W6 / v1.00.26 W7 / v1.00.28 W9 precedent);
-;; not part of the adopted bundle. Coordinator-owned.
-
-(evidence
- (wave v1.00.29-w11)
- (implementation-sha . "this docs+release-prep commit on campaign/v1.00.29-w11 (base 897fe0c0)")
- (ticket . "campaign v1.00.29 W11 (milestone #894)")
- (deliverables
-  ((file util/version.rkt)
-   (detail "q-version bumped 1.00.28 -> 1.00.29 (canonical source)"))
-  ((file info.rkt)
-   (detail "version synced to 1.00.29 via scripts/sync-version.rkt --write"))
-  ((file README.md)
-   (detail "metrics block resynced (metrics --sync-all; lint 5/5) + Status block synced to v1.00.29 (sync-readme-status --check OK)"))
-  ((file CHANGELOG.md)
-   (detail "v1.00.29 entry: campaign narrative + exact recorded verdict PARTIAL — SAFE REDUCTION DELIVERED + measurement claims each bound to artifact paths + thresholds cited only from the frozen decision table; all seven required sections present"))
-  ((file scripts/lint-release-notes.rkt)
-   (detail "release-campaign contract table extended with 1.00.29 -> artifacts/ci-baseline/v1.00.29-final/decision.md (fail-closed campaign validation now applies to this release) and the exact verdict string added to allowed-verdict-strings"))
-  ((file docs/reports/SERIES-COMPLETION-v1.00.28-v1.00.29.md)
-   (detail "series-level verdict accounting: both milestones PARTIAL-by-honesty, what was delivered, what was not, handoff levers"))
-  ((file tests/ sweep)
-   (detail "BUG-0009 version-literal sweep (commit e3f2af0b): 54 hard-coded 1.00.29 literals across 20 test files converted to q-version derivations (19) or comment rewords (35); one behavior-restoring fix disclosed (v28-dir frozen-pin in the cohort guard)")))
- (verification
-  ((check-version-expectations . "PASSED — 1488 test files scanned, 0 hard-coded 1.00.29 literals")
-   (lint-release-notes . "PASSED: CHANGELOG.md version 1.00.29")
-   (metrics . "All 5 static metrics match README.md (sync applied before commit)")
-   (readme-status . "OK: README Status block version (1.00.29) matches CHANGELOG")
-   (release-dry-run . "6/6 PASS (see the validation record for the RUN output)")
-   (frozen-chain . "coordinator unsharded fast suite + security + arch green on the exact tree (RUN-SUMMARY in the validation record)")))
- (post-merge-coordinator-plan
-  . "lint-release-readiness --strict --context tag-publish at the merge SHA, re-record gate evidence, tag v1.00.29, watch the release pipeline to a public non-draft release, close milestone #894")
- (issues-referenced ("campaign v1.00.29 W11")))
+#hasheq((schema-version . 2)
+ (milestone . 894)
+ (wave . "W11")
+ (issue . 9650)
+ (status . "ready-for-merge")
+ (implementation-sha . "df58a7c53f365aab34076bf5bf603f7871a0df6d")
+ (content-digest . "06ebb39bf8f5f95147b3a572391e4efe573e34534b6fc245751cb78f841b4d78")
+ (required-checks . ("lint" "lint-quality" "security" "release-dry-run" "workflows (0)" "workflows (1)" "workflows-aggregate" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)" "test-aggregate" "test-platform"))
+ (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.29-w11.rktd")
+ (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.29-w11.rktd")
+ (narrative . "v1.00.29 bake and release prep: version 1.00.28->1.00.29 (util/version.rkt + info.rkt via sync-version), CHANGELOG v1.00.29 entry naming the exact W10 verdict PARTIAL — SAFE REDUCTION DELIVERED with claims bound to artifact paths and thresholds from the frozen decision table, README metrics+status synced, SERIES-COMPLETION-v1.00.28-v1.00.29.md, lint-release-notes contract row for 1.00.29, BUG-0009 literal sweep (54 literals across 20 test files), release-bake artifacts (v1.00.29-w1 wait-audit regenerated from a fresh 227-occurrence scan; v1.00.29-w0 ownership matrix + SHA256SUMS; v1.00.29-w2 overlap-review 80 rows), doc version markers synced. Frozen chain on the exact tree: RUN-SUMMARY runner-version=1.00.29 file-count=1190 pass=1190 fail=0 wall-clock-seconds=1242.197 + metrics 5/5. Narrative detail in the reviews/validation artifacts and in docs/reports/SERIES-COMPLETION-v1.00.28-v1.00.29.md")
+ (operational-note . "Two working-tree revert incidents during the bake (release-prep edits vanished between commands) are consistent with the stale-TUI revert class BUG-0038; mitigated by immediate commits; content verified at push. Also: this is the first campaign wave whose evidence passes the strict schema-2 per-wave gate on the main push — prior waves passed only via the aggregate-skip path.")
+ (issues-referenced . ("#9650" "#9649" "#9683")))

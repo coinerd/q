@@ -1,44 +1,7 @@
-;; GSD Wave Review — v1.00.29 W11: Bake and v1.00.29 release
-;; House-standard release wave (coordinator-owned); independent gate below.
-
-(review
- (wave v1.00.29-w11)
- (review-type . "release-prep review (coordinator checklist) + independent reviewer")
- (reviewed-shas . "campaign/v1.00.29-w11 @ release-prep head (base 897fe0c0)")
- (checks
-  (verdict-truthfulness
-   .
-   "PASS: the CHANGELOG names the exact W10 verdict PARTIAL — SAFE REDUCTION DELIVERED verbatim from the decision record; no upgrade to ACHIEVED; the p50/p95 miss and the W4 +1623.0s/+171.4% attribution are stated in the entry itself")
-  (claim-binding
-   .
-   "PASS: every measurement claim in the entry cites artifacts/ci-baseline/v1.00.29-final/ or docs/reports/ paths that exist in the tree; lint-release-notes campaign validation extended to 1.00.29 fail-closed")
-  (threshold-citation
-   .
-   "PASS: prose thresholds (<= 10 %, <= 360.0 s, <= 480.0 s) match the decision table's fixed-target cells; no new thresholds introduced in prose")
-  (version-hygiene
-   .
-   "PASS: BUG-0009 sweep green (0 hard-coded literals); the one semantic deviation (v28-dir frozen-pin, disclosed by the sweep) is the correct convention for frozen predecessor artifacts")
-  (scope
-   .
-   "PASS: version bump + sync + changelog + series record + trio + lint extension; no .planning/ or artifact-content changes"))
- (verdict
-   .
-   "APPROVE the release-prep delivery; proceed to the protected PR, then the coordinator-owned post-merge release sequence"))
-
-;; --- Independent reviewer gate (kimi-coding/kimi-for-coding, read-only) ---
-;; Job v10029-w11-review, 2026-09-13.
-(independent-review
- (reviewer "kimi-coding/kimi-for-coding (read-only static review)")
- (verdict "REQUEST_CHANGES -> remediated")
- (confirmed ("CHANGELOG verdict string byte-identical to the decision record (em-dash included); thresholds match the frozen table; the W4 wall increase and p50/p95 NOT-MET stated in the entry itself"
-             "lint-release-notes extension minimal and fail-closed (exactly one contract row + the exact verdict string)"
-             "BUG-0009 sweep reconciles exactly: 54 literals, 19 derivations + 35 rewords, v28-dir frozen-pin correct and disclosed"
-             "SERIES-COMPLETION verdicts byte-match both decision records"))
- (findings-blocking
-  ("B1 claim-binding wrap: reviewer's static simulation flagged wrapped narrative lines; DISMISSED with evidence — the actual linter passes on the exact tree (exit 0 re-verified after every edit; also covered by tests/test-lint-release-notes green)"
-   "B2 stale chain evidence: VALID — the validation record had quoted carried pre-bump evidence; fixed by re-running the cold-purge chain on the exact tree and quoting the real RUN-SUMMARY (runner-version=1.00.29, 1190/1190)"
-   "B3 dangling binding-file citation: VALID — the W10 binding file lands on main via PR #9683; the branch merges origin/main so the cited path exists at merge time"))
- (findings-nonblocking
-  ("N1 fixed: W4 attribution citation now points at decision.md (~1623.0 s / +171.4 %)"
-   "N2 noted: 1488 (.rkt scan) vs 1489 (all-files census) counting-basis parenthetical added to the validation record"
-   "N3 accepted as future hardening: a pin that release-campaign-contracts contains the current-release row")))
+#hasheq((reviewer . "kimi-coding/kimi-for-coding (independent, read-only)")
+ (verdict . "APPROVED")
+ (reviewed-sha . "df58a7c53f365aab34076bf5bf603f7871a0df6d")
+ (content-digest . "06ebb39bf8f5f95147b3a572391e4efe573e34534b6fc245751cb78f841b4d78")
+ (timestamp . "2026-09-13T07:40:00Z")
+ (scope . "campaign/v1.00.29-w11 release prep: version bump + changelog verdict entry + lint contract row + series record + BUG-0009 sweep (e3f2af0b) + release-bake artifacts (wait-audit, ownership matrix, overlap-review) + doc markers; round 1 reviewed the prep content and round 2 re-verified the bake-artifact delta on the committed branch")
+ (report . "Round 1 REQUEST_CHANGES with B1/B2/B3: B1 (claim-binding wrap) dismissed with evidence — the actual lint-release-notes passes on the exact tree (exit 0 re-verified after every edit; tests/test-lint-release-notes green); B2 (stale chain evidence) VALID and fixed — the validation record previously quoted carried pre-bump evidence and now quotes the real RUN-SUMMARY (runner-version=1.00.29, 1190/1190) from a cold-purge chain on the exact tree; B3 (dangling binding-file citation) VALID and fixed — origin/main (W10 binding) merged into the branch so the cited path exists at merge time. Round 2 re-verified the bake-artifact delta and the final content head; no new findings. Narrative detail: CHANGELOG verdict byte-identical to artifacts/ci-baseline/v1.00.29-final/decision.md final line; thresholds cited only from the frozen table; W4 wall increase and p50/p95 NOT-MET stated in the entry; literal sweep reconciles 54 = 19 derivations + 35 rewords; v28-dir frozen-pin correct for a frozen predecessor artifact"))
