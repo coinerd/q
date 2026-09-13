@@ -484,8 +484,10 @@ jobs:
           : > artifacts-run/shards.jsonl
           for f in $SHARD_JSONS; do
             jq -c --arg artifact "$(basename "$(dirname "$f")")" \
+              --arg run_sha "$GITHUB_SHA" \
               '{artifact: $artifact,
                 shard: .run_summary.shard,
+                head_sha: $run_sha,
                 file_count: .run_summary.file_count,
                 pass: .run_summary.pass,
                 fail: .run_summary.fail,
@@ -493,7 +495,8 @@ jobs:
                 skip: .run_summary.skip,
                 wall_clock_seconds: .run_summary.wall_clock_seconds}' "$f" >> artifacts-run/shards.jsonl
           done
-          jq -s '{
+          jq -s --arg run_sha "$GITHUB_SHA" '{
+            run_sha: $run_sha,
             suite: "fast",
             sharded: true,
             shards: (sort_by(.artifact)),
@@ -516,6 +519,17 @@ jobs:
             exit 1
           fi
           echo "producer: clean fast-suite aggregate (files=$FILE_TOTAL pass=$PASS_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)"
+          # BUG-0073 (v1.00.30 W0): result-truth verification at the
+          # required aggregate boundary.  The structural refusal above is
+          # necessary but not sufficient: a green claim (proof bundle) is
+          # minted below only if scripts/ci/verify-result-truth.rkt also
+          # verifies shard presence, totals consistency and the run-SHA
+          # binding for the aggregate and every shard.  Fail closed.
+          SHARD_TOTAL="$(jq -r '.shards | length' "$SUMMARY")"
+          racket scripts/ci/verify-result-truth.rkt \
+            --aggregate "$SUMMARY" \
+            --expect-shards "$SHARD_TOTAL" \
+            --expect-sha "$GITHUB_SHA"
           WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
           TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
           CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

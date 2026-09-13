@@ -181,4 +181,25 @@
     (define p (write-aggregate! "canary9" (aggregate-json (list clean-shard))))
     (define-values (ec so _se) (run-verifier! p))
     (check-equal? ec 0 "a truthful clean aggregate must verify")
-    (check-true (string-contains? so "genuine clean success"))))
+    (check-true (string-contains? so "genuine clean success")))
+
+  ;; -- aggregate-boundary wiring (BUG-0073) --------------------------------------
+  ;; The verifier exists to gate the ONE place a green claim is minted:
+  ;; ci.yml test-aggregate "Produce fast-suite proof bundle".  A verifier
+  ;; that nothing calls would be a regex test in disguise.
+  (test-case "wiring: ci.yml test-aggregate invokes the result-truth verifier"
+    (define ci-yml (file->string (build-path repo-root ".github" "workflows" "ci.yml")))
+    (check-true (string-contains? ci-yml "scripts/ci/verify-result-truth.rkt")
+                "test-aggregate must invoke scripts/ci/verify-result-truth.rkt")
+    (check-true (string-contains? ci-yml "--expect-sha \"$GITHUB_SHA\"")
+                "aggregate verification must bind the aggregate to the run SHA")
+    (check-true (string-contains? ci-yml "--expect-shards \"$SHARD_TOTAL\"")
+                "aggregate verification must assert the declared shard count")
+    (define producer-start
+      (car (car (regexp-match-positions #rx"Produce fast-suite proof bundle" ci-yml))))
+    (define verifier-start
+      (car (car (regexp-match-positions #rx"scripts/ci/verify-result-truth[.]rkt" ci-yml))))
+    (check-true (< producer-start verifier-start)
+                "verifier must run at/after the bundle-producer boundary")
+    (check-true (string-contains? ci-yml "head_sha: $run_sha")
+                "every recorded shard must carry the run SHA binding")))
