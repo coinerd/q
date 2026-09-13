@@ -170,6 +170,7 @@ jobs:
         env:
           STRICT_TEST_RUNNER: 1
         run: |
+          set -o pipefail
           SCHEDULER="${{ steps.resolve.outputs.scheduler }}"
           ORDERING="${{ steps.resolve.outputs.ordering }}"
           LANE="${{ steps.resolve.outputs.lane }}"

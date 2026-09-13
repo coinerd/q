@@ -316,6 +316,7 @@ jobs:
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
         run: |
+          set -o pipefail
           PLAN_ARGS=""
           if [ "$FAST_SHARD_PLAN" = "active" ]; then
             PLAN_ARGS="--shard-plan active"
@@ -752,6 +753,7 @@ jobs:
 
       - name: Run platform-cross suite
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite platform --jobs 4 \
             --json-out test-results.json \
@@ -836,6 +838,7 @@ jobs:
 
       - name: Run fast suite (Racket 8.11)
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --json-out test-results.json \
@@ -906,7 +909,9 @@ jobs:
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run security test suite (parallel)
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
+        run: |
+          set -o pipefail
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
 
       - name: Test results summary
         if: always()
@@ -1099,6 +1104,7 @@ jobs:
 
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite workflows --jobs 2 --timeout 90 \
             --shard-index ${{ matrix.shard }} --shard-total 2 \
@@ -1258,6 +1264,7 @@ jobs:
 
       - name: Run abstraction audit (CI mode)
         run: |
+          set -o pipefail
           racket scripts/abstraction-audit.rkt --ci-mode 2>&1 | tee audit-output.log
 
       - name: Upload audit report
@@ -1281,16 +1288,24 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run fast suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
 
       - name: Run TUI suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
 
       - name: Run arch suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
 
       - name: Run workflows suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
 
       - name: Gate evidence summary
         if: always()
@@ -1322,7 +1337,9 @@ jobs:
         run: racket scripts/lint-release-readiness.rkt --strict
 
       - name: Triple-gate (3x full suite)
-        run: racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
 
       - name: Triple-gate summary
         if: always()
