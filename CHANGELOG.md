@@ -1,3 +1,115 @@
+## v1.00.29 — 2026-09-13
+
+Released 2026-09-13.
+
+> v1.00.29: proof-graph reduction — census the CI proof graph, remove only
+> verified duplicate proof, and report the honest final verdict against the
+> frozen contract.
+
+The campaign instrumented the proof graph before touching it (W0 census with a
+metric contract: artifacts/proof-graph/v1.00.29-w0/), then delivered verified
+reductions behind fail-closed machinery: campaign-integrity hardening (W1),
+delivery-verifier boundary extraction (W2), flake forensics (W3), systemic
+prepared-env bytecode pinning (W4, BUG-0065), the provenance-safe proof-bundle
+prototype (W5), prepared-environment expansion with nine-dimension identity at
+restore (W6), selector governance with the bounded shadow design (W7), the
+change-impact pilot CLOSED-SKIPPED with the governance gate honestly unmet (W8),
+one exact-duplicate removed through fail-closed same-SHA reuse (W9, dup-01;
+dup-04 disqualified as distinct_environment with both instances preserved), and
+the final cohort with all 14 safety-gate rows decided (W10). The W10 decision
+record (artifacts/ci-baseline/v1.00.29-final/decision.md) returned the exact
+verdict **PARTIAL — SAFE REDUCTION DELIVERED**:
+
+- duplicate proof ratio 2.49 % (477 s / 19,188 s frozen W0 window) against
+  <= 10 % — pass; removal PROXY-labeled 1282.561 s
+  (artifacts/ci-baseline/v1.00.29-final/decision.md)
+- required PR CI p50 2558.0 s / p95 3023.0 s post-W4 against <= 360.0 s /
+  <= 480.0 s — not achieved; the W4 prepared-env purge+identity expansion raised
+  the CI wall by ~1623.0 s mean (+171.4 %), openly attributed
+  (artifacts/ci-baseline/v1.00.29-final/decision.md)
+- final cohort closed at 24 of 24 eligible unique PR head SHAs observed with zero
+  exclusions and no failed runs (artifacts/ci-baseline/v1.00.29-final/cohort.json)
+- prepared-env verified-restore window ratio pending-coordinator-fill at release
+  time; carried prior-milestone baseline 24/24 = 100 %, mismatch path
+  fail-closed test-verified (artifacts/ci-baseline/v1.00.29-final/decision.md)
+- local L0/L1 latencies indicative-pass at sample sizes n=3/n=1 with p90 unknown
+  (never 0); flake tax unknown with partial evidence (single retained run 0.00 %)
+  (artifacts/ci-baseline/v1.00.29-final/decision.md)
+
+All 14 safety-gate rows hold (artifacts/ci-baseline/v1.00.29-final/decision.md):
+no distinct Racket-version, platform, strict-security, or release-specific proof
+removed; proof reuse fail-closed with provenance and retention validation; the
+selector never replaced a broad gate (W8 skipped-with-decision, W7 amendment
+remains PROPOSED and unmerged); unknown metrics remain unknown.
+
+Scheduler states for this release are explicit (milestone #894). Activated in
+this release: prepared-environment verified restore with identity manifests
+across six ci consumers (W4/W6), the q.proof-bundle/1 producer/consumer gate
+behind the 15-step fail-closed validator (W5/W9), the duration-aware shard-plan
+governance with starvation/tail checks (W10), and the selector governance doc
+with the amendment left unmerged pending independent review (W7). Not activated:
+any selector-based reduction of a required gate (W8 CLOSED-SKIPPED), nightly
+suite execution when a same-SHA ci proof exists (W9 consumer ships fail-closed
+with always-run fallback), and every performance lever still on the table per
+the decision record (artifacts/ci-baseline/v1.00.29-final/decision.md).
+
+### User-Visible Changes
+
+- Prepared-environment restore is now verified at every ci lane that consumes it:
+  a nine-dimension identity manifest is compared at restore time and any mismatch
+  routes to a loud, counted cold rebuild — never silent acceptance
+  (docs/reports/PREPARED-ENV-EXPANSION-v1.00.29.md).
+- Nightly fast-suite runs skip re-execution only when a provenance-safe,
+  same-SHA ci proof bundle validates at the consumer boundary; any invalid,
+  stale, expired, or missing bundle falls back to running the suite, and every
+  decision is recorded (docs/reports/DUPLICATE-PROOF-REDUCTION-v1.00.29.md).
+
+### Features
+
+- q.proof-bundle/1: canonical proof-bundle writer, a 15-step fail-closed
+  consumer validator, and a CLI consumer gate with exit codes 0/3/4
+  (scripts/proof-bundle/, docs/reports/PROOF-BUNDLE-PROTOTYPE-v1.00.29.md).
+- Duration-aware shard-plan regeneration with starvation and tail-straddle
+  checks plus a measurement mode (scripts/run-tests/shard-plan.rkt,
+  docs/reports/PROOF-GRAPH-FINAL-v1.00.29.md).
+
+### Bug Fixes
+
+- BUG-0065: workspace bytecode is purged and verified on every CI path before
+  tests run; prepared-env restore never trusts stale bytecode
+  (docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md).
+- BUG-0064: campaign advance now requires bound merge-SHA evidence per wave;
+  all eleven waves carry binding files
+  (docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w10.rktd).
+- BUG-0066/BUG-0067/BUG-0068/BUG-0069/BUG-0070/BUG-0071/BUG-0072 fixed during
+  this campaign (docs/reports/gsd-wave-evidence/v1.00.29-w1.rktd and the
+  campaign's standalone bugfix PRs).
+
+### Breaking / Behavior Changes
+
+- None. No public API or CLI surface changed in this release.
+
+### Migration Notes
+
+- None required. CI lanes gain the purge and identity steps transparently;
+  scheduled lanes keep their unconditional fallback paths.
+
+### Testing
+
+- Frozen fast chain green at the release tree (1190 files); cohort artifact
+  guards extended to 143 checks; proof-bundle threat-model suite at the consumer
+  boundary (corruption canaries force fallback, never a green skip)
+  (docs/reports/gsd-wave-validation/v1.00.29-w10.rktd).
+
+### Operational / Release
+
+- The selector strategy amendment remains PROPOSED and unmerged by design; the
+  W8 pilot was CLOSED-SKIPPED with the gate state recorded verbatim
+  (docs/reports/SELECTOR-SHADOW-COHORT-v1.00.29.md).
+- CI wall-time increase from the W4 integrity expansion is recorded as a
+  known, attributed regression against the performance goals — not hidden
+  (artifacts/ci-baseline/v1.00.29-final/cohort.json).
+
 ## v1.00.28 — 2026-09-09
 
 Released 2026-09-09.
