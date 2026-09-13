@@ -26,4 +26,19 @@
    "APPROVE the release-prep delivery; proceed to the protected PR, then the coordinator-owned post-merge release sequence"))
 
 ;; --- Independent reviewer gate (kimi-coding/kimi-for-coding, read-only) ---
-;; Job v10029-w11-review, 2026-09-13 — verdict recorded BELOW after the run.
+;; Job v10029-w11-review, 2026-09-13.
+(independent-review
+ (reviewer "kimi-coding/kimi-for-coding (read-only static review)")
+ (verdict "REQUEST_CHANGES -> remediated")
+ (confirmed ("CHANGELOG verdict string byte-identical to the decision record (em-dash included); thresholds match the frozen table; the W4 wall increase and p50/p95 NOT-MET stated in the entry itself"
+             "lint-release-notes extension minimal and fail-closed (exactly one contract row + the exact verdict string)"
+             "BUG-0009 sweep reconciles exactly: 54 literals, 19 derivations + 35 rewords, v28-dir frozen-pin correct and disclosed"
+             "SERIES-COMPLETION verdicts byte-match both decision records"))
+ (findings-blocking
+  ("B1 claim-binding wrap: reviewer's static simulation flagged wrapped narrative lines; DISMISSED with evidence — the actual linter passes on the exact tree (exit 0 re-verified after every edit; also covered by tests/test-lint-release-notes green)"
+   "B2 stale chain evidence: VALID — the validation record had quoted carried pre-bump evidence; fixed by re-running the cold-purge chain on the exact tree and quoting the real RUN-SUMMARY (runner-version=1.00.29, 1190/1190)"
+   "B3 dangling binding-file citation: VALID — the W10 binding file lands on main via PR #9683; the branch merges origin/main so the cited path exists at merge time"))
+ (findings-nonblocking
+  ("N1 fixed: W4 attribution citation now points at decision.md (~1623.0 s / +171.4 %)"
+   "N2 noted: 1488 (.rkt scan) vs 1489 (all-files census) counting-basis parenthetical added to the validation record"
+   "N3 accepted as future hardening: a pin that release-campaign-contracts contains the current-release row")))
