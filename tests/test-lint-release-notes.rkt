@@ -384,25 +384,25 @@
 
 (define w9-decision-path (w9-write-tmp "decision.md" w9-decision-fixture))
 
-;; Deterministic bug-registry fixture: the canonical v1.00.29 changelog entry
+;; Deterministic bug-registry fixture: the canonical changelog entry
 ;; cites BUG-0066..BUG-0072 as fixed. Registry auto-discovery would couple
 ;; this test to whatever planning tree happens to sit above the checkout;
 ;; pin a fixture registry via the documented bug-registry-path override.
+(define w9-registry-fixed-in (format "v~a" q-version))
 (define w9-registry-path
   (w9-write-tmp
    "INDEX.md"
    (string-append
     "| BUG | Reported | Title | Component | Severity | Status | Fixed in | Ref |\n"
     "|---|---|---|---|---|---|---|---|\n"
-    "| BUG-0064 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0065 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0066 | 2026-09-08 | fixture | fixture | critical | fixed | v1.00.29 | — |\n"
-    "| BUG-0067 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0068 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0069 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0070 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0071 | 2026-09-08 | fixture | fixture | high | fixed | v1.00.29 | — |\n"
-    "| BUG-0072 | 2026-09-08 | fixture | fixture | critical | fixed | v1.00.29 | — |\n")))
+    (string-append*
+     (for/list ([id (in-range 64 73)]
+                [sev (in-list
+                      '("high" "high" "critical" "high" "high" "high" "high" "high" "critical"))])
+       (format "| BUG-00~a | 2026-09-08 | fixture | fixture | ~a | fixed | ~a | — |\n"
+               id
+               sev
+               w9-registry-fixed-in))))))
 
 (define w9-base-sections
   (string-append "### User-Visible Changes\n"
