@@ -3,9 +3,9 @@
 ;; @speed fast
 ;; @suite unit-fast
 ;; @boundary unit
-;; @timeout 120  ;; per-owner cap: measured cold median ~3s (v1.00.29 W0 benchmark), 120s = default cap
+;; @timeout 120  ;; per-owner cap: measured cold median ~3s (the W0 benchmark), 120s = default cap
 ;;
-;; v1.00.29 W2 delivery-verifier boundary extraction — OWNER 1 of 3.
+;; The campaign's W2 delivery-verifier boundary extraction — OWNER 1 of 3.
 ;;
 ;; This file is the unit-fast DECISION owner: verifier decision logic (branch
 ;; matching, changed-file detection, gate verdicts, verify normalization)
@@ -15,7 +15,7 @@
 ;; Git fact itself comes from the injected fake runner. Deterministic and
 ;; safely parallelizable; no real-Git boundary claim lives here.
 ;;
-;; Ownership siblings (see docs/reports/DELIVERY-VERIFIER-SPLIT-v1.00.29.md):
+;; Ownership siblings (see docs/reports/DELIVERY-VERIFIER-SPLIT-v<q-version>.md):
 ;;   - tests/test-gsd-delivery-verifier-git-contract.rkt — required real-Git
 ;;     fail-closed boundary canaries (private fixture, integration lane)
 ;;   - tests/test-gsd-delivery-verifier-e2e.rkt — verify-gate execution plane
@@ -23,7 +23,7 @@
 ;;
 ;; Timing provenance: the stale whole-file `@timeout 300` / `~123s` note from
 ;; the a2a10b9d pin (predecessor release) is superseded. This owner's cap is
-;; the 120s default, derived from the v1.00.29 W0 benchmark contract
+;; the 120s default, derived from the W0 benchmark contract
 ;; (repeatable cold/warm runs), not from the legacy observation. No global
 ;; timeout increase.
 ;;

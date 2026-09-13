@@ -5,7 +5,7 @@
 ;; @speed fast  ;; @suite fast
 ;; @boundary integration
 
-;; tests/test-proof-bundle-consume.rkt — v1.00.29 W9 REWORK: the consumer
+;; tests/test-proof-bundle-consume.rkt — the campaign's W9 rework: the consumer
 ;; boundary for q.proof-bundle/1 reuse, re-aimed at the SAME-ENVIRONMENT
 ;; pair dup-01 (scheduled nightly.yml#test consuming the ci.yml fast-suite
 ;; proof at the same SHA) after review round 1 REQUEST_CHANGES:
@@ -68,6 +68,7 @@
          racket/list
          racket/string
          json
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/proof-bundle/consume.rkt"
                   write-command
                   consume-command
@@ -690,9 +691,13 @@
 (define nightly-yml-path (build-path repo-root ".github" "workflows" "nightly.yml"))
 (define release-yml-path (build-path repo-root ".github" "workflows" "release.yml"))
 (define dup-json-path
-  (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w0" "duplicate-classification.json"))
+  (build-path repo-root
+              "artifacts"
+              "proof-graph"
+              (format "v~a-w0" q-version)
+              "duplicate-classification.json"))
 (define removals-json-path
-  (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w9" "removals.json"))
+  (build-path repo-root "artifacts" "proof-graph" (format "v~a-w9" q-version) "removals.json"))
 
 ;; Extracts a top-level (2-space indented) job section from workflow text.
 (define (job-section text job-name)

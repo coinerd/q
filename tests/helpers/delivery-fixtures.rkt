@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; tests/helpers/delivery-fixtures.rkt — shared real-Git fixtures for the
-;; delivery-verifier owners (v1.00.29 W2 boundary extraction).
+;; delivery-verifier owners (the campaign's W2 boundary extraction).
 ;;
 ;; W2 split the former monolithic tests/test-gsd-delivery-verifier.rkt into
 ;; three runner-visible owners (decision / git-contract / e2e). The real-Git

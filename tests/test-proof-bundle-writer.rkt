@@ -5,10 +5,10 @@
 ;; @speed fast  ;; @suite default
 ;; @boundary unit
 
-;; tests/test-proof-bundle-writer.rkt — v1.00.29 W5: canonical q.proof-bundle/1
+;; tests/test-proof-bundle-writer.rkt — the campaign's W5 wave: canonical q.proof-bundle/1
 ;; writer. Covers canonicalization stability (same input → same bundle_id),
-;; required-field completeness (the 17 top-level fields of the
-;; proof-bundle-schema-v1.00.29.json "required" list, hardcoded here), digest
+;; required-field completeness (the 17 top-level fields of
+;; this cycle's proof-bundle-schema JSON "required" list, hardcoded here), digest
 ;; correctness (FIPS 180-4 known-answer vectors + content-address derivation)
 ;; and schema conformance of the written bundle. Also proves that the §9
 ;; fixture corpus under tests/fixtures/proof-bundle/ regenerates
@@ -189,7 +189,7 @@
 ;; ---------------------------------------------------------------------------
 
 ;; Required sub-fields per section, hardcoded from
-;; proof-bundle-schema-v1.00.29.json / spec §5.3–§5.16.
+;; this cycle's proof-bundle-schema JSON / spec §5.3–§5.16.
 (define schema-required-subfields
   (hasheq
    'producer

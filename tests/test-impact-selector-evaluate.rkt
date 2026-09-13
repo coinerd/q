@@ -5,7 +5,7 @@
 ;; @speed fast  ;; @suite default
 ;; @boundary unit
 
-;; tests/test-impact-selector-evaluate.rkt — v1.00.29 W7: the §10 selector
+;; tests/test-impact-selector-evaluate.rkt — the campaign's W7 wave: the §10 selector
 ;; threat model exercised against the static, explanation-only evaluator
 ;; (scripts/impact-selector/evaluate.rkt).
 ;;
@@ -58,6 +58,7 @@
          racket/base
          racket/file
          json
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/impact-selector/evaluate.rkt"
                   broadening-reasons
                   canonical-json
@@ -107,7 +108,7 @@
           'schema_version
           "1.0.0"
           'wave
-          "v1.00.29-w7-fixture"
+          (format "v~a-w7-fixture" q-version)
           'base_commit
           "000000000000"
           'node_types
@@ -464,7 +465,7 @@
                 "racket/contract is a pinned dependency")))
 
 (define all-suites
-  (test-suite "q.impact-selector evaluator (v1.00.29 W7)"
+  (test-suite (format "q.impact-selector evaluator (v~a W7)" q-version)
     sha-suite
     canonical-suite
     threat-suite

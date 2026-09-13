@@ -403,7 +403,7 @@
 ;; (7) BUG-0067: fast-budget exhaustion enters the patient slow lane
 ;; ============================================================
 
-;; v1.00.29 launch day (campaign 6ae3ac51): two provider bursts outlasted
+;; This release's launch day (campaign 6ae3ac51): two provider bursts outlasted
 ;; the fast budget (3 × 30/60/120s) and stopped the campaign for a
 ;; transient-class failure — manual /retry each time. With patience
 ;; remaining, exhaustion must keep re-attempting (backoff doubling past

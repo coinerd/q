@@ -3,9 +3,9 @@
 ;; @speed slow
 ;; @suite extensions
 ;; @boundary e2e
-;; @timeout 180  ;; per-owner cap: measured cold median ~25s (v1.00.29 W2 measurement), includes 2s-sleep attach test
+;; @timeout 180  ;; per-owner cap: measured cold median ~25s (the W2 measurement), includes 2s-sleep attach test
 ;;
-;; v1.00.29 W2 delivery-verifier boundary extraction — OWNER 3 of 3.
+;; The campaign's W2 delivery-verifier boundary extraction — OWNER 3 of 3.
 ;;
 ;; E2E owner: the delivery verifier's EXECUTION PLANE and coordinator
 ;; composition — the claims that span more than the verifier's decision
@@ -22,7 +22,7 @@
 ;; (tests/test-gsd-delivery-verifier-decision.rkt); required real-Git
 ;; fail-closed boundary canaries live in the contract owner
 ;; (tests/test-gsd-delivery-verifier-git-contract.rkt). Ownership map:
-;; docs/reports/DELIVERY-VERIFIER-SPLIT-v1.00.29.md.
+;; docs/reports/DELIVERY-VERIFIER-SPLIT-v<q-version>.md.
 ;;
 ;; Timing provenance: the stale whole-file `@timeout 300` / `~123s` note from
 ;; the a2a10b9d pin (predecessor release) is superseded by per-owner caps

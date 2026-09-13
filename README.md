@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.00.28-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-1.00.29-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -208,7 +208,7 @@ bin/q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-bin/q --version            # q version 1.00.28
+bin/q --version            # q version 1.00.29
 raco test tests/           # run the full test suite
 ```
 
@@ -296,8 +296,8 @@ q/
 |--------|-------|
 | Test files | 1489 |
 | Source modules | 881 |
-| Source lines | 183205 |
-| Test lines | 272478 |
+| Source lines | 183210 |
+| Test lines | 272518 |
 | Test assertions | 41389 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -419,6 +419,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v1.00.29** — User-Visible Changes
 
 **v1.00.28** — Test workload reduction: PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED
 

@@ -4,7 +4,7 @@
 ;; @suite unit-fast
 ;; @boundary unit
 ;;
-;; tests/test-flake-reduce.rkt — v1.00.29 W3 bounded flake reduction tests.
+;; tests/test-flake-reduce.rkt — the campaign's W3 bounded flake reduction tests.
 ;;
 ;; The reducer is driven entirely through injected run predicates (no real
 ;; processes, no sleeps, no wall-clock dependence — the clock is an injected

@@ -258,12 +258,17 @@
 ;; ---------------------------------------------------------------------------
 
 (define allowed-verdict-strings
-  '("ACHIEVED" "NOT ACHIEVED" "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED"))
+  '("ACHIEVED" "NOT ACHIEVED"
+               "PARTIAL WORKLOAD REDUCTION; FINAL TARGET NOT ACHIEVED"
+               "PARTIAL — SAFE REDUCTION DELIVERED"))
 
 ;; Version (without prerelease suffix) -> decision-record path, relative to
 ;; the changelog's directory (the git root).
 (define release-campaign-contracts
-  (hasheq "1.00.28" "artifacts/ci-baseline/v1.00.28-final/decision.md"))
+  (hasheq "1.00.28"
+          "artifacts/ci-baseline/v1.00.28-final/decision.md"
+          "1.00.29"
+          "artifacts/ci-baseline/v1.00.29-final/decision.md"))
 
 ;; Test override: bypass the version table with an explicit decision path.
 (define contract-decision-path-override (make-parameter #f))

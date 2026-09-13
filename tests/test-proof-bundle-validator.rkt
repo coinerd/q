@@ -5,7 +5,7 @@
 ;; @speed fast  ;; @suite default
 ;; @boundary unit
 
-;; tests/test-proof-bundle-validator.rkt — v1.00.29 W5: fail-closed consumer
+;; tests/test-proof-bundle-validator.rkt — the campaign's W5 wave: fail-closed consumer
 ;; validation for q.proof-bundle/1.
 ;;
 ;; Coverage:
