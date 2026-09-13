@@ -169,6 +169,11 @@ runs:
           --expect-lock-digest "$LOCK_DIGEST" \
           --root "$stage"
 
+        # BUG-0073 (v1.00.30 W0): default shell here is bash -e without
+        # pipefail, so a failing du was masked by the successful tee.
+        # Propagate the pipeline status; the step summary tee below must
+        # not turn a broken pack into a green step.
+        set -o pipefail
         du -sh "$stage" | tee -a "$GITHUB_STEP_SUMMARY"
 
     # Immutable by construction: upload-artifact never overwrites an
