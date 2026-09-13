@@ -5,7 +5,7 @@
 ;; @boundary integration
 ;; tests/test-workflow-purge-contract.rkt
 ;;
-;; BUG-0065 systemic invariant (v1.00.29 W4): every lane that consumes a
+;; BUG-0065 systemic invariant (the campaign's W4 wave): every lane that consumes a
 ;; restored/prepared workspace purges or cryptographically verifies
 ;; workspace bytecode BEFORE executing tests, and every producer stamps
 ;; its artifact (manifest tuple: repository, git SHA, source digest,
@@ -42,13 +42,18 @@
          racket/string
          racket/port
          racket/runtime-path
-         json)
+         json
+         (only-in "../util/version.rkt" q-version))
 
 ;; ── Path helpers ──
 
 (define-runtime-path workflows-dir "../.github/workflows")
 (define-runtime-path setup-racket-action-path "../.github/actions/setup-racket/action.yml")
-(define-runtime-path consumers-json-path "../artifacts/proof-graph/v1.00.29-w6/consumers.json")
+(define-runtime-path artifacts-dir "../artifacts")
+;; The current campaign's W6 consumer matrix (derived from the version
+;; module per BUG-0009).
+(define consumers-json-path
+  (build-path artifacts-dir "proof-graph" (format "v~a-w6" q-version) "consumers.json"))
 
 (define workflow-paths
   (sort (for/list ([p (in-directory workflows-dir)]
@@ -234,8 +239,9 @@ verify workspace bytecode before executing tests (BUG-0065 systemic)"))
      (string-contains? (file->string p) removed-local-purge-step)
      (format
       "~a still carries the superseded local purge step; the shared
-setup-racket purge owns this invariant since v1.00.29 W4"
-      (path->string p)))))
+setup-racket purge owns this invariant since v~a W4"
+      (path->string p)
+      q-version))))
 
 ;; ── 3. Positive detection: the restore-capable lanes are really covered ──
 ;;
@@ -337,9 +343,9 @@ YAML
 
 ;; ── W6 consumer-matrix purge coverage ──
 ;;
-;; v1.00.29 W6 (spec §6 W4): the prepared-environment restore is expanded
+;; The campaign's W6 wave (spec §6 W4): the prepared-environment restore is expanded
 ;; to every consumer whose env-profile is provably identical to the
-;; producer tuple (artifacts/proof-graph/v1.00.29-w6/consumers.json).
+;; producer tuple (the wave's consumers.json under artifacts/proof-graph/).
 ;; EVERY consumer the matrix lists as `activated` must consume the
 ;; restored workspace through the shared setup-racket action (which owns
 ;; the always-on BUG-0065 purge/verify) and must carry its one-command

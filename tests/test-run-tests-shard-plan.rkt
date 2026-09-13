@@ -16,6 +16,7 @@
 
 (require racket/runtime-path
          json
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/run-tests/shard-plan.rkt"
                   build-shard-plan
                   build-shard-plan/safe
@@ -204,7 +205,7 @@
                         (delete-file tmp)))))))
 
 ;; ---------------------------------------------------------------------------
-;; W10 (v1.00.29): starvation/tail checks, cohort wall anchors, and the
+;; W10 (the current campaign): starvation/tail checks, cohort wall anchors, and the
 ;; duration-aware plan regeneration report.
 ;; ---------------------------------------------------------------------------
 
@@ -320,7 +321,7 @@
                                 #:duration-source "fixture"
                                 #:seed-path (path->string seed-fixture-path)))
       (check-equal? (hash-ref report 'schema) "shard-plan-regeneration/1")
-      (check-equal? (hash-ref report 'wave) "v1.00.29-w10")
+      (check-equal? (hash-ref report 'wave) (format "v~a-w10" q-version))
       (check-true (hash? (hash-ref report 'plan)))
       (check-true (hash? (hash-ref (hash-ref report 'checks) 'starvation)))
       (check-true (hash? (hash-ref (hash-ref report 'checks) 'tail_straddle)))

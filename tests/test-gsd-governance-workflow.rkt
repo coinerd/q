@@ -409,7 +409,7 @@
     (check-true (string-contains? governance contract) contract)))
 
 ;; ============================================================
-;; BUG-0064 (v1.00.29 W1, #9620): end-to-end campaign governance —
+;; BUG-0064 (the campaign's W1 wave, #9620): end-to-end campaign governance —
 ;; a campaign must refuse to advance to wave N while wave N-1 lacks
 ;; its Delivery-Contract merge-SHA binding (the v1.00.27 failure mode:
 ;; W0→W6 advanced with zero merges). Refusal is auditable; the only

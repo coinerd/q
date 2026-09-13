@@ -3,9 +3,9 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 120  ;; per-owner cap: measured cold median ~15s (v1.00.29 W2 measurement), 120s = default cap
+;; @timeout 120  ;; per-owner cap: measured cold median ~15s (the W2 measurement), 120s = default cap
 ;;
-;; v1.00.29 W2 delivery-verifier boundary extraction — OWNER 2 of 3.
+;; The campaign's W2 delivery-verifier boundary extraction — OWNER 2 of 3.
 ;;
 ;; REQUIRED real-Git fail-closed boundary canaries. Each test below proves a
 ;; boundary claim that CANNOT be proven on synthetic facts because the claim
@@ -21,7 +21,7 @@
 ;; (tests/test-gsd-delivery-verifier-decision.rkt); verify-gate execution +
 ;; coordinator composition live in the e2e owner
 ;; (tests/test-gsd-delivery-verifier-e2e.rkt). Ownership map:
-;; docs/reports/DELIVERY-VERIFIER-SPLIT-v1.00.29.md.
+;; docs/reports/DELIVERY-VERIFIER-SPLIT-v<q-version>.md.
 ;;
 ;; Timing provenance: the stale whole-file `@timeout 300` / `~123s` note from
 ;; the a2a10b9d pin (predecessor release) is superseded by per-owner caps

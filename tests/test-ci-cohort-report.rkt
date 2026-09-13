@@ -1861,9 +1861,9 @@
 ;; ============================================================
 
 ;; ============================================================
-;; W10 (v1.00.29): final-cohort artifact guard suite
+;; W10 (the current campaign): final-cohort artifact guard suite
 ;;
-;; Pins (a) the v1.00.29-final §7.2 row vocabulary, (b) the §7.1
+;; Pins (a) the final cohort's §7.2 row vocabulary, (b) the §7.1
 ;; safety-gate row vocabulary (all 14 rows decided in decision.md),
 ;; (c) the cohort's mechanical eligibility invariants, (d) the
 ;; graph-after reduction invariants, and (e) SHA256SUMS integrity of
@@ -1872,18 +1872,21 @@
 ;; ============================================================
 
 (define-runtime-path ci-baseline-dir "../artifacts/ci-baseline")
-;; v29-dir names the CURRENT in-progress milestone artifact (kept as a
-;; literal: the repo's canonical q-version still points at the previous
-;; release until closeout, so this path must not derive from q-version).
-(define v29-dir (build-path ci-baseline-dir "v1.00.29-final"))
-;; Derived from the version module (BUG-0009): the guard tracks the current
-;; milestone's prior final-cohort artifact directory.
-(define v28-dir (build-path ci-baseline-dir (string-append "v" q-version "-final")))
+;; v29-dir names the CURRENT milestone's final-cohort artifact, derived
+;; from the version module (BUG-0009): during this release's bake window
+;; the canonical q-version points at this release, so the derived path
+;; names exactly the artifact this suite guards.
+(define v29-dir (build-path ci-baseline-dir (format "v~a-final" q-version)))
+;; The PRIOR final cohort is a frozen v1.00.28-series artifact (older
+;; per-entry schema: `sha`, not `head_sha`), pinned literally like every
+;; other frozen predecessor artifact in this repo — deriving it from the
+;; current q-version would name the current milestone's own directory.
+(define v28-dir (build-path ci-baseline-dir "v1.00.28-final"))
 
 (define (load-json rel)
   (call-with-input-file (build-path v29-dir rel) read-json))
 
-;; §7.2 v1.00.29-final row vocabulary (frozen contract; ids as decided at W10)
+;; §7.2 final-cohort row vocabulary (frozen contract; ids as decided at W10)
 (define v29-report-row-ids
   '("l0-p90-local" "l1-p90-local"
                    "pr-ci-p50"
@@ -1914,7 +1917,7 @@
   '("ACHIEVED" "PARTIAL — SAFE REDUCTION DELIVERED" "NOT ACHIEVED" "BLOCKED — SAFETY/INTEGRITY"))
 
 (define v29-final-suite
-  (test-suite "v1.00.29 final cohort artifact guards (W10)"
+  (test-suite (format "v~a final cohort artifact guards (W10)" q-version)
 
     (test-case "cohort.json: closed cohort of >= 20 eligible unique head SHAs"
       (define c (load-json "cohort.json"))

@@ -5,7 +5,7 @@
 ;; @boundary pure
 ;; tests/test-gsd-infra-retry-slow-lane.rkt — BUG-0067 pure seams.
 ;;
-;; The v1.00.29 launch-day incidents (campaign 6ae3ac51): three api.z.ai
+;; The launch-day incidents of this campaign (campaign 6ae3ac51): three api.z.ai
 ;; bursts in one afternoon, two of which exhausted the fast budget
 ;; (3 × 30/60/120s ≈ 3.5 min of patience) and stopped the campaign for a
 ;; transient-class failure — each stop costing a manual /retry. The slow

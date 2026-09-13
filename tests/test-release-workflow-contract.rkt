@@ -111,7 +111,7 @@
   (check-true (string-contains? content "Per-file failure output")
               "failure summary must include per-file failure output"))
 
-;; BUG-0065 systemic (v1.00.29 W4): the release lane no longer carries a
+;; BUG-0065 systemic (the campaign's W4 wave): the release lane no longer carries a
 ;; bespoke purge step — the shared setup-racket action purges + verifies
 ;; workspace bytecode on EVERY path (if: always()), including a
 ;; successful prepared-environment restore whose .zo mtimes are newer
@@ -521,7 +521,7 @@
     (dict-ref fixture 'w7-target-max-lines))))
 
 ;; ============================================================
-;; BUG-0065 systemic invariant (v1.00.29 W4): the shared setup-racket
+;; BUG-0065 systemic invariant (the campaign's W4 wave): the shared setup-racket
 ;; action is the single purge/verify mechanism; every lane that could
 ;; execute bytecode in a restored/prepared workspace goes through it.
 ;; The per-workflow purge-step scan over ALL workflow files (including

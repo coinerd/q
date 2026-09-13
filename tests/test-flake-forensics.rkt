@@ -4,7 +4,7 @@
 ;; @suite unit-fast
 ;; @boundary unit
 ;;
-;; tests/test-flake-forensics.rkt — v1.00.29 W3 flake forensic capture tests.
+;; tests/test-flake-forensics.rkt — the campaign's W3 flake forensic capture tests.
 ;;
 ;; Pure, deterministic coverage of flake-forensics.rkt: every environment
 ;; probe is pinned via the current-forensics-* parameters, the clock is
@@ -17,7 +17,7 @@
 ;;     an absent key;
 ;;   - the schema string "q.flake-forensics/1" is present;
 ;;   - the bundle file is written under
-;;     artifacts/proof-graph/v1.00.29-w3/bundles/<incident-id>.json;
+;;     artifacts/proof-graph/v<q-version>-w3/bundles/<incident-id>.json;
 ;;   - rerun ancestry round-trips through the JSON bundle;
 ;;   - capture is deterministic given identical pinned inputs (structure, not
 ;;     time values — the clock is injected, so ids match exactly);
@@ -31,6 +31,7 @@
          racket/port
          racket/string
          json
+         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/run-tests/flake-forensics.rkt"
                   capture-flake-forensics!
                   flake-forensics-schema
@@ -133,7 +134,7 @@
       (check-equal? flake-forensics-schema "q.flake-forensics/1")
       (cleanup-fixture! root))
 
-    (test-case "bundle file is written under artifacts/proof-graph/v1.00.29-w3/bundles"
+    (test-case (format "bundle file is written under artifacts/proof-graph/v~a-w3/bundles" q-version)
       (define root (make-fixture-root))
       (define bundle (capture-into-root! root #:write? #t))
       (define id (hash-ref bundle 'incident-id))
@@ -141,7 +142,7 @@
       (define expected (bundle-path-for root id))
       (check-true (file-exists? expected) "bundle file must exist at the canonical path")
       (check-equal? (path->string (find-relative-path root expected))
-                    (string-append "artifacts/proof-graph/v1.00.29-w3/bundles/" id ".json"))
+                    (format "artifacts/proof-graph/v~a-w3/bundles/~a.json" q-version id))
       (check-equal? (hash-ref bundle 'bundle-path) (path->string expected))
       (cleanup-fixture! root))
 
