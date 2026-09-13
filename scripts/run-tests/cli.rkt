@@ -64,8 +64,11 @@
   (displayln "  --shard-index N         Select shard N of M (for parallel CI sharding)")
   (displayln "  --shard-total M         Total number of shards (default: 1, no sharding)")
   (displayln "  --shard-plan <mode>     Duration-aware shard planning: report (print plan +")
-  (displayln "                          predicted durations, change nothing, exit 0) or")
-  (displayln "                          active (consume the plan instead of round-robin)")
+  (displayln "                          predicted durations, change nothing, exit 0),")
+  (displayln "                          active (consume the plan instead of round-robin), or")
+  (displayln "                          measure (W10: run each selected file once, write a")
+  (displayln "                          W0-schema duration snapshot to --json-out, then print")
+  (displayln "                          the regenerated plan + starvation/tail checks; exit 0)")
   (displayln "  --durations PATH        Duration snapshot for --shard-plan: a retained CI JSON")
   (displayln "                          artifact or a directory of *.json artifacts (W0 schema)")
   (displayln "  --help            Show this help message")
@@ -282,7 +285,7 @@
          (exit 2))
        (continue rest #:ordering ord)]
       [(list "--shard-plan" rest ...)
-       (eprintf "run-tests: --shard-plan requires a mode (report|active)~n")
+       (eprintf "run-tests: --shard-plan requires a mode (report|active|measure)~n")
        (usage)
        (exit 2)]
       [(list "--durations" rest ...)
@@ -368,8 +371,14 @@
     (raise-user-error 'run-tests "--changed-base must be non-empty"))
   (when (and changed-head (string? changed-head) (equal? changed-head ""))
     (raise-user-error 'run-tests "--changed-head must be non-empty"))
-  (when (and shard-plan (not (member shard-plan '("report" "active"))))
-    (raise-user-error 'run-tests "unknown --shard-plan mode: ~a (valid: report, active)" shard-plan))
+  (when (and shard-plan (not (member shard-plan '("report" "active" "measure"))))
+    (raise-user-error 'run-tests
+                      "unknown --shard-plan mode: ~a (valid: report, active, measure)"
+                      shard-plan))
+  (when (and shard-plan (equal? shard-plan "measure") (not json-out))
+    (raise-user-error
+     'run-tests
+     "--shard-plan measure requires --json-out <path> (duration snapshot destination)"))
   (when (and durations (not (string? durations)))
     (raise-user-error 'run-tests "--durations must be a path string, got: ~a" durations))
   (when (and ordering (not (memq ordering known-orderings)))

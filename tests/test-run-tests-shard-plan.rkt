@@ -25,10 +25,19 @@
                   plan-predicted-max
                   round-robin-predicted-max
                   print-shard-plan-report
+                  print-starvation-tail-report
                   write-plan-json!
                   load-duration-snapshot
                   inventory-preserved?
                   activation-recommendation
+                  plan-mean-shard-seconds
+                  starvation-check
+                  tail-straddle-check
+                  quantile-interpolated
+                  load-cohort-wall-anchors
+                  regenerate-plan-report
+                  starvation-max-ratio
+                  tail-straddle-limit-ratio
                   shard-plan-mode
                   shard-plan-substituted
                   shard-plan-total-files
@@ -36,6 +45,7 @@
                   shard-plan-shards))
 
 (define-runtime-path fixture-path (build-path "fixtures" "shard-plan-durations.json"))
+(define-runtime-path seed-fixture-path (build-path "fixtures" "shard-plan-cohort-seed.json"))
 
 (define fixture-files
   '("tests/test-aa-slow.rkt" "tests/test-bb-slow.rkt"
@@ -193,5 +203,147 @@
                       (with-handlers ([exn:fail? (lambda (_) (void))])
                         (delete-file tmp)))))))
 
+;; ---------------------------------------------------------------------------
+;; W10 (v1.00.29): starvation/tail checks, cohort wall anchors, and the
+;; duration-aware plan regeneration report.
+;; ---------------------------------------------------------------------------
+
+(define w10-plan-suite
+  (test-suite "W10 shard-plan regeneration, starvation/tail checks"
+
+    (test-case "quantile-interpolated: empty, single, interpolated, ms-rounded"
+      (check-false (quantile-interpolated '() 0.5))
+      (check-equal? (quantile-interpolated '(42.0) 0.5) 42.0)
+      (check-equal? (quantile-interpolated '(42.0) 0.95) 42.0)
+      (check-equal? (quantile-interpolated '(10.0 20.0 30.0 40.0) 0.5) 25.0)
+      ;; exact linear interpolation at k = 0.95·3 = 2.85 → 30 + 0.85·10
+      (check-equal? (quantile-interpolated '(10.0 20.0 30.0 40.0) 0.95) 38.5)
+      ;; unsorted input is sorted internally
+      (check-equal? (quantile-interpolated '(40.0 10.0 30.0 20.0) 0.5) 25.0)
+      ;; millisecond rounding keeps regenerated artifacts byte-stable
+      (check-equal? (quantile-interpolated '(1.0 2.0) 0.9999999999) 2.0))
+
+    (test-case "plan-mean-shard-seconds: mean of predicted shard durations"
+      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
+      (define plan (build-shard-plan fixture-files 3 #:durations dur))
+      (define preds (shard-plan-predicted plan))
+      (check-equal? (plan-mean-shard-seconds plan)
+                    (exact->inexact (/ (for/sum ([p (in-list preds)]) p) (length preds)))))
+
+    (test-case "starvation-check: balanced fixture plan passes the 1.35× gate"
+      (check-equal? (starvation-max-ratio) 1.35)
+      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
+      (define plan (build-shard-plan fixture-files 3 #:durations dur))
+      (define check (starvation-check plan))
+      (check-true (hash-ref check 'ok))
+      (check-equal? (length (hash-ref check 'per_shard)) 3)
+      (check-equal? (hash-ref check 'offending) '())
+      (check-equal? (hash-ref check 'max_ratio_limit) 1.35))
+
+    (test-case "starvation-check: a file-bound shard offends the 1.35× gate"
+      ;; one 900s file among small ones over 3 shards → its shard far exceeds
+      ;; 1.35× the mean shard duration
+      (define plan
+        (build-shard-plan '("a.rkt" "b.rkt" "c.rkt" "d.rkt" "e.rkt")
+                          3
+                          #:durations
+                          (hash "a.rkt" 900.0 "b.rkt" 10.0 "c.rkt" 10.0 "d.rkt" 10.0 "e.rkt" 10.0)))
+      (define check (starvation-check plan))
+      (check-false (hash-ref check 'ok))
+      (check-equal? (length (hash-ref check 'offending)) 1)
+      (define worst (first (hash-ref check 'offending)))
+      (check-true (> (hash-ref worst 'ratio) 1.35))
+      (check-equal? (hash-ref worst 'predicted_seconds) 900.0))
+
+    (test-case "tail-straddle-check: no fixture file straddles (all far below mean)"
+      (check-equal? (tail-straddle-limit-ratio) 2.0)
+      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
+      (define plan (build-shard-plan fixture-files 3 #:durations dur))
+      (define check (tail-straddle-check plan))
+      (check-true (hash-ref check 'ok))
+      (check-equal? (hash-ref check 'violations) '())
+      (check-equal? (hash-ref check 'straddling_once) '()))
+
+    (test-case "tail-straddle-check: a file straddling once is recorded, not a violation"
+      ;; total 120 over 2 shards → mean 60; the 100s file straddles once
+      ;; (100 > 60) but not twice (100 < 120)
+      (define plan
+        (build-shard-plan '("big.rkt" "s1.rkt" "s2.rkt")
+                          2
+                          #:durations (hash "big.rkt" 100.0 "s1.rkt" 10.0 "s2.rkt" 10.0)))
+      (define check (tail-straddle-check plan))
+      (check-true (hash-ref check 'ok))
+      (check-equal? (length (hash-ref check 'straddling_once)) 1)
+      (check-equal? (hash-ref (first (hash-ref check 'straddling_once)) 'path) "big.rkt")
+      (check-equal? (hash-ref check 'violations) '()))
+
+    (test-case "tail-straddle-check: a file straddling TWICE is a violation"
+      ;; total 540 over 4 shards → mean 135; the 500s file exceeds 2×mean=270
+      (define plan
+        (build-shard-plan
+         '("huge.rkt" "s1.rkt" "s2.rkt" "s3.rkt" "s4.rkt")
+         4
+         #:durations (hash "huge.rkt" 500.0 "s1.rkt" 10.0 "s2.rkt" 10.0 "s3.rkt" 10.0 "s4.rkt" 10.0)))
+      (define check (tail-straddle-check plan))
+      (check-false (hash-ref check 'ok))
+      (check-equal? (length (hash-ref check 'violations)) 1)
+      (define v (first (hash-ref check 'violations)))
+      (check-equal? (hash-ref v 'path) "huge.rkt")
+      (check-true (> (hash-ref v 'ratio_to_mean) 2.0)))
+
+    (test-case "cohort wall anchors: three latest pre-W4 walls, post-W4 p50/p95, malformed rows filtered"
+      (define anchors (load-cohort-wall-anchors (path->string seed-fixture-path)))
+      (check-equal? (hash-ref anchors 'entries_total) 6) ; malformed row filtered
+      (check-equal? (length (hash-ref anchors 'three_anchors)) 3)
+      ;; latest three pre-cutoff merges: 102 (900), 103 (1000), 104 (1400)
+      (check-equal? (map (lambda (a) (hash-ref a 'number)) (hash-ref anchors 'three_anchors))
+                    (list 102 103 104))
+      (check-equal? (hash-ref anchors 'three_anchor_mean_seconds) 1100.0)
+      (define post (hash-ref anchors 'post_w4))
+      (check-equal? (hash-ref post 'count) 2)
+      (check-equal? (hash-ref post 'p50_seconds) 2600.0)
+      ; k = 0.95·1 = 0.95 → 2400 + 0.95·(2800−2400) = 2780.0
+      (check-equal? (hash-ref post 'p95_seconds) 2780.0)
+      (define full (hash-ref anchors 'full))
+      (check-equal? (hash-ref full 'count) 6)
+      ; k = 0.5·5 = 2.5 → (1000+1400)/2 = 1200.0
+      (check-equal? (hash-ref full 'p50_seconds) 1200.0)
+      ; k = 0.95·5 = 4.75 → 2400 + 0.75·(2800−2400) = 2700.0
+      (check-equal? (hash-ref full 'p95_seconds) 2700.0))
+
+    (test-case "regenerate-plan-report: deterministic, schema-shaped, checks attached"
+      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
+      (define report
+        (regenerate-plan-report inventory-with-substitution
+                                3
+                                #:durations dur
+                                #:duration-source "fixture"
+                                #:seed-path (path->string seed-fixture-path)))
+      (check-equal? (hash-ref report 'schema) "shard-plan-regeneration/1")
+      (check-equal? (hash-ref report 'wave) "v1.00.29-w10")
+      (check-true (hash? (hash-ref report 'plan)))
+      (check-true (hash? (hash-ref (hash-ref report 'checks) 'starvation)))
+      (check-true (hash? (hash-ref (hash-ref report 'checks) 'tail_straddle)))
+      (check-true (string? (hash-ref (hash-ref report 'checks_definitions) 'starvation)))
+      (check-true (hash? (hash-ref report 'cohort_wall_anchors)))
+      (define report-2
+        (regenerate-plan-report inventory-with-substitution
+                                3
+                                #:durations dur
+                                #:duration-source "fixture"
+                                #:seed-path (path->string seed-fixture-path)))
+      (check-equal? report report-2 "regeneration must be deterministic from identical inputs"))
+
+    (test-case "print-starvation-tail-report: report-only text mentions both gates"
+      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
+      (define plan (build-shard-plan fixture-files 3 #:durations dur))
+      (define out (open-output-string))
+      (print-starvation-tail-report plan out)
+      (define text (get-output-string out))
+      (check-true (regexp-match? #rx"starvation: ok" text))
+      (check-true (regexp-match? #rx"tail-straddle: ok" text)))))
+
 (module+ test
-  (exit (run-tests shard-plan-suite)))
+  (exit (run-tests (test-suite "all shard-plan suites"
+                     shard-plan-suite
+                     w10-plan-suite))))

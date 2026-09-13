@@ -17,9 +17,11 @@
          racket/system
          racket/port
          racket/list
-         json
          racket/future
          racket/exn
+         json
+         (only-in racket/format ~r)
+         (only-in racket/date date->string current-date date-display-format)
          (only-in "classify.rkt"
                   base-dir
                   normalize-test-path
@@ -36,6 +38,7 @@
                   test-file-result-path
                   test-file-result-exit-code
                   test-file-result-total
+                  test-file-result-elapsed-ms
                   test-file-result-requested-execution-mode
                   test-file-result-grouped-fallback-reason
                   parse-raco-output
@@ -47,6 +50,7 @@
                   save-failure-logs
                   summary-exit-code
                   write-json-results!
+                  result-status
                   print-ledger-summary
                   print-run-summary-record)
          (only-in "ledger.rkt" load-known-failure-ledger)
@@ -65,6 +69,7 @@
                   build-shard-plan/safe
                   plan-shard-files
                   print-shard-plan-report
+                  print-starvation-tail-report
                   load-duration-snapshot
                   shard-plan-mode)
          (only-in "scheduler-order.rkt"
@@ -1294,8 +1299,73 @@
     (cond
       [(equal? shard-plan "report") 'report]
       [(equal? shard-plan "active") 'active]
+      [(equal? shard-plan "measure") 'measure]
       [else #f]))
   (define active-plan (box #f))
+  ;; W10: `measure` — measure each selected file once (subprocess mode,
+  ;; sequential, deterministic order), write a W0-schema duration snapshot to
+  ;; --json-out, then print the duration-aware plan regenerated from that
+  ;; snapshot plus the W10 starvation/tail checks, and exit 0. It is a
+  ;; measurement pass: it never produces a test verdict and changes nothing.
+  (when (and plan-mode (eq? plan-mode 'measure))
+    (unless (string? json-out)
+      (raise-user-error
+       'run-tests
+       "--shard-plan measure requires --json-out <path> (duration snapshot destination)"))
+    (printf
+     ";; run-tests: shard-plan=measure files=~a jobs=1 (sequential per-file subprocess measurement)~n"
+     (length all-suite-files))
+    (define measured
+      (for/list ([f (in-list (sort all-suite-files string<?))])
+        (define r (run-single-file f #:timeout timeout #:mode 'subprocess))
+        (printf ";; run-tests: measured ~a ~as (~a)~n"
+                f
+                (~r (/ (test-file-result-elapsed-ms r) 1000.0) #:precision '(= 3))
+                (result-status r))
+        (hasheq 'path
+                f
+                'duration_seconds
+                (/ (test-file-result-elapsed-ms r) 1000.0)
+                'status
+                (result-status r))))
+    (call-with-output-file
+     json-out
+     #:exists 'truncate/replace
+     (lambda (out)
+       (write-json
+        (hasheq
+         'schema
+         "ci-durations/1"
+         'suite
+         (symbol->string suite)
+         'generated_at
+         (parameterize ([date-display-format 'iso-8601])
+           (date->string (current-date) #t))
+         'measured_by
+         "--shard-plan measure (sequential subprocess per-file wall clock, includes per-file runner overhead)"
+         'files
+         measured)
+        out)
+       (newline out)))
+    (printf ";; run-tests: duration snapshot written to ~a~n" json-out)
+    (define-values (mdur mdur-status) (load-duration-snapshot json-out))
+    (printf ";; run-tests: shard-plan=measure snapshot status=~a known=~a~n"
+            mdur-status
+            (hash-count mdur))
+    ;; Regenerate the plan from the fresh snapshot; with no explicit sharding
+    ;; the report uses the CI fast-lane shard count (3) so the prediction is
+    ;; comparable with the deployed topology.
+    (define mplan
+      (build-shard-plan/safe
+       all-suite-files
+       (if (> shard-total 1) shard-total 3)
+       #:durations mdur
+       #:profile-skips?
+       (lambda (f) (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
+       #:duration-source json-out))
+    (print-shard-plan-report mplan)
+    (print-starvation-tail-report mplan)
+    (exit 0))
   ;; W7: `report` is informational only and works for any --shard-total
   ;; (a 1-shard plan is a degenerate-but-valid plan: all files on shard 0).
   ;; `active` needs a real partition, so it stays gated on shard-total > 1.

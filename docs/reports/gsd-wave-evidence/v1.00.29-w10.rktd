@@ -1,0 +1,56 @@
+;; GSD Wave Evidence — v1.00.29 W10: rebalance, final cohort, and bake.
+;; Branch: campaign/v1.00.29-w10 (worktree /tmp/q-w10); base 9112e1ec lineage,
+;; branched from origin/main 30713cad (post-W9 main).
+
+(evidence
+ (wave v1.00.29-w10)
+ (implementation-shas ("20f5f8d0" "bb93281c"))
+ (branch campaign/v1.00.29-w10)
+ (base 30713cad)
+ (ticket "campaign v1.00.29 W10 (milestone #894): rebalance, final cohort, and bake — duration-aware shard-plan regeneration with pre-registered starvation/tail checks and a --shard-plan measure mode; pre-registered final acceptance cohort (24 eligible unique PR head SHAs, CLOSED); before/after proof graph; all 14 §7.1 safety-gate decisions; §7.2/§7.3 reporting; single draft verdict PARTIAL — SAFE REDUCTION DELIVERED")
+ (commits
+  ((sha 20f5f8d0)
+   (scope "wave A — scripts/run-tests/shard-plan.rkt extended (backward compatible): pre-registered starvation check (no shard > 1.35× mean shard duration) and tail-straddle check (no file predicted to straddle a shard boundary twice: weight > 2× mean; >1× recorded informationally); quantile-interpolated (exact linear interpolation, ms-rounded, byte-stable); load-cohort-wall-anchors (cohort seed → three latest pre-W4 retained CI walls + post-W4/full p50/p95; rule frozen in the module); regenerate-plan-report (shard-plan-regeneration/1) implementing the frozen per-shard duration model (sum of per-file durations from the LATEST retained v1.00.28-final cohort duration evidence — the W7 post-remediation census — or a local --measure snapshot); load-duration-snapshot extended additively to accept q.census.fast-runtime/1 census artifacts (records/path/median_ms → duration_seconds). cli.rkt + runner.rkt: third --shard-plan mode `measure` — measures each selected file once (sequential subprocess), writes a W0-schema ci-durations/1 snapshot to --json-out, prints the regenerated plan + starvation/tail report, exits 0; measure requires --json-out (validated). Tests: new W10 suite in tests/test-run-tests-shard-plan.rkt (25 checks, hand-computed anchor/quantile/violation pins on a committed fixture seed) + measure-mode validation cases in tests/test-run-tests-arg-validation.rkt; all pre-existing pins green"))
+  ((sha bb93281c)
+   (scope "wave B — artifacts/ci-baseline/v1.00.29-final/: cohort.json (CLOSED final cohort, 24 eligible unique merged-PR head SHAs, eligibility rules pre-registered in-file, full per-entry row vocabulary incl. topology_class, post-W4 AND full-window p50/p95, zero exclusions, mechanically verified zero overlap with v1.00.28-final); graph-after.json (W0-diff after-state: one removed claim dup-01 replaced by fail-closed bundle consumption; dup-04 requalified distinct_environment with both instances required; §4.7 final accounting 477s = 2.49%, removal PROXY-labeled); report.json (§7.2 per-metric goal/measured/verdict; pending-coordinator-fill verified_restore_ratio; unknowns never coerced); decision.md (14 explicit §7.1 row decisions with evidence pointers; §7.2; §7.3 stage-gate evidence-pending + north-star NOT ACHIEVED with TOPOLOGY DISCLOSURE; keep-3-shards rebalance decision; single draft verdict); SHA256SUMS over the four contract artifacts; shard-plan-regeneration.json (deterministic regeneration evidence); tests/test-ci-cohort-report.rkt extended with the v1.00.29-final artifact guard suite (11 checks) + latent fixture fix (fc-full-guards hasheq→hash, see reviews) — 143/143 green"))
+  ((sha "this-commit")
+   (scope "wave C — docs/reports/PROOF-GRAPH-FINAL-v1.00.29.md (before/after graph, cohort verdicts, §7.3 stage-gate + north-star, TOPOLOGY DISCLOSURE, single draft verdict); evidence trio; artifact-guard test path hardening for the BUG-0009 version-expectation lint (no in-flight version literal in the guard suite; prior final cohort derived from q-version); README metrics resync evaluated — net zero delta after removing the temporary failure-triage worktree whose file tree had inflated one interim sync; metrics lint 5/5")))
+ (deliverables
+  ((file scripts/run-tests/shard-plan.rkt)
+   (detail "duration-aware plan regeneration + starvation/tail checks + cohort-wall anchors + census-schema durations; report-only, never wired into required CI"))
+  ((file scripts/run-tests/cli.rkt scripts/run-tests/runner.rkt)
+   (detail "--shard-plan measure (third mode, additive): measurement pass that writes a ci-durations/1 snapshot and exits 0; existing report/active semantics unchanged"))
+  ((file artifacts/ci-baseline/v1.00.29-final/cohort.json)
+   (detail "machine-readable final cohort; eligibility rules pre-registered; no sample reuse; failures/cancellations would be retained (none occurred in window)"))
+  ((file artifacts/ci-baseline/v1.00.29-final/graph-after.json)
+   (detail "post-reduction proof graph as a diff against the frozen W0 before-state; regenerability + behavior_change fields updated"))
+  ((file artifacts/ci-baseline/v1.00.29-final/decision.md)
+   (detail "per-row §7.1 safety-gate decisions (14/14 explicit), §7.2 performance rows, §7.3 stage-gate + north-star, topology disclosure, one draft verdict"))
+  ((file artifacts/ci-baseline/v1.00.29-final/report.json)
+   (detail "§7.2 contract rows with goal/measured/verdict; unknowns remain unknown; verified_restore_ratio pending-coordinator-fill placeholder"))
+  ((file artifacts/ci-baseline/v1.00.29-final/SHA256SUMS)
+   (detail "integrity binding of the four contract artifacts; verified by tests/test-ci-cohort-report.rkt"))
+  ((file artifacts/ci-baseline/v1.00.29-final/shard-plan-regeneration.json)
+   (detail "machine-readable duration-model regeneration (plan + checks + cohort anchors)"))
+  ((file docs/reports/PROOF-GRAPH-FINAL-v1.00.29.md)
+   (detail "before/after graph summary, cohort verdicts, §7.3 stage-gate + north-star, TOPOLOGY DISCLOSURE, single draft verdict handed to W11"))
+  ((file tests/test-ci-cohort-report.rkt)
+   (detail "extended: v1.00.29-final artifact guard suite pinning the §7.2 row vocabulary, the 14 §7.1 safety-gate decisions, cohort eligibility invariants, graph-after invariants and SHA256SUMS integrity; existing pinned vocabulary untouched and green")))
+ (measurements
+  ((what "final cohort PR CI walls")
+   (basis "q-w10-cohort-seed.json (coordinator's GitHub API fetch): ci_wall_seconds = CI workflow run wall (run_started_at→updated_at) per head SHA")
+   (numbers "post-W4 n=11: p50 2558.0s p95 3023.0s mean 2569.7s; pre-W4 n=13: p50 890.0s p95 1320.2s mean 946.7s; full n=24: p50 1329.0s p95 2856.7s; exact linear interpolation ms-rounded"))
+  ((what "L0 local single file")
+   (basis "--shard-plan measure, sequential subprocess, runner-reported per-file wall (tests/test-run-tests-shard-plan.rkt, tests/test-ansi.rkt, tests/test-tool.rkt)")
+   (numbers "0.640 / 0.676 / 2.491 s — all ≤ 5s goal; p90 UNKNOWN at n=3 (labeled, never 0)"))
+  ((what "L1 local small group")
+   (basis "one runner invocation over the same 3 files; RUN-SUMMARY wall")
+   (numbers "2.61 s ≤ 30s goal; p90 UNKNOWN at n=1 (labeled, never 0)"))
+  ((what "shard-plan regeneration at 3 shards")
+   (basis "current fast inventory 1186 files (collect-test-files 'fast); W7 census durations (1180 known, 7 substituted at p95 default 2.014s); seed anchors = three latest pre-W4 walls 928/817/832s mean 859s")
+   (numbers "predicted 309.326/309.492/309.495s; max 309.495s vs round-robin 374.320s (−17.3%); starvation ok (worst ratio ≈1.0002 ≤ 1.35); tail-straddle ok (zero files >1× mean); inventory preserved; recommendation activate — NOT activated (decision.md §4)")))
+ (topology-disclosure
+  "The cohort spans W0→W9 topology evolution. W4 (PR 9669, merged 2026-09-12T01:00:26Z) added the prepared-env purge+identity lanes and RAISED the CI workflow wall from ~800–1400s (pre-W4 p50 890.0s mean 946.7s n=13) to ~2000–3200s (post-W4 p50 2558.0s mean 2569.7s n=11): +~1624s mean (+171%). Post-W4 PR CI p50 vs the frozen ≤360s goal is NOT MET — reported as progress-not-achieved with the W4-increase attribution, never hidden.")
+ (honesty
+  "Unknowns stay unknown: flake-tax rate unknown (single retained run 0.00% at W3; W0 zero eligible incidents); L0/L1 p90 unknown at n=3/n=1 with measured maxima reported; main/release stage-gates evidence-pending (no post-W9 main-push or release-tag run retained locally); prepared-env v1.00.29 window ratio pending-coordinator-fill (carried baseline 24/24=100% at v1.00.28-final; mismatch fail-closed test-verified). The dup-01 saving stays PROXY-labeled (local W8-chain fast-suite wall; no retained nightly CI run exists).")
+ (issues-referenced ("campaign v1.00.29 W10")))

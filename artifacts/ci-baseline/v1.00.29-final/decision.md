@@ -1,0 +1,73 @@
+# W10 decision record — v1.00.29-final (rebalance, final cohort, and bake)
+
+| Field | Value |
+|---|---|
+| Wave | v1.00.29-w10 (`campaign/v1.00.29-w10`) |
+| Contract | PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W8 + §7 (frozen; targets never revised) |
+| Cohort | `cohort.json` — 24 eligible unique merged-PR head SHAs, window 2026-09-10T07:38:22Z .. 2026-09-12T15:52:02Z, CLOSED (≥20 met; §11.4) |
+| Machine-readable rows | `report.json` (§7.2 per-metric), `graph-after.json` (§4.7 accounting), `shard-plan-regeneration.json` (duration model) |
+
+## 1. §7.1 Safety-gate decisions (all 14 rows, explicit)
+
+| # | Contract row | Required verdict | Decision | Evidence pointer |
+|---|---|---|---|---|
+| 1 | Required claim inventory | No unexplained loss | **pass** — exactly one claim left the required graph (dup-01 b-side `claim:nightly:linux-fast-suite-nightly`) and it was replaced by fail-closed bundle consumption of the same proof with unconditional suite fallback; 29/30 W0 claims untouched; zero unclassified removals | `graph-after.json` `changes_vs_w0`; `artifacts/proof-graph/v1.00.29-w9/removals.json` (exactly 1 removal, 1 disqualification); `docs/reports/DUPLICATE-PROOF-REDUCTION-v1.00.29.md` §3 |
+| 2 | Distinct Racket-version proofs | Preserved | **pass** — `ci.yml#test-cross-version` (Racket 8.11 lane) untouched; dup-05 remains `distinct_environment` and independent; the single W9 removal (dup-01) is same-runtime by classification | `graph-after.json` unchanged nodes; W0 `duplicate-classification.json` dup-05; W9 ledger removals[] (same-environment pair only) |
+| 3 | Distinct platform proofs | Preserved | **pass** — W0's dup-04 `exact_duplicate` premise was invalidated by review (B1): ci.yml platform lane runs ubuntu-latest, full-regression platform lane runs macos-14 → `distinct_environment`, wiring reverted byte-exact, BOTH instances remain required and run unconditionally | W9 ledger `disqualifications[]` (`wiring_reverted: true`); `graph-after.json` `requalified_pairs`; protection pinned by `tests/test-proof-bundle-consume.rkt` (full-regression carries zero proof-bundle wiring; unconditional macos suite step) |
+| 4 | Strict-security/sandbox proofs | Preserved | **pass** — `ci.yml#security` (STRICT) untouched; the strict queue keeps a reserved separate prepared-env identity on the cold path; no reuse path touches a security claim | W6 `artifacts/proof-graph/v1.00.29-w6/consumers.json` (ci:security deferred — "no strict-security consumer receives a weaker prepared environment"); `graph-after.json` (no edge added to security) |
+| 5 | Release-specific proofs | Preserved | **pass** — `release.yml` carries zero proof-bundle wiring (pinned by test); release-specific evidence list (readiness, packaging, reproducibility, install smoke, attestation, retention, publish authorization) executes independently; dup-08 (477 s) deliberately NOT removed | W9 report §1.1 ("release lane untouched") + §3; `tests/test-proof-bundle-consume.rkt` release pin; `report.json` duplicate-proof-ratio row |
+| 6 | Workflow-contract proofs | Preserved unless semantic equivalence explicitly proven | **pass** — workflows suite lanes (ci.yml matrix 2 + full-regression workflows-suite) untouched; no semantic-equivalence claim was made or needed (dup-07 remains `distinct_environment`) | W0 `duplicate-classification.json` dup-07; `graph-after.json` unchanged nodes/edges |
+| 7 | Proof reuse | Fail-closed | **pass** — the only reuse edge is `bundle:proof-bundle-fast → job:nightly:test` through the repository-owned validator (steps 1–15); missing/stale/corrupt bundle, environment drift, unauthorized consumer, or any hiccup → `consume-not-run`/`not-reusable:<reason>`/`invalid` decision record and the fast suite RUNS unconditionally; a skipped suite is recorded by an explicit zero-tests-run step | W9 report §4 (fallback ledger + dry-run evidence); `tests/test-proof-bundle-consume.rkt` 25/25 incl. §9 threat cases (a)–(g); `graph-after.json` `added_edges[].consumer_behavior` |
+| 8 | Provenance validation | Pass | **pass** — `q.proof-bundle/1` writer/validator provenance chain: content-addressed `bundle_id`, immutable workflow revision SHA, producer identity, exact commit/tree subject; checksum-only acceptance paths do not exist (deliberate-corruption fixtures rejected) | `tests/test-proof-bundle-writer.rkt` 23/23; `tests/test-proof-bundle-validator.rkt` 16/16; W9 report §6 |
+| 9 | Retention validation | Pass | **pass** — validator rejects expired evidence and evidence whose retention horizon is shorter than the consuming policy; bundle artifact retention 14d recorded at production; retention checks exercised by test | W9 report §2/§6; `tests/test-proof-bundle-validator.rkt` (expired-evidence case); `graph-after.json` `added_nodes` (retention field) |
+| 10 | Rerun semantics | Original required failure retained | **pass** — the cohort retains every attempt (24/24 success here; failures/cancellations would be recorded, never dropped — no-silence rule pinned by `tests/test-ci-cohort-report.rkt`); the W2 rerun contract stands: a rerun is evidence only and never auto-converts a required failure to green; the W3-era unreproduced sharded observation is recorded, not erased | `cohort.json` reliability block; `tests/test-ci-cohort-report.rkt` failure-truth pins; `docs/reports/FLAKE-FORENSICS-v1.00.29.md` (unreproduced observation retained) |
+| 11 | Selector | No replacement of broad gates without W5/W6 promotion governance | **pass** — the selector pilot is CLOSED-SKIPPED (W7 amendment gate unmet, recorded at W8/PR 9678); no selector execution exists in any required gate; the historical over-budget impact-selector job remains absent (prohibition §1.3 held); broad required PR gates unchanged | W8 cohort entry 9678 title; `tests/test-workflow-purge-contract.rkt`; W9 report §6 |
+| 12 | Prepared env | Verified restore ≥95%; mismatch never silently accepted | **pass (mechanism + carried baseline); window ratio unverified — pending coordinator fill** — the guarded restore verifies the manifest tuple before any test; wrong racket digest / wrong OS profile / wrong lock digest all fail closed loudly (test-verified), and the W6 identity-manifest compare adds a counted identity-mismatch fallback. Carried retained baseline: 24/24 = 100 % verified restores at v1.00.28-final (same guarded mechanism). The v1.00.29 post-W6 window aggregate exists only in CI run logs (coordinator-retrievable); it is recorded as `pending-coordinator-fill` in `report.json` — unknown, never coerced | `report.json` prepared-env row + `verified_restore_ratio` placeholder; `artifacts/ci-baseline/v1.00.28-final/cohort.json` prepared-env-restore-stats; `tests/test-prepared-env-report.rkt`; W6 consumers.json `activation_rule` |
+| 13 | Coverage/behavior ownership | No silent orphaned claim | **pass** — the removed nightly re-execution is not an orphaned claim: its proof obligation is satisfied by the bundle consumer with unconditional fallback (the claim set of the nightly lane is preserved by construction); all other W0 claim→job edges unchanged; ownership matrix `--check` PASS on this branch (regenerated bytes identical) | `graph-after.json` `added_edges`; ownership matrix check (W10 final chain output); W9 report §3 table |
+| 14 | Unknown metrics | Remain unknown, never coerced to zero | **pass** — flake-tax rate: `unknown` (single-run 0.00 % partial evidence recorded as such); L0/L1 p90: `unknown` at n=3/n=1 with measured maxima reported; prepared-env window ratio: `pending-coordinator-fill`; main/release stage-gates: evidence-pending; every unknown is labeled in `report.json`/this file | `report.json` rows (l0/l1/flake-tax/prepared-env); §3 below |
+
+A safety-gate failure would prevent a successful reduction verdict regardless of speed; no row fails. Row 12's v1.00.29-window number is explicitly unverified (carried 100 % baseline + test-verified fail-closed mismatch behavior are the local evidence); it is the single open measurement of this record.
+
+## 2. §7.2 Performance rows (measured honestly; details in `report.json`)
+
+| Row | Goal | Measured | Verdict |
+|---|---|---|---|
+| Local L0 p90 | ≤ 5 s | samples 0.640 / 0.676 / 2.491 s (n=3 files, one machine, `--shard-plan measure`); **p90 unknown (never 0) at n=3** | indicative pass — max ≤ goal; p90 not estimable |
+| Local L1 p90 | ≤ 30 s | group wall 2.61 s (n=1 group, RUN-SUMMARY); **p90 unknown (never 0) at n=1** | indicative pass — wall ≤ goal; p90 not estimable |
+| Required PR CI p50 | ≤ 360 s | **2558.0 s** post-W4 subset (n=11); full-window 1329.0 s (n=24) | **target not achieved** |
+| Required PR CI p95 | ≤ 480 s | **3023.0 s** post-W4 subset; full-window 2856.7 s | **target not achieved** |
+| Duplicate proof ratio | ≤ 10 % | **2.49 %** (477 s / 19,188 s frozen W0 window; removal PROXY-labeled 1282.561 s) | **pass** |
+| Prepared-env verified restore | ≥ 95 % | **pending-coordinator-fill** (carried baseline 24/24 = 100 %; mismatch fail-closed test-verified) | unverified — pending coordinator fill |
+| Flake tax runner share | ≤ 2 % | **unknown** (single retained run 0.00 % at W3; W0: zero eligible incidents; no fleet-wide v1.00.29 rate locally computable) | unknown with partial evidence |
+| Selector confirmed relevant omissions | 0 if W6 runs | 0 — W6 never activated (CLOSED-SKIPPED at W8) | not applicable |
+
+## 3. §7.3 Main/release staged contract (W0-frozen stage gates) and north-star
+
+W0 froze gate bands (PERFORMANCE-CONTRACT-v1.00.29.md §7): main CI ≤ 12 m warn / ≤ 8 m target trajectory, fail if > 30 m or regression > 25 % vs the 7-run p50; release ≤ 45 m warn / ≤ 30 m target trajectory, fail if > 90 m; full regression setup-share warn (no completion time ever imputed for cancelled runs).
+
+**Stage-gate verdict: evidence-pending (unknown, never 0).** No post-W9 main-push or release-tag production run is retained locally; the W0-frozen gates compare against new same-SHA production observations under the final topology, and none exists in the local evidence set. The gates are neither declared passed nor failed from proxy data.
+
+**North-star progress (main ≤ 10 min, release ≤ 20 min): NOT ACHIEVED on the available evidence — and trending the wrong way on the PR surface.** The only new window evidence is the PR CI cohort: post-W4 p50 2558 s (42.6 min), p95 3023 s — far above both the frozen PR goals (≤ 6/8 min) and incompatible with the ≤ 10 min main north-star trajectory if it transferred to main pushes. No release-lane observation exists post-W9. Point estimates are labeled as such; sample sizes are in `cohort.json`.
+
+### TOPOLOGY DISCLOSURE (honest north-star evidence — not hidden)
+
+The cohort spans the W0→W9 topology evolution, so its wall-clock numbers mix two topologies by construction. **W4 ("systemic prepared-env bytecode pinning", PR 9669, merged 2026-09-12T01:00:26Z) added the prepared-env purge + identity lanes, which RAISED the CI workflow wall from ~800–1400 s (pre-W4 entries: p50 888 s, mean 946.7 s, n=13) to ~2000–3200 s (post-W4 entries: p50 2558 s, mean 2569.7 s, n=11) — an increase of ~+1623.0 s mean (+171 %).** The post-W4 CI p50 of ~2450–2558 s against the ≤ 360 s goal is therefore NOT MET, and this is reported as progress-not-achieved with the W4-increase attribution. The W4 mechanism bought correctness (BUG-0065 bytecode-pinning invariant: every lane tests exactly what it checked out) and setup-time savings at the cost of a new required lane and purge work on the critical path — a trade that was accepted when W4 merged and that v1.00.29's final contract now records honestly rather than nets out. Recovering the ≤ 360 s goal requires putting that mass off the mergeable critical path (or gating it per-surface), which is future governance work, not part of W10.
+
+## 4. Shard-plan rebalance decision (§6 W8 work items 1–2)
+
+Regeneration (machine-readable: `shard-plan-regeneration.json`; capability + checks: `scripts/run-tests/shard-plan.rkt`, `--shard-plan measure`):
+
+- Inventory: current fast-suite selection, 1186 files (`collect-test-files 'fast` at regeneration time; the runner's equivalent fast selection printed 1190 in the W10 chain — discovery-inclusion differences of 4 data-adjacent files are recorded, never silently reconciled).
+- Duration model: per-shard predicted duration = Σ per-file durations; per-file durations from the **latest retained v1.00.28-final cohort duration evidence** (the W7 post-remediation fast-runtime census, `q.census.fast-runtime/1`, medians mapped to seconds) — 1180 files covered, 7 substituted at the conservative p95 default 2.014 s (recorded); a local `--shard-plan measure` snapshot is the alternative basis (exercised on a 3-file sample).
+- Retained CI anchors (cohort seed, pre-registered rule "three latest pre-W4 merged PRs"): PRs 9667/9668/9666 → 928/817/832 s, mean 859 s (pre-W4 CI wall the fast-suite plan actually influences; post-W4 walls additionally contain the new prepared-env lane and are disclosed above).
+- Prediction at 3 shards: per-shard 396.0/395.0/395.0 s under conservative defaults-only… with census medians: **309.3–309.5 s per shard, max 309.5 s vs round-robin 374.3 s (−17.3 %)**; inventory preserved.
+- Starvation check: **ok** (no shard > 1.35 × mean 309.4 s; worst ratio ≈ 1.0002).
+- Tail-straddle check: **ok** (no file predicted to straddle a shard boundary twice — no file > 2 × mean; no file > 1 × mean either).
+
+**Decision: keep 3 shards; the duration-aware assignment is available with `activate` recommendation but is NOT activated in this wave.** Rationale: (a) activating a re-assignment inside the final-cohort window would change the topology the cohort measured (§11.4 no-partial-cohort discipline); (b) the improvement is a census-median PROXY prediction, not a retained CI observation; (c) shard-count changes raise runner-minutes and require the accepted-cost decision the contract reserves for a reviewed follow-up. Nothing in W10 changes CI execution.
+
+## 5. Draft verdict (exactly one, for W11 to publish)
+
+All 14 §7.1 safety-gate rows hold (row 12 with the explicitly recorded pending window measurement); safe, verified reductions were delivered (one exact-duplicate removed through fail-closed provenance-safe reuse with unconditional fallback; avoidable duplicate mass 6065 s → 477 s = 2.49 % ≤ 10 % goal; prepared-env setup savings banked per W6 evidence); and one or more frozen performance goals miss — PR CI p50/p95 post-W4 (2558/3023 s vs 360/480 s) with the W4-increase attribution, and main/release north-stars unverifiable locally and trending away. Targets are not changed to avoid this verdict.
+
+PARTIAL — SAFE REDUCTION DELIVERED

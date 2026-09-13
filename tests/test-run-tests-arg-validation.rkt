@@ -130,6 +130,39 @@
                  (apply validate 4 #f 'not-a-number #t 'all '() 1 #f #f default-new-args)))))
 
 ;; ---------------------------------------------------------------------------
+;; W10: --shard-plan measure validation
+;; ---------------------------------------------------------------------------
+
+;; default-new-args positions (0-indexed, after inventory?): 14 = --shard-plan,
+;; 3 = --json-out.
+(define (new-args-with-shard-plan v json-out)
+  (list-set (list-set default-new-args 14 v) 3 json-out))
+
+(test-case "validate-args!: --shard-plan measure requires --json-out"
+  (define validate (runner-ref 'validate-args!))
+  (check-exn
+   exn:fail?
+   (lambda ()
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (check-not-false (regexp-match? #rx"measure requires --json-out"
+                                                                  (exn-message e)))
+                                  (raise e))])
+       (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" #f)))))
+  (check-not-exn
+   (lambda ()
+     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" "snap.json")))))
+
+(test-case "validate-args!: --shard-plan measure is a valid mode; nonsense is rejected"
+  (define validate (runner-ref 'validate-args!))
+  (check-not-exn
+   (lambda ()
+     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" "snap.json"))))
+  (check-exn
+   exn:fail?
+   (lambda ()
+     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "sometimes" #f)))))
+
+;; ---------------------------------------------------------------------------
 ;; known-suites list
 ;; ---------------------------------------------------------------------------
 

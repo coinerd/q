@@ -1,0 +1,9 @@
+[
+ {"number": 101, "title": "fixture pre-a", "merged_at": "2026-09-10T00:00:00Z", "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ci_wall_seconds": 800},
+ {"number": 102, "title": "fixture pre-b", "merged_at": "2026-09-10T12:00:00Z", "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "ci_wall_seconds": 900},
+ {"number": 103, "title": "fixture pre-c", "merged_at": "2026-09-11T00:00:00Z", "head_sha": "cccccccccccccccccccccccccccccccccccccccc", "ci_wall_seconds": 1000},
+ {"number": 104, "title": "fixture pre-d", "merged_at": "2026-09-11T12:00:00Z", "head_sha": "dddddddddddddddddddddddddddddddddddddddd", "ci_wall_seconds": 1400},
+ {"number": 105, "title": "fixture post-a", "merged_at": "2026-09-12T06:00:00Z", "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ci_wall_seconds": 2400},
+ {"number": 106, "title": "fixture post-b", "merged_at": "2026-09-12T12:00:00Z", "head_sha": "ffffffffffffffffffffffffffffffffffffffff", "ci_wall_seconds": 2800},
+ {"number": 107, "title": "fixture malformed (no wall)", "merged_at": "2026-09-13T00:00:00Z", "head_sha": "1111111111111111111111111111111111111111"}
+]

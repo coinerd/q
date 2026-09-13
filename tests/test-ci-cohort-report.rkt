@@ -22,6 +22,7 @@
          racket/string
          json
          (only-in "../util/version.rkt" q-version)
+         (only-in "../scripts/run-tests/sha256.rkt" sha256-hex)
          "../scripts/run-tests/cohort-report.rkt")
 
 (define-runtime-path here ".")
@@ -1387,7 +1388,13 @@
 ;; ============================================================
 
 (define fc-full-guards
-  (hasheq
+  ;; W10 fix: `hash` (equal?-based), not `hasheq`. With `hasheq`, the string
+  ;; keys only resolve when the compiler happens to share these literal
+  ;; objects with cohort-report.rkt's own row-guard literals — an identity
+  ;; lottery across compilation layouts that flipped this suite from green
+  ;; to "unverified" depending on incremental-compile layout. Guard evidence
+  ;; is content, so the fixture must look it up content-based.
+  (hash
    "inventory-accounted"
    (hasheq 'provided #t 'reference "artifact: per-SHA inventory digests equal the baseline")
    "reliability-non-regression"
@@ -1853,12 +1860,206 @@
 ;; Run
 ;; ============================================================
 
+;; ============================================================
+;; W10 (v1.00.29): final-cohort artifact guard suite
+;;
+;; Pins (a) the v1.00.29-final §7.2 row vocabulary, (b) the §7.1
+;; safety-gate row vocabulary (all 14 rows decided in decision.md),
+;; (c) the cohort's mechanical eligibility invariants, (d) the
+;; graph-after reduction invariants, and (e) SHA256SUMS integrity of
+;; the four contract artifacts. Existing pinned rows stay green; these
+;; are additive rows.
+;; ============================================================
+
+(define-runtime-path ci-baseline-dir "../artifacts/ci-baseline")
+;; v29-dir names the CURRENT in-progress milestone artifact (kept as a
+;; literal: the repo's canonical q-version still points at the previous
+;; release until closeout, so this path must not derive from q-version).
+(define v29-dir (build-path ci-baseline-dir "v1.00.29-final"))
+;; Derived from the version module (BUG-0009): the guard tracks the current
+;; milestone's prior final-cohort artifact directory.
+(define v28-dir (build-path ci-baseline-dir (string-append "v" q-version "-final")))
+
+(define (load-json rel)
+  (call-with-input-file (build-path v29-dir rel) read-json))
+
+;; §7.2 v1.00.29-final row vocabulary (frozen contract; ids as decided at W10)
+(define v29-report-row-ids
+  '("l0-p90-local" "l1-p90-local"
+                   "pr-ci-p50"
+                   "pr-ci-p95"
+                   "duplicate-proof-ratio"
+                   "prepared-env-verified-restore"
+                   "flake-tax-runner-share"
+                   "selector-confirmed-relevant-omissions"))
+
+;; §7.1 safety-gate vocabulary (roadmap §7.1 table, in order)
+(define v29-safety-gate-rows
+  '("Required claim inventory" "Distinct Racket-version proofs"
+                               "Distinct platform proofs"
+                               "Strict-security/sandbox proofs"
+                               "Release-specific proofs"
+                               "Workflow-contract proofs"
+                               "Proof reuse"
+                               "Provenance validation"
+                               "Retention validation"
+                               "Rerun semantics"
+                               "Selector"
+                               "Prepared env"
+                               "Coverage/behavior ownership"
+                               "Unknown metrics"))
+
+;; §13 draft-verdict vocabulary: the verdict must be exactly one of these
+(define v29-verdict-vocabulary
+  '("ACHIEVED" "PARTIAL — SAFE REDUCTION DELIVERED" "NOT ACHIEVED" "BLOCKED — SAFETY/INTEGRITY"))
+
+(define v29-final-suite
+  (test-suite "v1.00.29 final cohort artifact guards (W10)"
+
+    (test-case "cohort.json: closed cohort of >= 20 eligible unique head SHAs"
+      (define c (load-json "cohort.json"))
+      (check-equal? (hash-ref c '|cohort-status|) "closed")
+      (check-true (>= (hash-ref c '|unique-head-shas|) 20))
+      (check-equal? (hash-ref c '|unique-head-shas|)
+                    (length (hash-ref c '|shas|))
+                    "unique-head-shas must equal the entry count")
+      (check-equal? (hash-ref c '|exclusion-count|) 0)
+      (check-true (hash-has-key? c '|eligibility-rules-pre-registered|)
+                  "eligibility rules must be pre-registered in the artifact"))
+
+    (test-case "cohort.json: every entry carries the full per-entry row vocabulary"
+      (define c (load-json "cohort.json"))
+      (for ([e (in-list (hash-ref c '|shas|))])
+        (for ([k '(number title
+                          merged_at
+                          head_sha
+                          checks_total
+                          checks_failed
+                          ci_wall_seconds
+                          topology_class)])
+          (check-true (hash-has-key? e k) (format "entry ~a missing ~a" (hash-ref e 'number) k)))
+        (check-true (>= (hash-ref e 'checks_total) 17) "eligibility rule (c): checks.completed >= 17")
+        (check-equal? (hash-ref e 'checks_failed) 0 "eligibility rule (c): failed = 0")
+        (check-not-false (member (hash-ref e 'topology_class) '("pre-w4" "post-w4"))
+                         "topology_class vocabulary is pre-w4 | post-w4")))
+
+    (test-case "cohort.json: head SHAs unique and disjoint from the prior final cohort"
+      (define c (load-json "cohort.json"))
+      (define heads (map (lambda (e) (hash-ref e 'head_sha)) (hash-ref c '|shas|)))
+      (check-equal? (length heads)
+                    (length (remove-duplicates heads))
+                    "eligibility rule (b): head SHAs distinct")
+      (define prior (call-with-input-file (build-path v28-dir "cohort.json") read-json))
+      (define prior-shas (map (lambda (e) (hash-ref e 'sha)) (hash-ref prior 'shas)))
+      (for ([h (in-list heads)])
+        (check-false (member h prior-shas) "eligibility rule (d): no prior-cohort sample reuse")))
+
+    (test-case "cohort.json: post-W4 and full-window p50/p95 both reported"
+      (define c (load-json "cohort.json"))
+      (define stats (hash-ref c '|statistics|))
+      (check-true (>= (hash-ref (hash-ref stats '|post-w4|) '|count|) 1))
+      (check-true (number? (hash-ref (hash-ref stats '|post-w4|) '|p50-seconds|)))
+      (check-true (number? (hash-ref (hash-ref stats '|post-w4|) '|p95-seconds|)))
+      (check-true (number? (hash-ref (hash-ref stats '|full-window|) '|p50-seconds|)))
+      (check-true (number? (hash-ref (hash-ref stats '|full-window|) '|p95-seconds|))))
+
+    (test-case "report.json: §7.2 row vocabulary is complete and each row has goal/measured/verdict"
+      (define r (load-json "report.json"))
+      (define ids (map (lambda (row) (hash-ref row '|id|)) (hash-ref r '|rows|)))
+      (for ([want (in-list v29-report-row-ids)])
+        (check-not-false (member want ids) (format "missing §7.2 row ~a" want)))
+      (for ([row (in-list (hash-ref r '|rows|))])
+        (for ([k '(goal measured verdict)])
+          (check-true (hash-has-key? row k) (format "row ~a missing ~a" (hash-ref row '|id|) k)))))
+
+    (test-case "report.json: unknown metrics remain unknown, never coerced to zero"
+      (define r (load-json "report.json"))
+      (define (row id)
+        (findf (lambda (x) (equal? (hash-ref x '|id|) id)) (hash-ref r '|rows|)))
+      (define flake (row "flake-tax-runner-share"))
+      (define flake-measured (hash-ref flake '|measured|))
+      (check-true (string? (hash-ref flake-measured '|rate|))
+                  "flake-tax rate must stay the unknown marker, never 0")
+      (check-true (regexp-match? #rx"unknown" (hash-ref flake-measured '|rate|)))
+      (define pe (row "prepared-env-verified-restore"))
+      (define measured (hash-ref pe '|measured|))
+      (check-equal? (hash-ref (hash-ref measured '|verified_restore_ratio|) '|status|)
+                    "pending-coordinator-fill"))
+
+    (test-case "decision.md: all 14 §7.1 safety-gate rows are decided"
+      (define md (file->string (build-path v29-dir "decision.md")))
+      (for ([row (in-list v29-safety-gate-rows)])
+        (check-true (string-contains? md row) (format "decision.md must decide §7.1 row ~a" row)))
+      ;; rows 1-11 and 13-14 read a plain **pass**; row 12 reads a qualified pass
+      (check-true (>= (length (regexp-match* #rx"[*][*]pass[*][*]" md)) 12)
+                  "the overwhelming majority of rows must read pass")
+      (check-true (string-contains? md "pass (mechanism + carried baseline)")
+                  "row 12's qualified pass must be explicit"))
+
+    (test-case "decision.md: ends in exactly one §13 draft verdict from the vocabulary"
+      (define md (file->string (build-path v29-dir "decision.md")))
+      (define verdict-line
+        (last (filter (lambda (l) (non-empty-string? (string-trim l))) (string-split md "\n"))))
+      (check-not-false (member (string-trim verdict-line) v29-verdict-vocabulary)
+                       "the last content line must be exactly the draft verdict")
+      (check-not-false (member "PARTIAL — SAFE REDUCTION DELIVERED" v29-verdict-vocabulary))
+      (check-equal? (string-trim verdict-line) "PARTIAL — SAFE REDUCTION DELIVERED"))
+
+    (test-case "graph-after.json: exactly one removal (dup-01) and the dup-04 protection"
+      (define g (load-json "graph-after.json"))
+      (define changes (hash-ref g '|changes_vs_w0|))
+      (define removed (hash-ref changes '|removed_claims|))
+      (check-equal? (length removed) 1)
+      (check-equal? (hash-ref (first removed) '|pair_id|) "dup-01")
+      (define rbw (hash-ref (hash-ref g '|final_metrics|) '|removed_by_w9|))
+      (check-true (regexp-match? #rx"PROXY" (hash-ref rbw '|proxy_basis|))
+                  "the dup-01 saving must stay PROXY-labeled")
+      (define requalified (hash-ref changes '|requalified_pairs|))
+      (check-equal? (length requalified) 1)
+      (check-equal? (hash-ref (first requalified) '|pair_id|) "dup-04")
+      (check-equal? (hash-ref (first requalified) '|current_class|) "distinct_environment")
+      (check-true (hash-ref (first requalified) '|both_instances_remain_required|)
+                  "both dup-04 instances must remain required"))
+
+    (test-case "graph-after.json: §4.7 accounting carries the honest post-W9 numbers"
+      (define g (load-json "graph-after.json"))
+      (define acct (hash-ref g '|spec_section_4_7_accounting|))
+      (check-equal? (hash-ref acct '|avoidable_remainder_seconds|) 477)
+      (check-equal? (hash-ref acct '|avoidable_remainder_ratio_of_window|) 0.0249)
+      (check-equal? (hash-ref acct '|distinct_environment_removed_seconds|) 0)
+      (check-equal? (hash-ref acct '|distinct_semantic_removed_seconds|) 0)
+      (check-equal? (hash-ref acct '|observational_removed_seconds|) 0)
+      (define fm (hash-ref g '|final_metrics|))
+      (check-equal? (hash-ref fm '|duplicate_proof_ratio_after_w9|) 0.0249)
+      (check-equal? (hash-ref fm '|duplicate_proof_ratio_goal|) 0.1))
+
+    (test-case "SHA256SUMS: the five contract artifacts match their recorded digests"
+      (define sums (file->lines (build-path v29-dir "SHA256SUMS")))
+      (define non-empty (filter (lambda (l) (non-empty-string? (string-trim l))) sums))
+      (check-equal? (length non-empty) 5)
+      (for ([line (in-list non-empty)])
+        (define m (regexp-match #px"^([0-9a-f]{64})\\s{2}(.+)$" (string-trim line)))
+        (check-true (pair? m) (format "malformed SHA256SUMS line: ~a" line))
+        (when (pair? m)
+          (define want (second m))
+          (define name (third m))
+          (define got (call-with-input-file (build-path v29-dir name) sha256-hex))
+          (check-equal? got want (format "~a digest mismatch" name)))))))
+
+;; ============================================================
+
 (define failures (run-tests suite))
 (define c2-failures (run-tests c2-suite))
 (define pr-elapsed-failures (run-tests pr-elapsed-suite))
 (define final-claim-failures (run-tests final-claim-suite))
 (define w8-failures (run-tests w8-final-verdict-suite))
+(define v29-final-failures (run-tests v29-final-suite))
 
 (module+ main
-  (when (positive? (+ failures c2-failures pr-elapsed-failures final-claim-failures w8-failures))
+  (when (positive? (+ failures
+                      c2-failures
+                      pr-elapsed-failures
+                      final-claim-failures
+                      w8-failures
+                      v29-final-failures))
     (exit 1)))

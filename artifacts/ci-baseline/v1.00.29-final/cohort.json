@@ -1,0 +1,72 @@
+{
+  "schema-version": 2,
+  "artifact": "final acceptance cohort",
+  "cohort-id": "v1.00.29-final",
+  "cohort-mode": "final-claim",
+  "cohort-status": "closed",
+  "cohort-status-reason": "24 eligible unique merged-PR head SHAs accumulated in the v1.00.29 campaign window (2026-09-10T07:38:22Z .. 2026-09-12T15:52:02Z), exceeding the >=20 requirement; every entry is fully measured on the seed-recorded CI evidence; no exclusion was necessary.",
+  "expected-count": 20,
+  "window-eligible-count": 24,
+  "shortfall-count": 0,
+  "window": {"start": "2026-09-10T07:38:22Z", "end": "2026-09-12T15:52:02Z"},
+  "start-sha": "a2a10b9daab1542920ac5fb55dec450b14f36a1e",
+  "eligibility-rules-pre-registered": {
+    "registration": "Rules frozen in this file before any entry was admitted; application is mechanical per entry.",
+    "a-merged-in-window": "PR merged into main during the v1.00.29 campaign window (merged_at within [2026-09-10T07:38:22Z, 2026-09-12T15:52:02Z]).",
+    "b-unique-head-sha": "PR head SHA distinct from every other cohort entry (mechanically enforced: 24 distinct values, zero collisions).",
+    "c-required-ci-completed": "Required CI completed on the head SHA: checks.completed >= 17 and checks.failed = 0.",
+    "d-not-a-prior-cohort-rerun": "Head SHA must not appear in artifacts/ci-baseline/v1.00.28-final/cohort.json (verified mechanically against that artifact's 8 SHAs: 439f732c6f9375727671ce8bda3f33afedaca545, 584681684d522ea1f5d630dad7af4eaae3748291, 04637d835d33f887a29846a2f3c1855146151985, db46eda2674a55a4c507b17fdcbfe91fbeb815ec, 02b9120dc2f22fd5ddb30adc392c9c55fa5f6a48, 02c1d43b47c613349809656104852996cb90483a, 87d3265e22f3ecf9d6817e338717d6a3c735f3ac, fc2b3f8afcc880344028a28b30c183480db54147 — zero overlaps with this cohort).",
+    "failed-cancelled-runs": "None excluded: the seed records zero failed and zero cancelled required runs in the window (every entry has checks.failed = []). No cancelled-then-retried run exists in the seed; had one existed, the RETRIED run's data would be used and the cancellation recorded here.",
+    "topology-class-rule": "topology_class = 'post-w4' iff merged_at >= 2026-09-12T01:00:26Z (the W4 prepared-env expansion merge, PR 9669, whose own CI already ran the prepared-environment-pilot workflow per the seed's ci_wall_ms keys); otherwise 'pre-w4'. The cohort therefore spans the W0->W9 topology evolution and is disclosed, not hidden (see TOPOLOGY DISCLOSURE in decision.md / PROOF-GRAPH-FINAL-v1.00.29.md)."
+  },
+  "evidence-sources": {
+    "cohort-seed": "q-w10-cohort-seed.json (machine-readable GitHub API fetch by the coordinator: number/title/merged_at/merge_sha/head_sha/checks/ci_wall_seconds per PR)",
+    "wall-basis": "ci_wall_seconds = CI workflow run wall (run_started_at -> updated_at) per PR head SHA, as recorded in the seed",
+    "prior-cohort-exclusion-check": "artifacts/ci-baseline/v1.00.28-final/cohort.json"
+  },
+  "statistics-method": "Exact linear interpolation at rank k = q*(n-1) over ascending samples (same estimator as cohort-quantile-exact), millisecond-rounded; p50/p95 reported over BOTH the post-W4 topology subset and the full 24-entry window.",
+  "statistics": {
+    "post-w4": {"count": 11, "p50-seconds": 2558.0, "p95-seconds": 3023.0, "mean-seconds": 2569.727},
+    "pre-w4": {"count": 13, "p50-seconds": 890.0, "p95-seconds": 1320.2, "mean-seconds": 946.692},
+    "full-window": {"count": 24, "p50-seconds": 1329.0, "p95-seconds": 2856.7},
+    "w4-attribution": "post-W4 mean 2570.6s vs pre-W4 mean 946.7s: the W4 prepared-env purge+identity expansion RAISED the CI workflow wall by ~+1624s mean (+171%); post-W4 p50 2558.0s vs the frozen <=360s PR CI goal = NOT MET. This increase is honest north-star evidence and is attributed, not hidden."
+  },
+  "shas": [
+    {"number": 9638, "title": "v1.00.28 W9 — bake, verdict records, and release gates (test workload reduction)", "merged_at": "2026-09-10T07:38:22Z", "head_sha": "a2a10b9daab1542920ac5fb55dec450b14f36a1e", "merge_sha": "293b6a271aa174c81573ab262219bc1531cce294", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 809, "topology_class": "pre-w4"},
+    {"number": 9653, "title": "BUG-0067: patient slow-lane infra auto-resume + settings wiring + IPC render fix", "merged_at": "2026-09-10T20:05:19Z", "head_sha": "08fdc2121f8104ad72831665a6cab9551319dcf5", "merge_sha": "e97a34f1429af179dcc809ea80f994457a640a4e", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 893, "topology_class": "pre-w4"},
+    {"number": 9654, "title": "v1.00.29 W0 — proof-graph census, metric contract, and evidence trio (measurement-only)", "merged_at": "2026-09-10T21:22:02Z", "head_sha": "ba4ba392f72fa508b95e742a42157434a5b3c5e1", "merge_sha": "e83a8c5299b6fc88c077a4960fd1b3f972c3c3e8", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 888, "topology_class": "pre-w4"},
+    {"number": 9656, "title": "BUG-0069: surface campaign auto-retry in the TUI + honest error hints", "merged_at": "2026-09-10T22:06:10Z", "head_sha": "8ad138bbed5a26bb4c82983067576af65e23b068", "merge_sha": "78b34cbdf9644cca9524aac10ccb13c775637bc2", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 890, "topology_class": "pre-w4"},
+    {"number": 9658, "title": "Verify criteria: run declared commands, not markdown decoration (BUG-0068 secondary 2)", "merged_at": "2026-09-10T23:00:02Z", "head_sha": "dda701bd8fb0e67a96da04736db10e6324fe2f29", "merge_sha": "56f5c996ec39feba40702a834afdd072eadbb1bf", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 1285, "topology_class": "pre-w4"},
+    {"number": 9659, "title": "v1.00.29 W1 — campaign-integrity hardening", "merged_at": "2026-09-11T06:54:14Z", "head_sha": "f3b0e141450b9847f3f3318bdb100a2dc855bf5d", "merge_sha": "880c17dad6195d35b7df1d98e8013b9edb3e0004", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 949, "topology_class": "pre-w4"},
+    {"number": 9661, "title": "fix(gsd): harden Verify section execution contract", "merged_at": "2026-09-11T09:33:35Z", "head_sha": "b0de60e38b7f4bbabf41562cfbbce61373b43083", "merge_sha": "b48b3a41a1281ebf9fb674fe459f9b6eeea39293", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 783, "topology_class": "pre-w4"},
+    {"number": 9663, "title": "test: repair fast-gate contract drift (BUG-0071)", "merged_at": "2026-09-11T11:51:53Z", "head_sha": "0d2aa80d66fa105c6bf68145cb11bf3d6677263a", "merge_sha": "db0c2053d57b137637d5132c30f9edd2e42abce1", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 1055, "topology_class": "pre-w4"},
+    {"number": 9664, "title": "v1.00.29 W2: delivery-verifier boundary extraction (#9590)", "merged_at": "2026-09-11T13:28:09Z", "head_sha": "b69a7108842f0a3912a6cd11855fc6165687ef0b", "merge_sha": "c77899338f15f9e424eac751d03beef5a8cd40fc", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 1373, "topology_class": "pre-w4"},
+    {"number": 9665, "title": "chore: bind v1.00.29 W2 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-11T13:48:18Z", "head_sha": "38461677194ebca3652811d33180f862b3ff47cf", "merge_sha": "ff5b5fc9a56ff49f1d18b2eb144bab5750c95352", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 805, "topology_class": "pre-w4"},
+    {"number": 9667, "title": "v1.00.29 W3: suite-interference and flake forensics", "merged_at": "2026-09-11T16:43:46Z", "head_sha": "d611a840396c1034fb6ea390af5ee67fc4bd810a", "merge_sha": "f1791e84e5028eeea8eff4f7c66ef973e4390e25", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 928, "topology_class": "pre-w4"},
+    {"number": 9668, "title": "chore: bind v1.00.29 W3 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-11T17:01:34Z", "head_sha": "0ca7098c699c04e963654ba96f141eed1e64b41e", "merge_sha": "b2f35d77a45fea8d5251c00a709d045139befc8a", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 817, "topology_class": "pre-w4"},
+    {"number": 9666, "title": "fix(gsd): BUG-0068 snapshot-drift resume remedy, hook error surfacing, register-shortcuts protocol", "merged_at": "2026-09-11T17:27:10Z", "head_sha": "cc75eba0a98229975c74806c624aaa490b9e61ef", "merge_sha": "a80d4abfb84c61e4ea8d6623832ee003430995ad", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 832, "topology_class": "pre-w4"},
+    {"number": 9669, "title": "v1.00.29 W4: systemic prepared-env bytecode pinning (BUG-0065)", "merged_at": "2026-09-12T01:00:26Z", "head_sha": "7682489aa367fa85b69238205d941744bbc9942c", "merge_sha": "7679d25e239df40cd7013ee584393ac2fca8bfeb", "checks_total": 24, "checks_failed": 0, "ci_wall_seconds": 2783, "topology_class": "post-w4"},
+    {"number": 9671, "title": "chore: bind v1.00.29 W4 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-12T01:47:26Z", "head_sha": "0fd693132d678b1517300a3e1c184fa1e8e6f423", "merge_sha": "aa882ad3457bb1d9f30fed100b210f1396b72880", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 2558, "topology_class": "post-w4"},
+    {"number": 9670, "title": "fix(tui): BUG-0072 tool-call-pre hash seam + TUI stderr guard", "merged_at": "2026-09-12T03:09:42Z", "head_sha": "4bce9f6f6c3521904adcc16d4048ed5b80ef6b52", "merge_sha": "e346cc1771c776d351cc0287d877f9705456296f", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 2855, "topology_class": "post-w4"},
+    {"number": 9672, "title": "v1.00.29 W5: provenance-safe proof-bundle prototype", "merged_at": "2026-09-12T04:32:09Z", "head_sha": "4c6c62314d7ceb6c945f7598825f81803ba05522", "merge_sha": "520805dae7d9ef286e7764b090f0aeb6c65ad41d", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 2857, "topology_class": "post-w4"},
+    {"number": 9673, "title": "chore: bind v1.00.29 W5 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-12T07:59:36Z", "head_sha": "0c360db854883b1ebbb543dcb204f85bcc9b5e33", "merge_sha": "6b65bd43469c2ef2c21c9058f9b973fdac1d919b", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 3189, "topology_class": "post-w4"},
+    {"number": 9675, "title": "v1.00.29 W7: selector governance and bounded shadow design", "merged_at": "2026-09-12T10:47:02Z", "head_sha": "284d524c3c1d6f2e9d8406a44e0ce2bd36bc11cc", "merge_sha": "719a7d195ac89f52dd8a36c10856ad0de63ac19b", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 2256, "topology_class": "post-w4"},
+    {"number": 9676, "title": "chore: bind v1.00.29 W7 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-12T11:38:17Z", "head_sha": "7565db47351c8a0d71d200e236b4d737c56e8cf9", "merge_sha": "1fbd6541173d7e754d42d7d65c1d9d4384f1fd41", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 2620, "topology_class": "post-w4"},
+    {"number": 9674, "title": "v1.00.29 W6: prepared-environment expansion", "merged_at": "2026-09-12T12:44:12Z", "head_sha": "9ff7a7839e9e35b929572ae47e9d2c39584fa72a", "merge_sha": "92f3de462177001cd34e844fc9c4f6b236345f0e", "checks_total": 20, "checks_failed": 0, "ci_wall_seconds": 2368, "topology_class": "post-w4"},
+    {"number": 9677, "title": "chore: bind v1.00.29 W6 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-12T13:33:13Z", "head_sha": "f0b163c784c177b9690e44c2d1ca2a6d62543574", "merge_sha": "51f33e1c3732abde04da10863e38510dce0e3c0e", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 2361, "topology_class": "post-w4"},
+    {"number": 9678, "title": "v1.00.29 W8: selector pilot CLOSED-SKIPPED (W7 amendment gate unmet)", "merged_at": "2026-09-12T14:45:29Z", "head_sha": "503430a3aa0405d4bd8e5606b044d02fdb4e4936", "merge_sha": "e936bbb2f1aefa8d6049cc3f0691582b8ff78ac6", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 2452, "topology_class": "post-w4"},
+    {"number": 9679, "title": "chore: bind v1.00.29 W8 merge evidence (BUG-0064 gate preflight)", "merged_at": "2026-09-12T15:52:02Z", "head_sha": "f26e025d1af31e3cff75edd92169989e14048d4e", "merge_sha": "9112e1ec880249c580a7cc582cc5366ef0f6b032", "checks_total": 21, "checks_failed": 0, "ci_wall_seconds": 1968, "topology_class": "post-w4"}
+  ],
+  "exclusions": [],
+  "exclusion-count": 0,
+  "unique-head-shas": 24,
+  "reliability": {"total-attempts": 24, "successes": 24, "failures": 0, "cancelled": 0, "reruns": 0},
+  "reliability-baseline": {
+    "failures": 0,
+    "cancelled": 0,
+    "reruns": 0,
+    "basis": "v1.00.28-final attempts summary (open cohort, 8 attempts, all successful) — carried as the recorded prior baseline"
+  },
+  "spec-reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W8 Final cohort + §11.4 (no partial cohort promoted as final: 24 >= 20, cohort CLOSED)",
+  "wave": "v1.00.29-w10"
+}

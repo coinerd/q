@@ -1,0 +1,122 @@
+{
+  "artifact": "graph-after",
+  "schema_version": "1.1.0",
+  "spec_reference": "PLAN-v1.00.29-PROOF-GRAPH-REDUCTION.md §6 W8 (publish before/after graph) + §4.7/§11.2 (duplicate accounting) + §11.3 (no silent fallback)",
+  "wave": "v1.00.29-w10",
+  "base_commit": "9112e1ec",
+  "wave_branch": "campaign/v1.00.29-w10",
+  "kind": "after-state (post-W9 intrinsic reduction + W10 rebalance/bake). Diff-aware against the frozen W0 before-state at artifacts/proof-graph/v1.00.29-w0/graph.json, which is never overwritten.",
+  "node_types": ["workflow", "job", "claim", "bundle"],
+  "edge_types": {
+    "produces": "job -> claim: executing the job yields the claim on success",
+    "enables": "job -> job: gate dependency (downstream runs only if upstream green)",
+    "aggregates": "job -> job: evidence aggregation dependency",
+    "duplicates": "claim -> claim: §4 duplicate relation with class",
+    "observes": "job -> job/claim: observational replica relation (no gate proof transfer)",
+    "produces-bundle": "job -> bundle: the job writes a q.proof-bundle/1 artifact (W9)",
+    "consumes-bundle": "bundle -> job: the job consumes the bundle through the fail-closed validator; any validation failure falls back to executing the consumer's normal proof path — never a silent skip (W9)"
+  },
+  "changes_vs_w0": {
+    "removed_claims": [
+      {
+        "claim_id": "claim:nightly:linux-fast-suite-nightly",
+        "pair_id": "dup-01",
+        "w0_class": "exact_duplicate",
+        "why": "Nightly fast-suite re-execution of the ci.yml fast-suite proof at the same SHA in the same environment (ubuntu-latest / Racket 8.10 / same selection). Removed as the W9 verified duplicate-proof reduction; the claim is now satisfied by fail-closed bundle consumption of claim:pr-ci:linux-fast-suite, with unconditional suite fallback.",
+        "evidence": "artifacts/proof-graph/v1.00.29-w9/removals.json (sha256:c143d1d8811323e32f0d676fc6c11e817c8c28c781258983889f9f60779d11b4)"
+      }
+    ],
+    "added_nodes": [
+      {
+        "id": "bundle:proof-bundle-fast",
+        "type": "bundle",
+        "schema": "q.proof-bundle/1",
+        "producer": "job:ci:test-aggregate",
+        "identity": "ci.yml:test-aggregate",
+        "retention": "14d",
+        "allowed_consumers": ["workflow:nightly.yml:test"],
+        "release_reusable": false
+      }
+    ],
+    "added_edges": [
+      {"from": "job:ci:test-aggregate", "to": "bundle:proof-bundle-fast", "type": "produces-bundle", "wave": "v1.00.29-w9"},
+      {"from": "bundle:proof-bundle-fast", "to": "job:nightly:test", "type": "consumes-bundle", "wave": "v1.00.29-w9", "consumer_behavior": "consume.rkt validator steps 1-15, fail-closed: missing/stale/corrupt bundle, environment drift, or any consume hiccup records reuse-decision-fast and the fast suite executes unconditionally (no silent skip)"}
+    ],
+    "requalified_pairs": [
+      {
+        "pair_id": "dup-04",
+        "w0_class": "exact_duplicate",
+        "current_class": "distinct_environment",
+        "disposition": "distinct_environment-disqualified — NOT REMOVED, protected",
+        "both_instances_remain_required": true,
+        "instances": [
+          "job:ci:test-platform (runs-on ubuntu-latest)",
+          "job:fullreg:test-platform (runs-on macos-14)"
+        ],
+        "evidence": "artifacts/proof-graph/v1.00.29-w9/removals.json disqualifications[] (review round 1 finding B1; round-1 wiring reverted byte-exact; pinned by tests/test-proof-bundle-consume.rkt)"
+      }
+    ],
+    "unchanged": "All other W0 nodes and edges are unchanged: no workflow added/removed; no required job removed; distinct Racket-version (dup-05), strict-security (dup-06), workflow-contract (dup-07), distinct-semantic (dup-09/10/14) and observational (dup-11/12/13) claims all still execute on their own lanes; release.yml and full-regression.yml carry zero proof-bundle wiring."
+  },
+  "nodes": {
+    "workflows_ref": "identical to artifacts/proof-graph/v1.00.29-w0/graph.json nodes.workflows (12 workflows; W10 makes no workflow changes; nightly.yml's job semantics changed per W9 as recorded in nodes.jobs annotations)",
+    "jobs": [
+      {"id": "job:ci:test-aggregate", "workflow": "wf:ci", "status": "required", "env": "ubuntu-latest", "w9_change": "produces q.proof-bundle/1 proof-bundle-fast from the aggregated per-shard results; fails unless every shard reported and fail=timeout=skip=0"},
+      {"id": "job:nightly:test", "workflow": "wf:nightly", "status": "observational", "env": "ubuntu-latest", "w9_change": "resolves + consumes proof-bundle-fast fail-closed; on any validation failure runs `racket scripts/run-tests.rkt --suite fast` unconditionally (timeout 15 kept); uploads reuse-decision-fast on every run"},
+      {"id": "job:ci:test-platform", "workflow": "wf:ci", "status": "required", "env": "ubuntu-latest", "w9_note": "dup-04 instance 1 — REQUIRED, untouched (distinct_environment protection)"},
+      {"id": "job:fullreg:test-platform", "workflow": "wf:full-regression", "status": "required", "env": "macos-14", "w9_note": "dup-04 instance 2 — REQUIRED, runs unconditionally (round-1 wiring reverted)"},
+      "all other W0 job nodes unchanged (see artifacts/proof-graph/v1.00.29-w0/graph.json nodes.jobs — the W0 before-state remains the normative full job list; only the four annotations above differ)"
+    ],
+    "claims_ref": "claims.json (W0) minus the removed dup-01 b-side claim:nightly:linux-fast-suite-nightly; all remaining claim->job edges normative and unchanged (29 preserved claims)",
+    "bundles": ["bundle:proof-bundle-fast"]
+  },
+  "edges": {
+    "enables_ref": "identical to artifacts/proof-graph/v1.00.29-w0/graph.json edges.enables (17 gate edges; unchanged — W9/W10 add no gate edge and remove none)",
+    "duplicates_ref": "duplicate-classification.json (W0, frozen history) + artifacts/proof-graph/v1.00.29-w9/removals.json (dup-01 removed; dup-04 requalified distinct_environment)",
+    "bundle_edges": [
+      {"from": "job:ci:test-aggregate", "to": "bundle:proof-bundle-fast", "type": "produces-bundle"},
+      {"from": "bundle:proof-bundle-fast", "to": "job:nightly:test", "type": "consumes-bundle"}
+    ],
+    "observes_ref": "identical to artifacts/proof-graph/v1.00.29-w0/graph.json edges.observes (3 observational replica edges)"
+  },
+  "final_metrics": {
+    "measurement_basis": "W0-frozen formulas (PERFORMANCE-CONTRACT-v1.00.29.md §3/§4); duplicate accounting on the W0 three-run window denominator 19,188 s (319.8 runner-min) for same-window comparability, per the W9 ratio re-derivation",
+    "avoidable_duplicate_proof_mass_after_w9_seconds": 477,
+    "avoidable_duplicate_proof_mass_after_w9_note": "dup-08 (release draft+public re-verification, 477s) remains the entire avoidable-class remainder; release-specific proofs are out of W9/W10 scope by design",
+    "duplicate_proof_ratio_after_w9": 0.0249,
+    "duplicate_proof_ratio_goal": 0.10,
+    "duplicate_proof_ratio_verdict": "pass (2.49% <= 10%)",
+    "removed_by_w9": {
+      "pair_id": "dup-01",
+      "seconds_saved_observed_proxy": 1282.561,
+      "proxy_basis": "local unsharded fast-suite RUN-SUMMARY wall-clock-seconds from the v1.00.29-W8 frozen chain; no retained nightly CI run exists (W0 recorded null) — CI runner wall may differ; labeled PROXY, never presented as a CI-observed saving"
+    },
+    "reclassified_distinct_environment_seconds": 5588,
+    "reclassified_note": "dup-04 pair (389s + 5199s incl. cancelled-run setup) left the avoidable ledger in W9; distinct_environment mass is never removable",
+    "w0_avoidable_mass_restatement_seconds": 6065,
+    "critical_path_seconds_latest_retained": {"main_ci": 1346, "release_chain": 3612, "fullreg_dominator": 5428, "note": "no post-W9 main-push or release-tag run is retained locally; these remain the W0 retained-run values, NOT updated numbers"},
+    "pr_ci_wall_from_final_cohort": {
+      "post_w4_p50_seconds": 2558.0,
+      "post_w4_p95_seconds": 3023.0,
+      "full_window_p50_seconds": 1329.0,
+      "full_window_p95_seconds": 2856.7,
+      "goal_p50_seconds": 360,
+      "goal_p95_seconds": 480,
+      "verdict": "target not achieved (see TOPOLOGY DISCLOSURE: W4 added prepared-env purge+identity and RAISED CI walls)"
+    }
+  },
+  "regenerability": "Every change traces to a retained machine-readable input: W0 graph.json/duplicate-classification.json (frozen before-state), artifacts/proof-graph/v1.00.29-w9/removals.json (content-addressed removal + disqualification ledger), q-w10-cohort-seed.json (cohort walls), and artifacts/ci-baseline/v1.00.29-final/shard-plan-regeneration.json (W10 duration-model regeneration). SHA256SUMS binds cohort.json, graph-after.json, decision.md, report.json.",
+  "behavior_change": "proof-graph placement only (W9, one removal): nightly fast-suite re-execution replaced by fail-closed bundle consumption with unconditional fallback; dup-04 round-1 wiring reverted byte-exact. W10 itself makes no execution changes: the shard-plan regeneration is report-only and the runner/plan changes are additive tooling (--shard-plan measure) never wired into required CI.",
+  "spec_section_4_7_accounting": {
+    "total_required_runner_seconds_w0_window": 19188,
+    "exact_duplicate_removed_seconds": 1282.561,
+    "exact_duplicate_removed_basis": "PROXY (local wall), see removed_by_w9",
+    "compatible_reusable_removed_seconds": 0,
+    "distinct_environment_removed_seconds": 0,
+    "distinct_semantic_removed_seconds": 0,
+    "observational_removed_seconds": 0,
+    "unknown_mass_seconds": 0,
+    "avoidable_remainder_seconds": 477,
+    "avoidable_remainder_ratio_of_window": 0.0249
+  }
+}
