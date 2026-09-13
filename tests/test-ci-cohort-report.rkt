@@ -2033,10 +2033,10 @@
       (check-equal? (hash-ref fm '|duplicate_proof_ratio_after_w9|) 0.0249)
       (check-equal? (hash-ref fm '|duplicate_proof_ratio_goal|) 0.1))
 
-    (test-case "SHA256SUMS: the four contract artifacts match their recorded digests"
+    (test-case "SHA256SUMS: the five contract artifacts match their recorded digests"
       (define sums (file->lines (build-path v29-dir "SHA256SUMS")))
       (define non-empty (filter (lambda (l) (non-empty-string? (string-trim l))) sums))
-      (check-equal? (length non-empty) 4)
+      (check-equal? (length non-empty) 5)
       (for ([line (in-list non-empty)])
         (define m (regexp-match #px"^([0-9a-f]{64})\\s{2}(.+)$" (string-trim line)))
         (check-true (pair? m) (format "malformed SHA256SUMS line: ~a" line))
