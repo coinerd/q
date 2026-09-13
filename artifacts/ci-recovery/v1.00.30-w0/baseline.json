@@ -1,0 +1,20 @@
+{
+  "audit_id": "v1.00.30-w0-baseline",
+  "source": ".planning/q-v1.00.29-pr-ci-regression-assessment.md (13 September 2026); PLAN-v1.00.30-PR-CI-RECOVERY.md",
+  "sample_size_caveat": "Assessment figures derive from limited incumbent-regime samples; they reproduce the recorded assessment numbers and are diagnostic baselines, not population estimates. Cohort-based gates (R1-R4) require the frozen quantile helper on new truthful samples.",
+  "verdict_baseline": "NOT ACHIEVED - SEVERE PR-CI PERFORMANCE REGRESSION (v1.00.29 recovery baseline headline)",
+  "metrics": {
+    "required_pr_ci_p50_seconds": {"v1.00.28_reference": 820.5, "v1.00.29_observed": 2558.0, "delta": "regression"},
+    "required_pr_ci_p95_seconds": {"v1.00.28_reference": 850.3, "v1.00.29_observed": 3023.0, "delta": "regression"},
+    "isolated_test_compilation_summed_file_time_factor": 6.774,
+    "pre_w4_job_band_seconds": [233, 292],
+    "pathological_tail_rounded_seconds": 2171,
+    "r1_cap_derivation": "1736.8 s = 20% below the rounded pathological tail 2171 s; NEW explicit planning choice, not a historical measured target (PLAN line 55)"
+  },
+  "masked_historical_failures": [
+    {"era": "v1.00.29", "issue": "BUG-0073 tee/default-shell masking allowed failed racket shards to yield green required checks and proof bundles", "disposition": "MASKED - diagnostic only, never clean safety evidence"},
+    {"era": "v1.00.29 main", "run_id": 34749378379, "issue": "gsd-governance FAILED: W11 binding evidence is not a hash", "disposition": "genuine failure, retained"}
+  ],
+  "compilation_regime": "W4 purge plus skipped eager compilation amplified isolated test compilation (6.774x summed file time); restore success/setup savings do not compensate PR latency.",
+  "known_masked_failures_flag": "Every historical green whose artifacts lack run-SHA/shard bindings is flagged masked in this baseline; none may fill W0/W1 bootstrap comparisons."
+}
