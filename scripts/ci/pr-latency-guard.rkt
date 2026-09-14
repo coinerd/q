@@ -494,10 +494,20 @@
                     (let ([s (parse-ts (hash-ref rec 'started-at #f))]
                           [e (parse-ts (hash-ref rec 'completed-at #f))])
                       (and s e (<= s e) (<= e evaluated-s) (<= (- evaluated-s e) freshness-window)))))
-             (append ref-samples
-                     (if (list? cand-runs)
-                         cand-runs
-                         '())))
+             (if (list? cand-runs)
+                 cand-runs
+                 '()))
+            ;; reference runs are historical by construction: each must complete
+            ;; at or before the freeze, and the freeze itself must be fresh
+            (let ([frozen-s (parse-ts (hash-ref reference 'frozen-at #f))])
+              (and frozen-s
+                   (<= (- evaluated-s frozen-s) freshness-window)
+                   (andmap (lambda (rec)
+                             (and (hash? rec)
+                                  (let ([s (parse-ts (hash-ref rec 'started-at #f))]
+                                        [e (parse-ts (hash-ref rec 'completed-at #f))])
+                                    (and s e (<= s e) (<= e frozen-s)))))
+                           ref-samples)))
             ;; reference frozen strictly before any candidate evidence began
             (let ([frozen-s (parse-ts (hash-ref reference 'frozen-at #f))])
               (and frozen-s
@@ -511,7 +521,7 @@
      (unless freshness-ok?
        (check-fail! 'freshness)
        (bad!
-        "freshness check failed: reference must be frozen (frozen=true, frozen-at before the earliest candidate start) and every record must be attested, internally ordered, not in the future and within freshness-window-seconds of evaluated-at"))
+        "freshness check failed: reference must be frozen (frozen=true, frozen-at fresh and before the earliest candidate start, every reference record completing at or before the freeze) and every candidate record must be attested, internally ordered, not in the future and within freshness-window-seconds of evaluated-at"))
 
      ;; ---- control strata ----------------------------------------
      (define ref-strata

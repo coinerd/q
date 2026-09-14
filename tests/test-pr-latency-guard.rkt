@@ -24,7 +24,9 @@
 (define (sha n)
   (substring (string-append (number->string n 16) (make-string 40 #\a)) 0 40))
 
-(define T-FROZEN "2026-01-01T00:00:00Z")
+(define REF-START "2026-01-01T00:00:00Z")
+(define REF-END "2026-01-01T05:00:00Z")
+(define T-FROZEN "2026-01-01T06:00:00Z")
 (define T-START "2026-01-02T00:00:00Z")
 (define T-END "2026-01-02T01:00:00Z")
 (define T-EVAL "2026-01-05T00:00:00Z")
@@ -128,7 +130,10 @@
                       #:frozen-at [frozen-at T-FROZEN]
                       #:fingerprint [fingerprint "lazy/1"]
                       #:strata [strata CANONICAL-STRATA]
-                      #:samples [samples (list (rec HEAD-1 500) (rec HEAD-2 500) (rec HEAD-3 500))])
+                      #:samples [samples
+                                 (list (rec HEAD-1 500 #:start REF-START #:end REF-END)
+                                       (rec HEAD-2 500 #:start REF-START #:end REF-END)
+                                       (rec HEAD-3 500 #:start REF-START #:end REF-END))])
   (hasheq 'frozen
           frozen
           'frozen-at
@@ -241,7 +246,9 @@
   (check-equal?
    (decide
     (mk-input
-     #:reference (mk-reference #:samples (list (rec HEAD-1 1000) (rec HEAD-2 1000) (rec HEAD-3 1000)))
+     #:reference (mk-reference #:samples (list (rec HEAD-1 1000 #:start REF-START #:end REF-END)
+                                               (rec HEAD-2 1000 #:start REF-START #:end REF-END)
+                                               (rec HEAD-3 1000 #:start REF-START #:end REF-END)))
      #:candidate (mk-candidate #:runs (list (rec HEAD-1 1060) (rec HEAD-2 1060) (rec HEAD-3 1060)))))
    "pass"))
 
@@ -249,7 +256,9 @@
   (check-equal?
    (decide
     (mk-input
-     #:reference (mk-reference #:samples (list (rec HEAD-1 1000) (rec HEAD-2 1000) (rec HEAD-3 1000)))
+     #:reference (mk-reference #:samples (list (rec HEAD-1 1000 #:start REF-START #:end REF-END)
+                                               (rec HEAD-2 1000 #:start REF-START #:end REF-END)
+                                               (rec HEAD-3 1000 #:start REF-START #:end REF-END)))
      #:candidate (mk-candidate #:runs (list (rec HEAD-1 1061) (rec HEAD-2 1061) (rec HEAD-3 1061)))))
    "fail"))
 

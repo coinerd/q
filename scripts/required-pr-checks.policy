@@ -8,6 +8,10 @@
  "smoke (ubuntu-latest)"
  "test (0)"
  "test (1)"
- "test (2)"
- "test-aggregate"
- "test-platform")
+  "test (2)"
+  "test-aggregate"
+  "test-platform"
+  ;; v1.00.30 W1: pre-merge PR latency guard (bootstrap-pending; see
+  ;; docs/reports/PR-LATENCY-GUARD-v1.00.30.md). Enabling this entry in the
+  ;; protected branch policy is the coordinator's post-bootstrap step.
+  "pr-latency-guard")
