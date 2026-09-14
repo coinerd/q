@@ -98,10 +98,13 @@
           line)))
 
 (define (security-suite-run-line*)
+  ;; Since the v1.00.30 W0 BUG-0073 amendment the suite command lives on its
+  ;; own line inside a `run: |` block (preceded by `set -o pipefail`), so the
+  ;; extractor keys on the runner invocation alone instead of a literal
+  ;; `run:` prefix.
   (define candidates
     (for/list ([line (in-list (security-job-block*))]
-               #:when (and (string-contains? line "run-tests.rkt --suite security")
-                           (string-contains? line "run:")))
+               #:when (string-contains? line "run-tests.rkt --suite security"))
       line))
   (and (= (length candidates) 1) (car candidates)))
 
@@ -286,6 +289,12 @@
     ;;    lane may resolve a scheduler default from the repository variable.
     ;; Any silent future activation (a workflow scheduler token, a changed
     ;; suite command) breaks a pin deliberately.
+    ;; Reviewed amendment (v1.00.30 W0, BUG-0073): the lane's single-line
+    ;; `run:` became a `run: |` block with an explicit `set -o pipefail` so
+    ;; the racket exit status propagates through the tee pipeline instead of
+    ;; being masked by tee's exit code. The pin now locks the exact command
+    ;; line inside the block and pins the pipefail guard itself, preserving
+    ;; the original hold observability.
 
     (test-case "hold: security required lane stays on batch while the W1 security-queue hold stands"
       (define block (string-join (security-job-block*) "\n"))
@@ -295,10 +304,13 @@
        "the security lane must not reference the scheduler repository variable while the W1 security-queue hold stands")
       (check-false (regexp-match? #rx"--scheduler" block)
                    "the security lane command must keep the CLI batch default")
+      (check-true
+       (ormap (lambda (line) (string-contains? line "set -o pipefail")) (security-job-block*))
+       "the security lane lost its BUG-0073 pipefail guard; tee would mask the racket exit status")
       (check-equal?
        (security-suite-run-line*)
        (string-append
-        "        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt"
+        "          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt"
         " --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log")
        "the security lane's single suite command changed; only a reviewed promote may touch it"))
 
