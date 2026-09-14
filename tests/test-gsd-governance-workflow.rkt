@@ -39,7 +39,8 @@
            "test (1)"
            "test (2)"
            "test-aggregate"
-           "test-platform"))
+           "test-platform"
+           "pr-latency-guard"))
 
 (define (write-datum path datum)
   (make-parent-directory* path)
