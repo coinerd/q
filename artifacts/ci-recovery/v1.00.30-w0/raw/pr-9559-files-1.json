@@ -1,0 +1,50 @@
+[
+  {
+    "sha": "2b2d2042667f048aac3e1a5f27e222061b9bd569",
+    "filename": "docs/reports/governance/v1.00.23-w3.md",
+    "status": "added",
+    "additions": 3,
+    "deletions": 0,
+    "changes": 3,
+    "blob_url": "https://github.com/coinerd/q/blob/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgovernance%2Fv1.00.23-w3.md",
+    "raw_url": "https://github.com/coinerd/q/raw/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgovernance%2Fv1.00.23-w3.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgovernance%2Fv1.00.23-w3.md?ref=ee77e8f5d63b5f997f58930f3f51807901420bab",
+    "patch": "@@ -0,0 +1,3 @@\n+# v1.00.23 W3 evidence modernization\n+\n+Non-artifact marker for the W3 schema-2 evidence modernization."
+  },
+  {
+    "sha": "8322a565dd0d91d88be3be12fc5353b7f9c7f1a2",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w3.rktd",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 24,
+    "changes": 30,
+    "blob_url": "https://github.com/coinerd/q/blob/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w3.rktd?ref=ee77e8f5d63b5f997f58930f3f51807901420bab",
+    "patch": "@@ -1,24 +1,6 @@\n-#lang reader \"rktd-reader.rkt\"\n-\n-;; Wave evidence record for v1.00.23 W3\n-;; Deterministic FIFO/LPT ordering and duration fallback\n-\n-((wave . \"W3\")\n- (milestone . \"v1.00.23\")\n- (branch . \"campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w3-delivery\")\n- (verify-command . \"racket tests/test-runner-scheduler-order.rkt && racket tests/test-run-tests-shard-plan.rkt && racket scripts/run-tests.rkt --suite fast --scheduler batch && racket scripts/run-tests.rkt --suite fast --scheduler queue\")\n- (verify-results\n-  ((test-runner-scheduler-order (tests . 21) (pass . 21) (fail . 0) (result . PASS))\n-   (test-run-tests-shard-plan (result . PASS))\n-   (fast-batch (files . 1162) (tests . 16808) (pass . 1162) (fail . 0) (result . PASS) (elapsed . \"6m37s\"))\n-   (fast-queue (files . 1162) (tests . 16808) (pass . 1162) (fail . 0) (result . PASS) (elapsed . \"3m15s\"))))\n- (ordering-modes (default . fifo) (supported . (fifo lpt)))\n- (ci-defaults-unchanged (scheduler . batch) (ordering . fifo) (v1.00.23 . true))\n- (delivery-files\n-  (\"q/scripts/run-tests/cli.rkt\"\n-   \"q/scripts/run-tests/runner.rkt\"\n-   \"q/scripts/run-tests/shard-plan.rkt\"\n-   \"q/scripts/run-tests/scheduler-order.rkt\"\n-   \"q/tests/test-runner-scheduler-order.rkt\"\n-   \"q/tests/test-run-tests-shard-plan.rkt\"\n-   \"q/docs/TEST_CONVENTIONS.md\")))\n+#hash((schema-version . 2) (milestone . 888) (wave . \"W3\") (issue . 9547)\n+      (status . \"ready-for-merge\") (implementation-sha . \"4efcbdc4ea592f3ee4762290d2a444cb450da49d\")\n+      (content-digest . \"803dc28f69fcd05a1a9591bd64b44b6713efcfaf4bddeb1e418869d0ccdf76e5\")\n+      (required-checks . (\"lint\" \"security\" \"release-dry-run\" \"workflows (0)\" \"workflows (1)\" \"workflows-aggregate\" \"smoke (ubuntu-latest)\" \"test (0)\" \"test (1)\" \"test (2)\" \"test-aggregate\" \"test-platform\"))\n+      (review-artifact . \"docs/reports/gsd-wave-reviews/v1.00.23-w3.rktd\")\n+      (validation-artifact . \"docs/reports/gsd-wave-validation/v1.00.23-w3.rktd\"))"
+  },
+  {
+    "sha": "b2b4e28110bf7bd4153df11ba76a086f0899207c",
+    "filename": "docs/reports/gsd-wave-reviews/v1.00.23-w3.rktd",
+    "status": "added",
+    "additions": 4,
+    "deletions": 0,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w3.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w3.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-reviews%2Fv1.00.23-w3.rktd?ref=ee77e8f5d63b5f997f58930f3f51807901420bab",
+    "patch": "@@ -0,0 +1,4 @@\n+#hash((reviewer . \"automated evidence modernization review\") (verdict . \"APPROVED\")\n+      (reviewed-sha . \"4efcbdc4ea592f3ee4762290d2a444cb450da49d\") (content-digest . \"803dc28f69fcd05a1a9591bd64b44b6713efcfaf4bddeb1e418869d0ccdf76e5\")\n+      (timestamp . \"2026-08-31\") (scope . \"W3 scheduler ordering and shard-plan evidence schema modernization\")\n+      (report . \"The legacy W3 evidence was converted to schema version 2 without changing implementation behavior. Historical verification claims are retained as claims, while unavailable fresh cohort data is not inferred.\"))"
+  },
+  {
+    "sha": "862930e4c5fa27b2f3410f03c048374c326b831c",
+    "filename": "docs/reports/gsd-wave-validation/v1.00.23-w3.rktd",
+    "status": "added",
+    "additions": 9,
+    "deletions": 0,
+    "changes": 9,
+    "blob_url": "https://github.com/coinerd/q/blob/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w3.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/ee77e8f5d63b5f997f58930f3f51807901420bab/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w3.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-validation%2Fv1.00.23-w3.rktd?ref=ee77e8f5d63b5f997f58930f3f51807901420bab",
+    "patch": "@@ -0,0 +1,9 @@\n+#hash((status . \"current\") (milestone . 888) (wave . \"W3\") (issue . 9547)\n+      (branch . \"campaign/7537743a3dcedebc6ff1e40ed7b601712b6ee26329cedc4e9bae627b4f06f327/w3-delivery\")\n+      (implementation-sha . \"4efcbdc4ea592f3ee4762290d2a444cb450da49d\") (content-digest . \"803dc28f69fcd05a1a9591bd64b44b6713efcfaf4bddeb1e418869d0ccdf76e5\")\n+      (red-first . #hash((command . \"racket tests/test-runner-scheduler-order.rkt\") (failure . \"Legacy W3 record supplied deterministic ordering characterization; modernization does not claim a new red run.\")))\n+      (focused-tests . #hash((result . \"passed\") (count . 21) (suites . \"test-runner-scheduler-order\")))\n+      (format-compile . #hash((result . \"passed\") (detail . \"schema-2 evidence artifacts parse as Racket data\")))\n+      (lint . #hash((result . \"passed\") (detail . \"evidence modernization files pass repository lint\")))\n+      (fast . #hash((result . \"passed\") (detail . \"historical W3 focused fast result retained; no new cohort claim\")))\n+      (review-artifact . \"docs/reports/gsd-wave-reviews/v1.00.23-w3.rktd\") (remaining-items . ()) (planning-sync . \"current\"))"
+  }
+]

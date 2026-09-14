@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "080996721b56236e7a25f089ef15d7e110f43dc0",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/4469725e52367eaad15672649ac96cf9a1a7c3b8/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/4469725e52367eaad15672649ac96cf9a1a7c3b8/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=4469725e52367eaad15672649ac96cf9a1a7c3b8",
+    "patch": "@@ -297,7 +297,7 @@ q/\n | Test files | 1399 |\n | Source modules | 852 |\n | Source lines | 163159 |\n-| Test lines | 250875 |\n+| Test lines | 250878 |\n | Test assertions | 38459 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "e9494c45e2fa198c8d62267cd69971965856b5f2",
+    "filename": "tests/test-campaign-notifier.rkt",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 0,
+    "changes": 3,
+    "blob_url": "https://github.com/coinerd/q/blob/4469725e52367eaad15672649ac96cf9a1a7c3b8/tests%2Ftest-campaign-notifier.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/4469725e52367eaad15672649ac96cf9a1a7c3b8/tests%2Ftest-campaign-notifier.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-campaign-notifier.rkt?ref=4469725e52367eaad15672649ac96cf9a1a7c3b8",
+    "patch": "@@ -104,6 +104,9 @@\n       (define scratch \"tmp/notify-desktop-test.out\")\n       (with-handlers ([exn:fail? void])\n         (delete-file scratch))\n+      ;; Fresh checkouts have no repo-local tmp/ (gitignored) \u2014 the\n+      ;; sink's `echo >> scratch` needs the parent dir to exist.\n+      (make-directory* \"tmp\")\n       (define cmd-sink\n         (gsd-notify-sinks-from-settings\n          (q-settings (hash)"
+  }
+]

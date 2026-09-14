@@ -384,6 +384,26 @@
 
 (define w9-decision-path (w9-write-tmp "decision.md" w9-decision-fixture))
 
+;; Deterministic bug-registry fixture: the canonical changelog entry
+;; cites BUG-0066..BUG-0072 as fixed. Registry auto-discovery would couple
+;; this test to whatever planning tree happens to sit above the checkout;
+;; pin a fixture registry via the documented bug-registry-path override.
+(define w9-registry-fixed-in (format "v~a" q-version))
+(define w9-registry-path
+  (w9-write-tmp
+   "INDEX.md"
+   (string-append
+    "| BUG | Reported | Title | Component | Severity | Status | Fixed in | Ref |\n"
+    "|---|---|---|---|---|---|---|---|\n"
+    (string-append*
+     (for/list ([id (in-range 64 73)]
+                [sev (in-list
+                      '("high" "high" "critical" "high" "high" "high" "high" "high" "critical"))])
+       (format "| BUG-00~a | 2026-09-08 | fixture | fixture | ~a | fixed | ~a | — |\n"
+               id
+               sev
+               w9-registry-fixed-in))))))
+
 (define w9-base-sections
   (string-append "### User-Visible Changes\n"
                  "### Breaking / Behavior Changes\nnone\n"
@@ -453,6 +473,7 @@
 ;; its real release-campaign contract (contract resolved from the version
 ;; table relative to the changelog's directory).
 (test-case "w9: current release entry satisfies its release-campaign contract"
-  (define changelog-path (path->string (build-path repo-root "CHANGELOG.md")))
-  (define errors (lint-changelog changelog-path q-version))
-  (check-equal? errors '() (string-join errors "\n")))
+  (parameterize ([bug-registry-path w9-registry-path])
+    (define changelog-path (path->string (build-path repo-root "CHANGELOG.md")))
+    (define errors (lint-changelog changelog-path q-version))
+    (check-equal? errors '() (string-join errors "\n"))))

@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "d533dc033c773f083438e6e2dd7ea03c528b7977",
+    "filename": "tests/test-lint-version-pure.rkt",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/53e6c6ebbe6a465e5899cdaa822e2f560c6815b8/tests%2Ftest-lint-version-pure.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/53e6c6ebbe6a465e5899cdaa822e2f560c6815b8/tests%2Ftest-lint-version-pure.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-lint-version-pure.rkt?ref=53e6c6ebbe6a465e5899cdaa822e2f560c6815b8",
+    "patch": "@@ -75,7 +75,7 @@\n    (check-equal? (check content) '()))\n  (test-case \"check-changelog-content: too few versions \u2192 error\"\n    (define check (lv-ref 'check-changelog-content))\n-   (define content \"## v1.0.0\\n## v1.0.1\\n## v1.0.2\")\n+   (define content \"## v1.0.0\\n## v1.0.1\")\n    (define errors (check content))\n    (check-equal? (length errors) 1)\n    (check-equal? (first (first errors)) 'CHANGELOG.md))"
+  }
+]

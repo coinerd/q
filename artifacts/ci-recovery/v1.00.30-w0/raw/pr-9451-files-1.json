@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "00f6e5d8871b826c7f30ca3b9d09bb6fd3a85bda",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/5d527a0780158c7778de7778365952ffe5cb9167/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/5d527a0780158c7778de7778365952ffe5cb9167/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=5d527a0780158c7778de7778365952ffe5cb9167",
+    "patch": "@@ -54,6 +54,8 @@\n   models that legitimately need longer silent reasoning gaps require the\n   v1.00.13 Request Lifecycle Policy Unification follow-up.\n \n+Released 2026-08-22.\n+\n ## v1.00.08 \u2014 2026-08-21\n \n > Provider networking hardening closeout: per-model cumulative retry ceiling"
+  }
+]

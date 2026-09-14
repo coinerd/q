@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "59e94aeb3846c03ffae719da0864c9068f4943f0",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w1.rktd",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/feb844f77d9e453cc56d44e74f08e92adb1c1635/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/feb844f77d9e453cc56d44e74f08e92adb1c1635/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd?ref=feb844f77d9e453cc56d44e74f08e92adb1c1635",
+    "patch": "@@ -23,3 +23,5 @@\n       (required-checks . (\"lint\" \"security\" \"release-dry-run\" \"workflows (0)\" \"workflows (1)\" \"workflows-aggregate\" \"smoke (ubuntu-latest)\" \"test (0)\" \"test (1)\" \"test (2)\" \"test-aggregate\" \"test-platform\"))\n       (review-artifact . \"docs/reports/gsd-wave-reviews/v1.00.23-w1.rktd\")\n       (validation-artifact . \"docs/reports/gsd-wave-validation/v1.00.23-w1.rktd\"))\n+\n+; Follow-up PR validation: wave W1 evidence isolated for canonical governance checking."
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "sha": "aaa855ac9db7cb52c2b9cc41a31d3e69fbe17e85",
+    "filename": ".github/actions/prepare-racket-environment/action.yml",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 1,
+    "changes": 7,
+    "blob_url": "https://github.com/coinerd/q/blob/31e2e08dafd956d09f75faa52128f610795f0cbf/.github%2Factions%2Fprepare-racket-environment%2Faction.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/31e2e08dafd956d09f75faa52128f610795f0cbf/.github%2Factions%2Fprepare-racket-environment%2Faction.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Factions%2Fprepare-racket-environment%2Faction.yml?ref=31e2e08dafd956d09f75faa52128f610795f0cbf",
+    "patch": "@@ -94,8 +94,13 @@ runs:\n         CACHE_HIT: ${{ steps.addon-cache.outputs.cache-hit }}\n       run: |\n         set -euo pipefail\n+        # raco pkg show exits 0 even when the package is absent (it prints\n+        # \"[none]\"), so exit status cannot detect installation.\n+        q_installed() {\n+          [ \"$(raco pkg show --scope user q 2>/dev/null | tr -d '[:space:]')\" != \"[none]\" ]\n+        }\n         if [ \"$CACHE_HIT\" = \"true\" ]; then\n-          raco pkg show --scope user q >/dev/null 2>&1 || {\n+          q_installed || {\n             echo \"::error::exact package-store cache hit lacks the q user package\"\n             exit 1\n           }"
+  },
+  {
+    "sha": "9cd6ede13d2b7c95068460b99584ad5205b7ed5b",
+    "filename": ".github/actions/setup-racket/action.yml",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 2,
+    "changes": 11,
+    "blob_url": "https://github.com/coinerd/q/blob/31e2e08dafd956d09f75faa52128f610795f0cbf/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/31e2e08dafd956d09f75faa52128f610795f0cbf/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Factions%2Fsetup-racket%2Faction.yml?ref=31e2e08dafd956d09f75faa52128f610795f0cbf",
+    "patch": "@@ -77,8 +77,15 @@ runs:\n         raco pkg show --scope user q || true\n         echo \"\"\n \n+        # raco pkg show exits 0 even when the package is absent (it prints\n+        # \"[none]\"), so exit status cannot detect installation. Compare the\n+        # trimmed output instead.\n+        q_installed() {\n+          [ \"$(raco pkg show --scope user q 2>/dev/null | tr -d '[:space:]')\" != \"[none]\" ]\n+        }\n+\n         if [ \"${{ steps.racket-addon-cache.outputs.cache-hit }}\" = \"true\" ]; then\n-          if ! raco pkg show --scope user q >/dev/null 2>&1; then\n+          if ! q_installed; then\n             echo \"::error::Exact Racket cache hit lacks the q user package; bump the cache schema or repair ci/racket-package-lock.rktd. Reproduce locally with: racket scripts/ci-package-setup.rkt --preflight\"\n             exit 1\n           fi\n@@ -102,7 +109,7 @@ runs:\n           # The pilot rollback runs after a producer that already link-\n           # installed q into the shared user scope; relink instead of\n           # failing on \"package is already installed\".\n-          if raco pkg show --scope user q >/dev/null 2>&1; then\n+          if q_installed; then\n             set +e\n             raco pkg update --name q --link --batch --no-setup \"$PWD\"\n             INSTALL_RC=$?"
+  },
+  {
+    "sha": "a9caf779bc3c8f76b33b4ce9fafca29cdb33cce9",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/31e2e08dafd956d09f75faa52128f610795f0cbf/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/31e2e08dafd956d09f75faa52128f610795f0cbf/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=31e2e08dafd956d09f75faa52128f610795f0cbf",
+    "patch": "@@ -296,7 +296,7 @@ q/\n |--------|-------|\n | Test files | 1357 |\n | Source modules | 842 |\n-| Source lines | 154130 |\n+| Source lines | 154137 |\n | Test lines | 240720 |\n | Test assertions | 37058 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |"
+  },
+  {
+    "sha": "1e43d1c98cd602b935b92ba84d29fd2be36a277c",
+    "filename": "scripts/run-tests/classify.rkt",
+    "status": "modified",
+    "additions": 7,
+    "deletions": 0,
+    "changes": 7,
+    "blob_url": "https://github.com/coinerd/q/blob/31e2e08dafd956d09f75faa52128f610795f0cbf/scripts%2Frun-tests%2Fclassify.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/31e2e08dafd956d09f75faa52128f610795f0cbf/scripts%2Frun-tests%2Fclassify.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/scripts%2Frun-tests%2Fclassify.rkt?ref=31e2e08dafd956d09f75faa52128f610795f0cbf",
+    "patch": "@@ -89,6 +89,13 @@\n                                      [rel (path->string (find-relative-path base-dir f))])\n                                 (and (string-suffix? s \".rkt\")\n                                      (not (string-contains? s \"/compiled/\"))\n+                                     ;; v1.00.11 hotfix: the discovery-parity fixture tree\n+                                     ;; (tests/metadata-discovery/fixture/) is frozen input\n+                                     ;; data for tests/ci/metadata-discovery-test.rkt, which\n+                                     ;; copies it into its own temp root before collecting.\n+                                     ;; The repo-root walk must never collect or execute it.\n+                                     (not (for/or ([prefix (in-list discovery-ignored-path-prefixes)])\n+                                            (string-prefix? rel prefix)))\n                                      (not (support-test-module? s))\n                                      (not (hash-ref (get-file-metadata rel) 'not-test? #f))))))\n          (path->string (find-relative-path base-dir f))))"
+  }
+]

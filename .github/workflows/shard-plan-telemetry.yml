@@ -104,6 +104,7 @@ jobs:
       - name: Build duration-aware plan (report-only, loud on failure)
         if: always()
         run: |
+          set -o pipefail
           if ! compgen -G "durations/*.json" > /dev/null; then
             echo ";; No duration artifacts available (upstream gate failed or artifacts missing); skipping plan build." | tee shard-plan-report.log
             exit 0

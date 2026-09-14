@@ -1,0 +1,28 @@
+{
+  "audit_id": "v1.00.30-w0-tee-audit",
+  "bug": "BUG-0073",
+  "method": "Per-site audit of effective shell semantics in every declared workflow/composite action. Each runner/tee site was checked for its enclosing run block's pipefail/status propagation; effective failure propagation was reproduced with `bash -c 'set -o pipefail; false | tee /dev/null'` (exit 1) versus plain `bash -c 'false | tee /dev/null'` (exit 0), matching GitHub's default `bash -e {0}`. No grep-only conclusions; fixes applied only where masking was proven.",
+  "date": "2026-09-14",
+  "sites": [
+    {"file": ".github/workflows/ci.yml", "shell_sites": 3, "tee_sites": 11, "pipefail_sites": 13, "status": "FIXED", "fix": "lint job (L249), fast-shard map (L267) and shard-reduce aggregate boundary (L1208) use explicit `shell: bash` with `set -o pipefail`; all tee pipelines propagate test exit; result-truth verifier invoked at aggregate boundary before proof-bundle publication."},
+    {"file": ".github/workflows/full-regression.yml", "shell_sites": 0, "tee_sites": 4, "pipefail_sites": 5, "status": "COVERED", "note": "All four tee sites (L110/168/213/375) sit in run blocks opened with `set -euo pipefail` (L95/163/208/367); default `bash -e` plus pipefail propagates racket failures through tee."},
+    {"file": ".github/workflows/nightly.yml", "shell_sites": 0, "tee_sites": 4, "pipefail_sites": 2, "status": "COVERED-INTENTIONAL", "note": "Tee sites (L72/154/157/167) write fallback-cause records after a deliberately handled validator/lookup failure; the fallback path always runs the full suite, so a recorded fallback message cannot mask a required failure. Enclosing block `set -euo pipefail` (L50/61)."},
+    {"file": ".github/workflows/release.yml", "shell_sites": 0, "tee_sites": 5, "pipefail_sites": 5, "status": "COVERED", "note": "Each of the five tee pipelines is immediately preceded by `set -o pipefail` (L84-104)."},
+    {"file": ".github/workflows/release-core.yml", "shell_sites": 0, "tee_sites": 1, "pipefail_sites": 3, "status": "COVERED", "note": "Smoke tee site (L227) inside block with `set -o pipefail` (L220); blocks at L186/L432 use `set -euo pipefail`."},
+    {"file": ".github/workflows/shard-plan-telemetry.yml", "shell_sites": 0, "tee_sites": 4, "pipefail_sites": 2, "status": "COVERED", "note": "Report-only telemetry job; run block `set -o pipefail` (L107); tee sites L109/118/125/133. Step outcome is report-only by design (upstream gate failure is recorded and skips plan build explicitly)."},
+    {"file": ".github/workflows/test-scheduler-shadow.yml", "shell_sites": 0, "tee_sites": 2, "pipefail_sites": 1, "status": "COVERED", "note": "Shadow lane tee sites (L177/184) under `set -o pipefail` (L173); lane failures propagate."},
+    {"file": ".github/workflows/test-scheduler-cohort-c1.yml", "shell_sites": 0, "tee_sites": 0, "pipefail_sites": 1, "status": "COVERED", "note": "No tee sites; run block `set -euo pipefail` (L51)."},
+    {"file": ".github/workflows/benchmark.yml", "shell_sites": 0, "tee_sites": 0, "pipefail_sites": 0, "status": "NO-PIPE-SURFACE", "note": "Four run blocks contain no pipelines; nothing for a default shell to mask."},
+    {"file": ".github/workflows/prepared-environment-pilot.yml", "shell_sites": 7, "tee_sites": 0, "pipefail_sites": 4, "status": "COVERED", "note": "Explicit `shell: bash` on every run step; no pipelines."},
+    {"file": ".github/actions/setup-racket/action.yml", "shell_sites": 9, "tee_sites": 0, "pipefail_sites": 9, "status": "COVERED", "note": "Composite action: every run step declares `shell: bash` with pipefail-safe blocks; no pipelines."},
+    {"file": ".github/actions/prepare-racket-environment/action.yml", "shell_sites": 3, "tee_sites": 1, "pipefail_sites": 5, "status": "COVERED", "note": "Summary tee (L177) directly under `set -o pipefail` (L176)."},
+    {"file": ".github/actions/restore-racket-environment/action.yml", "shell_sites": 6, "tee_sites": 0, "pipefail_sites": 6, "status": "COVERED", "note": "All run steps `shell: bash`; no pipelines."}
+  ],
+  "unlisted_sites_gap": "Repository-wide scan of .github/workflows/*.yml and .github/actions/*/action.yml found no additional runner/tee site outside the declared file list except .github/workflows/project-automation.yml and .github/actions/install-racket-runtime/action.yml, both with no pipeline/tee masking surface (project-automation: no run pipelines; install-racket-runtime: explicit shell: bash steps, no pipes). Recorded here per the audit-and-fix rule; no silent omission.",
+  "masked_historical_artifacts": "v1.00.29-era fast-suite proof bundles and required-check greens produced before this fix are recorded as MASKED in baseline.json; they are diagnostic only and are NOT relabeled green or reused as safety evidence.",
+  "reproduction": {
+    "masked_semantics": "bash -c 'false | tee /dev/null'; echo $?  -> 0 (GitHub default bash -e)",
+    "fixed_semantics": "bash -c 'set -o pipefail; false | tee /dev/null'; echo $?  -> 1",
+    "tested_by": "tests/test-release-workflow-contract.rkt (shell-semantics assertions), tests/test-ci-exit-truth.rkt (aggregate boundary)"
+  }
+}

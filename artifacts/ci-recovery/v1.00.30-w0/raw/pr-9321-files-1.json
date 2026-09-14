@@ -1,0 +1,38 @@
+[
+  {
+    "sha": "593fa65bb922e32c3db2216183ee9911e62b5a72",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=5c1a06d1aa51a38a7187c7f89b40f91e68297cf0",
+    "patch": "@@ -297,7 +297,7 @@ q/\n | Test files | 1323 |\n | Source modules | 825 |\n | Source lines | 142792 |\n-| Test lines | 231988 |\n+| Test lines | 231994 |\n | Test assertions | 36172 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "fe5872c10c5921c9cde8c91bc5c36f21d8d52817",
+    "filename": "tests/tui/test-keybindings-binder.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 2,
+    "changes": 6,
+    "blob_url": "https://github.com/coinerd/q/blob/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/tests%2Ftui%2Ftest-keybindings-binder.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/tests%2Ftui%2Ftest-keybindings-binder.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftui%2Ftest-keybindings-binder.rkt?ref=5c1a06d1aa51a38a7187c7f89b40f91e68297cf0",
+    "patch": "@@ -20,9 +20,11 @@\n       (check-false (key-spec-ctrl ks))\n       (check-false (key-spec-shift ks)))\n \n-    (test-case \"keycode->key-spec-from-msg: ctrl-x\"\n+    (test-case \"keycode->key-spec-from-msg: ctrl-z\"\n       (define ks (keycode->key-spec-from-msg 'ctrl-z))\n-      (check-equal? (key-spec-name ks) 'z)\n+      ;; W2: single-letter ctrl suffixes normalize to chars so decoded\n+      ;; 'ctrl-z matches default keymap entries like (key-spec #\\z #t #f #f).\n+      (check-equal? (key-spec-name ks) #\\z)\n       (check-true (key-spec-ctrl ks))\n       (check-false (key-spec-shift ks)))\n "
+  },
+  {
+    "sha": "0acc8ff8b203650e1e0bafade9444f3bdfe2615f",
+    "filename": "tests/tui/test-render.rkt",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 5,
+    "changes": 14,
+    "blob_url": "https://github.com/coinerd/q/blob/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/tests%2Ftui%2Ftest-render.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/5c1a06d1aa51a38a7187c7f89b40f91e68297cf0/tests%2Ftui%2Ftest-render.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftui%2Ftest-render.rkt?ref=5c1a06d1aa51a38a7187c7f89b40f91e68297cf0",
+    "patch": "@@ -601,18 +601,22 @@\n       (check-true (string-contains? all-text \"pondering deeply...\")\n                   \"streaming thinking visible when no streaming text\"))\n \n-    (test-case \"streaming-thinking hidden when streaming-text present\"\n+    (test-case \"streaming-thinking retained when streaming-text present\"\n+      ;; BUG-0003 fix: the streaming-thinking pseudo-entry stays visible once\n+      ;; content starts streaming, so reasoning does not vanish mid-turn; the\n+      ;; persisted entry replaces it on completion.\n       (define state\n         (set-streaming-text\n          (set-streaming-thinking\n           (set-busy (initial-ui-state #:session-id \"test-sess\" #:model-name \"gpt-4\") #t)\n-          \"hidden thoughts\")\n+          \"in-flight thoughts\")\n          \"visible response\"))\n       (define-values (lines _st) (render-transcript state 10 200))\n       (define all-text (string-join (map styled-line->text lines) \"\\n\"))\n-      (check-false (string-contains? all-text \"hidden thoughts\")\n-                   \"streaming thinking hidden when streaming text present\")\n-      (check-true (string-contains? all-text \"visible response\") \"streaming text visible instead\"))\n+      (check-true (string-contains? all-text \"in-flight thoughts\")\n+                  \"streaming thinking retained when streaming text present\")\n+      (check-true (string-contains? all-text \"visible response\")\n+                  \"streaming text visible alongside thinking\"))\n \n     (test-case \"persisted thinking entry always visible\"\n       (define entry (transcript-entry 'thinking \"persisted thought\" 0 (hasheq) #f))"
+  }
+]

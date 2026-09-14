@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "bb9b6b96f537db4691b1ce4af433a94661f4b1fd",
+    "filename": ".github/workflows/ci.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/0a28f8625421b919d60e93e15ad0e63d0f7cf875/.github%2Fworkflows%2Fci.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/0a28f8625421b919d60e93e15ad0e63d0f7cf875/.github%2Fworkflows%2Fci.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Fci.yml?ref=0a28f8625421b919d60e93e15ad0e63d0f7cf875",
+    "patch": "@@ -310,7 +310,7 @@ jobs:\n           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}\n       - name: Download retained fast-shard artifacts\n         continue-on-error: true\n-        uses: actions/download-artifact@v7\n+        uses: actions/download-artifact@v8\n         with:\n           pattern: test-results-fast-*\n           path: durations-raw"
+  },
+  {
+    "sha": "ae41d6191464a066043171441a5a3c77dffacbbf",
+    "filename": ".github/workflows/full-regression.yml",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 3,
+    "changes": 6,
+    "blob_url": "https://github.com/coinerd/q/blob/0a28f8625421b919d60e93e15ad0e63d0f7cf875/.github%2Fworkflows%2Ffull-regression.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/0a28f8625421b919d60e93e15ad0e63d0f7cf875/.github%2Fworkflows%2Ffull-regression.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Fworkflows%2Ffull-regression.yml?ref=0a28f8625421b919d60e93e15ad0e63d0f7cf875",
+    "patch": "@@ -248,22 +248,22 @@ jobs:\n       # than preventing run-summary.json from being retained.\n       - name: Download Linux shard evidence\n         continue-on-error: true\n-        uses: actions/download-artifact@v7\n+        uses: actions/download-artifact@v8\n         with:\n           path: evidence/linux-shards\n           pattern: results-shard-*\n           merge-multiple: true\n \n       - name: Download workflows evidence\n         continue-on-error: true\n-        uses: actions/download-artifact@v7\n+        uses: actions/download-artifact@v8\n         with:\n           name: results-workflows\n           path: evidence/workflows\n \n       - name: Download macOS platform evidence\n         continue-on-error: true\n-        uses: actions/download-artifact@v7\n+        uses: actions/download-artifact@v8\n         with:\n           name: results-platform\n           path: evidence/platform"
+  }
+]

@@ -1,0 +1,3237 @@
+{
+  "schema": "q.ci-recovery.traffic-feasibility/1",
+  "window": {
+    "as_of": "2026-09-13T19:18:51.100716+00:00",
+    "since": "2026-08-14T19:18:51Z",
+    "purpose": "Launch feasibility, NOT clean cohort evidence; historical exit masking remains diagnostic."
+  },
+  "policy_sha256": "6df085788c378ef74df4e2add1314491c40ad09642a4984f6fbe02a513bb11f2",
+  "complete_run_pagination": true,
+  "all_recent_prs": 212,
+  "ci_runs": 388,
+  "ci_unique_head_shas": 386,
+  "matched_current_pr_heads": 211,
+  "file_classification_counts": {
+    "unknown-excluded": 30,
+    "execution-change-candidate": 156,
+    "docs-only-excluded": 26
+  },
+  "observed_execution_change_candidate_heads": 155,
+  "validated_clean_eligible_heads": 0,
+  "future_cohort_heads_collected": 0,
+  "projection_calendar_days_for_40_heads": {
+    "1": 7.741935483870968,
+    "0.5": 15.483870967741936,
+    "0.25": 30.967741935483872
+  },
+  "verdict": "CONDITIONAL TRAFFIC CAPACITY; CLEAN ELIGIBILITY UNPROVEN; COHORTS NOT OPENED",
+  "caveats": [
+    "Not a successful performance gate or guaranteed finish date.",
+    "Old heads do not fill future R2/final cohorts.",
+    "Historical BUG-0073 masking means success conclusions are not clean evidence.",
+    "File classification is a feasibility heuristic, not claim/suite/control matching or trusted exemption.",
+    "Only current matched PR heads counted, superseded head admission not reconstructed.",
+    "API exposes latest run_attempt; prior rerun attempts not reconstructed here and cannot be erased for actual cohort collection.",
+    "Future disjoint serial windows begin at actual W4/W6 merges; rates may change."
+  ],
+  "records": [
+    {
+      "pr": 9685,
+      "head_sha": "abd45ef7d90bf8782040a0eb5f7125a527caf4c9",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34748113102,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9684,
+      "head_sha": "c92d198cc6ca3dee507fd79dd4cbfe21571acbd5",
+      "classification": "execution-change-candidate",
+      "files": 54,
+      "ci_runs": [
+        {
+          "id": 34744931855,
+          "attempt": 2,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9683,
+      "head_sha": "9e3b70f71ed793dd7edf1f5c2a83f2b7ec29c6d6",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34734275363,
+          "attempt": 3,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9682,
+      "head_sha": "461ce66032f3695c9304362505656c01a8cc0fab",
+      "classification": "execution-change-candidate",
+      "files": 18,
+      "ci_runs": [
+        {
+          "id": 34732141865,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9681,
+      "head_sha": "3d20759a3b38cfd81285909e327337c12419efb4",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34722485561,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9680,
+      "head_sha": "0cc5dfcb0c6c17a4bfec05c24868e543f572f80a",
+      "classification": "execution-change-candidate",
+      "files": 13,
+      "ci_runs": [
+        {
+          "id": 34720099162,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9679,
+      "head_sha": "f26e025d1af31e3cff75edd92169989e14048d4e",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34700280306,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9678,
+      "head_sha": "503430a3aa0405d4bd8e5606b044d02fdb4e4936",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 34697931137,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9677,
+      "head_sha": "f0b163c784c177b9690e44c2d1ca2a6d62543574",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34694562581,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9674,
+      "head_sha": "9ff7a7839e9e35b929572ae47e9d2c39584fa72a",
+      "classification": "execution-change-candidate",
+      "files": 17,
+      "ci_runs": [
+        {
+          "id": 34692582693,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9676,
+      "head_sha": "7565db47351c8a0d71d200e236b4d737c56e8cf9",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34689410796,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9675,
+      "head_sha": "284d524c3c1d6f2e9d8406a44e0ce2bd36bc11cc",
+      "classification": "execution-change-candidate",
+      "files": 11,
+      "ci_runs": [
+        {
+          "id": 34686905326,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9673,
+      "head_sha": "0c360db854883b1ebbb543dcb204f85bcc9b5e33",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34673327619,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9672,
+      "head_sha": "4c6c62314d7ceb6c945f7598825f81803ba05522",
+      "classification": "execution-change-candidate",
+      "files": 53,
+      "ci_runs": [
+        {
+          "id": 34671086704,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9670,
+      "head_sha": "4bce9f6f6c3521904adcc16d4048ed5b80ef6b52",
+      "classification": "execution-change-candidate",
+      "files": 11,
+      "ci_runs": [
+        {
+          "id": 34666916942,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9671,
+      "head_sha": "0fd693132d678b1517300a3e1c184fa1e8e6f423",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34663567908,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9669,
+      "head_sha": "7682489aa367fa85b69238205d941744bbc9942c",
+      "classification": "execution-change-candidate",
+      "files": 18,
+      "ci_runs": [
+        {
+          "id": 34646721214,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9666,
+      "head_sha": "cc75eba0a98229975c74806c624aaa490b9e61ef",
+      "classification": "execution-change-candidate",
+      "files": 10,
+      "ci_runs": [
+        {
+          "id": 34626016387,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9668,
+      "head_sha": "0ca7098c699c04e963654ba96f141eed1e64b41e",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34623793689,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9667,
+      "head_sha": "d611a840396c1034fb6ea390af5ee67fc4bd810a",
+      "classification": "execution-change-candidate",
+      "files": 16,
+      "ci_runs": [
+        {
+          "id": 34622031557,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9665,
+      "head_sha": "38461677194ebca3652811d33180f862b3ff47cf",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 34604644508,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9664,
+      "head_sha": "b69a7108842f0a3912a6cd11855fc6165687ef0b",
+      "classification": "execution-change-candidate",
+      "files": 18,
+      "ci_runs": [
+        {
+          "id": 34600980989,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9663,
+      "head_sha": "0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+      "classification": "execution-change-candidate",
+      "files": 10,
+      "ci_runs": [
+        {
+          "id": 34594524906,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9661,
+      "head_sha": "b0de60e38b7f4bbabf41562cfbbce61373b43083",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 34583610815,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9659,
+      "head_sha": "f3b0e141450b9847f3f3318bdb100a2dc855bf5d",
+      "classification": "execution-change-candidate",
+      "files": 18,
+      "ci_runs": [
+        {
+          "id": 34570440418,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9658,
+      "head_sha": "dda701bd8fb0e67a96da04736db10e6324fe2f29",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 34538202796,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9656,
+      "head_sha": "8ad138bbed5a26bb4c82983067576af65e23b068",
+      "classification": "execution-change-candidate",
+      "files": 10,
+      "ci_runs": [
+        {
+          "id": 34534129055,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9654,
+      "head_sha": "ba4ba392f72fa508b95e742a42157434a5b3c5e1",
+      "classification": "unknown-excluded",
+      "files": 19,
+      "ci_runs": [
+        {
+          "id": 34530117183,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9653,
+      "head_sha": "08fdc2121f8104ad72831665a6cab9551319dcf5",
+      "classification": "execution-change-candidate",
+      "files": 19,
+      "ci_runs": [
+        {
+          "id": 34522697975,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9638,
+      "head_sha": "a2a10b9daab1542920ac5fb55dec450b14f36a1e",
+      "classification": "execution-change-candidate",
+      "files": 157,
+      "ci_runs": [
+        {
+          "id": 34449614760,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9637,
+      "head_sha": "439f732c6f9375727671ce8bda3f33afedaca545",
+      "classification": "execution-change-candidate",
+      "files": 19,
+      "ci_runs": [
+        {
+          "id": 34326377989,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9636,
+      "head_sha": "584681684d522ea1f5d630dad7af4eaae3748291",
+      "classification": "execution-change-candidate",
+      "files": 19,
+      "ci_runs": [
+        {
+          "id": 34304416015,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9617,
+      "head_sha": "fc2b3f8afcc880344028a28b30c183480db54147",
+      "classification": "execution-change-candidate",
+      "files": 57,
+      "ci_runs": [
+        {
+          "id": 34183835935,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9624,
+      "head_sha": "db46eda2674a55a4c507b17fdcbfe91fbeb815ec",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 34242932412,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9623,
+      "head_sha": "02b9120dc2f22fd5ddb30adc392c9c55fa5f6a48",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 34235915933,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9621,
+      "head_sha": "87d3265e22f3ecf9d6817e338717d6a3c735f3ac",
+      "classification": "execution-change-candidate",
+      "files": 91,
+      "ci_runs": [
+        {
+          "id": 34210442594,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9609,
+      "head_sha": "e1be1fc40669887dbfe10a28d8925cd25d3cf46d",
+      "classification": "execution-change-candidate",
+      "files": 48,
+      "ci_runs": [
+        {
+          "id": 34091038391,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9608,
+      "head_sha": "79002351852a84ae5d2ca9b71f54aa612fd9bd80",
+      "classification": "execution-change-candidate",
+      "files": 30,
+      "ci_runs": [
+        {
+          "id": 34066264527,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9607,
+      "head_sha": "a04e360734c10d4509ec3fa43a677ea28119b454",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 34055077783,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9606,
+      "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+      "classification": "execution-change-candidate",
+      "files": 73,
+      "ci_runs": [
+        {
+          "id": 34051240975,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9597,
+      "head_sha": "5ba4dab0ea13016525baf71a3d9529d050bc346c",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 34048955511,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9587,
+      "head_sha": "c333e25695ca3f500d64d0d70242b6a7a8d15a0f",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 34000319299,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9586,
+      "head_sha": "1d88302fa86f6fcd95c4c9d11ba7a54962c1e8b8",
+      "classification": "execution-change-candidate",
+      "files": 21,
+      "ci_runs": [
+        {
+          "id": 33997105566,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9585,
+      "head_sha": "dd266cd9c1b5295b216d776296e0df240eee92b3",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 33990674966,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9581,
+      "head_sha": "1e1068ea69ea216ba09d9402e0eafdecf2577325",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 33988745094,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9567,
+      "head_sha": "0a28f8625421b919d60e93e15ad0e63d0f7cf875",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 33985021354,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9566,
+      "head_sha": "2119fa5f21b1bc6e04d47dd69046fb02459aada9",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 33985010791,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9553,
+      "head_sha": "9d4d0111eda0967ee9e6f5aaa55a28e771be68da",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33386307628,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9552,
+      "head_sha": "c5402d82fb796236ef617d9088da0e1da46376f5",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33386305837,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9551,
+      "head_sha": "299fe5d0292f52b85552fb020d0589a8d3dfcb4f",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33386306213,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9579,
+      "head_sha": "a51f4cfa2227e0d1acdc9fc48a27f0b1aec806fd",
+      "classification": "execution-change-candidate",
+      "files": 69,
+      "ci_runs": [
+        {
+          "id": 33962512900,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9578,
+      "head_sha": "ac894c4735e495a0558aed86c3b66f999a5634dc",
+      "classification": "execution-change-candidate",
+      "files": 41,
+      "ci_runs": [
+        {
+          "id": 33960409558,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9577,
+      "head_sha": "6091b09c1c4b9a6e65282f7f2580ab112498bfb9",
+      "classification": "execution-change-candidate",
+      "files": 19,
+      "ci_runs": [
+        {
+          "id": 33959109759,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9576,
+      "head_sha": "e08c4319b934c1337f11a8d10a50aee3f23e1a24",
+      "classification": "execution-change-candidate",
+      "files": 28,
+      "ci_runs": [
+        {
+          "id": 33955830487,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9575,
+      "head_sha": "ad746222fe4145c086552971229a62b32a8d6489",
+      "classification": "execution-change-candidate",
+      "files": 23,
+      "ci_runs": [
+        {
+          "id": 33952616166,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9569,
+      "head_sha": "dd93119195ea7c1c6cadd6cf9a604d5db9314013",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 33866115277,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9568,
+      "head_sha": "a6fccb0e4e689ad40ff62b4e3c41a95b5ab5983e",
+      "classification": "execution-change-candidate",
+      "files": 122,
+      "ci_runs": [
+        {
+          "id": 33827797069,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9565,
+      "head_sha": "cacabf7a1629745ace488b384a2f0f62149a0561",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 33430397037,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9564,
+      "head_sha": "829b6f764a021db02ebec7c7e1600584d54c767b",
+      "classification": "execution-change-candidate",
+      "files": 48,
+      "ci_runs": [
+        {
+          "id": 33427153473,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 33422862603,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9563,
+      "head_sha": "829b6f764a021db02ebec7c7e1600584d54c767b",
+      "classification": "execution-change-candidate",
+      "files": 48,
+      "ci_runs": [
+        {
+          "id": 33427153473,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 33422862603,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9562,
+      "head_sha": "5abd6fabb613cd4bb26773c1f506d678b618623c",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33418514314,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9561,
+      "head_sha": "abaef8d079c026ac1c1219197569d6a1c3054a59",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33406785948,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9560,
+      "head_sha": "b2098d2faf7cdcf07bc36661ff14321bcd529523",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33404677751,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9559,
+      "head_sha": "ee77e8f5d63b5f997f58930f3f51807901420bab",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33402499555,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9558,
+      "head_sha": "819d6e856c356a841d58ce1687fecdbc91d8bee4",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33399775734,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9557,
+      "head_sha": "8dcf1b2e9c614135e7dcab4a12136268713e8b5a",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33397825439,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9556,
+      "head_sha": "59bb46a53ad9dba0da61e63f655d5ddb62762019",
+      "classification": "unknown-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33395844609,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9555,
+      "head_sha": "bf6f3ec914e920a0f36b278159f794755795fbaa",
+      "classification": "unknown-excluded",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 33394082918,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9554,
+      "head_sha": "9df196bba55c4bda1d418cbddf6336f64f34f599",
+      "classification": "unknown-excluded",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 33392254273,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9550,
+      "head_sha": "491aaaffa88a894ed46d32dbac947915bae8c0af",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33390581135,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9549,
+      "head_sha": "feb844f77d9e453cc56d44e74f08e92adb1c1635",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33388969456,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9548,
+      "head_sha": "17ef8050455cf9e886ef256cc20b9639e4928ba5",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 33386299170,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9547,
+      "head_sha": "dc79a2a1a7d90448b6f9748e6b5710ac3fe8daca",
+      "classification": "execution-change-candidate",
+      "files": 53,
+      "ci_runs": [
+        {
+          "id": 33383085419,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9546,
+      "head_sha": "cf1c6648c2a097940e3d66f65955ab7b8e6f6cdb",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 33300977936,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9545,
+      "head_sha": "bb16fdb1fe17914f923c70c7e5fecb6447e8839a",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 33298001354,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9544,
+      "head_sha": "9f139a433ade9900806bb9a7942775a04fe8bf63",
+      "classification": "execution-change-candidate",
+      "files": 51,
+      "ci_runs": [
+        {
+          "id": 33296618277,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9543,
+      "head_sha": "4469725e52367eaad15672649ac96cf9a1a7c3b8",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 33133090036,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9542,
+      "head_sha": "5173c6355b4299fe7d9bb136a2c2c595a3d5ad27",
+      "classification": "execution-change-candidate",
+      "files": 64,
+      "ci_runs": [
+        {
+          "id": 33126193976,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9541,
+      "head_sha": "1c8710a0f4fea3a043bcf79b11d05b1b867f116a",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 33072889911,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9540,
+      "head_sha": "a62686fd443c2325e48ad46a36bd7ca1ed309c6d",
+      "classification": "docs-only-excluded",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 33036287009,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9539,
+      "head_sha": "69c341917ca4c2eb4eaaa2c2576989217282308b",
+      "classification": "execution-change-candidate",
+      "files": 52,
+      "ci_runs": [
+        {
+          "id": 33030780701,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9538,
+      "head_sha": "6d2b8cda0ff9703cc39fa9ca298d10ceb54f985d",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 33007694535,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9537,
+      "head_sha": "7ada506473fa8923519f0be114d357f09312e222",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32998692746,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9536,
+      "head_sha": "299d7538fc6472bb8eb0b68ee8324acfb596ab61",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 32972727097,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9535,
+      "head_sha": "bb4b5bc47ea3746a4870db6d1858aabd3f1408f0",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 32965287785,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9534,
+      "head_sha": "3e9a16563e59fa015af6b79308458a0b2fff28f5",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32939355723,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9533,
+      "head_sha": "635a1cc2d45533d7a09c5cf786a812529296da4d",
+      "classification": "execution-change-candidate",
+      "files": 33,
+      "ci_runs": [
+        {
+          "id": 32936333181,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9532,
+      "head_sha": "e47e879384dc9e1f4a4b05bea703996a9f70d098",
+      "classification": "execution-change-candidate",
+      "files": 37,
+      "ci_runs": [
+        {
+          "id": 32931788168,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9531,
+      "head_sha": "70bcf3929453fed8f5f4f8a1992956e6544dcaaf",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32887620282,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9530,
+      "head_sha": "ee819b4e8347c6e54160a8aa382f8189a231469b",
+      "classification": "execution-change-candidate",
+      "files": 51,
+      "ci_runs": [
+        {
+          "id": 32883264683,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9529,
+      "head_sha": "8a92711083fa96be2b0ace423311becdbaf1955a",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32838048550,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9523,
+      "head_sha": "01ca0ca9e5a5dda3a78f77ebe9c177e50f8b5b8b",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32812859652,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9522,
+      "head_sha": "2bba0d75c5c1b9bc6a327cf1cabc7e4e46773848",
+      "classification": "execution-change-candidate",
+      "files": 57,
+      "ci_runs": [
+        {
+          "id": 32810287900,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9521,
+      "head_sha": "9452e0515bc24c80de76f8a3984c4887826fab2a",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32770708841,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9520,
+      "head_sha": "1a3f7e5e3967f4cdfbdf1f4c5922a9186895a71f",
+      "classification": "execution-change-candidate",
+      "files": 32,
+      "ci_runs": [
+        {
+          "id": 32764486919,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9519,
+      "head_sha": "c649a210e8498e3a554175d3ffa300a098abf09f",
+      "classification": "execution-change-candidate",
+      "files": 13,
+      "ci_runs": [
+        {
+          "id": 32760220339,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9518,
+      "head_sha": "1351fb0568d349b96d3aa9083138138419e38548",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32754509241,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9511,
+      "head_sha": "8e7481d13b9f6dc923944a16449f9e90978c32f0",
+      "classification": "execution-change-candidate",
+      "files": 27,
+      "ci_runs": [
+        {
+          "id": 32745843124,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9510,
+      "head_sha": "2b750d90459ae10bbac0e52cd1312ffd46c4cb67",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32713210509,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9509,
+      "head_sha": "a98d3940e6524bbf86e4b1cede97d58248bb105c",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32683795643,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9508,
+      "head_sha": "afb4a806323cb097f610f8724fdcf5e537b2c2e4",
+      "classification": "execution-change-candidate",
+      "files": 31,
+      "ci_runs": [
+        {
+          "id": 32680666408,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9507,
+      "head_sha": "4db1e98318ed1d3a033b6f001d8efff5092050fc",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 32678081733,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9506,
+      "head_sha": "f268e2fdd307954f535afb477cb6cbcf548e215f",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 32672980208,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9504,
+      "head_sha": "cd0b7ac28e807300369fc84e808a3b4a4c38d597",
+      "classification": "unknown-excluded",
+      "files": 0,
+      "ci_runs": [
+        {
+          "id": 32663210783,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9505,
+      "head_sha": "334364484181a8e0c85e6a94574fc8747d5bb91d",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 32661516756,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9503,
+      "head_sha": "7708107e2610af3f7aa6c10912213c6e4bc752ba",
+      "classification": "execution-change-candidate",
+      "files": 42,
+      "ci_runs": [
+        {
+          "id": 32657377874,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9362,
+      "head_sha": "06c5ffbba6840c38f9f4f2d7a6dfba7553437312",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32640216167,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9363,
+      "head_sha": "857076eee3a4740119723a1cf6836d7e53d0951b",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32638613757,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9502,
+      "head_sha": "f5b2082e22c1b3113f162ed1803c455c817e388e",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32636594640,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9425,
+      "head_sha": "19fde84e2709b56eae62b6befb1488f1d1d67a85",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32582977141,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9419,
+      "head_sha": "8648e5e8c83cc5edf375d2d39302c8096a6b0d90",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32634650112,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9415,
+      "head_sha": "3deceb11e7e30bdb097c13db12f30e39f04775d8",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32633501840,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9500,
+      "head_sha": "bac435f47749c0f39533c66aa04001cf221161f3",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 32624005859,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9499,
+      "head_sha": "58664fc5d4367f2b7430090912c2b7e25f913f0a",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 32621578459,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9498,
+      "head_sha": "715387da301ac4c284dcfa0d7a9a45547d38af09",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32619199845,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9497,
+      "head_sha": "9825a1b545198fa8e9de2176f2f0240f6a01ad52",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 32616304586,
+          "attempt": 2,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9495,
+      "head_sha": "bea9d0c33a8a121e40d68b4b58f869e57c23f85f",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32610262316,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9496,
+      "head_sha": "994a449ea00b877ad88d9b9633fde0bc8e6c7596",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 32613953977,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9494,
+      "head_sha": "447d02b155f46981eca759a816ba7ff7d1ee278a",
+      "classification": "execution-change-candidate",
+      "files": 42,
+      "ci_runs": [
+        {
+          "id": 32606999230,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9493,
+      "head_sha": "3ad49edf7cd7e784f263d9aeb95f08b673e14f0d",
+      "classification": "execution-change-candidate",
+      "files": 11,
+      "ci_runs": [
+        {
+          "id": 32605167068,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9492,
+      "head_sha": "f9cf63d38532ad51bba503deac1c8ca498a46e34",
+      "classification": "execution-change-candidate",
+      "files": 9,
+      "ci_runs": [
+        {
+          "id": 32603940817,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9491,
+      "head_sha": "c7fd42c4918f9144e4bb369e5e5cabd4f77091fa",
+      "classification": "execution-change-candidate",
+      "files": 14,
+      "ci_runs": [
+        {
+          "id": 32601387097,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9490,
+      "head_sha": "aba4729af9c741cbee8439748872586f0a631ea6",
+      "classification": "execution-change-candidate",
+      "files": 11,
+      "ci_runs": [
+        {
+          "id": 32599933443,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9489,
+      "head_sha": "99890ffb5f61c291d930d4edc8910d914ba40dff",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 32598175319,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9488,
+      "head_sha": "31e2e08dafd956d09f75faa52128f610795f0cbf",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32597230028,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9452,
+      "head_sha": "52adc6ae17a593490c96a6ef1f5c154f03c93c68",
+      "classification": "execution-change-candidate",
+      "files": 60,
+      "ci_runs": [
+        {
+          "id": 32589790397,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9379,
+      "head_sha": "5a489654b89ca6551f4485caeb71e548101f18a4",
+      "classification": "execution-change-candidate",
+      "files": 67,
+      "ci_runs": [
+        {
+          "id": 32239702742,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9378,
+      "head_sha": "b60cff9a32e343955a5479c34f50f91f10c3e218",
+      "classification": "execution-change-candidate",
+      "files": 67,
+      "ci_runs": [
+        {
+          "id": 32235394003,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9339,
+      "head_sha": "cb84284c803a04804acdfcf3bf0fddd46516014a",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 31935959071,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9377,
+      "head_sha": "2ede5d6e39cd97c4b9a36c352c51251e9b0d7b9c",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 32182476154,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9453,
+      "head_sha": "7bc94baaf1cc7960668aeecbf444051953e18ae6",
+      "classification": "docs-only-excluded",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 32581693241,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9451,
+      "head_sha": "5d527a0780158c7778de7778365952ffe5cb9167",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32577613924,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9450,
+      "head_sha": "a4b9e382e8db88c4dd0e8a1fdb1d62ede458479e",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32576273241,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9449,
+      "head_sha": "4b27d3130873ccf73554bff0c7c400453977dd3f",
+      "classification": "execution-change-candidate",
+      "files": 26,
+      "ci_runs": [
+        {
+          "id": 32575051114,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9448,
+      "head_sha": "4eda487f600b45c1b64c1705b344d6ba48b1c8c9",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 32572485813,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9447,
+      "head_sha": "ec3382457de9235d630cc0560e4cc57ae494fc0f",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32570085794,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9446,
+      "head_sha": "9642ead0daebeef6f79594421c77fac6952f6ff1",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32567357828,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9424,
+      "head_sha": "5005290e3eff32fe0a608fc3ffe65e4c1a0cbf84",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32530303572,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9423,
+      "head_sha": "3c8f1ce4e5931160df9c3aae0b0b3edd3ff89bb4",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32519286156,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9422,
+      "head_sha": "f533481a6bab9cfb9ebc8b6e40dd3d84da305db1",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32511005321,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9421,
+      "head_sha": "a8199eec17b967414efd23bf41722ce827642026",
+      "classification": "execution-change-candidate",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32506860793,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9420,
+      "head_sha": "15479a4fede8a96a3e68eb4b2ae5c66c0bf58602",
+      "classification": "execution-change-candidate",
+      "files": 12,
+      "ci_runs": [
+        {
+          "id": 32503295911,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9418,
+      "head_sha": "efb94037d8501118a06f5b48db7a4f4a64af1cc0",
+      "classification": "execution-change-candidate",
+      "files": 9,
+      "ci_runs": [
+        {
+          "id": 32477355696,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9417,
+      "head_sha": "fa44a43b63dfc3f6dbcf23d64b38a4dbf8509065",
+      "classification": "docs-only-excluded",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32468568032,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9416,
+      "head_sha": "78afc69b887c369e57382327003d6df342ebfd0c",
+      "classification": "execution-change-candidate",
+      "files": 29,
+      "ci_runs": [
+        {
+          "id": 32466211435,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9414,
+      "head_sha": "21a9f4308d908b2f5860800fbf5bfe9d00345b00",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32431957869,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9413,
+      "head_sha": "53e6c6ebbe6a465e5899cdaa822e2f560c6815b8",
+      "classification": "execution-change-candidate",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32429290078,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9412,
+      "head_sha": "15f6209e82c812ad0ce9b511dff80eac0374adfc",
+      "classification": "execution-change-candidate",
+      "files": 31,
+      "ci_runs": [
+        {
+          "id": 32425772377,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9411,
+      "head_sha": "a03230612e77dcb0ba0904c7e12a96d012d72c7f",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32421434811,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9410,
+      "head_sha": "45e2c4aa458621e9851522b4c5c1c31978e5e2c8",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32408195044,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9408,
+      "head_sha": "007feb0aed80c5d8b907b03d1aa931281379f355",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32406385227,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9409,
+      "head_sha": "dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 32403860042,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9405,
+      "head_sha": "0ddf6eb032ca381b3ad370f584dd03a04aab086c",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32386104809,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9404,
+      "head_sha": "cdd69c70defb389e0f6e149b3dc39004c155f294",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 32382967069,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9403,
+      "head_sha": "a1cb8da555b742063fe1881fd45e705d3679b465",
+      "classification": "docs-only-excluded",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 32378022788,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9348,
+      "head_sha": "2ed36b053e498db945e2de8017d3d9f8087df4bc",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 31967544766,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9402,
+      "head_sha": "ee5e18204a165d9eeb8e1efbadfb44a5d43a6a56",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32362827571,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9401,
+      "head_sha": "14d16a8db3f5d2678bdd6cd246cb20f287b66e77",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32360091524,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9400,
+      "head_sha": "b926ec439f4092384fe8665bf152e08476d5978f",
+      "classification": "execution-change-candidate",
+      "files": 31,
+      "ci_runs": [
+        {
+          "id": 32357349677,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9399,
+      "head_sha": "fd0ad95ef90e18785019396d7ba0cfd698312002",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32352891332,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9398,
+      "head_sha": "7ed3fbb8c293651a4b983d001d057a42547d9da1",
+      "classification": "execution-change-candidate",
+      "files": 33,
+      "ci_runs": [
+        {
+          "id": 32330313744,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9397,
+      "head_sha": "e67700323923bf957d8bb608e5d6b68785d5b71a",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 32328375271,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9396,
+      "head_sha": "c07a4849c10a4b52206f3601c56762bc2d7149fc",
+      "classification": "execution-change-candidate",
+      "files": 10,
+      "ci_runs": [
+        {
+          "id": 32325530199,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9395,
+      "head_sha": "794965b24b65d59c5fce3173d6d0c285c0a84672",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 32322124641,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9391,
+      "head_sha": "eaa5136fda7eacaa3768665a4495c2e5623866db",
+      "classification": "docs-only-excluded",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 32314231698,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9389,
+      "head_sha": "47e9082956681a9b1932f729872e3d512d78f462",
+      "classification": "execution-change-candidate",
+      "files": 9,
+      "ci_runs": [
+        {
+          "id": 32313159776,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9388,
+      "head_sha": "770d7548a211f9ef1b45b95617789d8104111b53",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32311633636,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9390,
+      "head_sha": "874b34ef79d07188ca9d57b1dec6f3cd554ed70e",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32306227141,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9387,
+      "head_sha": "5c26b8032feebd4073ca67e0413e8cc2f410ddd4",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32302229541,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9386,
+      "head_sha": "7912fb7b8a67c6c3eff0fdbfa39951417eeb22cb",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 32295922627,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9385,
+      "head_sha": "a6c2b31f9ab002488443b1b5919c8bb3b267fc65",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32294187436,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9383,
+      "head_sha": "79ba0a96ab010da36ac3e00344b4f30b46496ef1",
+      "classification": "execution-change-candidate",
+      "files": 89,
+      "ci_runs": [
+        {
+          "id": 32290560623,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9381,
+      "head_sha": "9bd76d3207af4bf84db79c9329d01caf1bba60f2",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 32286830787,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9382,
+      "head_sha": "7e5b83e35d866a700a45854bedfb882a8b865dfb",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32284277408,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9380,
+      "head_sha": "c5029ae8a5ebb0cebe84cc53c53b79cc47ad8155",
+      "classification": "execution-change-candidate",
+      "files": 68,
+      "ci_runs": [
+        {
+          "id": 32258347215,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9376,
+      "head_sha": "505136d0e127ccc0287500108af49acfa549b43c",
+      "classification": "execution-change-candidate",
+      "files": 1284,
+      "ci_runs": [
+        {
+          "id": 32140599753,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9375,
+      "head_sha": "f9476984d00812888eac18a7ff80a42a2c464cd4",
+      "classification": "execution-change-candidate",
+      "files": 8,
+      "ci_runs": [
+        {
+          "id": 32129069010,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9374,
+      "head_sha": "234d34583ae80c6ede26ee7d10129cc960c7e055",
+      "classification": "execution-change-candidate",
+      "files": 13,
+      "ci_runs": [
+        {
+          "id": 32118042310,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9373,
+      "head_sha": "3ac91307afd66ec88843cfa1a14238812b802333",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32083756641,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9372,
+      "head_sha": "79fcdd17160a66459c2cf3b886df77f1b8156dad",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 32065457559,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9371,
+      "head_sha": "d1fd43f9f1ead5a674a73c932984a7f6d5c66237",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 32061872348,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9370,
+      "head_sha": "3d32eb0a676d8e0056574304bb5acf4ec9a44674",
+      "classification": "execution-change-candidate",
+      "files": 39,
+      "ci_runs": [
+        {
+          "id": 32059480349,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9369,
+      "head_sha": "a92db9eef5e771766c5fc0c38dcfb84f52bc1618",
+      "classification": "execution-change-candidate",
+      "files": 12,
+      "ci_runs": [
+        {
+          "id": 32038869293,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9368,
+      "head_sha": "f1ddf25d26a7f8e1c3d5b85be2953fa84d083a4f",
+      "classification": "execution-change-candidate",
+      "files": 10,
+      "ci_runs": [
+        {
+          "id": 32014591049,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9367,
+      "head_sha": "d20140608aa43f60fa4a78d84a087b371946002e",
+      "classification": "execution-change-candidate",
+      "files": 9,
+      "ci_runs": [
+        {
+          "id": 32011315753,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9365,
+      "head_sha": "00b93b7ebf5be0b192c5f4a547f0cbbd19993f7a",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 32006835110,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9361,
+      "head_sha": "50d6176aba2d24c2f7110bdef11887b3f852ba9c",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 31977758632,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9360,
+      "head_sha": "a7de9d323439277382a3d5f9f436206a0c4c3617",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 31976910514,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9354,
+      "head_sha": "46cc4b3996c8b75e2d5c70bc3b3379af2a7925e4",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 31970876961,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9352,
+      "head_sha": "c7dac671dfa3b54827d227fb249be16e44799012",
+      "classification": "execution-change-candidate",
+      "files": 16,
+      "ci_runs": [
+        {
+          "id": 31968989385,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9350,
+      "head_sha": "d29cf7823146e90806513e4451baf767c26b689f",
+      "classification": "execution-change-candidate",
+      "files": 32,
+      "ci_runs": [
+        {
+          "id": 31960465780,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9347,
+      "head_sha": "230f2cd57ab62c4466ace6d190fdad2e29b30b9a",
+      "classification": "execution-change-candidate",
+      "files": 97,
+      "ci_runs": [
+        {
+          "id": 31954310087,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9338,
+      "head_sha": "a3673e12e21a3f5e8e880da6e060ca357fdea2ad",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 31934654154,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9337,
+      "head_sha": "3f8a0cbd63acff36f28e5d31d10b37a97a477a5c",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 31916313356,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9336,
+      "head_sha": "6c2d82e377cc45794f85ce1649f4f2e35eb4b84a",
+      "classification": "execution-change-candidate",
+      "files": 25,
+      "ci_runs": [
+        {
+          "id": 31915316410,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9335,
+      "head_sha": "e8d43d6e09395f83a5fec6bb4ea90f3988414f21",
+      "classification": "execution-change-candidate",
+      "files": 18,
+      "ci_runs": [
+        {
+          "id": 31912632296,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9334,
+      "head_sha": "11e9b8cf12e5f76178d7d72a9e90448a70a5ba62",
+      "classification": "unknown-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 31906168764,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9333,
+      "head_sha": "fbe3754638ae33eb5517f162fef4622d9dcde44e",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 31903987805,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9332,
+      "head_sha": "955e7460144b3b581889298d1368f6a7b1f5a400",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 31896454282,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9331,
+      "head_sha": "c5c34f4cca42d73a8b52328fdc355b21dadfcbbb",
+      "classification": "execution-change-candidate",
+      "files": 5,
+      "ci_runs": [
+        {
+          "id": 31889549771,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9330,
+      "head_sha": "15a5e01f572ffe64dae2ccd1ab4463402a4cafc1",
+      "classification": "docs-only-excluded",
+      "files": 1,
+      "ci_runs": [
+        {
+          "id": 31885391243,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9320,
+      "head_sha": "c59c4001d9a8d2e4edd34a866e927fb27573fe30",
+      "classification": "execution-change-candidate",
+      "files": 24,
+      "ci_runs": [
+        {
+          "id": 31871242138,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9321,
+      "head_sha": "5c1a06d1aa51a38a7187c7f89b40f91e68297cf0",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 31878091779,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9319,
+      "head_sha": "a0354d22c2dee216ee49bf99b7c4f56e1c42dbd9",
+      "classification": "execution-change-candidate",
+      "files": 6,
+      "ci_runs": [
+        {
+          "id": 31859703077,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9318,
+      "head_sha": "80bf214d1e252e5dc00e353fbdce815fb9db77bc",
+      "classification": "execution-change-candidate",
+      "files": 32,
+      "ci_runs": [
+        {
+          "id": 31855281094,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9317,
+      "head_sha": "efa1a36d9a6e43069f5bfa19430a4c0b7224ca07",
+      "classification": "execution-change-candidate",
+      "files": 7,
+      "ci_runs": [
+        {
+          "id": 31851785530,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9316,
+      "head_sha": "1f63f91937f383ab02231d1c16c4fcbd648887ed",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 31848549398,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9315,
+      "head_sha": "20107bcea0504837d6bd913c1dc1e64b4d6cd99e",
+      "classification": "execution-change-candidate",
+      "files": 3,
+      "ci_runs": [
+        {
+          "id": 31840634360,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9314,
+      "head_sha": "60286d1f838ed6c31ccd585f0ee15b00bb217a8a",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 31840038335,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "failure"
+        },
+        {
+          "id": 31838762215,
+          "attempt": 2,
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9313,
+      "head_sha": "72f81f11affa72bcc26a89a46f417613607966c9",
+      "classification": "execution-change-candidate",
+      "files": 4,
+      "ci_runs": [
+        {
+          "id": 31836961830,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9311,
+      "head_sha": "9df30f959366a8a7380d532dfeaa842c682c9bae",
+      "classification": "execution-change-candidate",
+      "files": 2,
+      "ci_runs": [
+        {
+          "id": 31834069662,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    },
+    {
+      "pr": 9312,
+      "head_sha": "a12473de173c9f75dac166bbd3ea364a78169221",
+      "classification": "unknown-excluded",
+      "files": 0,
+      "ci_runs": [
+        {
+          "id": 31835336817,
+          "attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "cohort_eligibility": "UNVERIFIED_DIAGNOSTIC_ONLY"
+    }
+  ]
+}

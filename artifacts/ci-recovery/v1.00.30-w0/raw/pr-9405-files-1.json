@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "d3213d0049103699ae53dc5cd1297b4969a8a5db",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/0ddf6eb032ca381b3ad370f584dd03a04aab086c/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/0ddf6eb032ca381b3ad370f584dd03a04aab086c/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=0ddf6eb032ca381b3ad370f584dd03a04aab086c",
+    "patch": "@@ -5,6 +5,8 @@\n > enforcement decision (W0\u2013W3); first clean full-regression run + governance\n > closure (W4). Merged via PR #9400.\n \n+Released 2026-08-20.\n+\n ### Bug Fixes\n \n - **Full-regression evidence path repaired (#9384).** The `full-regression.yml`"
+  }
+]

@@ -39,7 +39,7 @@
   },
   "telemetry_relocation_contract": {
     "telemetry_workflow": ".github/workflows/shard-plan-telemetry.yml",
-    "telemetry_workflow_sha256": "38101d4026bff08bc847a5a719e08496148cf97b138d232337864526a30c6b08",
+    "telemetry_workflow_sha256": "5347c6ab8f48d4c2c961758e297d308b8b8b3006a79ae50fea1ff99b4df26993",
     "ci_yml_seam": "grep -c '^  shard-plan-report:' .github/workflows/ci.yml == 0 (no ci.yml job of that name; only the relocation pointer comment remains)",
     "artifact_name": "shard-plan-report",
     "artifact_path": "shard-plan-report.log",

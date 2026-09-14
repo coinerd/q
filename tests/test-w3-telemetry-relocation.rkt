@@ -179,8 +179,10 @@
 (test-case "W3: dag-checkpoint exists, is checksum-bound, and is a topology checkpoint"
   (check-true (file-exists? cp3) "W3 dag-checkpoint.json must exist")
   (check-equal? (sha256-hex cp3)
-                "bffe410ac755bddec09642c6fa23b363896bde95b3a5503ab8b58f40f2db12ab"
+                "9472a94ebdfac91810c8542a72fb843de425c587d7265d6d13bdb52e87782ce2"
                 "W3 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
+  ;; re-stamped by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
+  ;; telemetry_workflow_sha256 inside telemetry_relocation_contract
   (define j (call-with-input-file cp3 read-json))
   (check-equal? (hash-ref j 'wave) (format "v~a-w3" ci-topology-version))
   (check-equal? (hash-ref (hash-ref j 'timing_checkpoint) 'label)

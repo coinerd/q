@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "47db3549fdf5de0ab1e49ab590a222b7303fb1eb",
+    "filename": "docs/reports/governance/v1.00.23-w1.md",
+    "status": "added",
+    "additions": 3,
+    "deletions": 0,
+    "changes": 3,
+    "blob_url": "https://github.com/coinerd/q/blob/bf6f3ec914e920a0f36b278159f794755795fbaa/docs%2Freports%2Fgovernance%2Fv1.00.23-w1.md",
+    "raw_url": "https://github.com/coinerd/q/raw/bf6f3ec914e920a0f36b278159f794755795fbaa/docs%2Freports%2Fgovernance%2Fv1.00.23-w1.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgovernance%2Fv1.00.23-w1.md?ref=bf6f3ec914e920a0f36b278159f794755795fbaa",
+    "patch": "@@ -0,0 +1,3 @@\n+# v1.00.23 W1 governance remediation\n+\n+This marker is part of the isolated W1 evidence-validation change."
+  },
+  {
+    "sha": "a3f778fdeb7e2d1038e4e563f140ee8d4a82625b",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w1.rktd",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/bf6f3ec914e920a0f36b278159f794755795fbaa/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/bf6f3ec914e920a0f36b278159f794755795fbaa/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w1.rktd?ref=bf6f3ec914e920a0f36b278159f794755795fbaa",
+    "patch": "@@ -19,7 +19,7 @@\n       (issue . 9547)\n       (status . \"ready-for-merge\")\n       (implementation-sha . \"420ae2c62803b2dec163d15bb9351a157afd95f0\")\n-      (content-digest . \"9a2950a9eb5a2067ecaeccb602f402f72e105062178d73d2d9c9a3215af3fd6f\")\n+      (content-digest . \"9b2a54a4e8bd5ff3f77739e46a3ea8cc01fbf819a5b8934657f1068acbd20d6f\")\n       (required-checks . (\"lint\" \"security\" \"release-dry-run\" \"workflows (0)\" \"workflows (1)\" \"workflows-aggregate\" \"smoke (ubuntu-latest)\" \"test (0)\" \"test (1)\" \"test (2)\" \"test-aggregate\" \"test-platform\"))\n       (review-artifact . \"docs/reports/gsd-wave-reviews/v1.00.23-w1.rktd\")\n       (validation-artifact . \"docs/reports/gsd-wave-validation/v1.00.23-w1.rktd\"))"
+  }
+]

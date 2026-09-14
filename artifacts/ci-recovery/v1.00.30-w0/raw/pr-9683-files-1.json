@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "096dbf428f6974660a67feac843d9b5766b2dc07",
+    "filename": "docs/reports/gsd-wave-evidence/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w10.rktd",
+    "status": "added",
+    "additions": 29,
+    "deletions": 0,
+    "changes": 29,
+    "blob_url": "https://github.com/coinerd/q/blob/9e3b70f71ed793dd7edf1f5c2a83f2b7ec29c6d6/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w10.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/9e3b70f71ed793dd7edf1f5c2a83f2b7ec29c6d6/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w10.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2F6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f-w10.rktd?ref=9e3b70f71ed793dd7edf1f5c2a83f2b7ec29c6d6",
+    "patch": "@@ -0,0 +1,29 @@\n+;; GSD Wave Merge Binding \u2014 v1.00.29 W10 (BUG-0064 advance-gate evidence)\n+;; Plan: .planning/campaigns/6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f.rktd\n+;; Wave: W10 \u2014 Rebalance, final cohort, and bake (wave issue #9649)\n+\n+(merge-binding\n+ (wave v1.00.29-w10)\n+ (plan-id \"6ae3ac5125fd82a7f22e5d7250c5fb25c506441ec928cbf148a85e1edb5c940f\")\n+ (merge-sha \"897fe0c05f3ebf5605c709eca765c6c3c0263403\")\n+ (merge-method \"squash-merge PR #9682 (protected main)\")\n+ (merged-at \"2026-09-13T02:10:00Z\")\n+ (wave-branch \"campaign/v1.00.29-w10\")\n+ (implementation-commits (\"20f5f8d0\" \"bb93281c\" \"bd53cdb3\" \"0dd98a12\" \"461ce660\"))\n+ (verification\n+  ((frozen-chain \"1190/1190 files + metrics 5/5 (coordinator unsharded lane)\")\n+   (protected-checks \"19/19 green on final head 461ce660 (incl. test-aggregate producer over a clean aggregate)\")\n+   (cohort \"24 eligible unique PR head SHAs; zero overlap with v1.00.28-final; post-W4 p50 2558.0s p95 3023.0s; topology disclosure honored (W4 +1623.0s/+171.4%)\")\n+   (reviewer \"kimi-coding APPROVED; 2 arithmetic errata (pre-W4 p50 890.0s, post-W4 mean 2569.727s) fixed in-wave, SHA256SUMS regenerated\")\n+   (draft-verdict \"PARTIAL \u2014 SAFE REDUCTION DELIVERED (handed to W11)\")))\n+ (evidence\n+  (\"docs/reports/gsd-wave-evidence/v1.00.29-w10.rktd\"\n+   \"docs/reports/gsd-wave-reviews/v1.00.29-w10.rktd\"\n+   \"docs/reports/gsd-wave-validation/v1.00.29-w10.rktd\"\n+   \"docs/reports/PROOF-GRAPH-FINAL-v1.00.29.md\"\n+   \"artifacts/ci-baseline/v1.00.29-final/cohort.json\"\n+   \"artifacts/ci-baseline/v1.00.29-final/graph-after.json\"\n+   \"artifacts/ci-baseline/v1.00.29-final/decision.md\"\n+   \"artifacts/ci-baseline/v1.00.29-final/report.json\"\n+   \"artifacts/ci-baseline/v1.00.29-final/SHA256SUMS\"))\n+ (issues-closed (\"#9649\")))"
+  }
+]

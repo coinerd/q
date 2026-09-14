@@ -1,0 +1,58 @@
+{
+  "total_count": 1,
+  "environments": [
+    {
+      "id": 18980944508,
+      "node_id": "EN_kwDOR8hf6M8AAAAEa1o6fA",
+      "name": "release-repair",
+      "url": "https://api.github.com/repos/coinerd/q/environments/release-repair",
+      "html_url": "https://github.com/coinerd/q/deployments/activity_log?environments_filter=release-repair",
+      "created_at": "2026-07-29T23:17:42Z",
+      "updated_at": "2026-07-29T23:17:42Z",
+      "can_admins_bypass": true,
+      "protection_rules": [
+        {
+          "id": 61312538,
+          "node_id": "GA_kwDOR8hf6M4Dp44a",
+          "type": "required_reviewers",
+          "prevent_self_review": false,
+          "reviewers": [
+            {
+              "type": "User",
+              "reviewer": {
+                "login": "coinerd",
+                "id": 10107520,
+                "node_id": "MDQ6VXNlcjEwMTA3NTIw",
+                "avatar_url": "https://avatars.githubusercontent.com/u/10107520?v=4",
+                "gravatar_id": "",
+                "url": "https://api.github.com/users/coinerd",
+                "html_url": "https://github.com/coinerd",
+                "followers_url": "https://api.github.com/users/coinerd/followers",
+                "following_url": "https://api.github.com/users/coinerd/following{/other_user}",
+                "gists_url": "https://api.github.com/users/coinerd/gists{/gist_id}",
+                "starred_url": "https://api.github.com/users/coinerd/starred{/owner}{/repo}",
+                "subscriptions_url": "https://api.github.com/users/coinerd/subscriptions",
+                "organizations_url": "https://api.github.com/users/coinerd/orgs",
+                "repos_url": "https://api.github.com/users/coinerd/repos",
+                "events_url": "https://api.github.com/users/coinerd/events{/privacy}",
+                "received_events_url": "https://api.github.com/users/coinerd/received_events",
+                "type": "User",
+                "user_view_type": "public",
+                "site_admin": false
+              }
+            }
+          ]
+        },
+        {
+          "id": 61335910,
+          "node_id": "GA_kwDOR8hf6M4Dp-lm",
+          "type": "branch_policy"
+        }
+      ],
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      }
+    }
+  ]
+}

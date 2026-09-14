@@ -1,0 +1,15 @@
+{
+  "viewer": {
+    "login": "coinerd"
+  },
+  "repository": {
+    "nameWithOwner": "coinerd/q",
+    "viewerPermission": "ADMIN",
+    "defaultBranchRef": {
+      "name": "main",
+      "target": {
+        "oid": "548931121edb3d085f0a05b8c65467ce4d63ae0f"
+      }
+    }
+  }
+}

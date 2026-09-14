@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "e9ad2f253637a8ca75681ef37b02429fc1916f62",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/3f8a0cbd63acff36f28e5d31d10b37a97a477a5c/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/3f8a0cbd63acff36f28e5d31d10b37a97a477a5c/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=3f8a0cbd63acff36f28e5d31d10b37a97a477a5c",
+    "patch": "@@ -296,7 +296,7 @@ q/\n |--------|-------|\n | Test files | 1326 |\n | Source modules | 829 |\n-| Source lines | 144367 |\n+| Source lines | 144386 |\n | Test lines | 232395 |\n | Test assertions | 36254 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |"
+  },
+  {
+    "sha": "7ab244f13464b86a71a5bb6de5f0ff0cda9989a7",
+    "filename": "scripts/release-closeout.rkt",
+    "status": "modified",
+    "additions": 30,
+    "deletions": 11,
+    "changes": 41,
+    "blob_url": "https://github.com/coinerd/q/blob/3f8a0cbd63acff36f28e5d31d10b37a97a477a5c/scripts%2Frelease-closeout.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/3f8a0cbd63acff36f28e5d31d10b37a97a477a5c/scripts%2Frelease-closeout.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/scripts%2Frelease-closeout.rkt?ref=3f8a0cbd63acff36f28e5d31d10b37a97a477a5c",
+    "patch": "@@ -107,6 +107,17 @@\n                         ec\n                         (string-trim err))))\n \n+;; Call gh expecting plain scalar output (e.g. with -q '.field').\n+(define (gh-text . args)\n+  (define-values (ec out err) (apply run-capture \"gh\" args))\n+  (if (zero? ec)\n+      (string-trim out)\n+      (raise-user-error 'gh\n+                        \"gh ~a failed (exit ~a): ~a\"\n+                        (string-join args \" \")\n+                        ec\n+                        (string-trim err))))\n+\n (define (repo-slug)\n   (define-values (ec out _e)\n     (run-capture \"gh\" \"repo\" \"view\" \"--json\" \"nameWithOwner\" \"-q\" \".nameWithOwner\"))\n@@ -178,16 +189,24 @@\n \n ;; ------------------------------------------------- stage 1: release notes\n \n-;; Find the milestone number for the version by title. One page of 100\n-;; (state=all) keeps the response a single JSON document; filter in Racket.\n+;; Find the milestone number for the version by title. Milestones are sorted\n+;; by due date, so a single page can miss the target (BUG-0014: \"nine pages of\n+;; closed milestones\"); walk pages of 100 until a title match or an empty page.\n (define (find-milestone-number)\n-  (define ms (gh-json \"api\" \"repos/{owner}/{repo}/milestones?state=all&per_page=100\"))\n-  (define hits\n-    (filter (lambda (m) (string-contains? (hash-ref m 'title \"\") version))\n-            (if (list? ms)\n-                ms\n-                '())))\n-  (and (pair? hits) (hash-ref (car hits) 'number #f)))\n+  (let loop ([page 1])\n+    (define ms\n+      (gh-json \"api\"\n+               (format \"repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a\"\n+                       page)))\n+    (cond\n+      [(not (list? ms)) #f]\n+      [(null? ms) #f]\n+      [else\n+       (define hits\n+         (filter (lambda (m) (equal? (hash-ref m 'title \"\") (string-append \"v\" version)))\n+                 ms))\n+       (or (and (pair? hits) (hash-ref (car hits) 'number #f))\n+           (loop (add1 page)))])))\n \n ;; Closed issues in the milestone: the note sources from the tracker.\n (define (milestone-issues mn)\n@@ -378,9 +397,9 @@\n \n (define (stage-milestone-close mn)\n   (printf \"== [7/7] MILESTONE - close milestone ~a (v~a)\\n\" mn version)\n-  (define state (gh-json \"api\" (format \"repos/{owner}/{repo}/milestones/~a\" mn) \"-q\" \".state\"))\n+  (define state (gh-text \"api\" (format \"repos/{owner}/{repo}/milestones/~a\" mn) \"-q\" \".state\"))\n   (cond\n-    [(string=? (string-trim (~a state)) \"closed\") (printf \"  already closed - no-op\\n\")]\n+    [(string=? (string-trim state) \"closed\") (printf \"  already closed - no-op\\n\")]\n     [dry-run? (printf \"  [dry-run] would PATCH state=closed\\n\")]\n     [else\n      (gh-json \"api\" (format \"repos/{owner}/{repo}/milestones/~a\" mn) \"-X\" \"PATCH\" \"-f\" \"state=closed\")"
+  }
+]

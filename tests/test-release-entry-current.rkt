@@ -64,10 +64,39 @@
         (check-true (regexp-match? #px"(?i:milestone) #[0-9]+" block)
                     "release entry must reference its milestone")))
     (test-case "release-language lint passes for the canonical entry"
-      (define lint-changelog
-        (dynamic-require (string->path (path->string notes-lint-path)) 'lint-changelog))
-      (define violations (lint-changelog changelog-path canonical-version))
-      (check-equal? violations '()))
+      (define lint-mod (string->path (path->string notes-lint-path)))
+      (define lint-changelog (dynamic-require lint-mod 'lint-changelog))
+      (define bug-registry-path (dynamic-require lint-mod 'bug-registry-path))
+      ;; Deterministic registry fixture: the canonical entry cites
+      ;; BUG-0064..BUG-0072 as fixed. Pin it so this test never depends on
+      ;; a foreign planning tree discovered above the checkout. The fixed-in
+      ;; column is derived from the canonical version surface (BUG-0009:
+      ;; never a hardcoded literal, so the fixture survives future bumps).
+      (define (fixture-row id severity)
+        (format "| ~a | 2026-09-08 | fixture | fixture | ~a | fixed | v~a | — |\n"
+                id
+                severity
+                canonical-version))
+      (define fixture-registry
+        (string-append "| BUG | Reported | Title | Component | Severity | Status | Fixed in | Ref |\n"
+                       "|---|---|---|---|---|---|---|---|\n"
+                       (fixture-row "BUG-0064" "high")
+                       (fixture-row "BUG-0065" "high")
+                       (fixture-row "BUG-0066" "critical")
+                       (fixture-row "BUG-0067" "high")
+                       (fixture-row "BUG-0068" "high")
+                       (fixture-row "BUG-0069" "high")
+                       (fixture-row "BUG-0070" "high")
+                       (fixture-row "BUG-0071" "high")
+                       (fixture-row "BUG-0072" "critical")))
+      (define tmp-registry (make-temporary-file "release-entry-registry-~a.md"))
+      (call-with-output-file tmp-registry (λ (out) (display fixture-registry out)) #:exists 'replace)
+      (dynamic-wind (λ ()
+                      (parameterize ([bug-registry-path tmp-registry])
+                        (define violations (lint-changelog changelog-path canonical-version))
+                        (check-equal? violations '())))
+                    void
+                    (λ () (delete-file tmp-registry))))
     (test-case "entry names activated and non-activated states explicitly"
       (define block (entry-block-for changelog-text canonical-version))
       (check-not-false block)

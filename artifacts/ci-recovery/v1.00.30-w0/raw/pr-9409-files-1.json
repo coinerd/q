@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "8ff104dafa793440e5446a3bf8f8e9504606dbfc",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877",
+    "patch": "@@ -296,7 +296,7 @@ q/\n |--------|-------|\n | Test files | 1343 |\n | Source modules | 838 |\n-| Source lines | 152090 |\n+| Source lines | 152088 |\n | Test lines | 239691 |\n | Test assertions | 36963 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |"
+  },
+  {
+    "sha": "14bbf2dc6f0e1e766f4c195193a425b22724bc20",
+    "filename": "scripts/release-closeout.rkt",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 8,
+    "changes": 14,
+    "blob_url": "https://github.com/coinerd/q/blob/dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877/scripts%2Frelease-closeout.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877/scripts%2Frelease-closeout.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/scripts%2Frelease-closeout.rkt?ref=dddcc66f0d8a34240ea4fb5884cb2e8b6b9f4877",
+    "patch": "@@ -195,18 +195,14 @@\n (define (find-milestone-number)\n   (let loop ([page 1])\n     (define ms\n-      (gh-json \"api\"\n-               (format \"repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a\"\n-                       page)))\n+      (gh-json \"api\" (format \"repos/{owner}/{repo}/milestones?state=all&per_page=100&page=~a\" page)))\n     (cond\n       [(not (list? ms)) #f]\n       [(null? ms) #f]\n       [else\n        (define hits\n-         (filter (lambda (m) (equal? (hash-ref m 'title \"\") (string-append \"v\" version)))\n-                 ms))\n-       (or (and (pair? hits) (hash-ref (car hits) 'number #f))\n-           (loop (add1 page)))])))\n+         (filter (lambda (m) (equal? (hash-ref m 'title \"\") (string-append \"v\" version))) ms))\n+       (or (and (pair? hits) (hash-ref (car hits) 'number #f)) (loop (add1 page)))])))\n \n ;; Closed issues in the milestone: the note sources from the tracker.\n (define (milestone-issues mn)\n@@ -269,7 +265,9 @@\n             (hash-ref r 'fixed-in)))\n   ;; CHANGELOG.md stays the reviewed source of notes; gen/lint check it.\n   (run-racket-script \"gen-release-notes\" (find-script \"gen-release-notes.rkt\") version)\n-  (run-racket-script \"lint-release-notes\" (find-script \"lint-release-notes.rkt\") version))\n+  ;; lint-release-notes.rkt's CLI takes --version (F-15 auto-detect fallback);\n+  ;; pass it explicitly so the close-out works regardless of invocation cwd.\n+  (run-racket-script \"lint-release-notes\" (find-script \"lint-release-notes.rkt\") \"--version\" version))\n \n ;; ---------------------------------------------- stage 2: readiness gate\n "
+  }
+]

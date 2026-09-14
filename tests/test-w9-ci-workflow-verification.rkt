@@ -367,8 +367,11 @@
     ;; the prepared-env producer and the guarded restore stay byte-identical
     (define contract (hash-ref cp 'fast_env_verification_contract))
     (check-equal? (hash-ref contract 'prepare_action_sha256)
-                  "be8c614ce36555a0bcbe8671d12699255825109c9ff8c83a8c2a40650a4e5a2d"
-                  "manifest/OS/Racket/lockfile verification steps must stay byte-identical")
+                  "f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501"
+                  (string-append
+                   "manifest/OS/Racket/lockfile verification steps must stay byte-identical"
+                   " (re-stamped by v1.00.30 W0 BUG-0073: pipefail added before the step-summary tee;"
+                   " verification steps unchanged)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
      "a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784"

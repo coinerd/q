@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "63d975f3a385ee7875221e3579e36b22d2fe7c5b",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/21a9f4308d908b2f5860800fbf5bfe9d00345b00/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/21a9f4308d908b2f5860800fbf5bfe9d00345b00/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=21a9f4308d908b2f5860800fbf5bfe9d00345b00",
+    "patch": "@@ -38,6 +38,8 @@\n \n - Version stamped `1.00.07`; wave PR #9411 merged to main.\n \n+Released 2026-08-20.\n+\n ## [Unreleased]\n \n > v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE \u2014 merged via PR #9370 (main `76ae7946`)."
+  }
+]

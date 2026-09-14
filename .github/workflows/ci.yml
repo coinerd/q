@@ -316,6 +316,7 @@ jobs:
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
         run: |
+          set -o pipefail
           PLAN_ARGS=""
           if [ "$FAST_SHARD_PLAN" = "active" ]; then
             PLAN_ARGS="--shard-plan active"
@@ -483,8 +484,10 @@ jobs:
           : > artifacts-run/shards.jsonl
           for f in $SHARD_JSONS; do
             jq -c --arg artifact "$(basename "$(dirname "$f")")" \
+              --arg run_sha "$GITHUB_SHA" \
               '{artifact: $artifact,
                 shard: .run_summary.shard,
+                head_sha: $run_sha,
                 file_count: .run_summary.file_count,
                 pass: .run_summary.pass,
                 fail: .run_summary.fail,
@@ -492,7 +495,8 @@ jobs:
                 skip: .run_summary.skip,
                 wall_clock_seconds: .run_summary.wall_clock_seconds}' "$f" >> artifacts-run/shards.jsonl
           done
-          jq -s '{
+          jq -s --arg run_sha "$GITHUB_SHA" '{
+            run_sha: $run_sha,
             suite: "fast",
             sharded: true,
             shards: (sort_by(.artifact)),
@@ -515,6 +519,17 @@ jobs:
             exit 1
           fi
           echo "producer: clean fast-suite aggregate (files=$FILE_TOTAL pass=$PASS_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)"
+          # BUG-0073 (v1.00.30 W0): result-truth verification at the
+          # required aggregate boundary.  The structural refusal above is
+          # necessary but not sufficient: a green claim (proof bundle) is
+          # minted below only if scripts/ci/verify-result-truth.rkt also
+          # verifies shard presence, totals consistency and the run-SHA
+          # binding for the aggregate and every shard.  Fail closed.
+          SHARD_TOTAL="$(jq -r '.shards | length' "$SUMMARY")"
+          racket scripts/ci/verify-result-truth.rkt \
+            --aggregate "$SUMMARY" \
+            --expect-shards "$SHARD_TOTAL" \
+            --expect-sha "$GITHUB_SHA"
           WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
           TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
           CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -752,6 +767,7 @@ jobs:
 
       - name: Run platform-cross suite
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite platform --jobs 4 \
             --json-out test-results.json \
@@ -836,6 +852,7 @@ jobs:
 
       - name: Run fast suite (Racket 8.11)
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --json-out test-results.json \
@@ -906,7 +923,9 @@ jobs:
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
       - name: Run security test suite (parallel)
-        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
+        run: |
+          set -o pipefail
+          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
 
       - name: Test results summary
         if: always()
@@ -1099,6 +1118,7 @@ jobs:
 
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
+          set -o pipefail
           STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
             --suite workflows --jobs 2 --timeout 90 \
             --shard-index ${{ matrix.shard }} --shard-total 2 \
@@ -1258,6 +1278,7 @@ jobs:
 
       - name: Run abstraction audit (CI mode)
         run: |
+          set -o pipefail
           racket scripts/abstraction-audit.rkt --ci-mode 2>&1 | tee audit-output.log
 
       - name: Upload audit report
@@ -1281,16 +1302,24 @@ jobs:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
 
       - name: Run fast suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
 
       - name: Run TUI suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
 
       - name: Run arch suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
 
       - name: Run workflows suite with gate evidence
-        run: racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
 
       - name: Gate evidence summary
         if: always()
@@ -1322,7 +1351,9 @@ jobs:
         run: racket scripts/lint-release-readiness.rkt --strict
 
       - name: Triple-gate (3x full suite)
-        run: racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
+        run: |
+          set -o pipefail
+          racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
 
       - name: Triple-gate summary
         if: always()

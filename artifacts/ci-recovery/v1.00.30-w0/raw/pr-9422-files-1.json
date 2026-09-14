@@ -1,0 +1,50 @@
+[
+  {
+    "sha": "6581baa6529699c5ab5e8a8306ce7899b061fbbf",
+    "filename": ".github/actions/setup-racket/action.yml",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 6,
+    "changes": 14,
+    "blob_url": "https://github.com/coinerd/q/blob/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "raw_url": "https://github.com/coinerd/q/raw/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/.github%2Factions%2Fsetup-racket%2Faction.yml",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/.github%2Factions%2Fsetup-racket%2Faction.yml?ref=f533481a6bab9cfb9ebc8b6e40dd3d84da305db1",
+    "patch": "@@ -37,7 +37,7 @@ runs:\n       with:\n         path: ${{ steps.racket-store.outputs.addon_path }}\n         key: >-\n-          racket-addon-v1-${{ runner.os }}-x64-cs-full-${{ inputs.racket-version }}-\n+          racket-addon-v2-${{ runner.os }}-x64-cs-full-${{ inputs.racket-version }}-\n           ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}\n \n     - name: Install Racket\n@@ -114,11 +114,13 @@ runs:\n           echo \"::endgroup::\"\n         fi\n \n-        # Compile every q package-visible collection. Documentation is not a\n-        # test-platform requirement; disabling it removes a large cold-run cost\n-        # without weakening the package compile boundary.\n-        echo \"::group::Compiling all q package-visible collections\"\n-        raco setup --no-docs --jobs 4 --pkgs q\n+        # Compile every q package-visible collection and the `fmt` command\n+        # package used by racket-tooling write validation. `fmt` is a build\n+        # dependency, so q setup alone does not reliably install its `raco`\n+        # command in a clean CI user store.\n+        echo \"::group::Compiling q collections and the formatter command\"\n+        raco setup --no-docs --jobs 4 --pkgs q fmt\n+        raco fmt --help >/dev/null\n         echo \"::endgroup::\"\n \n         racket -e '(require quickcheck fmt) (displayln \"Racket package store health check passed\")'"
+  },
+  {
+    "sha": "0ff7d04c0170ef48122f0159ba3d9bb032ce1c7a",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=f533481a6bab9cfb9ebc8b6e40dd3d84da305db1",
+    "patch": "@@ -297,7 +297,7 @@ q/\n | Test files | 1345 |\n | Source modules | 840 |\n | Source lines | 152438 |\n-| Test lines | 240003 |\n+| Test lines | 240004 |\n | Test assertions | 37002 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "41cfdd5cd0ac29b765e5417031c1be997497d1ee",
+    "filename": "docs/reports/CI-RACKET-CACHE-POLICY.md",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 3,
+    "changes": 6,
+    "blob_url": "https://github.com/coinerd/q/blob/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/docs%2Freports%2FCI-RACKET-CACHE-POLICY.md",
+    "raw_url": "https://github.com/coinerd/q/raw/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/docs%2Freports%2FCI-RACKET-CACHE-POLICY.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2FCI-RACKET-CACHE-POLICY.md?ref=f533481a6bab9cfb9ebc8b6e40dd3d84da305db1",
+    "patch": "@@ -10,10 +10,10 @@ The full-regression platform lane previously cached `~/.racket` and workspace by\n |---|---|\n | Cache owner | Only `.github/actions/setup-racket/action.yml` restores the Racket package store. Callers must not add a second Racket package cache. |\n | Cache path | The action sets `PLTADDONDIR=$HOME/.cache/q-racket-addon` and caches the versioned addon directory. |\n-| Cache key | `racket-addon-v1`, runner OS, Racket x64/CS/full distribution tuple, Racket version, `info.rkt`, and `ci/racket-package-lock.rktd` form the exact key. |\n+| Cache key | `racket-addon-v2`, runner OS, Racket x64/CS/full distribution tuple, Racket version, `info.rkt`, and `ci/racket-package-lock.rktd` form the exact key. |\n | Restore policy | No prefix restore keys are permitted. A manifest or lock change produces a clean store. |\n | Workspace bytecode | `compiled/` directories are deleted before setup and are never cached. |\n-| Compile boundary | Every run, including an exact cache hit, relinks q and executes `raco setup --no-docs --jobs 4 --pkgs q`. |\n+| Compile boundary | Every run, including an exact cache hit, relinks q and executes `raco setup --no-docs --jobs 4 --pkgs q fmt`, then checks `raco fmt --help`. |\n \n > **Binding constraint:** A cache hit accelerates dependency acquisition. It never authorizes skipping compilation of package-visible q modules.\n \n@@ -25,7 +25,7 @@ When `info.rkt` changes or an explicit dependency update is required, maintainer\n \n ## Cache recovery\n \n-A missing q package on an exact cache hit, a failed lock verifier, or a failed health probe is a cache-integrity incident. The job must remain red. The repair is to correct the lock or intentionally increment the `racket-addon-v1` schema in the setup action, which creates a new immutable GitHub cache after a successful trusted main, scheduled, or manual run. Do not add `restore-keys` as a workaround.\n+A missing q package on an exact cache hit, a failed lock verifier, a missing `raco fmt` command, or a failed health probe is a cache-integrity incident. The job must remain red. The repair is to correct the lock or intentionally increment the `racket-addon-v2` schema in the setup action, which creates a new immutable GitHub cache after a successful trusted main, scheduled, or manual run. Do not add `restore-keys` as a workaround.\n \n ## Rollout evidence and timeout policy\n "
+  },
+  {
+    "sha": "ec562996064c7e300140f337f63e49a79465af81",
+    "filename": "tests/test-ci-workflows.rkt",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 4,
+    "changes": 9,
+    "blob_url": "https://github.com/coinerd/q/blob/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/tests%2Ftest-ci-workflows.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/f533481a6bab9cfb9ebc8b6e40dd3d84da305db1/tests%2Ftest-ci-workflows.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-ci-workflows.rkt?ref=f533481a6bab9cfb9ebc8b6e40dd3d84da305db1",
+    "patch": "@@ -82,7 +82,7 @@\n                     (string-contains? setup-action \"steps.racket-store.outputs.addon_path\"))\n                \"the addon store must be explicit and cacheable on macOS\"))\n  (test-case \"cache key is exact, versioned, and dependency-lock based\"\n-   (check-true (and (string-contains? setup-action \"racket-addon-v1-\")\n+   (check-true (and (string-contains? setup-action \"racket-addon-v2-\")\n                     (string-contains? setup-action \"x64-cs-full\")\n                     (string-contains? setup-action \"ci/racket-package-lock.rktd\"))\n                \"cache key must identify the exact Racket distribution and lock\"))\n@@ -91,11 +91,12 @@\n                     (string-contains? setup-action \"./compiled\")\n                     (string-contains? setup-action \"restore-keys:\"))\n                 \"the cache must not restore legacy paths or partial dependency graphs\"))\n- (test-case \"cache hit relinks q and still compiles all package-visible modules\"\n+ (test-case \"cache hit relinks q and compiles q plus the formatter command\"\n    (check-true (and (string-contains? setup-action \"raco pkg update --name q --link --batch --no-setup\")\n-                    (string-contains? setup-action \"raco setup --no-docs --jobs 4 --pkgs q\")\n+                    (string-contains? setup-action \"raco setup --no-docs --jobs 4 --pkgs q fmt\")\n+                    (string-contains? setup-action \"raco fmt --help >/dev/null\")\n                     (string-contains? setup-action \"verify-racket-package-lock.rkt\"))\n-               \"cache hits must be locked, relinked, and fully compiled\"))\n+               \"cache hits must be locked, relinked, and compile q plus `raco fmt`\"))\n  (test-case \"full regression has no duplicate outer Racket package cache\"\n    (check-false (string-contains? wf \"Cache Racket packages\")\n                 \"the reusable setup action must be the sole package-cache owner\")))"
+  }
+]

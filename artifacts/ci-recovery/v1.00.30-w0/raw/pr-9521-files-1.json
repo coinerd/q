@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "90616b72d8aeafac104dce41da0f748e71833433",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 1,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/9452e0515bc24c80de76f8a3984c4887826fab2a/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/9452e0515bc24c80de76f8a3984c4887826fab2a/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=9452e0515bc24c80de76f8a3984c4887826fab2a",
+    "patch": "@@ -1,6 +1,8 @@\n ## v1.00.16 \u2014 2026-08-24\n \n-> Released 2026-08-24. BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate\n+Released 2026-08-24.\n+\n+> BUG-0020/BUG-0021 remediations, the v1.00.16 fast-gate\n > and TDD-adoption campaign (W0\u2013W4), and the connection-pool chunked-body\n > fix that made pooling safe to re-enable everywhere.\n "
+  }
+]

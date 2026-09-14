@@ -1,0 +1,121 @@
+[
+  {
+    "sha": "a9202a49f413b928607214f17835a98d946b03db",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -297,7 +297,7 @@ q/\n | Test files | 1478 |\n | Source modules | 872 |\n | Source lines | 177723 |\n-| Test lines | 267786 |\n+| Test lines | 267809 |\n | Test assertions | 40783 |\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "bf00bde679f3cbe9d7fc4fb05929a290d8a346d4",
+    "filename": "artifacts/tier-ownership/v1.00.28-w0/ownership-matrix.json",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/artifacts%2Ftier-ownership%2Fv1.00.28-w0%2Fownership-matrix.json",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/artifacts%2Ftier-ownership%2Fv1.00.28-w0%2Fownership-matrix.json",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/artifacts%2Ftier-ownership%2Fv1.00.28-w0%2Fownership-matrix.json?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a"
+  },
+  {
+    "sha": "dc0675c1b8dd7b7b9cdc3aca334ebf1de07483af",
+    "filename": "docs/architecture/dependency-policy.rktd",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 0,
+    "changes": 4,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/docs%2Farchitecture%2Fdependency-policy.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/docs%2Farchitecture%2Fdependency-policy.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Farchitecture%2Fdependency-policy.rktd?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -310,6 +310,10 @@\n        (risk\n         . \"TUI composition root with session startup, extension wiring, and campaign command integration\")\n        (owner . \"tui\"))\n+      (\"tui/state-events/core-handlers.rkt\"\n+       (risk\n+        . \"Central TUI event reducer dispatch with campaign, verification, and lifecycle integration\")\n+       (owner . \"tui\"))\n       (\"runtime/session/session-store-tree.rkt\"\n        (cycle-resolved . \"v0.74.1\")\n        (risk"
+  },
+  {
+    "sha": "d7357776bc75e935726a4ef1acd65afea1907a9c",
+    "filename": "docs/architecture/parameter-inventory.rktd",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 1,
+    "changes": 3,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/docs%2Farchitecture%2Fparameter-inventory.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/docs%2Farchitecture%2Fparameter-inventory.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Farchitecture%2Fparameter-inventory.rktd?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -166,7 +166,8 @@\n  (\"runtime/goal/goal-runner.rkt\" (current-goal-session-log-path . CONFIGURATION)\n                                  (current-simulated-prompt-sink . SERVICE_HANDLE)\n                                  (current-eval-timeout-secs . CONFIGURATION))\n- (\"runtime/gsd-query.rkt\" (current-gsd-mode-query . SERVICE_HANDLE))\n+ (\"runtime/gsd-query.rkt\" (current-gsd-mode-query . SERVICE_HANDLE)\n+                          (current-gsd-campaign-active-query . SERVICE_HANDLE))\n  (\"runtime/iteration/retry-policy.rkt\" (current-loop-cooldown-left . ITERATION_LOCAL))\n  (\"runtime/iteration/step-executor.rkt\" (current-post-tool-result-hook . SERVICE_HANDLE)\n                                         (current-reflection-prompt-enabled . CONFIGURATION))"
+  },
+  {
+    "sha": "3b44f2ee6ba41218ea37174cf37234010bd36ba5",
+    "filename": "tests/helpers/gsd-golden-trace.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 1,
+    "changes": 5,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Fhelpers%2Fgsd-golden-trace.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Fhelpers%2Fgsd-golden-trace.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Fhelpers%2Fgsd-golden-trace.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -77,7 +77,8 @@\n                   gsd-ctx-set-state!\n                   gsd-ctx-set-history!\n                   current-gsd-ctx)\n-         (only-in \"../../util/loop-result.rkt\" make-loop-result))\n+         (only-in \"../../util/loop-result.rkt\" make-loop-result)\n+         (only-in \"gsd-test-helpers.rkt\" bind-test-wave-merge-sha!))\n \n ;; ============================================================\n ;; Trace record\n@@ -277,6 +278,8 @@\n                              (format \"prompt-W~a\" wave-idx))\n                            (lambda (wave-idx)\n                              (gsm-ctx-transition-to! ctx 'verifying)\n+                             (when approve?\n+                               (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-idx))\n                              approve?)))\n   (define outcome-box (box 0))\n   (execute-campaign-request! request"
+  },
+  {
+    "sha": "fe5f193d1061628adbea1efdb6e85b3952eca913",
+    "filename": "tests/helpers/gsd-test-helpers.rkt",
+    "status": "modified",
+    "additions": 19,
+    "deletions": 6,
+    "changes": 25,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Fhelpers%2Fgsd-test-helpers.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Fhelpers%2Fgsd-test-helpers.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Fhelpers%2Fgsd-test-helpers.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -4,11 +4,24 @@\n \n ;; BOUNDARY: integration\n \n-;; tests/helpers/gsd-test-helpers.rkt \u2014 Test helper for GSD context\n-;;\n-;; Re-exports make-gsd-context from session-state.rkt for test convenience.\n-;; v0.32.5: Updated to re-export struct-based factory.\n+;; tests/helpers/gsd-test-helpers.rkt \u2014 Test helpers for GSD context and delivery fixtures\n \n-(provide make-gsd-context)\n+(require racket/file\n+         (only-in \"../../extensions/gsd/session-state.rkt\" make-gsd-context))\n \n-(require (only-in \"../../extensions/gsd/session-state.rkt\" make-gsd-context))\n+;; Bind the synthetic merge evidence required before a test campaign may\n+;; advance beyond an approved wave. The SHA is intentionally unmistakable\n+;; fixture data and the file is always rooted in the caller's temporary project.\n+(define (bind-test-wave-merge-sha! project-root plan-id wave-index)\n+  (define evidence-dir (build-path project-root \"docs\" \"reports\" \"gsd-wave-evidence\"))\n+  (define evidence-path (build-path evidence-dir (format \"~a-w~a.rktd\" plan-id wave-index)))\n+  (make-directory* evidence-dir)\n+  (call-with-output-file evidence-path\n+                         (lambda (out)\n+                           (write '((merge-sha . \"0123456789abcdef0123456789abcdef01234567\")) out)\n+                           (newline out))\n+                         #:exists 'replace)\n+  evidence-path)\n+\n+(provide make-gsd-context\n+         bind-test-wave-merge-sha!)"
+  },
+  {
+    "sha": "69e8cefa74a96586e1c6baa086b9c505ea840a59",
+    "filename": "tests/test-arch-parameters.rkt",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 1,
+    "changes": 5,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-arch-parameters.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-arch-parameters.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-arch-parameters.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -280,8 +280,11 @@\n       ;; backoff shape like retry-delay) and\n       ;; current-gsd-campaign-infra-wait-chunk-secs (CONFIGURATION,\n       ;; cancellation-check granularity for long waits).\n+      ;; +1 \u2014 BUG-0069 campaign auto-retry visibility\n+      ;; (runtime/gsd-query.rkt): current-gsd-campaign-active-query\n+      ;; (SERVICE_HANDLE, injectable runtime campaign-state query).\n       (check-equal? (length inventory-entries)\n-                    234\n+                    235\n                     \"parameter inventory should contain audited parameters\"))))\n \n ;; ============================================================"
+  },
+  {
+    "sha": "2114d06a2cefcaef47f33a12440fff3945f2d052",
+    "filename": "tests/test-gsd-end-to-end-recovery.rkt",
+    "status": "modified",
+    "additions": 38,
+    "deletions": 29,
+    "changes": 67,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-gsd-end-to-end-recovery.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-gsd-end-to-end-recovery.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-gsd-end-to-end-recovery.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -57,7 +57,8 @@\n                   gsd-github-command-result-external-id\n                   gsd-github-command-result-already-done?)\n          (only-in \"../extensions/gsd/github-port.rkt\" make-github-port)\n-         (only-in \"helpers/gsd-port-fakes.rkt\" make-fake-github-adapter fake-github-call-count))\n+         (only-in \"helpers/gsd-port-fakes.rkt\" make-fake-github-adapter fake-github-call-count)\n+         (only-in \"helpers/gsd-test-helpers.rkt\" bind-test-wave-merge-sha!))\n \n ;; ============================================================\n ;; Fixture: deterministic 4-wave campaign project\n@@ -87,7 +88,10 @@\n (define (read-text p)\n   (call-with-input-file p port->string))\n \n-(define approve-wave (lambda (_) #t))\n+(define (make-approve-wave dir rec)\n+  (lambda (wave-index)\n+    (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-index)\n+    #t))\n \n ;; ============================================================\n ;; Recovery helper (mirrors run-campaign! startup + W2/W5 reconcile)\n@@ -157,7 +161,7 @@\n            (run-campaign! dir\n                           rec1\n                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))\n-                          #:verifier approve-wave))\n+                          #:verifier (make-approve-wave dir rec1)))\n          (check-eq? (campaign-result-status r1) 'wave-failed)\n          (check-eq? (wave-status* rec1 0) 'done)\n          (check-eq? (wave-status* rec1 1) 'failed)\n@@ -185,7 +189,7 @@\n            (run-campaign! dir\n                           rec2\n                           #:runner (lambda (idx) (if (= idx 2) 'cancelled 'ok))\n-                          #:verifier approve-wave))\n+                          #:verifier (make-approve-wave dir rec2)))\n          (check-eq? (campaign-result-status r2) 'wave-cancelled)\n          (check-eq? (wave-status* rec2 0) 'done)\n          (check-eq? (wave-status* rec2 1)\n@@ -202,7 +206,8 @@\n          ;; --- Process 3 (restart): interrupted W2 is retried and succeeds;\n          ;; W3 succeeds -> campaign complete ---\n          (define rec3 (load-or-migrate-campaign! dir))\n-         (define r3 (run-campaign! dir rec3 #:runner (lambda (_) 'ok) #:verifier approve-wave))\n+         (define r3\n+           (run-campaign! dir rec3 #:runner (lambda (_) 'ok) #:verifier (make-approve-wave dir rec3)))\n          (check-eq? (campaign-result-status r3) 'campaign-complete)\n          (check-equal? (campaign-result-completed-waves r3) '(2 3))\n          (check-eq? (wave-status* rec3 0) 'done)\n@@ -293,29 +298,33 @@\n \n     (test-case \"crash after interrupted persist: durable-only, projections stay pending\"\n       (define dir (make-e2e-project))\n-      (dynamic-wind\n-       void\n-       (lambda ()\n-         (define rec (migrate-campaign! dir))\n-         (begin-wave-persisted! dir rec 0)\n-         (set-campaign-wave-status! (wave* rec 0) 'interrupted)\n-         (persist-campaign! dir rec)\n-         (define-values (oa pp) (recover-fresh! dir rec))\n-         (check-equal? oa 0 \"interrupted wave emits no completion event\")\n-         (define durable (load-campaign-record dir (campaign-plan-id rec)))\n-         (check-eq? (wave-status* durable 0) 'interrupted)\n-         (check-equal? (load-outbox dir (campaign-plan-id rec))\n-                       '()\n-                       \"no phantom event for interrupted wave\")\n-         ;; Projections: interrupted is not a terminal plan status; PLAN.md\n-         ;; keeps the Inbox marker (durable truth is the record, not the marker).\n-         (check-true (string-contains? (read-text (build-path dir \".planning\" \"PLAN.md\"))\n-                                       \"- [Inbox] W0\"))\n-         ;; Restart retries the interrupted wave.\n-         (define r (run-campaign! dir durable #:runner (lambda (_) 'ok) #:verifier approve-wave))\n-         (check-eq? (campaign-result-status r) 'campaign-complete)\n-         (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0) 'done))\n-       (lambda () (cleanup! dir))))\n+      (dynamic-wind void\n+                    (lambda ()\n+                      (define rec (migrate-campaign! dir))\n+                      (begin-wave-persisted! dir rec 0)\n+                      (set-campaign-wave-status! (wave* rec 0) 'interrupted)\n+                      (persist-campaign! dir rec)\n+                      (define-values (oa pp) (recover-fresh! dir rec))\n+                      (check-equal? oa 0 \"interrupted wave emits no completion event\")\n+                      (define durable (load-campaign-record dir (campaign-plan-id rec)))\n+                      (check-eq? (wave-status* durable 0) 'interrupted)\n+                      (check-equal? (load-outbox dir (campaign-plan-id rec))\n+                                    '()\n+                                    \"no phantom event for interrupted wave\")\n+                      ;; Projections: interrupted is not a terminal plan status; PLAN.md\n+                      ;; keeps the Inbox marker (durable truth is the record, not the marker).\n+                      (check-true (string-contains? (read-text (build-path dir \".planning\" \"PLAN.md\"))\n+                                                    \"- [Inbox] W0\"))\n+                      ;; Restart retries the interrupted wave.\n+                      (define r\n+                        (run-campaign! dir\n+                                       durable\n+                                       #:runner (lambda (_) 'ok)\n+                                       #:verifier (make-approve-wave dir durable)))\n+                      (check-eq? (campaign-result-status r) 'campaign-complete)\n+                      (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0)\n+                                 'done))\n+                    (lambda () (cleanup! dir))))\n \n     (test-case \"crash after done commit before outbox: reconcile rebuilds event + projections\"\n       (define dir (make-e2e-project))\n@@ -372,7 +381,7 @@\n            (run-campaign! dir\n                           rec\n                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))\n-                          #:verifier approve-wave))\n+                          #:verifier (make-approve-wave dir rec)))\n          (check-eq? (campaign-result-status r) 'wave-failed)\n          (define durable (load-or-migrate-campaign! dir))\n          (recover-fresh! dir durable)"
+  },
+  {
+    "sha": "9d9c3fc1b18ac6abadf22d878fabf68c9d22cff7",
+    "filename": "tests/test-process-extension-command.rkt",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 2,
+    "changes": 10,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-process-extension-command.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-process-extension-command.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-process-extension-command.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -12,7 +12,8 @@\n          \"../tui/commands.rkt\"\n          \"../tui/state-types.rkt\"\n          (only-in \"../tui/commands/runtime-control.rkt\" handle-retry-command)\n-         (only-in \"../extensions/gsd/campaign-state.rkt\" migrate-campaign!)\n+         (only-in \"../extensions/gsd/campaign-state.rkt\" migrate-campaign! campaign-plan-id)\n+         (only-in \"helpers/gsd-test-helpers.rkt\" bind-test-wave-merge-sha!)\n          (only-in \"../extensions/gsd/go-orchestrator.rkt\"\n                   make-campaign-request\n                   register-campaign-request!)\n@@ -105,7 +106,12 @@\n         #:exists 'truncate))\n      (define rec (migrate-campaign! dir))\n      (define request\n-       (make-campaign-request dir rec (lambda (idx) (format \"isolated-W~a\" idx)) (lambda (_) #t)))\n+       (make-campaign-request dir\n+                              rec\n+                              (lambda (idx) (format \"isolated-W~a\" idx))\n+                              (lambda (idx)\n+                                (bind-test-wave-merge-sha! dir (campaign-plan-id rec) idx)\n+                                #t)))\n      (define token (register-campaign-request! request))\n      (define prompt-channel (make-channel))\n      (define factory-count 0)"
+  },
+  {
+    "sha": "d02bbe8cee115ad896f717b382f8ec89dc716853",
+    "filename": "tests/test-reload-command.rkt",
+    "status": "modified",
+    "additions": 25,
+    "deletions": 36,
+    "changes": 61,
+    "blob_url": "https://github.com/coinerd/q/blob/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-reload-command.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/0d2aa80d66fa105c6bf68145cb11bf3d6677263a/tests%2Ftest-reload-command.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-reload-command.rkt?ref=0d2aa80d66fa105c6bf68145cb11bf3d6677263a",
+    "patch": "@@ -22,7 +22,8 @@\n          \"../extensions/api.rkt\"\n          \"../extensions/loader.rkt\"\n          \"../tui/state.rkt\"\n-         \"../tui/commands.rkt\")\n+         \"../tui/commands.rkt\"\n+         (only-in \"helpers/test-sandbox.rkt\" with-test-sandbox test-sandbox-project-dir))\n \n ;; ============================================================\n ;; Helpers\n@@ -141,41 +142,29 @@\n     ;; /reload command shows success message in transcript\n     ;; ----------------------------------------------------------\n     (test-case \"/reload command shows success message in transcript\"\n-      (define tmp-dir (make-temporary-file \"q-reload-cmd-~a\" 'directory))\n-      (cleanup! tmp-dir)\n-\n-      ;; Write extension file\n-      (write-ext-file! tmp-dir \"demo-ext\")\n-\n-      (define reg (make-extension-registry))\n-      ;; Pre-register so we have something to reload\n-      (register-extension! reg (extension \"demo-ext\" \"0.1\" \"1\" (hash)))\n-\n-      (define cctx (make-test-cctx #:ext-reg reg))\n-\n-      ;; Parameterize current-directory so reload finds extensions in tmp-dir\n-      ;; We place extensions directly in a .q/extensions/ subdir\n-      (define local-ext-dir (build-path tmp-dir \".q\" \"extensions\"))\n-      (write-ext-file! local-ext-dir \"demo-ext\")\n-\n-      (parameterize ([current-directory tmp-dir])\n-        ;; Clear the registry and register directly so reload has something to unload\n-        (unregister-extension! reg \"demo-ext\")\n-        (register-extension! reg (extension \"demo-ext\" \"0.1\" \"1\" (hash)))\n-\n-        (define result (process-slash-command cctx 'reload))\n-        (check-equal? result 'continue)\n-\n-        ;; Check transcript for success message\n-        (define state (unbox (cmd-ctx-state-box cctx)))\n-        (define transcript (ui-state-transcript state))\n-        (check-true (not (null? transcript)) \"transcript has entries\")\n-        (define last-entry (car (reverse transcript)))\n-        (check-true (string-contains? (transcript-entry-text last-entry) \"reload complete\")\n-                    (format \"transcript contains 'reload complete': ~a\"\n-                            (transcript-entry-text last-entry))))\n-\n-      (cleanup! tmp-dir))\n+      (with-test-sandbox (lambda (sandbox)\n+                           (define project-dir (test-sandbox-project-dir sandbox))\n+                           (define reg (make-extension-registry))\n+                           ;; Pre-register so we have something to unload before discovery.\n+                           (register-extension! reg (extension \"demo-ext\" \"0.1\" \"1\" (hash)))\n+                           (define cctx (make-test-cctx #:ext-reg reg))\n+                           (define local-ext-dir (build-path project-dir \".q\" \"extensions\"))\n+                           (write-ext-file! local-ext-dir \"demo-ext\")\n+\n+                           (unregister-extension! reg \"demo-ext\")\n+                           (register-extension! reg (extension \"demo-ext\" \"0.1\" \"1\" (hash)))\n+\n+                           (define result (process-slash-command cctx 'reload))\n+                           (check-equal? result 'continue)\n+\n+                           (define state (unbox (cmd-ctx-state-box cctx)))\n+                           (define transcript (ui-state-transcript state))\n+                           (check-true (not (null? transcript)) \"transcript has entries\")\n+                           (define last-entry (car (reverse transcript)))\n+                           (check-true (string-contains? (transcript-entry-text last-entry)\n+                                                         \"reload complete\")\n+                                       (format \"transcript contains 'reload complete': ~a\"\n+                                               (transcript-entry-text last-entry))))))\n \n     ;; ----------------------------------------------------------\n     ;; /reload with no registry shows appropriate message"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "db7506cafafe81f99ffed123e84c45a660aa1bd4",
+    "filename": "docs/reports/gsd-wave-evidence/v1.00.23-w4.rktd",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "blob_url": "https://github.com/coinerd/q/blob/c5402d82fb796236ef617d9088da0e1da46376f5/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w4.rktd",
+    "raw_url": "https://github.com/coinerd/q/raw/c5402d82fb796236ef617d9088da0e1da46376f5/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w4.rktd",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/docs%2Freports%2Fgsd-wave-evidence%2Fv1.00.23-w4.rktd?ref=c5402d82fb796236ef617d9088da0e1da46376f5",
+    "patch": "@@ -29,3 +29,5 @@\n    \"q/docs/operations/test-regression-triage.md\"\n    \"q/docs/reports/test-regression-log.md\"\n    \"q/docs/reports/gsd-wave-evidence/v1.00.23-w4.rktd\")))\n+\n+; Follow-up PR validation: wave W4 evidence isolated for canonical governance checking."
+  }
+]

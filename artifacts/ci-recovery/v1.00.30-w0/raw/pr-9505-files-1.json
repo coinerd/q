@@ -1,0 +1,62 @@
+[
+  {
+    "sha": "b39ec352b16dad91ab0f1b975810c37ed51796ac",
+    "filename": "README.md",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 8,
+    "changes": 16,
+    "blob_url": "https://github.com/coinerd/q/blob/334364484181a8e0c85e6a94574fc8747d5bb91d/README.md",
+    "raw_url": "https://github.com/coinerd/q/raw/334364484181a8e0c85e6a94574fc8747d5bb91d/README.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/README.md?ref=334364484181a8e0c85e6a94574fc8747d5bb91d",
+    "patch": "@@ -281,7 +281,7 @@ q/\n \u251c\u2500\u2500 runtime/        Agent session, compaction, resource loading, auth\n \u251c\u2500\u2500 sandbox/        Subprocess management, execution limits\n \u251c\u2500\u2500 skills/         Skill loading, context files, prompt templates\n-\u251c\u2500\u2500 tests/          Full test suite (1366 files)\n+\u251c\u2500\u2500 tests/          Full test suite (1367 files)\n \u251c\u2500\u2500 tools/          Tool registry, scheduler, 27 built-in tools\n \u251c\u2500\u2500 tui/            Terminal UI: rendering, input, state, clipboard\n \u251c\u2500\u2500 util/           JSONL, ANSI, markdown, IDs, cancellation, paths\n@@ -294,16 +294,16 @@ q/\n \n | Metric | Value |\n |--------|-------|\n-| Test files | 1366 |\n+| Test files | 1367 |\n | Source modules | 844 |\n <<<<<<< HEAD\n-| Source lines | 155125 |\n-| Test lines | 242418 |\n-| Test assertions | 37251 |\n+| Source lines | 155153 |\n+| Test lines | 242516 |\n+| Test assertions | 37261 |\n =======\n-| Source lines | 155125 |\n-| Test lines | 242418 |\n-| Test assertions | 37251 |\n+| Source lines | 155153 |\n+| Test lines | 242516 |\n+| Test assertions | 37261 |\n >>>>>>> origin/main\n | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |\n "
+  },
+  {
+    "sha": "3e384e8bbc64b527c5be72697fd71153e18987ea",
+    "filename": "extensions/gsd/plan-types-parser.rkt",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 1,
+    "changes": 10,
+    "blob_url": "https://github.com/coinerd/q/blob/334364484181a8e0c85e6a94574fc8747d5bb91d/extensions%2Fgsd%2Fplan-types-parser.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/334364484181a8e0c85e6a94574fc8747d5bb91d/extensions%2Fgsd%2Fplan-types-parser.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fplan-types-parser.rkt?ref=334364484181a8e0c85e6a94574fc8747d5bb91d",
+    "patch": "@@ -90,10 +90,18 @@\n \n ;; Parse a single wave section \u2192 raw data hash (not a gsd-wave struct).\n ;; plan-types.rkt wraps this into a gsd-wave.\n+;;\n+;; Header tolerance (v1.00.14 hotfix): the wave header separator may be a\n+;; colon (`## Wave 0: Title`), an em/en-dash (`## Wave 1 \u2014 Title`), or a\n+;; hyphen run (`## Wave 2 - Title`). Previously ONLY the colon form matched;\n+;; any other separator silently fell back to index 0 / empty title, so a\n+;; plan written with em-dash headers normalized to indices (0 0 0 ...)\n+;; and `/go` rejected it with \"Wave indices not sequential\".\n (define (parse-wave-section-raw lines)\n   (define header (car lines))\n   (define body-lines (cdr lines))\n-  (define header-match (regexp-match #rx\"^## +[Ww]ave +([0-9]+) *: *(.+)$\" header))\n+  (define header-match\n+    (regexp-match #px\"^## +[Ww]ave +([0-9]+)(?: *: *| *[\u2014\u2013] *| +-+ *)(.+)$\" header))\n   (define idx\n     (if header-match\n         (string->number (cadr header-match))"
+  },
+  {
+    "sha": "8e9601b9f8e156d186f8f61c8176417b152ce948",
+    "filename": "extensions/gsd/plan-types.rkt",
+    "status": "modified",
+    "additions": 31,
+    "deletions": 11,
+    "changes": 42,
+    "blob_url": "https://github.com/coinerd/q/blob/334364484181a8e0c85e6a94574fc8747d5bb91d/extensions%2Fgsd%2Fplan-types.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/334364484181a8e0c85e6a94574fc8747d5bb91d/extensions%2Fgsd%2Fplan-types.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/extensions%2Fgsd%2Fplan-types.rkt?ref=334364484181a8e0c85e6a94574fc8747d5bb91d",
+    "patch": "@@ -344,17 +344,37 @@\n \n (: parse-waves-from-markdown : String -> (Listof gsd-wave))\n (define (parse-waves-from-markdown md-text)\n-  (for/list :\n-    (Listof gsd-wave)\n-    ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])\n-    (gsd-wave (expect-natural (raw-ref raw 'index 0))\n-              (expect-string (raw-ref raw 'title \"\"))\n-              'pending\n-              (expect-string (raw-ref raw 'root-cause \"\"))\n-              (expect-string-list (raw-ref raw 'files '()))\n-              '()\n-              (expect-string (raw-ref raw 'verify \"\"))\n-              (expect-string-list (raw-ref raw 'done '())))))\n+  (define waves\n+    (for/list :\n+      (Listof gsd-wave)\n+      ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])\n+      (gsd-wave (expect-natural (raw-ref raw 'index 0))\n+                (expect-string (raw-ref raw 'title \"\"))\n+                'pending\n+                (expect-string (raw-ref raw 'root-cause \"\"))\n+                (expect-string-list (raw-ref raw 'files '()))\n+                '()\n+                (expect-string (raw-ref raw 'verify \"\"))\n+                (expect-string-list (raw-ref raw 'done '())))))\n+  ;; v1.00.14 hotfix: plans written with human 1-based wave headers (Wave 1..N)\n+  ;; must normalize to the internal 0-based indexing. Only an EXACT 1..n\n+  ;; sequential run is shifted; anything else is left untouched so\n+  ;; normalize-plan still rejects genuinely broken numbering.\n+  (define n (length waves))\n+  (define idxs (map gsd-wave-index waves))\n+  (if (and (> n 0) (equal? idxs (build-list n add1)))\n+      (for/list :\n+        (Listof gsd-wave)\n+        ([w : gsd-wave waves])\n+        (struct-copy gsd-wave\n+                     w\n+                     [index\n+                      (let ([i\n+                             :\n+                             Natural\n+                             (assert (sub1 (gsd-wave-index w)) exact-nonnegative-integer?)])\n+                        i)]))\n+      waves))\n \n ;; ============================================================\n ;; Provide"
+  },
+  {
+    "sha": "c8404ad8c18b1afd0b67b0a5325c88a71edee698",
+    "filename": "tests/metadata-discovery/fixture/tests/compiled/stray-test.rkt",
+    "status": "removed",
+    "additions": 0,
+    "deletions": 6,
+    "changes": 6,
+    "blob_url": "https://github.com/coinerd/q/blob/ce31c158c2c719674fd5436adf8c95d1c50e2b2f/tests%2Fmetadata-discovery%2Ffixture%2Ftests%2Fcompiled%2Fstray-test.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/ce31c158c2c719674fd5436adf8c95d1c50e2b2f/tests%2Fmetadata-discovery%2Ffixture%2Ftests%2Fcompiled%2Fstray-test.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Fmetadata-discovery%2Ffixture%2Ftests%2Fcompiled%2Fstray-test.rkt?ref=ce31c158c2c719674fd5436adf8c95d1c50e2b2f",
+    "patch": "@@ -1,6 +0,0 @@\n-;; Fixture: stray .rkt inside a compiled/ directory. The discovery walk\n-;; excludes any path containing \"/compiled/\" (stale bytecode areas), so this\n-;; file MUST NOT be discovered in any invocation mode.\n-(module+ test\n-  (require rackunit)\n-  (check-true #t))"
+  },
+  {
+    "sha": "8834fb8e815f9096ff819966e3a8aad9877f4ee8",
+    "filename": "tests/test-plan-wave-header-tolerance.rkt",
+    "status": "added",
+    "additions": 98,
+    "deletions": 0,
+    "changes": 98,
+    "blob_url": "https://github.com/coinerd/q/blob/334364484181a8e0c85e6a94574fc8747d5bb91d/tests%2Ftest-plan-wave-header-tolerance.rkt",
+    "raw_url": "https://github.com/coinerd/q/raw/334364484181a8e0c85e6a94574fc8747d5bb91d/tests%2Ftest-plan-wave-header-tolerance.rkt",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/tests%2Ftest-plan-wave-header-tolerance.rkt?ref=334364484181a8e0c85e6a94574fc8747d5bb91d",
+    "patch": "@@ -0,0 +1,98 @@\n+#lang racket\n+\n+;; @speed fast\n+;; @suite extensions\n+;; @boundary unit\n+\n+;; tests/test-plan-wave-header-tolerance.rkt \u2014 wave-header tolerance regression\n+;;\n+;; BUG (session MN5MQHQP, 2026-08-23): a plan written with em-dash headers\n+;; (`## Wave 1 \u2014 Title`) and 1-based numbering failed /go normalization with\n+;; \"Wave indices not sequential 0..3: (0 0 0 0)\" \u2014 the parser only matched\n+;; the colon separator and fell back to index 0 for every wave.\n+\n+(require rackunit\n+         (only-in \"../extensions/gsd/plan-types-parser.rkt\" parse-waves-from-markdown-raw)\n+         \"../extensions/gsd/plan-types.rkt\")\n+\n+(define CLASSIC\n+  #<<PLAN\n+## Wave 0: Alpha\n+- File: a.rkt\n+- Verify: rackcat a.rkt\n+\n+## Wave 1: Beta\n+- File: b.rkt\n+- Verify: rackcat b.rkt\n+PLAN\n+  )\n+\n+(define EMDASH-1BASED\n+  #<<PLAN\n+# Plan\n+\n+## Wave 1 \u2014 Release pre-flight (local-only) \u2014 DONE 2026-08-23\n+- File: a.rkt\n+- Verify: racket a.rkt\n+\n+## Wave 2 \u2014 Observation tools (local-only)\n+- File: b.rkt\n+- Verify: racket b.rkt\n+\n+## Wave 3 \u2014 Wave-finish + release helpers (mixed) \u2014 DONE 2026-08-23\n+- File: c.rkt\n+- Verify: racket c.rkt\n+\n+## Wave 4 \u2014 CI-repro skill, hook fix (mixed) \u2014 DONE 2026-08-23\n+- File: d.rkt\n+- Verify: racket d.rkt\n+PLAN\n+  )\n+\n+(test-case \"classic colon headers still parse with 0-based indices\"\n+  (define waves (parse-waves-from-markdown CLASSIC))\n+  (check-equal? (length waves) 2)\n+  (check-equal? (map gsd-wave-index waves) '(0 1))\n+  (check-equal? (gsd-wave-title (first waves)) \"Alpha\"))\n+\n+(test-case \"em-dash 1-based headers parse and normalize to 0-based\"\n+  (define waves (parse-waves-from-markdown EMDASH-1BASED))\n+  (check-equal? (length waves) 4)\n+  ;; THE regression: previously every index was 0 \u2192 \"(0 0 0 0)\"\n+  (check-equal? (map gsd-wave-index waves) '(0 1 2 3))\n+  (check-false (string=? (gsd-wave-title (first waves)) \"\") \"title must not be empty on dash headers\")\n+  (check-true (string-contains? (gsd-wave-title (first waves)) \"Release pre-flight\")))\n+\n+(test-case \"hyphen separator headers parse\"\n+  (define md\n+    #<<PLAN\n+## Wave 1 - First\n+- Verify: true\n+\n+## Wave 2 - Second\n+- Verify: true\n+PLAN\n+    )\n+  (define waves (parse-waves-from-markdown md))\n+  (check-equal? (map gsd-wave-index waves) '(0 1)))\n+\n+(test-case \"non-sequential indices are NOT silently shifted\"\n+  (define md\n+    #<<PLAN\n+## Wave 2 \u2014 A\n+- Verify: true\n+\n+## Wave 5 \u2014 B\n+- Verify: true\n+PLAN\n+    )\n+  ;; 2,5 is neither 0..n-1 nor 1..n \u2014 left untouched so normalize-plan rejects.\n+  (define waves (parse-waves-from-markdown md))\n+  (check-equal? (map gsd-wave-index waves) '(2 5)))\n+\n+(test-case \"normalize-plan accepts the user's failing plan shape\"\n+  (define plan (gsd-plan (parse-waves-from-markdown EMDASH-1BASED) #f '() '()))\n+  (define result (normalize-plan plan))\n+  (check-pred gsd-normalized-plan? result)\n+  (unless (gsd-normalized-plan? result)\n+    (fail (format \"normalization failed: ~a\" result))))"
+  }
+]

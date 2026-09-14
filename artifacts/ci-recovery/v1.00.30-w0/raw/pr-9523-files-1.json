@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "baccacdd7fcbf3c8ae9dd185172ed58fb4dcef34",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 41,
+    "deletions": 0,
+    "changes": 41,
+    "blob_url": "https://github.com/coinerd/q/blob/01ca0ca9e5a5dda3a78f77ebe9c177e50f8b5b8b/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/01ca0ca9e5a5dda3a78f77ebe9c177e50f8b5b8b/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=01ca0ca9e5a5dda3a78f77ebe9c177e50f8b5b8b",
+    "patch": "@@ -45,6 +45,47 @@ Released 2026-08-25.\n   evidence: dogfooded worktree isolation, branch-based verification, and the\n   #9515 failure-context retry on a synthetic no-op first attempt.\n \n+### Breaking / Behavior Changes\n+\n+- `gsd.worktree-isolation` now defaults ON: campaign wave executors run in\n+  dedicated git worktrees instead of the shared checkout. Set it to `false`\n+  to restore shared-checkout execution.\n+- Delivery verification is branch-based: a wave completes only when its\n+  deliverables exist as a committed diff on the wave branch (pushed head SHA\n+  recorded in the durable campaign record); uncommitted working-tree mutations\n+  no longer count as delivery.\n+- Shell-risk severities for `$()`/backtick substitution and bare two-operand\n+  `mv` are downgraded one tier; critical anchors (`rm -rf`, `dd of=/dev/`,\n+  force-push) are unchanged.\n+\n+### Migration Notes\n+\n+- No API changes. Operators with automation keyed to shell-risk severity strings\n+  should re-check thresholds against the new tiers; use\n+  `networking.pool.host-idle-ttl` to pin aggressive keep-alive hosts (e.g.\n+  api.z.ai) without lowering the global idle TTL.\n+- Campaign operators: provider/network infra failures now auto-retry at the\n+  campaign level before stopping; `/retry` remains available as manual override.\n+\n+### Testing\n+\n+- New characterization + hardening tests: executor-retry characterization pins,\n+  shell-risk severity baseline, conn-pool stale-reuse retry, health-gate\n+  turn-scoped accounting, mutation-stall watchdog, wave-worktree lifecycle,\n+  branch-based delivery verification. Fast suite 1129 files / 16406 tests,\n+  tui 88, arch 31, workflows 29 \u2014 all green; local gate evidence recorded at\n+  the release SHA prior to tagging.\n+\n+### Operational / Release\n+\n+- Rollback toggles: `gsd.worktree-isolation=false` (shared-checkout executors);\n+  `networking.pool.enabled=false` (pooling); stall watchdog thresholds via\n+  settings (defaults soft 25 / hard 60 tool calls).\n+- Known follow-up defects observed during the bake and filed for the next\n+  series: BUG-0023\u2013BUG-0027 in `.planning/bugs/` (plan-format fragility,\n+  campaign halt on infra failure, verifier annotation false negative, scratch-\n+  workflow guard friction, git-root contract gap).\n+\n ## v1.00.16 \u2014 2026-08-24\n \n Released 2026-08-24."
+  }
+]

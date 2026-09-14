@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "f18ac264612d9d7d9120ec16e7aaad46a1594287",
+    "filename": "CHANGELOG.md",
+    "status": "modified",
+    "additions": 15,
+    "deletions": 1,
+    "changes": 16,
+    "blob_url": "https://github.com/coinerd/q/blob/14d16a8db3f5d2678bdd6cd246cb20f287b66e77/CHANGELOG.md",
+    "raw_url": "https://github.com/coinerd/q/raw/14d16a8db3f5d2678bdd6cd246cb20f287b66e77/CHANGELOG.md",
+    "contents_url": "https://api.github.com/repos/coinerd/q/contents/CHANGELOG.md?ref=14d16a8db3f5d2678bdd6cd246cb20f287b66e77",
+    "patch": "@@ -1,4 +1,4 @@\n-## [1.00.06] - 2026-08-20\n+## 1.00.06\n \n > TDD plan reassessment closure: full-regression evidence-path repair (#9384),\n > DEEP-9 semver assertion fix, macOS platform budget revision, metadata-lint\n@@ -38,6 +38,20 @@\n   `docs/TDD-TEST-STRATEGY-PLAN.md` on main (v1.00.06). Plan governance figures\n   now match the generated manifest (95 entries / 92 modules).\n \n+### Breaking / Behavior Changes\n+\n+- None. The metadata-lint enforcement (W3) makes previously warn-only CI\n+  metadata checks blocking, which is a deliberate tightening of the release\n+  gate rather than a runtime behavior change.\n+\n+### Migration Notes\n+\n+- None required.\n+\n+### Operational / Release\n+\n+- Version stamped `1.00.06`; wave PR #9400 merged to main.\n+\n ## [Unreleased]\n \n > v1.00.02 UX campaign (3a1d608a) 7/7 waves DONE \u2014 merged via PR #9370 (main `76ae7946`)."
+  }
+]
