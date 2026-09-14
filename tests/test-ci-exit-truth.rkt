@@ -2,12 +2,16 @@
 
 ;; test-ci-exit-truth.rkt — BUG-0073 exit-truth canaries (wave W0, v1.00.30).
 ;;
-;; Nine canaries plus the genuine-success control, each exercising
+;; @suite ci
+;; @speed fast
+;; @boundary integration
+;;
+;; Eight negative canaries plus the genuine-success control, each exercising
 ;; scripts/ci/verify-result-truth.rkt at the required aggregate boundary.
 ;; A canary represents a distinct way CI can lie about a green run:
 ;;
 ;;   1. failed runner / successful tee   -> aggregate claims clean, runner failed
-;;   2. tee failure                      -> runner conclusion failure, not clean
+;;   2. tee failure                      -> per-shard tee_exit failure
 ;;   3. timeout                          -> timed-out shards never verify clean
 ;;   4. partial JSON                     -> truncated aggregate must not verify
 ;;   5. missing shard                    -> declared shard count not present
@@ -44,21 +48,26 @@
                       #:pass [pass 3]
                       #:fail [fail 0]
                       #:timeout [timeout 0]
-                      #:skip [skip 0])
-    (hasheq 'artifact
-            artifact
-            'shard
-            shard
-            'file_count
-            file-count
-            'pass
-            pass
-            'fail
-            fail
-            'timeout
-            timeout
-            'skip
-            skip))
+                      #:skip [skip 0]
+                      #:tee-exit [tee-exit #f])
+    (define base
+      (hasheq 'artifact
+              artifact
+              'shard
+              shard
+              'file_count
+              file-count
+              'pass
+              pass
+              'fail
+              fail
+              'timeout
+              timeout
+              'skip
+              skip))
+    (if tee-exit
+        (hash-set base 'tee_exit tee-exit)
+        base))
 
   (define (aggregate-json shards
                           #:run-sha [run-sha "0123456789abcdef0123456789abcdef01234567"]
@@ -95,7 +104,9 @@
   (define (run-verifier! agg-path
                          #:expect-shards [expect-shards #f]
                          #:expect-sha [expect-sha #f]
-                         #:runner-conclusion [runner-conclusion "success"])
+                         #:runner-conclusion [runner-conclusion "success"]
+                         #:artifact-verdict [artifact-verdict #f]
+                         #:artifact-exit [artifact-exit #f])
     (define args
       (append* (list (list "--aggregate" (path->string agg-path))
                      (if expect-shards
@@ -104,7 +115,13 @@
                      (if expect-sha
                          (list "--expect-sha" expect-sha)
                          '())
-                     (list "--runner-conclusion" runner-conclusion))))
+                     (list "--runner-conclusion" runner-conclusion)
+                     (if artifact-verdict
+                         (list "--artifact-verdict" artifact-verdict)
+                         '())
+                     (if artifact-exit
+                         (list "--artifact-exit" (number->string artifact-exit))
+                         '()))))
     (define so (open-output-string))
     (define se (open-output-string))
     (define ec
@@ -122,11 +139,15 @@
     (check-true (string-contains? se "truth-mismatch") "rejection must be a truth-mismatch verdict"))
 
   ;; -- canary 2: tee failure ----------------------------------------------------
-  (test-case "canary-2: tee failure propagates non-success"
-    (define p (write-aggregate! "canary2" (aggregate-json (list clean-shard))))
-    (define-values (ec _so se) (run-verifier! p #:runner-conclusion "failure"))
+  ;; Exercises the per-shard tee_exit branch (the tee-truth check), not
+  ;; the runner-conclusion branch — a duplicate of canary 1 would leave
+  ;; that branch untested.
+  (test-case "canary-2: per-shard tee failure makes a clean claim unverifiable"
+    (define tee-failed (shard-json #:tee-exit 1))
+    (define p (write-aggregate! "canary2" (aggregate-json (list tee-failed))))
+    (define-values (ec _so se) (run-verifier! p))
     (check-not-equal? ec 0)
-    (check-true (string-contains? se "truth-mismatch")))
+    (check-true (string-contains? se "tee") "rejection must name the tee-failure branch"))
 
   ;; -- canary 3: timeout --------------------------------------------------------
   (test-case "canary-3: timeout is never a clean success"
@@ -170,11 +191,14 @@
     (check-true (string-contains? se "run SHA")))
 
   ;; -- canary 8: successful runner, failing artifact upload ---------------------
-  (test-case "canary-8: successful runner with artifact failure is rejected"
+  ;; Exercises the artifact-truth branch via the verifier's
+  ;; --artifact-verdict/--artifact-exit flags (a runner-conclusion
+  ;; surrogate would test the wrong branch).
+  (test-case "canary-8: successful runner with failing artifact verdict is rejected"
     (define p (write-aggregate! "canary8" (aggregate-json (list clean-shard))))
-    (define-values (ec _so se) (run-verifier! p #:runner-conclusion "artifact-failure"))
+    (define-values (ec _so se) (run-verifier! p #:artifact-verdict "failure" #:artifact-exit 1))
     (check-not-equal? ec 0)
-    (check-true (string-contains? se "truth-mismatch")))
+    (check-true (string-contains? se "artifact") "rejection must name the artifact-truth branch"))
 
   ;; -- canary 9: genuine success -------------------------------------------------
   (test-case "canary-9: genuine success verifies"
@@ -182,6 +206,30 @@
     (define-values (ec so _se) (run-verifier! p))
     (check-equal? ec 0 "a truthful clean aggregate must verify")
     (check-true (string-contains? so "genuine clean success")))
+
+  (test-case "SHA binding: absent aggregate SHA fails with correctly bound shard"
+    (define sha "ffffffffffffffffffffffffffffffffffffffff")
+    (define agg (aggregate-json (list (hash-set clean-shard 'head_sha sha)) #:run-sha sha))
+    (define p (write-aggregate! "missing-aggregate-sha" (hash-remove agg 'run_sha)))
+    (define-values (ec _so se) (run-verifier! p #:expect-sha sha))
+    (check-equal? ec 3)
+    (check-true (string-contains? se "aggregate has no run SHA binding")))
+
+  (test-case "SHA binding: missing and stale shard SHA fail independently"
+    (define sha "ffffffffffffffffffffffffffffffffffffffff")
+    (for ([shard (in-list (list clean-shard (hash-set clean-shard 'head_sha "stale")))])
+      (define p (write-aggregate! "bad-shard-sha" (aggregate-json (list shard) #:run-sha sha)))
+      (define-values (ec _so se) (run-verifier! p #:expect-sha sha))
+      (check-equal? ec 3)
+      (check-true (string-contains? se "shard"))))
+
+  (test-case "SHA binding: fully bound clean aggregate succeeds"
+    (define sha "ffffffffffffffffffffffffffffffffffffffff")
+    (define p
+      (write-aggregate! "bound-success"
+                        (aggregate-json (list (hash-set clean-shard 'head_sha sha)) #:run-sha sha)))
+    (define-values (ec _so _se) (run-verifier! p #:expect-shards 1 #:expect-sha sha))
+    (check-equal? ec 0))
 
   ;; -- aggregate-boundary wiring (BUG-0073) --------------------------------------
   ;; The verifier exists to gate the ONE place a green claim is minted:
@@ -193,13 +241,21 @@
                 "test-aggregate must invoke scripts/ci/verify-result-truth.rkt")
     (check-true (string-contains? ci-yml "--expect-sha \"$GITHUB_SHA\"")
                 "aggregate verification must bind the aggregate to the run SHA")
-    (check-true (string-contains? ci-yml "--expect-shards \"$SHARD_TOTAL\"")
-                "aggregate verification must assert the declared shard count")
+    (check-true (string-contains? ci-yml "--expect-shards \"$SHARD_EXPECT\"")
+                "aggregate verification must assert the matrix-derived shard count")
+    (check-true
+     (string-contains? ci-yml "SHARD_EXPECT=\"${{ vars.FAST_SHARD_COUNT")
+     "the expected shard count must come from the matrix variable, not the downloaded artifacts")
+    (check-true
+     (string-contains? ci-yml "head_sha: .run_summary.run_sha")
+     "every recorded shard must carry its shard-side run SHA (not stamped by the aggregate)")
+    (check-true (string-contains? ci-yml "lacks its shard-side run-SHA attestation")
+                "the aggregate must refuse a bundle over an unattested shard")
     (define producer-start
       (car (car (regexp-match-positions #rx"Produce fast-suite proof bundle" ci-yml))))
     (define verifier-start
       (car (car (regexp-match-positions #rx"scripts/ci/verify-result-truth[.]rkt" ci-yml))))
     (check-true (< producer-start verifier-start)
                 "verifier must run at/after the bundle-producer boundary")
-    (check-true (string-contains? ci-yml "head_sha: $run_sha")
-                "every recorded shard must carry the run SHA binding")))
+    (check-true (string-contains? ci-yml "Stamp shard run SHA (shard-side attestation)")
+                "the fast suite must stamp the run SHA shard-side before upload")))

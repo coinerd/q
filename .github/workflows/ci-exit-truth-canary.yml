@@ -1,0 +1,94 @@
+name: CI exit-truth canary
+
+# Diagnostic only: deliberately red failure jobs are evidence, never PR gates
+# or latency-cohort samples. No continue-on-error or converted green verdicts.
+on:
+  workflow_dispatch:
+  push:
+    branches: [campaign/v1.00.30-w0-review-fix]
+    paths: [.github/workflows/ci-exit-truth-canary.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  runner:
+    strategy:
+      fail-fast: false
+      matrix:
+        outcome: [failure, success]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+      - name: Create isolated intentional test
+        env:
+          OUTCOME: ${{ matrix.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/exit-truth"
+          if [ "$OUTCOME" = failure ]; then EXPECTED=2; else EXPECTED=1; fi
+          printf '#lang racket/base\n(module+ test (require rackunit) (check-equal? 1 %s))\n' "$EXPECTED" > "$RUNNER_TEMP/exit-truth/canary.rkt"
+      - name: Real runner piped through tee
+        run: |
+          set -euo pipefail
+          racket scripts/run-tests.rkt --sequential --mode subprocess \
+            --json-out result.json "$RUNNER_TEMP/exit-truth/canary.rkt" \
+            2>&1 | tee runner.log
+      - name: Stamp and retain runner evidence
+        if: always()
+        env:
+          OUTCOME: ${{ matrix.outcome }}
+        run: |
+          set -euo pipefail
+          jq --arg sha "$GITHUB_SHA" '.run_summary.run_sha = $sha' result.json > stamped.json
+          mv stamped.json result.json
+          printf '%s\n' "$OUTCOME" > intended-outcome.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: exit-truth-${{ matrix.outcome }}
+          path: |
+            result.json
+            runner.log
+            intended-outcome.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate:
+    needs: runner
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        outcome: [failure, success]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+      - uses: actions/download-artifact@v7
+        with:
+          name: exit-truth-${{ matrix.outcome }}
+          path: evidence
+      - name: Verify actual runner result at aggregate boundary
+        run: |
+          set -euo pipefail
+          jq '{run_sha: .run_summary.run_sha, shards: [
+                (.run_summary | {artifact: "canary", shard: 0,
+                  head_sha: .run_sha, file_count, pass, fail, timeout, skip})
+              ]} + (.run_summary | {file_count, pass, fail, timeout, skip})' \
+            evidence/result.json > aggregate.json
+          racket scripts/ci/verify-result-truth.rkt --aggregate aggregate.json \
+            --expect-shards 1 --expect-sha "$GITHUB_SHA" 2>&1 | tee aggregate.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: exit-truth-aggregate-${{ matrix.outcome }}
+          path: |
+            aggregate.json
+            aggregate.log
+          if-no-files-found: error
+          retention-days: 30

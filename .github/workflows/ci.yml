@@ -328,6 +328,20 @@ jobs:
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
+      # v1.00.30 W0 review-fix: shard-side run-SHA attestation.  The
+      # aggregate step must never stamp a SHA onto shard evidence itself
+      # (that made the binding self-referential); each shard records the
+      # commit IT ran under, and the aggregate fails closed if any
+      # downloaded shard record lacks the attestation.
+      - name: Stamp shard run SHA (shard-side attestation)
+        if: always()
+        run: |
+          if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
+            jq --arg run_sha "$GITHUB_SHA" '.run_summary.run_sha = $run_sha' \
+              test-results.json > test-results.stamped.json \
+              && mv test-results.stamped.json test-results.json
+          fi
+
       - name: Test results summary
         if: always()
         run: |
@@ -484,10 +498,9 @@ jobs:
           : > artifacts-run/shards.jsonl
           for f in $SHARD_JSONS; do
             jq -c --arg artifact "$(basename "$(dirname "$f")")" \
-              --arg run_sha "$GITHUB_SHA" \
               '{artifact: $artifact,
                 shard: .run_summary.shard,
-                head_sha: $run_sha,
+                head_sha: .run_summary.run_sha,
                 file_count: .run_summary.file_count,
                 pass: .run_summary.pass,
                 fail: .run_summary.fail,
@@ -495,6 +508,12 @@ jobs:
                 skip: .run_summary.skip,
                 wall_clock_seconds: .run_summary.wall_clock_seconds}' "$f" >> artifacts-run/shards.jsonl
           done
+          # Fail closed: every recorded shard must carry its own
+          # shard-side run-SHA attestation (see the shard stamp step).
+          if ! jq -se 'length > 0 and all(.head_sha != null)' artifacts-run/shards.jsonl >/dev/null; then
+            echo "producer: a shard result lacks its shard-side run-SHA attestation (refusing to write a bundle)" >&2
+            exit 1
+          fi
           jq -s --arg run_sha "$GITHUB_SHA" '{
             run_sha: $run_sha,
             suite: "fast",
@@ -525,10 +544,14 @@ jobs:
           # minted below only if scripts/ci/verify-result-truth.rkt also
           # verifies shard presence, totals consistency and the run-SHA
           # binding for the aggregate and every shard.  Fail closed.
-          SHARD_TOTAL="$(jq -r '.shards | length' "$SUMMARY")"
+          # Independent shard-count expectation, derived from the SAME
+          # repo variable that expands the test matrix — never from the
+          # downloaded artifacts (a green job with a missing/misnamed
+          # artifact would otherwise shrink the summary and pass).
+          SHARD_EXPECT="${{ vars.FAST_SHARD_COUNT == '4' && '4' || vars.FAST_SHARD_COUNT == '6' && '6' || vars.FAST_SHARD_COUNT == '8' && '8' || '3' }}"
           racket scripts/ci/verify-result-truth.rkt \
             --aggregate "$SUMMARY" \
-            --expect-shards "$SHARD_TOTAL" \
+            --expect-shards "$SHARD_EXPECT" \
             --expect-sha "$GITHUB_SHA"
           WF_REVISION="$(git rev-parse "$GITHUB_SHA":.github/workflows/ci.yml)"
           TREE_SHA="$(git rev-parse 'HEAD^{tree}')"

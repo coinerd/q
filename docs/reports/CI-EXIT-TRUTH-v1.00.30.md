@@ -34,7 +34,7 @@ Fixes were applied **only** where effective execution proved masking; no topolog
 
 ## 3. Canaries (executable, in `tests/test-ci-exit-truth.rkt`)
 
-failed-runner/successful-tee, tee failure, timeout, partial JSON, missing shard, invalid totals, mismatched run SHA, successful-runner/failing-artifact, and genuine success. A failed canary proves the aggregate AND the job fail while evidence is retained (artifacts kept for upload under failure); the clean canary succeeds. R0 passes only on that behavior.
+failed-runner/successful-tee, tee failure, timeout, partial JSON, missing shard, invalid totals, mismatched run SHA, successful-runner/failing-artifact, and genuine success. The canaries are unit-level invocations of the boundary verifier: each proves the verifier refuses its named lie with a non-zero verdict, and the job/aggregate-level consequence (the aggregate step exits non-zero, so no proof bundle is minted and the job fails with evidence retained for upload) follows structurally from the single call site wired in ci.yml rather than from a dedicated failing CI job — the W0 review-fix restated this; the earlier wording "proves the aggregate AND the job fail" overstated the executable evidence. The clean canary succeeds. Actual failed-job/aggregate execution and retained-artifact evidence have not been demonstrated by these unit tests; R0 remains HOLD pending that evidence. Two test-only repairs outside the BUG-0073 contract (tests/test-lint-release-notes.rkt, tests/test-release-entry-current.rkt) are recorded here as incidental repair scope, defensible but not contract-mandated.
 
 ## 4. Prepared-environment telemetry isolation (W9 fix preserved)
 
@@ -43,3 +43,7 @@ failed-runner/successful-tee, tee failure, timeout, partial JSON, missing shard,
 ## 5. Frozen claims and baseline
 
 `required-claims.json` freezes the required-check/suite inventory and the exact primary timing fields; `baseline.json` records the v1.00.28/v1.00.29 comparison figures with their sample-size caveat and flags every masked historical artifact as MASKED (diagnostic only). Raw API inputs and checksums live under `artifacts/ci-recovery/v1.00.30-w0/raw/` with `SHA256SUMS`. Genuine incumbent-regime runs for W1/W2 reference are collected after this wave lands; no guaranteed finish date exists without genuine traffic (155 candidate heads/30d observed, 0 validated clean eligible).
+
+### Review remediation scope
+
+The current tier-ownership matrix now includes `tests/test-ci-exit-truth.rkt` with explicit CI/fast/integration metadata. The other added source, `scripts/ci/verify-result-truth.rkt`, is production tooling, outside the matrix generator’s `tests/` scope. The version-current eight-column matrix under `artifacts/tier-ownership/v1.00.29-w0/` is also regenerated: despite its versioned path, the milestone gate treats it as a live drift baseline. Its checksum is refreshed. Older historical snapshots remain unchanged.

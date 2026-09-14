@@ -33,7 +33,7 @@
     "check_name_policy": "Exact check-run names as declared in branch protection (contexts list above); no normalization, no prefix matching, no failed-run substitution",
     "per_shard_duration_field": "check-run 'started_at' to 'completed_at' of the individual 'test (N)' check runs; setup/compile time is the 'Set up Racket'/prepared-environment step window inside the job and is reported separately, never substituted",
     "excluded_from_primary": "trigger-to-mergeable elapsed, queue time, runner-minutes — reported separately (PLAN invariant 14), cannot substitute",
-    "quantile_helper": "sorted observations, linear interpolation at (n-1)*p, milliseconds retained until display; tests/test-ci-exit-truth.rkt pins the exact helper (legacy rounded/midpoint helper is not reused)"
+    "quantile_helper": "sorted observations, linear interpolation at (n-1)*p, milliseconds retained until display; W1 must implement and pin the exact helper with pr-latency-guard; this remains an outstanding W1 obligation — the pin is NOT in tests/test-ci-exit-truth.rkt; the earlier claim said otherwise and was corrected by the W0 review-fix (legacy rounded/midpoint helper is not reused)"
   },
   "cohort_eligibility_policy_preregistered": {
     "eligible_head": "distinct PR head SHA with a complete truthful run of every required check above; first-attempt completions only; later green attempts never erase an original failure",
