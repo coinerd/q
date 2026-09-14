@@ -179,12 +179,17 @@
 
 (when (expect-sha)
   ;; The claimed aggregate itself must be bound to this run's SHA.
-  (when (and aggregate (hash-has-key? aggregate 'run_sha))
-    (unless (equal? (hash-ref aggregate 'run_sha) (expect-sha))
-      (record! 'sha-binding
-               (format "aggregate run SHA is ~a but this run is at ~a"
-                       (hash-ref aggregate 'run_sha)
-                       (expect-sha)))))
+  ;; Absence is a failure, not a pass: an aggregate with no run_sha
+  ;; key cannot prove it describes this run (v1.00.30 W0 review-fix).
+  (when aggregate
+    (cond
+      [(not (hash-has-key? aggregate 'run_sha))
+       (record! 'sha-binding "aggregate has no run SHA binding; cannot prove it describes this run")]
+      [(not (equal? (hash-ref aggregate 'run_sha) (expect-sha)))
+       (record! 'sha-binding
+                (format "aggregate run SHA is ~a but this run is at ~a"
+                        (hash-ref aggregate 'run_sha)
+                        (expect-sha)))]))
   ;; Every shard must carry and match the run SHA — an unbound shard
   ;; cannot prove it executed at the claimed commit.
   (for ([shard (in-list shards)])
