@@ -441,7 +441,10 @@
      (unless provenance-ok?
        (check-fail! 'provenance)
        (bad!
-        "policy provenance is incomplete: expected-head-sha/expected-base-sha must be 40-hex SHAs, expected-attempt a positive integer, min-distinct-heads >= 3, freshness-window-seconds positive, evaluated-at parseable, required-jobs a list of non-empty strings"))
+        (string-append
+         "policy provenance is incomplete: expected-head-sha/expected-base-sha must be 40-hex SHAs,"
+         " expected-attempt a positive integer, min-distinct-heads >= 3, freshness-window-seconds positive,"
+         " evaluated-at parseable, required-jobs a list of non-empty strings")))
 
      ;; ---- no-self-recursion ------------------------------------
      (define self-in-jobs? (and (list? required-jobs) (member measured-check required-jobs)))
@@ -521,7 +524,11 @@
      (unless freshness-ok?
        (check-fail! 'freshness)
        (bad!
-        "freshness check failed: reference must be frozen (frozen=true, frozen-at fresh and before the earliest candidate start, every reference record completing at or before the freeze) and every candidate record must be attested, internally ordered, not in the future and within freshness-window-seconds of evaluated-at"))
+        (string-append
+         "freshness check failed: reference must be frozen (frozen=true, frozen-at fresh and before the"
+         " earliest candidate start, every reference record completing at or before the freeze) and every"
+         " candidate record must be attested, internally ordered, not in the future and within"
+         " freshness-window-seconds of evaluated-at")))
 
      ;; ---- control strata ----------------------------------------
      (define ref-strata
@@ -598,7 +605,10 @@
        (check-fail! 'control-strata)
        (unless (unbox specific-strata-reason?)
          (bad!
-          "control strata must be non-empty string maps on both sides with identical canonical strata (runner-class, racket-executable, dependencies, required-suite-inventory) and non-empty regime fingerprints")))
+          (string-append
+           "control strata must be non-empty string maps on both sides with identical canonical strata"
+           " (runner-class, racket-executable, dependencies, required-suite-inventory) and non-empty"
+           " regime fingerprints"))))
 
      ;; ---- eligibility, uniqueness, final head -------------------
      (define measured-check-s measured-check)
@@ -715,7 +725,9 @@
      (unless jobs-ok?
        (check-fail! 'required-jobs)
        (bad!
-        "the final head's required-check inventory is incomplete: every job in policy required-jobs must be completed and successful on the final head"))
+        (string-append
+         "the final head's required-check inventory is incomplete: every job in policy required-jobs"
+         " must be completed and successful on the final head")))
 
      ;; ---- coordinator-attested diff / NOT_APPLICABLE --------------
      (define diff (and (hash? candidate) (hash-ref candidate 'diff #f)))
