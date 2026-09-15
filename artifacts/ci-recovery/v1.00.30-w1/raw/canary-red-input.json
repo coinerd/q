@@ -1,0 +1,523 @@
+{
+ "schema": "q.pr-latency-guard.input/1",
+ "label": "red-canary: delta exceeds +60s boundary",
+ "attestation": {
+  "repository": "coinerd/q",
+  "workflow": "pr-latency-guard.yml",
+  "source": "actions-api",
+  "collector": "coordinator-canary",
+  "collected-at": "2026-09-14T18:00:00Z"
+ },
+ "policy": {
+  "trusted-origin": {
+   "repository": "coinerd/q",
+   "workflow": "pr-latency-guard.yml"
+  },
+  "expected-head-sha": "1111111111111111111111111111111111111111",
+  "expected-base-sha": "c7de57ad4c7f61ea4f0d71ee4044e97c88db38b7",
+  "expected-attempt": 1,
+  "min-distinct-heads": 3,
+  "freshness-window-seconds": 86400,
+  "evaluated-at": "2026-09-14T18:05:00Z",
+  "measured-check": "pr-latency-guard",
+  "required-jobs": [
+   "lint",
+   "lint-quality",
+   "security",
+   "release-dry-run",
+   "workflows (0)",
+   "workflows (1)",
+   "workflows-aggregate",
+   "smoke (ubuntu-latest)",
+   "test (0)",
+   "test (1)",
+   "test (2)",
+   "test-aggregate",
+   "test-platform"
+  ]
+ },
+ "reference": {
+  "frozen": true,
+  "frozen-at": "2026-09-14T20:05:00Z",
+  "regime-fingerprint": "v1.00.29-required-ci-regime/lazy-compile",
+  "control-strata": {
+   "runner-class": "ubuntu-latest",
+   "racket-version": "8.10",
+   "suite-inventory": "fast",
+   "cache-stratum": "store-available"
+  },
+  "samples": [
+   {
+    "head-sha": "9752950f7b1dc195ee96a355ef09036af0d34369",
+    "base-sha": "c7de57ad4c5510dc8c560a1d5042af803f927074",
+    "attempt": 1,
+    "first-attempt": true,
+    "status": "completed",
+    "conclusion": "success",
+    "started-at": "2026-09-14T16:47:30Z",
+    "completed-at": "2026-09-14T17:34:09Z",
+    "window-seconds": 2799,
+    "attested": true,
+    "jobs": [
+     {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "lint-quality",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "release-dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "smoke (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-platform",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     }
+    ]
+   },
+   {
+    "head-sha": "5c002f75276312362f31251892b4e5f4f60c24e4",
+    "base-sha": "6a1f5ed96168e1c9c0b3f42dfa010be9a6b266e4",
+    "attempt": 1,
+    "first-attempt": true,
+    "status": "completed",
+    "conclusion": "success",
+    "started-at": "2026-09-14T14:00:27Z",
+    "completed-at": "2026-09-14T14:48:16Z",
+    "window-seconds": 2869,
+    "attested": true,
+    "jobs": [
+     {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "lint-quality",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "release-dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "smoke (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-platform",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     }
+    ]
+   },
+   {
+    "head-sha": "58323ef9e427cd98b9b09558b342220944d86aba",
+    "base-sha": "32f5dc5b2db03c44370f73ce8addff4a0264c9c0",
+    "attempt": 1,
+    "first-attempt": true,
+    "status": "completed",
+    "conclusion": "success",
+    "started-at": "2026-09-14T06:28:25Z",
+    "completed-at": "2026-09-14T07:13:31Z",
+    "window-seconds": 2706,
+    "attested": true,
+    "jobs": [
+     {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "lint-quality",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "release-dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "smoke (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-platform",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     }
+    ]
+   },
+   {
+    "head-sha": "25df00857de37c43167af877b8be8575f3b13315",
+    "base-sha": "548931121edb3d085f0a05b8c65467ce4d63ae0f",
+    "attempt": 1,
+    "first-attempt": true,
+    "status": "completed",
+    "conclusion": "success",
+    "started-at": "2026-09-13T20:00:16Z",
+    "completed-at": "2026-09-13T20:47:09Z",
+    "window-seconds": 2813,
+    "attested": true,
+    "jobs": [
+     {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "lint-quality",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "release-dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "smoke (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-platform",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     }
+    ]
+   }
+  ]
+ },
+ "candidate": {
+  "regime-fingerprint": "v1.00.29-required-ci-regime/lazy-compile",
+  "control-strata": {
+   "runner-class": "ubuntu-latest",
+   "racket-version": "8.10",
+   "suite-inventory": "fast",
+   "cache-stratum": "store-available"
+  },
+  "runs": [
+   {
+    "head-sha": "1111111111111111111111111111111111111111",
+    "base-sha": "c7de57ad4c7f61ea4f0d71ee4044e97c88db38b7",
+    "attempt": 1,
+    "first-attempt": true,
+    "status": "completed",
+    "conclusion": "success",
+    "started-at": "2026-09-14T16:47:28Z",
+    "completed-at": "2026-09-14T17:34:10Z",
+    "window-seconds": 3306.0,
+    "attested": true,
+    "jobs": [
+     {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "lint-quality",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "release-dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "workflows-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "smoke (ubuntu-latest)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-aggregate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     },
+     {
+      "name": "test-platform",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+     }
+    ]
+   }
+  ]
+ }
+}

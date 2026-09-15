@@ -1,0 +1,101 @@
+# pr-latency-guard — v1.00.30 W1 (blocking pre-merge PR latency gate)
+#
+# Contract: .planning/PLAN-v1.00.30-PR-CI-RECOVERY.md
+# Report:   docs/reports/PR-LATENCY-GUARD-v1.00.30.md
+#
+# Safety rules enforced here (PLAN):
+# - This job NEVER runs PR-supplied scripts with write credentials:
+#   `permissions: contents: read` for every job; no secrets are exported.
+# - The guard's own completion is excluded from every measured latency window
+#   (scripts/ci/pr-latency-guard.rkt drops samples whose `job` equals
+#   "pr-latency-guard"), so the check cannot create a feedback cycle.
+# - The guard script itself always runs from the PR's BASE branch checkout
+#   (trusted code), never from the PR head, so a PR cannot approve itself.
+# - Fail-closed: any missing/stale/forged input yields a non-zero exit.
+name: pr-latency-guard
+
+on:
+  # Measure after the CI workflow finished on a pull_request head.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  # Manual dispatch for bootstrap canaries (red + green) and refreezes.
+  workflow_dispatch:
+    inputs:
+      input-json:
+        description: "Path (in repo) to a provenance-bound input JSON document"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  pr-latency-guard:
+    name: pr-latency-guard
+    runs-on: ubuntu-latest
+    # Only evaluate CI runs that were triggered by pull requests and succeeded.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted guard (PR base branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.workflow_run.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@v1.19
+        with:
+          version: "8.16"
+
+      - name: Collect candidate evidence (CI artifacts, read-only)
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WRUN_ID: ${{ github.event.workflow_run.id }}
+          WRUN_HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "input=${{ inputs.input-json }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # List artifacts of the completed CI run (metadata only — the guard
+          # script consumes the composed JSON; no PR code is executed here).
+          gh api "repos/${{ github.repository }}/actions/runs/${WRUN_ID}/artifacts" \
+            --paginate > candidate/run-artifacts.json
+          # A trusted collector (coordinator-side, outside PR code) composes
+          # the input document. Bootstrap note: until that collector is bound,
+          # the guard receives no candidate and must fail closed.
+          echo "input=" >> "$GITHUB_OUTPUT"
+
+      - name: Run guard (fail-closed)
+        id: guard
+        env:
+          INPUT_PATH: ${{ steps.collect.outputs.input }}
+        run: |
+          set -euo pipefail
+          if [ -z "$INPUT_PATH" ]; then
+            echo "pr-latency-guard: no provenance-bound input available (bootstrap-pending) — FAIL closed" | tee "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          racket scripts/ci/pr-latency-guard.rkt \
+            --input "$INPUT_PATH" \
+            --verdict-json guard-verdict.json \
+            --decision-md guard-decision.md
+          cat guard-decision.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-latency-guard-verdict
+          path: |
+            guard-verdict.json
+            guard-decision.md
+          if-no-files-found: ignore
