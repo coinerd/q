@@ -280,7 +280,20 @@
                              (gsm-ctx-transition-to! ctx 'verifying)
                              (when approve?
                                (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-idx))
-                             approve?)))
+                             approve?)
+                           ;; v1.00.30: golden traces exercise the FSM, not
+                           ;; delivery — an authenticated delivered-proof mock
+                           ;; lets verified waves advance (a pending proof
+                           ;; would stop the campaign and diverge the trace).
+                           #:delivery-reader (lambda (_base plan idx)
+                                               (hasheq 'status
+                                                       "delivered"
+                                                       'plan-id
+                                                       plan
+                                                       'wave
+                                                       idx
+                                                       'merge-sha
+                                                       "0123456789abcdef0123456789abcdef01234567"))))
   (define outcome-box (box 0))
   (execute-campaign-request! request
                              (lambda (prompt)

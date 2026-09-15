@@ -111,7 +111,19 @@
                               (lambda (idx) (format "isolated-W~a" idx))
                               (lambda (idx)
                                 (bind-test-wave-merge-sha! dir (campaign-plan-id rec) idx)
-                                #t)))
+                                #t)
+                              ;; v1.00.30: delivered-proof mock so the
+                              ;; isolated-runner cycle reaches the W1 token.
+                              #:delivery-reader
+                              (lambda (_base plan idx)
+                                (hasheq 'status
+                                        "delivered"
+                                        'plan-id
+                                        plan
+                                        'wave
+                                        idx
+                                        'merge-sha
+                                        "0123456789abcdef0123456789abcdef01234567"))))
      (define token (register-campaign-request! request))
      (define prompt-channel (make-channel))
      (define factory-count 0)

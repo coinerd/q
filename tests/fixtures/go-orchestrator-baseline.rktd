@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.29 W1 merge 2: BUG-0064 wave-advance delivery gate + BUG-0067 patient slow-lane + BUG-0069 slow-lane event patience payload 1653 -> 1657 lines, 23 defines unchanged; target stays 1700 — growth is orchestration control flow fused to attempt-ledger fence closures; extracting the attempt-preservation block is deferred to a dedicated decomposition wave; supersedes the W1 merge-1 re-record")
- (line-count . 1657)
+  "v1.00.30 delivery-runtime finalization: +37 lines (1657 -> 1694), 23 defines unchanged; target stays 1700 — the wave-advance gate and final full-loop delivery check now delegate to extensions/gsd/delivery-handoff.rkt (ready-for-run-checkpoint / delivered-predecessor-resolver / pending-delivery-message), so go-orchestrator stays under the W7 target; growth is the irreducible loop integration (decision -> case arms) fused to run-campaign-wave, not new effect logic")
+ (line-count . 1694)
  (top-level-define-count . 23)
  (w7-target-max-lines . 1700))
