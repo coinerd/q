@@ -5,7 +5,7 @@
         (reviewed-sha . "af68b0c3eac01a2040e3bc11c079b9e8f7cc01e5")
         (content-digest
          .
-         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+         "ec2a5bca00a106e4de369aa3e9b82f661f23ac654dfda64bd374ad79c9f9f3b3")
         (timestamp . "2026-09-14T22:10:03Z")
         (scope
          .
