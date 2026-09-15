@@ -103,12 +103,18 @@
 
 (module+ test
   (require rackunit/text-ui)
-  (run-tests step-naming-tests)
-  (run-tests diagnostic-logging-tests)
-  (run-tests yaml-structure-tests))
+  (define failed
+    (+ (run-tests step-naming-tests)
+       (run-tests diagnostic-logging-tests)
+       (run-tests yaml-structure-tests)))
+  (unless (zero? failed)
+    (raise-user-error 'test-ci-workflow-diagnostics "~a test failure(s)" failed)))
 
 (module+ main
   (require rackunit/text-ui)
-  (run-tests step-naming-tests)
-  (run-tests diagnostic-logging-tests)
-  (run-tests yaml-structure-tests))
+  (define failed
+    (+ (run-tests step-naming-tests)
+       (run-tests diagnostic-logging-tests)
+       (run-tests yaml-structure-tests)))
+  (unless (zero? failed)
+    (raise-user-error 'test-ci-workflow-diagnostics "~a test failure(s)" failed)))

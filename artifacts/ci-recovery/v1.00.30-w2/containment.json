@@ -1,0 +1,31 @@
+{
+  "schema": "prepared-env-containment@1",
+  "wave": "v1.00.30-w2",
+  "issue": "https://github.com/coinerd/q/issues/9688",
+  "rollback-switch": "RACKET_PREPARED_ARTIFACT",
+  "rollback-value": "off",
+  "switch-selects-full-path": true,
+  "switch-recorded": {
+    "prior-value": "unset (repository variable not defined before W2; effective default enabled the prepared-environment fast path)",
+    "set-by": "coordinator (repository variable RACKET_PREPARED_ARTIFACT=off)",
+    "effect": "every opting consumer evaluates PREPARED_ENV to 'off' and setup-racket runs the eager full path"
+  },
+  "eager-boundary-count": 1,
+  "eager-boundary": "raco setup --no-docs --jobs 4 --pkgs q fmt (single eager boundary inside .github/actions/setup-racket, full path only)",
+  "per-file-compile-fallback": false,
+  "purge-invariant": "BUG-0065: the shared purge inside setup-racket runs on EVERY path (successful restore included); stale or future-mtime checkout bytecode cannot survive into the test run, and future stale/future-mtime bytecode cannot execute.",
+  "compiled-code-outcome-separation": true,
+  "compiled-code-outcome": "eager-full-path",
+  "containment-not-recovery": true,
+  "residual-gap": "The eager full path rebuilds bytecode from THIS checkout on every job, so pre-W4 job walls of 233-292 s (worst observed single-PR max 2171 s) are contained, not recovered: runner wall clock returns to roughly the eager-compile plus runner-time envelope measured in this wave, which is still above a verified-restore fast path. R1 PASS is containment ONLY - never a recovery claim.",
+  "evidence": "docs/reports/EAGER-COMPILE-CONTAINMENT-v1.00.30.md",
+  "consumers": [
+    { "consumer": "test", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off'" },
+    { "consumer": "prepared-env-report", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_ENV_REPORT != 'off'" },
+    { "consumer": "release-dry-run", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_RELEASE_DRY_RUN != 'off'" },
+    { "consumer": "smoke", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_SMOKE != 'off'" },
+    { "consumer": "workflows", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_WORKFLOWS != 'off'" },
+    { "consumer": "gsd-governance", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_GSD_GOVERNANCE != 'off'" },
+    { "consumer": "abstraction-audit", "honors-global-switch": true, "prepared-env-gate": "vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_PREPARED_ABSTRACTION_AUDIT != 'off'" }
+  ]
+}

@@ -141,9 +141,20 @@
 (define (duration-or-unknown v)
   (if (and (real? v) (positive? v)) v "unknown"))
 
+;; Counts may legitimately be zero (zero stale .zo files purged is a real
+;; observation); only non-numbers become "unknown".
+(define (count-or-unknown v)
+  (if (and (real? v) (not (negative? v))) v "unknown"))
+
 (define (number-arg args flag)
   (define raw (assoc-value args flag))
   (and (string? raw) (let ([n (string->number raw)]) (and (real? n) (positive? n) n))))
+
+;; Argument variant of count-or-unknown: zero is a real observation
+;; (zero stale .zo files purged), only negatives/garbage are rejected.
+(define (count-arg args flag)
+  (define raw (assoc-value args flag))
+  (and (string? raw) (let ([n (string->number raw)]) (and (real? n) (not (negative? n)) n))))
 
 (define (env-positive-number name)
   (define raw (getenv name))
@@ -200,6 +211,7 @@ usage:
   prepared-env-report.rkt --savings-check PATH
   prepared-env-report.rkt --rollback-drill --consumers F --consumer NAME [--vars K=V,K=V] \
   [--event push|workflow_dispatch] [--producer-result success|skipped|failure]
+  prepared-env-report.rkt --containment-check PATH
 "
    message)
   2)
@@ -229,6 +241,18 @@ usage:
         "unknown"))
   (define-values (outcome fallback-cause) (classify-outcome state producer-result prepared-env-mode))
   (define record-source (or (assoc-value args "--record-source") "ci-emitted"))
+  ;; W2 eager-compilation containment: the RUNTIME/STORE restore outcome
+  ;; (fields above) is separate from the USABLE COMPILED-CODE outcome. A
+  ;; successful restore restores the store but NOT usable eager compiled
+  ;; code (the BUG-0065 purge removes workspace bytecode; the fast suite
+  ;; lazily compiles from this checkout), while the full path eagerly
+  ;; compiles current sources at the one controlled setup boundary.
+  ;; Every field below is verbatim observed telemetry: "unknown" when the
+  ;; caller could not observe it, never a fabricated number.
+  (define compiled-code-outcome (or (assoc-value args "--compiled-code-outcome") "unknown"))
+  (define eager-setup (or (number-arg args "--eager-setup-seconds") "unknown"))
+  (define cache-state (or (assoc-value args "--cache-state") "unknown"))
+  (define purge-zo (or (count-or-unknown (count-arg args "--purge-zo-count")) "unknown"))
   (define record
     (json-obj (cons 'schema "prepared-env-restore-record")
               (cons 'run-id (or (string->number run-id-raw) run-id-raw))
@@ -245,6 +269,10 @@ usage:
               (cons 'restore-ms restore-ms)
               (cons 'fallback-ms fallback-ms)
               (cons 'wall-clock-seconds wall-clock)
+              (cons 'compiled-code-outcome compiled-code-outcome)
+              (cons 'eager-setup-seconds eager-setup)
+              (cons 'cache-state cache-state)
+              (cons 'purge-zo-count purge-zo)
               (cons 'cache-key cache-key)
               (cons 'sha-context (or (assoc-value args "--head-sha") "unknown"))))
   (write-json-file out record)
@@ -289,6 +317,22 @@ usage:
             (cons 'restore-ms (duration-or-unknown (hash-ref-unknown h 'restore-ms)))
             (cons 'fallback-ms (duration-or-unknown (hash-ref-unknown h 'fallback-ms)))
             (cons 'wall-clock-seconds (duration-or-unknown (hash-ref-unknown h 'wall-clock-seconds)))
+            ;; W2 eager-compilation containment: carry the separate
+            ;; usable-compiled-code outcome and its measurements through
+            ;; aggregation so aggregate windows keep the full picture
+            ;; (unknown stays unknown — never zero-filled).
+            (cons 'compiled-code-outcome (hash-ref-unknown h 'compiled-code-outcome))
+            (cons 'eager-setup-seconds
+                  (let ([v (hash-ref h 'eager-setup-seconds #f)])
+                    (if v
+                        (duration-or-unknown v)
+                        "unknown")))
+            (cons 'cache-state (hash-ref-unknown h 'cache-state))
+            (cons 'purge-zo-count
+                  (let ([v (hash-ref h 'purge-zo-count #f)])
+                    (if v
+                        (count-or-unknown v)
+                        "unknown")))
             (cons 'cache-key
                   ;; Emitted records already carry the composed cache key; only
                   ;; recompose when the input carries the raw components instead.
@@ -1175,6 +1219,97 @@ usage:
   0)
 
 ;; ---------------------------------------------------------------------------
+;; Mode: --containment-check
+;; ---------------------------------------------------------------------------
+
+;; Fail-closed honesty gate over the committed W2 containment document
+;; (artifacts/ci-recovery/<version>-w2/containment.json). It pins the
+;; global rollback switch, exactly one eager setup boundary per job, the
+;; runtime/store restore vs usable-compiled-code separation, the audited
+;; opting consumers, and the containment-not-recovery honesty markers.
+(define (containment-violations doc)
+  (define violations '())
+  (define (violate fmt . vs)
+    (set! violations (cons (apply format fmt vs) violations)))
+  (cond
+    [(not (hash? doc))
+     (violate "containment document is not a JSON object")
+     violations]
+    [else
+     (unless (equal? (hash-ref doc 'schema #f) "prepared-env-containment@1")
+       (violate "schema must be prepared-env-containment@1"))
+     ;; The rollback switch must be the exact global switch, and setting
+     ;; it to off must select the eager full path.
+     (unless (equal? (hash-ref doc 'rollback-switch #f) "RACKET_PREPARED_ARTIFACT")
+       (violate "rollback-switch must be RACKET_PREPARED_ARTIFACT (the global switch)"))
+     (unless (equal? (hash-ref doc 'rollback-value #f) "off")
+       (violate "rollback-value must be off"))
+     (unless (eq? (hash-ref doc 'switch-selects-full-path #f) #t)
+       (violate "switch-selects-full-path must be true (the switch must select the full path)"))
+     ;; Exactly one eager setup boundary per job; never a per-file
+     ;; compile fallback.
+     (unless (equal? (hash-ref doc 'eager-boundary-count #f) 1)
+       (violate "eager-boundary-count must be exactly 1 (one eager setup boundary per job)"))
+     (unless (non-empty-string? (hash-ref doc 'eager-boundary #f))
+       (violate "eager-boundary must name the controlled setup command"))
+     (unless (eq? (hash-ref doc 'per-file-compile-fallback #f) #f)
+       (violate "per-file-compile-fallback must be false (per-file compile fallbacks are forbidden)"))
+     ;; The BUG-0065 purge invariant must be stated: stale workspace
+     ;; bytecode cannot survive on any path.
+     (unless (non-empty-string? (hash-ref doc 'purge-invariant #f))
+       (violate "purge-invariant must state the BUG-0065 purge guarantee"))
+     ;; Runtime/store restore outcome vs usable compiled-code outcome.
+     (unless (eq? (hash-ref doc 'compiled-code-outcome-separation #f) #t)
+       (violate
+        "compiled-code-outcome-separation must be true (a successful restore does NOT restore usable eager compiled code)"))
+     ;; Containment is NEVER advertised as recovery.
+     (unless (eq? (hash-ref doc 'containment-not-recovery #f) #t)
+       (violate
+        "containment-not-recovery must be true (R1 PASS is containment only, never a recovery claim)"))
+     (unless (non-empty-string? (hash-ref doc 'residual-gap #f))
+       (violate "residual-gap must state the residual gap honestly"))
+     (unless (non-empty-string? (hash-ref doc 'evidence #f))
+       (violate "evidence must cite the retained containment report"))
+     ;; Every opting consumer must be audited against the switch.
+     (define consumers (hash-ref doc 'consumers #f))
+     (unless (and (list? consumers) (pair? consumers))
+       (violate "consumers must be a non-empty list (all opting consumers audited)"))
+     (when (list? consumers)
+       (for ([c (in-list consumers)])
+         (cond
+           [(not (hash? c)) (violate "consumer audit row is not an object")]
+           [else
+            (define name (hash-ref c 'consumer #f))
+            (unless (non-empty-string? name)
+              (violate "consumer audit row is missing its consumer name"))
+            (unless (eq? (hash-ref c 'honors-global-switch #f) #t)
+              (violate "consumer ~a must honor the global rollback switch" name))])))
+     (reverse violations)]))
+
+(define (do-containment-check args)
+  (define path (assoc-value args "--containment-check"))
+  (unless (string? path)
+    (exit (usage-fail "--containment-check requires a containment.json path")))
+  (define doc
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (fprintf (current-error-port)
+                                          "prepared-env-report: FAILED ~a (not parseable JSON: ~a)\n"
+                                          path
+                                          (exn-message e))
+                                 (exit 1))])
+      (with-input-from-file path read-json)))
+  (define violations (containment-violations doc))
+  (cond
+    [(null? violations)
+     (printf "prepared-env-report: PASS containment ~a\n" path)
+     0]
+    [else
+     (fprintf (current-error-port) "prepared-env-report: FAILED containment ~a\n" path)
+     (for ([v (in-list violations)])
+       (fprintf (current-error-port) "  - ~a\n" v))
+     1]))
+
+;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
@@ -1190,6 +1325,7 @@ usage:
     [(has-flag? args "--consumers-check") (do-consumers-check args)]
     [(has-flag? args "--savings-check") (do-savings-check args)]
     [(has-flag? args "--rollback-drill") (do-rollback-drill args)]
+    [(has-flag? args "--containment-check") (do-containment-check args)]
     [else (usage-fail "unknown arguments")]))
 
 (module+ main

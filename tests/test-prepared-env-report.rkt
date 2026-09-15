@@ -32,6 +32,13 @@
 ;;       measured rows must cite retained evidence)
 ;;   --rollback-drill
 ;;       the exercisable §11.6 one-command rollback decision per consumer
+;;   --containment-check
+;;       W2 eager-compilation containment gate over the committed
+;;       containment document: the rollback switch pins exactly one
+;;       eager setup boundary (no per-file compile fallback), the
+;;       runtime/store restore outcome stays separate from the usable
+;;       compiled-code outcome, all opting consumers honor the global
+;;       switch, and containment is never advertised as recovery.
 ;;
 ;;   --emit-restore-record  (ci.yml wiring: one machine-readable restore
 ;;                           outcome per test shard, consumed by the report)
@@ -168,6 +175,39 @@
                  (if (non-empty-string? extra)
                      (string-append " " extra)
                      "")))
+
+;; A complete, honest W2 containment document (module level: test-case
+;; bodies are expression contexts, so shared defines live here). The
+;; negative tests below mutate one field at a time and expect the gate
+;; to reject the result.
+(define good-containment-doc
+  (hasheq 'schema
+          "prepared-env-containment@1"
+          'rollback-switch
+          "RACKET_PREPARED_ARTIFACT"
+          'rollback-value
+          "off"
+          'switch-selects-full-path
+          #t
+          'eager-boundary
+          "raco setup --no-docs --jobs 4 --pkgs q fmt"
+          'eager-boundary-count
+          1
+          'per-file-compile-fallback
+          #f
+          'purge-invariant
+          "BUG-0065 purge runs fail-closed on every path"
+          'compiled-code-outcome-separation
+          #t
+          'containment-not-recovery
+          #t
+          'residual-gap
+          "R1 is containment only; the pre-W4 233-292s job walls remain"
+          'evidence
+          "docs/reports/EAGER-COMPILE-CONTAINMENT-v1.00.30.md"
+          'consumers
+          (list (hasheq 'consumer "ci:test" 'honors-global-switch #t)
+                (hasheq 'consumer "ci:smoke" 'honors-global-switch #t))))
 
 ;; ---------------------------------------------------------------------------
 ;; W6 identity-manifest helpers (module level: test-case bodies are
@@ -1070,8 +1110,183 @@
         (check-equal? code-g 0)
         (check-equal? (hash-ref decision-g 'prepared-path-in-play)
                       #f
-                      (format "~a must pin the legacy full path" extra))))))
+                      (format "~a must pin the legacy full path" extra))))
+
+    ;; -----------------------------------------------------------------
+    ;; W2 eager-compilation containment: the runtime/store restore
+    ;; outcome is separate from the usable compiled-code outcome, every
+    ;; W2 field is verbatim observed telemetry (zero is a real
+    ;; observation, missing is "unknown"), and the committed containment
+    ;; document passes a fail-closed honesty gate.
+    ;; -----------------------------------------------------------------
+
+    (test-case "emit: W2 eager telemetry — zero purge count is a real observation, never unknown"
+      (define out (tmp-path "emit-w2-eager.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--fast-env-producer-result skipped --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef --compiled-code-outcome eager-full-path --eager-setup-seconds 273.5 --cache-state cold-build --purge-zo-count 0")
+       '(("Q_PREPARED_ENV_STATE" . "unavailable")))
+      (define rec (read-jsexpr out))
+      (check-equal? (hash-ref rec 'compiled-code-outcome) "eager-full-path")
+      (check-equal? (hash-ref rec 'eager-setup-seconds) 273.5)
+      (check-equal? (hash-ref rec 'cache-state) "cold-build")
+      (check-equal?
+       (hash-ref rec 'purge-zo-count)
+       0
+       "purging zero stale .zo files is a real observation; only missing data is unknown"))
+
+    (test-case "emit: absent W2 telemetry -> unknown, never fabricated"
+      (define out (tmp-path "emit-w2-absent.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+       '(("Q_PREPARED_ENV_STATE" . "restored") ("Q_PREPARED_ENV_RESTORE_MS" . "12000")))
+      (define rec (read-jsexpr out))
+      (check-equal? (hash-ref rec 'compiled-code-outcome) "unknown")
+      (check-equal? (hash-ref rec 'eager-setup-seconds) "unknown")
+      (check-equal? (hash-ref rec 'cache-state) "unknown")
+      (check-equal? (hash-ref rec 'purge-zo-count) "unknown"))
+
+    (test-case "aggregate: W2 eager telemetry carried through the window (absent stays unknown)"
+      (write-jsexpr (tmp-path "w2a.json")
+                    (hasheq 'schema
+                            "prepared-env-restore-record"
+                            'run-id
+                            2001
+                            'head-sha
+                            "a2a2"
+                            'created-at-utc
+                            "2026-09-06T10:00:00Z"
+                            'shard
+                            0
+                            'prepared-env-mode
+                            "off"
+                            'fast-env-producer-result
+                            "skipped"
+                            'state
+                            "unavailable"
+                            'result
+                            "success"
+                            'restore-ms
+                            "unknown"
+                            'fallback-ms
+                            "unknown"
+                            'wall-clock-seconds
+                            300.0
+                            'prepared-artifact-name
+                            "prepared-env-fast"
+                            'installer-sha256
+                            "d2"
+                            'compiled-code-outcome
+                            "eager-full-path"
+                            'eager-setup-seconds
+                            273.5
+                            'cache-state
+                            "cold-build"
+                            'purge-zo-count
+                            12))
+      (write-jsexpr (tmp-path "w2b.json")
+                    (hasheq 'schema
+                            "prepared-env-restore-record"
+                            'run-id
+                            2002
+                            'head-sha
+                            "b2b2"
+                            'created-at-utc
+                            "2026-09-06T11:00:00Z"
+                            'shard
+                            1
+                            'prepared-env-mode
+                            "off"
+                            'fast-env-producer-result
+                            "skipped"
+                            'state
+                            "unavailable"
+                            'result
+                            "success"
+                            'restore-ms
+                            "unknown"
+                            'fallback-ms
+                            "unknown"
+                            'wall-clock-seconds
+                            "unknown"
+                            'prepared-artifact-name
+                            "prepared-env-fast"
+                            'installer-sha256
+                            "d2"))
+      (define report (tmp-path "w2-report.json"))
+      (script-succeeds (string-append "--aggregate "
+                                      (path->string tmp-root)
+                                      " --filter-prefix w2 --out "
+                                      (path->string report)))
+      (define rep (read-jsexpr report))
+      (define recs (hash-ref rep 'restores))
+      (define eager-rec
+        (for/first ([r (in-list recs)]
+                    #:when (equal? (hash-ref r 'run-id) 2001))
+          r))
+      (check-equal? (hash-ref eager-rec 'compiled-code-outcome) "eager-full-path")
+      (check-equal? (hash-ref eager-rec 'eager-setup-seconds) 273.5)
+      (check-equal? (hash-ref eager-rec 'cache-state) "cold-build")
+      (check-equal? (hash-ref eager-rec 'purge-zo-count) 12)
+      (define bare-rec
+        (for/first ([r (in-list recs)]
+                    #:when (equal? (hash-ref r 'run-id) 2002))
+          r))
+      (check-equal? (hash-ref bare-rec 'compiled-code-outcome) "unknown")
+      (check-equal? (hash-ref bare-rec 'eager-setup-seconds) "unknown")
+      (check-equal? (hash-ref bare-rec 'purge-zo-count) "unknown"))
+
+    (test-case "containment-check: the committed W2 containment evidence passes its honesty gate"
+      (script-succeeds "--containment-check artifacts/ci-recovery/v1.00.30-w2/containment.json"))
+
+    (test-case "containment-check: a complete containment document passes"
+      (define p (tmp-path "good-containment.json"))
+      (write-jsexpr p good-containment-doc)
+      (script-succeeds (string-append "--containment-check " (path->string p))))
+
+    (test-case "containment-check: violations are rejected fail-closed"
+      (define (rejects doc name)
+        (define p (tmp-path name))
+        (write-jsexpr p doc)
+        (script-fails (string-append "--containment-check " (path->string p))))
+      ;; Containment must never be advertised as recovery.
+      (rejects (hash-set good-containment-doc 'containment-not-recovery #f) "bad-not-recovery.json")
+      ;; No per-file compile fallback may exist next to the boundary.
+      (rejects (hash-set good-containment-doc 'per-file-compile-fallback #t)
+               "bad-per-file-fallback.json")
+      ;; Exactly one eager setup boundary per job.
+      (rejects (hash-set good-containment-doc 'eager-boundary-count 2) "bad-two-boundaries.json")
+      ;; The switch must be named and must select the full path.
+      (rejects (hash-set good-containment-doc 'rollback-switch "SOMETHING_ELSE") "bad-switch.json")
+      (rejects (hash-set good-containment-doc 'switch-selects-full-path #f)
+               "bad-switch-full-path.json")
+      ;; The runtime/store vs usable-compiled-code separation is mandatory.
+      (rejects (hash-set good-containment-doc 'compiled-code-outcome-separation #f)
+               "bad-separation.json")
+      ;; Every opting consumer must be audited against the switch.
+      (rejects (hash-set good-containment-doc 'consumers (list)) "bad-no-consumers.json")
+      (rejects (hash-set good-containment-doc
+                         'consumers
+                         (list (hasheq 'consumer "ci:test" 'honors-global-switch #f)))
+               "bad-consumer-switch.json")
+      ;; The residual gap and retained evidence must be named honestly.
+      (rejects (hash-set good-containment-doc 'residual-gap "") "bad-empty-gap.json")
+      (rejects (hash-set good-containment-doc 'evidence "") "bad-empty-evidence.json")
+      ;; Not a JSON object at all.
+      (rejects (list 1 2 3) "bad-not-object.json"))))
 
 (module+ main
   (define failed (run-tests (suite)))
-  (exit (if (zero? failed) 0 1)))
+  (unless (zero? failed)
+    (raise-user-error 'test-prepared-env-report "~a test failure(s)" failed)))
+
+;; raco test instantiates the `test` submodule, not `main`; run the same
+;; suite here and raise so `raco test` marks the file failed on any failure.
+(module+ test
+  (require rackunit/text-ui)
+  (define failed (run-tests (suite)))
+  (unless (zero? failed)
+    (raise-user-error 'test-prepared-env-report "~a test failure(s)" failed)))
