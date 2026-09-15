@@ -5,7 +5,7 @@
         (status . "ready-for-merge")
         (branch . "campaign/v1.00.30-w1")
         (implementation-sha . "af68b0c3eac01a2040e3bc11c079b9e8f7cc01e5")
-        (content-digest . "55734dd98e8ab36c94ed10208ef1f4ec926d69f92176f1f38e3f13f9bb7d65bf")
+        (content-digest . "3cf3124d96a31646f3fb5f7a0106b825a3d1c18924766419de6ac9c011a91053")
         (required-checks
          .
          ("lint"
