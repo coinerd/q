@@ -58,7 +58,6 @@
          known-config-orderings
          known-cohort-statuses
          ;; helpers exposed for testing
-         sha40?
          sha-eligible?
          sha-has-timing-sample?
          sha-final-success-attempt
@@ -83,7 +82,6 @@
          pr-elapsed-required-fields
          pr-elapsed-decision-md-string
          pr-elapsed-seconds-from-window
-         pr-elapsed-utc-seconds
          ;; final-claim verdict mode (v1.00.27 W5: C3)
          final-claim-gate
          final-claim-gate-text
