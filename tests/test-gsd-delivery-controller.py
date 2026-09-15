@@ -298,20 +298,22 @@ def status_routes(world, *, names=None, governance=True, contexts=None,
               'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}],
         (SLUG, 'branches/main/protection', False):
             protection(contexts if contexts is not None else POLICY_NAMES),
-        (SLUG, f"commits/{w['head']}/check-runs?per_page=100", True):
-            [{'check_runs': [check_run(name, w['head'], job=i)
-                             for i, name in enumerate(names)]}],
+        (SLUG, f"commits/{w['head']}/check-runs?per_page=100&page=1", False):
+            {'check_runs': [check_run(name, w['head'], job=i)
+                            for i, name in enumerate(names)],
+             'total_count': len(names)},
         (SLUG, 'actions/runs/777', False):
             run_details(w['head'], 'pull_request', branch=WAVE_BRANCH),
     }
     if governance:
-        routes[(SLUG, f"commits/{w['publication']}/check-runs?per_page=100", True)] = \
-            [{'check_runs': [check_run('gsd-governance', w['publication'], run=888)]}]
+        routes[(SLUG, f"commits/{w['publication']}/check-runs?per_page=100&page=1", False)] = \
+            {'check_runs': [check_run('gsd-governance', w['publication'], run=888)],
+             'total_count': 1}
         routes[(SLUG, 'actions/runs/888', False)] = \
             run_details(w['publication'], 'push', branch='main')
     else:
-        routes[(SLUG, f"commits/{w['publication']}/check-runs?per_page=100", True)] = \
-            [{'check_runs': []}]
+        routes[(SLUG, f"commits/{w['publication']}/check-runs?per_page=100&page=1", False)] = \
+            {'check_runs': [], 'total_count': 0}
     return routes
 
 
@@ -507,9 +509,10 @@ class DeliveryTests(unittest.TestCase):
             route = ' '.join(args)
             calls.append(route)
             if 'check-runs' in route:
-                return json.dumps([{'check_runs': [check_run('lint', sha),
-                                                   check_run('test (0)', sha, job=2),
-                                                   check_run('workflows (0)', sha, job=3)]}])
+                return json.dumps({'check_runs': [check_run('lint', sha),
+                                                  check_run('test (0)', sha, job=2),
+                                                  check_run('workflows (0)', sha, job=3)],
+                                   'total_count': 3})
             assert 'actions/runs/777' in route
             return json.dumps(run_details(sha, 'pull_request', branch='b'))
 
@@ -523,8 +526,9 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(sum('actions/runs/777' in c for c in calls), 1)
 
     def test_incomplete_or_malformed_check_pages_fail_closed(self):
-        for pages in ([], [{}], [{'check_runs': [42]}], {'not': 'a list'}):
-            fake = FakeAPI({(SLUG, 'commits/x/check-runs?per_page=100', True): pages})
+        for pages in ([], [{}], [{'check_runs': [42]}], {'not': 'a list'},
+                      {'check_runs': [], 'total_count': 2}):
+            fake = FakeAPI({(SLUG, 'commits/x/check-runs?per_page=100&page=1', False): pages})
             with patch.object(m, 'api', fake), self.assertRaises(m.Pending):
                 m.checks(SLUG, 'x')
 
@@ -568,9 +572,10 @@ class DeliveryTests(unittest.TestCase):
         for label, check_kwargs, run_kwargs in cases:
             head_override = check_kwargs.pop('head', None)
             routes = {
-                (SLUG, f'commits/{sha}/check-runs?per_page=100', True):
-                    [{'check_runs': [check_run('lint', sha, head=head_override,
-                                               **check_kwargs)]}],
+                (SLUG, f'commits/{sha}/check-runs?per_page=100&page=1', False):
+                    {'check_runs': [check_run('lint', sha, head=head_override,
+                                              **check_kwargs)],
+                     'total_count': 1},
                 (SLUG, 'actions/runs/777', False):
                     run_details(sha, run_kwargs.get('event', 'pull_request'),
                                 branch=run_kwargs.get('branch', 'b'),
@@ -584,7 +589,8 @@ class DeliveryTests(unittest.TestCase):
                 m.trusted_check(SLUG, sha, 'lint', 'pull_request', 'b')
         m._API_CACHE.clear()
         m._CHECKS_CACHE.clear()
-        routes = {(SLUG, f'commits/{sha}/check-runs?per_page=100', True): [{'check_runs': []}]}
+        routes = {(SLUG, f'commits/{sha}/check-runs?per_page=100&page=1', False):
+                  {'check_runs': [], 'total_count': 0}}
         with patch.object(m, 'api', FakeAPI(routes)), self.assertRaises(m.Pending):
             m.trusted_check(SLUG, sha, 'lint', 'pull_request', 'b')
 
@@ -725,6 +731,34 @@ class DeliveryTests(unittest.TestCase):
                    'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}]
         with self.fake_api(status_routes(w, pub_prs=forked)), self.assertRaises(m.Pending):
             m.status(w['subject'], w['plan'], w['wave'])
+
+    def test_publication_pr_accepts_merged_at_association_quirk(self):
+        # GitHub's commits/{sha}/pulls endpoint reports `merged: null` even
+        # for a genuinely merged squash PR; state == 'closed' AND a non-null
+        # merged_at are the merged signal (verified against a real binding).
+        pub = 'a' * 40
+        pr = {'number': 9699, 'merged': None, 'state': 'closed',
+              'merged_at': '2026-09-14T17:34:25Z', 'merge_commit_sha': pub,
+              'head': {'repo': {'full_name': SLUG}},
+              'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}
+        with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr]}):
+            self.assertEqual(m.publication_pr(SLUG, pub)['number'], 9699)
+
+    def test_publication_pr_authoritative_fallback_and_fail_closed(self):
+        pub = 'b' * 40
+        pr = {'number': 7777, 'merged': None, 'state': 'closed', 'merged_at': None,
+              'merge_commit_sha': pub,
+              'head': {'repo': {'full_name': SLUG}},
+              'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}
+        # association payload inconclusive -> authoritative endpoint confirms
+        with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr],
+                            (SLUG, 'pulls/7777', False): {'merged': True}}):
+            self.assertEqual(m.publication_pr(SLUG, pub)['number'], 7777)
+        # authoritative endpoint says not merged -> fails closed
+        with self.assertRaises(m.Pending):
+            with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr],
+                                (SLUG, 'pulls/7777', False): {'merged': False}}):
+                m.publication_pr(SLUG, pub)
 
     def test_status_pending_when_binding_absent(self):
         w = self.world()

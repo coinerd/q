@@ -237,15 +237,23 @@ def checks(slug, sha):
     key = (slug, sha)
     if key in _CHECKS_CACHE:
         return _CHECKS_CACHE[key]
-    pages = api(slug, 'commits/' + sha + '/check-runs?per_page=100', True)
-    require(isinstance(pages, list) and pages, 'check pagination incomplete')
+    # gh 2.45 has no `--paginate --slurp`; page manually in-process so every
+    # gh version returns the same fail-closed result.
     result = []
-    for page in pages:
-        require(isinstance(page, dict) and isinstance(page.get('check_runs'), list),
+    page = 1
+    while True:
+        data = api(slug, 'commits/%s/check-runs?per_page=100&page=%d' % (sha, page))
+        require(isinstance(data, dict) and isinstance(data.get('check_runs'), list),
                 'invalid check result')
-        for run in page['check_runs']:
-            require(isinstance(run, dict), 'invalid check run entry')
-        result.extend(page['check_runs'])
+        runs = data['check_runs']
+        require(all(isinstance(run, dict) for run in runs), 'invalid check run entry')
+        result.extend(runs)
+        total = data.get('total_count')
+        require(isinstance(total, int) and total >= 0, 'malformed check-total')
+        if not runs or len(result) >= total:
+            break
+        page += 1
+    require(len(result) >= total, 'check pagination incomplete')
     _CHECKS_CACHE[key] = result
     return result
 
@@ -320,8 +328,22 @@ def publication_pr(slug, publication):
             dig(pr, 'base', 'repo', 'full_name') == slug and
             dig(pr, 'head', 'repo', 'full_name') == slug and
             pr.get('merge_commit_sha') == publication]
-    require(len(same) == 1 and same[0].get('merged') is True,
+    require(len(same) == 1,
             'binding publication must be exactly one merged same-repo PR')
+    # GitHub's COMMIT-ASSOCIATION endpoint reports `merged: null` even for a
+    # genuinely merged squash PR (only the pulls/{number} endpoint and the
+    # `merged_at`/`state` fields reflect the merge authoritatively). Accept
+    # the old `merged is True` shape (unit fakes), the association shape
+    # (state == 'closed' AND merged_at set), and otherwise fail closed via
+    # the authoritative pulls/{number} endpoint.
+    pr = same[0]
+    merged = (pr.get('merged') is True or
+              (pr.get('state') == 'closed' and pr.get('merged_at') is not None))
+    if not merged:
+        number = pr.get('number')
+        merged = (isinstance(number, int) and
+                  api(slug, f'pulls/{number}').get('merged') is True)
+    require(merged, 'binding publication must be exactly one merged same-repo PR')
     return same[0]
 
 def snapshot_facts(campaign_root, plan, wave):
