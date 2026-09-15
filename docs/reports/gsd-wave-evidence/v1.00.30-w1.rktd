@@ -20,7 +20,6 @@
           "test (1)"
           "test (2)"
           "test-aggregate"
-          "test-platform"
-          "pr-latency-guard"))
+          "test-platform"))
         (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w1.rktd")
         (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.30-w1.rktd"))
