@@ -7,7 +7,7 @@
 
 ;; W2 (v1.00.30) — eager compilation containment (issue #9688).
 ;;
-;; The v1.00.29 regression: purge-plus-skipped-compile amplification. The
+;; The prior-release regression: purge-plus-skipped-compile amplification. The
 ;; BUG-0065 purge (correctly) removes untrusted checkout bytecode on every
 ;; path, but the W3 prepared-environment restore SKIPS the package-visible
 ;; compile for restored shards — so the fast suite lazily re-compiles this

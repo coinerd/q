@@ -1,0 +1,63 @@
+{
+  "schema-version": 2,
+  "milestone": 895,
+  "wave": "W2",
+  "issue": 9688,
+  "drill": "switch rollback and restoration on controlled runs",
+  "scope": "fixture-controlled local drill plus CI-gated cohort truth; local sandbox cannot produce representative raco setup wall-clock timings (package compiles into user install dir, not checkout)",
+  "steps": [
+    {
+      "step": 1,
+      "name": "global-switch-set-selects-full-path",
+      "command": "RACKET_PREPARED_ARTIFACT=off evaluated by scripts/ci/prepared-env-report.rkt PREPARED_ENV boundary; covered by tests/test-ci-eager-compilation.rkt full-path cases",
+      "expected": "with switch set, prepared-artifact restore path is not taken; the action body takes the eager full path (purge, relink, raco setup --no-docs --jobs 4 --pkgs q fmt)",
+      "observed": "full-path selection asserted green: prepared-env reports full-path regime under RACKET_PREPARED_ARTIFACT=off",
+      "verdict": "pass"
+    },
+    {
+      "step": 2,
+      "name": "unsuccessful-mitigation-rolls-back-to-restore-path",
+      "command": "full-path failure branch in .github/actions/setup-racket/action.yml (raco setup or relink fails)",
+      "expected": "action exits non-zero without a per-file compile fallback and without advertising success; downstream restore-based delivery is not claimed as recovery",
+      "observed": "fixture asserts fallback forbidden and failure propagates as job failure",
+      "verdict": "pass"
+    },
+    {
+      "step": 3,
+      "name": "restore-path-purges-untrusted-checkout-bytecode-before-use",
+      "command": "restore branch of setup-racket action on controlled run",
+      "expected": "stale checkout bytecode cannot execute: restore purges checkout *.zo/*.dep/compiled dirs before artifact relink",
+      "observed": "fixture asserts purge-on-restore (stale mtime, future mtime, and pre-existing compiled fixtures all purged)",
+      "verdict": "pass"
+    },
+    {
+      "step": 4,
+      "name": "future-mtime-checkout-bytecode-cannot-execute",
+      "command": "seed checkout with zo files with mtime in the future, run restore-branch evaluation",
+      "expected": "purge removes them regardless of mtime; BUG-0065 invariant retained",
+      "observed": "future-mtime purge fixture green",
+      "verdict": "pass"
+    },
+    {
+      "step": 5,
+      "name": "single-eager-boundary-per-job",
+      "command": "static assert on ci.yml via tests/test-ci-eager-compilation.rkt single-boundary case",
+      "expected": "at most one eager setup boundary per job; internal jobs=4 unchanged; runner/test membership unchanged",
+      "observed": "single-boundary fixture green; no per-file compile fallback in any job",
+      "verdict": "pass"
+    }
+  ],
+  "switch-matrix": {
+    "RACKET_PREPARED_ARTIFACT=off": "full eager path; all consumers honor the switch (7 audited consumers)",
+    "RACKET_PREPARED_ARTIFACT unset or on": "restore path with mandatory purge; identical runner membership and worker counts",
+    "rollback rule": "unsuccessful mitigation is rolled back to restore path; restore is never advertised as successful recovery"
+  },
+  "timing": {
+    "local-sandbox": "not representative: raco setup --pkgs q compiles into user install dir; checkout zo count stays 0; wall-clock numbers intentionally not recorded",
+    "ci-cohort": "owned by coordinator: >=3 comparable PR head SHAs, primary PR guard plus R1 p95 of slowest fast-shard runner; R1 pass is containment only, never a recovery claim",
+    "residual-gap": "pre-W4 233-292s job walls and runner/job boundary differences remain unaddressed by containment"
+  },
+  "anchor": "2171s figure is a single-PR max, not a population tail",
+  "verdict": "drill-pass-fixture-controlled",
+  "recorded-at": "2026-09-15T20:56:25Z"
+}

@@ -1123,9 +1123,11 @@
     (test-case "emit: W2 eager telemetry — zero purge count is a real observation, never unknown"
       (define out (tmp-path "emit-w2-eager.json"))
       (script-succeeds
-       (emit-command
-        out
-        "--fast-env-producer-result skipped --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef --compiled-code-outcome eager-full-path --eager-setup-seconds 273.5 --cache-state cold-build --purge-zo-count 0")
+       (emit-command out
+                     (string-append
+                      "--fast-env-producer-result skipped --prepared-artifact-name prepared-env-fast"
+                      " --installer-sha256 deadbeef --compiled-code-outcome eager-full-path"
+                      " --eager-setup-seconds 273.5 --cache-state cold-build --purge-zo-count 0"))
        '(("Q_PREPARED_ENV_STATE" . "unavailable")))
       (define rec (read-jsexpr out))
       (check-equal? (hash-ref rec 'compiled-code-outcome) "eager-full-path")

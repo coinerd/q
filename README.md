@@ -281,7 +281,7 @@ q/
 ├── runtime/        Agent session, compaction, resource loading, auth
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
-├── tests/          Full test suite (1495 files)
+├── tests/          Full test suite (1496 files)
 ├── tools/          Tool registry, scheduler, 27 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
@@ -294,7 +294,7 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 1495 |
+| Test files | 1496 |
 | Source modules | 885 |
 | Source lines | 185236 |
 | Test lines | 274038 |
