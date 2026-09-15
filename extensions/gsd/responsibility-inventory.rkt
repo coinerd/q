@@ -99,7 +99,7 @@
                                "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(fs-read git make-param mkdir path-ops parameterize)
+               '(git make-param mkdir path-ops parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
@@ -116,10 +116,32 @@
                                  "wave-status"
                                  "projection-effects"
                                  "delivery-verifier"
+                                 "delivery-handoff"
                                  "util/loop-result"
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
                                  "plan-context-builder"))
+   ;; v1.00.30 (delivery runtime): the coordinator-owned authenticated
+   ;; delivery handoff — loop decision, delivered-proof validation,
+   ;; pending→delivered ledger, and the predecessor resolver. Factored
+   ;; OUT of go-orchestrator so the wave-advance gate and the final
+   ;; full-loop delivery check share ONE proof source (BUG-0064/#9620).
+   ;; Effects reflect the scanner-visible markers; the durable handoff
+   ;; ledger is additionally written atomically via
+   ;; call-with-atomic-output-file / make-parent-directory* (fs-write /
+   ;; fs-rename / mkdir, invisible to the marker scanner).
+   (make-entry "delivery-handoff.rkt"
+               'campaign-state
+               '(fs-read path-ops parameterize subprocess)
+               '()
+               '("json" "racket/file"
+                        "racket/format"
+                        "racket/path"
+                        "racket/runtime-path"
+                        "racket/string"
+                        "campaign-state"
+                        "campaign-repository"
+                        "sandbox/subprocess"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence

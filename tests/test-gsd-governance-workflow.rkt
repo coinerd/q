@@ -15,6 +15,7 @@
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-status)
+         (only-in "../extensions/gsd/delivery-handoff.rkt" delivered-proof-merge-sha)
          "../scripts/gsd-wave-gate.rkt"
          "../extensions/gsd/go-orchestrator.rkt")
 
@@ -465,14 +466,29 @@
   (check-false (eq? (gov-wave-status rec 1) 'done))
   (delete-directory/files dir #:must-exist? #f))
 
-(test-case "campaign advance proceeds once the predecessor evidence trio is bound to a merge SHA"
+(test-case "campaign advance proceeds once the predecessor merge SHA is authenticated"
   (define dir (make-gov-tmp-campaign-dir 2))
   (define rec (migrate-campaign! dir))
   (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
-  (check-false (wave-merge-sha dir (campaign-plan-id rec) 0))
+  ;; v1.00.30 trust boundary: a locally-authored evidence trio is never
+  ;; proof on its own — only the authenticated controller's exact
+  ;; delivered proof (full 40-hex merge SHA for THIS campaign/wave)
+  ;; resolves the Delivery-Contract. Stale local regex fixtures cannot
+  ;; count (BUG-0064 hardening).
   (bind-gov-merge-sha! dir (campaign-plan-id rec) 0)
-  (check-equal? (wave-merge-sha dir (campaign-plan-id rec) 0) valid-sha)
-  (define result (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+  (check-false (wave-merge-sha dir (campaign-plan-id rec) 0))
+  (check-false (delivered-proof-merge-sha (hasheq 'status "proof-bundle" 'wave 0 'merge-sha valid-sha)
+                                          (campaign-plan-id rec)
+                                          0))
+  ;; The authenticated-proof resolver (stand-in for the controller
+  ;; readback) unblocks the advance; the campaign never reruns W0.
+  (define result
+    (run-campaign-wave dir
+                       rec
+                       1
+                       #:runner (lambda (_) 'ok)
+                       #:verifier (lambda (_) #t)
+                       #:predecessor-merge-sha (lambda (b p w) (and (= w 0) valid-sha))))
   (check-eq? (campaign-result-status result) 'wave-done)
   (check-eq? (gov-wave-status rec 1) 'done)
   (delete-directory/files dir #:must-exist? #f))

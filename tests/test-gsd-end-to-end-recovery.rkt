@@ -93,6 +93,21 @@
     (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-index)
     #t))
 
+;; v1.00.30: this suite exercises crash-RECOVERY, not delivery — every
+;; verified wave carries an authenticated delivered proof so the loop
+;; advances (a pending proof would stop the campaign before the
+;; recovery/restart transitions under test).
+(define (make-delivered-reader)
+  (lambda (_base plan idx)
+    (hasheq 'status
+            "delivered"
+            'plan-id
+            plan
+            'wave
+            idx
+            'merge-sha
+            "0123456789abcdef0123456789abcdef01234567")))
+
 ;; ============================================================
 ;; Recovery helper (mirrors run-campaign! startup + W2/W5 reconcile)
 ;; ============================================================
@@ -161,7 +176,8 @@
            (run-campaign! dir
                           rec1
                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))
-                          #:verifier (make-approve-wave dir rec1)))
+                          #:verifier (make-approve-wave dir rec1)
+                          #:delivery-reader (make-delivered-reader)))
          (check-eq? (campaign-result-status r1) 'wave-failed)
          (check-eq? (wave-status* rec1 0) 'done)
          (check-eq? (wave-status* rec1 1) 'failed)
@@ -189,7 +205,8 @@
            (run-campaign! dir
                           rec2
                           #:runner (lambda (idx) (if (= idx 2) 'cancelled 'ok))
-                          #:verifier (make-approve-wave dir rec2)))
+                          #:verifier (make-approve-wave dir rec2)
+                          #:delivery-reader (make-delivered-reader)))
          (check-eq? (campaign-result-status r2) 'wave-cancelled)
          (check-eq? (wave-status* rec2 0) 'done)
          (check-eq? (wave-status* rec2 1)
@@ -207,7 +224,11 @@
          ;; W3 succeeds -> campaign complete ---
          (define rec3 (load-or-migrate-campaign! dir))
          (define r3
-           (run-campaign! dir rec3 #:runner (lambda (_) 'ok) #:verifier (make-approve-wave dir rec3)))
+           (run-campaign! dir
+                          rec3
+                          #:runner (lambda (_) 'ok)
+                          #:verifier (make-approve-wave dir rec3)
+                          #:delivery-reader (make-delivered-reader)))
          (check-eq? (campaign-result-status r3) 'campaign-complete)
          (check-equal? (campaign-result-completed-waves r3) '(2 3))
          (check-eq? (wave-status* rec3 0) 'done)
@@ -320,7 +341,8 @@
                         (run-campaign! dir
                                        durable
                                        #:runner (lambda (_) 'ok)
-                                       #:verifier (make-approve-wave dir durable)))
+                                       #:verifier (make-approve-wave dir durable)
+                                       #:delivery-reader (make-delivered-reader)))
                       (check-eq? (campaign-result-status r) 'campaign-complete)
                       (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0)
                                  'done))
@@ -381,7 +403,8 @@
            (run-campaign! dir
                           rec
                           #:runner (lambda (idx) (if (= idx 0) 'ok 'error))
-                          #:verifier (make-approve-wave dir rec)))
+                          #:verifier (make-approve-wave dir rec)
+                          #:delivery-reader (make-delivered-reader)))
          (check-eq? (campaign-result-status r) 'wave-failed)
          (define durable (load-or-migrate-campaign! dir))
          (recover-fresh! dir durable)

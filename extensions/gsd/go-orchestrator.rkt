@@ -27,6 +27,7 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "wave-completion.rkt"
+         "delivery-handoff.rkt"
          "wave-runner-port.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
@@ -206,22 +207,32 @@
 ;; A campaign request is the interface-safe execution boundary for /go.  It
 ;; carries durable campaign identity plus callbacks that build one wave prompt
 ;; and verify one completed attempt; interfaces supply only the prompt runner.
+;; delivery-reader: authenticated delivered-proof reader (default
+;; delivery-readback) — the DI seam so tests inject proofs without network.
 ;; timeout-sec: per-campaign override for the wave budget (current-gsd-wave-
 ;; timeout-seconds), resolved at /go time from the --wave-timeout=SECONDS flag,
 ;; then ~/.q/config.json wave-timeout-seconds, then the parameter default.
 ;; #f → use the current parameter value at execution time. Carried on the
 ;; request (not the parameter) because the campaign runs in a separate thread.
-(struct campaign-request (base-dir record prompt-for-wave verifier timeout-sec allow-stale?)
+(struct campaign-request
+        (base-dir record prompt-for-wave verifier timeout-sec allow-stale? delivery-reader)
   #:transparent
-  #:constructor-name make-campaign-request/6)
+  #:constructor-name make-campaign-request/7)
 
 (define (make-campaign-request base-dir
                                record
                                prompt-for-wave
                                verifier
                                #:timeout-sec [timeout-sec #f]
-                               #:allow-stale? [allow-stale? #f])
-  (make-campaign-request/6 base-dir record prompt-for-wave verifier timeout-sec allow-stale?))
+                               #:allow-stale? [allow-stale? #f]
+                               #:delivery-reader [delivery-reader delivery-readback])
+  (make-campaign-request/7 base-dir
+                           record
+                           prompt-for-wave
+                           verifier
+                           timeout-sec
+                           allow-stale?
+                           delivery-reader))
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -337,6 +348,7 @@
                #:cancel! (current-gsd-wave-cancel!)
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
+     #:delivery-reader (campaign-request-delivery-reader request)
      #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -418,19 +430,7 @@
 ;; exactly the v1.00.27 failure mode (W0→W6 advanced with zero merges).
 ;; Returns the sha string, or #f when the wave is not merged-proven.
 (define (wave-merge-sha base-dir plan-id wave-idx)
-  (define trio-name (format "~a-w~a.rktd" plan-id wave-idx))
-  (define direct (build-path base-dir "docs" "reports" "gsd-wave-evidence" trio-name))
-  (define candidate
-    (cond
-      [(file-exists? direct) direct]
-      ;; compat: package-root layout (<base>/q/...) in some checkouts.
-      [else
-       (define alt (build-path base-dir "q" "docs" "reports" "gsd-wave-evidence" trio-name))
-       (and (file-exists? alt) alt)]))
-  (and candidate
-       (let ([m (regexp-match #px"merge-sha[^0-9a-f]*([0-9a-f]{40})" (file->string candidate))])
-         ;; file->string input ⇒ string captures (never bytes).
-         (and m (cadr m)))))
+  (verified-wave-merge-sha base-dir plan-id wave-idx))
 
 (define (run-campaign-wave base-dir
                            rec
@@ -466,7 +466,16 @@
                            ;; BUG-0064 (v1.00.29 W1, #9620): explicit,
                            ;; auditable operator escape from the
                            ;; Delivery-Contract wave-advance gate below.
-                           #:advance-override? [advance-override? #f])
+                           #:advance-override? [advance-override? #f]
+                           ;; v1.00.30 (delivery runtime): injectable
+                           ;; predecessor-proof resolver (base-dir plan-id
+                           ;; wave-idx → full 40-hex merge SHA | #f).
+                           ;; Default: the authenticated delivery proof
+                           ;; (wave-merge-sha). run-campaign! forwards a
+                           ;; resolver derived from its delivery-reader so
+                           ;; tests need no network and local regex
+                           ;; fixtures can never count as production proof.
+                           #:predecessor-merge-sha [predecessor-merge-sha wave-merge-sha])
 
   ;; BUG-0028 S1 (v1.00.19 W2): composition-root settings wiring — the
   ;; gsd.worktree-isolation key drives isolation from here on.
@@ -508,6 +517,11 @@
   ;; completion, cancellation, or fence after waiting for the process lock.
   (define active (or (load-campaign-record base-dir (campaign-plan-id rec)) rec))
   (define fence (or requested-fence (add1 (campaign-fence-token active))))
+  ;; v1.00.30: a predecessor proof counts only as a FULL 40-hex SHA —
+  ;; defense-in-depth so no injected resolver can wave through garbage.
+  (define (predecessor-proof-sha idx)
+    (define sha (predecessor-merge-sha base-dir (campaign-plan-id active) idx))
+    (and (string? sha) (regexp-match? #px"^[0-9a-f]{40}$" sha) sha))
   (define initial-wave (find-wave active wave-idx))
   (cond
     [(campaign-record-cancellation active)
@@ -520,9 +534,7 @@
     ;; A wave may launch only when its predecessor carries a merge-SHA
     ;; binding in its evidence trio. W0 (no predecessor) is never gated.
     ;; Explicit operator override proceeds but is logged for audit.
-    [(and (>= wave-idx 1)
-          (not advance-override?)
-          (not (wave-merge-sha base-dir (campaign-plan-id active) (sub1 wave-idx))))
+    [(and (>= wave-idx 1) (not advance-override?) (not (predecessor-proof-sha (sub1 wave-idx))))
      (campaign-result
       'wave-blocked
       '()
@@ -537,9 +549,7 @@
     ;; wave launches without its predecessor's merge-SHA proof because the
     ;; caller explicitly passed #:advance-override? #t.
     [else
-     (when (and (>= wave-idx 1)
-                advance-override?
-                (not (wave-merge-sha base-dir (campaign-plan-id active) (sub1 wave-idx))))
+     (when (and (>= wave-idx 1) advance-override? (not (predecessor-proof-sha (sub1 wave-idx))))
        (log-info
         "BUG-0064 OVERRIDE: wave ~a launched without predecessor merge-SHA proof (operator advance-override)"
         wave-idx))
@@ -1356,7 +1366,8 @@
                        ;; v1.00.19 W2 (BUG-0028 S1): 'auto = honor the
                        ;; gsd.worktree-isolation project-settings key (see
                        ;; resolve-worktree-isolation in wave-executor.rkt).
-                       #:isolate? [isolate-arg 'auto])
+                       #:isolate? [isolate-arg 'auto]
+                       #:delivery-reader [delivery-reader delivery-readback])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
   (define project-settings (load-project-settings-silently base-dir))
@@ -1416,41 +1427,66 @@
            (define wt-repo (find-repo-root base-dir))
            (when wt-repo
              (reclaim-orphaned-worktrees! wt-repo #:campaign-id plan-id)))
+         ;; v1.00.30 (delivery runtime): verified-delivered proofs are
+         ;; memoized only until execution can mutate the checkout. Every new
+         ;; loop iteration revalidates publication AND synchronized bytes;
+         ;; ledger reconciliation is idempotent.
+         (define verified-delivered (make-hash))
          (define final-result
            (let loop ([current authoritative]
                       [completed '()])
-             (define next-idx (select-next-actionable-wave current))
-             (cond
-               [(campaign-record-cancellation current)
-                (notify-terminal-transition*! (campaign-plan-id current)
-                                              #f
-                                              'campaign-cancelled
-                                              #:reason "campaign cancellation requested")
-                (campaign-result 'wave-cancelled
-                                 (reverse completed)
-                                 "campaign cancellation requested")]
-               [(not next-idx)
-                (notify-terminal-transition*! (campaign-plan-id current)
+             ;; Implementation DONE is durable and never rerun to repair
+             ;; delivery; the full-loop checkpoint runs BEFORE the next
+             ;; launch / final completion against the authenticated
+             ;; delivery-reader (default delivery-readback).
+             (define-values (decision live extra message)
+               (ready-for-run-checkpoint base-dir
+                                         plan-id
+                                         current
+                                         completed
+                                         delivery-reader
+                                         verified-delivered))
+             (case decision
+               [(campaign-complete)
+                (notify-terminal-transition*! (campaign-plan-id live)
                                               #f
                                               'campaign-complete
                                               #:reason "all waves done or deferred")
-                (campaign-result 'campaign-complete (reverse completed) "all waves done or deferred")]
+                (campaign-result 'campaign-complete (reverse completed) message)]
+               [(wave-blocked) (campaign-result 'wave-blocked (reverse completed) message)]
+               [(wave-cancelled)
+                (when (campaign-record-cancellation live)
+                  (notify-terminal-transition*! (campaign-plan-id live)
+                                                #f
+                                                'campaign-cancelled
+                                                #:reason "campaign cancellation requested"))
+                (campaign-result 'wave-cancelled (reverse completed) message)]
                [else
+                (define next-idx extra)
                 (define result
                   ;; v1.00.22 W6 (BUG-0040): wave-level terminal sites
                   ;; (done/failed/stall/budget-pause) inside
                   ;; run-campaign-wave emit through these sinks.
                   (parameterize ([current-gsd-notify-sinks notify-sinks])
                     (run-campaign-wave base-dir
-                                       current
+                                       live
                                        next-idx
                                        #:runner runner
                                        #:verifier verifier
                                        #:meta-fix-predicate meta-fix-predicate
-                                       #:fence-token (add1 (campaign-fence-token current))
+                                       #:fence-token (add1 (campaign-fence-token live))
                                        #:timeout-sec timeout-sec
                                        #:timeout-retries (current-gsd-wave-timeout-retries)
-                                       #:isolate? isolate?)))
+                                       #:isolate? isolate?
+                                       ;; v1.00.30: the wave-advance gate uses the same
+                                       ;; authenticated proof source as the checkpoint —
+                                       ;; a resolver derived from delivery-reader (memoized
+                                       ;; + ledger-reconciled), never a local regex fixture.
+                                       #:predecessor-merge-sha
+                                       (delivered-predecessor-resolver base-dir
+                                                                       plan-id
+                                                                       verified-delivered
+                                                                       delivery-reader))))
                 (define observed (load-campaign-record base-dir plan-id))
                 (mirror-durable-statuses! rec observed)
                 (case (campaign-result-status result)
@@ -1578,6 +1614,7 @@
          campaign-request-record
          campaign-request-prompt-for-wave
          campaign-request-verifier
+         campaign-request-delivery-reader
          campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!

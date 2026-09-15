@@ -78,6 +78,16 @@
                   git-available?)
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
          (only-in "../extensions/gsd/delivery-verifier.rkt" delivery-verification)
+         (only-in "../extensions/gsd/delivery-handoff.rkt"
+                  delivered-proof-merge-sha
+                  undelivered-proof-reason
+                  delivery-handoff-path
+                  reconcile-delivered-handoff!)
+         (only-in "../extensions/gsd/notify.rkt"
+                  current-gsd-notify-sinks
+                  make-recording-sink
+                  gsd-notification-kind)
+         (only-in "../extensions/gsd/wave-completion.rkt" load-outbox)
          (only-in "../util/loop-result.rkt" make-loop-result)
          (only-in "../util/version.rkt" q-version)
          (only-in "../extensions/gsd/policy.rkt"
@@ -126,6 +136,28 @@
   (for/first ([w (campaign-record-waves rec)]
               #:when (= (campaign-wave-index w) idx))
     w))
+
+;; ============================================================
+;; v1.00.30 delivery-runtime DI mocks.
+;; BUG-0064's local regex fixture (bind-merge-sha!) is NO LONGER a
+;; production proof source: wave-merge-sha delegates to the
+;; authenticated controller readback, and run-campaign! derives its
+;; predecessor-proof resolver from #:delivery-reader. Tests inject
+;; explicit delivered-proof readers here — never production backdoors.
+;; ============================================================
+
+(define BUG-0064-FAKE-SHA "0123456789abcdef0123456789abcdef01234567")
+
+(define (delivered-proof plan-id wave-idx)
+  (hasheq 'status "delivered" 'plan-id plan-id 'wave wave-idx 'merge-sha BUG-0064-FAKE-SHA))
+
+;; Delivered-proof reader for every wave (resume/complete fixtures).
+(define (make-delivered-reader)
+  (lambda (_base plan idx) (delivered-proof plan idx)))
+
+;; Predecessor-proof resolver equivalent to a verified delivered proof.
+(define (delivered-predecessor-resolver)
+  (lambda (_base _plan idx) (and (>= idx 0) BUG-0064-FAKE-SHA)))
 
 ;; ============================================================
 ;; Test suites
@@ -245,16 +277,15 @@
     (test-case "all waves succeed → campaign-complete"
       (define dir (make-tmp-campaign-dir 3))
       (define rec (load-or-migrate dir))
-      ;; BUG-0064: the coordinator binds the Delivery-Contract merge SHA when a
-      ;; wave lands (post-verify in this fixture). Advances without it are
-      ;; blocked — covered by advance-gate-suite.
+      ;; BUG-0064/v1.00.30: each wave's Delivery-Contract proof is the
+      ;; authenticated delivered-proof reader (explicit mock; covered
+      ;; fail-closed by delivery-runtime-suite).
       (define result
         (run-campaign! dir
                        rec
                        #:runner (lambda (_) 'ok)
-                       #:verifier (lambda (idx)
-                                    (bind-merge-sha! dir (campaign-plan-id rec) idx)
-                                    #t)))
+                       #:verifier (lambda (_) #t)
+                       #:delivery-reader (make-delivered-reader)))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? (campaign-result-completed-waves result) '(0 1 2))
       (cleanup-tmp dir))
@@ -269,9 +300,8 @@
                        #:runner (lambda (idx)
                                   (set! call-count (add1 call-count))
                                   (if (= idx 1) 'error 'ok))
-                       #:verifier (lambda (idx)
-                                    (bind-merge-sha! dir (campaign-plan-id rec) idx)
-                                    #t)))
+                       #:verifier (lambda (_) #t)
+                       #:delivery-reader (make-delivered-reader)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-equal? call-count 2 "runner called for W0 and W1 only")
       (check-eq? (wave-status* rec 0) 'done)
@@ -305,7 +335,8 @@ check-equal? actual 14 expected 12")
                                     'ok)
                          #:verifier (lambda (_)
                                       (set! verifier-calls (add1 verifier-calls))
-                                      (if (= verifier-calls 1) failed-verification #t)))))
+                                      (if (= verifier-calls 1) failed-verification #t))
+                         #:delivery-reader (make-delivered-reader))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? runner-calls 2)
       (check-equal? verifier-calls 2 "the complete verifier is rerun after repair")
@@ -379,9 +410,8 @@ check-equal? actual 14 expected 12")
           (run-campaign! dir
                          rec
                          #:runner (lambda (_) 'ok)
-                         #:verifier (lambda (idx)
-                                      (bind-merge-sha! dir (campaign-plan-id rec) idx)
-                                      (not (= idx 1))))))
+                         #:verifier (lambda (idx) (not (= idx 1)))
+                         #:delivery-reader (make-delivered-reader))))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-eq? (wave-status* rec 0) 'done)
       (check-false (eq? (wave-status* rec 1) 'done))
@@ -490,6 +520,7 @@ check-equal? actual 14 expected 12")
                        rec
                        #:lease-owner "main-tui-session"
                        #:verifier (lambda (_) #t)
+                       #:delivery-reader (make-delivered-reader)
                        #:runner
                        (lambda (_idx)
                          (set-box! observed-owner
@@ -540,17 +571,18 @@ check-equal? actual 14 expected 12")
       (define rec (load-or-migrate dir))
       (define prompts '())
       (define request
-        (make-campaign-request dir rec (lambda (idx) (format "ONLY-W~a" idx)) (lambda (_) #t)))
-      ;; BUG-0064: the coordinator binds the Delivery-Contract merge SHA when
-      ;; a wave's PR lands. The stub simulates that binding for W0 so the
-      ;; W0→W1 advance satisfies the gate (unbound advance is covered by
-      ;; advance-gate-suite).
+        (make-campaign-request dir
+                               rec
+                               (lambda (idx) (format "ONLY-W~a" idx))
+                               (lambda (_) #t)
+                               #:delivery-reader (make-delivered-reader)))
+      ;; v1.00.30: the W0→W1 advance satisfies the gate through the exact
+      ;; delivered-proof reader (same authenticated source as the final
+      ;; full-loop check); unbound advance is covered by advance-gate-suite.
       (define result
         (execute-campaign-request! request
                                    (lambda (prompt)
                                      (set! prompts (append prompts (list prompt)))
-                                     (when (equal? prompt "ONLY-W0")
-                                       (bind-merge-sha! dir (campaign-plan-id rec) 0))
                                      (make-loop-result '() 'completed (hasheq)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? prompts '("ONLY-W0" "ONLY-W1"))
@@ -582,12 +614,15 @@ check-equal? actual 14 expected 12")
     (test-case "empty response automatically retries current wave as infrastructure failure"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
       (define calls 0)
       (define result
         (parameterize ([current-gsd-campaign-infra-retries 1]
                        [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
-          (execute-campaign-request! request
+          (execute-campaign-request! (make-campaign-request dir
+                                                            rec
+                                                            (lambda (_) "W0")
+                                                            (lambda (_) #t)
+                                                            #:delivery-reader (make-delivered-reader))
                                      (lambda (_)
                                        (set! calls (add1 calls))
                                        (if (= calls 1)
@@ -680,7 +715,12 @@ check-equal? actual 14 expected 12")
     (test-case "two-value production runner uses returned loop result"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define request
+        (make-campaign-request dir
+                               rec
+                               (lambda (_) "W0")
+                               (lambda (_) #t)
+                               #:delivery-reader (make-delivered-reader)))
       (define result
         (execute-campaign-request!
          request
@@ -720,7 +760,8 @@ check-equal? actual 14 expected 12")
                        stale
                        #:runner (lambda (_)
                                   (set! calls (add1 calls))
-                                  'ok)))
+                                  'ok)
+                       #:delivery-reader (make-delivered-reader)))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? calls 0)
       (define durable (load-campaign-record dir (campaign-plan-id stale)))
@@ -939,7 +980,12 @@ check-equal? actual 14 expected 12")
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
       (define request
-        (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t) #:allow-stale? #t))
+        (make-campaign-request dir
+                               rec
+                               (lambda (_) "W0")
+                               (lambda (_) #t)
+                               #:allow-stale? #t
+                               #:delivery-reader (make-delivered-reader)))
       (define result
         (freshness-suite/guarded
          dir
@@ -958,7 +1004,12 @@ check-equal? actual 14 expected 12")
       ;; The handler path may pass the flag directly rather than on the request.
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define request
+        (make-campaign-request dir
+                               rec
+                               (lambda (_) "W0")
+                               (lambda (_) #t)
+                               #:delivery-reader (make-delivered-reader)))
       (define result
         (freshness-suite/guarded
          dir
@@ -975,7 +1026,12 @@ check-equal? actual 14 expected 12")
     (test-case "offline mode warns but proceeds (never blocks offline operators)"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define request
+        (make-campaign-request dir
+                               rec
+                               (lambda (_) "W0")
+                               (lambda (_) #t)
+                               #:delivery-reader (make-delivered-reader)))
       (define result
         (freshness-suite/guarded dir
                                  rec
@@ -991,7 +1047,12 @@ check-equal? actual 14 expected 12")
     (test-case "fresh build proceeds without override and stamps build identity"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
-      (define request (make-campaign-request dir rec (lambda (_) "W0") (lambda (_) #t)))
+      (define request
+        (make-campaign-request dir
+                               rec
+                               (lambda (_) "W0")
+                               (lambda (_) #t)
+                               #:delivery-reader (make-delivered-reader)))
       (define result
         (freshness-suite/guarded dir
                                  rec
@@ -1182,8 +1243,9 @@ check-equal? actual 14 expected 12")
 ;; BUG-0064 wave-advance gate suite (W1, #9620)
 ;; ============================================================
 
-(define BUG-0064-FAKE-SHA "0123456789abcdef0123456789abcdef01234567")
-
+;; Deliberately stale local regex fixture: v1.00.30 must NEVER accept it
+;; as production proof (see the stale-fixture test below). Kept only to
+;; prove the refusal.
 (define (bind-merge-sha! dir plan-id wave-idx)
   (define evidence-dir (build-path dir "docs" "reports" "gsd-wave-evidence"))
   (make-directory* evidence-dir)
@@ -1194,29 +1256,56 @@ check-equal? actual 14 expected 12")
 
 (define advance-gate-suite
   (test-suite "BUG-0064 delivery-contract wave-advance gate"
-    (test-case "wave 1 is blocked while wave 0 lacks its merge-SHA binding"
+    (test-case "wave 1 is blocked while wave 0 lacks its delivered proof"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
       (check-eq? (campaign-result-status
                   (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
                  'wave-done)
       (define result
-        (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+        (run-campaign-wave dir
+                           rec
+                           1
+                           #:runner (lambda (_) 'ok)
+                           #:verifier (lambda (_) #t)
+                           ;; DI: predecessor has NO proof (no local fixture
+                           ;; can fake one — see the stale-fixture test).
+                           #:predecessor-merge-sha (lambda (_b _p _w) #f)))
       (check-eq? (campaign-result-status result) 'wave-blocked)
       (check-true (string-contains? (campaign-result-message result)
                                     "no Delivery-Contract merge SHA"))
       (check-false (eq? (wave-status* rec 1) 'done) "blocked advance must not mark the wave done")
       (cleanup-tmp dir))
 
-    (test-case "wave 1 proceeds once the predecessor merge-SHA is bound"
+    (test-case "wave 1 proceeds once the predecessor carries an exact delivered proof"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
       (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
-      (bind-merge-sha! dir (campaign-plan-id rec) 0)
-      (check-true (string? (wave-merge-sha dir (campaign-plan-id rec) 0)))
       (define result
-        (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
+        (run-campaign-wave dir
+                           rec
+                           1
+                           #:runner (lambda (_) 'ok)
+                           #:verifier (lambda (_) #t)
+                           #:predecessor-merge-sha (delivered-predecessor-resolver)))
       (check-eq? (campaign-result-status result) 'wave-done)
+      (cleanup-tmp dir))
+
+    (test-case "a predecessor resolver without a full 40-hex SHA is not proof"
+      ;; Defense-in-depth: even an injected resolver cannot wave the gate
+      ;; through with a short or non-hex value.
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t))
+      (define result
+        (run-campaign-wave dir
+                           rec
+                           1
+                           #:runner (lambda (_) 'ok)
+                           #:verifier (lambda (_) #t)
+                           #:predecessor-merge-sha (lambda (_b _p _w) "abc123")))
+      (check-eq? (campaign-result-status result) 'wave-blocked)
+      (check-false (eq? (wave-status* rec 1) 'done))
       (cleanup-tmp dir))
 
     (test-case "explicit override launches the wave and is audited"
@@ -1229,17 +1318,24 @@ check-equal? actual 14 expected 12")
                            1
                            #:runner (lambda (_) 'ok)
                            #:verifier (lambda (_) #t)
+                           #:predecessor-merge-sha (lambda (_b _p _w) #f)
                            #:advance-override? #t))
       (check-eq? (campaign-result-status result) 'wave-done)
       (check-eq? (wave-status* rec 1) 'done)
       (cleanup-tmp dir))
 
-    (test-case "wave-merge-sha returns #f for absent evidence and malformed files"
+    (test-case "wave-merge-sha ignores stale local regex fixtures (authenticated proof only)"
+      ;; The old gate parsed merge-sha out of local evidence files with a
+      ;; regex; v1.00.30 delegates to the authenticated controller. A stale
+      ;; fixture file that WOULD have satisfied the regex must yield #f —
+      ;; the default resolver is the subprocess readback, which fails closed
+      ;; in this offline temp campaign (no git origin, no auth).
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
       (check-false (wave-merge-sha dir (campaign-plan-id rec) 0))
       (bind-merge-sha! dir (campaign-plan-id rec) 0)
-      (check-equal? (wave-merge-sha dir (campaign-plan-id rec) 0) BUG-0064-FAKE-SHA)
+      (check-false (wave-merge-sha dir (campaign-plan-id rec) 0)
+                   "local regex fixture must never count as production proof")
       (cleanup-tmp dir))
 
     (test-case "W0 has no predecessor and is never gated"
