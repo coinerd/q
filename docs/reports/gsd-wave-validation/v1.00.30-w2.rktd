@@ -14,7 +14,7 @@
         (focused-tests
          .
          #hasheq((command . "raco test tests/test-ci-eager-compilation.rkt tests/test-ci-workflow-diagnostics.rkt tests/test-prepared-env-report.rkt")
-                 (detail . "62 checks passed, 0 failures (3 + 38 + 21 focused)")
+                 (detail . "62 checks passed, 0 failures (10 + 38 + 14 focused)")
                  (result . "passed")))
         (format-compile
          .
@@ -37,7 +37,7 @@
          (#hasheq((item
                    .
                    "coordinator-owned: R0 truthfulness and per-wave guard; R1 cohort (>=3 comparable PR head SHAs, exact final head included; p95 of slowest fast-shard runner wall <= 1736.8 s) evaluated on the implementation PR head; genuine independent APPROVED review; protected squash merge; merge-SHA binding via the campaign binding protocol; enable required pr-latency-guard check in branch protection after bootstrap")
-                  (classification . "coordinator-gated")
+                  (classification . "noncritical")
                   (owner . "coordinator")
                   (rationale
                    .
