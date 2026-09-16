@@ -160,6 +160,18 @@
                                "plan-context-builder"
                                "sandbox/subprocess"
                                "util/credential-redaction"))
+   ;; B2a (coordinator-delivery-execution-gap): deterministic journal-driven
+   ;; delivery stage machine. Pure decision kernel: reloads journal + durable
+   ;; record, re-runs delivery-receipt-blocker per effect, rejects
+   ;; cancellation/fence/takeover, records separate delivery usage, advances
+   ;; one journal stage per success. No git/fs effect markers beyond the
+   ;; journal (the injected controller seam owns external effects).
+   (make-entry
+    "delivery-coordinator.rkt"
+    'campaign-state
+    '()
+    '()
+    '("racket/string" "campaign-state" "campaign-repository" "delivery-receipt" "delivery-journal"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence
