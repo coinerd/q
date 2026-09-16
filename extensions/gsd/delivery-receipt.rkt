@@ -14,7 +14,8 @@
          current-wave-for-attempt
          verify-with-delivery-receipt
          verify-campaign-delivery
-         recover-legacy-delivery-receipt!)
+         recover-legacy-delivery-receipt!
+         delivery-receipt-blocker)
 ;; Shared pure attempt fence: the same identity test guards the implementation
 ;; result and the Verify receipt, avoiding a second weaker completion predicate.
 (define (current-wave-for-attempt rec wave-idx fence attempt-id)
@@ -84,7 +85,8 @@
                                       thunk
                                       #:approved? approved?
                                       #:evidence evidence
-                                      #:snapshot [snapshot committed-delivery-snapshot])
+                                      #:snapshot [snapshot committed-delivery-snapshot]
+                                      #:attempt [attempt #f])
   (define before (snapshot cwd))
   (define result (thunk))
   (define after (snapshot cwd))
@@ -100,7 +102,13 @@
         (record-delivery-receipt! base
                                   plan
                                   wave
-                                  (hash-set* before
+                                  (hash-set* (if attempt
+                                                 (hash-set* before
+                                                            'attempt-id
+                                                            (campaign-attempt-id attempt)
+                                                            'attempt-fence
+                                                            (campaign-attempt-fence-token attempt))
+                                                 before)
                                              'verified-at
                                              (current-seconds)
                                              'evidence
@@ -109,24 +117,79 @@
 ;; Thin orchestration seam: context and verdict interpretation stay beside
 ;; receipt capture. `current-record` rejects stale attempts before persistence.
 (define (verify-campaign-delivery base plan wave cwd context verifier current-record)
-  (verify-with-delivery-receipt base
-                                plan
-                                wave
-                                cwd
-                                (lambda ()
-                                  (parameterize ([current-gsd-delivery-branch-context context])
-                                    (verifier wave)))
-                                #:approved? (lambda (v)
-                                              (define current (current-record))
-                                              (and current
-                                                   (not (campaign-record-cancellation current))
-                                                   (if (delivery-verification? v)
-                                                       (delivery-verification-approved? v)
-                                                       v)))
-                                #:evidence (lambda (v)
-                                             (if (delivery-verification? v)
-                                                 (delivery-verification-evidence v)
-                                                 "verifier approved"))))
+  (define initial (current-record))
+  (define attempt
+    (and initial
+         (for/first ([w (in-list (campaign-record-waves initial))]
+                     #:when (= (campaign-wave-index w) wave))
+           (campaign-wave-current-attempt w))))
+  (verify-with-delivery-receipt
+   base
+   plan
+   wave
+   cwd
+   (lambda ()
+     (parameterize ([current-gsd-delivery-branch-context context])
+       (verifier wave)))
+   #:attempt attempt
+   #:approved? (lambda (v)
+                 (define current (current-record))
+                 (and current
+                      attempt
+                      (equal? (campaign-plan-id current) plan)
+                      (not (campaign-record-cancellation current))
+                      (current-wave-for-attempt current
+                                                wave
+                                                (campaign-attempt-fence-token attempt)
+                                                (campaign-attempt-id attempt))
+                      (if (delivery-verification? v)
+                          (delivery-verification-approved? v)
+                          v)))
+   #:evidence (lambda (v)
+                (if (delivery-verification? v)
+                    (delivery-verification-evidence v)
+                    "verifier approved"))))
+;; Pure eligibility prerequisite, NOT approval or delivery proof. The caller
+;; must load journal and record from disk while holding the lease and repeat
+;; this check before each effect. Git identity/review/checks belong to the
+;; protected action adapter. A resumed coordinator has a new fence; the DONE
+;; implementation attempt retains its own historical fence.
+(define (delivery-receipt-blocker journal record plan wave expected-fence)
+  (define receipt (and (hash? journal) (hash-ref journal 'receipt #f)))
+  (define w
+    (and (campaign-record? record)
+         (for/first ([w (in-list (campaign-record-waves record))]
+                     #:when (equal? (campaign-wave-index w) wave))
+           w)))
+  (define attempt (and w (campaign-wave-current-attempt w)))
+  (cond
+    [(not (and (hash? journal)
+               (equal? (hash-ref journal 'schema-version #f) 1)
+               (equal? (hash-ref journal 'plan-id #f) plan)
+               (equal? (hash-ref journal 'wave #f) wave)
+               (valid-delivery-receipt? receipt)))
+     'missing-provenance]
+    [(not (and (campaign-record? record) (equal? (campaign-plan-id record) plan) w))
+     'campaign-mismatch]
+    [(campaign-record-cancellation record) 'cancelled]
+    [(not (and (exact-nonnegative-integer? expected-fence)
+               (equal? (campaign-fence-token record) expected-fence)))
+     'stale-coordinator]
+    [(not (eq? (campaign-wave-status w) 'done)) 'implementation-not-done]
+    [(not (and attempt
+               (string? (hash-ref receipt 'attempt-id #f))
+               (exact-nonnegative-integer? (hash-ref receipt 'attempt-fence #f))
+               (equal? (hash-ref receipt 'attempt-id) (campaign-attempt-id attempt))
+               (equal? (hash-ref receipt 'attempt-fence) (campaign-attempt-fence-token attempt))))
+     'unbound-attempt]
+    [(member (hash-ref receipt 'branch) '("main" "master")) 'protected-branch]
+    [(or (and (not (equal? (campaign-wave-delivery-branch w) ""))
+              (not (equal? (campaign-wave-delivery-branch w) (hash-ref receipt 'branch))))
+         (and (not (equal? (campaign-wave-delivery-head-sha w) ""))
+              (not (equal? (campaign-wave-delivery-head-sha w) (hash-ref receipt 'head)))))
+     'stale-provenance]
+    [else #f]))
+
 (define (recover-legacy-delivery-receipt! base plan wave branch head cwd)
   (and
    (string? branch)

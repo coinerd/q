@@ -15,7 +15,8 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign!
                   campaign-result-status
-                  campaign-result-message))
+                  campaign-result-message)
+         "../extensions/gsd/delivery-receipt.rkt")
 
 (define (call-with-campaign count proc)
   (define dir (make-temporary-file "delivery-runtime-~a" 'directory))
@@ -71,6 +72,12 @@
                                  'ok)
                       #:delivery-reader pending)
        (check-equal? runs 1)
+       (define durable (load-campaign-record dir (campaign-plan-id rec)))
+       (check-false (delivery-receipt-blocker journal
+                                              durable
+                                              (campaign-plan-id rec)
+                                              0
+                                              (campaign-fence-token durable)))
        (check-equal? journal (load-delivery-journal dir (campaign-plan-id rec) 0)))))
   (test-case "verified first wave stops before successor; resume only runs successor"
     (call-with-campaign
