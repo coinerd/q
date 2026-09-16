@@ -60,12 +60,17 @@
                '()
                '()
                '("racket/format" "racket/string" "plan-types" "wave-executor"))
-   (make-entry
-    "plan-context-builder.rkt"
-    'pure-planning
-    '(make-param path-ops fs-read)
-    '()
-    '("racket/string" "racket/port" "racket/list" "plan-types" "effect-ports" "composition-root"))
+   (make-entry "plan-context-builder.rkt"
+               'pure-planning
+               '(git make-param path-ops fs-read parameterize)
+               '()
+               '("racket/string" "racket/port"
+                                 "racket/list"
+                                 "racket/path"
+                                 "racket/system"
+                                 "plan-types"
+                                 "effect-ports"
+                                 "composition-root"))
    ;; campaign state (5)
    (make-entry "runtime-state-types.rkt" 'campaign-state '() '() '("racket/set"))
    (make-entry "session-state.rkt"
@@ -99,7 +104,7 @@
                                "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(git make-param mkdir path-ops parameterize)
+               '(make-param mkdir parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
@@ -166,12 +171,18 @@
    ;; cancellation/fence/takeover, records separate delivery usage, advances
    ;; one journal stage per success. No git/fs effect markers beyond the
    ;; journal (the injected controller seam owns external effects).
-   (make-entry
-    "delivery-coordinator.rkt"
-    'campaign-state
-    '()
-    '()
-    '("racket/string" "campaign-state" "campaign-repository" "delivery-receipt" "delivery-journal"))
+   (make-entry "delivery-coordinator.rkt"
+               'campaign-state
+               '(subprocess path-ops)
+               '()
+               '("racket/string" "racket/runtime-path"
+                                 "json"
+                                 "campaign-state"
+                                 "campaign-repository"
+                                 "delivery-receipt"
+                                 "delivery-journal"
+                                 "delivery-handoff"
+                                 "sandbox/subprocess"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence

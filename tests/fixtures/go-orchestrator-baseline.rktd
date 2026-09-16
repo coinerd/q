@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "Coordinator provenance: Verify receipt and shared attempt-fence interpretation extracted into delivery-receipt.rkt; 1694 -> 1693 lines, 23 -> 22 defines; target unchanged")
- (line-count . 1693)
- (top-level-define-count . 22)
+  "B2b: git-root resolution (F-7) extracted to plan-context-builder.rkt (owns current-git-root); 1693 -> 1687 lines, 22 -> 19 defines; injectable #:delivery-coordinator seam wired into the wave-blocked checkpoint (one journal stage per loop, typed stops, fail-closed on unproven terminal)")
+ (line-count . 1687)
+ (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

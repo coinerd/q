@@ -6,6 +6,7 @@
 (require rackunit
          racket/file
          racket/format
+         racket/string
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-handoff.rkt"
@@ -16,7 +17,8 @@
                   run-campaign!
                   campaign-result-status
                   campaign-result-message)
-         "../extensions/gsd/delivery-receipt.rkt")
+         "../extensions/gsd/delivery-receipt.rkt"
+         "../extensions/gsd/delivery-coordinator.rkt")
 
 (define (call-with-campaign count proc)
   (define dir (make-temporary-file "delivery-runtime-~a" 'directory))
@@ -132,6 +134,81 @@
         'campaign-complete)
        (check-equal? count 1)
        (check-equal? outbox (load-outbox dir plan)))))
+  ;; ============================================================
+  ;; B2b: injectable delivery-coordinator seam at the wave-blocked checkpoint
+  ;; ============================================================
+  (test-case "wired coordinator that returns ok advances the blocked campaign loop"
+    (call-with-campaign
+     2
+     (lambda (dir rec)
+       (define runs '())
+       (define ran-coordinator? #f)
+       (define (runner idx)
+         (set! runs (cons idx runs))
+         'ok)
+       (define blocked
+         (run-campaign! dir rec #:runner runner #:verifier (lambda (_) #t) #:delivery-reader pending))
+       (check-eq? (campaign-result-status blocked) 'wave-blocked)
+       (check-equal? runs '(0))
+       ;; The coordinator's single ok step flips the readback to delivered;
+       ;; the re-entered checkpoint must then advance without re-running W0.
+       (define resumed
+         (run-campaign! dir
+                        rec
+                        #:runner runner
+                        #:verifier (lambda (_) #t)
+                        #:delivery-reader (lambda (b p w)
+                                            (if ran-coordinator?
+                                                (delivered b p w)
+                                                (pending b p w)))
+                        #:delivery-coordinator (lambda (b p w)
+                                                 (set! ran-coordinator? #t)
+                                                 (delivery-outcome 'ok "advanced one stage"))))
+       (check-eq? (campaign-result-status resumed) 'campaign-complete)
+       (check-equal? runs '(1 0)))))
+  (test-case "typed coordinator stops return typed wave-blocked without advancing"
+    (for ([kind (in-list '(awaiting-review retryable blocked))])
+      (call-with-campaign 1
+                          (lambda (dir rec)
+                            (define runs 0)
+                            (define result
+                              (run-campaign! dir
+                                             rec
+                                             #:runner (lambda (_)
+                                                        (set! runs (add1 runs))
+                                                        'ok)
+                                             #:verifier (lambda (_) #t)
+                                             #:delivery-reader pending
+                                             #:delivery-coordinator
+                                             (lambda (b p w) (delivery-outcome kind "reason"))))
+                            (check-eq? (campaign-result-status result) 'wave-blocked)
+                            (check-equal? runs 1)
+                            (check-equal? (campaign-result-message result) "reason")))))
+  (test-case "coordinator claiming delivered without readback proof is fail-closed"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define result
+         (run-campaign! dir
+                        rec
+                        #:runner (lambda (_) 'ok)
+                        #:verifier (lambda (_) #t)
+                        #:delivery-reader pending
+                        #:delivery-coordinator
+                        (lambda (b p w) (delivery-outcome 'delivered "already delivered"))))
+       (check-eq? (campaign-result-status result) 'wave-blocked)
+       (check-false (string-contains? (campaign-result-message result) "already delivered")))))
+  (test-case "no coordinator wired preserves the block-only wave-blocked behavior"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define result
+                            (run-campaign! dir
+                                           rec
+                                           #:runner (lambda (_) 'ok)
+                                           #:verifier (lambda (_) #t)
+                                           #:delivery-reader pending))
+                          (check-eq? (campaign-result-status result) 'wave-blocked)
+                          (check-true (string? (campaign-result-message result))))))
   (test-case "wrong campaign/wave or missing/short SHA cannot satisfy final delivery"
     (for ([mutate (in-list (list (lambda (p) (hash-set p 'plan-id (make-string 64 #\b)))
                                  (lambda (p) (hash-set p 'wave 9))

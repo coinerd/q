@@ -181,4 +181,36 @@
        (define durable (load-campaign-record dir plan))
        (check-false (for/or ([w (in-list (campaign-record-waves durable))])
                       (define tokens (usage-summary-total-tokens (wave-usage-summary w)))
-                      (and tokens (positive? tokens))))))))
+                      (and tokens (positive? tokens)))))))
+  (test-case "default controller interpret maps controller verdicts to typed outcomes"
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret "implementation-merged"
+                                                                         (hasheq 'status "merged")))
+     'ok)
+    (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
+                                                "implementation-merged"
+                                                (hasheq 'status "already-merged")))
+                  'ok)
+    (check-equal?
+     (delivery-effect-result-kind
+      (default-delivery-controller-interpret
+       "implementation-merged"
+       (hasheq 'status "awaiting-review" 'reason "no genuine independent human approval")))
+     'awaiting-review)
+    (check-equal? (delivery-effect-result-kind
+                   (default-delivery-controller-interpret "sync" (hasheq 'status "synchronized")))
+                  'ok)
+    (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
+                                                "sync"
+                                                (hasheq 'status "pending" 'reason "detached HEAD")))
+                  'blocked))
+  (test-case "default controller refuses stages without a controller action (typed stop, never fabricated)"
+    (define dir (make-temporary-file "coordinator-noop-~a" 'directory))
+    (dynamic-wind void
+                  (lambda ()
+                    (define r
+                      (default-delivery-controller dir (make-string 64 #\a) 0 "binding-review"))
+                    (check-eq? (delivery-effect-result-kind r) 'blocked)
+                    (check-true (string-contains? (hash-ref (delivery-effect-result-data r) 'reason)
+                                                  "not implemented")))
+                  (lambda () (delete-directory/files dir)))))

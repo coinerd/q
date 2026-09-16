@@ -29,13 +29,18 @@
          "wave-completion.rkt"
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
+         (only-in "delivery-coordinator.rkt"
+                  delivery-outcome
+                  delivery-outcome?
+                  delivery-outcome-kind
+                  delivery-outcome-message)
          "wave-runner-port.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
          "../../util/loop-result.rkt"
          (only-in "system-adapters.rkt" run-wave-with-timeout)
-         (only-in "plan-context-builder.rkt" current-git-root)
+         (only-in "plan-context-builder.rkt" current-git-root find-git-root git-available?)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
@@ -285,7 +290,8 @@
                                            run-prompt
                                            record
                                            freshness
-                                           #:lease-owner [lease-owner "unknown"])
+                                           #:lease-owner [lease-owner "unknown"]
+                                           #:delivery-coordinator [delivery-coordinator #f])
   (define base-dir (campaign-request-base-dir request))
   (define plan-id (campaign-plan-id record))
   ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
@@ -350,6 +356,7 @@
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
      #:delivery-reader (campaign-request-delivery-reader request)
+     #:delivery-coordinator delivery-coordinator
      #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -1366,7 +1373,8 @@
                        ;; gsd.worktree-isolation project-settings key (see
                        ;; resolve-worktree-isolation in wave-executor.rkt).
                        #:isolate? [isolate-arg 'auto]
-                       #:delivery-reader [delivery-reader delivery-readback])
+                       #:delivery-reader [delivery-reader delivery-readback]
+                       #:delivery-coordinator [delivery-coordinator #f])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
   (define project-settings (load-project-settings-silently base-dir))
@@ -1452,7 +1460,39 @@
                                               'campaign-complete
                                               #:reason "all waves done or deferred")
                 (campaign-result 'campaign-complete (reverse completed) message)]
-               [(wave-blocked) (campaign-result 'wave-blocked (reverse completed) message)]
+               [(wave-blocked)
+                (if (procedure? delivery-coordinator)
+                    ;; B2b: the coordinator drives ONE journal-driven delivery
+                    ;; stage per loop iteration. An 'ok means one controller
+                    ;; effect ran (journal advanced); the loop re-enters the
+                    ;; checkpoint, which re-reads the authenticated delivery
+                    ;; reader. Typed stops (awaiting-review / retryable /
+                    ;; blocked) return a typed campaign result. 'delivered
+                    ;; alone is NEVER proof — journal terminal without
+                    ;; readback confirmation is fail-closed, so it cannot
+                    ;; spin.
+                    (let ([outcome (delivery-coordinator base-dir
+                                                         plan-id
+                                                         (and (campaign-wave? extra)
+                                                              (campaign-wave-index extra)))])
+                      (case (and outcome (delivery-outcome-kind outcome))
+                        [(ok) (loop (load-campaign-record base-dir plan-id) completed)]
+                        [(delivered)
+                         ;; The coordinator ALONE never proves delivery: a
+                         ;; terminal journal stage without authenticated
+                         ;; readback confirmation is fail-closed. Surfacing
+                         ;; "already delivered" here would fabricate success.
+                         (campaign-result
+                          'wave-blocked
+                          (reverse completed)
+                          "coordinator claims terminal stage but authenticated readback does not confirm; no delivery proof was advanced")]
+                        [else
+                         (campaign-result 'wave-blocked
+                                          (reverse completed)
+                                          (if (delivery-outcome? outcome)
+                                              (delivery-outcome-message outcome)
+                                              message))]))
+                    (campaign-result 'wave-blocked (reverse completed) message))]
                [(wave-cancelled)
                 (when (campaign-record-cancellation live)
                   (notify-terminal-transition*! (campaign-plan-id live)
@@ -1515,8 +1555,7 @@
                    (campaign-result 'wave-blocked
                                     (reverse completed)
                                     (campaign-result-message result))]
-                  [else
-                   (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
+                  [else (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
          ;; v1.00.21 W5 (BUG-0029 action 3): the campaign ended (success OR
          ;; terminal failure) — report non-delivery leftover artifacts and
          ;; offer operator-approved reclaim. NEVER auto-deletes.
@@ -1533,57 +1572,12 @@
   (and next (= n next)))
 
 ;; ============================================================
-;; Git Root Resolution (F-7)
-;; Uses `current-git-root` parameter from plan-context-builder for W1 cwd migration.
-(define (find-git-root start-dir)
-  (define start-path
-    (path->complete-path (if (path? start-dir)
-                             start-dir
-                             (string->path start-dir))))
-  (define (has-git? dir)
-    (define git-marker (build-path dir ".git"))
-    (or (directory-exists? git-marker) (file-exists? git-marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     ;; Walk up from start-path first (handles nested dirs in temp tests)
-     (define walked (find-git-root-walking-up start-path has-git?))
-     (if walked
-         walked
-         ;; Last resort: use current-git-root parameter if set and valid
-         (let ([param-root (current-git-root)])
-           (if (and param-root (has-git? param-root)) param-root #f)))]))
-
-(define (find-git-root-walking-up start-path has-git?)
-  (let loop ([dir start-path])
-    (cond
-      [(has-git? dir) dir]
-      [else
-       (define-values (parent _sub _dir?) (split-path dir))
-       (if (and parent (path? parent) (not (equal? parent dir)))
-           (loop parent)
-           #f)])))
-
-(define (git-available? base-dir)
-  (define git (find-executable-path "git"))
-  (define (inside-work-tree? dir)
-    (and git
-         dir
-         (directory-exists? dir)
-         (let ([stdout (open-output-string)]
-               [stderr (open-output-string)])
-           (with-handlers ([exn:fail? (lambda (_) #f)])
-             (define exit-code
-               (parameterize ([current-output-port stdout]
-                              [current-error-port stderr])
-                 (system*/exit-code git "-C" dir "rev-parse" "--is-inside-work-tree")))
-             (and (zero? exit-code) (string=? (string-trim (get-output-string stdout)) "true"))))))
-  ;; Validate from the requested base directory. Preserve the supported
-  ;; two-tier checkout layout by trying its q/ child explicitly, but never
-  ;; trust a .git marker or an unrelated current-git-root fallback.
-  (and base-dir (or (inside-work-tree? base-dir) (inside-work-tree? (build-path base-dir "q"))) #t))
+;; Git Root Resolution (F-7) — extracted to plan-context-builder
+;; (B2b); go-orchestrator re-provides the names below for existing
+;; importers, keeping the historical public API unchanged.
+;; ============================================================
+;; ============================================================
+;; Provide
 ;; ============================================================
 ;; Provide
 ;; ============================================================

@@ -36,9 +36,13 @@
          delivery-effect-result-kind
          delivery-effect-result-data
          delivery-outcome
+         delivery-outcome?
          delivery-outcome-kind
          delivery-outcome-message
-         run-delivery-coordinator!)
+         run-delivery-coordinator!
+         default-delivery-controller
+         default-delivery-coordinator
+         default-delivery-controller-interpret)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -78,6 +82,9 @@
         (if (string? message)
             message
             (format "~a" message))))
+
+(define (delivery-outcome? o)
+  (and (pair? o) (symbol? (car o)) (string? (cdr o))))
 
 (define (delivery-outcome-kind o)
   (car o))
@@ -191,3 +198,127 @@
                     (delivery-outcome
                      'blocked
                      (hash-ref data 'reason "controller refused the effect"))])])])])])]))
+
+;; ============================================================
+;; B2b: default production controller seam
+;; ============================================================
+;;
+;; The wave-blocked checkpoint in run-campaign! accepts an injectable
+;; `delivery-coordinator` procedure (base-dir plan wave-index) ->
+;; delivery-outcome. The PRODUCTION default wraps the journal-driven stage
+;; machine around a controller that shells scripts/gsd-delivery.py through
+;; the SAME credential boundary as delivery-readback (controller-environment
+;; re-adds GH_TOKEN/GITHUB_TOKEN to an otherwise scrubbed environment; every
+;; operator-visible reason is redacted). One bounded effect per invocation;
+;; absent credentials or an action the controller cannot safely take are
+;; typed stops, never fabricated success.
+
+(require (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
+         racket/runtime-path
+         json
+         (only-in "../../sandbox/subprocess.rkt"
+                  run-subprocess
+                  subprocess-result-stdout
+                  subprocess-result-stderr
+                  subprocess-result-exit-code
+                  subprocess-result-timed-out?
+                  subprocess-result-truncated?))
+
+(define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
+
+(define (default-delivery-controller base-dir plan wave target-stage)
+  ;; The controller shell runs in the checkout identified by base-dir (or its
+  ;; q/ child), exactly like delivery-readback. Tokens are added for THIS
+  ;; process only; the reason is redacted on every failure path.
+  (define repo
+    (if (or (directory-exists? (build-path base-dir ".git"))
+            (file-exists? (build-path base-dir ".git")))
+        base-dir
+        (build-path base-dir "q")))
+  (define (run-controller . args)
+    (with-handlers
+        ([exn:fail? (lambda (e)
+                      (delivery-effect-result
+                       'blocked
+                       (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
+      (define result
+        (run-subprocess "python3"
+                        #:args (append (list (path->string default-delivery-controller-script))
+                                       args
+                                       (list "--repo"
+                                             (path->string (path->complete-path repo))
+                                             "--plan"
+                                             plan
+                                             "--wave"
+                                             (number->string wave)))
+                        #:directory base-dir
+                        #:environment (controller-environment)
+                        #:timeout 240
+                        #:process-group? #t))
+      (if (or (subprocess-result-timed-out? result)
+              (subprocess-result-truncated? result)
+              (not (zero? (subprocess-result-exit-code result))))
+          (delivery-effect-result 'blocked
+                                  (hasheq 'stage
+                                          target-stage
+                                          'reason
+                                          (redact-delivery-text (subprocess-result-stderr result))))
+          (default-delivery-controller-interpret
+           target-stage
+           (string->jsexpr (subprocess-result-stdout result))))))
+  ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
+  (case target-stage
+    [("implementation-merged") (run-controller "merge")]
+    [("sync")
+     (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
+    [else
+     ;; Stages the controller shell cannot yet act on deterministically are
+     ;; typed stops with an actionable reason — never fabricated progress.
+     (delivery-effect-result 'blocked
+                             (hasheq 'stage
+                                     target-stage
+                                     'reason
+                                     (format "controller action for stage ~a not implemented; "
+                                             target-stage)))]))
+
+(define (default-delivery-controller-interpret target-stage data)
+  (define status (and (hash? data) (hash-ref data 'status #f)))
+  (cond
+    [(equal? status "merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [(equal? status "already-merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [(equal? status "awaiting-review")
+     (delivery-effect-result 'awaiting-review
+                             (hasheq 'stage
+                                     target-stage
+                                     'reason
+                                     (hash-ref data 'reason "awaiting genuine independent review")))]
+    [(equal? status "synchronized") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [(equal? status "delivered") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [else
+     (delivery-effect-result 'blocked
+                             (hasheq 'stage
+                                     target-stage
+                                     'reason
+                                     (or (and (hash? data) (hash-ref data 'reason #f))
+                                         "controller returned an unexpected status")))]))
+
+(define (current-git-delivery-branch base-dir plan wave)
+  ;; The durable wave record owns the delivery branch; the journal receipt is
+  ;; the fallback when the record is mid-persist. Never guessed from cwd.
+  (define record (load-campaign-record base-dir plan))
+  (define w
+    (and record
+         (for/first ([x (in-list (campaign-record-waves record))]
+                     #:when (= (campaign-wave-index x) wave))
+           x)))
+  (define from-wave (and w (campaign-wave-delivery-branch w)))
+  (define journal (load-delivery-journal base-dir plan wave))
+  (define from-receipt (and journal (hash-ref (hash-ref journal 'receipt #f) 'branch #f)))
+  (cond
+    [(and (string? from-wave) (not (equal? from-wave ""))) from-wave]
+    [(string? from-receipt) from-receipt]
+    [else
+     (raise-argument-error 'current-git-delivery-branch "campaign wave with delivery branch" w)]))
+
+(define (default-delivery-coordinator base-dir plan wave-index)
+  (run-delivery-coordinator! base-dir plan wave-index #:controller default-delivery-controller))
