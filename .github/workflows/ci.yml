@@ -262,6 +262,13 @@ jobs:
       # inside setup-racket are untouched; this records what happened
       # (state, durations, provenance) so real CI runs can be aggregated
       # honestly, including named fallback causes.
+      #
+      # W2 containment telemetry (issue #9688): with the rollback switch
+      # pinned to off, this job trusts ONLY code produced by its own
+      # single eager raco setup boundary, so compiled-code-outcome is
+      # `eager-full-path` (restore success does NOT restore usable
+      # compiled code). The duration/purge/cache fields come from the
+      # setup-racket action's W2 outputs.
       - name: Emit prepared-environment restore record
         if: always()
         shell: bash
@@ -276,7 +283,11 @@ jobs:
             --created-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --fast-env-producer-result "${{ needs.fast-env.result }}" \
             --prepared-artifact-name "prepared-env-fast" \
-            --installer-sha256 "${{ env.INSTALLER_SHA_LINUX_8_10 }}"
+            --installer-sha256 "${{ env.INSTALLER_SHA_LINUX_8_10 }}" \
+            --compiled-code-outcome eager-full-path \
+            --eager-setup-seconds "${{ steps.setup.outputs.eager-setup-seconds }}" \
+            --cache-state "${{ steps.setup.outputs.cache-state }}" \
+            --purge-zo-count "${{ steps.setup.outputs.purge-zo-count }}"
 
       - name: Upload prepared-environment restore records
         if: always()

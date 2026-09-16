@@ -73,6 +73,28 @@ outputs:
       cold fallback taken), 0 on a verified identity, empty when the
       prepared path was not in play.
     value: ${{ steps.prepared-env-identity.outputs.identity-fallback-count }}
+  eager-setup-seconds:
+    description: >-
+      W2 containment telemetry (issue #9688): wall-clock seconds spent in
+      the job's single eager raco setup boundary (no-docs, jobs 4,
+      packages q+fmt) on the full path; empty when the eager boundary did
+      not run (guarded restore succeeded, or the prepared path was not
+      requested). Restored shortcuts never report restore wall clock as
+      setup seconds.
+    value: ${{ steps.setup-compile.outputs.setup-duration-s }}
+  purge-zo-count:
+    description: >-
+      W2 containment telemetry (issue #9688): number of stale workspace
+      .zo files removed by the BUG-0065 purge, which runs on EVERY path
+      (restore success included). 0 means the workspace was clean.
+    value: ${{ steps.purge-zo.outputs.purge-zo-count }}
+  cache-state:
+    description: >-
+      W2 containment telemetry (issue #9688): Racket add-on cache state
+      observed by this job: 'warm' (exact cache hit) or 'cold-build'
+      (cache miss). Distinguishes eager-compile cost attributable to a
+      cold cache from steady-state eager-compile cost.
+    value: ${{ steps.racket-addon-cache.outputs.cache-hit == 'true' && 'warm' || 'cold-build' }}
 runs:
   using: 'composite'
   steps:
@@ -261,6 +283,7 @@ runs:
     # docs/reports/PREPARED-ENV-BYTECODE-PINNING-v1.00.29.md.
     # ------------------------------------------------------------------
     - name: Purge and verify workspace bytecode (BUG-0065, every path)
+      id: purge-zo
       if: always()
       shell: bash
       run: |
@@ -278,6 +301,9 @@ runs:
           exit 1
         fi
         echo "::notice::BUG-0065 workspace bytecode purge: removed ${zo_before} stale .zo file(s); post-purge verification: 0 .zo outside the frozen fixture (prepared-env outcome: ${{ steps.prepared-env.outcome }})"
+        # W2 telemetry (issue #9688): count of stale workspace .zo files the
+        # purge removed, for the restore-record's purge-zo-count field.
+        echo "purge-zo-count=${zo_before}" >> "$GITHUB_OUTPUT"
         printf '{"purged_zo": %s, "post_purge_zo": %s, "prepared_env_outcome": "%s"}\n' \
           "$zo_before" "$zo_after" '${{ steps.prepared-env.outcome }}' \
           > "$RUNNER_TEMP/bug-0065-purge-stamp.json"

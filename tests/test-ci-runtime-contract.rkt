@@ -601,12 +601,14 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "7bde200e0d63d8c05a7e091a4ca3f48701d55316c41121afb4d82b8ce59c13eb"
+                    "e396efb01f70853aabcda1a89e6f42fcd1de15e133b94f7cf5f00c2ab1eebb95"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       ;; re-stamped by the campaign's W6 wave: the identity-manifest expansion changed
       ;; setup_action_sha256 inside fast_env_verification_contract
       ;; re-stamped again by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
       ;; prepare_action_sha256 inside fast_env_verification_contract
+      ;; re-stamped again by the v1.00.30 W2 wave (issue #9688): containment telemetry
+      ;; outputs changed setup_action_sha256 inside fast_env_verification_contract
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)

@@ -374,9 +374,11 @@
                    " verification steps unchanged)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
-     "a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784"
+     "da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772"
      (format
-      "the guarded restore action must stay byte-identical (re-stamped by v~a W6; purge and restore steps unchanged)"
+      (string-append "the guarded restore action must stay byte-identical (re-stamped by v~a W6, "
+                     "re-stamped by v1.00.30 W2 #9688: containment telemetry outputs added; "
+                     "purge and restore steps unchanged)")
       q-version))
     (check-true (string-contains? ci-text "needs.fast-env.result")
                 "test shards must keep gating PREPARED_ENV on the fast-env result")
