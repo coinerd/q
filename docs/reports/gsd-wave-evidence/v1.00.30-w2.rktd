@@ -2,19 +2,24 @@
         (milestone . 895)
         (wave . "W2")
         (issue . 9688)
-        (status . "implemented-local-green")
+        (status . "ready-for-merge")
         (branch . "campaign/v1.00.30-w2")
-        (head . "81e0d4cedd990e273b547fa30fc96968aed6aa3d")
-        (containment-only . #t)
-        (recovery-claimed . #f)
-        (switch . "RACKET_PREPARED_ARTIFACT=off")
-        (consumers-audited . 7)
-        (single-eager-boundary-per-job . #t)
-        (per-file-compile-fallback . #f)
-        (bug-0065-retained . #t)
-        (runner-membership-unchanged . #t)
-        (artifact-sha256 . #hash(("containment.json" . "422b386a066f0e138069180151fcbc57c8b35d1a29bfec2107a73ec4e98b0ef9")
-                                 ("rollback-drill.json" . "15d7ef53f7dd8ba13297bae20b3478fb04d782a1d1e28dbaff8c8015e96b52fa")))
-        (residual-gap . "pre-W4 233-292s job walls and runner/job boundary differences remain; 2171s anchor is single-PR max not population tail")
-        (coordinator-gates-pending . ("R0" "per-wave guard" "R1 p95 fast-shard >=3-head cohort" "independent review APPROVED" "protected squash merge" "merge-SHA binding"))
-        (report . "docs/reports/EAGER-COMPILE-CONTAINMENT-v1.00.30.md"))
+        (implementation-sha . "3f279bc80dc3add9766d1aa335b1830d6d3ecf93")
+        (content-digest . "bd2d1ccef3ccec63c43dd3a767f61743def33f3ac8c179f7f56f1f4ef08a8478")
+        (required-checks
+         .
+         ("lint"
+          "lint-quality"
+          "security"
+          "release-dry-run"
+          "workflows (0)"
+          "workflows (1)"
+          "workflows-aggregate"
+          "smoke (ubuntu-latest)"
+          "test (0)"
+          "test (1)"
+          "test (2)"
+          "test-aggregate"
+          "test-platform"))
+        (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w2.rktd")
+        (validation-artifact . "docs/reports/gsd-wave-validation/v1.00.30-w2.rktd"))
