@@ -41,5 +41,5 @@
                   (owner . "coordinator")
                   (rationale
                    .
-                   "Local Verify has no authority to waive R0/R1/R2, protection, sample size or release gates; retained remote CI evidence is required before advancing")))
+                   "Local Verify has no authority to waive R0/R1/R2, protection, sample size or release gates; retained remote CI evidence is required before advancing"))))
         (planning-sync . "current"))
