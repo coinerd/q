@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "v1.00.30 delivery-runtime finalization: +37 lines (1657 -> 1694), 23 defines unchanged; target stays 1700 — the wave-advance gate and final full-loop delivery check now delegate to extensions/gsd/delivery-handoff.rkt (ready-for-run-checkpoint / delivered-predecessor-resolver / pending-delivery-message), so go-orchestrator stays under the W7 target; growth is the irreducible loop integration (decision -> case arms) fused to run-campaign-wave, not new effect logic")
- (line-count . 1694)
- (top-level-define-count . 23)
+  "Coordinator provenance: Verify receipt and shared attempt-fence interpretation extracted into delivery-receipt.rkt; 1694 -> 1693 lines, 23 -> 22 defines; target unchanged")
+ (line-count . 1693)
+ (top-level-define-count . 22)
  (w7-target-max-lines . 1700))

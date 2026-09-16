@@ -142,6 +142,24 @@
                         "campaign-state"
                         "campaign-repository"
                         "sandbox/subprocess"))
+   ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
+   ;; to the legacy effect marker scanner, as with delivery-handoff above.
+   (make-entry "delivery-journal.rkt"
+               'persistence
+               '(fs-read)
+               '()
+               '("json" "racket/file" "racket/list" "racket/path"))
+   (make-entry "delivery-receipt.rkt"
+               'campaign-state
+               '(git subprocess path-ops parameterize)
+               '()
+               '("racket/path" "racket/string"
+                               "delivery-journal"
+                               "delivery-verifier"
+                               "campaign-state"
+                               "plan-context-builder"
+                               "sandbox/subprocess"
+                               "util/credential-redaction"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence

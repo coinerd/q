@@ -9,6 +9,8 @@
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-handoff.rkt"
+         "../extensions/gsd/delivery-journal.rkt"
+         (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
          (only-in "../extensions/gsd/wave-completion.rkt" load-outbox)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign!
@@ -38,6 +40,38 @@
   (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
 
 (module+ test
+  (test-case "shared-checkout Verify records the exact committed provenance without rerunning implementation"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define repo (build-path dir "q"))
+       (make-directory repo)
+       (git-quiet! repo "init" "-q")
+       (hermetic-identity! repo)
+       (git-quiet! repo "checkout" "-b" "campaign/test")
+       (git-quiet! repo "remote" "add" "origin" "https://github.com/example/q.git")
+       (display-to-file "payload" (build-path repo "payload"))
+       (git-quiet! repo "add" "payload")
+       (git-quiet! repo "commit" "-qm" "verified implementation")
+       (define runs 0)
+       (run-campaign! dir
+                      rec
+                      #:runner (lambda (_)
+                                 (set! runs (add1 runs))
+                                 'ok)
+                      #:verifier (lambda (_) #t)
+                      #:delivery-reader pending)
+       (define journal (load-delivery-journal dir (campaign-plan-id rec) 0))
+       (check-true (hash? journal))
+       (check-equal? (hash-ref (hash-ref journal 'receipt) 'branch) "campaign/test")
+       (run-campaign! dir
+                      rec
+                      #:runner (lambda (_)
+                                 (set! runs (add1 runs))
+                                 'ok)
+                      #:delivery-reader pending)
+       (check-equal? runs 1)
+       (check-equal? journal (load-delivery-journal dir (campaign-plan-id rec) 0)))))
   (test-case "verified first wave stops before successor; resume only runs successor"
     (call-with-campaign
      2

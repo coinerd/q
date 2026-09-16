@@ -28,6 +28,7 @@
          "campaign-repository.rkt"
          "wave-completion.rkt"
          "delivery-handoff.rkt"
+         "delivery-receipt.rkt"
          "wave-runner-port.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
@@ -410,17 +411,6 @@
 ;; ============================================================
 ;; Single-wave campaign coordinator (D1)
 ;; ============================================================
-
-(define (current-wave-for-attempt rec wave-idx fence attempt-id)
-  (define wave (and rec (find-wave rec wave-idx)))
-  (define attempt (and wave (campaign-wave-current-attempt wave)))
-  (and rec
-       wave
-       attempt
-       (= (campaign-fence-token rec) fence)
-       (= (campaign-attempt-fence-token attempt) fence)
-       (equal? (campaign-attempt-id attempt) attempt-id)
-       wave))
 
 ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract merge-SHA provenance.
 ;; The durable binding lives in the wave's evidence trio
@@ -826,10 +816,19 @@
                                wave-idx))]
                            [verifier-result
                             (with-handlers ([exn:fail? (lambda (_) #f)])
-                              (if delivery-ctx
-                                  (parameterize ([current-gsd-delivery-branch-context delivery-ctx])
-                                    (verifier wave-idx))
-                                  (verifier wave-idx)))]
+                              (verify-campaign-delivery
+                               base-dir
+                               (campaign-plan-id active)
+                               wave-idx
+                               (if wt
+                                   (wave-worktree-path wt)
+                                   base-dir)
+                               delivery-ctx
+                               verifier
+                               (lambda ()
+                                 (define current (observe))
+                                 (and (current-wave-for-attempt current wave-idx fence expected-id)
+                                      current))))]
                            [approved? (cond
                                         [(delivery-verification? verifier-result)
                                          (delivery-verification-approved? verifier-result)]
