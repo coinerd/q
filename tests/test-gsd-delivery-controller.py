@@ -135,8 +135,8 @@ class FakeAPI:
         self.routes = routes
         self.calls = []
 
-    def __call__(self, slug, route, paginate=False):
-        self.calls.append((slug, route, paginate))
+    def __call__(self, slug, route, paginate=False, _refresh=False):
+        self.calls.append((slug, route, paginate, _refresh))
         key = (slug, route, paginate)
         assert key in self.routes, 'unexpected api route: %r' % (key,)
         value = self.routes[key]
@@ -1020,6 +1020,287 @@ class DeliveryTests(unittest.TestCase):
         sh('git', 'push', '-q', '--force', w['origin'], f'{divergent}:refs/heads/main', cwd=work)
         with self.assertRaises(m.Pending):
             m.sync(w['subject'], 'main')
+
+    # ------------------------------------------------------------------
+    # merge (deterministic protected squash merge of the implementation PR)
+    # ------------------------------------------------------------------
+
+    def merge_routes(self, w, *, names=None, head=None, pr=None, base=None,
+                     reviews=None, author='wave-author', merged=None, merge_sha=None):
+        names = POLICY_NAMES if names is None else names
+        number = pr or w['pr']
+        head = head or w['head']
+        base = base or w['c0']
+        payload = {'number': number, 'merged': bool(merged) if merged is not None else False,
+                   'merge_commit_sha': merge_sha,
+                   'state': 'closed' if merged else 'open',
+                   'user': {'login': author, 'type': 'User'},
+                   'head': {'sha': head, 'ref': WAVE_BRANCH,
+                            'repo': {'full_name': SLUG}},
+                   'base': {'ref': 'main', 'sha': base,
+                            'repo': {'full_name': SLUG}}}
+        routes = {
+            (SLUG, f'pulls/{number}', False): payload,
+            (SLUG, f'pulls/{number}/reviews', False):
+                reviews if reviews is not None else [],
+            (SLUG, 'branches/main/protection', False): protection(POLICY_NAMES),
+            (SLUG, f'commits/{head}/check-runs?per_page=100&page=1', False):
+                {'check_runs': [check_run(name, head, job=i)
+                                for i, name in enumerate(names)],
+                 'total_count': len(names)},
+            (SLUG, 'actions/runs/777', False):
+                run_details(head, 'pull_request', branch=WAVE_BRANCH),
+        }
+        return routes
+
+    def approval(self, login='wave-reviewer', commit=None, kind='User'):
+        return {'state': 'APPROVED', 'submitted_at': '2026-09-15T10:00:00Z',
+                'commit_id': commit, 'user': {'login': login, 'type': kind}}
+
+    def open_impl_world(self, *, pr=42, merged=False, plan=None, source='version'):
+        """An OPEN implementation PR: main stays at c0 (no squash yet) while the
+        impl branch carries the source trio and is pushed as refs/pull/<pr>/head.
+        When merged=True, main additionally contains the squash M so the
+        already-merged idempotent path can be exercised against a real origin.
+        """
+        plan = plan or 'a' * 64
+        base = self.base / f'world-open-{len(list(self.base.iterdir()))}'
+        origin_path = base / 'origin.git'
+        sh('git', 'init', '--bare', '-b', 'main', origin_path)
+        work = init_repo(base / 'work')
+        write_file(work / 'scripts/required-pr-checks.policy',
+                   '("' + '" "'.join(POLICY_NAMES) + '")')
+        write_file(work / 'src/file.txt', 'one\n')
+        sh('git', 'add', '-A', cwd=work)
+        sh('git', 'commit', '-m', 'c0', cwd=work)
+        c0 = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
+        sh('git', 'checkout', '-b', 'impl', cwd=work)
+        write_file(work / 'src/file.txt', 'two\n')
+        sh('git', 'add', '-A', cwd=work)
+        sh('git', 'commit', '-m', 'h1', cwd=work)
+        h1 = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
+        label = 'v9.9.9-w1'
+        source_label = 'v9.9.9-w1' if source == 'version' else f'{plan}-w1'
+        digest = m.digest(work, c0, h1)
+        for rel, text in trio(source_label, 1, impl_sha=h1, digest=digest).items():
+            write_file(work / rel, text)
+        sh('git', 'add', '-A', cwd=work)
+        sh('git', 'commit', '-m', 'h2 source trio', cwd=work)
+        head = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
+        sh('git', 'checkout', 'main', cwd=work)
+        if merged:
+            sh('git', 'merge', '--squash', 'impl', cwd=work)
+            sh('git', 'commit', '-m', 'M squash', cwd=work)
+        merge = None
+        if merged:
+            merge = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
+        sh('git', 'push', '-q', origin_path, 'main:main', cwd=work)
+        sh('git', 'push', '-q', origin_path, f'{head}:refs/pull/{pr}/head', cwd=work)
+        subject = base / 'repo'
+        sh('git', 'clone', '-q', '--branch', 'main', origin_path, subject)
+        sh('git', 'remote', 'set-url', 'origin', f'https://github.com/{SLUG}.git', cwd=subject)
+        sh('git', 'config', f'url.{origin_path}.insteadOf', f'https://github.com/{SLUG}.git',
+           cwd=subject)
+        sh('git', 'config', 'user.email', 'fixture@example.com', cwd=subject)
+        sh('git', 'config', 'user.name', 'fixture', cwd=subject)
+        return {'origin': origin_path, 'work': work, 'subject': subject,
+                'c0': c0, 'head': head, 'h1': h1, 'merge': merge, 'plan': plan,
+                'wave': 1, 'pr': pr, 'label': label,
+                'source': f'docs/reports/gsd-wave-evidence/{source_label}.rktd'}
+
+    def test_merge_requires_exact_expected_head(self):
+        w = self.open_impl_world()
+        routes = self.merge_routes(w, head='9' * 40)
+        with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('expected head', str(caught.exception))
+
+    def test_merge_refuses_foreign_repo_or_non_main_base(self):
+        w = self.open_impl_world()
+        forked = dict(self.merge_routes(w)[(SLUG, f"pulls/{w['pr']}", False)],
+                      head={'sha': w['head'], 'ref': WAVE_BRANCH,
+                            'repo': {'full_name': 'someone/fork'}})
+        with self.fake_api({**self.merge_routes(w),
+                            (SLUG, f"pulls/{w['pr']}", False): forked}), \
+                self.assertRaises(m.Pending):
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        wrong_base = dict(self.merge_routes(w)[(SLUG, f"pulls/{w['pr']}", False)],
+                          base={'ref': 'develop', 'sha': w['c0'],
+                                'repo': {'full_name': SLUG}})
+        with self.fake_api({**self.merge_routes(w),
+                            (SLUG, f"pulls/{w['pr']}", False): wrong_base}), \
+                self.assertRaises(m.Pending):
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+
+    def test_merge_requires_fresh_main(self):
+        w = self.open_impl_world()
+        # main advanced after the PR was cut: the PR payload still claims the
+        # old c0 base, so the merge must fail closed on freshness.
+        self.advance_origin_worktree(w)
+        routes = self.merge_routes(w)
+        with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('fresh origin/main', str(caught.exception))
+
+    def advance_origin_worktree(self, w):
+        work = w['work']
+        sh('git', 'checkout', '-q', 'main', cwd=work)
+        write_file(work / 'src/file.txt', 'advanced\n')
+        sh('git', 'add', '-A', cwd=work)
+        sh('git', 'commit', '-m', 'advance', cwd=work)
+        sh('git', 'push', '-q', w['origin'], 'main:main', cwd=work)
+
+    def test_merge_asserts_fetched_head_equals_expected(self):
+        w = self.open_impl_world()
+        sh('git', 'push', '-q', '--force', w['origin'],
+           f"{w['c0']}:refs/pull/{w['pr']}/head", cwd=w['work'])
+        with self.fake_api(self.merge_routes(w)), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('fetched', str(caught.exception))
+
+    def test_merge_requires_independent_human_approval_at_exact_head(self):
+        w = self.open_impl_world()
+        author = 'wave-author'
+        cases = [
+            [],
+            [self.approval(login=author)],
+            [self.approval(kind='Bot')],
+            [self.approval(commit='c' * 40)],
+            [self.approval(), {'state': 'CHANGES_REQUESTED',
+                               'submitted_at': '2026-09-15T11:00:00Z',
+                               'commit_id': w['head'],
+                               'user': {'login': 'second', 'type': 'User'}}],
+        ]
+        for reviews in cases:
+            routes = self.merge_routes(w, reviews=reviews)
+            with self.fake_api(routes) as fake:
+                result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'],
+                                 w['head'], WAVE_BRANCH, w['source'])
+            self.assertEqual(result['status'], 'awaiting-review', msg=repr(reviews))
+            self.assertNotIn('merge-sha', result)
+
+    def test_merge_requires_every_required_check_at_exact_head(self):
+        w = self.open_impl_world()
+        routes = self.merge_routes(
+            w, reviews=[self.approval(commit=w['head'])],
+            names=[n for n in POLICY_NAMES if n != 'workflows (0)'])
+        with self.fake_api(routes), self.assertRaises(m.Pending):
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+
+    def test_merge_preflights_source_trio_before_any_mutation(self):
+        w = self.open_impl_world()
+        routes = self.merge_routes(w, reviews=[self.approval(commit=w['head'])])
+        with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'] + '-missing')
+        self.assertIn('artifact', str(caught.exception).lower())
+
+    def test_merge_squash_only_via_pr_endpoint_never_admin_or_main_push(self):
+        w = self.open_impl_world()
+        calls = []
+
+        class FakeResult:
+            returncode = 0
+            stdout = b'{"merged": true, "sha": "' + w['h1'].encode() + b'"}'
+            stderr = b''
+
+        def fake_command(args, cwd=None, timeout=45, raw=False):
+            calls.append(list(args))
+            if '/merge' in ' '.join(args):
+                return FakeResult.stdout if raw else FakeResult.stdout.decode()
+            return real_command(args, cwd=cwd, timeout=timeout, raw=raw)
+
+        real_command = m.command
+        routes = self.merge_routes(w, reviews=[self.approval(commit=w['head'])])
+        # The post-merge refetch must not be served from the process cache:
+        # stage-1 reads never satisfy post-mutation proof. The PR route is
+        # stateful — open before the PUT, merged after the (refreshed) refetch.
+        open_pr = routes[(SLUG, f'pulls/{w["pr"]}', False)]
+        merged_pr = {
+            'number': w['pr'], 'merged': True, 'merge_commit_sha': w['h1'],
+            'state': 'closed', 'user': {'login': 'wave-author', 'type': 'User'},
+            'head': {'sha': w['head'], 'ref': WAVE_BRANCH,
+                     'repo': {'full_name': SLUG}},
+            'base': {'ref': 'main', 'sha': w['c0'], 'repo': {'full_name': SLUG}}}
+        calls_pr = {'n': 0}
+        def pull_route():
+            calls_pr['n'] += 1
+            return open_pr if calls_pr['n'] == 1 else merged_pr
+        routes[(SLUG, f'pulls/{w["pr"]}', False)] = pull_route
+        routes[(SLUG, f'commits/{w["h1"]}', False)] = commit_payload(w['h1'], w['c0'])
+        with self.fake_api(routes), patch.object(m, 'command', fake_command):
+            result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                             WAVE_BRANCH, w['source'])
+        self.assertEqual(result['status'], 'merged')
+        self.assertEqual(result['merge-sha'], w['h1'])
+        self.assertEqual(calls_pr['n'], 2)
+        mutation = [a for a in calls if '/merge' in ' '.join(a)]
+        self.assertEqual(len(mutation), 1)
+        joined = ' '.join(mutation[0])
+        self.assertIn('-X', joined)
+        self.assertIn('PUT', joined)
+        self.assertIn('merge_method=squash', joined)
+        self.assertNotIn('admin', joined.lower())
+        for call in calls:
+            joined_call = ' '.join(call)
+            self.assertFalse('push' in joined_call and 'refs/heads/main' in joined_call)
+
+    def test_merge_already_merged_is_idempotent_no_second_merge(self):
+        w = self.open_impl_world(merged=True)
+        calls = []
+
+        class FakeResult:
+            returncode = 0
+            stdout = b'{"merged": true, "sha": "' + w['merge'].encode() + b'"}'
+            stderr = b''
+
+        def fake_command(args, cwd=None, timeout=45, raw=False):
+            calls.append(list(args))
+            if '/merge' in ' '.join(args):
+                return FakeResult.stdout if raw else FakeResult.stdout.decode()
+            return real_command(args, cwd=cwd, timeout=timeout, raw=raw)
+
+        real_command = m.command
+        routes = self.merge_routes(w, merged=True, merge_sha=w['merge'])
+        routes[(SLUG, f"commits/{w['merge']}", False)] = \
+            commit_payload(w['merge'], w['c0'])
+        with self.fake_api(routes), patch.object(m, 'command', fake_command):
+            result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                             WAVE_BRANCH, w['source'])
+        self.assertEqual(result['status'], 'already-merged')
+        self.assertEqual(result['merge-sha'], w['merge'])
+        self.assertFalse([a for a in calls if '/merge' in ' '.join(a)])
+
+    def test_merge_refuses_already_merged_at_a_different_head(self):
+        w = self.open_impl_world(merged=True)
+        routes = self.merge_routes(w, merged=True, merge_sha=w['merge'],
+                                   head='d' * 40)
+        routes[(SLUG, f"commits/{w['merge']}", False)] = \
+            commit_payload(w['merge'], w['c0'])
+        with self.fake_api(routes), self.assertRaises(m.Pending):
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+
+    def test_merge_refuses_multiple_open_prs_for_one_branch(self):
+        w = self.open_impl_world()
+        head = f'{SLUG}:{WAVE_BRANCH}'
+        open_list = [{'number': w['pr']}, {'number': w['pr'] + 1}]
+        with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): open_list}), \
+                self.assertRaises(m.Pending) as caught:
+            m.resolve_existing_pr(SLUG, WAVE_BRANCH)
+        self.assertIn('multiple', str(caught.exception))
+        one = [{'number': w['pr']}]
+        with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): one}):
+            self.assertEqual(m.resolve_existing_pr(SLUG, WAVE_BRANCH)['number'],
+                             w['pr'])
+        with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): []}):
+            self.assertIsNone(m.resolve_existing_pr(SLUG, WAVE_BRANCH))
 
     # ------------------------------------------------------------------
     # CLI shape
