@@ -73,6 +73,12 @@
          "campaign-repository.rkt"
          "go-orchestrator.rkt"
          "delivery-verifier.rkt"
+         (only-in "delivery-coordinator.rkt" default-delivery-coordinator)
+         (only-in "delivery-handoff.rkt"
+                  delivery-pending-wave
+                  delivery-readback
+                  delivered-proof-merge-sha)
+         (only-in "delivery-journal.rkt" load-delivery-journal)
          (only-in "../../runtime/settings-core.rkt" load-global-settings)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
@@ -629,8 +635,23 @@
     (store-wave-doc-lint-verdict! base-dir (campaign-plan-id rec))
     (define next-wave (select-next-actionable-wave rec))
     (define requested (requested-wave-index input-text))
+    ;; C1 (coordinator-delivery-execution-gap): with every implementation wave
+    ;; done, /go must still enter FINAL DELIVERY when authenticated delivery
+    ;; is pending — it must NOT answer "no actionable waves" before delivery
+    ;; runs. The request carries the delivery coordinator (wired below), so
+    ;; the run-campaign! checkpoint drives one journal stage per loop
+    ;; iteration and only reports campaign-complete after authenticated proof.
+    (define delivery-pending
+      (with-handlers ([exn:fail? (lambda (_) #f)])
+        (and (not next-wave)
+             (delivery-pending-wave base-dir
+                                    (campaign-plan-id rec)
+                                    (campaign-record-waves rec)
+                                    delivery-readback
+                                    (make-hash)))))
     (cond
-      [(not next-wave) (hook-amend (hasheq 'text "Campaign has no actionable waves."))]
+      [(and (not next-wave) (not delivery-pending))
+       (hook-amend (hasheq 'text "Campaign has no actionable waves."))]
       [(and requested (not (assert-go-n rec requested)))
        (hook-amend
         (hasheq 'text
@@ -641,20 +662,30 @@
          [(list 'ok _ _)
           (define gsd-ctx (current-gsd-ctx))
           (define effective-timeout (resolve-wave-timeout-secs input-text))
+          ;; C1: for a delivery-only run (all implementation waves done) there
+          ;; is no next actionable wave; anchor the fresh session on the
+          ;; latest done wave (or W0) for role continuity, while the
+          ;; checkpoint drives delivery BEFORE any wave prompt is used.
+          (define anchor-wave-idx
+            (or next-wave
+                (for/last ([w (in-list (campaign-record-waves rec))]
+                           #:when (eq? (campaign-wave-status w) 'done))
+                  (campaign-wave-index w))
+                0))
           ;; v1.00.17 W3 (#9514): role-anchor the wave-executor session. If a
           ;; turn ends reasoning-only, the runtime's empty-response retry
           ;; re-sends THIS re-anchor prompt (verbatim executor role + order to
           ;; continue) instead of the generic output nudge, so the model can
           ;; never reinterpret itself as an interactive assistant (the
           ;; v1.00.16 W3 attempt-2 failure mode).
-          (define reanchor-wave (plan-wave-ref plan next-wave))
+          (define reanchor-wave (plan-wave-ref plan anchor-wave-idx))
           (define reanchor
             (executor-reanchor-prompt
-             (format "W~a" next-wave)
+             (format "W~a" anchor-wave-idx)
              (campaign-plan-id rec)
              (if reanchor-wave
                  (format "W~a: ~a" (gsd-wave-index reanchor-wave) (gsd-wave-title reanchor-wave))
-                 "implement the wave")
+                 "delivery-only: all implementation waves complete")
              "(session start — no tool has run yet in this session)"))
           (parameterize ([current-empty-response-nudge reanchor])
             (define request
@@ -666,6 +697,12 @@
                  (build-single-wave-prompt base-dir plan wave-idx))
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
                #:timeout-sec effective-timeout
+               ;; B2b/C: the /go request carries the production delivery
+               ;; coordinator so the wave-blocked checkpoint can drive
+               ;; authenticated delivery INSIDE /go (it shells
+               ;; gsd-delivery.py through the credential boundary). No
+               ;; implementation wave is rerun to repair delivery.
+               #:delivery-coordinator default-delivery-coordinator
                ;; v1.00.19 W3 (BUG-0031): the trailing `allow-stale` token
                ;; parsed out of /go <args> by command-parser.rkt flows onto
                ;; the request; execute-campaign-request! then bypasses the
@@ -674,11 +711,13 @@
             (hook-amend (hasheq 'campaign-token
                                 (register-campaign-request! request)
                                 'new-session
-                                (build-single-wave-prompt base-dir plan next-wave)
+                                (build-single-wave-prompt base-dir plan anchor-wave-idx)
                                 'text
-                                (append-divergence-warnings (format "Executing campaign from W~a..."
-                                                                    next-wave)
-                                                            warnings))))])])))
+                                (append-divergence-warnings
+                                 (if delivery-pending
+                                     "Executing final delivery..."
+                                     (format "Executing campaign from W~a..." anchor-wave-idx))
+                                 warnings))))])])))
 
 (define (handle-go-command base-dir input-text)
   ;; Report plan validation failures first. Repository identity becomes a hard
@@ -742,11 +781,40 @@
               (list (format "Total: $~a (~a tokens)"
                             (~r (or (usage-summary-cost-usd total) 0) #:precision '(= 2))
                             (or (usage-summary-total-tokens total) 0))))))
+  ;; C2 (coordinator-delivery-execution-gap): delivery status is visible and
+  ;; distinct from implementation progress. Each done wave shows its durable
+  ;; delivery stage + coordinator-handoff status (delivered vs pending with
+  ;; actionable reason). Never guessed from the checkout — read from the
+  ;; durable journal and the authenticated readback hash.
+  (define delivery-lines
+    (with-handlers ([exn:fail? (lambda (e) '())])
+      (define rec (load-or-migrate-campaign! base-dir))
+      (define plan (campaign-plan-id rec))
+      (define staged-delivery
+        (for/list ([w (in-list (campaign-record-waves rec))]
+                   #:when (eq? (campaign-wave-status w) 'done))
+          (define idx (campaign-wave-index w))
+          (define journal (load-delivery-journal base-dir plan idx))
+          (define stage (and journal (hash-ref journal 'stage #f)))
+          (define proof (delivery-readback base-dir plan idx))
+          (define sha (delivered-proof-merge-sha proof plan idx))
+          (cond
+            [sha (format "W~a: delivered (merge ~a)" idx (substring sha 0 12))]
+            [stage
+             (format "W~a: delivery-pending (stage ~a; ~a)"
+                     idx
+                     stage
+                     (or (hash-ref proof 'reason #f) "readback pending"))]
+            [else (format "W~a: delivery-pending (no journal)" idx)])))
+      (if (null? staged-delivery)
+          '()
+          (cons "Delivery:" staged-delivery))))
   (define parts
     (append (list (format "Mode: ~a" (or mode "inactive"))
                   (if (> tw 0)
                       (format "Waves: ~a/~a complete" (set-count cw) tw)
                       "Waves: not set"))
+            delivery-lines
             spend-lines))
   ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal
   ;; status block. Advisory only, never blocks anything.

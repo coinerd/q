@@ -60,12 +60,17 @@
                '()
                '()
                '("racket/format" "racket/string" "plan-types" "wave-executor"))
-   (make-entry
-    "plan-context-builder.rkt"
-    'pure-planning
-    '(make-param path-ops fs-read)
-    '()
-    '("racket/string" "racket/port" "racket/list" "plan-types" "effect-ports" "composition-root"))
+   (make-entry "plan-context-builder.rkt"
+               'pure-planning
+               '(git make-param path-ops fs-read parameterize)
+               '()
+               '("racket/string" "racket/port"
+                                 "racket/list"
+                                 "racket/path"
+                                 "racket/system"
+                                 "plan-types"
+                                 "effect-ports"
+                                 "composition-root"))
    ;; campaign state (5)
    (make-entry "runtime-state-types.rkt" 'campaign-state '() '() '("racket/set"))
    (make-entry "session-state.rkt"
@@ -99,7 +104,7 @@
                                "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(git make-param mkdir path-ops parameterize)
+               '(make-param mkdir parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
@@ -142,6 +147,42 @@
                         "campaign-state"
                         "campaign-repository"
                         "sandbox/subprocess"))
+   ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
+   ;; to the legacy effect marker scanner, as with delivery-handoff above.
+   (make-entry "delivery-journal.rkt"
+               'persistence
+               '(fs-read)
+               '()
+               '("json" "racket/file" "racket/list" "racket/path"))
+   (make-entry "delivery-receipt.rkt"
+               'campaign-state
+               '(git subprocess path-ops parameterize)
+               '()
+               '("racket/path" "racket/string"
+                               "delivery-journal"
+                               "delivery-verifier"
+                               "campaign-state"
+                               "plan-context-builder"
+                               "sandbox/subprocess"
+                               "util/credential-redaction"))
+   ;; B2a (coordinator-delivery-execution-gap): deterministic journal-driven
+   ;; delivery stage machine. Pure decision kernel: reloads journal + durable
+   ;; record, re-runs delivery-receipt-blocker per effect, rejects
+   ;; cancellation/fence/takeover, records separate delivery usage, advances
+   ;; one journal stage per success. No git/fs effect markers beyond the
+   ;; journal (the injected controller seam owns external effects).
+   (make-entry "delivery-coordinator.rkt"
+               'campaign-state
+               '(subprocess path-ops)
+               '()
+               '("racket/string" "racket/runtime-path"
+                                 "json"
+                                 "campaign-state"
+                                 "campaign-repository"
+                                 "delivery-receipt"
+                                 "delivery-journal"
+                                 "delivery-handoff"
+                                 "sandbox/subprocess"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence

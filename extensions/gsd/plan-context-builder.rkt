@@ -16,6 +16,8 @@
 (require racket/string
          racket/port
          racket/list
+         racket/path
+         racket/system
          "plan-types.rkt"
          "effect-ports.rkt"
          "composition-root.rkt")
@@ -27,6 +29,8 @@
          get-test-summary
          current-git-root
          find-git-root-dir
+         find-git-root
+         git-available?
          FILE-EXTENSION->CAPABILITY)
 
 ;; ============================================================
@@ -54,6 +58,57 @@
           (if (and parent (path? parent) (not (equal? parent dir)))
               (loop parent)
               #f)]))]))
+
+;; ============================================================
+;; Git Root Resolution (F-7) — moved here from go-orchestrator (B2b)
+;; Uses `current-git-root` parameter defined below for the last-resort
+;; fallback. Canonical home: plan-context-builder owns git-root resolution.
+;; ============================================================
+
+(define (find-git-root start-dir)
+  (define start-path
+    (path->complete-path (if (path? start-dir)
+                             start-dir
+                             (string->path start-dir))))
+  (define (has-git? dir)
+    (define git-marker (build-path dir ".git"))
+    (or (directory-exists? git-marker) (file-exists? git-marker)))
+  (define q-sub (build-path start-path "q"))
+  (cond
+    [(has-git? start-path) start-path]
+    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
+    [else
+     (define walked (find-git-root-walking-up start-path has-git?))
+     (if walked
+         walked
+         (let ([param-root (current-git-root)])
+           (if (and param-root (has-git? param-root)) param-root #f)))]))
+
+(define (find-git-root-walking-up start-path has-git?)
+  (let loop ([dir start-path])
+    (cond
+      [(has-git? dir) dir]
+      [else
+       (define-values (parent _sub _dir?) (split-path dir))
+       (if (and parent (path? parent) (not (equal? parent dir)))
+           (loop parent)
+           #f)])))
+
+(define (git-available? base-dir)
+  (define git (find-executable-path "git"))
+  (define (inside-work-tree? dir)
+    (and git
+         dir
+         (directory-exists? dir)
+         (let ([stdout (open-output-string)]
+               [stderr (open-output-string)])
+           (with-handlers ([exn:fail? (lambda (_) #f)])
+             (define exit-code
+               (parameterize ([current-output-port stdout]
+                              [current-error-port stderr])
+                 (system*/exit-code git "-C" dir "rev-parse" "--is-inside-work-tree")))
+             (and (zero? exit-code) (string=? (string-trim (get-output-string stdout)) "true"))))))
+  (and base-dir (or (inside-work-tree? base-dir) (inside-work-tree? (build-path base-dir "q"))) #t))
 
 ;; ============================================================
 ;; Parameterized git root (W1: cwd migration)

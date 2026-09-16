@@ -142,9 +142,9 @@ def repository(repo):
 _API_CACHE = {}
 _CHECKS_CACHE = {}
 
-def api(slug, route, paginate=False):
+def api(slug, route, paginate=False, _refresh=False):
     key = (slug, route, paginate)
-    if key in _API_CACHE:
+    if not _refresh and key in _API_CACHE:
         return _API_CACHE[key]
     args = ['gh', 'api', '--hostname', 'github.com', 'repos/' + slug + '/' + route]
     if paginate:
@@ -233,6 +233,103 @@ def validate_merge(pr, commit, slug, merge, head):
     require(commit.get('sha') == merge and isinstance(parents, list) and len(parents) == 1,
             'delivery must have single-parent squash provenance')
 
+def validate_pr_identity(pr, slug):
+    """Same-repo branch identity: the implementation PR must target main of
+    the very same repository on both sides (no forks, no alternate bases)."""
+    require(isinstance(pr, dict), 'malformed PR response')
+    require(dig(pr, 'base', 'ref') == 'main' and
+            dig(pr, 'base', 'repo', 'full_name') == slug and
+            dig(pr, 'head', 'repo', 'full_name') == slug,
+            'implementation PR must be a same-repository main-base pull request')
+
+def independent_approval(reviews, author, head):
+    """One genuine independent human approval at the EXACT head: a review by a
+    non-bot reviewer (not the author) on that commit with no later
+    CHANGES_REQUESTED sweep. Reviewer unavailability is a typed awaiting-review
+    condition, never implicit approval."""
+    require(isinstance(reviews, list), 'malformed pull-request reviews response')
+    on_head = [r for r in reviews if isinstance(r, dict) and
+               r.get('commit_id') == head and
+               dig(r, 'user', 'type') == 'User' and
+               dig(r, 'user', 'login') != author and
+               r.get('state') in ('APPROVED', 'CHANGES_REQUESTED')]
+    if not on_head:
+        return None
+    latest = max(on_head, key=lambda r: r.get('submitted_at') or '')
+    if latest.get('state') != 'APPROVED':
+        return None
+    return latest
+
+def gh_put(slug, route, fields):
+    """Authenticated GitHub mutation (PUT) through the trusted gh CLI. The
+    controller is the single deliberate credential boundary; no shell, no
+    token material ever leaves the process."""
+    args = ['gh', 'api', '--hostname', 'github.com', '-X', 'PUT',
+            'repos/' + slug + '/' + route]
+    for key in sorted(fields):
+        args += ['-f', f'{key}={fields[key]}']
+    data = json.loads(command(args, timeout=60))
+    require(isinstance(data, dict), 'malformed GitHub mutation response')
+    return data
+
+def merge(repo, plan, wave, number, expected_head, expected_branch, source):
+    """Deterministic protected squash merge of the implementation PR.
+
+    Every gate runs BEFORE any mutation; `expected_head` comes from the durable
+    verified receipt, never from model output. Order:
+      1. same-repo main-base identity
+      2. exact expected head (both the PR claim and the actually-fetched refs/pull/N/head)
+      3. already-merged at the expected head -> idempotent, no second merge
+      4. fresh main (PR based on current origin/main)
+      5. genuine independent human approval at the exact head (else awaiting-review)
+      6. every required check green at that exact head (policy snapshot + protection)
+      7. unchanged strict trio/digest preflight at PR base...head
+      8. squash-only PUT to the PR merge endpoint (never admin, never main push)
+      9. post-merge single-parent squash provenance via validate_merge
+    Returns {'status':'merged'|'already-merged'|'awaiting-review', ...}; model
+    or journal completion alone never sets delivery."""
+    slug = repository(repo)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    pr = api(slug, f'pulls/{number}')
+    require(isinstance(pr, dict), 'malformed PR response')
+    validate_pr_identity(pr, slug)
+    head = dig(pr, 'head', 'sha')
+    require(head == expected_head and full_sha(expected_head),
+            'implementation PR head does not match the verified expected head')
+    if pr.get('merged') is True:
+        merge_sha = dig(pr, 'merge_commit_sha')
+        validate_merge(pr, api(slug, f'commits/{merge_sha}'), slug, merge_sha, head)
+        return {'status': 'already-merged', 'merge-sha': merge_sha, 'plan-id': plan,
+                'wave': wave, 'head': head, 'pr': number}
+    require(pr.get('state') == 'open', 'implementation PR is neither open nor already merged')
+    require(dig(pr, 'base', 'sha') == main,
+            'implementation PR is not based on fresh origin/main; reanchor and re-verify')
+    fetched = fetch_head(repo, number)
+    require(fetched == head, 'fetched implementation head does not match expected head')
+    if independent_approval(api(slug, f'pulls/{number}/reviews'),
+                            dig(pr, 'user', 'login') or '', head) is None:
+        return {'status': 'awaiting-review', 'plan-id': plan, 'wave': wave, 'head': head,
+                'pr': number,
+                'reason': 'no genuine independent human approval at the exact expected head'}
+    names = policy_names(repo, main)
+    protection(slug, names)
+    for name in names:
+        trusted_check(slug, head, name, 'pull_request', expected_branch)
+    validate_trio(repo, head, source, dig(pr, 'base', 'sha'))
+    result = gh_put(slug, f'pulls/{number}/merge', {'merge_method': 'squash'})
+    require(result.get('merged') is True and full_sha(result.get('sha')),
+            'GitHub did not confirm the protected squash merge')
+    merge_sha = result.get('sha')
+    # Refetch WITHOUT the per-process cache: a stage-1 read must never satisfy
+    # a post-mutation proof.
+    merged_pr = api(slug, f'pulls/{number}', _refresh=True)
+    validate_merge(merged_pr, api(slug, f'commits/{merge_sha}'), slug, merge_sha, head)
+    return {'status': 'merged', 'merge-sha': merge_sha, 'plan-id': plan, 'wave': wave,
+            'head': head, 'pr': number}
+
+
 def checks(slug, sha):
     key = (slug, sha)
     if key in _CHECKS_CACHE:
@@ -297,6 +394,17 @@ def protection(slug, expected_names):
     missing = [name for name in expected_names if name not in contexts]
     require(not missing, 'branch protection does not require expected checks: ' + ', '.join(missing))
     return policy
+
+def resolve_existing_pr(slug, branch):
+    """Resolve-before-create: at most one open PR may already target the
+    exact head branch. Returns it, or None when none exists; multiple open
+    PRs for one branch fail closed (never silently pick one to reuse)."""
+    require(isinstance(branch, str) and branch.strip(), 'invalid branch identity')
+    opened = api(slug, f'pulls?state=open&head={slug}:{branch}')
+    require(isinstance(opened, list), 'malformed open-PR response')
+    require(len(opened) <= 1,
+            'multiple open pull requests already target branch ' + branch)
+    return opened[0] if opened else None
 
 def refresh(repo):
     git(repo, 'fetch', '--no-tags', 'origin',
@@ -574,25 +682,51 @@ def sync(repo, expected_branch):
     return {'status':'synchronized', 'head':git(repo, 'rev-parse', 'HEAD').strip(),
             'branch':current}
 
+
+def resolve_pr(repo, plan, wave, branch):
+    """Resolve the (at most one) open implementation PR for the exact head
+    branch. Fail closed: zero or multiple open PRs are never silently
+    collapsed; the caller (coordinator) must surface a typed stop instead of
+    inventing a PR identity. The returned PR number feeds the protected
+    merge; model/journal completion never substitutes for it."""
+    slug = repository(repo)
+    refresh(repo)
+    pr = resolve_existing_pr(slug, branch)
+    if pr is None:
+        return {'status': 'none', 'plan-id': plan, 'wave': wave, 'branch': branch}
+    return {'status': 'resolved', 'pr': pr['number'], 'plan-id': plan, 'wave': wave,
+            'branch': branch, 'head': dig(pr, 'head', 'sha')}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['status','prepare','sync'])
+    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
     parser.add_argument('--pr', type=int)
     parser.add_argument('--evidence')
+    parser.add_argument('--expected-branch',
+                        help='PR head branch / sync branch; never switches branches')
+    parser.add_argument('--expected-head',
+                        help='exact verified implementation head (from the durable receipt)')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--campaign-root', type=Path,
                         help='campaign working tree holding .planning/campaigns/<plan-id>/plan-snapshot')
-    parser.add_argument('--expected-branch',
-                        help='branch sync is allowed to fast-forward; never switches branches')
     args = parser.parse_args()
     try:
         if args.action == 'sync':
             result = sync(args.repo, args.expected_branch)
         elif args.action == 'status':
             result = status(args.repo, args.plan, args.wave)
+        elif args.action == 'merge':
+            require(args.pr and args.expected_head and args.expected_branch and args.evidence,
+                    'merge requires --pr, --expected-head, --expected-branch and --evidence')
+            result = merge(args.repo, args.plan, args.wave, args.pr, args.expected_head,
+                           args.expected_branch, args.evidence)
+        elif args.action == 'resolve-pr':
+            require(args.expected_branch,
+                    'resolve-pr requires --expected-branch')
+            result = resolve_pr(args.repo, args.plan, args.wave, args.expected_branch)
         else:
             require(args.pr and args.evidence and args.output and args.campaign_root,
                     'prepare requires --pr, --evidence, --output and --campaign-root')

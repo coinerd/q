@@ -30,7 +30,13 @@
          reconcile-delivered-handoff!
          persist-delivery-handoff!
          ready-for-run-checkpoint
-         delivered-predecessor-resolver)
+         delivered-predecessor-resolver
+         pending-delivery-message
+         ;; B2b: the coordinator's default controller shells gsd-delivery.py
+         ;; through the SAME credential boundary as readback; these helpers
+         ;; are exported for reuse (never re-implement the boundary).
+         controller-environment
+         redact-delivery-text)
 (define-runtime-path controller "../../scripts/gsd-delivery.py")
 
 ;; ============================================================
