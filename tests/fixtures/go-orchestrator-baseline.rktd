@@ -14,7 +14,7 @@
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "B2b: git-root resolution (F-7) extracted to plan-context-builder.rkt (owns current-git-root); 1693 -> 1687 lines, 22 -> 19 defines; injectable #:delivery-coordinator seam wired into the wave-blocked checkpoint (one journal stage per loop, typed stops, fail-closed on unproven terminal)")
- (line-count . 1687)
+  "C1: campaign-request carries delivery-coordinator (8th field) so the /go-wired coordinator survives the registry token path; 1687 -> 1696 lines, 19 defines unchanged; still below the 1700 target")
+ (line-count . 1696)
  (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

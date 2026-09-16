@@ -42,6 +42,36 @@
 (define (pending _ _p _w)
   (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
 
+;; An all-done campaign with a durable Verify receipt (used by C1 delivery-only
+;; entry test below: /go must enter final delivery, never rerun implementation).
+(define (done-record dir)
+  (define rec (migrate-campaign! dir))
+  (set-campaign-wave-status! (car (campaign-record-waves rec)) 'done)
+  (set-campaign-wave-current-attempt! (car (campaign-record-waves rec))
+                                      (campaign-attempt "attempt-1" 7 0))
+  (set-campaign-fence-token! rec 7)
+  (set-campaign-wave-delivery-branch! (car (campaign-record-waves rec)) "campaign/test")
+  (set-campaign-wave-delivery-head-sha! (car (campaign-record-waves rec)) (make-string 40 #\a))
+  (persist-campaign! dir rec)
+  (record-delivery-receipt! dir
+                            (campaign-plan-id rec)
+                            0
+                            (hasheq 'repo
+                                    "git@github.com:example/q.git"
+                                    'branch
+                                    "campaign/test"
+                                    'origin
+                                    "https://github.com/example/q.git"
+                                    'evidence
+                                    "docs/reports/gsd-wave-evidence/a-w0.rktd"
+                                    'head
+                                    (make-string 40 #\a)
+                                    'tree
+                                    (make-string 40 #\b)
+                                    'verified-at
+                                    42))
+  rec)
+
 (module+ test
   (test-case "shared-checkout Verify records the exact committed provenance without rerunning implementation"
     (call-with-campaign
@@ -198,6 +228,34 @@
                         (lambda (b p w) (delivery-outcome 'delivered "already delivered"))))
        (check-eq? (campaign-result-status result) 'wave-blocked)
        (check-false (string-contains? (campaign-result-message result) "already delivered")))))
+  (test-case "all implementation waves done: /go enters final delivery and completes without any rerun"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define rec-done (done-record dir))
+                          (define plan (campaign-plan-id rec-done))
+                          ;; All waves done; readback pending on first check, delivered after
+                          ;; the coordinator's single ok step. The campaign must complete via
+                          ;; delivery with the implementation runner NEVER invoked again.
+                          (define runs 0)
+                          (define coordinated? #f)
+                          (define result
+                            (run-campaign! dir
+                                           rec-done
+                                           #:runner (lambda (_)
+                                                      (set! runs (add1 runs))
+                                                      'ok)
+                                           #:verifier (lambda (_) #t)
+                                           #:delivery-reader (lambda (b p w)
+                                                               (if coordinated?
+                                                                   (delivered b p w)
+                                                                   (pending b p w)))
+                                           #:delivery-coordinator
+                                           (lambda (b p w)
+                                             (set! coordinated? #t)
+                                             (delivery-outcome 'ok "delivery advanced"))))
+                          (check-eq? (campaign-result-status result) 'campaign-complete)
+                          (check-equal? runs 0)
+                          (check-true coordinated?))))
   (test-case "no coordinator wired preserves the block-only wave-blocked behavior"
     (call-with-campaign 1
                         (lambda (dir rec)
@@ -209,6 +267,22 @@
                                            #:delivery-reader pending))
                           (check-eq? (campaign-result-status result) 'wave-blocked)
                           (check-true (string? (campaign-result-message result))))))
+  (test-case "delivery pending message is distinct from implementation failure with handoff + action hint"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (void (run-campaign! dir
+                                               rec
+                                               #:runner (lambda (_) 'ok)
+                                               #:verifier (lambda (_) #t)
+                                               #:delivery-reader pending))
+                          (define plan (campaign-plan-id rec))
+                          (define w (car (campaign-record-waves (load-campaign-record dir plan))))
+                          (define message
+                            (pending-delivery-message dir plan (cons w "implementation PR pending")))
+                          (check-true (string-contains? message "verified; delivery pending:"))
+                          (check-true (string-contains? message "Coordinator handoff:"))
+                          (check-true (string-contains? message "delivery pending"))
+                          (check-false (string-contains? message "FAILED")))))
   (test-case "wrong campaign/wave or missing/short SHA cannot satisfy final delivery"
     (for ([mutate (in-list (list (lambda (p) (hash-set p 'plan-id (make-string 64 #\b)))
                                  (lambda (p) (hash-set p 'wave 9))

@@ -221,9 +221,15 @@
 ;; #f → use the current parameter value at execution time. Carried on the
 ;; request (not the parameter) because the campaign runs in a separate thread.
 (struct campaign-request
-        (base-dir record prompt-for-wave verifier timeout-sec allow-stale? delivery-reader)
+        (base-dir record
+                  prompt-for-wave
+                  verifier
+                  timeout-sec
+                  allow-stale?
+                  delivery-reader
+                  delivery-coordinator)
   #:transparent
-  #:constructor-name make-campaign-request/7)
+  #:constructor-name make-campaign-request/8)
 
 (define (make-campaign-request base-dir
                                record
@@ -231,14 +237,16 @@
                                verifier
                                #:timeout-sec [timeout-sec #f]
                                #:allow-stale? [allow-stale? #f]
-                               #:delivery-reader [delivery-reader delivery-readback])
-  (make-campaign-request/7 base-dir
+                               #:delivery-reader [delivery-reader delivery-readback]
+                               #:delivery-coordinator [delivery-coordinator #f])
+  (make-campaign-request/8 base-dir
                            record
                            prompt-for-wave
                            verifier
                            timeout-sec
                            allow-stale?
-                           delivery-reader))
+                           delivery-reader
+                           delivery-coordinator))
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -356,7 +364,7 @@
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
      #:delivery-reader (campaign-request-delivery-reader request)
-     #:delivery-coordinator delivery-coordinator
+     #:delivery-coordinator (or delivery-coordinator (campaign-request-delivery-coordinator request))
      #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -1608,6 +1616,7 @@
          campaign-request-prompt-for-wave
          campaign-request-verifier
          campaign-request-delivery-reader
+         campaign-request-delivery-coordinator
          campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!
