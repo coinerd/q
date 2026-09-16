@@ -1370,6 +1370,29 @@
 ;; Full campaign execution (loop one wave at a time)
 ;; ============================================================
 
+(define (coordinator-checkpoint-result dir
+                                       plan-id
+                                       extra
+                                       completed
+                                       message
+                                       delivery-coordinator
+                                       loop-again)
+  (if (campaign-record-cancellation (load-campaign-record dir plan-id))
+      (campaign-result 'wave-cancelled (reverse completed) message)
+      (let ([outcome (delivery-coordinator dir
+                                           plan-id
+                                           (and (campaign-wave? extra) (campaign-wave-index extra)))])
+        (case (and outcome (delivery-outcome-kind outcome))
+          [(ok) (loop-again)]
+          [else
+           (campaign-result
+            'wave-blocked
+            (reverse completed)
+            (cond
+              [(eq? (and outcome (delivery-outcome-kind outcome)) 'delivered)
+               "terminal stage lacks authenticated readback; no delivery proof advanced"]
+              [(delivery-outcome? outcome) (delivery-outcome-message outcome)]
+              [else message]))]))))
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
@@ -1470,36 +1493,14 @@
                 (campaign-result 'campaign-complete (reverse completed) message)]
                [(wave-blocked)
                 (if (procedure? delivery-coordinator)
-                    ;; B2b: the coordinator drives ONE journal-driven delivery
-                    ;; stage per loop iteration. An 'ok means one controller
-                    ;; effect ran (journal advanced); the loop re-enters the
-                    ;; checkpoint, which re-reads the authenticated delivery
-                    ;; reader. Typed stops (awaiting-review / retryable /
-                    ;; blocked) return a typed campaign result. 'delivered
-                    ;; alone is NEVER proof — journal terminal without
-                    ;; readback confirmation is fail-closed, so it cannot
-                    ;; spin.
-                    (let ([outcome (delivery-coordinator base-dir
-                                                         plan-id
-                                                         (and (campaign-wave? extra)
-                                                              (campaign-wave-index extra)))])
-                      (case (and outcome (delivery-outcome-kind outcome))
-                        [(ok) (loop (load-campaign-record base-dir plan-id) completed)]
-                        [(delivered)
-                         ;; The coordinator ALONE never proves delivery: a
-                         ;; terminal journal stage without authenticated
-                         ;; readback confirmation is fail-closed. Surfacing
-                         ;; "already delivered" here would fabricate success.
-                         (campaign-result
-                          'wave-blocked
-                          (reverse completed)
-                          "coordinator claims terminal stage but authenticated readback does not confirm; no delivery proof was advanced")]
-                        [else
-                         (campaign-result 'wave-blocked
-                                          (reverse completed)
-                                          (if (delivery-outcome? outcome)
-                                              (delivery-outcome-message outcome)
-                                              message))]))
+                    (coordinator-checkpoint-result
+                     base-dir
+                     plan-id
+                     extra
+                     completed
+                     message
+                     delivery-coordinator
+                     (lambda () (loop (load-campaign-record base-dir plan-id) completed)))
                     (campaign-result 'wave-blocked (reverse completed) message))]
                [(wave-cancelled)
                 (when (campaign-record-cancellation live)
@@ -1563,7 +1564,8 @@
                    (campaign-result 'wave-blocked
                                     (reverse completed)
                                     (campaign-result-message result))]
-                  [else (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
+                  [else
+                   (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
          ;; v1.00.21 W5 (BUG-0029 action 3): the campaign ended (success OR
          ;; terminal failure) — report non-delivery leftover artifacts and
          ;; offer operator-approved reclaim. NEVER auto-deletes.

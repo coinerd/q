@@ -16,7 +16,13 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign!
                   campaign-result-status
-                  campaign-result-message)
+                  campaign-result-message
+                  make-campaign-request
+                  register-campaign-request!
+                  execute-campaign-token!
+                  current-gsd-freshness-check
+                  campaign-freshness)
+         (only-in "../util/loop-result.rkt" make-loop-result)
          "../extensions/gsd/delivery-receipt.rkt"
          "../extensions/gsd/delivery-coordinator.rkt")
 
@@ -349,4 +355,60 @@
        (make-directory* (build-path dir "outside"))
        (make-file-or-directory-link (build-path dir "outside") (build-path dir ".planning"))
        (check-exn exn:fail? (lambda () (delivery-handoff-path dir (make-string 64 #\a) 0))))
-     (lambda () (delete-directory/files dir)))))
+     (lambda () (delete-directory/files dir))))
+  (test-case "delivery-coordinator survives the registry token path (TUI/SDK fresh session)"
+    ;; The /go-wired coordinator is carried ON the campaign request (8th
+    ;; field); the token path used by TUI and the SDK must not drop it. The
+    ;; coordinator actually invoked by the checkpoint proves the round trip
+    ;; and its typed blocker surfaces as the campaign result.
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define done (done-record dir))
+       (define invoked 0)
+       (define request
+         (make-campaign-request dir
+                                done
+                                (lambda (_) "W0")
+                                (lambda (_) #t)
+                                #:delivery-reader (lambda (b p w) (pending b p w))
+                                #:delivery-coordinator
+                                (lambda (b p w)
+                                  (set! invoked (add1 invoked))
+                                  (delivery-outcome 'blocked
+                                                    "token-path coordinator saw the checkpoint"))))
+       (define token (register-campaign-request! request))
+       (define result
+         (parameterize ([current-gsd-freshness-check
+                         (lambda (_) (campaign-freshness "1.00.30" "1.00.30" "0" #f #f))])
+           (execute-campaign-token! token
+                                    (lambda (prompt)
+                                      (values 'session (make-loop-result '() 'completed (hasheq)))))))
+       (check-true (positive? invoked))
+       (check-eq? (campaign-result-status result) 'wave-blocked)
+       (check-true (string-contains? (campaign-result-message result)
+                                     "token-path coordinator saw the checkpoint")))))
+  (test-case "cancelled campaign exits wave-cancelled without coordinator delivery"
+    ;; A pre-cancelled record makes ready-for-run-checkpoint return
+    ;; wave-cancelled (delivery-handoff) before any checkpoint reaches the
+    ;; coordinator. The race-guard inside coordinator-checkpoint-result
+    ;; (go-orchestrator) is inspected rather than exercised deterministically:
+    ;; it reloads and re-checks cancellation BEFORE the coordinator call, so
+    ;; an injected seam that returns ok after cancel can never fabricate
+    ;; delivery. This test pins the top-level early-exit + no-coordinator-run.
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define done (done-record dir))
+                          (define plan (campaign-plan-id done))
+                          (define cancelled (load-campaign-record dir plan))
+                          (set-campaign-cancellation! cancelled (make-campaign-cancellation "stop" 1))
+                          (persist-campaign! dir cancelled)
+                          (define result
+                            (run-campaign! dir
+                                           done
+                                           #:runner (lambda (_) 'ok)
+                                           #:verifier (lambda (_) #t)
+                                           #:delivery-reader (lambda (b p w) (pending b p w))
+                                           #:delivery-coordinator
+                                           (lambda (b p w) (delivery-outcome 'ok "must never run"))))
+                          (check-eq? (campaign-result-status result) 'wave-cancelled)))))

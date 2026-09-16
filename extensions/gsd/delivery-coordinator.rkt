@@ -268,7 +268,38 @@
            (string->jsexpr (subprocess-result-stdout result))))))
   ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
   (case target-stage
-    [("implementation-merged") (run-controller "merge")]
+    [("implementation-merged")
+     ;; A protected merge needs (a) the PR identity resolved from the durable
+     ;; receipt branch (never guessed), (b) the exact verified head and branch
+     ;; from the receipt, and (c) the frozen schema-2 evidence path. The PR
+     ;; lookup is the same fail-closed resolve-before-create the controller
+     ;; already uses; zero/multiple open PRs become a typed stop.
+     (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
+     (define receipt-head (default-delivery-receipt-head base-dir plan wave))
+     (define evidence (default-delivery-evidence-path plan wave))
+     (define resolve (run-controller "resolve-pr" "--expected-branch" receipt-branch))
+     (define pr-number (hash-ref (delivery-effect-result-data resolve) "pr" #f))
+     (cond
+       ;; None/ambiguous PR, or shell failure: typed stop with the controller
+       ;; reason — never invent a PR identity.
+       [(not (eq? (delivery-effect-result-kind resolve) 'ok)) resolve]
+       [(not (exact-nonnegative-integer? pr-number))
+        (delivery-effect-result 'blocked
+                                (hasheq 'stage
+                                        target-stage
+                                        'reason
+                                        (format "controller resolved no usable PR for branch ~a"
+                                                receipt-branch)))]
+       [else
+        (run-controller "merge"
+                        "--pr"
+                        (number->string pr-number)
+                        "--expected-head"
+                        receipt-head
+                        "--expected-branch"
+                        receipt-branch
+                        "--evidence"
+                        evidence)])]
     [("sync")
      (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
     [else
@@ -286,6 +317,7 @@
   (cond
     [(equal? status "merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "already-merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [(equal? status "resolved") (delivery-effect-result 'ok data)]
     [(equal? status "awaiting-review")
      (delivery-effect-result 'awaiting-review
                              (hasheq 'stage
@@ -294,6 +326,15 @@
                                      (hash-ref data 'reason "awaiting genuine independent review")))]
     [(equal? status "synchronized") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "delivered") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    [(equal? status "none")
+     (delivery-effect-result
+      'blocked
+      (hasheq
+       'stage
+       target-stage
+       'reason
+       (format "no open implementation PR for branch ~a; open it for genuine independent review"
+               (hash-ref data 'branch "?"))))]
     [else
      (delivery-effect-result 'blocked
                              (hasheq 'stage
@@ -319,6 +360,28 @@
     [(string? from-receipt) from-receipt]
     [else
      (raise-argument-error 'current-git-delivery-branch "campaign wave with delivery branch" w)]))
+
+;; Exact verified identity for the protected merge: the durable receipt is the
+;; only authority (never a model claim or a fresh checkout HEAD).
+(define (default-delivery-receipt-branch base-dir plan wave)
+  (define journal (load-delivery-journal base-dir plan wave))
+  (define branch (and journal (hash-ref (hash-ref journal 'receipt #f) 'branch #f)))
+  (unless (and (string? branch) (positive? (string-length branch)))
+    (raise-argument-error 'default-delivery-receipt-branch "receipt with branch" journal))
+  branch)
+
+(define (default-delivery-receipt-head base-dir plan wave)
+  (define journal (load-delivery-journal base-dir plan wave))
+  (define head (and journal (hash-ref (hash-ref journal 'receipt #f) 'head #f)))
+  (unless (and (string? head) (= (string-length head) 40))
+    (raise-argument-error 'default-delivery-receipt-head "receipt with 40-hex head" journal))
+  head)
+
+;; The frozen schema-2 evidence path is derivable from campaign+wave identity
+;; (the same path gsd-delivery.py's binding_path computes) — never guessed
+;; from a checkout.
+(define (default-delivery-evidence-path plan wave)
+  (format "docs/reports/gsd-wave-evidence/~a-w~a.rktd" plan wave))
 
 (define (default-delivery-coordinator base-dir plan wave-index)
   (run-delivery-coordinator! base-dir plan wave-index #:controller default-delivery-controller))

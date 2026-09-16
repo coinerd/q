@@ -1337,6 +1337,40 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('expected-branch', json.loads(stdout.getvalue())['reason'])
 
+    def test_cli_resolve_pr_resolves_open_pr_by_branch_and_refuses_nonepr(self):
+        w = self.open_impl_world()
+        head = f'{SLUG}:{WAVE_BRANCH}'
+        with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False):
+                            [{'number': w['pr']}]}):
+            argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                    '--plan', w['plan'], '--wave', str(w['wave']),
+                    '--expected-branch', WAVE_BRANCH]
+            stdout = io.StringIO()
+            with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+                code = m.main()
+            self.assertEqual(code, 0)
+            data = json.loads(stdout.getvalue())
+            self.assertEqual(data['status'], 'resolved')
+            self.assertEqual(data['pr'], w['pr'])
+            self.assertIn('head', data)
+        with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): []}):
+            argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                    '--plan', w['plan'], '--wave', str(w['wave']),
+                    '--expected-branch', WAVE_BRANCH]
+            stdout = io.StringIO()
+            with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+                code = m.main()
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(stdout.getvalue())['status'], 'none')
+        # Missing branch identity fails closed (never picks a PR silently).
+        argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                '--plan', w['plan'], '--wave', str(w['wave'])]
+        stdout = io.StringIO()
+        with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+            code = m.main()
+        self.assertEqual(code, 2)
+        self.assertIn('expected-branch', json.loads(stdout.getvalue())['reason'])
+
 
 if __name__ == '__main__':
     unittest.main()

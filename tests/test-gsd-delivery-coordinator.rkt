@@ -213,4 +213,33 @@
                     (check-eq? (delivery-effect-result-kind r) 'blocked)
                     (check-true (string-contains? (hash-ref (delivery-effect-result-data r) 'reason)
                                                   "not implemented")))
-                  (lambda () (delete-directory/files dir)))))
+                  (lambda () (delete-directory/files dir))))
+  (test-case "PR resolution statuses map to typed outcomes (arg contract: resolve feeds merge)"
+    ;; The merge-ready controller derives the PR identity from the
+    ;; authenticated resolve, never from the wave record (no PR number is
+    ;; stored there). resolved -> ok with the PR; none/ambiguous -> typed
+    ;; stop with an actionable reason so no merge is attempted without --pr.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-merged"
+                                   (hasheq 'status "resolved" 'pr 7 'branch "campaign/test")))
+     'ok)
+    (check-equal? (hash-ref (delivery-effect-result-data
+                             (default-delivery-controller-interpret
+                              "implementation-merged"
+                              (hasheq 'status "resolved" 'pr 7 'branch "campaign/test")))
+                            'pr
+                            #f)
+                  7)
+    (define none
+      (default-delivery-controller-interpret "implementation-merged"
+                                             (hasheq 'status "none" 'branch "campaign/test")))
+    (check-eq? (delivery-effect-result-kind none) 'blocked)
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data none) 'reason)
+                                  "no open implementation PR"))
+    (define unexpected
+      (default-delivery-controller-interpret "implementation-merged"
+                                             (hasheq 'status "delivery-pending" 'reason "api down")))
+    (check-eq? (delivery-effect-result-kind unexpected) 'blocked)
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data unexpected) 'reason)
+                                  "api down"))))

@@ -682,9 +682,24 @@ def sync(repo, expected_branch):
     return {'status':'synchronized', 'head':git(repo, 'rev-parse', 'HEAD').strip(),
             'branch':current}
 
+
+def resolve_pr(repo, plan, wave, branch):
+    """Resolve the (at most one) open implementation PR for the exact head
+    branch. Fail closed: zero or multiple open PRs are never silently
+    collapsed; the caller (coordinator) must surface a typed stop instead of
+    inventing a PR identity. The returned PR number feeds the protected
+    merge; model/journal completion never substitutes for it."""
+    slug = repository(repo)
+    refresh(repo)
+    pr = resolve_existing_pr(slug, branch)
+    if pr is None:
+        return {'status': 'none', 'plan-id': plan, 'wave': wave, 'branch': branch}
+    return {'status': 'resolved', 'pr': pr['number'], 'plan-id': plan, 'wave': wave,
+            'branch': branch, 'head': dig(pr, 'head', 'sha')}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['status','prepare','sync','merge'])
+    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -708,6 +723,10 @@ def main():
                     'merge requires --pr, --expected-head, --expected-branch and --evidence')
             result = merge(args.repo, args.plan, args.wave, args.pr, args.expected_head,
                            args.expected_branch, args.evidence)
+        elif args.action == 'resolve-pr':
+            require(args.expected_branch,
+                    'resolve-pr requires --expected-branch')
+            result = resolve_pr(args.repo, args.plan, args.wave, args.expected_branch)
         else:
             require(args.pr and args.evidence and args.output and args.campaign_root,
                     'prepare requires --pr, --evidence, --output and --campaign-root')
