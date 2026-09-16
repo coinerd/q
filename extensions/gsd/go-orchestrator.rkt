@@ -28,13 +28,19 @@
          "campaign-repository.rkt"
          "wave-completion.rkt"
          "delivery-handoff.rkt"
+         "delivery-receipt.rkt"
+         (only-in "delivery-coordinator.rkt"
+                  delivery-outcome
+                  delivery-outcome?
+                  delivery-outcome-kind
+                  delivery-outcome-message)
          "wave-runner-port.rkt"
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
          "../../util/loop-result.rkt"
          (only-in "system-adapters.rkt" run-wave-with-timeout)
-         (only-in "plan-context-builder.rkt" current-git-root)
+         (only-in "plan-context-builder.rkt" current-git-root find-git-root git-available?)
          (only-in "policy.rkt"
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
@@ -215,9 +221,15 @@
 ;; #f → use the current parameter value at execution time. Carried on the
 ;; request (not the parameter) because the campaign runs in a separate thread.
 (struct campaign-request
-        (base-dir record prompt-for-wave verifier timeout-sec allow-stale? delivery-reader)
+        (base-dir record
+                  prompt-for-wave
+                  verifier
+                  timeout-sec
+                  allow-stale?
+                  delivery-reader
+                  delivery-coordinator)
   #:transparent
-  #:constructor-name make-campaign-request/7)
+  #:constructor-name make-campaign-request/8)
 
 (define (make-campaign-request base-dir
                                record
@@ -225,14 +237,16 @@
                                verifier
                                #:timeout-sec [timeout-sec #f]
                                #:allow-stale? [allow-stale? #f]
-                               #:delivery-reader [delivery-reader delivery-readback])
-  (make-campaign-request/7 base-dir
+                               #:delivery-reader [delivery-reader delivery-readback]
+                               #:delivery-coordinator [delivery-coordinator #f])
+  (make-campaign-request/8 base-dir
                            record
                            prompt-for-wave
                            verifier
                            timeout-sec
                            allow-stale?
-                           delivery-reader))
+                           delivery-reader
+                           delivery-coordinator))
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -284,7 +298,8 @@
                                            run-prompt
                                            record
                                            freshness
-                                           #:lease-owner [lease-owner "unknown"])
+                                           #:lease-owner [lease-owner "unknown"]
+                                           #:delivery-coordinator [delivery-coordinator #f])
   (define base-dir (campaign-request-base-dir request))
   (define plan-id (campaign-plan-id record))
   ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
@@ -349,6 +364,7 @@
                #:cancel-requested? durable-cancellation-requested?)
      #:verifier (campaign-request-verifier request)
      #:delivery-reader (campaign-request-delivery-reader request)
+     #:delivery-coordinator (or delivery-coordinator (campaign-request-delivery-coordinator request))
      #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -410,17 +426,6 @@
 ;; ============================================================
 ;; Single-wave campaign coordinator (D1)
 ;; ============================================================
-
-(define (current-wave-for-attempt rec wave-idx fence attempt-id)
-  (define wave (and rec (find-wave rec wave-idx)))
-  (define attempt (and wave (campaign-wave-current-attempt wave)))
-  (and rec
-       wave
-       attempt
-       (= (campaign-fence-token rec) fence)
-       (= (campaign-attempt-fence-token attempt) fence)
-       (equal? (campaign-attempt-id attempt) attempt-id)
-       wave))
 
 ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract merge-SHA provenance.
 ;; The durable binding lives in the wave's evidence trio
@@ -826,10 +831,19 @@
                                wave-idx))]
                            [verifier-result
                             (with-handlers ([exn:fail? (lambda (_) #f)])
-                              (if delivery-ctx
-                                  (parameterize ([current-gsd-delivery-branch-context delivery-ctx])
-                                    (verifier wave-idx))
-                                  (verifier wave-idx)))]
+                              (verify-campaign-delivery
+                               base-dir
+                               (campaign-plan-id active)
+                               wave-idx
+                               (if wt
+                                   (wave-worktree-path wt)
+                                   base-dir)
+                               delivery-ctx
+                               verifier
+                               (lambda ()
+                                 (define current (observe))
+                                 (and (current-wave-for-attempt current wave-idx fence expected-id)
+                                      current))))]
                            [approved? (cond
                                         [(delivery-verification? verifier-result)
                                          (delivery-verification-approved? verifier-result)]
@@ -1356,6 +1370,29 @@
 ;; Full campaign execution (loop one wave at a time)
 ;; ============================================================
 
+(define (coordinator-checkpoint-result dir
+                                       plan-id
+                                       extra
+                                       completed
+                                       message
+                                       delivery-coordinator
+                                       loop-again)
+  (if (campaign-record-cancellation (load-campaign-record dir plan-id))
+      (campaign-result 'wave-cancelled (reverse completed) message)
+      (let ([outcome (delivery-coordinator dir
+                                           plan-id
+                                           (and (campaign-wave? extra) (campaign-wave-index extra)))])
+        (case (and outcome (delivery-outcome-kind outcome))
+          [(ok) (loop-again)]
+          [else
+           (campaign-result
+            'wave-blocked
+            (reverse completed)
+            (cond
+              [(eq? (and outcome (delivery-outcome-kind outcome)) 'delivered)
+               "terminal stage lacks authenticated readback; no delivery proof advanced"]
+              [(delivery-outcome? outcome) (delivery-outcome-message outcome)]
+              [else message]))]))))
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
@@ -1367,7 +1404,8 @@
                        ;; gsd.worktree-isolation project-settings key (see
                        ;; resolve-worktree-isolation in wave-executor.rkt).
                        #:isolate? [isolate-arg 'auto]
-                       #:delivery-reader [delivery-reader delivery-readback])
+                       #:delivery-reader [delivery-reader delivery-readback]
+                       #:delivery-coordinator [delivery-coordinator #f])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
   (define project-settings (load-project-settings-silently base-dir))
@@ -1453,7 +1491,17 @@
                                               'campaign-complete
                                               #:reason "all waves done or deferred")
                 (campaign-result 'campaign-complete (reverse completed) message)]
-               [(wave-blocked) (campaign-result 'wave-blocked (reverse completed) message)]
+               [(wave-blocked)
+                (if (procedure? delivery-coordinator)
+                    (coordinator-checkpoint-result
+                     base-dir
+                     plan-id
+                     extra
+                     completed
+                     message
+                     delivery-coordinator
+                     (lambda () (loop (load-campaign-record base-dir plan-id) completed)))
+                    (campaign-result 'wave-blocked (reverse completed) message))]
                [(wave-cancelled)
                 (when (campaign-record-cancellation live)
                   (notify-terminal-transition*! (campaign-plan-id live)
@@ -1534,57 +1582,12 @@
   (and next (= n next)))
 
 ;; ============================================================
-;; Git Root Resolution (F-7)
-;; Uses `current-git-root` parameter from plan-context-builder for W1 cwd migration.
-(define (find-git-root start-dir)
-  (define start-path
-    (path->complete-path (if (path? start-dir)
-                             start-dir
-                             (string->path start-dir))))
-  (define (has-git? dir)
-    (define git-marker (build-path dir ".git"))
-    (or (directory-exists? git-marker) (file-exists? git-marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     ;; Walk up from start-path first (handles nested dirs in temp tests)
-     (define walked (find-git-root-walking-up start-path has-git?))
-     (if walked
-         walked
-         ;; Last resort: use current-git-root parameter if set and valid
-         (let ([param-root (current-git-root)])
-           (if (and param-root (has-git? param-root)) param-root #f)))]))
-
-(define (find-git-root-walking-up start-path has-git?)
-  (let loop ([dir start-path])
-    (cond
-      [(has-git? dir) dir]
-      [else
-       (define-values (parent _sub _dir?) (split-path dir))
-       (if (and parent (path? parent) (not (equal? parent dir)))
-           (loop parent)
-           #f)])))
-
-(define (git-available? base-dir)
-  (define git (find-executable-path "git"))
-  (define (inside-work-tree? dir)
-    (and git
-         dir
-         (directory-exists? dir)
-         (let ([stdout (open-output-string)]
-               [stderr (open-output-string)])
-           (with-handlers ([exn:fail? (lambda (_) #f)])
-             (define exit-code
-               (parameterize ([current-output-port stdout]
-                              [current-error-port stderr])
-                 (system*/exit-code git "-C" dir "rev-parse" "--is-inside-work-tree")))
-             (and (zero? exit-code) (string=? (string-trim (get-output-string stdout)) "true"))))))
-  ;; Validate from the requested base directory. Preserve the supported
-  ;; two-tier checkout layout by trying its q/ child explicitly, but never
-  ;; trust a .git marker or an unrelated current-git-root fallback.
-  (and base-dir (or (inside-work-tree? base-dir) (inside-work-tree? (build-path base-dir "q"))) #t))
+;; Git Root Resolution (F-7) — extracted to plan-context-builder
+;; (B2b); go-orchestrator re-provides the names below for existing
+;; importers, keeping the historical public API unchanged.
+;; ============================================================
+;; ============================================================
+;; Provide
 ;; ============================================================
 ;; Provide
 ;; ============================================================
@@ -1615,6 +1618,7 @@
          campaign-request-prompt-for-wave
          campaign-request-verifier
          campaign-request-delivery-reader
+         campaign-request-delivery-coordinator
          campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!
