@@ -162,6 +162,20 @@
       (define entry (car transcript))
       (check-true (string-contains? (transcript-entry-text entry) "REJECTED")))
 
+    (test-case "all completed verdicts remove the stale running verification status"
+      (for ([verdict '("reject" "unknown" "escalate")])
+        (define started
+          (apply-event-to-state
+           (initial-ui-state)
+           (make-test-event "gsd.verification.started"
+                            (hasheq 'wave 3 'timeout-sec 14400 'log-path "/tmp/verify.log"))))
+        (define completed
+          (apply-event-to-state started
+                                (make-test-event "gsd.verification.completed"
+                                                 (make-completed-payload #:verdict verdict))))
+        (check-false (ui-state-status-message completed))
+        (check-false (ui-state-verification-progress completed))))
+
     ;; ── Verification Completed: Symbol verdicts ──
 
     (test-case "verification-completed handles symbol verdicts"

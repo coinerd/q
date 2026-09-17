@@ -81,7 +81,14 @@
   (if (not wave)
       (stale-result)
       (begin
-        (set-campaign-wave-status! wave 'pending)
+        ;; Recursive attempts begin from `active`, not the freshly loaded
+        ;; record. Preserve the verifier diagnosis in BOTH views so a provider
+        ;; retry (or process restart) cannot erase the repair obligation.
+        (for ([w (in-list (cons wave
+                                (filter (lambda (w) (= (campaign-wave-index w) wave-idx))
+                                        (campaign-record-waves active))))])
+          (stamp-wave-failure! w verifier-message)
+          (set-campaign-wave-status! w 'pending))
         (persist-campaign! base-dir rec)
         (emit-repair-event! 'gsd.verification.repair-started wave-idx attempt-id verifier-message)
         (parameterize ([current-gsd-wave-failure-context (verification-repair-context-block

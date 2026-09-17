@@ -20,7 +20,8 @@
          executor-reanchor-prompt
          wave-failure-context-block
          verification-repair-context-block
-         wave-attempt-context-block)
+         wave-attempt-context-block
+         wave-retry-context)
 
 ;; ============================================================
 ;; Executor re-anchor prompt (v1.00.17 W3 — #9514)
@@ -95,8 +96,24 @@
    "Bounded verifier diagnostics (verbatim):\n"
    bounded
    "\n\nPreserve the existing implementation and checkpoints. Fix the reported failure now. "
+   "The first compiler error may hide other missing deliverables. Check the frozen wave's "
+   "declared Files and Done criteria and implement the remaining modules/APIs before returning. "
+   "Do not change the tests or Verify command merely to hide missing implementation. "
    "Focused checks may guide the repair, but completion requires returning to the coordinator, "
    "which will rerun the COMPLETE declared Verify chain. Do not claim success from a focused check alone."))
+
+;; Pure combination: (latest-durable-reason transient-infra-context) → the
+;; failure context for the NEXT same-wave attempt. Transient provider/infra
+;; context SUPPLEMENTS the durable verifier diagnosis instead of masking it
+;; (`or` previously erased the repair obligation). The caller rebuilds this
+;; from the single latest durable reason each run, so no retry history is
+;; recursively accumulated. #f when both are absent/empty.
+(define (wave-retry-context durable transient)
+  (cond
+    [(and (non-empty-string? durable) (non-empty-string? transient))
+     (string-append durable "\n" transient)]
+    [(non-empty-string? durable) durable]
+    [else (and (non-empty-string? transient) transient)]))
 
 ;; Pure constructor: (prior-attempt-context) → context block PREFIXED to the
 ;; wave executor prompt for any non-first attempt of the same wave after an

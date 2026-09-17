@@ -15,6 +15,13 @@
          "../extensions/gsd/plan-types.rkt"
          "../extensions/gsd/wave-executor.rkt")
 
+(test-case "retry context supplements rather than masks durable verifier diagnostics"
+  (check-false (wave-retry-context #f #f))
+  (check-equal? (wave-retry-context "verify failure" #f) "verify failure")
+  (check-equal? (wave-retry-context #f "provider retry") "provider retry")
+  (check-equal? (wave-retry-context "verify failure" "provider retry")
+                "verify failure\nprovider retry"))
+
 ;; ============================================================
 ;; Planning prompt (W0: renamed from exploring-prompt)
 ;; ============================================================
@@ -167,7 +174,9 @@
   (check-true (string-contains? p "cmd=racket tests/failing.rkt"))
   (check-true (string-contains? p "log=/tmp/verify.log"))
   (check-true (string-contains? p "actual 14 expected 12"))
-  (check-true (string-contains? p "COMPLETE declared Verify chain")))
+  (check-true (string-contains? p "COMPLETE declared Verify chain"))
+  (check-true (string-contains? p "declared Files and Done criteria"))
+  (check-true (string-contains? p "Do not change the tests or Verify command merely to hide")))
 
 (test-case "verification repair context bounds adversarially large diagnostics"
   (define p (verification-repair-context-block (make-string 7000 #\x)))

@@ -243,7 +243,7 @@
     (check-true (policy-allowed? d) (format "write should be allowed in ~a" mode))))
 
 (test-case "verification repair retry budget is bounded and independently configurable"
-  (check-equal? (current-gsd-wave-verification-repair-retries) 1)
+  (check-equal? (current-gsd-wave-verification-repair-retries) 3)
   (check-equal? (parameterize ([current-gsd-wave-verification-repair-retries 0])
                   (current-gsd-wave-verification-repair-retries))
                 0)

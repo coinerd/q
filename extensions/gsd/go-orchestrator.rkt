@@ -55,6 +55,7 @@
          (only-in "prompts.rkt"
                   wave-failure-context-block
                   wave-attempt-context-block
+                  wave-retry-context
                   executor-reanchor-prompt)
          (only-in "verification-repair.rkt" resolve-verification-rejection!)
          (only-in "wave-outcome-reporting.rkt" emit-wave-outcome-error! runner-outcome-failure-reason)
@@ -661,11 +662,11 @@
               effective-stall-soft-limit
               effective-stall-hard-limit)))
        (define prior-failure-reason
-         (let ([w (find-wave rec wave-idx)])
+         (let ([w (find-wave active wave-idx)])
            (and w
                 (let ([reason (wave-failure-reason w)])
                   (and (positive? (string-length (string-trim reason))) reason)))))
-       (define durable-failure-context
+       (define durable-ctx
          (and
           prior-failure-reason
           (string-append
@@ -685,8 +686,8 @@
          ;; successor executors see prior attempts' artifacts without
          ;; rediscovering them.
          (parameterize ([current-gsd-wave-inherited-artifacts inherited-artifact-text]
-                        [current-gsd-wave-failure-context (or (current-gsd-wave-failure-context)
-                                                              durable-failure-context)])
+                        [current-gsd-wave-failure-context
+                         (wave-retry-context durable-ctx (current-gsd-wave-failure-context))])
            (let retry-loop ([retries-left retries-left])
              (define result (coerce-run-result (run-one/watchdog wave-idx)))
              ;; v1.00.22 W5 (BUG-0039): ATTEMPT BOUNDARY — drain the

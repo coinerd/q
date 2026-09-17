@@ -130,6 +130,23 @@ Before `/go` is allowed, the plan is validated:
 | Wave has verify | Warning | Each wave should have a verify command |
 | Wave has root-cause | Warning | Each wave should document the root cause |
 
+### Automatic verification repair
+
+A coordinator-owned declared `Verify` command failure automatically returns to
+an executor for the **same wave**, carrying the command, exit status, log path,
+and bounded failure output. It preserves existing work and checks all frozen
+wave deliverables rather than treating a focused test pass as completion.
+Provider retries supplement these diagnostics instead of replacing them; the
+latest verifier failure is also persisted for a later resume.
+
+The default allows **three repair attempts**; the internal
+`current-gsd-wave-verification-repair-retries` policy parameter can lower this
+bound (zero disables repairs). An unchanged committed repair head stops early.
+Each repair reruns the complete declared Verify chain. Cancellation, exhausted
+budgets, or non-repairable provenance failures stop the campaign without
+advancing. A local pass still does not waive protected delivery or independent
+review. Completed verification clears the running status, even on rejection.
+
 ## State Machine
 
 ```
