@@ -346,6 +346,74 @@ check-equal? actual 14 expected 12")
       (check-eq? (wave-status* rec 0) 'done)
       (cleanup-tmp dir))
 
+    (test-case "verification diagnostics survive provider failure inside automatic repair"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (define verifies 0)
+      (define resumed-context #f)
+      (define durable-reason #f)
+      (define detail
+        "cmd=raco test tests/test-engine.rkt exit=1 state=failed log=/tmp/missing.log\nmissing engine.rkt; make-manifest: unbound identifier")
+      (define failure (delivery-verification #f (list (cons "verify" (cons #f detail))) detail))
+      (define result
+        (parameterize ([current-gsd-campaign-infra-retries 1]
+                       [current-gsd-campaign-infra-retry-delay (lambda (_) 0)]
+                       [current-gsd-wave-verification-repair-retries 1])
+          (run-campaign!
+           dir
+           rec
+           #:runner
+           (lambda (_)
+             (set! calls (add1 calls))
+             (when (= calls 3)
+               (set! resumed-context (current-gsd-wave-failure-context))
+               (set! durable-reason
+                     (wave-failure-reason (car (campaign-record-waves
+                                                (load-campaign-record dir (campaign-plan-id rec)))))))
+             (if (= calls 2)
+                 (wave-execution-outcome 'infra-failed "provider disconnected")
+                 'ok))
+           #:verifier (lambda (_)
+                        (set! verifies (add1 verifies))
+                        (if (= verifies 1) failure #t))
+           #:delivery-reader (make-delivered-reader))))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? calls 3)
+      (check-equal? verifies 2)
+      (check-true (and (string? resumed-context) (string-contains? resumed-context detail)))
+      (check-true (string-contains? resumed-context "provider disconnected"))
+      (check-equal? durable-reason detail)
+      (cleanup-tmp dir))
+
+    (test-case "default repair policy handles successive incomplete deliverables without user retry"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (define verifies 0)
+      (define result
+        (run-campaign!
+         dir
+         rec
+         #:runner (lambda (_)
+                    (set! calls (add1 calls))
+                    'ok)
+         #:verifier
+         (lambda (_)
+           (set! verifies (add1 verifies))
+           (if (<= verifies 3)
+               (let ([detail
+                      (format
+                       "cmd=raco test tests/test-engine.rkt exit=1 state=failed log=/tmp/v.log missing deliverable ~a"
+                       verifies)])
+                 (delivery-verification #f (list (cons "verify" (cons #f detail))) detail))
+               #t))
+         #:delivery-reader (make-delivered-reader)))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? verifies 5 "four W0 verifications then W1")
+      (check-equal? calls 5)
+      (cleanup-tmp dir))
+
     (test-case "repeated repairable verification failure exhausts repair budget and stays failed"
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
@@ -368,6 +436,30 @@ check-equal? actual 14 expected 12")
       (check-eq? (wave-status* rec 0) 'failed)
       (check-false (eq? (wave-status* rec 1) 'done) "later waves remain blocked")
       (cleanup-tmp dir))
+
+    (test-case "zero disables repairs and default exhaustion never advances"
+      (for ([budget (list 0 (current-gsd-wave-verification-repair-retries))])
+        (define dir (make-tmp-campaign-dir 2))
+        (define rec (load-or-migrate dir))
+        (define calls 0)
+        (define result
+          (parameterize ([current-gsd-wave-verification-repair-retries budget])
+            (run-campaign!
+             dir
+             rec
+             #:runner (lambda (idx)
+                        (check-equal? idx 0 "never starts successor on failed verification")
+                        (set! calls (add1 calls))
+                        'ok)
+             #:verifier
+             (lambda (_)
+               (define detail "cmd=false exit=1 state=failed log=/tmp/v.log")
+               (delivery-verification #f (list (cons "verify" (cons #f detail))) detail)))))
+        (check-eq? (campaign-result-status result) 'wave-failed)
+        (check-equal? calls (add1 budget))
+        (check-eq? (wave-status* rec 0) 'failed)
+        (check-eq? (wave-status* rec 1) 'pending)
+        (cleanup-tmp dir)))
 
     (test-case "durable cancellation during verification repair stops before another verify"
       (define dir (make-tmp-campaign-dir 1))

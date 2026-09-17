@@ -502,7 +502,9 @@
                    (if log-path
                        (format " · log ~a" log-path)
                        "")))
-  (define cleared (set-verification-progress state #f))
+  ;; Every terminal verdict ends the running status, including rejection
+  ;; and unknown/escalated results. The transcript retains the verdict.
+  (define cleared (set-status-message (set-verification-progress state #f) #f))
   (match verdict
     ;; Approval: clear status message. BUG-0062: an approval must also leave
     ;; a durable, truthful transcript trace (elapsed + log path) — clearing
