@@ -370,6 +370,13 @@
        (if limit-error
            (make-error-response #f limit-error)
            (begin
+             ;; Match normal write: create missing parents only after authorization
+             ;; and budget validation. Recheck containment at the mutation boundary.
+             (unless (path-allowed? resolved)
+               (error 'write "path no longer allowed: ~a" resolved))
+             (make-parent-directory* resolved)
+             (unless (path-allowed? resolved)
+               (error 'write "path no longer allowed: ~a" resolved))
              (call-with-atomic-output-file resolved (lambda (port) (display content-str port)))
              (ipc-response #f
                            'ok
