@@ -7,9 +7,15 @@
 ;; the checkout (Racket 8.10 `current-compiled-file-roots` semantics).
 ;;
 ;; Proven semantics (probe-verified on Racket 8.10 in this wave):
-;;   - A zo under an external root is used for a source S iff
-;;     mtime(zo) >= mtime(S); the 'modify-seconds check gates on
-;;     freshness. There is no mode that trusts stale root bytes.
+;;   - A zo under an explicit current-compiled-file-roots entry is
+;;     consulted for a source S UNCONDITIONALLY: the 'modify-seconds
+;;     freshness gate did NOT reject root entries even when mtime(S)
+;;     was future-dated relative to mtime(zo) (probe: no lazy
+;;     recompilation in any mtime variant). The freshness gate governs
+;;     the source-ADJACENT default compiled directory, not external
+;;     roots. The resolver still forces consumer source mtimes older
+;;     than root zo mtimes as defense-in-depth; identity is proven by
+;;     digests, never by mtime.
 ;;   - For an absolute source S = /D0/.../Dn/name.rkt and an absolute
 ;;     root entry R, the default compiled-load handler consults exactly
 ;;       R/D0/.../Dn/compiled/name_rkt.zo
@@ -35,8 +41,14 @@
 ;;     resolver forces source mtimes older than the root zo mtimes
 ;;     (mtime forcing only ever happens for byte-identical content).
 ;;   - TOCTOU canary: a current-load wrapper re-verifies each root
-;;     member's digest at load time; mutation after validation fails
-;;     closed instead of executing tampered bytecode.
+;;     member's digest at load time (loads arrive as CONSUMER SOURCE
+;;     paths — zo discovery is internal to the module system — so the
+;;     wrapper maps a source path back to its published payload member
+;;     via the manifest and digests the bytes behind the mapping
+;;     symlink); mutation after validation fails closed instead of
+;;     executing tampered bytecode. The subprocess launcher bakes the
+;;     same digest table into its child bootstrap for identical
+;;     protection outside the process.
 ;;   - Any validation failure resolves to a single EAGER fallback
 ;;     (raco make in the job-local checkout at the setup boundary,
 ;;     W2 containment semantics) or a hard failure — never producer-era
@@ -51,6 +63,7 @@
          racket/match
          racket/path
          racket/port
+         racket/runtime-path
          racket/string
          racket/system
          "compiled-root-manifest.rkt")
@@ -175,6 +188,15 @@
     (error 'build-compiled-root!
            "refusing to compile: dirty/untracked compilation inputs (freeze or clean them first)"))
   ;; Eager, controlled compilation at the job setup boundary (raco make).
+  ;; Snapshot pre-existing compiled/ directories first: after harvesting
+  ;; the payload, any compiled/ directory this build created is removed
+  ;; again so the producer checkout returns to its clean pre-build state
+  ;; (racomake residue must not turn a subsequent build into a
+  ;; dirty-input rejection).
+  (define pre-existing-compiled-dirs
+    (for/list ([d (in-list (find-files directory-exists? abs-checkout))]
+               #:when (equal? (file-name-from-path d) (string->path "compiled")))
+      (simplify-path d)))
   (define ok?
     (zero? (apply system*/exit-code
                   (find-executable-path "raco")
@@ -200,6 +222,13 @@
     (define staging-src (build-path staging-dir src-rel))
     (make-directory* (path-only staging-src))
     (copy-file (build-path abs-checkout src-rel) staging-src #t))
+  ;; Restore the producer checkout: delete compiled/ dirs this build
+  ;; created (pre-existing directories are never touched).
+  (for ([p (in-list pairs)])
+    (define-values (compiled-dir _zo-file _zo-dir?)
+      (split-path (build-path abs-checkout (list-ref p 1))))
+    (unless (member (simplify-path compiled-dir) pre-existing-compiled-dirs)
+      (delete-directory/files compiled-dir)))
   (make-compiled-root-manifest #:sources (for/list ([p (in-list pairs)])
                                            (list (list-ref p 0) (list-ref p 1)))
                                #:root-dir staging-dir
@@ -328,44 +357,107 @@
   (values (list (compiled-root-map-dir root)) 'modify-seconds))
 
 ;; install-compiled-root-toctou-guard!
-;;   current-load wrapper: any module loaded from the published root is
-;;   re-digested at load time. Mutation after validation (TOCTOU canary)
-;;   fails closed here instead of executing tampered bytecode.
+;;   current-load wrapper that re-verifies a root member's digest at
+;;   load time. Probe-verified on Racket 8.10: the module system hands
+;;   current-load the CONSUMER SOURCE path — zo discovery through
+;;   current-compiled-file-roots happens inside the default handler and
+;;   is invisible to the wrapper (and, empirically, external roots are
+;;   consulted without the source-freshness gate). The guard therefore
+;;   maps an incoming source path back to its published payload member
+;;   via the manifest and re-digests the actual bytes behind the
+;;   consumer's mapping symlink before the module can execute.
+;;   Mutation after validation (TOCTOU canary) fails closed here.
+;;   Loads that DO arrive as published-root paths (direct zo requires)
+;;   are covered by the secondary by-zo table.
 (define (install-compiled-root-toctou-guard! root)
   (define root-path
     (path->directory-path (simplify-path (path->complete-path (compiled-root-root-dir root)))))
+  (define checkout-dir
+    (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout root)))))
   (define entries (hash-ref (compiled-root-manifest root) 'sources))
   (define by-zo
     (for/hash ([e (in-list entries)])
       (values (string->path (hash-ref e 'zo)) (hash-ref e 'zo-digest))))
+  (define final-dir (compiled-root-root-dir root))
+  ;; consumer source path string -> (list zo-path-string zo-digest)
+  (define by-src
+    (for/hash ([e (in-list entries)])
+      (values (path->string
+               (simplify-path (path->complete-path (build-path checkout-dir (hash-ref e 'path))) #t))
+              (list (path->string (build-path final-dir (hash-ref e 'zo))) (hash-ref e 'zo-digest)))))
   (define orig (current-load))
   (current-load
    (lambda (path modname)
      (when (and path (file-exists? path))
-       ;; follow-links? = #t is load-bearing: root loads arrive via the
-       ;; map-dir symlink; resolving it yields the published payload
-       ;; member so the by-zo digest table matches (TOCTOU coverage and
-       ;; root-hit telemetry both depend on this).
-       (define p (simplify-path (path->complete-path path) #t #t))
-       (define rel (find-relative-path root-path p))
-       (define digest (hash-ref by-zo (string->path (path->string rel)) #f))
-       (when digest
-         (unless (string=? (sha256-bytes (file->bytes p)) digest)
+       ;; follow-links? = #t is load-bearing: every mapped member arrives
+       ;; through the map-dir symlink; resolving it yields the published
+       ;; payload bytes the digest table is keyed on.
+       (define p (simplify-path (path->complete-path path) #t))
+       (define hit
+         (or (hash-ref by-src (path->string p) #f)
+             (let ([rel (find-relative-path root-path p)])
+               (define digest (hash-ref by-zo (string->path (path->string rel)) #f))
+               (and digest (list (path->string (build-path final-dir (path->string rel))) digest)))))
+       (when hit
+         (match-define (list zo-path digest) hit)
+         (define bs (file->bytes zo-path))
+         (unless (string=? (sha256-bytes bs) digest)
            (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
-         (telemetry
-          (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
-            (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length (file->bytes p))) m)))))
+         (telemetry (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
+                      (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length bs)) m)))))
      (orig path modname))))
 
 ;; compiled-root-launch-arguments
 ;;   Subprocess inheritance: racket flags that point a CHILD process at
 ;;   the same mapping directory, before any -t/-l program arguments.
+;;   The bootstrap also installs the same load-time digest guard as the
+;;   in-process TOCTOU canary (child mutation-after-verification
+;;   coverage), using the project-owned pure-Racket sha256 from the
+;;   manifest module resolved via define-runtime-path.
+;;   manifest module resolved via define-runtime-path. The relative
+;;   string form is used because define-runtime-path evaluates its
+;;   template in the transformer phase where build-path is not bound
+;;   on Racket 8.10; the result is resolved at load time relative to
+;;   this module's source directory.
+(define-runtime-path compiled-root-manifest-module-path "compiled-root-manifest.rkt")
+
 (define (compiled-root-launch-arguments root)
-  (list
-   "-e"
-   (format
-    "(begin (current-compiled-file-roots (list (string->path ~s))) (use-compiled-file-check 'modify-seconds))"
-    (path->string (compiled-root-map-dir root)))))
+  (define entries (hash-ref (compiled-root-manifest root) 'sources))
+  (define checkout-dir
+    (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout root)))))
+  (define final-dir (compiled-root-root-dir root))
+  (define tbl
+    (string-join (for/list ([e (in-list entries)])
+                   (format "(cons ~s (list ~s ~s))"
+                           (path->string (simplify-path (path->complete-path
+                                                         (build-path checkout-dir (hash-ref e 'path)))
+                                                        #t))
+                           (path->string (build-path final-dir (hash-ref e 'zo)))
+                           (hash-ref e 'zo-digest)))
+                 " "))
+  (list "-e"
+        (format
+         (string-append
+          "(begin"
+          " (define sha256 (dynamic-require (string->path ~s) 'sha256-bytes))"
+          " (require racket/file)"
+          " (current-compiled-file-roots (list (string->path ~s)))"
+          " (use-compiled-file-check 'modify-seconds)"
+          " (define tbl (list ~a))"
+          " (define orig-load (current-load))"
+          " (current-load"
+          "  (lambda (path modname)"
+          "   (define hit"
+          "    (and path"
+          "         (assoc (path->string (simplify-path (path->complete-path path) #t))"
+          "                tbl)))"
+          "   (when hit"
+          "    (unless (string=? (sha256 (file->bytes (cadr hit))) (caddr hit))"
+          "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path)))"
+          "   (orig-load path modname))))")
+         (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
+         (path->string (compiled-root-map-dir root))
+         tbl)))
 
 ;; eager-fallback-compile!
 ;;   The ONE eager current-source fallback: raco make in the job-local
