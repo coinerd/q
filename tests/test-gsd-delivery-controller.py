@@ -754,6 +754,13 @@ class DeliveryTests(unittest.TestCase):
         with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr],
                             (SLUG, 'pulls/7777', False): {'merged': True}}):
             self.assertEqual(m.publication_pr(SLUG, pub)['number'], 7777)
+        # authoritative endpoint confirms the closed-plus-merged_at shape
+        with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr],
+                            (SLUG, 'pulls/7777', False): {
+                                'state': 'closed', 'merged': False,
+                                'merged_at': '2026-09-15T10:00:00Z',
+                                'merge_commit_sha': pub}}):
+            self.assertEqual(m.publication_pr(SLUG, pub)['number'], 7777)
         # authoritative endpoint says not merged -> fails closed
         with self.assertRaises(m.Pending):
             with self.fake_api({(SLUG, f'commits/{pub}/pulls', False): [pr],
@@ -823,6 +830,20 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('content-digest', gate.stdout)
         self.assertIn('status must be ready-for-merge', gate.stdout)
         self.assertIn('APPROVED', gate.stdout)
+
+    def test_prepare_accepts_merged_at_authoritative_shape(self):
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'camp', w['plan'], w['wave'])
+        output = self.base / 'draft-out'
+        payload = dict(self.prepare_routes(w)[(SLUG, f'pulls/{w["pr"]}', False)],
+                       state='closed', merged=False,
+                       merged_at='2026-09-15T10:00:00Z')
+        with self.fake_api({**self.prepare_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): payload}):
+            result = m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                               f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                               campaign, output)
+        self.assertEqual(result['status'], 'pending-review')
 
     def test_prepare_accepts_exact_hash_named_source_without_declarations(self):
         w = self.world(publish=False, source='hash')
@@ -1318,6 +1339,21 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['merge-sha'], w['merge'])
         self.assertFalse([a for a in calls if '/merge' in ' '.join(a)])
 
+    def test_merge_already_merged_accepts_merged_at_authoritative_shape(self):
+        w = self.open_impl_world(merged=True)
+        payload = dict(self.open_pr_payload(w), state='closed', merged=False,
+                       merged_at='2026-09-15T10:00:00Z',
+                       merge_commit_sha=w['merge'])
+        routes = self.merge_routes(w, merged=True, merge_sha=w['merge'])
+        routes[(SLUG, f"commits/{w['merge']}", False)] = \
+            commit_payload(w['merge'], w['c0'])
+        routes[(SLUG, f'pulls/{w["pr"]}', False)] = payload
+        with self.fake_api(routes):
+            result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                             WAVE_BRANCH, w['source'])
+        self.assertEqual(result['status'], 'already-merged')
+        self.assertEqual(result['merge-sha'], w['merge'])
+
     def test_merge_refuses_already_merged_at_a_different_head(self):
         w = self.open_impl_world(merged=True)
         routes = self.merge_routes(w, merged=True, merge_sha=w['merge'],
@@ -1506,6 +1542,212 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('expected-head', payload['reason'])
 
     # ------------------------------------------------------------------
+    # implementation PR creation and CI readback (W2)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def open_pr_payload(w, *, head=None, number=None):
+        payload = dict(pr_payload(w, merge=None, head=head, number=number))
+        payload.update({'merged': False, 'merge_commit_sha': None,
+                        'merged_at': None, 'state': 'open'})
+        return payload
+
+    @staticmethod
+    def ci_routes(w, *, names=None, protection_names=None,
+                  conclusion='success', missing_names=None):
+        names = POLICY_NAMES if names is None else names
+        protection_names = POLICY_NAMES if protection_names is None else protection_names
+        missing_names = set() if missing_names is None else set(missing_names)
+        head = w['head']
+        routes = {
+            (SLUG, f'pulls/{w["pr"]}', False): DeliveryTests.open_pr_payload(w),
+            (SLUG, 'branches/main/protection', False): protection(protection_names),
+            (SLUG, f'commits/{head}/check-runs?per_page=100&page=1', False):
+                {'check_runs': [check_run(name, head, job=i, conclusion=conclusion)
+                                for i, name in enumerate(names)
+                                if name not in missing_names],
+                 'total_count': len([name for name in names if name not in missing_names])},
+        }
+        if not missing_names:
+            routes[(SLUG, 'actions/runs/777', False)] = \
+                run_details(head, 'pull_request', branch=WAVE_BRANCH)
+        return routes
+
+    def test_open_pr_resolves_existing_before_create_and_rereads_identity(self):
+        w = self.open_impl_world()
+        existing = self.open_pr_payload(w)
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [existing],
+            (SLUG, f'pulls/{w["pr"]}', False): existing,
+        }
+        with self.fake_api(routes) as fake:
+            result = m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH)
+        self.assertEqual(result['status'], 'opened')
+        self.assertEqual(result['pr'], w['pr'])
+        self.assertEqual(result['head'], w['head'])
+        self.assertEqual(fake.calls[-1],
+                         (SLUG, f'pulls/{w["pr"]}', False, True))
+
+    def test_open_pr_posts_deterministic_payload_from_fetched_branch_tip(self):
+        w = self.open_impl_world()
+        created = self.open_pr_payload(w)
+        calls = []
+
+        def post(slug, route, fields):
+            calls.append((slug, route, fields))
+            return created
+
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls/{w["pr"]}', False): created,
+        }
+        with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=post):
+            result = m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH)
+        title = f'W{w["wave"]} delivery: {WAVE_BRANCH}'
+        body = ('Plan: %s\nWave: W%d\nHead: %s\nBranch: %s\n'
+                'Binding evidence: %s\n'
+                'Review: genuine independent review required at the exact implementation head.\n') % (
+                    w['plan'], w['wave'], w['head'], WAVE_BRANCH,
+                    m.binding_path(w['plan'], w['wave']))
+        self.assertEqual(calls, [(SLUG, 'pulls',
+                                  {'title': title, 'body': body,
+                                   'head': WAVE_BRANCH, 'base': 'main'})])
+        self.assertEqual(result, {'status': 'opened', 'pr': w['pr'],
+                                  'branch': WAVE_BRANCH, 'head': w['head']})
+
+    def test_open_pr_refuses_duplicate_open_prs_without_post(self):
+        w = self.open_impl_world()
+        first = self.open_pr_payload(w)
+        second = self.open_pr_payload(w, number=w['pr'] + 1)
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [first, second],
+        }
+        def fail_post(*args):
+            raise AssertionError('duplicate open PRs must not be posted')
+        with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=fail_post):
+            with self.assertRaises(m.Pending):
+                m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH)
+
+    def test_open_pr_uses_fetched_branch_tip_not_working_tree(self):
+        w = self.open_impl_world()
+        write_file(w['subject'] / 'src/local.txt', 'local-only\n')
+        sh('git', 'add', 'src/local.txt', cwd=w['subject'])
+        sh('git', 'commit', '-q', '-m', 'local-only', cwd=w['subject'])
+        local_tip = sh('git', 'rev-parse', 'HEAD', cwd=w['subject']).strip()
+        created = self.open_pr_payload(w)
+        calls = []
+        def post(slug, route, fields):
+            calls.append(fields)
+            return created
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls/{w["pr"]}', False): created,
+        }
+        with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=post):
+            result = m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH)
+        self.assertEqual(result['head'], w['head'])
+        self.assertNotEqual(result['head'], local_tip)
+        self.assertEqual(calls[0]['head'], WAVE_BRANCH)
+
+    def test_open_pr_requires_expected_branch(self):
+        w = self.open_impl_world()
+        with self.assertRaises(m.Pending) as caught:
+            m.open_pr(w['subject'], w['plan'], w['wave'], None)
+        self.assertIn('expected-branch', str(caught.exception))
+
+    def test_open_pr_refuses_source_drift_after_receipt_head(self):
+        w = self.open_impl_world()
+        sh('git', 'fetch', '-q', 'origin',
+           'refs/heads/' + WAVE_BRANCH + ':refs/remotes/origin/' + WAVE_BRANCH,
+           cwd=w['subject'])
+        sh('git', 'checkout', '-q', '-b', 'drift',
+           'refs/remotes/origin/' + WAVE_BRANCH, cwd=w['subject'])
+        write_file(w['subject'] / 'src/drift.txt', 'unreviewed\n')
+        sh('git', 'add', 'src/drift.txt', cwd=w['subject'])
+        sh('git', 'commit', '-q', '-m', 'unreviewed source drift', cwd=w['subject'])
+        sh('git', 'push', '-q', 'origin', 'HEAD:refs/heads/' + WAVE_BRANCH,
+           cwd=w['subject'])
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+        }
+        def fail_post(*args):
+            raise AssertionError('drifted branch must not be posted')
+        with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=fail_post):
+            with self.assertRaises(m.Pending) as caught:
+                m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH, w['head'])
+        self.assertIn('non-evidence paths', str(caught.exception))
+
+    def test_pr_ci_reports_green_only_for_all_trusted_required_checks(self):
+        w = self.open_impl_world()
+        m._CHECKS_CACHE.clear()
+        with self.fake_api(self.ci_routes(w)):
+            result = m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+        self.assertEqual(result, {'status': 'green', 'pr': w['pr'],
+                                  'branch': WAVE_BRANCH, 'head': w['head']})
+
+    def test_pr_ci_names_pending_failed_and_missing_required_checks(self):
+        w = self.open_impl_world()
+        for conclusion, expected in (('pending', 'pending'), ('failure', 'failed')):
+            with self.subTest(conclusion=conclusion):
+                routes = self.ci_routes(w, conclusion=conclusion)
+                m._CHECKS_CACHE.clear()
+                with self.fake_api(routes):
+                    with self.assertRaises(m.Pending) as caught:
+                        m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+                    self.assertIn(POLICY_NAMES[0], str(caught.exception))
+                    self.assertIn(expected, str(caught.exception))
+        with self.subTest(conclusion='missing'):
+            m._CHECKS_CACHE.clear()
+            with self.fake_api(self.ci_routes(w, missing_names=[POLICY_NAMES[0]])):
+                with self.assertRaises(m.Pending) as caught:
+                    m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+            self.assertIn('missing check: ' + POLICY_NAMES[0], str(caught.exception))
+
+    def test_pr_ci_refuses_wrong_branch_or_foreign_repository(self):
+        w = self.open_impl_world()
+        wrong_branch = dict(self.open_pr_payload(w),
+                            head={'sha': w['head'], 'ref': 'campaign/wrong',
+                                  'repo': {'full_name': SLUG}})
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): wrong_branch}):
+            with self.assertRaises(m.Pending):
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+        foreign = dict(self.open_pr_payload(w),
+                       head={'sha': w['head'], 'ref': WAVE_BRANCH,
+                             'repo': {'full_name': 'someone/fork'}})
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): foreign}):
+            with self.assertRaises(m.Pending):
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+
+    def test_cli_open_pr_requires_branch_and_dispatches_create_action(self):
+        w = self.open_impl_world()
+        argv = ['gsd-delivery.py', 'open-pr', '--repo', str(w['subject']),
+                '--plan', w['plan'], '--wave', '1']
+        stdout = io.StringIO()
+        with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+            code = m.main()
+        self.assertEqual(code, 2)
+        self.assertIn('expected-branch', json.loads(stdout.getvalue())['reason'])
+
+        created = self.open_pr_payload(w)
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls/{w["pr"]}', False): created,
+        }
+        def post(slug, route, fields):
+            return created
+        argv = ['gsd-delivery.py', 'open-pr', '--repo', str(w['subject']),
+                '--plan', w['plan'], '--wave', '1',
+                '--expected-branch', WAVE_BRANCH]
+        stdout = io.StringIO()
+        with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=post), \
+                patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+            code = m.main()
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())['status'], 'opened')
+
+    # ------------------------------------------------------------------
     # CLI shape
     # ------------------------------------------------------------------
 
@@ -1573,6 +1815,110 @@ class DeliveryTests(unittest.TestCase):
             code = m.main()
         self.assertEqual(code, 2)
         self.assertIn('expected-branch', json.loads(stdout.getvalue())['reason'])
+
+    def test_resolve_pr_validates_reviewed_tip_and_returns_exact_pr_head(self):
+        w = self.open_impl_world()
+        payload = {'number': w['pr'], 'state': 'open',
+                   'head': {'sha': w['head'], 'ref': WAVE_BRANCH,
+                            'repo': {'full_name': SLUG}},
+                   'base': {'ref': 'main', 'sha': w['c0'],
+                            'repo': {'full_name': SLUG}}}
+        # The receipt head is h1; the source trio at the PR tip is allowed
+        # evidence-only drift. Resolve must return that actual tip so merge can
+        # enforce its exact-head contract without weakening merge().
+        with self.fake_api({(SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False):
+                            [payload]}):
+            argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                    '--plan', w['plan'], '--wave', str(w['wave']),
+                    '--expected-branch', WAVE_BRANCH, '--expected-head', w['h1']]
+            stdout = io.StringIO()
+            with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+                code = m.main()
+            self.assertEqual(code, 0)
+            data = json.loads(stdout.getvalue())
+            self.assertEqual(data, {'status': 'resolved', 'pr': w['pr'],
+                                    'plan-id': w['plan'], 'wave': w['wave'],
+                                    'branch': WAVE_BRANCH, 'head': w['head']})
+
+    def test_resolve_pr_accepts_merged_pr_for_idempotent_resume(self):
+        w = self.open_impl_world()
+        payload = dict(self.open_pr_payload(w), state='closed', merged=True)
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=all&head={SLUG}:{WAVE_BRANCH}', False): [payload],
+        }
+        with self.fake_api(routes):
+            argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                    '--plan', w['plan'], '--wave', str(w['wave']),
+                    '--expected-branch', WAVE_BRANCH, '--expected-head', w['h1']]
+            stdout = io.StringIO()
+            with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+                code = m.main()
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(stdout.getvalue())['head'], w['head'])
+
+    def test_open_pr_accepts_evidence_only_tip_after_receipt_head(self):
+        w = self.open_impl_world()
+        created = self.open_pr_payload(w)
+        routes = {
+            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls/{w["pr"]}', False): created,
+        }
+        with self.fake_api(routes), patch.object(m, 'gh_post', return_value=created):
+            result = m.open_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH,
+                               expected_head=w['h1'])
+        self.assertEqual(result['head'], w['head'])
+
+    def test_pr_ci_accepts_evidence_only_tip_after_receipt_head(self):
+        w = self.open_impl_world()
+        m._CHECKS_CACHE.clear()
+        with self.fake_api(self.ci_routes(w)):
+            result = m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                             expected_head=w['h1'])
+        self.assertEqual(result['head'], w['head'])
+        self.assertEqual(result['status'], 'green')
+
+    def test_scratch_exempt_porcelain_does_not_split_untracked_arrow_names(self):
+        w = self.open_impl_world()
+        scratch = w['subject'] / '.planning' / 'scratch' / 'probe'
+        scratch.parent.mkdir(parents=True, exist_ok=True)
+        scratch.write_text('probe\n')
+        foreign_name = w['subject'] / 'src' / 'x -> .planning/scratch/y'
+        foreign_name.parent.mkdir(parents=True, exist_ok=True)
+        foreign_name.write_text('foreign\n')
+        kept = m.scratch_exempt_porcelain(w['subject'])
+        self.assertNotIn('.planning/scratch/probe', kept)
+        self.assertIn('src/x -> .planning/scratch/y', kept)
+
+    def test_resolve_pr_rejects_rename_from_source_to_evidence(self):
+        w = self.open_impl_world()
+        sh('git', 'fetch', '-q', 'origin',
+           'refs/heads/' + WAVE_BRANCH + ':refs/remotes/origin/' + WAVE_BRANCH,
+           cwd=w['subject'])
+        sh('git', 'checkout', '-q', '-b', 'rename-drift',
+           'refs/remotes/origin/' + WAVE_BRANCH, cwd=w['subject'])
+        sh('git', 'mv', 'src/file.txt',
+           'docs/reports/gsd-wave-evidence/renamed.txt', cwd=w['subject'])
+        sh('git', 'commit', '-q', '-m', 'rename source into evidence', cwd=w['subject'])
+        drifted_head = sh('git', 'rev-parse', 'HEAD', cwd=w['subject']).strip()
+        sh('git', 'push', '-q', 'origin',
+           'HEAD:refs/heads/' + WAVE_BRANCH,
+           'HEAD:refs/pull/%d/head' % w['pr'], cwd=w['subject'])
+        payload = {'number': w['pr'], 'state': 'open',
+                   'head': {'sha': drifted_head, 'ref': WAVE_BRANCH,
+                            'repo': {'full_name': SLUG}},
+                   'base': {'ref': 'main', 'sha': w['c0'],
+                            'repo': {'full_name': SLUG}}}
+        with self.fake_api({(SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False):
+                            [payload]}):
+            argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
+                    '--plan', w['plan'], '--wave', str(w['wave']),
+                    '--expected-branch', WAVE_BRANCH, '--expected-head', w['h1']]
+            stdout = io.StringIO()
+            with patch.object(m.sys, 'argv', argv), contextlib.redirect_stdout(stdout):
+                code = m.main()
+            self.assertEqual(code, 2)
+            self.assertIn('non-evidence paths', json.loads(stdout.getvalue())['reason'])
 
 
 if __name__ == '__main__':
