@@ -203,6 +203,28 @@
     (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
                                                 "sync"
                                                 (hasheq 'status "pending" 'reason "detached HEAD")))
+                  'blocked)
+    ;; W2 PR creation is deterministic and idempotent at the durable branch identity.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-pr"
+                                   (hasheq 'status "opened" 'pr 42 'branch "campaign/test")))
+     'ok)
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-pr"
+                                   (hasheq 'status "exists" 'pr 42 'branch "campaign/test")))
+     'ok)
+    ;; W2 CI success advances; unresolved CI remains a typed stop, never a fabricated green.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-ci"
+                                   (hasheq 'status "green" 'pr 42 'branch "campaign/test")))
+     'ok)
+    (check-equal? (delivery-effect-result-kind
+                   (default-delivery-controller-interpret
+                    "implementation-ci"
+                    (hasheq 'status "delivery-pending" 'reason "required check test (0) is pending")))
                   'blocked))
   (test-case "default controller refuses stages without a controller action (typed stop, never fabricated)"
     (define dir (make-temporary-file "coordinator-noop-~a" 'directory))
@@ -277,4 +299,16 @@
                           ;; the stub campaign repo has no origin: the python failure
                           ;; reason must survive the exit-2 boundary (previously
                           ;; discarded with the empty stderr)
-                          (check-true (string-contains? reason "delivery command failed"))))))
+                          (check-true (string-contains? reason "delivery command failed")))))
+  (test-case "W2 PR and CI stages route to their controller actions"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define ready (done-record dir))
+                          (define plan (campaign-plan-id ready))
+                          (for ([stage (in-list '("implementation-pr" "implementation-ci"
+                                                                      "implementation-merged"))])
+                            (define r (default-delivery-controller dir plan 0 stage))
+                            (check-eq? (delivery-effect-result-kind r) 'blocked)
+                            (define reason (hash-ref (delivery-effect-result-data r) 'reason))
+                            (check-false (string-contains? reason "not implemented")
+                                         (format "~a must dispatch to its Python action" stage)))))))

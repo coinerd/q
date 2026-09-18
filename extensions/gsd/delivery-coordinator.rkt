@@ -100,6 +100,9 @@
       [(equal? (car rest) v) i]
       [else (loop (add1 i) (cdr rest))])))
 
+(define (full-sha-string? value)
+  (and (string? value) (regexp-match? #px"^[0-9a-f]{40}$" value)))
+
 ;; Next linear stage after `current` (a member of linear-delivery-stages).
 (define (next-stage current)
   (define idx (indexof linear-delivery-stages current))
@@ -304,36 +307,110 @@
                      (default-delivery-receipt-head base-dir plan wave)
                      "--expected-branch"
                      (default-delivery-receipt-branch base-dir plan wave))]
+    [("implementation-pr")
+     ;; Resolve the durable branch identity first. A missing open PR is the
+     ;; only blocked result that may proceed to deterministic creation; API,
+     ;; fetch, or identity failures remain typed stops and never get retried
+     ;; as a create attempt.
+     (define pr-branch (default-delivery-receipt-branch base-dir plan wave))
+     (define pr-receipt-head (default-delivery-receipt-head base-dir plan wave))
+     (define resolved-pr
+       (run-controller "resolve-pr" "--expected-branch" pr-branch "--expected-head" pr-receipt-head))
+     (define resolved-pr-data (delivery-effect-result-data resolved-pr))
+     (define resolved-pr-status (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'status #f)))
+     (define resolved-pr-number (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'pr #f)))
+     (define resolved-pr-head (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'head #f)))
+     (cond
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'ok)
+             (equal? resolved-pr-status "resolved")
+             (exact-nonnegative-integer? resolved-pr-number)
+             (full-sha-string? resolved-pr-head))
+        resolved-pr]
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'ok)
+             (equal? resolved-pr-status "resolved"))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" pr-branch)))]
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'blocked)
+             (equal? resolved-pr-status "none"))
+        (run-controller "open-pr"
+                        "--expected-branch"
+                        pr-branch
+                        "--expected-head"
+                        (default-delivery-receipt-head base-dir plan wave))]
+       [else resolved-pr])]
+    [("implementation-ci")
+     ;; CI is evaluated only after an exact open PR has been resolved from the
+     ;; receipt branch. The PR number is never guessed or persisted.
+     (define ci-branch (default-delivery-receipt-branch base-dir plan wave))
+     (define ci-receipt-head (default-delivery-receipt-head base-dir plan wave))
+     (define resolved-ci-pr
+       (run-controller "resolve-pr" "--expected-branch" ci-branch "--expected-head" ci-receipt-head))
+     (define resolved-ci-data (delivery-effect-result-data resolved-ci-pr))
+     (define resolved-ci-status (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'status #f)))
+     (define ci-pr-number (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'pr #f)))
+     (define ci-pr-head (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'head #f)))
+     (cond
+       [(and (eq? (delivery-effect-result-kind resolved-ci-pr) 'ok)
+             (equal? resolved-ci-status "resolved")
+             (exact-nonnegative-integer? ci-pr-number)
+             (full-sha-string? ci-pr-head))
+        (run-controller "pr-ci"
+                        "--pr"
+                        (number->string ci-pr-number)
+                        "--expected-branch"
+                        ci-branch
+                        "--expected-head"
+                        (default-delivery-receipt-head base-dir plan wave))]
+       [(and (eq? (delivery-effect-result-kind resolved-ci-pr) 'ok)
+             (equal? resolved-ci-status "resolved"))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" ci-branch)))]
+       [else resolved-ci-pr])]
     [("implementation-merged")
      ;; A protected merge needs (a) the PR identity resolved from the durable
-     ;; receipt branch (never guessed), (b) the exact verified head and branch
-     ;; from the receipt, and (c) the frozen schema-2 evidence path. The PR
-     ;; lookup is the same fail-closed resolve-before-create the controller
-     ;; already uses; zero/multiple open PRs become a typed stop.
+     ;; receipt branch (never guessed), (b) the exact verified PR head and
+     ;; branch, and (c) the frozen schema-2 evidence path. Resolve validates
+     ;; that the PR tip descends from the receipt through evidence-only commits;
+     ;; merge then enforces its exact-head contract at that actual PR tip.
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
      (define receipt-head (default-delivery-receipt-head base-dir plan wave))
      (define evidence (default-delivery-evidence-path plan wave))
-     (define resolve (run-controller "resolve-pr" "--expected-branch" receipt-branch))
+     (define resolve
+       (run-controller "resolve-pr"
+                       "--expected-branch"
+                       receipt-branch
+                       "--expected-head"
+                       receipt-head))
+     (define resolve-data (delivery-effect-result-data resolve))
      ;; string->jsexpr hashes carry SYMBOL keys; a string key here never
      ;; matched and made the protected merge unreachable in production.
-     (define pr-number (hash-ref (delivery-effect-result-data resolve) 'pr #f))
+     (define pr-number (and (hash? resolve-data) (hash-ref resolve-data 'pr #f)))
+     (define pr-head (and (hash? resolve-data) (hash-ref resolve-data 'head #f)))
      (cond
        ;; None/ambiguous PR, or shell failure: typed stop with the controller
        ;; reason — never invent a PR identity.
        [(not (eq? (delivery-effect-result-kind resolve) 'ok)) resolve]
-       [(not (exact-nonnegative-integer? pr-number))
-        (delivery-effect-result 'blocked
-                                (hasheq 'stage
-                                        target-stage
-                                        'reason
-                                        (format "controller resolved no usable PR for branch ~a"
-                                                receipt-branch)))]
+       [(not (and (exact-nonnegative-integer? pr-number) (full-sha-string? pr-head)))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" receipt-branch)))]
        [else
         (run-controller "merge"
                         "--pr"
                         (number->string pr-number)
                         "--expected-head"
-                        receipt-head
+                        pr-head
                         "--expected-branch"
                         receipt-branch
                         "--evidence"
@@ -359,6 +436,11 @@
     ;; implementation-review: the strict gate validated the durable review
     ;; at the receipt head; carry the binding evidence (reviewed-sha) forward.
     [(equal? status "reviewed") (delivery-effect-result 'ok data)]
+    [(equal? status "opened") (delivery-effect-result 'ok data)]
+    [(equal? status "exists") (delivery-effect-result 'ok data)]
+    [(equal? status "green") (delivery-effect-result 'ok data)]
+    [(equal? status "pending-review") (delivery-effect-result 'ok data)]
+    [(equal? status "governed") (delivery-effect-result 'ok data)]
     [(equal? status "awaiting-review")
      (delivery-effect-result 'awaiting-review
                              (hasheq 'stage
@@ -373,6 +455,10 @@
       (hasheq
        'stage
        target-stage
+       'status
+       "none"
+       'branch
+       (hash-ref data 'branch "?")
        'reason
        (format "no open implementation PR for branch ~a; open it for genuine independent review"
                (hash-ref data 'branch "?"))))]

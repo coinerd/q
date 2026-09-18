@@ -226,7 +226,7 @@ def validate_trio(repo, ref, relative, base):
 
 def validate_merge(pr, commit, slug, merge, head):
     require(isinstance(pr, dict) and isinstance(commit, dict), 'malformed PR/commit response')
-    require(pr.get('merged') is True, 'implementation PR is not merged')
+    require(pr_is_merged(pr), 'implementation PR is not merged')
     require(dig(pr, 'merge_commit_sha') == merge and full_sha(merge),
             'implementation merge SHA mismatch')
     require(dig(pr, 'head', 'sha') == head and full_sha(head),
@@ -278,11 +278,23 @@ def gh_put(slug, route, fields):
     require(isinstance(data, dict), 'malformed GitHub mutation response')
     return data
 
+def gh_post(slug, route, fields):
+    """Authenticated GitHub mutation (POST) through the trusted gh CLI. This
+    mirrors gh_put so PR creation remains a single credential boundary."""
+    args = ['gh', 'api', '--hostname', 'github.com', '-X', 'POST',
+            'repos/' + slug + '/' + route]
+    for key in sorted(fields):
+        args += ['-f', f'{key}={fields[key]}']
+    data = json.loads(command(args, timeout=60))
+    require(isinstance(data, dict), 'malformed GitHub mutation response')
+    return data
+
 def merge(repo, plan, wave, number, expected_head, expected_branch, source):
     """Deterministic protected squash merge of the implementation PR.
 
-    Every gate runs BEFORE any mutation; `expected_head` comes from the durable
-    verified receipt, never from model output. Order:
+    Every gate runs BEFORE any mutation; `expected_head` is the validated PR
+    tip (or the receipt head when no evidence-only review commits followed it),
+    never model output. Order:
       1. same-repo main-base identity
       2. exact expected head (both the PR claim and the actually-fetched refs/pull/N/head)
       3. already-merged at the expected head -> idempotent, no second merge
@@ -304,7 +316,7 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
     head = dig(pr, 'head', 'sha')
     require(head == expected_head and full_sha(expected_head),
             'implementation PR head does not match the verified expected head')
-    if pr.get('merged') is True:
+    if pr_is_merged(pr):
         merge_sha = dig(pr, 'merge_commit_sha')
         validate_merge(pr, api(slug, f'commits/{merge_sha}'), slug, merge_sha, head)
         return {'status': 'already-merged', 'merge-sha': merge_sha, 'plan-id': plan,
@@ -401,16 +413,52 @@ def protection(slug, expected_names):
     require(not missing, 'branch protection does not require expected checks: ' + ', '.join(missing))
     return policy
 
+def pr_is_merged(pr):
+    """Return whether a PR response is authoritatively merged.
+
+    GitHub's commit-association response can report ``merged: null`` for a
+    real squash merge, while the pulls endpoint exposes either ``merged: true``
+    or a closed PR with ``merged_at`` set. Accept both established shapes and
+    nothing weaker."""
+    return (isinstance(pr, dict) and
+            (pr.get('merged') is True or
+             (pr.get('state') == 'closed' and pr.get('merged_at') is not None)))
+
+
+def resolve_prs_for_branch(slug, branch, state):
+    """Resolve PRs for a branch at a requested GitHub state.
+
+    A branch may have at most one candidate in the returned set. The open-set
+    query is used for resolve-before-create; the all-state query is used only
+    by the idempotent merged-PR recovery path."""
+    require(isinstance(branch, str) and branch.strip(), 'invalid branch identity')
+    candidates = api(slug, f'pulls?state={state}&head={slug}:{branch}')
+    require(isinstance(candidates, list), 'malformed pull-request response')
+    require(len(candidates) <= 1,
+            'multiple pull requests already target branch ' + branch)
+    return candidates[0] if candidates else None
+
+
 def resolve_existing_pr(slug, branch):
     """Resolve-before-create: at most one open PR may already target the
     exact head branch. Returns it, or None when none exists; multiple open
     PRs for one branch fail closed (never silently pick one to reuse)."""
-    require(isinstance(branch, str) and branch.strip(), 'invalid branch identity')
-    opened = api(slug, f'pulls?state=open&head={slug}:{branch}')
-    require(isinstance(opened, list), 'malformed open-PR response')
-    require(len(opened) <= 1,
-            'multiple open pull requests already target branch ' + branch)
-    return opened[0] if opened else None
+    return resolve_prs_for_branch(slug, branch, 'open')
+
+
+def resolve_merged_pr(slug, branch):
+    """Find one closed, merged PR for a branch for idempotent resume.
+
+    This is deliberately separate from open-PR resolution: a lost merge response
+    must not make the next delivery attempt invent a new PR or stall forever."""
+    candidates = api(slug, f'pulls?state=all&head={slug}:{branch}')
+    require(isinstance(candidates, list), 'malformed pull-request response')
+    merged = [pr for pr in candidates
+              if isinstance(pr, dict) and pr.get('state') == 'closed'
+              and pr_is_merged(pr) and dig(pr, 'head', 'ref') == branch]
+    require(len(merged) <= 1,
+            'multiple merged pull requests already target branch ' + branch)
+    return merged[0] if merged else None
 
 def refresh(repo):
     git(repo, 'fetch', '--no-tags', 'origin',
@@ -430,8 +478,8 @@ def tree_of(repo, ref):
     return tree
 
 def changed_evidence(repo, publication):
-    out = git(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', publication,
-              '--', 'docs/reports/gsd-wave-evidence/')
+    out = git(repo, 'diff-tree', '--no-commit-id', '--name-only', '--no-renames',
+              '-r', publication, '--', 'docs/reports/gsd-wave-evidence/')
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 def publication_pr(slug, publication):
@@ -455,8 +503,8 @@ def publication_pr(slug, publication):
               (pr.get('state') == 'closed' and pr.get('merged_at') is not None))
     if not merged:
         number = pr.get('number')
-        merged = (isinstance(number, int) and
-                  api(slug, f'pulls/{number}').get('merged') is True)
+        if isinstance(number, int):
+            merged = pr_is_merged(api(slug, f'pulls/{number}'))
     require(merged, 'binding publication must be exactly one merged same-repo PR')
     return same[0]
 
@@ -594,7 +642,7 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output):
     pr = api(slug, f'pulls/{number}')
     require(isinstance(pr, dict), 'malformed PR response')
     merge, head = dig(pr, 'merge_commit_sha'), dig(pr, 'head', 'sha')
-    require(pr.get('merged') is True, 'implementation PR must be independently reviewed and merged first')
+    require(pr_is_merged(pr), 'implementation PR must be independently reviewed and merged first')
     validate_merge(pr, api(slug, f'commits/{merge}'), slug, merge, head)
     fetched = fetch_head(repo, number)
     require(fetched == head, 'fetched implementation head does not match PR head SHA')
@@ -692,8 +740,16 @@ def scratch_exempt_porcelain(repo):
         if not line.strip():
             continue
         body = line[3:] if len(line) > 3 else ''
-        if line[:2].strip() == '??' and any(exempt(part) for part in body.split(' -> ')):
-            continue
+        code = line[:2]
+        if code == '??':
+            # An untracked path is one path even when its literal name contains
+            # " -> "; splitting it would let a foreign path masquerade as scratch.
+            if exempt(body):
+                continue
+        elif code[0] in ('R', 'C') and ' -> ' in body:
+            old, new = body.split(' -> ', 1)
+            if exempt(old) and exempt(new):
+                continue
         kept.append(line)
     return '\n'.join(kept)
 
@@ -714,19 +770,160 @@ def sync(repo, expected_branch):
             'branch':current}
 
 
-def resolve_pr(repo, plan, wave, branch):
-    """Resolve the (at most one) open implementation PR for the exact head
-    branch. Fail closed: zero or multiple open PRs are never silently
-    collapsed; the caller (coordinator) must surface a typed stop instead of
-    inventing a PR identity. The returned PR number feeds the protected
-    merge; model/journal completion never substitutes for it."""
+def resolve_pr(repo, plan, wave, branch, expected_head=None):
+    """Resolve the exact implementation PR for a durable head branch.
+
+    Open PRs are resolved for normal progression. When a durable receipt head
+    is supplied and no open PR exists, one closed merged PR is also accepted so
+    a lost merge response can resume idempotently; zero or multiple candidates
+    still fail closed. The returned PR number feeds the protected merge; model
+    or journal completion never substitutes for it.
+
+    When a durable receipt head is supplied, fetch the PR ref and require the
+    actual PR tip to descend from that receipt through excluded-evidence-only
+    commits. This preserves the review-stage tip semantics while keeping
+    merge's exact-head contract."""
     slug = repository(repo)
     refresh(repo)
     pr = resolve_existing_pr(slug, branch)
+    merged_resume = False
+    if pr is None and expected_head is not None:
+        # A squash merge may have completed while the response was lost. The
+        # closed PR remains the durable identity; re-resolve it and let merge()
+        # perform its normal already-merged proof rather than opening a new PR.
+        pr = resolve_merged_pr(slug, branch)
+        merged_resume = pr is not None
     if pr is None:
         return {'status': 'none', 'plan-id': plan, 'wave': wave, 'branch': branch}
-    return {'status': 'resolved', 'pr': pr['number'], 'plan-id': plan, 'wave': wave,
-            'branch': branch, 'head': dig(pr, 'head', 'sha')}
+    number = pr.get('number') if isinstance(pr, dict) else None
+    require(type(number) is int and number > 0,
+            'resolved pull request has no usable number')
+    head = dig(pr, 'head', 'sha') if isinstance(pr, dict) else None
+    if expected_head is not None:
+        require(isinstance(pr, dict), 'malformed pull-request response')
+        require(pr.get('state') == ('closed' if merged_resume else 'open'),
+                'resolved pull request has an unexpected state')
+        require(isinstance(head, str) and full_sha(head),
+                'resolved pull request has no full head SHA')
+        require(dig(pr, 'head', 'ref') == branch,
+                'resolved pull request branch does not match expected branch')
+        validate_pr_identity(pr, slug)
+        fetched = fetch_head(repo, number)
+        require(fetched == head, 'resolved pull-request head does not match fetched ref')
+        require_receipt_tip(repo, expected_head, head, 'merge')
+    return {'status': 'resolved', 'pr': number, 'plan-id': plan, 'wave': wave,
+            'branch': branch, 'head': head}
+
+
+def require_receipt_tip(repo, expected_head, tip, action='delivery'):
+    """Pin a branch/PR tip to the durable receipt identity when supplied.
+
+    The implementation-review stage permits only excluded evidence commits
+    after the receipt head. Carry that same ancestry/drift rule into PR and CI
+    readback so a later source rewrite cannot silently advance the wave."""
+    if expected_head is None:
+        return
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'expected-head must be a full SHA')
+    common = git(repo, 'merge-base', expected_head, tip).strip()
+    require(common == expected_head,
+            'receipt head %s is not an ancestor of tip %s; the wave branch may '
+            'have been rewritten; re-verify before %s'
+            % (expected_head[:12], tip[:12], action))
+    drifted = git(repo, 'diff', '--name-only', '--no-renames',
+                  expected_head + '..' + tip, '--')
+    foreign = [line.strip() for line in drifted.splitlines()
+               if line.strip() and not line.strip().startswith(EXCLUDED_PREFIXES)]
+    require(not foreign,
+            'receipt head %s is verified but later wave-branch commits touch '
+            'non-evidence paths: %s; re-verify before %s'
+            % (expected_head[:12], ', '.join(foreign[:3]), action))
+
+
+def open_pr(repo, plan, wave, expected_branch, expected_head=None):
+    """Resolve-before-create an implementation PR from the fetched branch tip.
+
+    The branch name is durable input, but the PR head is read from the remote
+    branch after a refresh; the current checkout is never used as the head.
+    Creation is deterministic, and the returned identity is re-read before it
+    is exposed to the coordinator."""
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'open-pr requires --expected-branch')
+    slug = repository(repo)
+    existing = resolve_existing_pr(slug, expected_branch)
+    refresh(repo)
+    refspec = 'refs/heads/' + expected_branch
+    remote_ref = 'refs/remotes/origin/' + expected_branch
+    # Allow a rewritten wave branch to refresh the remote-tracking ref. The
+    # subsequently re-read PR identity still pins the exact fetched tip.
+    git(repo, 'fetch', '--no-tags', 'origin', '+' + refspec + ':' + remote_ref)
+    tip = git(repo, 'rev-parse', remote_ref).strip()
+    require(full_sha(tip), 'malformed fetched implementation branch tip')
+    require_receipt_tip(repo, expected_head, tip)
+
+    if existing is None:
+        title = 'W%d delivery: %s' % (wave, expected_branch)
+        evidence = binding_path(plan, wave)
+        body = ('Plan: %s\nWave: W%d\nHead: %s\nBranch: %s\n'
+                'Binding evidence: %s\n'
+                'Review: genuine independent review required at the exact implementation head.\n') % (
+                    plan, wave, tip, expected_branch, evidence)
+        created = gh_post(slug, 'pulls',
+                          {'title': title, 'body': body, 'head': expected_branch, 'base': 'main'})
+        require(isinstance(created, dict), 'malformed GitHub pull-request creation response')
+        created_number = created.get('number')
+        require(type(created_number) is int and created_number > 0,
+                'GitHub pull-request creation response has no usable number')
+        pr = api(slug, 'pulls/%s' % created_number, _refresh=True)
+    else:
+        existing_number = existing.get('number')
+        require(type(existing_number) is int and existing_number > 0,
+                'resolved pull request has no usable number')
+        pr = api(slug, 'pulls/%s' % existing_number, _refresh=True)
+
+    require(isinstance(pr, dict), 'malformed pull-request response')
+    require(pr.get('state') == 'open', 'pull request is not open')
+    validate_pr_identity(pr, slug)
+    number = pr.get('number')
+    head = dig(pr, 'head', 'sha')
+    require(type(number) is int and number > 0, 'created pull request has no usable number')
+    require(full_sha(head), 'created pull request has no full head SHA')
+    require(head == tip, 'fetched implementation branch tip differs from pull-request head')
+    require(dig(pr, 'head', 'ref') == expected_branch,
+            'pull request branch does not match expected branch')
+    return {'status': 'opened', 'pr': number, 'branch': expected_branch, 'head': head}
+
+
+def pr_ci(repo, number, expected_branch, expected_head=None):
+    """Evaluate the exact PR head against the current required-check policy.
+
+    Every required check must be completed successfully, trusted to the
+    Actions app, and tied to the same pull-request event and branch. Any
+    pending, failed, missing, or untrusted check is a typed stop naming that
+    check."""
+    require(type(number) is int and number > 0, 'pr-ci requires --pr')
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'pr-ci requires --expected-branch')
+    slug = repository(repo)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    pr = api(slug, 'pulls/%s' % number, _refresh=True)
+    require(isinstance(pr, dict), 'malformed pull-request response')
+    require(pr.get('state') == 'open', 'pull request is not open')
+    validate_pr_identity(pr, slug)
+    head = dig(pr, 'head', 'sha')
+    require(full_sha(head), 'pull request has no full head SHA')
+    require(dig(pr, 'head', 'ref') == expected_branch,
+            'pull request branch does not match expected branch')
+    fetched = fetch_head(repo, number)
+    require(fetched == head, 'pull-request head does not match fetched ref')
+    require_receipt_tip(repo, expected_head, head)
+    names = policy_names(repo, main)
+    protection(slug, names)
+    for name in names:
+        trusted_check(slug, head, name, 'pull_request', expected_branch)
+    return {'status': 'green', 'pr': number, 'branch': expected_branch, 'head': head}
 
 
 def review(repo, plan, wave, expected_head, expected_branch):
@@ -757,15 +954,7 @@ def review(repo, plan, wave, expected_head, expected_branch):
     git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + expected_branch)
     tip = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
     require(full_sha(tip), 'malformed fetched receipt branch tip')
-    if tip != expected_head:
-        git(repo, 'merge-base', '--is-ancestor', expected_head, tip)
-        drifted = git(repo, 'diff', '--name-only', expected_head + '..' + tip)
-        foreign = [line.strip() for line in drifted.splitlines()
-                   if line.strip() and not line.strip().startswith(EXCLUDED_PREFIXES)]
-        require(not foreign,
-                'receipt head %s is verified but later wave-branch commits touch '
-                'non-evidence paths: %s; re-verify before review'
-                % (expected_head[:12], ', '.join(foreign[:3])))
+    require_receipt_tip(repo, expected_head, tip, 'review')
     # Validation reference: the fetched tip (the trio and review are produced
     # after Verify); the excluded-diff digest binds it to the receipt's tree.
     if blob_or_none(repo, tip, relative) is None:
@@ -794,18 +983,14 @@ def review(repo, plan, wave, expected_head, expected_branch):
     require(isinstance(reviewed, str) and full_sha(reviewed),
             'review record carries no reviewed-sha')
     if reviewed != expected_head:
-        touched = git(repo, 'diff', '--name-only', reviewed + '..' + expected_head)
-        foreign = [line.strip() for line in touched.splitlines()
-                   if line.strip() and not line.strip().startswith(EXCLUDED_PREFIXES)]
-        require(not foreign,
-                'review binds %s but later commits touch non-evidence paths: %s'
-                % (reviewed[:12], ', '.join(foreign[:3])))
+        require_receipt_tip(repo, reviewed, expected_head, 'review')
     return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
             'reviewed-sha': reviewed, 'review-artifact': review_rel}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review'])
+    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review',
+                                           'open-pr','pr-ci'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -832,12 +1017,22 @@ def main():
         elif args.action == 'resolve-pr':
             require(args.expected_branch,
                     'resolve-pr requires --expected-branch')
-            result = resolve_pr(args.repo, args.plan, args.wave, args.expected_branch)
+            result = resolve_pr(args.repo, args.plan, args.wave, args.expected_branch,
+                                args.expected_head)
         elif args.action == 'review':
             require(args.expected_head and args.expected_branch,
                     'review requires --expected-head and --expected-branch')
             result = review(args.repo, args.plan, args.wave, args.expected_head,
                             args.expected_branch)
+        elif args.action == 'open-pr':
+            require(args.expected_branch,
+                    'open-pr requires --expected-branch')
+            result = open_pr(args.repo, args.plan, args.wave, args.expected_branch,
+                             args.expected_head)
+        elif args.action == 'pr-ci':
+            require(args.pr and args.expected_branch,
+                    'pr-ci requires --pr and --expected-branch')
+            result = pr_ci(args.repo, args.pr, args.expected_branch, args.expected_head)
         else:
             require(args.pr and args.evidence and args.output and args.campaign_root,
                     'prepare requires --pr, --evidence, --output and --campaign-root')
