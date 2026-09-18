@@ -42,7 +42,8 @@
          run-delivery-coordinator!
          default-delivery-controller
          default-delivery-coordinator
-         default-delivery-controller-interpret)
+         default-delivery-controller-interpret
+         parse-delivery-stop)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -226,6 +227,23 @@
 
 (define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
 
+;; Typed-stop reason preservation: gsd-delivery.py reports typed stops as
+;; exit 2 with {"status":"delivery-pending","reason":…} on STDOUT while
+;; stderr stays empty. Reading only stderr discarded every controller reason;
+;; this parser surfaces the preserved, redacted reason and returns #f for
+;; anything else (garbage, other statuses, empty output).
+(define (parse-delivery-stop stdout target-stage)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define data (string->jsexpr stdout))
+    (and (hash? data)
+         (equal? (hash-ref data 'status #f) "delivery-pending")
+         (delivery-effect-result
+          'blocked
+          (hasheq 'stage
+                  target-stage
+                  'reason
+                  (redact-delivery-text (format "~a" (hash-ref data 'reason "delivery pending"))))))))
+
 (define (default-delivery-controller base-dir plan wave target-stage)
   ;; The controller shell runs in the checkout identified by base-dir (or its
   ;; q/ child), exactly like delivery-readback. Tokens are added for THIS
@@ -258,16 +276,34 @@
       (if (or (subprocess-result-timed-out? result)
               (subprocess-result-truncated? result)
               (not (zero? (subprocess-result-exit-code result))))
-          (delivery-effect-result 'blocked
-                                  (hasheq 'stage
-                                          target-stage
-                                          'reason
-                                          (redact-delivery-text (subprocess-result-stderr result))))
+          ;; gsd-delivery.py reports typed stops as exit 2 with the reason on
+          ;; STDOUT ({"status":"delivery-pending","reason":…}); stderr stays
+          ;; empty. Surface the preserved, redacted reason instead of
+          ;; discarding it with the blank stderr.
+          (or (parse-delivery-stop (subprocess-result-stdout result) target-stage)
+              (delivery-effect-result 'blocked
+                                      (hasheq 'stage
+                                              target-stage
+                                              'reason
+                                              (redact-delivery-text (subprocess-result-stderr
+                                                                     result)))))
           (default-delivery-controller-interpret
            target-stage
            (string->jsexpr (subprocess-result-stdout result))))))
   ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
   (case target-stage
+    [("implementation-review")
+     ;; Durable review validation at the receipt identity: the frozen
+     ;; binding-named evidence trio plus the schema-2 review artifact are
+     ;; validated by the unchanged strict gate at the receipt head (never
+     ;; the working tree). The review itself is produced by a genuine
+     ;; independent non-author reviewer outside the controller; its absence
+     ;; is a typed awaiting-review, never fabricated progress.
+     (run-controller "review"
+                     "--expected-head"
+                     (default-delivery-receipt-head base-dir plan wave)
+                     "--expected-branch"
+                     (default-delivery-receipt-branch base-dir plan wave))]
     [("implementation-merged")
      ;; A protected merge needs (a) the PR identity resolved from the durable
      ;; receipt branch (never guessed), (b) the exact verified head and branch
@@ -278,7 +314,9 @@
      (define receipt-head (default-delivery-receipt-head base-dir plan wave))
      (define evidence (default-delivery-evidence-path plan wave))
      (define resolve (run-controller "resolve-pr" "--expected-branch" receipt-branch))
-     (define pr-number (hash-ref (delivery-effect-result-data resolve) "pr" #f))
+     ;; string->jsexpr hashes carry SYMBOL keys; a string key here never
+     ;; matched and made the protected merge unreachable in production.
+     (define pr-number (hash-ref (delivery-effect-result-data resolve) 'pr #f))
      (cond
        ;; None/ambiguous PR, or shell failure: typed stop with the controller
        ;; reason — never invent a PR identity.
@@ -318,6 +356,9 @@
     [(equal? status "merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "already-merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "resolved") (delivery-effect-result 'ok data)]
+    ;; implementation-review: the strict gate validated the durable review
+    ;; at the receipt head; carry the binding evidence (reviewed-sha) forward.
+    [(equal? status "reviewed") (delivery-effect-result 'ok data)]
     [(equal? status "awaiting-review")
      (delivery-effect-result 'awaiting-review
                              (hasheq 'stage
