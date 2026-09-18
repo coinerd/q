@@ -666,6 +666,31 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output):
             'next':'Copy trio into a dedicated fresh-main worktree; complete genuine binding review and gates; '
                    'publish through protected squash PR; wait for main governance; sync and resume /go.'}
 
+def scratch_exempt_porcelain(repo):
+    """sandbox-write-scratch-parity W1: UNTRACKED files under
+    .planning/scratch/ are disposable executor probes (created by the
+    structured-write tool for diagnostic scripts) and must not block delivery
+    synchronization. Only bare-untracked ('??') lines are exempt: a COMMITTED
+    scratch file's local modification or deletion is real working-tree dirt
+    and still refuses, as does any edit outside the scratch root. Handles
+    porcelain v1 quoting (core.quotePath wraps non-ASCII paths in double
+    quotes) and rename pairs `R  old -> new`."""
+    def exempt(path):
+        path = path.strip().strip('"')
+        return path.startswith('.planning/scratch/')
+    kept = []
+    # -uall expands collapsed untracked directories: a fresh `.planning/`
+    # would otherwise report as one `?? .planning/` line and hide whether the
+    # dirt is scratch-only. Tracked-file modifications are unaffected.
+    for line in git(repo, 'status', '--porcelain', '--untracked-files=all').splitlines():
+        if not line.strip():
+            continue
+        body = line[3:] if len(line) > 3 else ''
+        if line[:2].strip() == '??' and any(exempt(part) for part in body.split(' -> ')):
+            continue
+        kept.append(line)
+    return '\n'.join(kept)
+
 def sync(repo, expected_branch):
     require(isinstance(expected_branch, str) and expected_branch.strip(),
             'sync requires --expected-branch')
@@ -676,7 +701,7 @@ def sync(repo, expected_branch):
     require(current == expected_branch,
             'synchronization refused: HEAD is %r, expected %r (unrelated branch changes not accepted)'
             % (current, expected_branch))
-    require(not git(repo, 'status', '--porcelain').strip(), 'dirty checkout; refusing synchronization')
+    require(not scratch_exempt_porcelain(repo).strip(), 'dirty checkout; refusing synchronization')
     refresh(repo)
     git(repo, 'merge', '--ff-only', 'origin/main')
     return {'status':'synchronized', 'head':git(repo, 'rev-parse', 'HEAD').strip(),

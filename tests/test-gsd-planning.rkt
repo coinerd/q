@@ -1098,3 +1098,41 @@
      (check-equal? (hook-result-action result) 'amend)
      (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "Wave 0"))
      (delete-directory/files tmp-dir))))
+
+;; ============================================================
+;; sandbox-write-scratch-parity W1: /go scratch guidance
+;; ============================================================
+
+(define (run-go-capture-scratch)
+  (with-gsd-cleanup
+   (lambda ()
+     (with-temp-dir
+      (lambda (dir)
+        (parameterize ([current-directory dir])
+          (set-pinned-planning-dir! dir)
+          (make-directory* (build-path dir ".planning"))
+          (call-with-output-file
+           (build-path dir ".planning" "PLAN.md")
+           (lambda (out) (display "# Plan\n- [Inbox] W0: Fix\n## Wave 0: Fix\n- File: foo.rkt" out))
+           #:exists 'truncate)
+          (call-with-output-file (build-path dir ".planning" "STATE.md")
+                                 (lambda (out) (display "| W0 | Fix | PENDING |" out))
+                                 #:exists 'truncate)
+          (write-test-wave-docs dir "W0-fix.md")
+          (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+          (define result (handler (hasheq 'command "/go" 'input "/go")))
+          (hash-ref (hook-result-payload result) 'new-session)))))))
+
+(test-case "/go prompt carries a session-owned scratch directory"
+  (define submit-text (run-go-capture-scratch))
+  (define scratch-match (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" submit-text))
+  (check-true (and scratch-match #t) "scratch dir with 16-hex token present in /go prompt")
+  (check-true (string-contains? submit-text "current working directory"))
+  (check-true (string-contains? submit-text "structured write tool")))
+
+(test-case "/go scratch tokens differ across fresh sessions"
+  (define a (run-go-capture-scratch))
+  (define b (run-go-capture-scratch))
+  (define token-a (cadr (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" a)))
+  (define token-b (cadr (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" b)))
+  (check-false (string=? token-a token-b) "fresh sessions must not share a scratch destination"))

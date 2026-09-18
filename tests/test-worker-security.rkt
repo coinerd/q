@@ -210,6 +210,48 @@
            (check-equal? (file->string target) "replacement")))
        (lambda () (delete-directory/files root))))
 
+    (test-case "W1 scratch: advertised relative scratch path works through worker dispatch"
+      ;; The /go guidance advertises `.planning/scratch/<token>/` relative to
+      ;; the executor's current working directory. The worker resolves
+      ;; relative paths against its cwd (= worker root), so the advertised
+      ;; path lands inside the allowed root in both base-dir and worktree
+      ;; execution, and W0's parent creation removes the mkdir detour.
+      (define root (make-temporary-file "worker-scratch~a" 'directory))
+      (define other (make-temporary-file "worker-scratch-other~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-allowed-roots (list root)]
+                        [current-directory root])
+           (define resp
+             (process-request-line
+              (make-request-json "scratch"
+                                 "write"
+                                 (hash 'path
+                                       ".planning/scratch/tok1234567890ab/probe.rkt"
+                                       'content
+                                       "#lang racket/base\n"))))
+           (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
+           (check-equal?
+            (file->string (build-path root ".planning" "scratch" "tok1234567890ab" "probe.rkt"))
+            "#lang racket/base\n")
+           ;; The same token under a foreign root stays denied — the guidance
+           ;; contract never widens worker roots.
+           (define denied
+             (process-request-line
+              (make-request-json
+               "scratch-x"
+               "write"
+               (hash 'path
+                     (path->string (build-path other ".planning" "scratch" "tok1234567890ab" "x.rkt"))
+                     'content
+                     "no"))))
+           (check-equal? (ipc-response-status denied) 'error)
+           (check-false (directory-exists? (build-path other ".planning")))))
+       (lambda ()
+         (delete-directory/files root #:must-exist? #f)
+         (delete-directory/files other #:must-exist? #f))))
+
     (test-case "write to allowed path succeeds"
       (define test-file (build-path allowed-dir "write-test"))
       (define resp (execute-write (hash 'path (path->string test-file) 'content "hello")))

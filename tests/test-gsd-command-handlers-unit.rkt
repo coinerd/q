@@ -7,10 +7,44 @@
 ;; Tests the pure parse-gsd-command and dispatch-gsd-command functions.
 
 (require racket/base
+         racket/file
+         racket/path
+         racket/string
          rackunit
          rackunit/text-ui
+         (only-in "../extensions/gsd/plan-types.rkt" gsd-plan gsd-wave)
+         (only-in "../extensions/gsd/wave-executor.rkt"
+                  current-gsd-worktree-isolation
+                  wave-worktree-dir)
          "../extensions/gsd/command-parser.rkt"
          "../extensions/gsd/command-handlers.rkt")
+
+(define (make-scratch-prompt-fixture)
+  (define dir (make-temporary-file "scratch-prompt-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file
+   (build-path dir ".planning" "PLAN.md")
+   (lambda (out)
+     (display
+      "# Plan: Scratch Guidance Test\n\n## Wave 0: W0 test\n- [Inbox] W0: W0 test → waves/W0-wave.md\n"
+      out)))
+  (call-with-output-file
+   (build-path dir ".planning" "waves" "W0-wave.md")
+   (lambda (out) (display "# Wave 0\nStatus: PENDING\n\n# W0 test\n\n- File: q/some-file.rkt\n" out)))
+  dir)
+
+(define (make-scratch-test-plan)
+  (gsd-plan (list (gsd-wave 0
+                            "W0: test wave"
+                            'pending
+                            "root cause"
+                            (list "q/some-file.rkt")
+                            '()
+                            "raco test"
+                            '("done")))
+            #f
+            '()
+            '()))
 
 (define suite
   (test-suite "GSD command parsing + dispatch unit tests"
@@ -193,6 +227,56 @@
 
     (test-case "extract-last-failure multi-line reason"
       (define doc "## Last Failure\nline one\nline two\n## Next")
-      (check-equal? (extract-last-failure doc) "line one\nline two"))))
+      (check-equal? (extract-last-failure doc) "line one\nline two"))
+
+    ;; ── sandbox-write-scratch-parity W1: executor scratch guidance ──
+
+    (test-case "single-wave prompt embeds scratch guidance only when a token is supplied"
+      (define dir (make-scratch-prompt-fixture))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define plan (make-scratch-test-plan))
+         (define plain (build-single-wave-prompt dir plan 0))
+         (check-false (string-contains? plain ".planning/scratch/")
+                      "no token → no scratch section (backward-compatible bytes)")
+         (define guided
+           (build-single-wave-prompt dir
+                                     plan
+                                     0
+                                     #:scratch-token "tok1234567890ab"
+                                     #:scratch-root-abs "/tmp/abs/.planning/scratch/tok1234567890ab"))
+         (check-true (string-contains? guided ".planning/scratch/tok1234567890ab"))
+         (check-true (string-contains? guided "/tmp/abs/.planning/scratch/tok1234567890ab")
+                     "concrete absolute path present")
+         (check-true (string-contains? guided "current working directory")))
+       (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+    (test-case "fresh executor scratch tokens are opaque 16-hex and distinct"
+      (define a (fresh-executor-scratch-token))
+      (define b (fresh-executor-scratch-token))
+      (check-equal? (string-length a) 16)
+      (check-true (regexp-match? #px"^[0-9a-f]{16}$" a))
+      (check-false (string=? a b) "fresh sessions must not share a scratch token"))
+
+    (test-case "scratch root follows worker roots: worktree in isolation, base-dir otherwise"
+      (define base (make-temporary-file "scratch-root-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-gsd-worktree-isolation #f])
+           (check-equal? (executor-scratch-root-abs base "abcdef1234567890" 0 "tok1234567890ab")
+                         (path->string (simplify-path
+                                        (build-path base ".planning" "scratch" "tok1234567890ab")
+                                        #f))))
+         (parameterize ([current-gsd-worktree-isolation #t])
+           (check-equal? (executor-scratch-root-abs base "abcdef1234567890" 0 "tok1234567890ab")
+                         (path->string (simplify-path
+                                        (build-path (wave-worktree-dir base "abcdef1234567890" 0)
+                                                    ".planning"
+                                                    "scratch"
+                                                    "tok1234567890ab")
+                                        #f)))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))))
 
 (run-tests suite)
