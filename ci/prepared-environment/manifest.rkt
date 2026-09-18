@@ -35,6 +35,8 @@
 
 (define schema-revision-supported 1)
 
+(provide sha256-file)
+
 ;; The fixed universe of artifact-safe top-level prefixes. The producer may
 ;; only allowlist entries from this set; the verifier enforces the same set
 ;; so a tampered manifest cannot widen its own allowlist.
