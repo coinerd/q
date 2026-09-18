@@ -667,12 +667,14 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output):
                    'publish through protected squash PR; wait for main governance; sync and resume /go.'}
 
 def scratch_exempt_porcelain(repo):
-    """sandbox-write-scratch-parity W1: porcelain lines under
-    .planning/scratch/ are disposable executor probes (untracked by design;
-    the structured-write tool creates them for diagnostic scripts) and must
-    not block delivery synchronization. Every other dirty state still
-    refuses. Handles porcelain v1 quoting (core.quotePath wraps non-ASCII
-    paths in double quotes) and rename pairs `R  old -> new`."""
+    """sandbox-write-scratch-parity W1: UNTRACKED files under
+    .planning/scratch/ are disposable executor probes (created by the
+    structured-write tool for diagnostic scripts) and must not block delivery
+    synchronization. Only bare-untracked ('??') lines are exempt: a COMMITTED
+    scratch file's local modification or deletion is real working-tree dirt
+    and still refuses, as does any edit outside the scratch root. Handles
+    porcelain v1 quoting (core.quotePath wraps non-ASCII paths in double
+    quotes) and rename pairs `R  old -> new`."""
     def exempt(path):
         path = path.strip().strip('"')
         return path.startswith('.planning/scratch/')
@@ -684,7 +686,7 @@ def scratch_exempt_porcelain(repo):
         if not line.strip():
             continue
         body = line[3:] if len(line) > 3 else ''
-        if any(exempt(part) for part in body.split(' -> ')):
+        if line[:2].strip() == '??' and any(exempt(part) for part in body.split(' -> ')):
             continue
         kept.append(line)
     return '\n'.join(kept)

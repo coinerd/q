@@ -721,11 +721,17 @@
                 0))
           ;; sandbox-write-scratch-parity W1: allocate the executor scratch
           ;; token ONCE per /go request (same-session retries reuse it; fresh
-          ;; sessions get distinct ownership) and resolve the absolute root
-          ;; from the executor's actual worker roots.
+          ;; sessions get distinct ownership). The absolute root is resolved
+          ;; PER WAVE inside the prompt closure: it runs in the campaign
+          ;; thread after apply-worktree-isolation-setting! has reconciled
+          ;; the flag, and each wave resolves its own worktree root, so the
+          ;; advertised absolute path tracks the executor's actual worker
+          ;; root. The initial 'new-session prompt resolves for the anchor
+          ;; wave in this extent.
           (define scratch-token (fresh-executor-scratch-token))
-          (define scratch-root-abs
-            (executor-scratch-root-abs base-dir (campaign-plan-id rec) anchor-wave-idx scratch-token))
+          (define scratch-root-for
+            (lambda (wave-idx)
+              (executor-scratch-root-abs base-dir (campaign-plan-id rec) wave-idx scratch-token)))
           ;; v1.00.17 W3 (#9514): role-anchor the wave-executor session. If a
           ;; turn ends reasoning-only, the runtime's empty-response retry
           ;; re-sends THIS re-anchor prompt (verbatim executor role + order to
@@ -752,7 +758,7 @@
                                            plan
                                            wave-idx
                                            #:scratch-token scratch-token
-                                           #:scratch-root-abs scratch-root-abs))
+                                           #:scratch-root-abs (scratch-root-for wave-idx)))
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
                #:timeout-sec effective-timeout
                ;; B2b/C: the /go request carries the production delivery
@@ -773,7 +779,8 @@
                                                           plan
                                                           anchor-wave-idx
                                                           #:scratch-token scratch-token
-                                                          #:scratch-root-abs scratch-root-abs)
+                                                          #:scratch-root-abs
+                                                          (scratch-root-for anchor-wave-idx))
                                 'text
                                 (append-divergence-warnings
                                  (if delivery-pending

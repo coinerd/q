@@ -999,6 +999,21 @@ class DeliveryTests(unittest.TestCase):
         result = m.sync(w['subject'], 'main')
         self.assertEqual(result['status'], 'synchronized')
 
+    def test_sync_refuses_committed_scratch_edit(self):
+        # A COMMITTED scratch file's local modification is real working-tree
+        # dirt: only untracked probe residue is exempt.
+        w = self.world()
+        self.advance_origin(w)
+        scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
+        scratch.mkdir(parents=True)
+        write_file(scratch / 'committed.rkt', 'one\n')
+        sh('git', 'add', '-A', cwd=w['subject'])
+        sh('git', 'commit', '-q', '-m', 'scratch', cwd=w['subject'])
+        write_file(scratch / 'committed.rkt', 'two\n')
+        with self.assertRaises(m.Pending) as caught:
+            m.sync(w['subject'], 'main')
+        self.assertIn('dirty', str(caught.exception))
+
     def test_sync_refuses_dirty_checkout_outside_scratch(self):
         # A tracked-file edit plus a scratch probe still refuses: the scratch
         # tolerance never widens into a general dirty-checkout allowance.
