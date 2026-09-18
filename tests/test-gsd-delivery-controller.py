@@ -1136,6 +1136,7 @@ class DeliveryTests(unittest.TestCase):
             merge = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
         sh('git', 'push', '-q', origin_path, 'main:main', cwd=work)
         sh('git', 'push', '-q', origin_path, f'{head}:refs/pull/{pr}/head', cwd=work)
+        sh('git', 'push', '-q', origin_path, f'{head}:refs/heads/{WAVE_BRANCH}', cwd=work)
         subject = base / 'repo'
         sh('git', 'clone', '-q', '--branch', 'main', origin_path, subject)
         sh('git', 'remote', 'set-url', 'origin', f'https://github.com/{SLUG}.git', cwd=subject)
@@ -1341,6 +1342,168 @@ class DeliveryTests(unittest.TestCase):
                              w['pr'])
         with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): []}):
             self.assertIsNone(m.resolve_existing_pr(SLUG, WAVE_BRANCH))
+
+    # ------------------------------------------------------------------
+    # implementation-review: durable review validation at the receipt head
+    # ------------------------------------------------------------------
+
+    def review_world(self):
+        """An impl branch carrying the BINDING-named trio (the exact source
+        merge() enforces) pushed as refs/pull/<pr>/head; no PR object is
+        consulted — review is a pure git-object readback. The work repo is
+        left on the impl branch so tests can append followup commits."""
+        w = self.open_impl_world(source='binding')
+        sh('git', 'checkout', '-q', 'impl', cwd=w['work'])
+        return w
+
+    def test_review_accepts_valid_trio_at_receipt_head(self):
+        w = self.review_world()
+        result = m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH)
+        self.assertEqual(result['status'], 'reviewed')
+        self.assertEqual(result['head'], w['head'])
+        # trio() binds the review to the implementation commit h1; the trio
+        # commit itself only adds excluded-dir files, so the binding holds.
+        self.assertEqual(result['reviewed-sha'], w['h1'])
+        self.assertEqual(result['review-artifact'],
+                         'docs/reports/gsd-wave-reviews/%s-w1.rktd' % w['plan'])
+
+    def test_review_awaits_when_review_artifact_is_absent(self):
+        w = self.review_world()
+        review_rel = 'docs/reports/gsd-wave-reviews/%s-w1.rktd' % w['plan']
+        sh('git', 'rm', '-q', review_rel, cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'drop review', cwd=w['work'])
+        head2 = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{head2}:refs/heads/{WAVE_BRANCH}',
+           f'{head2}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        result = m.review(w['subject'], w['plan'], w['wave'], head2, WAVE_BRANCH)
+        self.assertEqual(result['status'], 'awaiting-review')
+        self.assertEqual(result['review-artifact'], review_rel)
+        self.assertNotIn('reviewed-sha', result)
+
+    def test_review_refuses_missing_binding_trio(self):
+        w = self.review_world()
+        sh('git', 'rm', '-q', w['source'], cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'drop evidence', cwd=w['work'])
+        head2 = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{head2}:refs/heads/{WAVE_BRANCH}',
+           f'{head2}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        with self.assertRaises(m.Pending) as caught:
+            m.review(w['subject'], w['plan'], w['wave'], head2, WAVE_BRANCH)
+        self.assertIn('is absent on branch', str(caught.exception))
+
+    def test_review_refuses_forged_or_unbound_review(self):
+        w = self.review_world()
+        digest = m.digest(w['work'], w['c0'], w['head'])
+        label = f"{w['plan']}-w1"
+        cases = [
+            trio(label, w['wave'], impl_sha=w['head'], digest=digest,
+                 review_verdict='REJECTED'),
+            trio(label, w['wave'], impl_sha='9' * 40, digest=digest),
+            trio(label, w['wave'], impl_sha=w['head'], digest=EMPTY_SHA),
+        ]
+        for files in cases:
+            for rel, text in files.items():
+                write_file(w['work'] / rel, text)
+            sh('git', 'add', '-A', cwd=w['work'])
+            sh('git', 'commit', '-q', '-m', 'forged trio', cwd=w['work'])
+            head2 = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+            sh('git', 'push', '-q', w['origin'], f'{head2}:refs/heads/{WAVE_BRANCH}',
+               f'{head2}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+            with self.assertRaises(m.Pending):
+                m.review(w['subject'], w['plan'], w['wave'], head2, WAVE_BRANCH)
+
+    def test_review_accepts_excluded_dirs_only_post_review_commits(self):
+        w = self.review_world()
+        extra = 'docs/reports/gsd-wave-reviews/other-note.rktd'
+        write_file(w['work'] / extra, '#hasheq((note . "post-review evidence edit"))')
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'evidence-only followup', cwd=w['work'])
+        head2 = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{head2}:refs/heads/{WAVE_BRANCH}',
+           f'{head2}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        result = m.review(w['subject'], w['plan'], w['wave'], head2, WAVE_BRANCH)
+        self.assertEqual(result['status'], 'reviewed')
+        self.assertEqual(result['reviewed-sha'], w['h1'])
+
+    def test_review_refuses_review_bound_behind_later_source_commits(self):
+        w = self.review_world()
+        # Source advances AFTER the review, then the trio is re-declared with
+        # the OLD implementation SHA and a digest recomputed at the new head:
+        # the strict gate passes (digest matches, review binds the evidence's
+        # own implementation-sha) — the receipt-binding clause is the layer
+        # that refuses a review which never covered the later source.
+        write_file(w['work'] / 'src/file.txt', 'post-review change\n')
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'source drift after review', cwd=w['work'])
+        drifted = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        label = f"{w['plan']}-w1"
+        digest = m.digest(w['work'], w['c0'], drifted)
+        for rel, text in trio(label, w['wave'], impl_sha=w['h1'], digest=digest).items():
+            write_file(w['work'] / rel, text)
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'redeclare stale trio', cwd=w['work'])
+        head2 = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{head2}:refs/heads/{WAVE_BRANCH}',
+           f'{head2}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        with self.assertRaises(m.Pending) as caught:
+            m.review(w['subject'], w['plan'], w['wave'], head2, WAVE_BRANCH)
+        self.assertIn('non-evidence', str(caught.exception))
+
+    def test_review_requires_fresh_origin_main(self):
+        w = self.review_world()
+        sh('git', 'branch', '-m', 'main', 'main-renamed', cwd=w['origin'])
+        with self.assertRaises(m.Pending):
+            m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH)
+
+    def test_review_validates_at_branch_tip_when_receipt_head_is_ancestor(self):
+        """Production resume shape: the receipt froze the verified head; the
+        trio + review are produced after Verify. Evidence-only tip commits are
+        tolerated; the receipt identity stays authoritative."""
+        w = self.review_world()
+        extra = 'docs/reports/gsd-wave-reviews/other-note.rktd'
+        write_file(w['work'] / extra, '#hasheq((note . "post-verify evidence"))')
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'evidence-only tip commit', cwd=w['work'])
+        tip = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{tip}:refs/heads/{WAVE_BRANCH}',
+           f'{tip}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        result = m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH)
+        self.assertEqual(result['status'], 'reviewed')
+        self.assertEqual(result['head'], w['head'])
+
+    def test_review_refuses_source_drift_after_the_receipt_head(self):
+        w = self.review_world()
+        write_file(w['work'] / 'src/file.txt', 'post-receipt change\n')
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'source drift after Verify', cwd=w['work'])
+        tip = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], f'{tip}:refs/heads/{WAVE_BRANCH}',
+           f'{tip}:refs/pull/{w["pr"]}/head', cwd=w['work'])
+        with self.assertRaises(m.Pending) as caught:
+            m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH)
+        self.assertIn('non-evidence paths', str(caught.exception))
+
+    def test_review_refuses_rewritten_branch_without_the_receipt_head(self):
+        w = self.review_world()
+        sh('git', 'checkout', '-q', '--orphan', 'rewritten', cwd=w['work'])
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'unrelated rewritten history', cwd=w['work'])
+        tip = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', '--force', w['origin'],
+           f'{tip}:refs/heads/{WAVE_BRANCH}', cwd=w['work'])
+        with self.assertRaises(m.Pending):
+            m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH)
+
+    def test_cli_review_requires_head_and_branch(self):
+        w = self.review_world()
+        proc = subprocess.run(
+            ['python3', str(ROOT / 'scripts/gsd-delivery.py'), 'review',
+             '--repo', str(w['subject']), '--plan', w['plan'], '--wave', '1'],
+            capture_output=True, text=True, timeout=60)
+        self.assertEqual(proc.returncode, 2)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload['status'], 'delivery-pending')
+        self.assertIn('expected-head', payload['reason'])
 
     # ------------------------------------------------------------------
     # CLI shape

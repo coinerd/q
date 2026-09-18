@@ -242,4 +242,39 @@
                                              (hasheq 'status "delivery-pending" 'reason "api down")))
     (check-eq? (delivery-effect-result-kind unexpected) 'blocked)
     (check-true (string-contains? (hash-ref (delivery-effect-result-data unexpected) 'reason)
-                                  "api down"))))
+                                  "api down")))
+  (test-case "reviewed controller verdict maps to ok (implementation-review)"
+    (define reviewed
+      (default-delivery-controller-interpret
+       "implementation-review"
+       (hasheq 'status "reviewed" 'head (make-string 40 #\a) 'reviewed-sha (make-string 40 #\a))))
+    (check-eq? (delivery-effect-result-kind reviewed) 'ok)
+    (check-equal? (hash-ref (delivery-effect-result-data reviewed) 'reviewed-sha #f)
+                  (make-string 40 #\a))
+    (check-eq? (delivery-effect-result-kind
+                (default-delivery-controller-interpret
+                 "implementation-review"
+                 (hasheq 'status "awaiting-review" 'reason "review artifact absent")))
+               'awaiting-review))
+  (test-case "typed-stop reason preservation parses the delivery-pending stdout payload"
+    (define stop
+      (parse-delivery-stop "{\"status\":\"delivery-pending\",\"reason\":\"CI pending: test (0)\"}"
+                           "implementation-ci"))
+    (check-eq? (delivery-effect-result-kind stop) 'blocked)
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data stop) 'reason) "CI pending"))
+    (check-false (parse-delivery-stop "not json at all" "implementation-review"))
+    (check-false (parse-delivery-stop "{\"status\":\"reviewed\"}" "implementation-review"))
+    (check-false (parse-delivery-stop "" "implementation-review")))
+  (test-case "implementation-review routes to the review action (never the not-implemented stop)"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define ready (done-record dir))
+                          (define plan (campaign-plan-id ready))
+                          (define r (default-delivery-controller dir plan 0 "implementation-review"))
+                          (check-eq? (delivery-effect-result-kind r) 'blocked)
+                          (define reason (hash-ref (delivery-effect-result-data r) 'reason))
+                          (check-false (string-contains? reason "not implemented"))
+                          ;; the stub campaign repo has no origin: the python failure
+                          ;; reason must survive the exit-2 boundary (previously
+                          ;; discarded with the empty stderr)
+                          (check-true (string-contains? reason "delivery command failed"))))))

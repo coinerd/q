@@ -3,6 +3,10 @@
 
 status: exact protected-main proof and current-checkout readback (JSON).
 prepare: produce a deliberately gate-red schema-2 binding trio in a new directory.
+review: validate the durable independent implementation review at the receipt
+  identity (binding-named evidence trio at the receipt head through the
+  unchanged strict gate, plus the reviewed-sha receipt-binding clause);
+  outcomes reviewed / awaiting-review; never generates or approves a review.
 sync: explicit, clean-tree, expected-branch, fast-forward-only; never switches branches.
 
 Remediation contract (controller review findings):
@@ -47,6 +51,8 @@ HERE = Path(__file__).resolve().parent
 EXCLUDES = [':(exclude)docs/reports/gsd-wave-' + d + '/**'
             for d in ('evidence', 'reviews', 'validation')]
 GOVERNANCE_CHECK = 'gsd-governance'
+EXCLUDED_PREFIXES = tuple('docs/reports/gsd-wave-' + d + '/'
+                          for d in ('evidence', 'reviews', 'validation'))
 ACTIONS_APP_ID = 15368
 RUNTIME_CALLER_BUDGET = 240.0  # delivery-handoff run-subprocess timeout (seconds)
 
@@ -722,9 +728,84 @@ def resolve_pr(repo, plan, wave, branch):
     return {'status': 'resolved', 'pr': pr['number'], 'plan-id': plan, 'wave': wave,
             'branch': branch, 'head': dig(pr, 'head', 'sha')}
 
+
+def review(repo, plan, wave, expected_head, expected_branch):
+    """implementation-review: validate the durable independent review at the
+    receipt identity. Pure git-object readback plus the unchanged strict
+    gate — no PR, no network mutation, and deliberately no checkout HEAD
+    requirement (the head comes from the durable receipt, never from a
+    working tree that may have moved).
+
+    The wave branch TIP is validated when the receipt head is its ancestor:
+    the receipt freezes the verified implementation head, and the evidence
+    trio + review are produced AFTER Verify by a genuine independent
+    reviewer. Every commit between the receipt head and the tip must touch
+    only excluded evidence directories — any source drift after the receipt
+    refuses. The reviewed-sha receipt-binding clause then refuses a review
+    that never covered the implementation."""
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'review requires --expected-head (the durable receipt head)')
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'review requires --expected-branch (the durable receipt branch)')
+    relative = binding_path(plan, wave)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    # Materialize the receipt head's objects: fetch the receipt branch tip and
+    # require the receipt head to be on it (a rewritten/force-pushed branch
+    # that no longer carries the verified head refuses here).
+    git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + expected_branch)
+    tip = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
+    require(full_sha(tip), 'malformed fetched receipt branch tip')
+    if tip != expected_head:
+        git(repo, 'merge-base', '--is-ancestor', expected_head, tip)
+        drifted = git(repo, 'diff', '--name-only', expected_head + '..' + tip)
+        foreign = [line.strip() for line in drifted.splitlines()
+                   if line.strip() and not line.strip().startswith(EXCLUDED_PREFIXES)]
+        require(not foreign,
+                'receipt head %s is verified but later wave-branch commits touch '
+                'non-evidence paths: %s; re-verify before review'
+                % (expected_head[:12], ', '.join(foreign[:3])))
+    # Validation reference: the fetched tip (the trio and review are produced
+    # after Verify); the excluded-diff digest binds it to the receipt's tree.
+    if blob_or_none(repo, tip, relative) is None:
+        raise Pending('binding trio %s is absent on branch %s (tip %s); a genuine '
+                      'independent reviewer must commit it after Verify'
+                      % (relative, expected_branch, tip[:12]))
+    with tempfile.TemporaryDirectory(prefix='q-delivery-review-') as temp:
+        evidence = read_datum(materialize(repo, tip, relative, Path(temp)))
+        require(isinstance(evidence, dict) and evidence.get('schema-version') == 2,
+                'review requires a schema-2 evidence record at the branch tip')
+        require(evidence.get('wave') == 'W%d' % wave,
+                'evidence record belongs to another wave (expected W%d)' % wave)
+        declared_plan = evidence.get('plan-id')
+        require(declared_plan is None or declared_plan == plan,
+                'evidence record explicitly names another campaign')
+        review_rel = artifact_path(evidence.get('review-artifact'), 'gsd-wave-reviews')
+    if blob_or_none(repo, tip, review_rel) is None:
+        return {'status': 'awaiting-review', 'plan-id': plan, 'wave': wave,
+                'head': expected_head, 'review-artifact': review_rel,
+                'reason': 'review artifact absent at the receipt identity; a genuine '
+                          'independent non-author reviewer must produce it'}
+    validate_trio(repo, tip, relative, main)
+    with tempfile.TemporaryDirectory(prefix='q-delivery-review-bind-') as temp:
+        review_datum = read_datum(materialize(repo, tip, review_rel, Path(temp)))
+    reviewed = review_datum.get('reviewed-sha') if isinstance(review_datum, dict) else None
+    require(isinstance(reviewed, str) and full_sha(reviewed),
+            'review record carries no reviewed-sha')
+    if reviewed != expected_head:
+        touched = git(repo, 'diff', '--name-only', reviewed + '..' + expected_head)
+        foreign = [line.strip() for line in touched.splitlines()
+                   if line.strip() and not line.strip().startswith(EXCLUDED_PREFIXES)]
+        require(not foreign,
+                'review binds %s but later commits touch non-evidence paths: %s'
+                % (reviewed[:12], ', '.join(foreign[:3])))
+    return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
+            'reviewed-sha': reviewed, 'review-artifact': review_rel}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr'])
+    parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -752,6 +833,11 @@ def main():
             require(args.expected_branch,
                     'resolve-pr requires --expected-branch')
             result = resolve_pr(args.repo, args.plan, args.wave, args.expected_branch)
+        elif args.action == 'review':
+            require(args.expected_head and args.expected_branch,
+                    'review requires --expected-head and --expected-branch')
+            result = review(args.repo, args.plan, args.wave, args.expected_head,
+                            args.expected_branch)
         else:
             require(args.pr and args.evidence and args.output and args.campaign_root,
                     'prepare requires --pr, --evidence, --output and --campaign-root')
