@@ -199,3 +199,24 @@
   (wave-complete! exec 0)
   (define p (status-prompt 'executing exec))
   (check-true (string-contains? p "Completed")))
+
+;; ============================================================
+;; W1 scratch guidance (sandbox-write-scratch-parity)
+;; ============================================================
+
+(test-case "scratch-guidance-section names token, absolute root, and contracts"
+  (define section
+    (scratch-guidance-section "tok1234567890ab" "/tmp/proj/.planning/scratch/tok1234567890ab"))
+  (check-true (string-contains? section ".planning/scratch/tok1234567890ab"))
+  (check-true (string-contains? section "/tmp/proj/.planning/scratch/tok1234567890ab"))
+  (check-true (string-contains? section "current working directory"))
+  (check-true (string-contains? section "write") "structured write tool instruction")
+  (check-true (string-contains? section "disposable"))
+  (check-true (string-contains? section "sanctioned") "bash redirection stays restricted")
+  (check-true (string-contains? section "/tmp") "arbitrary /tmp writes stay denied")
+  (check-true (string-contains? section "deliverable") "never a deliverable or receipt"))
+
+(test-case "scratch-guidance-section works without a resolved absolute root"
+  (define section (scratch-guidance-section "tok1234567890ab" #f))
+  (check-true (string-contains? section ".planning/scratch/tok1234567890ab"))
+  (check-false (string-contains? section "Resolved")))

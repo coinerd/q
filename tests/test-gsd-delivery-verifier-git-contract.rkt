@@ -31,6 +31,7 @@
 ;; canaries for the /go delivery verifier (fail-closed structured evidence).
 
 (require rackunit
+         racket/set
          rackunit/text-ui
          racket/file
          racket/path
@@ -60,7 +61,9 @@
                   delivery-verification?
                   delivery-verification-approved?
                   delivery-verification-evidence
-                  delivery-verification-message)
+                  delivery-verification-message
+                  changed-files-set
+                  scratch-probe-path?)
          (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
          (only-in "../extensions/gsd/verification-job.rkt" make-verification-registry))
 
@@ -125,6 +128,23 @@
       (check-true (delivery-verification-approved? result)
                   "committed delivery on a feature branch must be approved")
       (check-true (pair? (delivery-verification-evidence result)))
+      (cleanup-tmp base))
+
+    (test-case "W1 scratch: untracked executor probes under .planning/scratch/ are not delivery evidence"
+      (define base (make-tmp-git-repo))
+      (define repo (build-path base "q"))
+      (make-directory* (build-path repo ".planning" "scratch" "tok1234567890ab"))
+      (call-with-output-file (build-path repo ".planning" "scratch" "tok1234567890ab" "probe.rkt")
+                             (lambda (out) (display "#lang racket/base\n" out)))
+      (call-with-output-file (build-path repo "probe-real.txt") (lambda (out) (display "real\n" out)))
+      (define evidence (changed-files-set base repo))
+      (check-true (set-member? evidence "probe-real.txt"))
+      (check-false (for/or ([p (in-set evidence)])
+                     (scratch-probe-path? p))
+                   "scratch probes must not enter delivery evidence")
+      (check-true (scratch-probe-path? ".planning/scratch/tok1234567890ab/probe.rkt"))
+      (check-false (scratch-probe-path? ".planning/scratch-elsewhere/x")
+                   "prefix must end at the scratch directory boundary")
       (cleanup-tmp base))
 
     (test-case "rejects when git not available"

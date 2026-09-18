@@ -45,6 +45,24 @@ tail -20 /tmp/q-agent-scratch/pre-commit.log
 Do not use the scratch exception for source edits or release evidence; move
 reviewed results through the relevant structured file tool.
 
+## Executor scratch source files (GSD /go)
+
+Structured source-file probes during a /go campaign wave do not use the shell
+scratch exception. The /go prompt designates a session-owned scratch
+directory — `.planning/scratch/<opaque-session-token>/` under the executor's
+current working directory — and executors create diagnostic scripts there
+with the structured write tool (missing parents are created automatically
+after authorization). The token is allocated once per /go request: retries
+within one session reuse the destination, fresh sessions get their own.
+
+Scratch files are disposable: never reference them as a wave deliverable,
+approval, or verification receipt, and never commit them. Untracked files
+under `.planning/scratch/` are explicitly exempt from delivery-evidence
+collection and do not block delivery synchronization; any other dirty state
+still refuses. Arbitrary `/tmp` source writes and destructive cleanup remain
+blocked, and bash output redirection stays restricted to the shell scratch
+root above.
+
 ## Whole-form and structural edits
 
 When replacing a clause or other form containing nested `if`, `begin`, `case`,

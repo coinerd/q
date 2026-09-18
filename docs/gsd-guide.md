@@ -35,6 +35,19 @@ Begin executing the plan. The agent follows the plan's waves sequentially.
 /go 2        # Start from wave 2
 ```
 
+**Executor scratch directory (sandbox-write-scratch-parity W1).** Each /go
+request allocates an opaque session token and the executor prompt designates
+`.planning/scratch/<token>/` (relative to the executor's current working
+directory; worktree-isolated executors resolve it inside their retained wave
+worktree) as the place for diagnostic scripts and probes. Create probe files
+with the structured write tool — missing parents are created automatically —
+not with shell redirection, which stays restricted to its own sanctioned
+scratch root, and never under `/tmp`, which stays denied. Scratch content is
+disposable: never reference it as a deliverable or verification receipt, and
+never commit it. Untracked files under `.planning/scratch/` are excluded from
+delivery evidence and do not block delivery synchronization; every other
+dirty state still refuses synchronization.
+
 **Per-wave budget (v1.00.03).** Each wave runs with a bounded runtime budget
 (default **3600 s** = 1 hour). Override per campaign, in precedence order:
 

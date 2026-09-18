@@ -21,7 +21,36 @@
          wave-failure-context-block
          verification-repair-context-block
          wave-attempt-context-block
-         wave-retry-context)
+         wave-retry-context
+         scratch-guidance-section)
+
+;; ============================================================
+;; Executor scratch guidance (sandbox-write-scratch-parity W1)
+;; ============================================================
+
+;; Pure render of the executor-owned scratch-directory contract. The runtime
+;; (command-handlers) allocates the opaque session token ONCE per /go request
+;; and resolves the absolute root from the executor's actual worker roots
+;; (retained wave worktree under worktree isolation, else the project base
+;; dir). The path is writable through the structured write tool — the worker
+;; creates missing parents after authorization (W0) — so no manual mkdir and
+;; no shell redirection is needed. absolute-root may be #f when the runtime
+;; cannot resolve one; the cwd-relative contract stays authoritative.
+(define (scratch-guidance-section scratch-token absolute-root)
+  (string-append
+   "\nSession scratch directory (executor-owned, disposable):\n"
+   (format "- Path: `.planning/scratch/~a/` under your current working directory\n" scratch-token)
+   (if absolute-root
+       (format "- Resolved for this context: ~a\n" absolute-root)
+       "")
+   "- Create diagnostic scripts and probes ONLY here, with the structured write tool;\n"
+   "  missing parent directories are created automatically\n"
+   "- Run probes with read-only bash (`racket file`, no output redirection); bash output\n"
+   "  redirection stays restricted to its sanctioned scratch root and arbitrary /tmp writes\n"
+   "  stay denied — do not improvise other write locations\n"
+   "- Scratch is disposable: NEVER reference it as a wave deliverable, approval, release or\n"
+   "  verification receipt, and never commit it\n"
+   "- No cleanup obligation; do not delete other sessions' scratch directories\n"))
 
 ;; ============================================================
 ;; Executor re-anchor prompt (v1.00.17 W3 — #9514)

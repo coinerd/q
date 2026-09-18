@@ -987,6 +987,31 @@ class DeliveryTests(unittest.TestCase):
             m.sync(w['subject'], 'main')
         self.assertIn('dirty', str(caught.exception))
 
+    def test_sync_tolerates_executor_scratch_probes(self):
+        # sandbox-write-scratch-parity W1: untracked files under
+        # .planning/scratch/ are disposable executor probes — they must not
+        # block delivery synchronization. Real edits still refuse.
+        w = self.world()
+        self.advance_origin(w)
+        scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
+        scratch.mkdir(parents=True)
+        write_file(scratch / 'probe.rkt', '#lang racket/base\n')
+        result = m.sync(w['subject'], 'main')
+        self.assertEqual(result['status'], 'synchronized')
+
+    def test_sync_refuses_dirty_checkout_outside_scratch(self):
+        # A tracked-file edit plus a scratch probe still refuses: the scratch
+        # tolerance never widens into a general dirty-checkout allowance.
+        w = self.world()
+        self.advance_origin(w)
+        scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
+        scratch.mkdir(parents=True)
+        write_file(scratch / 'probe.rkt', '#lang racket/base\n')
+        write_file(w['subject'] / 'src/file.txt', 'local-edit\n')
+        with self.assertRaises(m.Pending) as caught:
+            m.sync(w['subject'], 'main')
+        self.assertIn('dirty', str(caught.exception))
+
     def test_sync_refuses_detached_head(self):
         w = self.world()
         sh('git', 'checkout', '-q', '--detach', 'HEAD', cwd=w['subject'])
