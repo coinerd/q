@@ -28,7 +28,8 @@
          racket/string
          racket/system
          rackunit
-         "../ci/prepared-environment/compiled-root.rkt")
+         "../ci/prepared-environment/compiled-root.rkt"
+         racket/runtime-path)
 
 (module+ test
   (define tmp-base (make-temporary-file "qcr-e2e~a" 'directory))
@@ -245,4 +246,76 @@
                                          (dynamic-require (marker-abs-path checkout-c)
                                                           'marker-result))))))
     ;; restore for any later reader
-    (with-output-to-file zo-abs #:exists 'truncate/replace (lambda () (write-bytes orig-bytes)))))
+    (with-output-to-file zo-abs #:exists 'truncate/replace (lambda () (write-bytes orig-bytes))))
+
+  ;; ----------- B1/B2 regression: producer CLI + shared compiled dirs
+
+  ;; Fixture builder for checkouts whose module closure places several
+  ;; zos in ONE compiled/ directory (the normal multi-module case).
+  (define (make-lang-checkout! name files)
+    (define dir (build-path tmp-base name))
+    (for ([f (in-list files)])
+      (define p (build-path dir (car f)))
+      (make-directory* (path-only p))
+      (with-output-to-file p #:exists 'replace (lambda () (display (cdr f)))))
+    (define (git . args)
+      (unless (zero?
+               (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args))
+        (error 'fixture "git ~a failed" args)))
+    (git "init" "-q")
+    (git "config" "user.email" "ci@example.invalid")
+    (git "config" "user.name" "CI Fixture")
+    (git "add" ".")
+    (git "commit" "-q" "-m" "fixture")
+    dir)
+
+  (define checkout-multi
+    (make-lang-checkout!
+     "multi-checkout"
+     (list (cons "multi/multi-b.rkt" "#lang racket/base\n(provide b)\n(define b 42)\n")
+           (cons "multi/multi-a.rkt"
+                 "#lang racket/base\n(provide a)\n(require \"multi-b.rkt\")\n(define a b)\n"))))
+
+  ;; B2: the producer restores the checkout by deleting every compiled/
+  ;; directory the build created. A per-zo delete loop removes a shared
+  ;; directory repeatedly and raises exn:fail:filesystem, aborting the
+  ;; producer for any module with an in-checkout dependency closure.
+  (test-case "producer restores a shared compiled dir once for a multi-zo closure (B2)"
+    (define m
+      (build-compiled-root! #:checkout checkout-multi
+                            #:modules (list "multi/multi-a.rkt")
+                            #:staging-dir (build-path tmp-base "staging-multi")
+                            #:producer-label "q-trusted-producer"))
+    (check-equal? (hash-ref m 'schema) "q-compiled-root-manifest-1")
+    (check-true (>= (length (hash-ref m 'sources)) 2)
+                "module + in-checkout dependency closure must both be harvested")
+    (check-false (directory-exists? (build-path checkout-multi "multi" "compiled"))
+                 "producer must restore the checkout to its pre-build compiled state"))
+
+  ;; B1: the documented producer entry point is the CLI 'build'
+  ;; subcommand. It must publish a usable root end to end, not merely
+  ;; exercise the in-process build helper.
+  (define-runtime-path cli-script-path "../scripts/ci/compiled-root.rkt")
+
+  (test-case "CLI 'build' subcommand publishes a compiled root (B1)"
+    (define checkout-cli (make-checkout! "cli-checkout" 'cli-fixture))
+    (define cli-final (build-path tmp-base "cli-published-root"))
+    (define cli-staging (build-path tmp-base "cli-staging-root"))
+    (define exit-code
+      (apply system*/exit-code
+             (find-executable-path "racket")
+             (list (path->string cli-script-path)
+                   "build"
+                   "--checkout"
+                   (path->string checkout-cli)
+                   "--module"
+                   "marker/compiled-root-marker.rkt"
+                   "--staging-dir"
+                   (path->string cli-staging)
+                   "--final-dir"
+                   (path->string cli-final)
+                   "--label"
+                   "q-trusted-producer")))
+    (check-equal? exit-code 0)
+    (check-true (file-exists? (build-path cli-final "manifest.rktd"))
+                "CLI build must publish a manifest-bearing root")))

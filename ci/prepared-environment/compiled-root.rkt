@@ -224,10 +224,17 @@
     (copy-file (build-path abs-checkout src-rel) staging-src #t))
   ;; Restore the producer checkout: delete compiled/ dirs this build
   ;; created (pre-existing directories are never touched).
-  (for ([p (in-list pairs)])
-    (define-values (compiled-dir _zo-file _zo-dir?)
-      (split-path (build-path abs-checkout (list-ref p 1))))
-    (unless (member (simplify-path compiled-dir) pre-existing-compiled-dirs)
+  ;; Each compiled/ directory may host several zos (module plus
+  ;; in-checkout dependency closure). Delete every created directory
+  ;; exactly once: a repeated delete-directory/files on an already
+  ;; removed path raises exn:fail:filesystem and would abort every
+  ;; multi-zo build.
+  (for ([compiled-dir (in-list (remove-duplicates (for/list ([p (in-list pairs)])
+                                                    (define-values (dir _zo-file _zo-dir?)
+                                                      (split-path (build-path abs-checkout
+                                                                              (list-ref p 1))))
+                                                    (simplify-path dir))))])
+    (unless (member compiled-dir pre-existing-compiled-dirs)
       (delete-directory/files compiled-dir)))
   (make-compiled-root-manifest #:sources (for/list ([p (in-list pairs)])
                                            (list (list-ref p 0) (list-ref p 1)))

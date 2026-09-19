@@ -64,11 +64,32 @@
   (define label (make-parameter "unknown-producer"))
   (define trusted-labels (make-parameter '()))
   (define lockfile (make-parameter #f))
-  (define child-args (make-parameter '()))
+  ;; Raw argv: the child-argument tail after a literal "--" is captured
+  ;; first, because command-line consumes the separator and would merge
+  ;; the child args into the positional list.
+  (define raw-argv (vector->list (current-command-line-arguments)))
+  (define (split-dashdash lst)
+    (cond
+      [(null? lst) (values '() '())]
+      [(equal? (car lst) "--") (values '() (cdr lst))]
+      [else
+       (define-values (head tail) (split-dashdash (cdr lst)))
+       (values (cons (car lst) head) tail)]))
+  (define-values (flag-argv child-args) (split-dashdash raw-argv))
+  ;; Racket's command-line stops flag parsing at the first non-flag
+  ;; argument, so the documented `build --checkout DIR ...` order would
+  ;; leave every flag unparsed (every required option reported missing).
+  ;; command-line accepts #:argv, so move the leading subcommand token to
+  ;; the end: flags first, subcommand last.
+  (define ordered-argv
+    (if (and (pair? flag-argv) (member (car flag-argv) '("build" "run")))
+        (append (cdr flag-argv) (list (car flag-argv)))
+        flag-argv))
 
   (define args
     (command-line
      #:program "compiled-root"
+     #:argv ordered-argv
      #:once-each ["--checkout" dir "checkout root (producer source of truth)" (checkout dir)]
      ["--module" m "module relative to checkout (repeatable)" (modules (append (modules) (list m)))]
      ["--final-dir" dir "published immutable root directory" (final-dir dir)]
@@ -82,9 +103,6 @@
      ["--lockfile" p "lockfile checked into root identity" (lockfile p)]
      #:args rest
      rest))
-
-  (when (member "--" args)
-    (child-args (rest (member "--" args))))
 
   (define cmd (and (pair? args) (member (first args) '("build" "run")) (first args)))
   (unless cmd
@@ -104,14 +122,14 @@
      (define fd (require-opt! final-dir "final-dir"))
      (define sd
        (or (staging-dir) (path->string (make-temporary-file "compiled-root-stage~a" 'directory))))
-     (define root
+     (define manifest
        (build-compiled-root! #:checkout co
                              #:modules ms
                              #:staging-dir sd
                              #:producer-label (label)
                              #:producer-trusted? #t
                              #:lockfile (lockfile)))
-     (publish-compiled-root! sd fd (compiled-root-manifest root))
+     (publish-compiled-root! sd fd manifest)
      (printf "published compiled root: ~a (reason: ~a)\n" fd (reason->string #t))]
     ["run"
      (define co (require-opt! checkout "checkout"))
@@ -130,7 +148,7 @@
                                #:expect-lockfile-digest (and (lockfile) (sha256-file (lockfile)))))
      (cond
        [(eq? (compiled-root-reason root) #t)
-        (define-values (code transcript) (launch-with-root root (first ms) (child-args)))
+        (define-values (code transcript) (launch-with-root root (first ms) child-args))
         (display transcript)
         (exit code)]
        [else
@@ -139,5 +157,5 @@
                  (reason->string (compiled-root-reason root)))
         (eager-fallback-compile! co ms)
         (define code
-          (apply system*/exit-code (find-executable-path "racket") "-t" (first ms) (child-args)))
+          (apply system*/exit-code (find-executable-path "racket") "-t" (first ms) child-args))
         (exit code)])]))
