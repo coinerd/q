@@ -55,6 +55,7 @@ EXCLUDED_PREFIXES = tuple('docs/reports/gsd-wave-' + d + '/'
                           for d in ('evidence', 'reviews', 'validation'))
 ACTIONS_APP_ID = 15368
 RUNTIME_CALLER_BUDGET = 240.0  # delivery-handoff run-subprocess timeout (seconds)
+EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 
 class Pending(RuntimeError):
     pass
@@ -147,6 +148,7 @@ def repository(repo):
 
 _API_CACHE = {}
 _CHECKS_CACHE = {}
+POLICY_PATH = 'scripts/required-pr-checks.policy'
 
 def api(slug, route, paginate=False, _refresh=False):
     key = (slug, route, paginate)
@@ -633,16 +635,420 @@ def draft_request(source, plan, wave, pr, branch, required_checks):
             'merged-at':pr['merged_at'], 'branch':branch,
             'required-pr-checks':list(required_checks)}
 
-def prepare(repo, plan, wave, number, relative, campaign_root, output):
+def binding_branch(plan, wave):
+    binding_path(plan, wave)
+    require(type(wave) is int and wave >= 0, 'invalid wave index')
+    return 'binding/' + plan[:12] + f'-w{wave}'
+
+
+def binding_staging_path(campaign_root, plan, wave):
+    binding_path(plan, wave)
+    root = Path(campaign_root)
+    require(root.is_dir() and not root.is_symlink(),
+            'binding staging requires a real campaign root')
+    # Reject a symlink or traversal in any existing parent component. The
+    # resolved path is still compared below so a later symlink cannot redirect
+    # the durable staging directory.
+    current = root
+    for part in ('.planning', 'campaigns', plan, f'binding-w{wave}'):
+        current = current / part
+        require(not current.is_symlink(), 'binding staging path contains a symlink')
+    expected = (root.resolve() / '.planning' / 'campaigns' / plan /
+                f'binding-w{wave}').resolve()
+    return expected
+
+
+def require_binding_output(output, campaign_root, plan, wave):
+    expected = binding_staging_path(campaign_root, plan, wave)
+    raw = Path(output)
+    require(not raw.is_symlink(), 'binding output path must not be a symlink')
+    actual = raw.resolve()
+    require(actual == expected,
+            'binding output must be the deterministic campaign staging directory %s' % expected)
+    return expected
+
+
+def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
+    expected = require_binding_output(output, campaign_root, plan, wave)
+    if not expected.exists():
+        return {'status': 'awaiting-review', 'output': str(expected),
+                'branch': binding_branch(plan, wave)}
+    require(expected.is_dir() and not expected.is_symlink(),
+            'binding staging output is not a regular directory')
+    evidence_path = expected / 'docs/reports/gsd-wave-evidence' / f'{plan}-w{wave}.rktd'
+    review_path = expected / 'docs/reports/gsd-wave-reviews' / f'{plan}-w{wave}.rktd'
+    validation_path = expected / 'docs/reports/gsd-wave-validation' / f'{plan}-w{wave}.rktd'
+    for path in (evidence_path, review_path, validation_path):
+        require(path.is_file() and not path.is_symlink(),
+                'binding staging trio is incomplete or unsafe: ' + path.name)
+    evidence = read_datum(evidence_path)
+    review = read_datum(review_path)
+    validation = read_datum(validation_path)
+    require(isinstance(evidence, dict) and evidence.get('schema-version') == 2,
+            'staged binding must contain a schema-2 evidence datum')
+    require(evidence.get('plan-id') == plan and evidence.get('wave') == f'W{wave}',
+            'staged binding plan/wave identity mismatch')
+    require(type(evidence.get('milestone')) is int and evidence['milestone'] > 0,
+            'staged binding milestone is invalid')
+    require(type(evidence.get('issue')) is int and evidence['issue'] > 0,
+            'staged binding issue is invalid')
+    merge = evidence.get('merge-sha')
+    head = evidence.get('delivery-head-sha')
+    require(full_sha(merge) and full_sha(head),
+            'staged binding must carry full implementation SHAs')
+    require(evidence.get('implementation-sha') == merge,
+            'staged binding implementation-sha differs from merge-sha')
+    require(evidence.get('merge-method') == 'squash',
+            'staged binding must use squash publication')
+    require(type(evidence.get('delivery-pr')) is int and evidence['delivery-pr'] > 0,
+            'staged binding has no implementation PR identity')
+    require(isinstance(evidence.get('merged-at'), str) and evidence['merged-at'],
+            'staged binding has no merge provenance')
+    branch = binding_branch(plan, wave)
+    require(evidence.get('branch') == branch,
+            'staged binding branch identity mismatch')
+    require(expected_branch is None or evidence.get('wave-branch') == expected_branch,
+            'staged binding implementation branch does not match the durable receipt')
+    require(isinstance(evidence.get('required-pr-checks'), list) and evidence['required-pr-checks'],
+            'staged binding has no required-check policy snapshot')
+    expected_review = f'docs/reports/gsd-wave-reviews/{plan}-w{wave}.rktd'
+    expected_validation = f'docs/reports/gsd-wave-validation/{plan}-w{wave}.rktd'
+    require(evidence.get('review-artifact') == expected_review and
+            evidence.get('validation-artifact') == expected_validation,
+            'staged binding artifact paths do not match plan/wave identity')
+    require(isinstance(review, dict) and isinstance(validation, dict),
+            'staged binding review/validation artifacts are malformed')
+
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    require(evidence.get('required-pr-checks') == policy_names(repo, main),
+            'staged binding required-check snapshot differs from the current policy')
+    published = blob_or_none(repo, main, binding_path(plan, wave))
+    if published is not None:
+        with tempfile.TemporaryDirectory(prefix='q-delivery-rebind-') as temp:
+            path = Path(temp) / 'binding.rktd'
+            path.write_bytes(published)
+            try:
+                bound = read_datum(path)
+            except Pending as error:
+                raise Pending('origin/main binding is malformed; refusing rebind') from error
+        require(isinstance(bound, dict) and full_sha(bound.get('merge-sha')),
+                'origin/main binding is malformed; refusing rebind')
+        require(bound.get('merge-sha') == merge and
+                bound.get('delivery-head-sha') == head and
+                bound.get('implementation-sha') == merge,
+                'origin/main already binds this wave to a different implementation; refusing rebind')
+
+    status = evidence.get('status')
+    if status == 'pending-review':
+        # The draft is deliberately not a second approval channel. Its honest
+        # placeholders are validated as data; publication remains blocked until
+        # a genuine independent reviewer finalizes the staged trio.
+        require(review.get('verdict') == 'PENDING' and
+                review.get('reviewed-sha') == merge and
+                review.get('content-digest') == 'PENDING',
+                'staged binding review placeholders do not match the pending draft contract')
+        require(validation.get('status') == 'pending' and
+                validation.get('implementation-sha') == merge and
+                validation.get('content-digest') == 'PENDING' and
+                validation.get('review-artifact') == expected_review,
+                'staged binding validation placeholders do not match the pending draft contract')
+        for field in ('red-first', 'focused-tests', 'format-compile', 'lint', 'fast'):
+            require(isinstance(validation.get(field), dict),
+                    'staged binding validation gate evidence is malformed: ' + field)
+        return {'status': 'pending-review', 'output': str(expected),
+                'binding': binding_path(plan, wave), 'branch': branch,
+                'merge-sha': merge, 'delivery-head-sha': head,
+                'implementation-sha': merge}
+
+    require(status == 'ready-for-merge',
+            'staged trio status must be pending-review or ready-for-merge')
+    require(evidence.get('content-digest') == EMPTY_SHA,
+            'finalized binding evidence must use the excluded-diff digest')
+    require(review.get('verdict') == 'APPROVED' and
+            review.get('reviewed-sha') == merge and
+            review.get('content-digest') == EMPTY_SHA,
+            'finalized binding review is not bound to the publication evidence')
+    require(validation.get('status') == 'current' and
+            validation.get('implementation-sha') == merge and
+            validation.get('content-digest') == EMPTY_SHA and
+            validation.get('branch') == branch and
+            validation.get('review-artifact') == expected_review and
+            validation.get('planning-sync') == 'current',
+            'finalized binding validation is not bound to the publication evidence')
+
+    # The publication commit changes only excluded evidence directories, so its
+    # changed-content digest is the SHA-256 of an empty diff. Validate the
+    # finalized staged trio with the same gate used for implementation evidence.
+    with tempfile.TemporaryDirectory(prefix='q-delivery-binding-gate-') as temp:
+        gate_root = Path(temp)
+        for kind, source in (('evidence', evidence_path),
+                             ('reviews', review_path),
+                             ('validation', validation_path)):
+            target = gate_root / 'docs/reports' / ('gsd-wave-' + kind) / f'{plan}-w{wave}.rktd'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        policy = blob_or_none(repo, main, str(POLICY_PATH))
+        require(policy is not None, 'binding gate policy is unavailable')
+        policy_path = gate_root / 'scripts/required-pr-checks.policy'
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_bytes(policy)
+        gate = command(['racket', str(HERE / 'gsd-wave-gate.rkt'),
+                        str(gate_root / 'docs/reports/gsd-wave-evidence' /
+                            f'{plan}-w{wave}.rktd'),
+                        '--content-digest', EMPTY_SHA,
+                        '--root', str(gate_root), '--policy', str(policy_path)],
+                       cwd=str(gate_root))
+        require('GSD wave evidence PASS' in gate,
+                'finalized binding trio failed the strict wave gate')
+    return {'status': 'reviewed', 'output': str(expected), 'binding': binding_path(plan, wave),
+            'branch': branch, 'merge-sha': merge,
+            'delivery-head-sha': head, 'implementation-sha': merge}
+
+
+def binding_review(repo, plan, wave, output, campaign_root=None, expected_branch=None):
+    """Validate a durable staged binding draft without manufacturing review."""
+    binding_path(plan, wave)
+    root = Path(campaign_root) if campaign_root is not None else Path(repo)
+    return read_staged_trio(repo, plan, wave, output, root, expected_branch)
+
+
+def binding_publish(repo, plan, wave, output, campaign_root=None):
+    """Publish a validated binding draft on a fresh-main binding branch."""
+    staged = binding_review(repo, plan, wave, output, campaign_root)
+    require(staged['status'] == 'reviewed', 'binding staging is not ready to publish')
+    slug = repository(repo)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    branch = binding_branch(plan, wave)
+    remote_ref = 'refs/remotes/origin/' + branch
+    refspec = 'refs/heads/' + branch
+    # Validate an existing branch before considering it. A branch may be
+    # reused only when it is a fresh-main single-parent commit whose three
+    # binding artifacts match the validated staged trio semantically (datum
+    # equality; the strict digest gate still binds the publication content).
+    try:
+        remote_tip = git(repo, 'rev-parse', remote_ref).strip()
+    except Pending:
+        remote_tip = None
+    if remote_tip is not None:
+        require(full_sha(remote_tip), 'malformed existing binding branch tip')
+        parents = git(repo, 'rev-list', '--parents', '-n', '1', remote_tip).split()
+        require(len(parents) == 2 and parents[1] == main,
+                'existing binding branch is not based on fresh origin/main')
+        binding = binding_path(plan, wave)
+        with tempfile.TemporaryDirectory(prefix='q-delivery-existing-binding-') as temp:
+            for kind in ('evidence', 'reviews', 'validation'):
+                artifact = f'{plan}-w{wave}.rktd'
+                relative = f'docs/reports/gsd-wave-{kind}/{artifact}'
+                blob = blob_or_none(repo, remote_tip, relative)
+                require(blob is not None, 'existing binding branch is missing ' + relative)
+                path = Path(temp) / (kind + '.rktd')
+                path.write_bytes(blob)
+                remote_datum = read_datum(path)
+                staged_path = output / 'docs/reports' / ('gsd-wave-' + kind) / artifact
+                require(remote_datum == read_datum(staged_path),
+                        'existing binding branch does not match the staged trio')
+        commit = remote_tip
+    else:
+        with tempfile.TemporaryDirectory(prefix='q-delivery-binding-') as temp:
+            worktree = Path(temp)
+            try:
+                git(repo, 'worktree', 'add', '--detach', str(worktree), main)
+                for kind in ('evidence', 'reviews', 'validation'):
+                    artifact = f'{plan}-w{wave}.rktd'
+                    source = output / 'docs/reports' / ('gsd-wave-' + kind) / artifact
+                    require(source.is_file() and not source.is_symlink(),
+                            'staged binding trio is not a regular file')
+                    (worktree / 'docs/reports' / ('gsd-wave-' + kind)).mkdir(
+                        parents=True, exist_ok=True)
+                    target = worktree / 'docs/reports' / ('gsd-wave-' + kind) / artifact
+                    target.write_bytes(source.read_bytes())
+                git(worktree, 'add', '-A')
+                git(worktree, 'commit', '--no-gpg-sign', '-m',
+                    f'W{wave} binding draft: {plan}-w{wave}')
+                commit = git(worktree, 'rev-parse', 'HEAD').strip()
+                parents = git(worktree, 'rev-list', '--parents', '-n', '1', commit).split()
+                require(len(parents) == 2 and parents[0] == commit and parents[1] == main,
+                        'binding publication commit is not based on fresh origin/main')
+            finally:
+                try:
+                    git(repo, 'worktree', 'remove', '--force', str(worktree))
+                except Pending:
+                    pass
+    git(repo, 'push', '--no-tags', 'origin', f'{commit}:refs/heads/{branch}')
+    # Re-read the remote branch after the non-force push. This also proves the
+    # branch was created or remained at the exact commit being published.
+    git(repo, 'fetch', '--no-tags', 'origin', f'{refspec}:{remote_ref}')
+    tip = git(repo, 'rev-parse', remote_ref).strip()
+    require(tip == commit, 'binding branch did not publish at the verified commit')
+
+    existing = resolve_existing_pr(slug, branch)
+    if existing is None:
+        merged = resolve_merged_pr(slug, branch)
+        if merged is not None:
+            return {'status': 'already-published', 'pr': merged.get('number'),
+                    'branch': branch, 'head': commit}
+        title = f'W{wave} binding publication: {branch}'
+        body = ('Plan: %s\nWave: W%d\nHead: %s\nBranch: %s\n'
+                'Binding evidence: %s\n'
+                'Review and approval: genuine independent human review required at the exact binding head.\n') % (
+                    plan, wave, commit, branch, binding_path(plan, wave))
+        created = gh_post(slug, 'pulls',
+                          {'title': title, 'body': body, 'head': branch, 'base': 'main'})
+        require(isinstance(created, dict) and type(created.get('number')) is int and
+                created['number'] > 0, 'GitHub pull-request creation response has no usable number')
+        number = created['number']
+        pr = api(slug, f'pulls/{number}', _refresh=True)
+        status = 'opened'
+    else:
+        number = existing.get('number')
+        require(type(number) is int and number > 0,
+                'resolved binding pull request has no usable number')
+        pr = api(slug, f'pulls/{number}', _refresh=True)
+        status = 'exists'
+    require(isinstance(pr, dict) and pr.get('state') == 'open',
+            'binding pull request is not open')
+    validate_pr_identity(pr, slug)
+    require(dig(pr, 'head', 'ref') == branch and dig(pr, 'head', 'sha') == commit,
+            'binding pull request does not match the verified publication branch/head')
+    return {'status': status, 'pr': number, 'branch': branch, 'head': commit}
+
+
+def binding_resolve_pr(repo, expected_branch, plan=None, wave=None):
+    """Resolve a binding PR by its deterministic branch without receipt ancestry.
+
+    Binding publication branches are fresh-main publication commits, so the
+    implementation receipt's excluded-diff ancestry rule must not be applied.
+    The exact fetched branch tip and same-repository PR identity remain strict.
+    Merged-PR recovery resolves before any branch fetch so a deleted head
+    branch (common post-merge hygiene) cannot block idempotent resume after a
+    lost merge response; a missing branch before first publication yields the
+    typed none result instead of an opaque fetch failure.
+    """
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'binding PR resolution requires --expected-branch')
+    slug = repository(repo)
+    existing = resolve_existing_pr(slug, expected_branch)
+    refresh(repo)
+    refspec = 'refs/heads/' + expected_branch
+    remote_ref = 'refs/remotes/origin/' + expected_branch
+    if existing is not None:
+        git(repo, 'fetch', '--no-tags', 'origin', '+' + refspec + ':' + remote_ref)
+        tip = git(repo, 'rev-parse', remote_ref).strip()
+        require(full_sha(tip), 'malformed fetched binding branch tip')
+        number = existing.get('number')
+        require(type(number) is int and number > 0,
+                'resolved binding pull request has no usable number')
+        pr = api(slug, f'pulls/{number}', _refresh=True)
+        require(isinstance(pr, dict) and pr.get('state') == 'open',
+                'resolved binding pull request is not open')
+        validate_pr_identity(pr, slug)
+        head = dig(pr, 'head', 'sha')
+        require(isinstance(head, str) and full_sha(head) and head == tip,
+                'binding pull request head does not match the fetched branch tip')
+        require(dig(pr, 'head', 'ref') == expected_branch,
+                'binding pull request branch does not match expected branch')
+        return {'status': 'resolved', 'pr': number, 'branch': expected_branch,
+                'head': head, 'plan-id': plan, 'wave': wave}
+    merged = resolve_merged_pr(slug, expected_branch)
+    if merged is not None:
+        number = merged.get('number')
+        require(type(number) is int and number > 0,
+                'resolved merged binding pull request has no usable number')
+        pr = api(slug, f'pulls/{number}', _refresh=True)
+        require(pr_is_merged(pr), 'resolved binding pull request is not merged')
+        validate_pr_identity(pr, slug)
+        head = dig(pr, 'head', 'sha')
+        require(isinstance(head, str) and full_sha(head),
+                'resolved merged binding pull request has no full head SHA')
+        require(dig(pr, 'head', 'ref') == expected_branch,
+                'resolved merged binding pull request branch does not match expected branch')
+        fetched = fetch_head(repo, number)
+        require(fetched == head, 'merged binding pull request head does not match fetched ref')
+        # Defense-in-depth: when the deterministic branch still exists, its
+        # tip must be the merged PR head — a recreated branch must never
+        # inherit a stale merged PR identity. A deleted branch must not block
+        # resume, so a failed fetch here is tolerated; the refs/pull/N/head
+        # equality above stays authoritative either way. The tip equality
+        # itself is enforced OUTSIDE the fetch-failure tolerance: a divergent
+        # recreated branch must fail closed, not be swallowed as a deletion.
+        branch_tip = None
+        try:
+            git(repo, 'fetch', '--no-tags', 'origin', '+' + refspec + ':' + remote_ref)
+            branch_tip = git(repo, 'rev-parse', remote_ref).strip()
+        except Pending:
+            branch_tip = None
+        if branch_tip is not None:
+            require(head == branch_tip,
+                    'resolved merged binding pull request head does not match fetched branch tip')
+        return {'status': 'already-merged', 'pr': number, 'branch': expected_branch,
+                'head': head, 'merge-sha': dig(pr, 'merge_commit_sha'),
+                'plan-id': plan, 'wave': wave}
+    return {'status': 'none', 'branch': expected_branch}
+
+
+def binding_ci(repo, number, expected_branch, expected_head):
+    """Check a binding PR at its exact head without implementation ancestry rules."""
+    require(type(number) is int and number > 0, 'binding-ci requires --pr')
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'binding-ci requires --expected-branch')
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'binding-ci requires --expected-head')
+    slug = repository(repo)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    pr = api(slug, f'pulls/{number}', _refresh=True)
+    require(isinstance(pr, dict) and pr.get('state') == 'open',
+            'binding pull request is not open')
+    validate_pr_identity(pr, slug)
+    head = dig(pr, 'head', 'sha')
+    require(isinstance(head, str) and full_sha(head) and head == expected_head,
+            'binding pull request head does not match the verified expected head')
+    require(dig(pr, 'head', 'ref') == expected_branch,
+            'binding pull request branch does not match expected branch')
+    fetched = fetch_head(repo, number)
+    require(fetched == head, 'binding pull-request head does not match fetched ref')
+    names = policy_names(repo, main)
+    protection(slug, names)
+    for name in names:
+        trusted_check(slug, head, name, 'pull_request', expected_branch)
+    return {'status': 'green', 'pr': number, 'branch': expected_branch, 'head': head}
+
+
+def binding_merge(repo, plan, wave, number, expected_head, expected_branch, source):
+    """Run the unchanged protected merge gate for finalized binding evidence."""
+    return merge(repo, plan, wave, number, expected_head, expected_branch, source)
+
+
+# Explicit action names used by the coordinator's stage-to-action map.
+binding_pr = binding_publish
+
+
+def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_branch=None):
     binding = binding_path(plan, wave)
     slug = repository(repo)
     refresh(repo)
     main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
     require(full_sha(main), 'malformed origin/main head')
-    pr = api(slug, f'pulls/{number}')
+    if number is None:
+        require(isinstance(expected_branch, str) and expected_branch.strip(),
+                'prepare --pr requires --expected-branch for durable PR self-resolution')
+        pr = resolve_merged_pr(slug, expected_branch)
+        require(isinstance(pr, dict),
+                'prepare cannot self-resolve exactly one merged implementation PR for branch ' + expected_branch)
+        number = pr.get('number')
+    else:
+        pr = api(slug, f'pulls/{number}')
     require(isinstance(pr, dict), 'malformed PR response')
+    validate_pr_identity(pr, slug)
     merge, head = dig(pr, 'merge_commit_sha'), dig(pr, 'head', 'sha')
     require(pr_is_merged(pr), 'implementation PR must be independently reviewed and merged first')
+    if number is None:
+        require(pr.get('state') == 'closed', 'self-resolved implementation PR is not closed')
     validate_merge(pr, api(slug, f'commits/{merge}'), slug, merge, head)
     fetched = fetch_head(repo, number)
     require(fetched == head, 'fetched implementation head does not match PR head SHA')
@@ -987,10 +1393,39 @@ def review(repo, plan, wave, expected_head, expected_branch):
     return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
             'reviewed-sha': reviewed, 'review-artifact': review_rel}
 
+def governance(repo, plan, wave, expected_branch):
+    """Validate the merged binding publication and its protected-main governance run."""
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'governance requires --expected-branch')
+    require(expected_branch == binding_branch(plan, wave),
+            'governance branch does not match the deterministic binding branch')
+    slug = repository(repo)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    pr = resolve_merged_pr(slug, expected_branch)
+    require(isinstance(pr, dict),
+            'governance cannot self-resolve exactly one merged binding PR for branch ' + expected_branch)
+    number = pr.get('number')
+    merge = dig(pr, 'merge_commit_sha')
+    head = dig(pr, 'head', 'sha')
+    require(type(number) is int and number > 0 and full_sha(merge) and full_sha(head),
+            'merged binding PR has incomplete identity')
+    require(dig(pr, 'head', 'ref') == expected_branch,
+            'merged binding PR branch does not match expected branch')
+    validate_merge(pr, api(slug, f'commits/{merge}'), slug, merge, head)
+    git(repo, 'merge-base', '--is-ancestor', merge, 'refs/remotes/origin/main')
+    trusted_check(slug, merge, GOVERNANCE_CHECK, 'push', 'main')
+    return {'status': 'governed', 'pr': number, 'branch': expected_branch,
+            'publication-sha': merge}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review',
-                                           'open-pr','pr-ci'])
+                                           'open-pr','pr-ci','binding-review','binding-publish',
+                                           'binding-resolve-pr','binding-pr','binding-ci','binding-merge',
+                                           'governance'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -1033,11 +1468,46 @@ def main():
             require(args.pr and args.expected_branch,
                     'pr-ci requires --pr and --expected-branch')
             result = pr_ci(args.repo, args.pr, args.expected_branch, args.expected_head)
+        elif args.action == 'binding-review':
+            require(args.output and args.campaign_root,
+                    'binding-review requires --output and --campaign-root')
+            result = binding_review(args.repo, args.plan, args.wave, args.output,
+                                    args.campaign_root, args.expected_branch)
+        elif args.action == 'binding-publish':
+            require(args.output and args.campaign_root,
+                    'binding-publish requires --output and --campaign-root')
+            result = binding_publish(args.repo, args.plan, args.wave, args.output,
+                                     args.campaign_root)
+        elif args.action == 'binding-pr':
+            require(args.output and args.campaign_root,
+                    'binding-pr requires --output and --campaign-root')
+            result = binding_pr(args.repo, args.plan, args.wave, args.output,
+                                args.campaign_root)
+        elif args.action == 'binding-resolve-pr':
+            require(args.expected_branch,
+                    'binding-resolve-pr requires --expected-branch')
+            result = binding_resolve_pr(args.repo, args.expected_branch,
+                                          args.plan, args.wave)
+        elif args.action == 'binding-ci':
+            require(args.pr and args.expected_branch and args.expected_head,
+                    'binding-ci requires --pr, --expected-branch and --expected-head')
+            result = binding_ci(args.repo, args.pr, args.expected_branch, args.expected_head)
+        elif args.action == 'binding-merge':
+            require(args.pr and args.expected_branch and args.expected_head and args.evidence,
+                    'binding-merge requires --pr, --expected-branch, --expected-head and --evidence')
+            result = binding_merge(args.repo, args.plan, args.wave, args.pr,
+                                   args.expected_head, args.expected_branch, args.evidence)
+        elif args.action == 'governance':
+            require(args.expected_branch, 'governance requires --expected-branch')
+            result = governance(args.repo, args.plan, args.wave, args.expected_branch)
         else:
-            require(args.pr and args.evidence and args.output and args.campaign_root,
-                    'prepare requires --pr, --evidence, --output and --campaign-root')
+            require(args.evidence and args.output and args.campaign_root,
+                    'prepare requires --evidence, --output and --campaign-root')
+            if args.pr is None:
+                require(args.expected_branch,
+                        'prepare without --pr requires --expected-branch')
             result = prepare(args.repo, args.plan, args.wave, args.pr, args.evidence,
-                             args.campaign_root, args.output)
+                             args.campaign_root, args.output, args.expected_branch)
         print(json.dumps(result))
         return 0
     except (Pending, ValueError, KeyError, TypeError, OSError, AttributeError) as error:
