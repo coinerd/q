@@ -10,6 +10,7 @@
          racket/string
          racket/format
          racket/set
+         (only-in racket/random crypto-random-bytes)
          json
          "../define-extension.rkt"
          "../ext-commands.rkt"
@@ -92,7 +93,10 @@
           [register-gsd-commands (-> hash? hook-result?)]
           [handle-execute-command (-> hash? hook-result?)]
           [handle-go-command (-> (or/c path-string? #f) string? hook-result?)]
-          [build-single-wave-prompt (-> path-string? gsd-plan? exact-nonnegative-integer? string?)]
+          [build-single-wave-prompt
+           (->* (path-string? gsd-plan? exact-nonnegative-integer?)
+                (#:scratch-token (or/c string? #f) #:scratch-root-abs (or/c string? #f))
+                string?)]
           [handle-gsd-status (-> hook-result?)]
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
           [dispatch-gsd-command
@@ -104,7 +108,9 @@
                (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?)
                      (list/c 'error string?)))])
          extract-task-summary
-         extract-last-failure)
+         extract-last-failure
+         fresh-executor-scratch-token
+         executor-scratch-root-abs)
 
 ;; ============================================================
 ;; Command registration
@@ -378,6 +384,37 @@
        "\n## Task Summary (DO NOT FORGET)\nYou are implementing: ~a\nStay focused on this task.\n"
        (string-join wave-titles ", "))))
 
+;; ── Executor scratch guidance (sandbox-write-scratch-parity W1) ──────
+
+;; Runtime-owned opaque token. Allocated ONCE per /go request — not per
+;; prompt-formatting call — so same-session retries and re-anchors reuse one
+;; scratch destination while fresh /go sessions get distinct ownership.
+(define (fresh-executor-scratch-token)
+  (define b (crypto-random-bytes 8))
+  (apply string-append
+         (for/list ([v (in-bytes b)])
+           (define s (number->string v 16))
+           (if (= (string-length s) 1)
+               (string-append "0" s)
+               s))))
+
+;; Runtime-owned root resolution: the executor worker's writable root is its
+;; session cwd — the retained wave worktree when worktree isolation resolves
+;; ON (deterministic naming; created by go-orchestrator's run-isolated), else
+;; the project base dir. Pure prediction that matches both the initial /go
+;; prompt extent and the retry extent. If isolation later falls back to the
+;; shared checkout (worktree creation failure), the cwd-relative contract in
+;; the guidance text stays authoritative; a stale absolute path is either
+;; denied with self-diagnosing roots or unused — roots are never widened.
+(define (executor-scratch-root-abs base-dir campaign-id wave-idx scratch-token)
+  (path->string (simplify-path (build-path (if (worktree-isolation-enabled?)
+                                               (wave-worktree-dir base-dir campaign-id wave-idx)
+                                               (path->complete-path base-dir))
+                                           ".planning"
+                                           "scratch"
+                                           scratch-token)
+                               #f)))
+
 ;; build-go-prompt : path? string? (or/c gsd-plan? #f) any/c string? gsd-plan? -> (values string? string?)
 ;; Assemble augmented prompt text and display text for /go.
 (define (build-go-prompt base-dir plan-content plan-from-index executor wave-arg plan)
@@ -446,7 +483,11 @@
                          rel
                          rel))))]))
 
-(define (build-single-wave-prompt base-dir plan wave-idx)
+(define (build-single-wave-prompt base-dir
+                                  plan
+                                  wave-idx
+                                  #:scratch-token [scratch-token #f]
+                                  #:scratch-root-abs [scratch-root-abs #f])
   (define wave (plan-wave-ref plan wave-idx))
   (unless wave
     (error 'build-single-wave-prompt "wave ~a is not present in the validated plan" wave-idx))
@@ -568,7 +609,13 @@
    (let ([inherited (current-gsd-wave-inherited-artifacts)])
      (if (and (string? inherited) (non-empty-string? inherited))
          (string-append inherited "\n")
-         ""))))
+         ""))
+   ;; sandbox-write-scratch-parity W1: session-owned scratch guidance, only
+   ;; when the caller supplies the runtime-allocated token (bytes stay
+   ;; byte-identical otherwise — see the ergonomics snapshot pins).
+   (if scratch-token
+       (scratch-guidance-section scratch-token scratch-root-abs)
+       "")))
 
 ;; Extract the "## Last Failure" section (recorded by record-wave-failure! when
 ;; a previous attempt failed delivery verification) so a retry can adapt. The
@@ -672,6 +719,19 @@
                            #:when (eq? (campaign-wave-status w) 'done))
                   (campaign-wave-index w))
                 0))
+          ;; sandbox-write-scratch-parity W1: allocate the executor scratch
+          ;; token ONCE per /go request (same-session retries reuse it; fresh
+          ;; sessions get distinct ownership). The absolute root is resolved
+          ;; PER WAVE inside the prompt closure: it runs in the campaign
+          ;; thread after apply-worktree-isolation-setting! has reconciled
+          ;; the flag, and each wave resolves its own worktree root, so the
+          ;; advertised absolute path tracks the executor's actual worker
+          ;; root. The initial 'new-session prompt resolves for the anchor
+          ;; wave in this extent.
+          (define scratch-token (fresh-executor-scratch-token))
+          (define scratch-root-for
+            (lambda (wave-idx)
+              (executor-scratch-root-abs base-dir (campaign-plan-id rec) wave-idx scratch-token)))
           ;; v1.00.17 W3 (#9514): role-anchor the wave-executor session. If a
           ;; turn ends reasoning-only, the runtime's empty-response retry
           ;; re-sends THIS re-anchor prompt (verbatim executor role + order to
@@ -694,7 +754,11 @@
                rec
                (lambda (wave-idx)
                  (gsm-ctx-transition-to! gsd-ctx 'executing)
-                 (build-single-wave-prompt base-dir plan wave-idx))
+                 (build-single-wave-prompt base-dir
+                                           plan
+                                           wave-idx
+                                           #:scratch-token scratch-token
+                                           #:scratch-root-abs (scratch-root-for wave-idx)))
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
                #:timeout-sec effective-timeout
                ;; B2b/C: the /go request carries the production delivery
@@ -711,7 +775,12 @@
             (hook-amend (hasheq 'campaign-token
                                 (register-campaign-request! request)
                                 'new-session
-                                (build-single-wave-prompt base-dir plan anchor-wave-idx)
+                                (build-single-wave-prompt base-dir
+                                                          plan
+                                                          anchor-wave-idx
+                                                          #:scratch-token scratch-token
+                                                          #:scratch-root-abs
+                                                          (scratch-root-for anchor-wave-idx))
                                 'text
                                 (append-divergence-warnings
                                  (if delivery-pending

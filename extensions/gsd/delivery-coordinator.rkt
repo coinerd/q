@@ -41,8 +41,10 @@
          delivery-outcome-message
          run-delivery-coordinator!
          default-delivery-controller
+         binding-dispatch-stage-action
          default-delivery-coordinator
-         default-delivery-controller-interpret)
+         default-delivery-controller-interpret
+         parse-delivery-stop)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -98,6 +100,9 @@
       [(null? rest) #f]
       [(equal? (car rest) v) i]
       [else (loop (add1 i) (cdr rest))])))
+
+(define (full-sha-string? value)
+  (and (string? value) (regexp-match? #px"^[0-9a-f]{40}$" value)))
 
 ;; Next linear stage after `current` (a member of linear-delivery-stages).
 (define (next-stage current)
@@ -226,6 +231,23 @@
 
 (define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
 
+;; Typed-stop reason preservation: gsd-delivery.py reports typed stops as
+;; exit 2 with {"status":"delivery-pending","reason":…} on STDOUT while
+;; stderr stays empty. Reading only stderr discarded every controller reason;
+;; this parser surfaces the preserved, redacted reason and returns #f for
+;; anything else (garbage, other statuses, empty output).
+(define (parse-delivery-stop stdout target-stage)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define data (string->jsexpr stdout))
+    (and (hash? data)
+         (equal? (hash-ref data 'status #f) "delivery-pending")
+         (delivery-effect-result
+          'blocked
+          (hasheq 'stage
+                  target-stage
+                  'reason
+                  (redact-delivery-text (format "~a" (hash-ref data 'reason "delivery pending"))))))))
+
 (define (default-delivery-controller base-dir plan wave target-stage)
   ;; The controller shell runs in the checkout identified by base-dir (or its
   ;; q/ child), exactly like delivery-readback. Tokens are added for THIS
@@ -258,48 +280,185 @@
       (if (or (subprocess-result-timed-out? result)
               (subprocess-result-truncated? result)
               (not (zero? (subprocess-result-exit-code result))))
-          (delivery-effect-result 'blocked
-                                  (hasheq 'stage
-                                          target-stage
-                                          'reason
-                                          (redact-delivery-text (subprocess-result-stderr result))))
+          ;; gsd-delivery.py reports typed stops as exit 2 with the reason on
+          ;; STDOUT ({"status":"delivery-pending","reason":…}); stderr stays
+          ;; empty. Surface the preserved, redacted reason instead of
+          ;; discarding it with the blank stderr.
+          (or (parse-delivery-stop (subprocess-result-stdout result) target-stage)
+              (delivery-effect-result 'blocked
+                                      (hasheq 'stage
+                                              target-stage
+                                              'reason
+                                              (redact-delivery-text (subprocess-result-stderr
+                                                                     result)))))
           (default-delivery-controller-interpret
            target-stage
            (string->jsexpr (subprocess-result-stdout result))))))
   ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
   (case target-stage
+    [("implementation-review")
+     ;; Durable review validation at the receipt identity: the frozen
+     ;; binding-named evidence trio plus the schema-2 review artifact are
+     ;; validated by the unchanged strict gate at the receipt head (never
+     ;; the working tree). The review itself is produced by a genuine
+     ;; independent non-author reviewer outside the controller; its absence
+     ;; is a typed awaiting-review, never fabricated progress.
+     (run-controller "review"
+                     "--expected-head"
+                     (default-delivery-receipt-head base-dir plan wave)
+                     "--expected-branch"
+                     (default-delivery-receipt-branch base-dir plan wave))]
+    [("implementation-pr")
+     ;; Resolve the durable branch identity first. A missing open PR is the
+     ;; only blocked result that may proceed to deterministic creation; API,
+     ;; fetch, or identity failures remain typed stops and never get retried
+     ;; as a create attempt.
+     (define pr-branch (default-delivery-receipt-branch base-dir plan wave))
+     (define pr-receipt-head (default-delivery-receipt-head base-dir plan wave))
+     (define resolved-pr
+       (run-controller "resolve-pr" "--expected-branch" pr-branch "--expected-head" pr-receipt-head))
+     (define resolved-pr-data (delivery-effect-result-data resolved-pr))
+     (define resolved-pr-status (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'status #f)))
+     (define resolved-pr-number (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'pr #f)))
+     (define resolved-pr-head (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'head #f)))
+     (cond
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'ok)
+             (equal? resolved-pr-status "resolved")
+             (exact-nonnegative-integer? resolved-pr-number)
+             (full-sha-string? resolved-pr-head))
+        resolved-pr]
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'ok)
+             (equal? resolved-pr-status "resolved"))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" pr-branch)))]
+       [(and (eq? (delivery-effect-result-kind resolved-pr) 'blocked)
+             (equal? resolved-pr-status "none"))
+        (run-controller "open-pr"
+                        "--expected-branch"
+                        pr-branch
+                        "--expected-head"
+                        (default-delivery-receipt-head base-dir plan wave))]
+       [else resolved-pr])]
+    [("implementation-ci")
+     ;; CI is evaluated only after an exact open PR has been resolved from the
+     ;; receipt branch. The PR number is never guessed or persisted.
+     (define ci-branch (default-delivery-receipt-branch base-dir plan wave))
+     (define ci-receipt-head (default-delivery-receipt-head base-dir plan wave))
+     (define resolved-ci-pr
+       (run-controller "resolve-pr" "--expected-branch" ci-branch "--expected-head" ci-receipt-head))
+     (define resolved-ci-data (delivery-effect-result-data resolved-ci-pr))
+     (define resolved-ci-status (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'status #f)))
+     (define ci-pr-number (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'pr #f)))
+     (define ci-pr-head (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'head #f)))
+     (cond
+       [(and (eq? (delivery-effect-result-kind resolved-ci-pr) 'ok)
+             (equal? resolved-ci-status "resolved")
+             (exact-nonnegative-integer? ci-pr-number)
+             (full-sha-string? ci-pr-head))
+        (run-controller "pr-ci"
+                        "--pr"
+                        (number->string ci-pr-number)
+                        "--expected-branch"
+                        ci-branch
+                        "--expected-head"
+                        (default-delivery-receipt-head base-dir plan wave))]
+       [(and (eq? (delivery-effect-result-kind resolved-ci-pr) 'ok)
+             (equal? resolved-ci-status "resolved"))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" ci-branch)))]
+       [else resolved-ci-pr])]
     [("implementation-merged")
      ;; A protected merge needs (a) the PR identity resolved from the durable
-     ;; receipt branch (never guessed), (b) the exact verified head and branch
-     ;; from the receipt, and (c) the frozen schema-2 evidence path. The PR
-     ;; lookup is the same fail-closed resolve-before-create the controller
-     ;; already uses; zero/multiple open PRs become a typed stop.
+     ;; receipt branch (never guessed), (b) the exact verified PR head and
+     ;; branch, and (c) the frozen schema-2 evidence path. Resolve validates
+     ;; that the PR tip descends from the receipt through evidence-only commits;
+     ;; merge then enforces its exact-head contract at that actual PR tip.
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
      (define receipt-head (default-delivery-receipt-head base-dir plan wave))
      (define evidence (default-delivery-evidence-path plan wave))
-     (define resolve (run-controller "resolve-pr" "--expected-branch" receipt-branch))
-     (define pr-number (hash-ref (delivery-effect-result-data resolve) "pr" #f))
+     (define resolve
+       (run-controller "resolve-pr"
+                       "--expected-branch"
+                       receipt-branch
+                       "--expected-head"
+                       receipt-head))
+     (define resolve-data (delivery-effect-result-data resolve))
+     ;; string->jsexpr hashes carry SYMBOL keys; a string key here never
+     ;; matched and made the protected merge unreachable in production.
+     (define pr-number (and (hash? resolve-data) (hash-ref resolve-data 'pr #f)))
+     (define pr-head (and (hash? resolve-data) (hash-ref resolve-data 'head #f)))
      (cond
        ;; None/ambiguous PR, or shell failure: typed stop with the controller
        ;; reason — never invent a PR identity.
        [(not (eq? (delivery-effect-result-kind resolve) 'ok)) resolve]
-       [(not (exact-nonnegative-integer? pr-number))
-        (delivery-effect-result 'blocked
-                                (hasheq 'stage
-                                        target-stage
-                                        'reason
-                                        (format "controller resolved no usable PR for branch ~a"
-                                                receipt-branch)))]
+       [(not (and (exact-nonnegative-integer? pr-number) (full-sha-string? pr-head)))
+        (delivery-effect-result
+         'blocked
+         (hasheq 'stage
+                 target-stage
+                 'reason
+                 (format "controller resolved no usable PR identity for branch ~a" receipt-branch)))]
        [else
         (run-controller "merge"
                         "--pr"
                         (number->string pr-number)
                         "--expected-head"
-                        receipt-head
+                        pr-head
                         "--expected-branch"
                         receipt-branch
                         "--evidence"
                         evidence)])]
+    [("binding-prepared")
+     ;; Prepare the durable, hash-named binding staging output from the
+     ;; implementation receipt. The Python action self-resolves the merged
+     ;; implementation PR from the receipt branch when --pr is omitted.
+     (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
+     (run-controller "prepare"
+                     "--evidence"
+                     (default-delivery-evidence-path plan wave)
+                     "--output"
+                     (default-binding-staging-path base-dir plan wave)
+                     "--campaign-root"
+                     (path->string base-dir)
+                     "--expected-branch"
+                     receipt-branch)]
+    [("binding-review")
+     ;; Validate the staged draft and its rebind guard. This is evidence
+     ;; validation only; it never manufactures an approval.
+     (run-controller "binding-review"
+                     "--output"
+                     (default-binding-staging-path base-dir plan wave)
+                     "--campaign-root"
+                     (path->string base-dir)
+                     "--expected-branch"
+                     (default-delivery-receipt-branch base-dir plan wave))]
+    [("binding-pr")
+     ;; Publish the validated staging trio on the deterministic fresh-main
+     ;; binding branch, resolving an existing PR before creating a new one.
+     (run-controller "binding-pr"
+                     "--output"
+                     (default-binding-staging-path base-dir plan wave)
+                     "--campaign-root"
+                     (path->string base-dir))]
+    [("binding-ci")
+     ;; Resolve the exact binding PR by branch, then check its exact fetched
+     ;; head. Binding commits are fresh-main publication commits, so the
+     ;; implementation receipt ancestry check is intentionally not applied.
+     (binding-dispatch-stage-action run-controller target-stage plan wave "binding-ci")]
+    [("binding-merged")
+     ;; Reuse the protected merge workflow verbatim, with the binding path as
+     ;; its evidence source and the exact resolved binding PR head as input.
+     (binding-dispatch-stage-action run-controller target-stage plan wave "binding-merge")]
+    [("governance")
+     (run-controller "governance" "--expected-branch" (default-binding-branch plan wave))]
     [("sync")
      (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
     [else
@@ -316,8 +475,21 @@
   (define status (and (hash? data) (hash-ref data 'status #f)))
   (cond
     [(equal? status "merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
-    [(equal? status "already-merged") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
+    ;; Preserve the payload for already-merged: the binding dispatch stage
+    ;; actions consume the interpreted data and must see the idempotent
+    ;; resume identity (status/pr/head) to route verbatim instead of
+    ;; advancing on a stripped ok.
+    [(equal? status "already-merged") (delivery-effect-result 'ok data)]
     [(equal? status "resolved") (delivery-effect-result 'ok data)]
+    ;; implementation-review: the strict gate validated the durable review
+    ;; at the receipt head; carry the binding evidence (reviewed-sha) forward.
+    [(equal? status "reviewed") (delivery-effect-result 'ok data)]
+    [(equal? status "opened") (delivery-effect-result 'ok data)]
+    [(equal? status "exists") (delivery-effect-result 'ok data)]
+    [(equal? status "already-published") (delivery-effect-result 'ok data)]
+    [(equal? status "green") (delivery-effect-result 'ok data)]
+    [(equal? status "pending-review") (delivery-effect-result 'ok data)]
+    [(equal? status "governed") (delivery-effect-result 'ok data)]
     [(equal? status "awaiting-review")
      (delivery-effect-result 'awaiting-review
                              (hasheq 'stage
@@ -329,12 +501,16 @@
     [(equal? status "none")
      (delivery-effect-result
       'blocked
-      (hasheq
-       'stage
-       target-stage
-       'reason
-       (format "no open implementation PR for branch ~a; open it for genuine independent review"
-               (hash-ref data 'branch "?"))))]
+      (hasheq 'stage
+              target-stage
+              'status
+              "none"
+              'branch
+              (hash-ref data 'branch "?")
+              'reason
+              (format "~a: no open pull request for branch ~a; open it for genuine independent review"
+                      target-stage
+                      (hash-ref data 'branch "?"))))]
     [else
      (delivery-effect-result 'blocked
                              (hasheq 'stage
@@ -382,6 +558,71 @@
 ;; from a checkout.
 (define (default-delivery-evidence-path plan wave)
   (format "docs/reports/gsd-wave-evidence/~a-w~a.rktd" plan wave))
+
+;; Binding publication uses a deterministic branch and durable campaign-local
+;; staging directory. These derivations mirror gsd-delivery.py and are never
+;; taken from a mutable checkout HEAD.
+(define (default-binding-branch plan wave)
+  (string-append "binding/" (substring plan 0 (min 12 (string-length plan))) (format "-w~a" wave)))
+
+(define (default-binding-staging-path base-dir plan wave)
+  (path->string (build-path base-dir ".planning" "campaigns" plan (format "binding-w~a" wave))))
+
+;; Binding CI/merge dispatch: resolve the deterministic binding PR by branch,
+;; then act on the typed status. `run` is the controller seam (injectable for
+;; tests; the production caller passes run-controller). Statuses are JSON
+;; strings — string->jsexpr never produces symbols, so comparing against a
+;; quoted symbol list never matches and would silently skip the CI/merge
+;; action (fabricated progress). "already-merged" returns the resolve result
+;; verbatim (idempotent resume); a resolved identity without a usable number
+;; or head fails closed as a typed blocked stop.
+(define (binding-dispatch-stage-action run target-stage plan wave action-name)
+  (define binding-branch (default-binding-branch plan wave))
+  ;; The run-controller seam appends --repo/--plan/--wave itself; per-action
+  ;; flags must never duplicate them (argparse refuses unknown flags like
+  ;; --plan-id and would turn every dispatch into a usage-error stop).
+  (define binding-resolved (run "binding-resolve-pr" "--expected-branch" binding-branch))
+  (define binding-resolved-data (delivery-effect-result-data binding-resolved))
+  (define binding-resolved-status
+    (and (hash? binding-resolved-data) (hash-ref binding-resolved-data 'status #f)))
+  (define binding-pr-number
+    (and (hash? binding-resolved-data) (hash-ref binding-resolved-data 'pr #f)))
+  (define binding-pr-head
+    (and (hash? binding-resolved-data) (hash-ref binding-resolved-data 'head #f)))
+  (cond
+    [(and (eq? (delivery-effect-result-kind binding-resolved) 'ok)
+          (member binding-resolved-status '("resolved" "already-merged"))
+          (exact-positive-integer? binding-pr-number)
+          (full-sha-string? binding-pr-head))
+     (if (equal? binding-resolved-status "already-merged")
+         binding-resolved
+         (if (equal? action-name "binding-ci")
+             (run action-name
+                  "--pr"
+                  (number->string binding-pr-number)
+                  "--expected-branch"
+                  binding-branch
+                  "--expected-head"
+                  binding-pr-head)
+             (run action-name
+                  "--pr"
+                  (number->string binding-pr-number)
+                  "--expected-head"
+                  binding-pr-head
+                  "--expected-branch"
+                  binding-branch
+                  "--evidence"
+                  (default-delivery-evidence-path plan wave))))]
+    [(and (eq? (delivery-effect-result-kind binding-resolved) 'ok)
+          (member binding-resolved-status '("resolved" "already-merged")))
+     (delivery-effect-result
+      'blocked
+      (hasheq 'stage
+              target-stage
+              'reason
+              (format "controller resolved no usable binding PR identity for branch ~a"
+                      binding-branch)))]
+    [else binding-resolved]))
 
 (define (default-delivery-coordinator base-dir plan wave-index)
   (run-delivery-coordinator! base-dir plan wave-index #:controller default-delivery-controller))

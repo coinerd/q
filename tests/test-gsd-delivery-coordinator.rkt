@@ -191,6 +191,15 @@
                                                 "implementation-merged"
                                                 (hasheq 'status "already-merged")))
                   'ok)
+    ;; already-merged preserves the payload so the binding dispatch stage
+    ;; actions can route the idempotent resume identity verbatim.
+    (check-equal?
+     (hash-ref (delivery-effect-result-data (default-delivery-controller-interpret
+                                             "implementation-merged"
+                                             (hasheq 'status "already-merged" 'pr 7 'head "h")))
+               'pr
+               #f)
+     7)
     (check-equal?
      (delivery-effect-result-kind
       (default-delivery-controller-interpret
@@ -203,13 +212,34 @@
     (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
                                                 "sync"
                                                 (hasheq 'status "pending" 'reason "detached HEAD")))
+                  'blocked)
+    ;; W2 PR creation is deterministic and idempotent at the durable branch identity.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-pr"
+                                   (hasheq 'status "opened" 'pr 42 'branch "campaign/test")))
+     'ok)
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-pr"
+                                   (hasheq 'status "exists" 'pr 42 'branch "campaign/test")))
+     'ok)
+    ;; W2 CI success advances; unresolved CI remains a typed stop, never a fabricated green.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret
+                                   "implementation-ci"
+                                   (hasheq 'status "green" 'pr 42 'branch "campaign/test")))
+     'ok)
+    (check-equal? (delivery-effect-result-kind
+                   (default-delivery-controller-interpret
+                    "implementation-ci"
+                    (hasheq 'status "delivery-pending" 'reason "required check test (0) is pending")))
                   'blocked))
   (test-case "default controller refuses stages without a controller action (typed stop, never fabricated)"
     (define dir (make-temporary-file "coordinator-noop-~a" 'directory))
     (dynamic-wind void
                   (lambda ()
-                    (define r
-                      (default-delivery-controller dir (make-string 64 #\a) 0 "binding-review"))
+                    (define r (default-delivery-controller dir (make-string 64 #\a) 0 "future-stage"))
                     (check-eq? (delivery-effect-result-kind r) 'blocked)
                     (check-true (string-contains? (hash-ref (delivery-effect-result-data r) 'reason)
                                                   "not implemented")))
@@ -236,10 +266,169 @@
                                              (hasheq 'status "none" 'branch "campaign/test")))
     (check-eq? (delivery-effect-result-kind none) 'blocked)
     (check-true (string-contains? (hash-ref (delivery-effect-result-data none) 'reason)
-                                  "no open implementation PR"))
+                                  "no open pull request"))
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data none) 'reason)
+                                  "implementation-merged"))
     (define unexpected
       (default-delivery-controller-interpret "implementation-merged"
                                              (hasheq 'status "delivery-pending" 'reason "api down")))
     (check-eq? (delivery-effect-result-kind unexpected) 'blocked)
     (check-true (string-contains? (hash-ref (delivery-effect-result-data unexpected) 'reason)
-                                  "api down"))))
+                                  "api down")))
+  (test-case "reviewed controller verdict maps to ok (implementation-review)"
+    (define reviewed
+      (default-delivery-controller-interpret
+       "implementation-review"
+       (hasheq 'status "reviewed" 'head (make-string 40 #\a) 'reviewed-sha (make-string 40 #\a))))
+    (check-eq? (delivery-effect-result-kind reviewed) 'ok)
+    (check-equal? (hash-ref (delivery-effect-result-data reviewed) 'reviewed-sha #f)
+                  (make-string 40 #\a))
+    (check-eq? (delivery-effect-result-kind
+                (default-delivery-controller-interpret
+                 "implementation-review"
+                 (hasheq 'status "awaiting-review" 'reason "review artifact absent")))
+               'awaiting-review))
+  (test-case "typed-stop reason preservation parses the delivery-pending stdout payload"
+    (define stop
+      (parse-delivery-stop "{\"status\":\"delivery-pending\",\"reason\":\"CI pending: test (0)\"}"
+                           "implementation-ci"))
+    (check-eq? (delivery-effect-result-kind stop) 'blocked)
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data stop) 'reason) "CI pending"))
+    (check-false (parse-delivery-stop "not json at all" "implementation-review"))
+    (check-false (parse-delivery-stop "{\"status\":\"reviewed\"}" "implementation-review"))
+    (check-false (parse-delivery-stop "" "implementation-review")))
+  (test-case "implementation-review routes to the review action (never the not-implemented stop)"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define ready (done-record dir))
+                          (define plan (campaign-plan-id ready))
+                          (define r (default-delivery-controller dir plan 0 "implementation-review"))
+                          (check-eq? (delivery-effect-result-kind r) 'blocked)
+                          (define reason (hash-ref (delivery-effect-result-data r) 'reason))
+                          (check-false (string-contains? reason "not implemented"))
+                          ;; the stub campaign repo has no origin: the python failure
+                          ;; reason must survive the exit-2 boundary (previously
+                          ;; discarded with the empty stderr)
+                          (check-true (string-contains? reason "delivery command failed")))))
+  (test-case "W2 PR and CI stages route to their controller actions"
+    (call-with-campaign 1
+                        (lambda (dir rec)
+                          (define ready (done-record dir))
+                          (define plan (campaign-plan-id ready))
+                          (for ([stage (in-list '("implementation-pr" "implementation-ci"
+                                                                      "implementation-merged"))])
+                            (define r (default-delivery-controller dir plan 0 stage))
+                            (check-eq? (delivery-effect-result-kind r) 'blocked)
+                            (define reason (hash-ref (delivery-effect-result-data r) 'reason))
+                            (check-false (string-contains? reason "not implemented")
+                                         (format "~a must dispatch to its Python action" stage)))))))
+(test-case "binding stages route to explicit Python actions"
+  (call-with-campaign 1
+                      (lambda (dir rec)
+                        (define ready (done-record dir))
+                        (define plan (campaign-plan-id ready))
+                        (for ([stage (in-list '("binding-prepared" "binding-review"
+                                                                   "binding-pr"
+                                                                   "binding-ci"
+                                                                   "binding-merged"
+                                                                   "governance"))])
+                          (define r (default-delivery-controller dir plan 0 stage))
+                          (define reason (hash-ref (delivery-effect-result-data r) 'reason))
+                          (check-false (string-contains? reason "not implemented")
+                                       (format "~a must dispatch to its Python action" stage))))))
+(test-case "binding CI/merge dispatch acts only on typed STRING statuses"
+  ;; Regression (independent review F1): statuses arrive as JSON strings via
+  ;; string->jsexpr. Comparing them against a quoted SYMBOL list never
+  ;; matched, so binding-ci/binding-merged silently fell through to the
+  ;; resolve passthrough and the journal advanced without the CI/merge
+  ;; action ever running — fabricated progress.
+  (define head (make-string 40 #\a))
+  (define plan (make-string 64 #\b))
+  (define (resolved-identity status)
+    (delivery-effect-result 'ok (hasheq 'status status 'pr 77 'head head)))
+  ;; resolved + valid identity -> the stage action runs with the exact
+  ;; resolved PR identity.
+  (let ([calls '()])
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      (if (equal? action "binding-resolve-pr")
+          (resolved-identity "resolved")
+          (delivery-effect-result 'ok (hasheq 'status "green"))))
+    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (check-eq? (delivery-effect-result-kind r) 'ok)
+    (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "green")
+    (check-equal? (length calls) 2)
+    ;; R1 regression: the resolve invocation carries ONLY the per-action
+    ;; flag. The run seam appends --repo/--plan/--wave itself; an unknown
+    ;; --plan-id flag turned every dispatch into an argparse usage error.
+    (check-equal? (cdr (car (reverse calls))) (list "--expected-branch" "binding/bbbbbbbbbbbb-w3"))
+    (define action-call (car calls))
+    (check-equal? (car action-call) "binding-ci")
+    (define args (cdr action-call))
+    (check-equal? (list-ref args 0) "--pr")
+    (check-equal? (list-ref args 1) "77")
+    (check-equal? (list-ref args 2) "--expected-branch")
+    (check-equal? (list-ref args 3) "binding/bbbbbbbbbbbb-w3")
+    (check-equal? (list-ref args 4) "--expected-head")
+    (check-equal? (list-ref args 5) head))
+  ;; binding-merge dispatch carries the binding evidence path.
+  (let ([calls '()])
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      (if (equal? action "binding-resolve-pr")
+          (resolved-identity "resolved")
+          (delivery-effect-result 'ok (hasheq 'status "merged"))))
+    (define r (binding-dispatch-stage-action fake-run "binding-merged" plan 3 "binding-merge"))
+    (check-eq? (delivery-effect-result-kind r) 'ok)
+    (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "merged")
+    (check-equal? (length calls) 2)
+    (define args (cdr (car calls)))
+    (check-equal? (list-ref args 0) "--pr")
+    (check-equal? (list-ref args 1) "77")
+    (check-equal? (list-ref args 2) "--expected-head")
+    (check-equal? (list-ref args 4) "--expected-branch")
+    (check-equal? (list-ref args 6) "--evidence")
+    (check-equal? (list-ref args 7) (format "docs/reports/gsd-wave-evidence/~a-w3.rktd" plan)))
+  ;; already-merged -> idempotent passthrough of the resolve result; the
+  ;; protected merge action must NOT run again. The resolve result must be
+  ;; returned verbatim (identity, not a copy).
+  (let ([calls '()])
+    (define resolve-result (resolved-identity "already-merged"))
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      resolve-result)
+    (define r (binding-dispatch-stage-action fake-run "binding-merged" plan 3 "binding-merge"))
+    (check-eq? r resolve-result)
+    (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "already-merged")
+    (check-equal? (length calls) 1))
+  ;; resolved status WITHOUT a usable identity fails closed as blocked —
+  ;; never a silent passthrough.
+  (let ([calls '()])
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      (delivery-effect-result 'ok (hasheq 'status "resolved" 'pr "not-a-number" 'head head)))
+    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (check-eq? (delivery-effect-result-kind r) 'blocked)
+    (check-true (string-contains? (hash-ref (delivery-effect-result-data r) 'reason)
+                                  "no usable binding PR identity"))
+    (check-equal? (length calls) 1))
+  ;; A symbol status (seam violation shape) must NOT dispatch the action;
+  ;; the downstream interpret seam blocks it as an unexpected status.
+  (let ([calls '()])
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      (delivery-effect-result 'ok (hasheq 'status 'resolved 'pr 77 'head head)))
+    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (check-eq? (delivery-effect-result-kind r) 'ok)
+    (check-equal? (length calls) 1)
+    (check-eq? (delivery-effect-result-kind
+                (default-delivery-controller-interpret "binding-ci" (delivery-effect-result-data r)))
+               'blocked))
+  ;; none -> typed passthrough for the interpret seam to block.
+  (let ([calls '()])
+    (define (fake-run action . args)
+      (set! calls (cons (cons action args) calls))
+      (delivery-effect-result 'ok (hasheq 'status "none" 'branch "binding/bbbbbbbbbbbb-w3")))
+    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "none")
+    (check-equal? (length calls) 1)))

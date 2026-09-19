@@ -55,6 +55,8 @@
          delivery-verification-message
          make-delivery-verifier
          run-delivery-verification
+         changed-files-set
+         scratch-probe-path?
          current-gsd-delivery-verify-command
          current-gsd-delivery-verify-timeout-sec
          current-gsd-delivery-branch-context
@@ -403,12 +405,26 @@
         (list 1 "" "")))
   (define paths
     (append (string-split (git-stdout diff-result) "\n")
-            (string-split (git-stdout untracked-result) "\n")
+            ;; sandbox-write-scratch-parity W1: executor scratch probes are
+            ;; disposable, never delivery evidence — exclude them from the
+            ;; untracked-new collection so a probe cannot dirty a delivery
+            ;; verdict or leak into frozen artifacts. Tracked (committed)
+            ;; scratch WOULD appear in the committed/campaign diffs and stays
+            ;; visible: only uncommitted probe residue is exempt.
+            (for/list ([p (in-list (string-split (git-stdout untracked-result) "\n"))]
+                       #:unless (scratch-probe-path? p))
+              p)
             (string-split (git-stdout committed-result) "\n")
             (string-split (git-stdout campaign-result) "\n")))
   (for/set ([p (in-list paths)]
             #:when (not (string=? (string-trim p) "")))
     (string-trim p)))
+
+;; sandbox-write-scratch-parity W1: git-relative path predicate for
+;; executor-session scratch probes. The trailing slash makes the boundary
+;; exact: `.planning/scratch-elsewhere/` is NOT exempt.
+(define (scratch-probe-path? git-relative-path)
+  (string-prefix? (string-trim git-relative-path) ".planning/scratch/"))
 
 ;; Does the changed-file set satisfy this wave target?
 ;; - exact path match (existing behavior): a wave target that is a concrete
