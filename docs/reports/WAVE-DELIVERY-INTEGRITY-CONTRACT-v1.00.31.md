@@ -9,6 +9,16 @@ The register is frozen: a later re-scoping needs a reviewed plan amendment, neve
 silent edit. Every row must end with a fixture that fails pre-fix and passes
 post-fix; no row may be closed by assertion alone (acceptance gate A0).
 
+Provenance and trust boundary: the plan file lives outside this repository
+(`.planning/` is disk-resident, not tracked), so the in-repo verbatim copy of its
+register table is
+`artifacts/wave-delivery-integrity/v1.00.31-w0/raw/plan-failure-mode-register.txt`,
+taken directly from the frozen plan at W0 freeze time. Its SHA-256 is recorded as
+`plan-sha256` in `failure-register.json`. Verifying that digest against the plan
+is a coordinator-side check (the file is not in the tree); in-tree, the harness
+verifies that this document, the machine-readable register and the raw excerpt
+agree row-for-row on all four contract columns.
+
 Row count: **10**.
 
 | Mode | Observed in v1.00.30 W4 | Permanent guard | Owning wave | Refusal contract |

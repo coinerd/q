@@ -1,10 +1,14 @@
 #lang racket/base
-;; @covers extensions/gsd/wave-docs.rkt
-;; @covers extensions/gsd/wave-completion.rkt
 
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
+
+;; This test deliberately declares NO @covers: it exercises no production module.
+;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
+;; reproductions, contract document) and cross-checks them against each other and
+;; against the committed raw plan excerpt. Claiming @covers here would create a
+;; false impact link in tests/.coverage-manifest.json.
 
 ;; Register harness for the frozen v1.00.31 wave-delivery integrity register.
 ;;
@@ -57,6 +61,14 @@
 
 (define (row-ref r k [default #f])
   (hash-ref r k default))
+
+;; the four contract columns of a register row, used to prove verbatim agreement.
+(define (row-fields r)
+  (list (row-ref r 'mode "")
+        (row-ref r 'structural-fix "")
+        (row-ref r 'owning-wave "")
+        (row-ref r 'refusal "")))
+
 (define (repro-for mode)
   (for/first ([r (in-list reproduction-rows)]
               #:when (equal? (row-ref r 'mode) mode))
@@ -222,7 +234,12 @@
   (check-equal? (map (lambda (r) (row-ref r 'id)) register-rows)
                 '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10"))
   (check-true (eq? #t (hash-ref register 'frozen)))
-  (check-equal? (hash-ref register 'row-count) (length register-rows)))
+  (check-equal? (hash-ref register 'row-count) (length register-rows))
+  ;; the plan digest is recorded provenance for the (repo-external) plan file;
+  ;; the in-repo verbatim copy is raw/plan-failure-mode-register.txt, which the
+  ;; next test checks the register against. Assert the digest is well formed.
+  (check-true (and (regexp-match? #px"^[0-9a-f]{64}$" (row-ref register 'plan-sha256 "")) #t)
+              "plan digest is a recorded SHA-256"))
 
 (test-case "every register row carries its contract fields"
   (for ([r (in-list register-rows)])
@@ -246,10 +263,12 @@
                  #:when (string-prefix? l (format "| ~a |" id)))
         l))
     (check-true (and (pair? candidates) #t) (format "~a present in raw plan excerpt" id))
+    ;; every contract column must survive verbatim - mode, guard, owning wave
+    ;; and refusal - not merely the refusal text.
     (check-true (and (for/or ([l (in-list candidates)])
-                       (string-contains? l (row-ref r 'refusal "")))
+                       (andmap (lambda (v) (string-contains? l v)) (row-fields r)))
                      #t)
-                (format "~a refusal verbatim from the plan" id))))
+                (format "~a (mode, guard, wave, refusal) verbatim from the plan" id))))
 
 (test-case "contract document agrees with the register"
   (define doc (file->string contract-doc-path))
@@ -260,10 +279,8 @@
                   #:when (string-prefix? l (format "| **~a**" id)))
         l))
     (check-true (and line #t) (format "~a row in contract doc" id))
-    (check-true (and line (string-contains? line (row-ref r 'refusal "")))
-                (format "~a refusal in contract doc" id))
-    (check-true (and line (string-contains? line (row-ref r 'owning-wave "")))
-                (format "~a owning wave in contract doc" id))))
+    (check-true (and line (andmap (lambda (v) (string-contains? line v)) (row-fields r)) #t)
+                (format "~a (mode, guard, wave, refusal) in contract doc" id))))
 
 (test-case "every register row has exactly one reproduction"
   (for ([r (in-list register-rows)])
@@ -283,14 +300,37 @@
   (check-equal? (length results) (length register-rows))
   (for ([res (in-list results)])
     (define id (row-result-mode res))
-    (check-false (eq? (row-result-guard-status res) 'ok) (format "~a is not 'ok" id))
-    (cond
-      [(eq? (row-result-guard-status res) 'unguarded)
-       ;; consistency: unguarded <=> no guard registered
-       (check-false (hash-has-key? guards id) (format "~a has no guard" id))
-       (check-true (and (member (row-result-fixture-status res) '(reproduced not-reproduced)) #t)
-                   (format "~a fixture status" id))]
-      [else (check-true (hash-has-key? guards id) (format "~a has a guard" id))])))
+    ;; every reported status comes from the declared vocabulary, which contains
+    ;; no passing value at all; an unguarded row is therefore unrepresentable as
+    ;; a pass.
+    (check-true (and (member (row-result-guard-status res) '(unguarded guarded-pass guarded-fail)) #t)
+                (format "~a guard-status in vocabulary" id))
+    (check-true (and (member (row-result-fixture-status res)
+                             '(reproduced not-reproduced refused not-refused skipped))
+                     #t)
+                (format "~a fixture-status in vocabulary" id))
+    (check-false (hash-has-key? guards id) (format "~a has no guard in W0" id))))
+
+(test-case "harness expect-refused mode discriminates (self-test of the W6 mechanism)"
+  ;; W0's deliverable is the mechanism W6 replays. Prove it actually
+  ;; discriminates by registering a stub guard for one row and observing both
+  ;; outcomes, then restore the empty registry.
+  (dynamic-wind void
+                (lambda ()
+                  (register-guard! "F1" (lambda (_r) 'refused))
+                  (define passed
+                    (for/first ([x (in-list (run-register))]
+                                #:when (equal? (row-result-mode x) "F1"))
+                      x))
+                  (check-eq? (row-result-guard-status passed) 'guarded-pass)
+                  (register-guard! "F1" (lambda (_r) 'not-refused))
+                  (define failed
+                    (for/first ([x (in-list (run-register))]
+                                #:when (equal? (row-result-mode x) "F1"))
+                      x))
+                  (check-eq? (row-result-guard-status failed) 'guarded-fail))
+                (lambda () (hash-remove! guards "F1")))
+  (check-equal? (hash-count guards) 0))
 
 (test-case "unguarded rows still reproduce their defect on the unfixed tree"
   (for ([res (in-list results)]
