@@ -122,6 +122,12 @@
 ;; Reproduction-liveness checks for unguarded rows
 ;; ============================================================
 
+;; Reproduction fixtures F2-F10 are RECORDED inputs, not recomputations: they
+;; reference an unmerged W4 branch (ce13d038) and live GitHub API responses that
+;; do not exist in the checked-out tree, so re-deriving them in CI is impossible
+;; by design. F1 is the exception and is executed live below. W6 replays all of
+;; them as injections through the guards W1-W5 register; the raw inputs are kept
+;; under artifacts/wave-delivery-integrity/v1.00.31-w0/raw/ for offline replay.
 (define (hex64? s)
   (and (string? s) (regexp-match? #px"^[0-9a-f]{64}$" s)))
 
@@ -190,8 +196,15 @@
 
 (struct row-result (mode owning-wave guard-status fixture-status) #:transparent)
 
-;; run-register : [#:mode 'expect-refused] -> (listof row-result)
-(define (run-register #:mode [mode 'expect-refused])
+;; run-register : -> (listof row-result)
+;;
+;; The harness semantics ARE expect-refused mode, so there is no separate mode
+;; switch to get wrong: a row with a registered guard is evaluated through that
+;; guard and the guard must report 'refused (any other outcome is a failure); a
+;; row with no registered guard reports 'unguarded together with its
+;; reproduction-liveness result. W6 therefore replays a wave merely by
+;; registering the wave's guards with `register-guard!` and calling this.
+(define (run-register)
   (for/list ([row (in-list register-rows)])
     (define id (row-ref row 'id))
     (define repro (repro-for id))
@@ -268,7 +281,15 @@
     (check-true (and (for/or ([l (in-list candidates)])
                        (andmap (lambda (v) (string-contains? l v)) (row-fields r)))
                      #t)
-                (format "~a (mode, guard, wave, refusal) verbatim from the plan" id))))
+                (format "~a (mode, guard, wave, refusal) verbatim from the plan" id)))
+  ;; converse: the excerpt may not invent a mode the register does not freeze.
+  (define raw-ids
+    (for/list ([l (in-list raw-lines)]
+               #:when (regexp-match? #px"^\\| (F[0-9]+) \\|" l))
+      (second (regexp-match #px"^\\| (F[0-9]+) \\|" l))))
+  (check-equal? (sort (remove-duplicates raw-ids) string<?)
+                (sort (map (lambda (r) (row-ref r 'id)) register-rows) string<?)
+                "raw plan excerpt contains exactly the frozen modes, none invented"))
 
 (test-case "contract document agrees with the register"
   (define doc (file->string contract-doc-path))
@@ -280,7 +301,16 @@
         l))
     (check-true (and line #t) (format "~a row in contract doc" id))
     (check-true (and line (andmap (lambda (v) (string-contains? line v)) (row-fields r)) #t)
-                (format "~a (mode, guard, wave, refusal) in contract doc" id))))
+                (format "~a (mode, guard, wave, refusal) in contract doc" id)))
+  ;; converse: the contract document may not invent a row the register does not
+  ;; freeze (a fabricated F-row in the table would otherwise pass unnoticed).
+  (define doc-ids
+    (for/list ([l (in-list (string-split doc "\n"))]
+               #:when (regexp-match? #px"^\\| \\*\\*(F[0-9]+)\\*\\*" l))
+      (second (regexp-match #px"^\\| \\*\\*(F[0-9]+)\\*\\*" l))))
+  (check-equal? (sort (remove-duplicates doc-ids) string<?)
+                (sort (map (lambda (r) (row-ref r 'id)) register-rows) string<?)
+                "contract document has exactly the frozen modes, none invented"))
 
 (test-case "every register row has exactly one reproduction"
   (for ([r (in-list register-rows)])

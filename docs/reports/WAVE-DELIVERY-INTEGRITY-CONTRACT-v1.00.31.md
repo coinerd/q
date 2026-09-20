@@ -13,11 +13,15 @@ Provenance and trust boundary: the plan file lives outside this repository
 (`.planning/` is disk-resident, not tracked), so the in-repo verbatim copy of its
 register table is
 `artifacts/wave-delivery-integrity/v1.00.31-w0/raw/plan-failure-mode-register.txt`,
-taken directly from the frozen plan at W0 freeze time. Its SHA-256 is recorded as
-`plan-sha256` in `failure-register.json`. Verifying that digest against the plan
-is a coordinator-side check (the file is not in the tree); in-tree, the harness
-verifies that this document, the machine-readable register and the raw excerpt
-agree row-for-row on all four contract columns.
+taken directly from the frozen plan at W0 freeze time. Two different digests are
+recorded for two different things: `plan-sha256` in `failure-register.json` is the
+SHA-256 of the frozen **plan file itself** (which is repo-external, so only the
+coordinator can re-verify it against the plan), whereas the SHA-256 of the in-tree
+excerpt is the one recorded for `raw/plan-failure-mode-register.txt` in the
+artifact `SHA256SUMS`. Re-verifying the plan digest is a coordinator-side check;
+in-tree, the harness verifies that this document, the machine-readable register
+and the raw excerpt agree row-for-row on all four contract columns, in both
+directions (no dropped row, no invented row).
 
 Row count: **10**.
 
