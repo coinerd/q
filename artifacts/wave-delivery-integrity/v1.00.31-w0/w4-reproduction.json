@@ -1,0 +1,173 @@
+{
+  "schema": "wave-delivery-integrity-reproduction/1",
+  "plan": "v1.00.31 - GSD Wave Delivery Integrity",
+  "milestone": 896,
+  "wave": "W0",
+  "purpose": "Red fixtures for every frozen register row, captured on the UNFIXED tree before any guard exists. W6 re-runs these as injections and must observe each refused.",
+  "captured-from": "shared checkout /home/user/src/q-agent/q (branch campaign/v1.00.30-w4) and fresh origin/main 03cfd25c; executions re-run in the W0 worktree",
+  "subject": {
+    "campaign-plan-id": "96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8",
+    "wave": "W4",
+    "issue": 9690,
+    "milestone": 895,
+    "branch": "campaign/v1.00.30-w4",
+    "head": "ce13d0388b56b850d67fa50f7ca5bea093581e62",
+    "tree": "fc80fa2edc71a1788fb95db8b54985efebd48b78",
+    "evidence-implementation-sha": "bbb6500aa242c94dc53aefd7a840f7a3c91fc836",
+    "evidence-tree": "15294ea26ae409434a1d58e5e66089ad2af1523e",
+    "authored-content-digest": "542f7cbb35e3fe2e0f9de82265cfc7b9837f640aa5a887ed67809d14a75a234e",
+    "true-content-digest": "a7ad71fb129e541044896867fb0519ce27dc2565999d491b9eac45300882f7c4",
+    "base": "03cfd25c3441c0cb9e091b78a0c9215aa2a91292",
+    "stale-pinned-head": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"
+  },
+  "reproductions": [
+    {
+      "mode": "F1",
+      "owning-wave": "W1",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "command",
+      "declared-in": ".github/actions/prepare-racket-environment/action.yml:146-149 (introduced by the W4 branch; absent from origin/main)",
+      "declared": "racket scripts/ci/compiled-root.rkt build \\\n  --out \"$stage/compiled-root\" \\\n  --checkout \"$PWD\" \\\n  --trusted-label q-trusted-producer",
+      "declared-shell-context": "shell: bash with `set -euo pipefail` at action.yml:135",
+      "executed": "racket scripts/ci/compiled-root.rkt build --out /tmp/w0-repro/compiled-root --checkout $PWD --trusted-label q-trusted-producer",
+      "exit-code": 1,
+      "stdout": "",
+      "stderr": "compiled-root: unknown switch: --out\n",
+      "actual-cli-options": ["--checkout <dir>", "--module <m> (repeatable)", "--final-dir <dir>", "--staging-dir <dir>", "--map-dir <dir>", "--label <l>", "--trusted-label <l> (repeatable)", "--lockfile <p>"],
+      "consequence": "the producer step can never succeed, so the compiled-root lane could never activate in CI; under `set -euo pipefail` the whole job dies",
+      "note": "the sibling `manifest.rkt emit --out ...` invocation IS valid (manifest.rkt:351) - only the compiled-root call is wrong"
+    },
+    {
+      "mode": "F2",
+      "owning-wave": "W2",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "command",
+      "executed": "git diff --binary 03cfd25c3441c0cb9e091b78a0c9215aa2a91292...ce13d0388b56b850d67fa50f7ca5bea093581e62 -- . ':(exclude)docs/reports/gsd-wave-evidence/**' ':(exclude)docs/reports/gsd-wave-reviews/**' ':(exclude)docs/reports/gsd-wave-validation/**' | sha256sum",
+      "exit-code": 0,
+      "computed": "a7ad71fb129e541044896867fb0519ce27dc2565999d491b9eac45300882f7c4",
+      "authored": "542f7cbb35e3fe2e0f9de82265cfc7b9837f640aa5a887ed67809d14a75a234e",
+      "equal": false,
+      "consequence": "the wave claimed a verified content digest that no recomputation reproduces"
+    },
+    {
+      "mode": "F3",
+      "owning-wave": "W2",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "record",
+      "recorded-implementation-sha": "bbb6500aa242c94dc53aefd7a840f7a3c91fc836",
+      "recorded-tree": "15294ea26ae409434a1d58e5e66089ad2af1523e",
+      "actual-head": "ce13d0388b56b850d67fa50f7ca5bea093581e62",
+      "actual-tree": "fc80fa2edc71a1788fb95db8b54985efebd48b78",
+      "equal": false,
+      "evidence-status-field": "ready-for-merge",
+      "consequence": "the evidence bound a head that is not the verified head, so the binding did not describe what was reviewed"
+    },
+    {
+      "mode": "F4",
+      "owning-wave": "W2",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "command",
+      "executed": "git show --stat ce13d038",
+      "exit-code": 0,
+      "non-evidence-paths": ["README.md", "tests/test-w9-ci-workflow-verification.rkt"],
+      "evidence-paths": ["docs/reports/gsd-wave-evidence/v1.00.30-w4.rktd", "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd", "docs/reports/gsd-wave-validation/v1.00.30-w4.rktd"],
+      "consequence": "the record commit was not evidence-only; the wave's declared record commit carried source/test churn"
+    },
+    {
+      "mode": "F5",
+      "owning-wave": "W3",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "command",
+      "executed": "git ls-remote --heads origin refs/heads/campaign/v1.00.30-w4",
+      "exit-code": 0,
+      "matching-refs": 0,
+      "consequence": "the verified head was never published, so no ladder step could address it"
+    },
+    {
+      "mode": "F6",
+      "owning-wave": "W4",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "api",
+      "executed": "GET /repos/coinerd/q/pulls?state=all&head=coinerd/q:binding/96974d2cd97b-w3 (tool form, gsd-delivery.py:437) vs GET /repos/coinerd/q/pulls?state=all&head=coinerd:binding/96974d2cd97b-w3 (GitHub API form)",
+      "exit-code": 0,
+      "tool-form-result": [],
+      "api-form-result": [9722],
+      "consequence": "resolve_existing_pr / resolve_merged_pr always return none, so the `governance` ladder action can never succeed",
+      "note": "tests/test-gsd-delivery-controller.py binds its fakes with the same wrong key, so the suite mirrored the bug and CI stayed green"
+    },
+    {
+      "mode": "F7",
+      "owning-wave": "W5",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "record",
+      "stale-head-pins": [
+        {"file": "artifacts/ci-recovery/v1.00.30-w4/activation.json", "field": "implementation-head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"},
+        {"file": "artifacts/ci-recovery/v1.00.30-w4/activation.json", "field": "head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"},
+        {"file": "artifacts/ci-recovery/v1.00.30-w4/rollback-drill.json", "field": "head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"}
+      ],
+      "actual-head": "ce13d0388b56b850d67fa50f7ca5bea093581e62",
+      "timing-disagreement": [
+        {"phase": "global-off-rollback", "prose-ms": 260, "field-ms": 247, "agree": false},
+        {"phase": "current-source-canary", "prose-ms": 250, "field-ms": 250, "agree": true},
+        {"phase": "tamper-canary", "prose-ms": 245, "field-ms": 256, "agree": false}
+      ],
+      "consequence": "recorded provenance pinned a superseded head and the artifact's own prose contradicted its machine-readable fields"
+    },
+    {
+      "mode": "F8",
+      "owning-wave": "W3",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "record",
+      "surfaced-to-operator": "wave-blocked (delivery command failed (git, exit 128))",
+      "underlying": "fatal: Konnte Remote-Referenz '+refs/heads/campaign/v1.00.30-w4:...' nicht finden (remote ref not found)",
+      "consequence": "the operator saw a bare exit code instead of a typed reason naming the ref and the remedy"
+    },
+    {
+      "mode": "F9",
+      "owning-wave": "W3",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "record",
+      "observed-pre-correction": {
+        "plan-index-row": "- [DONE] W4: Guarded compiled root activation -> waves/W4-guarded-compiled-root-activation.md",
+        "wave-doc-header": "Status: DONE",
+        "campaign-record-wave-4": "done",
+        "delivery-journal": "delivery-pending"
+      },
+      "breaches": "frozen v1.00.30 contract: never mark this wave complete while delivery is pending; plan text line 67: '...remain COHORT OPEN and halt /go; coordinator gathers data and resumes the same gate, not mark-wave-DONE'",
+      "live-instance-corrected": {
+        "date": "2026-09-20",
+        "method": "campaign-state set-campaign-wave-status! + campaign-repository persist-campaign! (record) and wave-docs mark-wave-status! (dual-write index row + doc header)",
+        "record": "pending",
+        "plan-index-row": "- [Inbox] W4: ...",
+        "wave-doc-header": "Status: Inbox",
+        "delivery-journal-unchanged": "delivery-pending",
+        "note": "the correction makes the record truthful; the GUARD is still required and is owned by W3"
+      }
+    },
+    {
+      "mode": "F10",
+      "owning-wave": "W3",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "record",
+      "observed": {
+        "outbox-event": "campaign/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8/wave/4/attempt/attempt-1/completed",
+        "campaign-record-wave-4": "pending",
+        "ledger-leads-record": true
+      },
+      "mechanism": "extensions/gsd/wave-completion.rkt reconcile-completion-outbox! appends an event only for waves whose status is 'done' and never prunes; a rollback therefore leaves an event the durable record no longer justifies",
+      "invariant-violated": "the outbox is derived and 'may only lag the durable commit, never lead (no invented DONE)'",
+      "impact": "inert today - no reader outside wave-completion.rkt consumes the outbox and campaign completion is decided by wave statuses plus delivery proofs - but the invariant is broken and would mislead any future consumer",
+      "consequence": "a status rollback can leave the derived ledger asserting a completion the record denies"
+    }
+  ]
+}

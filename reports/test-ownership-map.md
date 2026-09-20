@@ -9,7 +9,7 @@ Every production area must have an accountable test destination.
 | provider | llm/ (provider adapters) | provider | 8 | integration, unit | tests |
 | session | agent/ (agent session) | runtime | 138 | e2e, integration, unit | tests |
 | tools | tools/ + agent/roles/tool-gateway | tools | 3 | unit | tests |
-| extensions | extensions/ | extensions | 140 | e2e, integration, pure, unit | tests |
+| extensions | extensions/ | extensions | 141 | e2e, integration, pure, unit | tests |
 | tui | tui/ | tui | 89 | integration, unit | tests |
 | workflows | scripts/run-tests/workflows/ + GSD | workflows | 29 | integration | tests/workflows |
 
