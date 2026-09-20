@@ -289,7 +289,22 @@
       (second (regexp-match #px"^\\| (F[0-9]+) \\|" l))))
   (check-equal? (sort (remove-duplicates raw-ids) string<?)
                 (sort (map (lambda (r) (row-ref r 'id)) register-rows) string<?)
-                "raw plan excerpt contains exactly the frozen modes, none invented"))
+                "raw plan excerpt contains exactly the frozen modes, none invented")
+  ;; and the observed-evidence narrative must survive too, not just the four
+  ;; contract columns: whatever the register carries as `observed` / evidence
+  ;; gap must be readable verbatim from the excerpt, so neither can drift.
+  (for ([r (in-list register-rows)])
+    (define id (row-ref r 'id))
+    (define observed (row-ref r 'observed ""))
+    (define gap (row-ref r 'evidence-gap ""))
+    (when (or (non-empty-string? observed) (non-empty-string? gap))
+      (define line
+        (for/or ([l (in-list raw-lines)]
+                 #:when (string-prefix? l (format "| ~a |" id)))
+          (and (or (not (non-empty-string? observed)) (string-contains? l observed))
+               (or (not (non-empty-string? gap)) (string-contains? l gap))
+               l)))
+      (check-true (and line #t) (format "~a observed/evidence-gap verbatim from the plan" id)))))
 
 (test-case "contract document agrees with the register"
   (define doc (file->string contract-doc-path))
