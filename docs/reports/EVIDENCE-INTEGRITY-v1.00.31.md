@@ -127,3 +127,23 @@ live-range assertion did not execute; the tool contract in CI is carried by
 the synthetic cases, and the live range is asserted wherever full history is
 present (canonical checkout, binding worktrees). This limitation is stated
 here and in the validation record rather than hidden.
+
+## 8. Post-merge repair: record-commit purity vs its contract letter (issue #9736)
+
+The binding ladder's `prepare` stage refused W2's own merged delivery with
+`impure-record-commit: tests/test-wave-delivery-integrity-register.rkt (commit
+c84d43eef90f)` — a live F4 instance caused by this wave's process error: the
+first source-trio commit bundled the register fixture's 150-column fix. The
+refusal was correct behavior for a strict reader, but stricter than the
+registered contract: register F4's structural fix is "the **final** record
+commit must be evidence-only", and `prepare()`'s own comment says the tool
+inspects the newest base..head commit touching the evidence directory — while
+the tool scanned every historical commit. The guard contradicted the contract
+it implements (the F1 defect class: declaration vs behavior). W2's final
+record commit (`b0f9e7bc`, trio-only) satisfies F4's letter.
+
+Repaired here: `record-commit-purity` inspects the newest evidence-touching
+commit; mixed-final is still refused with precise foreign paths; a third test
+direction pins older-impure + newer-pure → `pure`; verified against the real
+W2 branch. The mixed commit itself stays in the delivered history — named
+here rather than hidden; the binding records carry the same instance.
