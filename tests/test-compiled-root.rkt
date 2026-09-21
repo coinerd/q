@@ -34,6 +34,32 @@
 (module+ test
   (define tmp-base (make-temporary-file "qcr-e2e~a" 'directory))
 
+  ;; Nested git commands must not inherit the caller's git plumbing. A git hook
+  ;; (the repo's pre-commit hook, for instance) exports GIT_DIR/GIT_INDEX_FILE, so
+  ;; a nested `git -C <scratch fixture> init/add` acts on the hook's repository and
+  ;; dies with "must be run in a work tree". The fixture gets its own sanitized
+  ;; copy of the environment rather than mutating the global one.
+  (define (git-plumbing-free-env)
+    (define src (current-environment-variables))
+    (define dst (make-environment-variables))
+    (for ([name (in-list (environment-variables-names src))])
+      (environment-variables-set! dst name (environment-variables-ref src name)))
+    (for ([name (in-list '(#"GIT_DIR" #"GIT_INDEX_FILE"
+                                      #"GIT_WORK_TREE"
+                                      #"GIT_OBJECT_DIRECTORY"
+                                      #"GIT_COMMON_DIR"
+                                      #"GIT_PREFIX"
+                                      #"GIT_ALTERNATE_OBJECT_DIRECTORIES"))])
+      (environment-variables-set! dst name #f))
+    dst)
+
+  ;; Apply the sanitized environment to the whole test, not just to the fixtures:
+  ;; the engine under test also shells out to git (checkout cleanliness checks) and
+  ;; inherits whatever environment this process was started with. Measured: with
+  ;; GIT_DIR leaked, the fixtures passed but the CLI's git call failed, so a
+  ;; fixture-only fix was not enough.
+  (current-environment-variables (git-plumbing-free-env))
+
   ;; ---- fixture: a tiny git checkout containing one marker module ----
   (define (make-marker-source marker-symbol)
     (format
@@ -48,8 +74,10 @@
                          #:exists 'replace
                          (lambda () (display (make-marker-source marker-symbol))))
     (define (git . args)
-      (unless (zero?
-               (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args))
+      (define code
+        (parameterize ([current-environment-variables (git-plumbing-free-env)])
+          (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args)))
+      (unless (zero? code)
         (error 'fixture "git ~a failed" args)))
     (git "init" "-q")
     (git "config" "user.email" "ci@example.invalid")
@@ -259,8 +287,10 @@
       (make-directory* (path-only p))
       (with-output-to-file p #:exists 'replace (lambda () (display (cdr f)))))
     (define (git . args)
-      (unless (zero?
-               (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args))
+      (define code
+        (parameterize ([current-environment-variables (git-plumbing-free-env)])
+          (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args)))
+      (unless (zero? code)
         (error 'fixture "git ~a failed" args)))
     (git "init" "-q")
     (git "config" "user.email" "ci@example.invalid")

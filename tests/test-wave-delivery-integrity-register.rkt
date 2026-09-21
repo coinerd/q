@@ -8,7 +8,9 @@
 ;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
 ;; reproductions, contract document) and cross-checks them against each other and
 ;; against the committed raw plan excerpt. Claiming @covers here would create a
-;; false impact link in tests/.coverage-manifest.json.
+;; false impact link in tests/.coverage-manifest.json. (From W1 on it also
+;; requires scripts/ci/invocation-contract.rkt — a CI tool — to serve as the
+;; oracle for F1's guard, not a production module.)
 
 ;; Register harness for the frozen v1.00.31 wave-delivery integrity register.
 ;;
@@ -28,6 +30,10 @@
 ;;
 ;; This wave changes no production behaviour: no guard is registered here and no
 ;; green claim is made about any guard.
+;;
+;; W1 (register F1) registers the first guard — see the section below the harness
+;; — so the "no guard" claim is now the frozen W0 statement it was written as,
+;; while the tests assert the current per-wave registry state.
 
 (require rackunit
          racket/file
@@ -38,7 +44,8 @@
          racket/string
          racket/system
          json
-         (file "../util/json/checksum.rkt"))
+         (file "../util/json/checksum.rkt")
+         (file "../scripts/ci/invocation-contract.rkt"))
 
 (define-runtime-path q-root "..")
 (define-runtime-path register-path
@@ -235,6 +242,27 @@
          repro-for)
 
 ;; ============================================================
+;; W1 guard for F1 (invocation contract)
+;; ============================================================
+
+;; The row is guarded by the thing W1 actually shipped rather than by a
+;; re-statement of its fixture: the guard extracts the declaration from the
+;; action file and asks the CLI itself whether every declared flag exists. It is
+;; the same check tests/test-workflow-invocation-contract.rkt runs
+;; repository-wide, so the row flips back to guarded-fail if either side drifts —
+;; the action line or the script's option set.
+(define (f1-declaration-refused?)
+  (define action (build-path q-root ".github" "actions" "prepare-racket-environment" "action.yml"))
+  (define declaration
+    (for/first ([i (in-list (extract-declared-invocations action))]
+                #:when (equal? (hash-ref i 'target "") "scripts/ci/compiled-root.rkt"))
+      i))
+  (and (hash? declaration)
+       (equal? "ok" (hash-ref (check-invocation declaration q-root) 'status "not-ok"))))
+
+(register-guard! "F1" (lambda (_repro) (if (f1-declaration-refused?) 'refused 'not-refused)))
+
+;; ============================================================
 ;; Tests
 ;; ============================================================
 
@@ -354,12 +382,19 @@
                              '(reproduced not-reproduced refused not-refused skipped))
                      #t)
                 (format "~a fixture-status in vocabulary" id))
-    (check-false (hash-has-key? guards id) (format "~a has no guard in W0" id))))
+    ;; A row is either guarded (W1 onward) or honestly reported unguarded; the two
+    ;; must never disagree with the registry.
+    (if (hash-has-key? guards id)
+        (check-true (and (memq (row-result-guard-status res) '(guarded-pass guarded-fail)) #t)
+                    (format "~a status comes from its guard" id))
+        (check-eq? (row-result-guard-status res) 'unguarded (format "~a unguarded" id)))))
 
 (test-case "harness expect-refused mode discriminates (self-test of the W6 mechanism)"
   ;; W0's deliverable is the mechanism W6 replays. Prove it actually
   ;; discriminates by registering a stub guard for one row and observing both
-  ;; outcomes, then restore the empty registry.
+  ;; outcomes, then restore the registry to exactly its previous state — in W1
+  ;; that means the real F1 guard, not an empty registry.
+  (define saved (hash-ref guards "F1" #f))
   (dynamic-wind void
                 (lambda ()
                   (register-guard! "F1" (lambda (_r) 'refused))
@@ -374,8 +409,16 @@
                                 #:when (equal? (row-result-mode x) "F1"))
                       x))
                   (check-eq? (row-result-guard-status failed) 'guarded-fail))
-                (lambda () (hash-remove! guards "F1")))
-  (check-equal? (hash-count guards) 0))
+                (lambda ()
+                  (if saved
+                      (hash-set! guards "F1" saved)
+                      (hash-remove! guards "F1"))))
+  (check-equal? (hash-count guards) (if saved 1 0))
+  (unless saved
+    (check-eq? (for/first ([x (in-list (run-register))]
+                           #:when (equal? (row-result-mode x) "F1"))
+                 (row-result-guard-status x))
+               'unguarded)))
 
 (test-case "unguarded rows still reproduce their defect on the unfixed tree"
   (for ([res (in-list results)]
@@ -384,9 +427,22 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W0 registers no guard (no fix in this wave)"
-  (check-equal? (hash-count guards) 0)
-  (check-equal? (remove-duplicates (statuses)) '(unguarded)))
+(test-case "W1 registers exactly the F1 guard, and only F1 becomes guarded"
+  ;; The register is a per-wave ledger: a row becomes guarded in the wave that
+  ;; fixes it and only then. A wave that marked rows guarded without fixing them
+  ;; would show up here as an extra entry; a wave that fixed F1 and forgot to
+  ;; register its guard would show up as F1 falling back to unguarded — and, with
+  ;; the fix live, as a reproduction-liveness failure just above.
+  (check-equal? (sort (hash-keys guards) string<?) '("F1"))
+  (check-eq? (for/first ([r (in-list results)]
+                         #:when (equal? (row-result-mode r) "F1"))
+               (row-result-guard-status r))
+             'guarded-pass)
+  (for ([r (in-list results)]
+        #:unless (equal? (row-result-mode r) "F1"))
+    (check-eq? (row-result-guard-status r)
+               'unguarded
+               (format "~a still unguarded" (row-result-mode r)))))
 
 (test-case "SHA256SUMS covers every artifact input and matches its content"
   (define sums

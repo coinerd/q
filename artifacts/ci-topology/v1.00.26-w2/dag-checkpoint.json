@@ -38,7 +38,7 @@
   },
   "fast_env_verification_contract": {
     "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
-    "prepare_action_sha256": "f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501",
+    "prepare_action_sha256": "608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c",
     "setup_action": ".github/actions/setup-racket/action.yml",
     "setup_action_sha256": "da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772",
     "pinned_dimensions": [
@@ -61,6 +61,10 @@
     "w2_restamp": {
       "wave": "v1.00.30-w2",
       "note": "v1.00.30 W2 (issue #9688) added eager-compilation containment telemetry outputs to the shared setup-racket action (eager-setup-seconds, purge-zo-count, cache-state) and re-stamped setup_action_sha256 from the W6-era value a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784 to da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772. The W4 BUG-0065 purge step and the guarded restore step remain byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
+    },
+    "w1_restamp": {
+      "wave": "v1.00.31-w1",
+      "note": "v1.00.31 W1 (register F1) re-stamped prepare_action_sha256 from the W0-era value f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501 to 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c so that the invocation the action DECLARES is executable: the action gains the compiled-root input (default 'false'), the COMPILED_ROOT env, and a guarded whole-checkout producer invocation inside the pack step's run: script (the same shape as the v1.00.30 W0 BUG-0073 pipefail re-stamp). Verification semantics are unchanged and mechanically proven in artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt: the diff is deletion-free (+22, -0), the pre-W1 file is an ORDERED SUBSEQUENCE of the post-W1 file, and the pinned dimensions (manifest.rkt emit, manifest.rkt verify, lock_digest, ::error::, exit 1) are unchanged; with the default the inserted block does not execute at all. setup_action_sha256 is untouched. The literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (prepare_action_sha256)."
     }
   },
   "timing_checkpoint": {

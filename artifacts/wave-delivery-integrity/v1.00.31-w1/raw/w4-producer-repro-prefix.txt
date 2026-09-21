@@ -1,0 +1,6 @@
+$ git rev-parse HEAD
+ce13d0388b56b850d67fa50f7ca5bea093581e62
+
+$ racket scripts/ci/compiled-root.rkt build --out /tmp/w1-prefix-probe/compiled-root --checkout "$PWD" --trusted-label q-trusted-producer
+compiled-root: unknown switch: --out
+exit=1

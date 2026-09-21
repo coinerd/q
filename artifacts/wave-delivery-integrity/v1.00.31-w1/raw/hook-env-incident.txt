@@ -1,0 +1,53 @@
+=== v1.00.31 W1 — incident: pre-commit hook environment leak corrupted the repo (repaired) ===
+
+WHAT HAPPENED
+The repo's pre-commit hook exports GIT_DIR (and the index path) while it runs the
+affected tests. tests/test-compiled-root.rkt builds scratch git fixtures with
+`git -C <fixture> init/add/commit`. With GIT_DIR inherited, `git init` did not
+create a repository in the fixture: it RE-INITIALIZED the exported repository, and
+because git saw no worktree for it, it recorded
+
+    core.bare = true
+
+in /home/user/src/q-agent/q/.git/config.
+
+SYMPTOM
+`git rev-parse --show-toplevel` and every other worktree-bound command failed in
+the canonical checkout AND in all worktrees with:
+
+    fatal: Diese Operation muss in einem Arbeitsverzeichnis ausgeführt werden.
+    (this operation must be run in a work tree)
+
+The staged index of the affected worktree was intact, so no work was lost; the
+failure appeared only when the first commit of this wave was attempted.
+
+REPAIR (audited)
+    git -C /home/user/src/q-agent/q config core.bare false
+
+  core.bare before/after : true -> false
+  canonical HEAD         : ce13d038 (unchanged; the W4 branch head)
+  canonical reflog       : unchanged
+  canonical staged files : 0 (no stray additions from the leaked index)
+  canonical worktree     : clean
+  all worktrees          : core.bare=false, usable again
+
+GUARD (shipped in this wave)
+tests/test-compiled-root.rkt now builds a sanitized copy of the process
+environment with the git plumbing variables removed (GIT_DIR, GIT_INDEX_FILE,
+GIT_WORK_TREE, GIT_OBJECT_DIRECTORY, GIT_COMMON_DIR, GIT_PREFIX,
+GIT_ALTERNATE_OBJECT_DIRECTORIES) and applies it to the whole test — not just to
+the fixture helpers, because the engine under test shells out to git as well
+(measured: with GIT_DIR leaked, the fixtures passed and the CLI's git call
+failed, so a fixture-only fix was insufficient).
+
+Evidence, both modes green:
+  $ raco test tests/test-compiled-root.rkt
+  11 tests passed
+  $ GIT_DIR=<repo>/.git GIT_INDEX_FILE=/tmp/fake-index raco test tests/test-compiled-root.rkt
+  11 tests passed
+
+WHY IT IS RECORDED HERE
+This is the F1 class again in a different place: an inherited context silently
+changing the meaning of a command that reported success elsewhere. It is also the
+reason the wave's own commit could not be made until the leak was found, so it is
+part of the wave's honest history rather than an unmentionable accident.

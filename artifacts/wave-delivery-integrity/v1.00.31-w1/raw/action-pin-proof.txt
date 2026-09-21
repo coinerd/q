@@ -1,0 +1,53 @@
+=== v1.00.31 W1 — prepare-racket-environment pin proof ===
+
+Why the pin moves: W1 (register F1) makes the invocation the action
+declares executable. The action gains the `compiled-root` input (default
+'false'), the COMPILED_ROOT env, and a guarded producer block INSIDE the
+pack step's run: script — the same shape as the v1.00.30 W0 BUG-0073
+re-stamp (pipefail added before the step-summary tee).
+
+base: 6c602681b9c9a619bdf3ed7a777752fab9a696f4
+file: .github/actions/prepare-racket-environment/action.yml
+
+Proof 1 — deletion-free diff:
+$ git diff --numstat 6c602681 -- .github/actions/prepare-racket-environment/action.yml
+22	0	.github/actions/prepare-racket-environment/action.yml
+
+Proof 2 — the old file is an ORDERED SUBSEQUENCE of the new file
+(no pre-existing line was modified or removed; lines are only inserted):
+  ordered-subsequence: True
+  lines deleted or modified: 0
+  lines inserted: 22
+
+inserted lines, verbatim:
+  +  compiled-root:
+  +    description: >-
+  +      Also produce the whole-checkout trusted compiled root into
+  +      q-compiled/trusted-root (v1.00.30 W4 lane). Default off: a
+  +      whole-checkout `raco make` on the critical path is a deliberate
+  +      activation decision with its own latency evidence, not an accident.
+  +    required: false
+  +    default: 'false'
+  +        COMPILED_ROOT: ${{ inputs.compiled-root }}
+  +        # Whole-checkout trusted compiled root (v1.00.31 W1). This is the
+  +        # producer invocation the W4 lane activates; it must stay
+  +        # executable, and tests/test-compiled-root-workflow.rkt executes
+  +        # exactly this line against a scratch checkout. The published root
+  +        # lands inside the already-contracted q-compiled/ prefix, so the
+  +        # artifact contract (I10 allowlist) needs no widening.
+  +        if [ "${COMPILED_ROOT:-false}" = "true" ]; then
+  +          racket scripts/ci/compiled-root.rkt build \
+  +            --out "$stage/q-compiled/trusted-root" \
+  +            --checkout "$PWD" \
+  +            --trusted-label q-trusted-producer
+  +        fi
+  +
+
+Proof 3 — the pinned verification dimensions are still present:
+  OK  racket ci/prepared-environment/manifest.rkt emit
+  OK  racket ci/prepared-environment/manifest.rkt verify
+  OK  ::error::
+  OK  exit 1
+  OK  lock-digest
+
+verdict: ADDITIVE-ONLY — verification semantics unchanged
