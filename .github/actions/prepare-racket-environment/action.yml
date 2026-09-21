@@ -30,6 +30,14 @@ inputs:
   artifact-name:
     description: 'Name of the prepared-environment artifact'
     required: true
+  compiled-root:
+    description: >-
+      Also produce the whole-checkout trusted compiled root into
+      q-compiled/trusted-root (v1.00.30 W4 lane). Default off: a
+      whole-checkout `raco make` on the critical path is a deliberate
+      activation decision with its own latency evidence, not an accident.
+    required: false
+    default: 'false'
 outputs:
   lock-digest:
     description: 'SHA-256 of the lock file used for the package store'
@@ -125,6 +133,7 @@ runs:
         LOCK_DIGEST: ${{ steps.tuple.outputs.lock-digest }}
         SOURCE_DIGEST: ${{ steps.tuple.outputs.source-digest }}
         ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        COMPILED_ROOT: ${{ inputs.compiled-root }}
       run: |
         set -euo pipefail
         stage="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
@@ -140,6 +149,19 @@ runs:
           mkdir -p "$stage/q-compiled/$rel"
           cp -a "$dir/." "$stage/q-compiled/$rel/"
         done < <(find . -type d -name compiled -not -path './.git/*' -print0)
+
+        # Whole-checkout trusted compiled root (v1.00.31 W1). This is the
+        # producer invocation the W4 lane activates; it must stay
+        # executable, and tests/test-compiled-root-workflow.rkt executes
+        # exactly this line against a scratch checkout. The published root
+        # lands inside the already-contracted q-compiled/ prefix, so the
+        # artifact contract (I10 allowlist) needs no widening.
+        if [ "${COMPILED_ROOT:-false}" = "true" ]; then
+          racket scripts/ci/compiled-root.rkt build \
+            --out "$stage/q-compiled/trusted-root" \
+            --checkout "$PWD" \
+            --trusted-label q-trusted-producer
+        fi
 
         git_sha=$(git rev-parse HEAD)
         racket ci/prepared-environment/manifest.rkt emit \

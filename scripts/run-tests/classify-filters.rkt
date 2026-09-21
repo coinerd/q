@@ -246,8 +246,17 @@
       (file-has-suite-tag? f "extensions")))
 
 (define (workflows-file? f)
-  (and (string-contains? f "/workflows/")
-       (or (not (string-contains? f "/fixtures/"))
+  ;; Every other area predicate (security, arch, runtime, extensions) accepts
+  ;; the `@suite` tag as well as a path pattern. This one did not, so a file
+  ;; that declared `@suite workflows` while living outside tests/workflows/ was
+  ;; silently inert: the tag selected nothing. A test must be selectable by the
+  ;; suite it declares, so the tag counts here too — provided the file really
+  ;; is a real test file, since the runner's convention is tests/**/test-*.rkt:
+  ;; a helper or fixture that happens to carry the tag must not join a suite.
+  (or (and (string-contains? f "/workflows/")
+           (or (not (string-contains? f "/fixtures/"))
+               (string-prefix? (path->string (file-name-from-path f)) "test-")))
+      (and (file-has-suite-tag? f "workflows")
            (string-prefix? (path->string (file-name-from-path f)) "test-"))))
 
 (define (unit-fast-file? f)

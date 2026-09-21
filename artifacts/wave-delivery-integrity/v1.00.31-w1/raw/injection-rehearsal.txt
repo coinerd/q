@@ -1,0 +1,20 @@
+=== v1.00.31 W1 injection rehearsal ===
+Deliberate defect injection: the --out clause was renamed in a throwaway
+copy of scripts/ci/compiled-root.rkt (/tmp/w1-inject), reproducing F1
+statically: the action declares --out, the script no longer accepts it.
+The contract must FAIL. A contract that cannot fail proves nothing.
+
+$ racket probe-inject.rkt /tmp/w1-inject
+root: /tmp/w1-inject
+declaration-files=1 invocations=10
+status-counts=#hash((ok . 9) (unknown-flag . 1))
+tier-counts=#hash((literal-vocabulary . 2) (not-a-script . 5) (option-set . 3))
+compiled-root row: status=unknown-flag tier=option-set unknown-flags=(--out)
+
+=== control: unmodified W1 checkout ===
+$ racket probe-inject.rkt /home/user/src/q-agent/wt-v10031-w1/q
+root: /home/user/src/q-agent/wt-v10031-w1/q
+declaration-files=20 invocations=87
+status-counts=#hash((ok . 87))
+tier-counts=#hash((external-provisioned . 7) (literal-vocabulary . 44) (not-a-script . 25) (option-set . 11))
+compiled-root row: status=ok tier=option-set unknown-flags=()

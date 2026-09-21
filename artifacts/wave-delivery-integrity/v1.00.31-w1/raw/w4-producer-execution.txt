@@ -1,0 +1,41 @@
+=== v1.00.31 W1 — the repaired W4 producer invocation, executed ===
+
+Declared by .github/actions/prepare-racket-environment/action.yml (extracted, not retyped):
+  racket scripts/ci/compiled-root.rkt build --out $stage/q-compiled/trusted-root --checkout $PWD --trusted-label q-trusted-producer
+
+Pre-fix counterpart (raw/w4-producer-repro-prefix.txt): the same command on the
+v1.00.30 W4 head died with `compiled-root: unknown switch: --out`, exit 1, which is
+why the producer job failed and the compiled-root lane could not activate.
+
+Identity guard retained: a checkout with untracked compilation inputs is refused
+rather than silently compiled (observed live in this wave, kept as evidence that
+the freeze/identity property survived the CLI extension):
+  build-compiled-root!: refusing to compile: dirty/untracked compilation inputs (freeze or clean them first)
+  exit code: 1
+
+[1] clean scratch fixture checkout (/tmp/w1probe/checkout, 2 modules):
+$ racket scripts/ci/compiled-root.rkt build --out /tmp/w1-exec/fixture-stage/q-compiled/trusted-root --checkout /tmp/w1probe/checkout --trusted-label q-trusted-producer
+published whole-checkout compiled root: /tmp/w1-exec/fixture-stage/q-compiled/trusted-root (2 modules, 0 non-module .rkt input(s) skipped, reason: ok)
+exit code: 0 (wall clock: 7s)
+
+published  : /tmp/w1-exec/fixture-stage/q-compiled/trusted-root
+schema     : q-compiled-root-manifest-1
+producer   : label=q-trusted-producer trusted=#t
+sources    : 2 module(s)
+payload    : algorithm=sha256 digest=49f6940927fffd14d9c18728ec8c129db6ec8ad35342654b64470c92da063092 files=2
+read-only  : #t (no writable file in the published root)
+staging    : 0 leftover staging dir(s) beside the root
+
+[2] the real W1 worktree, whole-checkout compile (the shape prepare-racket-environment runs in CI):
+$ racket scripts/ci/compiled-root.rkt build --out /tmp/w1-exec/real-stage/q-compiled/trusted-root --checkout /home/user/src/q-agent/wt-v10031-w1/q --trusted-label q-trusted-producer
+published whole-checkout compiled root: /tmp/w1-exec/real-stage/q-compiled/trusted-root (2386 modules, 10 non-module .rkt input(s) skipped, reason: ok)
+exit code: 0 (wall clock: 269s)
+
+published  : /tmp/w1-exec/real-stage/q-compiled/trusted-root
+schema     : q-compiled-root-manifest-1
+producer   : label=q-trusted-producer trusted=#t
+sources    : 2389 module(s)
+payload    : algorithm=sha256 digest=2b9f03498e37c909aa9b9b57c5025f6b8d25c0292fd57485d570b8b3da7bc338 files=2389
+read-only  : #t (no writable file in the published root)
+staging    : 0 leftover staging dir(s) beside the root
+

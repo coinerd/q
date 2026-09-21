@@ -27,6 +27,7 @@
          racket/format
          racket/list
          racket/match
+         racket/path
          racket/port
          racket/string
          racket/system
@@ -54,9 +55,67 @@
 (define (string->path/args s)
   s)
 
+;; Whole-checkout module inventory (v1.00.31 W1).
+;;
+;; The invocation the prepare-racket-environment action declares publishes
+;; a trusted root of the ENTIRE checkout. Deriving the module list from
+;; the checkout means the producer carries no separately maintained
+;; module inventory that can drift away from the tree it claims to
+;; describe. Deterministically sorted so the published manifest digest is
+;; reproducible for a given tree.
+;;
+;; Exclusions: VCS metadata, compiled-output directories, and `.rkt`/`.rktl`
+;; files that are not modules at all. The last one is not cosmetic: this
+;; repository deliberately keeps non-module `.rkt` files as test fixtures (a bare
+;; `(module+ test …)` fragment, discovery-parity fixtures, script fragments) and
+;; `raco make` aborts on them. Measured on the real tree during v1.00.31 W1, a
+;; whole-checkout run died with
+;;
+;;   load-handler: expected a `module` declaration in
+;;   tests/metadata-discovery/fixture/tests/alpha-test.rkt
+;;
+;; so the producer recognises those as non-compilation inputs, skips them and
+;; reports how many it skipped, instead of failing the lane. Test MODULES are
+;; still included: the root stays an honest picture of what CI runs.
+;;
+;; Returns (values modules skipped-non-module-inputs).
+(define (derive-checkout-modules checkout)
+  (define abs (path->complete-path checkout))
+  (unless (directory-exists? abs)
+    (error 'derive-checkout-modules "checkout missing: ~a" abs))
+  (define (excluded? p)
+    (define parts (map path->string (explode-path (find-relative-path abs p))))
+    (or (member ".git" parts) (member "compiled" parts)))
+  (define candidates
+    (sort (for/list ([p (in-list (find-files (lambda (p)
+                                               (regexp-match? #rx"\\.(rkt|rktl)$" (path->string p)))
+                                             abs))]
+                     #:unless (excluded? p))
+            (path->string (find-relative-path abs p)))
+          string<?))
+  (define-values (mods skipped)
+    (partition (lambda (rel) (module-input? (build-path abs rel))) candidates))
+  (values mods skipped))
+
+;; A `.rkt`/`.rktl` file is a compilation input only if it declares a module:
+;; a `#lang` line (optionally after a shebang) or an explicit `(module …)` form.
+(define (module-input? path)
+  (define text
+    (with-handlers ([exn:fail? (lambda (_) "")])
+      (file->string path)))
+  (define no-shebang (regexp-replace #rx"^(#![^\n]*\n)?" text ""))
+  (cond
+    [(regexp-match? #rx"^#lang" no-shebang) #t]
+    [else
+     (define datum
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (read (open-input-string no-shebang))))
+     (and (pair? datum) (eq? (first datum) 'module))]))
+
 (module+ main
   (define mode (make-parameter #f))
   (define checkout (make-parameter #f))
+  (define out (make-parameter #f))
   (define modules (make-parameter '()))
   (define final-dir (make-parameter #f))
   (define staging-dir (make-parameter #f))
@@ -91,6 +150,10 @@
      #:program "compiled-root"
      #:argv ordered-argv
      #:once-each ["--checkout" dir "checkout root (producer source of truth)" (checkout dir)]
+     ["--out"
+      dir
+      "whole-checkout build: publish a trusted root of the entire checkout into dir"
+      (out dir)]
      ["--module" m "module relative to checkout (repeatable)" (modules (append (modules) (list m)))]
      ["--final-dir" dir "published immutable root directory" (final-dir dir)]
      ["--staging-dir" dir "staging directory for atomic publish" (staging-dir dir)]
@@ -116,21 +179,76 @@
   (match cmd
     ["build"
      (define co (require-opt! checkout "checkout"))
-     (define ms (modules))
-     (when (null? ms)
-       (error 'compiled-root "build requires at least one --module"))
-     (define fd (require-opt! final-dir "final-dir"))
-     (define sd
-       (or (staging-dir) (path->string (make-temporary-file "compiled-root-stage~a" 'directory))))
-     (define manifest
-       (build-compiled-root! #:checkout co
-                             #:modules ms
-                             #:staging-dir sd
-                             #:producer-label (label)
-                             #:producer-trusted? #t
-                             #:lockfile (lockfile)))
-     (publish-compiled-root! sd fd manifest)
-     (printf "published compiled root: ~a (reason: ~a)\n" fd (reason->string #t))]
+     ;; Producer identity the published manifest records. `--label` is the
+     ;; historical per-module spelling; `--trusted-label` is the name the
+     ;; declared action invocation uses. Both must resolve to the SAME
+     ;; namespace the consumer will trust, so a given trusted label takes
+     ;; precedence and `--label` stays the fallback: callers passing
+     ;; neither keep the previous behaviour verbatim.
+     (define producer-label-value
+       (or (and (pair? (trusted-labels)) (first (trusted-labels))) (label)))
+     (cond
+       [(out)
+        ;; Whole-checkout producer mode (v1.00.31 W1). The
+        ;; prepare-racket-environment action declares exactly this
+        ;; invocation, so the CLI must be able to execute it: publish a
+        ;; trusted root of the ENTIRE checkout into --out, deriving the
+        ;; module list from the checkout itself.
+        (when (pair? (modules))
+          (error 'compiled-root
+                 (string-append "--out derives the module list from the checkout;"
+                                " --module cannot be combined with --out")))
+        (when (final-dir)
+          (error 'compiled-root
+                 (string-append "--out is the published root;"
+                                " --final-dir cannot be combined with --out")))
+        (define out-dir (out))
+        (define-values (ms skipped) (derive-checkout-modules co))
+        (when (null? ms)
+          (error 'compiled-root "no compilable modules found under checkout ~a" co))
+        (make-parent-directory* out-dir)
+        ;; Publication is an atomic rename, so the staging tree must live
+        ;; on the same filesystem as the published root.
+        (define sd
+          (path->string (make-temporary-file "compiled-root-stage~a"
+                                             'directory
+                                             (path-only (path->complete-path out-dir)))))
+        (with-handlers ([exn:fail? (lambda (e)
+                                     ;; Never leave a partial staging tree behind in
+                                     ;; the staged artifact.
+                                     (when (directory-exists? sd)
+                                       (delete-directory/files sd))
+                                     (raise e))])
+          (define manifest
+            (build-compiled-root! #:checkout co
+                                  #:modules ms
+                                  #:staging-dir sd
+                                  #:producer-label producer-label-value
+                                  #:producer-trusted? #t
+                                  #:lockfile (lockfile)))
+          (publish-compiled-root! sd out-dir manifest)
+          (printf
+           "published whole-checkout compiled root: ~a (~a modules, ~a non-module .rkt input(s) skipped, reason: ~a)\n"
+           out-dir
+           (length ms)
+           (length skipped)
+           (reason->string #t)))]
+       [else
+        (define ms (modules))
+        (when (null? ms)
+          (error 'compiled-root "build requires at least one --module"))
+        (define fd (require-opt! final-dir "final-dir"))
+        (define sd
+          (or (staging-dir) (path->string (make-temporary-file "compiled-root-stage~a" 'directory))))
+        (define manifest
+          (build-compiled-root! #:checkout co
+                                #:modules ms
+                                #:staging-dir sd
+                                #:producer-label producer-label-value
+                                #:producer-trusted? #t
+                                #:lockfile (lockfile)))
+        (publish-compiled-root! sd fd manifest)
+        (printf "published compiled root: ~a (reason: ~a)\n" fd (reason->string #t))])]
     ["run"
      (define co (require-opt! checkout "checkout"))
      (define ms (modules))
