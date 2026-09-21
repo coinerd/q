@@ -344,10 +344,11 @@
   (define root (make-temporary-file "q-w2-f3-~a" 'directory))
   (define ev-path (build-path root "evidence.rktd"))
   (display-to-file
-   (format
-    "#hasheq((schema-version . 2) (milestone . 896) (wave . \"W2\") (issue . 9725) (status . \"ready-for-merge\") (implementation-sha . ~s) (content-digest . ~s))\n"
-    f3-impl-sha
-    f3-digest-sha)
+   (format (string-append
+            "#hasheq((schema-version . 2) (milestone . 896) (wave . \"W2\") (issue . 9725)"
+            " (status . \"ready-for-merge\") (implementation-sha . ~s) (content-digest . ~s))\n")
+           f3-impl-sha
+           f3-digest-sha)
    ev-path
    #:exists 'replace)
   (define evidence
