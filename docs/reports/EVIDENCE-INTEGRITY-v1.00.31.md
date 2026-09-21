@@ -86,7 +86,18 @@ exclusion contract is byte-identical to Python's
 
 - Focused: `test-gsd-wave-gate.rkt`, `test-gsd-wave-gate-digest.rkt`,
   `test-gsd-evidence-bind.rkt`, `test-wave-delivery-integrity-register.rkt`,
-  `test-gsd-delivery-receipt.rkt` — PASS (41 tests).
+  `test-gsd-delivery-receipt.rkt` — PASS (42 tests).
+- Review round 1 non-blocking findings and their disposition: the `--check`
+  mode named by the wave contract is delivered as the `check` subcommand (a
+  fail-closed alias of `verify`, tested in both directions); refusal verdicts
+  deliberately exit 0 with typed codes on stdout (consumers parse stdout;
+  nonzero exit is reserved for tool failure), noted here as an F8-adjacent
+  ergonomics consideration; the binding-time `review()` reconciliation
+  (`gsd-delivery.py`) accepts a `reviewed-sha` that is an evidence-only
+  ancestor of the receipt head — required so the binding ladder can bind a
+  pre-merge reviewed head to the post-merge receipt, and fail-closed via
+  `require_receipt_tip` on any non-evidence drift; a duplicated require block
+  in the CLI test was removed.
 - Python controller lane: `tests/test-gsd-delivery-controller.py` — 123 tests OK
   (incl. `test_prepare_refuses_mixed_record_commit`,
   `test_binding_review_refuses_sentinel_reviewer_identity`).

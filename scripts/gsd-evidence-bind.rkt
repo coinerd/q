@@ -249,6 +249,7 @@
     "  racket scripts/gsd-evidence-bind.rkt digest --repo <dir> --base <sha> --head <sha>\n"
     "  racket scripts/gsd-evidence-bind.rkt bind   --repo <dir> --base <sha> --head <sha> --evidence <path> [--reviews <path>] [--validation <path>]\n"
     "  racket scripts/gsd-evidence-bind.rkt verify --repo <dir> --base <sha> --head <sha> --evidence <path> [--reviews <path>] [--validation <path>]\n"
+    "  racket scripts/gsd-evidence-bind.rkt check  --repo <dir> --base <sha> --head <sha> --evidence <path>  ; alias of verify\n"
     "  racket scripts/gsd-evidence-bind.rkt record-commit --repo <dir> --base <sha> --head <sha>")))
 
 (define (parse-options args required)
@@ -263,7 +264,8 @@
         [(list "--evidence" value rest ...) (loop rest (hash-set acc '--evidence value))]
         [(list "--reviews" value rest ...) (loop rest (hash-set acc '--reviews value))]
         [(list "--validation" value rest ...) (loop rest (hash-set acc '--validation value))]
-        [(list "--check" rest ...) (loop rest (hash-set acc '--check #t))]
+        [(list "--check" rest ...)
+         (loop rest (hash-set acc '--check #t))] ; accepted for tolerance, unused
         [(list flag rest ...)
          #:when (string-prefix? flag "--")
          (print-usage)
@@ -299,6 +301,10 @@
                                 (hash-ref options '--head)
                                 (record-paths options)))
      0]
+    ;; The wave contract's `--check` mode: same fail-closed verification as
+    ;; `verify` (typed digest-mismatch/malformed-digest refusals on stdout),
+    ;; under the contract's literal name.
+    [(list "check" rest ...) (main (list* "verify" rest))]
     [(list "bind" rest ...)
      (define options (parse-options rest '(--repo --base --head --evidence)))
      (bind-records! (hash-ref options '--repo)

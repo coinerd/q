@@ -12,14 +12,6 @@
 (require racket/file
          racket/list
          racket/port
-         racket/string
-         rackunit)
-
-(require (file "../tests/helpers/w2-mini-git-repo.rkt"))
-
-(require racket/file
-         racket/list
-         racket/port
          racket/runtime-path
          racket/string
          rackunit)
@@ -78,6 +70,23 @@
   (define-values (code1 out1 _e1)
     (run-tool (list "verify" "--repo" repo "--base" base "--head" head "--evidence" bad)))
   ;; decided verdicts are exit 0 with the typed refusal on stdout
+  (check-equal? code1 0)
+  (check-true (string-prefix? out1 "digest-mismatch")))
+
+(test-case "CLI check: alias of verify, fail-closed on the same contract"
+  (define root (make-temporary-file "q-w2-cli-check-~a" 'directory))
+  (define good (build-path root "good.rktd"))
+  (display-to-file (format "#hasheq((content-digest . ~s))\n" expected-digest) good #:exists 'replace)
+  (define-values (code0 out0 _e0)
+    (run-tool (list "check" "--repo" repo "--base" base "--head" head "--evidence" good)))
+  (check-equal? code0 0)
+  (check-true (string-prefix? out0 "digest-ok"))
+  (define bad (build-path root "bad.rktd"))
+  (display-to-file (format "#hasheq((content-digest . ~s))\n" (make-string 64 #\f))
+                   bad
+                   #:exists 'replace)
+  (define-values (code1 out1 _e1)
+    (run-tool (list "check" "--repo" repo "--base" base "--head" head "--evidence" bad)))
   (check-equal? code1 0)
   (check-true (string-prefix? out1 "digest-mismatch")))
 
