@@ -64,10 +64,21 @@
 ;; describe. Deterministically sorted so the published manifest digest is
 ;; reproducible for a given tree.
 ;;
-;; Exclusions: VCS metadata and compiled-output directories only. Test
-;; modules are deliberately included: the root must remain an honest,
-;; complete picture of the checkout, not a subset that silently omits
-;; what CI also runs.
+;; Exclusions: VCS metadata, compiled-output directories, and `.rkt`/`.rktl`
+;; files that are not modules at all. The last one is not cosmetic: this
+;; repository deliberately keeps non-module `.rkt` files as test fixtures (a bare
+;; `(module+ test …)` fragment, discovery-parity fixtures, script fragments) and
+;; `raco make` aborts on them. Measured on the real tree during v1.00.31 W1, a
+;; whole-checkout run died with
+;;
+;;   load-handler: expected a `module` declaration in
+;;   tests/metadata-discovery/fixture/tests/alpha-test.rkt
+;;
+;; so the producer recognises those as non-compilation inputs, skips them and
+;; reports how many it skipped, instead of failing the lane. Test MODULES are
+;; still included: the root stays an honest picture of what CI runs.
+;;
+;; Returns (values modules skipped-non-module-inputs).
 (define (derive-checkout-modules checkout)
   (define abs (path->complete-path checkout))
   (unless (directory-exists? abs)
@@ -75,12 +86,31 @@
   (define (excluded? p)
     (define parts (map path->string (explode-path (find-relative-path abs p))))
     (or (member ".git" parts) (member "compiled" parts)))
-  (sort (for/list ([p (in-list (find-files (lambda (p)
-                                             (regexp-match? #rx"\\.(rkt|rktl)$" (path->string p)))
-                                           abs))]
-                   #:unless (excluded? p))
-          (path->string (find-relative-path abs p)))
-        string<?))
+  (define candidates
+    (sort (for/list ([p (in-list (find-files (lambda (p)
+                                               (regexp-match? #rx"\\.(rkt|rktl)$" (path->string p)))
+                                             abs))]
+                     #:unless (excluded? p))
+            (path->string (find-relative-path abs p)))
+          string<?))
+  (define-values (mods skipped)
+    (partition (lambda (rel) (module-input? (build-path abs rel))) candidates))
+  (values mods skipped))
+
+;; A `.rkt`/`.rktl` file is a compilation input only if it declares a module:
+;; a `#lang` line (optionally after a shebang) or an explicit `(module …)` form.
+(define (module-input? path)
+  (define text
+    (with-handlers ([exn:fail? (lambda (_) "")])
+      (file->string path)))
+  (define no-shebang (regexp-replace #rx"^(#![^\n]*\n)?" text ""))
+  (cond
+    [(regexp-match? #rx"^#lang" no-shebang) #t]
+    [else
+     (define datum
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (read (open-input-string no-shebang))))
+     (and (pair? datum) (eq? (first datum) 'module))]))
 
 (module+ main
   (define mode (make-parameter #f))
@@ -173,7 +203,7 @@
                  (string-append "--out is the published root;"
                                 " --final-dir cannot be combined with --out")))
         (define out-dir (out))
-        (define ms (derive-checkout-modules co))
+        (define-values (ms skipped) (derive-checkout-modules co))
         (when (null? ms)
           (error 'compiled-root "no compilable modules found under checkout ~a" co))
         (make-parent-directory* out-dir)
@@ -197,10 +227,12 @@
                                   #:producer-trusted? #t
                                   #:lockfile (lockfile)))
           (publish-compiled-root! sd out-dir manifest)
-          (printf "published whole-checkout compiled root: ~a (~a modules, reason: ~a)\n"
-                  out-dir
-                  (length ms)
-                  (reason->string #t)))]
+          (printf
+           "published whole-checkout compiled root: ~a (~a modules, ~a non-module .rkt input(s) skipped, reason: ~a)\n"
+           out-dir
+           (length ms)
+           (length skipped)
+           (reason->string #t)))]
        [else
         (define ms (modules))
         (when (null? ms)

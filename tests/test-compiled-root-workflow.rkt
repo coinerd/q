@@ -77,6 +77,14 @@
                                 "(require \"second.rkt\")\n"
                                 "(provide marker-result)\n"
                                 "(define marker-result (add1 second-value))\n"))
+  ;; A deliberately NON-module .rkt input, exactly like this repository's test
+  ;; fixtures do not compile it: `raco make` dies with "expected a `module`
+  ;; declaration", which killed the first real whole-checkout run of this mode
+  ;; (tests/metadata-discovery/fixture/tests/alpha-test.rkt). The producer must
+  ;; recognise it, skip it, and say so.
+  (call-with-output-file (build-path dir "marker" "not-a-module.rkt")
+                         #:exists 'replace
+                         (lambda (o) (display "(module+ test (void))\n" o)))
   (define (git . args)
     (unless (zero?
              (apply system*/exit-code (find-executable-path "git") "-C" (path->string dir) args))
@@ -160,7 +168,14 @@
     (check-equal? (hash-ref (hash-ref m 'producer) 'label) "q-trusted-producer")
     (check-true (hash-ref (hash-ref m 'producer) 'trusted))
     ;; The whole checkout was derived, not a hand-written module list.
-    (check-true (>= (length (hash-ref m 'sources)) 2))
+    (check-equal? (length (hash-ref m 'sources)) 2)
+    ;; The non-module fixture is recognised as a non-compilation input and left
+    ;; out instead of failing the lane (real-tree defect found by this wave's
+    ;; first whole-checkout run; regression-guarded here).
+    (check-true (regexp-match? #px"non-module .rkt input\\(s\\) skipped" transcript) transcript)
+    (for ([entry (in-list (hash-ref m 'sources))])
+      (check-false (string-contains? (hash-ref entry 'path) "not-a-module.rkt")
+                   "a non-module fixture must not be published as a compiled module"))
     ;; `#px`, not `#rx`: Racket's byte regexps silently ignore counted
     ;; repetitions, so `#rx"^[0-9a-f]{64}$"` matches nothing and this
     ;; assertion would have passed vacuously (it did, in the first run).
