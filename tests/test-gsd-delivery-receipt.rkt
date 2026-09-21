@@ -175,4 +175,19 @@
   (test-case "legacy empty head cannot be replaced by current checkout"
     (with-root (lambda (root)
                  (check-false (recover-legacy-delivery-receipt! root plan 2 "" "" root))
-                 (check-false (load-delivery-journal root plan 2))))))
+                 (check-false (load-delivery-journal root plan 2)))))
+
+  (test-case "durable-receipt-head returns the verified head, and #f without a receipt"
+    (with-root (lambda (root)
+                 (check-false (durable-receipt-head root plan 2))
+                 (define result
+                   (verify-with-delivery-receipt root
+                                                 plan
+                                                 2
+                                                 root
+                                                 (lambda () 'approved)
+                                                 #:approved? (lambda (v) (eq? v 'approved))
+                                                 #:evidence (lambda (_) "log")
+                                                 #:snapshot (lambda (_) identity)))
+                 (check-eq? result 'approved)
+                 (check-equal? (durable-receipt-head root plan 2) (hash-ref identity 'head))))))

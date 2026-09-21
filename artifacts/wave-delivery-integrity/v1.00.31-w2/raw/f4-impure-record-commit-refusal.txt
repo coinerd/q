@@ -1,0 +1,12 @@
+# F4 red-first capture: mixed record commit refused (2026-09-21T15:59:56Z)
+# HEAD amends an evidence path together with README.md in one commit.
+
+# refusal: record-commit-purity over base..HEAD names the foreign path
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-evidence-bind.rkt record-commit --repo /var/tmp/q-w2-raw-f4-17899991911789999191512/repo --base 70f231b73f0f586b65dbfe2424c143806c656931 --head 6eb7926658096155dbf25031b80e5572afe03ef9
+impure-record-commit: README.md (commit 6eb792665809)
+exit: 0
+
+# control: a fresh evidence-only commit scans pure
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-evidence-bind.rkt record-commit --repo /var/tmp/q-w2-raw-f4ctl-17899991971789999197175/repo --base 63d82c579650406e23dd85196b02e5903ef9732c --head c9deb0102398e9243b6b7fcc8a07c44d2cb8692e
+pure
+exit: 0

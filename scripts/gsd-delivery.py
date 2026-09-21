@@ -56,6 +56,10 @@ EXCLUDED_PREFIXES = tuple('docs/reports/gsd-wave-' + d + '/'
 ACTIONS_APP_ID = 15368
 RUNTIME_CALLER_BUDGET = 240.0  # delivery-handoff run-subprocess timeout (seconds)
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
+# Register F12: sentinel placeholders that never constitute reviewer identity.
+SENTINEL_TEXT = re.compile(
+    r'(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/a|na)[:.;!,?]*',
+    re.IGNORECASE)
 
 class Pending(RuntimeError):
     pass
@@ -766,6 +770,14 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
             'staged trio status must be pending-review or ready-for-merge')
     require(evidence.get('content-digest') == EMPTY_SHA,
             'finalized binding evidence must use the excluded-diff digest')
+    # Register F12: a finalized review asserts an independent reviewer that
+    # existed. The draft-stage placeholder contract is honest for drafts, but
+    # a finalized record carrying the same sentinels must be refused here as
+    # well as in the strict gate.
+    reviewer = review.get('reviewer')
+    require(isinstance(reviewer, str) and reviewer.strip()
+            and not SENTINEL_TEXT.fullmatch(reviewer.strip()),
+            'finalized binding review has no genuine reviewer identity')
     require(review.get('verdict') == 'APPROVED' and
             review.get('reviewed-sha') == merge and
             review.get('content-digest') == EMPTY_SHA,
@@ -1054,6 +1066,18 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
     require(fetched == head, 'fetched implementation head does not match PR head SHA')
     require(tree_of(repo, merge) == tree_of(repo, fetched),
             'implementation merge tree differs from fetched PR head tree')
+    # Register F4: the wave's evidence record must be authored in an
+    # evidence-only commit on the wave branch (the receipt head's history,
+    # not the squash merge). The shared Racket tool inspects the newest
+    # base..head commit touching the evidence directory and prints
+    # `impure-record-commit: <paths>` for a mixed record commit; any tool
+    # failure raises Pending, so the ladder fails closed before any stage.
+    purity = command(['racket', str(HERE / 'gsd-evidence-bind.rkt'),
+                      'record-commit', '--repo', str(repo),
+                      '--base', dig(pr, 'base', 'sha'), '--head', head],
+                     cwd=str(repo), timeout=60)
+    # The tool's decided verdict already carries the typed refusal code.
+    require(purity.startswith('pure'), purity.strip())
     names = policy_names(repo, main)
     protection(slug, names)
     git(repo, 'merge-base', '--is-ancestor', merge, 'refs/remotes/origin/main')

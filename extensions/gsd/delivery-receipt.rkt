@@ -12,6 +12,7 @@
          (only-in "../../util/credential-redaction.rkt" redact-credential-data))
 (provide committed-delivery-snapshot
          current-wave-for-attempt
+         durable-receipt-head
          verify-with-delivery-receipt
          verify-campaign-delivery
          recover-legacy-delivery-receipt!
@@ -189,6 +190,15 @@
               (not (equal? (campaign-wave-delivery-head-sha w) (hash-ref receipt 'head)))))
      'stale-provenance]
     [else #f]))
+
+;; The durable receipt head (register F3): the verified branch head recorded
+;; by verify-with-delivery-receipt for this wave, or #f when no verified
+;; receipt exists. Evidence and review heads must equal it before delivery.
+(define (durable-receipt-head base plan wave)
+  (define journal (load-delivery-journal base plan wave))
+  (define receipt (and (hash? journal) (hash-ref journal 'receipt #f)))
+  (define head (and (hash? receipt) (hash-ref receipt 'head #f)))
+  (and (sha? head) head))
 
 (define (recover-legacy-delivery-receipt! base plan wave branch head cwd)
   (and

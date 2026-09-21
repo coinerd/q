@@ -86,14 +86,19 @@ def trio(label, wave, *, impl_sha, digest, milestone=895, issue=9686,
     review_pairs = [
         ('reviewer', '"wave-reviewer"'), ('verdict', f'"{review_verdict}"'),
         ('timestamp', '"2026-09-14T16:00:00Z"'), ('reviewed-sha', f'"{impl_sha}"'),
-        ('content-digest', f'"{digest}"'), ('scope', '"wave scope"'), ('report', '"wave report"'),
+        ('content-digest', f'"{digest}"'),
+        ('scope', '"independent read-only review of the wave implementation, '
+                  'gate evidence and provenance chain"'),
+        ('report', '"reviewed the commit chain, ran the focused and fast gates, and '
+                   'found no blocking defect at the reviewed head"'),
     ]
     passed = '#hasheq((result . "passed") (command . "x"))'
     validation_pairs = [
         ('status', '"current"'), ('milestone', milestone), ('wave', f'"{wave_label}"'),
         ('issue', issue), ('branch', f'"{branch}"'),
         ('implementation-sha', f'"{impl_sha}"'), ('content-digest', f'"{digest}"'),
-        ('red-first', '#hasheq((command . "x") (failure . "y"))'),
+        ('red-first', '#hasheq((command . "raco test tests/test-wave-fixture.rkt") '
+                      '(failure . "reproduction observed: the malformed digest passed the gate"))'),
         ('focused-tests', passed), ('format-compile', passed), ('lint', passed), ('fast', passed),
         ('review-artifact', f'"{review}"'), ('remaining-items', '()'),
         ('planning-sync', '"current"'),
@@ -203,7 +208,8 @@ def build_campaign(base, plan, wave, *, declared=True, q_declared=False,
 
 def build_world(base, *, publish=True, plan='a' * 64, wave=1, pr=42, q_named=False,
                 source='version', second_impl=False, pub_impl_sha=None,
-                green_skip=False, source_plan_id=None, source_issue=None):
+                green_skip=False, source_plan_id=None, source_issue=None,
+                mixed_record=False):
     """Real git fixture: c0 -> impl head h -> squash M on main [-> M2] [-> P].
 
     Pushes main plus refs/pull/<pr>/head to a local bare origin, then clones a
@@ -236,6 +242,10 @@ def build_world(base, *, publish=True, plan='a' * 64, wave=1, pr=42, q_named=Fal
         kwargs['issue'] = source_issue
     for rel, text in trio(source_label, wave, impl_sha=h1, digest=digest, **kwargs).items():
         write_file(work / rel, text)
+    if mixed_record:
+        # Register F4 incident shape: the record authored together with a
+        # non-evidence path in the same commit.
+        write_file(work / 'README.md', 'drifted alongside the record\n')
     sh('git', 'add', '-A', cwd=work)
     sh('git', 'commit', '-m', 'h2 source trio', cwd=work)
     head = sh('git', 'rev-parse', 'HEAD', cwd=work).strip()
@@ -292,13 +302,13 @@ def build_world(base, *, publish=True, plan='a' * 64, wave=1, pr=42, q_named=Fal
             'source': f'docs/reports/gsd-wave-evidence/{source_label}.rktd'}
 
 
-def pr_payload(world, merge=None, head=None, number=None):
+def pr_payload(world, merge=None, head=None, number=None, base=None):
     return {'number': number or world['pr'], 'merged': True,
             'merge_commit_sha': merge or world['merge'],
             'merged_at': '2026-09-14T16:23:06Z',
             'head': {'sha': head or world['head'], 'ref': WAVE_BRANCH,
                      'repo': {'full_name': SLUG}},
-            'base': {'ref': 'main', 'sha': world['c0'],
+            'base': {'ref': 'main', 'sha': base or world['c0'],
                      'repo': {'full_name': SLUG}}}
 
 
@@ -814,7 +824,8 @@ class DeliveryTests(unittest.TestCase):
         number = number or w['pr']
         parent = w['c0'] if merge == w['merge'] else w['merge']
         return {
-            (SLUG, f'pulls/{number}', False): pr_payload(w, merge=merge, head=head, number=number),
+            (SLUG, f'pulls/{number}', False):
+                pr_payload(w, merge=merge, head=head, number=number, base=parent),
             (SLUG, f'commits/{merge}', False): commit_payload(merge, parent),
             (SLUG, 'branches/main/protection', False): protection(POLICY_NAMES),
         }
@@ -915,6 +926,47 @@ class DeliveryTests(unittest.TestCase):
                                   expected_branch=WAVE_BRANCH)
         self.assertEqual(result['status'], 'reviewed')
         self.assertEqual(result['branch'], binding_branch)
+
+    def test_binding_review_refuses_sentinel_reviewer_identity(self):
+        """Register F12: a finalized review must carry a genuine reviewer."""
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        output = binding_staging(self.base / 'campaign', w['plan'], w['wave'])
+        with self.fake_api(self.prepare_routes(w)):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                      f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                      campaign, output)
+        binding_branch = m.binding_branch(w['plan'], w['wave'])
+        files = trio(f"{w['plan']}-w{w['wave']}", w['wave'],
+                     impl_sha=w['merge'], digest=m.EMPTY_SHA,
+                     plan_id=w['plan'], merge=w['merge'], head=w['head'],
+                     pr=w['pr'], branch=binding_branch,
+                     evidence_branch=binding_branch, wave_branch=WAVE_BRANCH)
+        for relative, text in files.items():
+            target = output / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text)
+        review_rel = f"docs/reports/gsd-wave-reviews/{w['plan']}-w{w['wave']}.rktd"
+        review_path = output / review_rel
+        review_path.write_text(files[review_rel].replace('"wave-reviewer"', '"PENDING"'))
+        with self.assertRaises(m.Pending) as caught:
+            m.binding_review(w['subject'], w['plan'], w['wave'], output,
+                             campaign_root=self.base / 'campaign',
+                             expected_branch=WAVE_BRANCH)
+        self.assertIn('genuine reviewer identity', str(caught.exception))
+
+    def test_prepare_refuses_mixed_record_commit(self):
+        """Register F4: the evidence record must be authored evidence-only."""
+        w = self.world(publish=False, mixed_record=True)
+        campaign = build_campaign(self.base / 'camp', w['plan'], w['wave'])
+        with self.fake_api(self.prepare_routes(w)), \
+                self.assertRaises(m.Pending) as caught:
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                      f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                      campaign, self.base / 'draft-mixed')
+        message = str(caught.exception)
+        self.assertIn('impure-record-commit', message)
+        self.assertIn('README.md', message)
 
     def test_binding_review_reports_missing_or_malformed_staging(self):
         w = self.world(publish=False)

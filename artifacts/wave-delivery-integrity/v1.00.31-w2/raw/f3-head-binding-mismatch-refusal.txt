@@ -1,0 +1,14 @@
+# F3 red-first capture: evidence/review head not bound to the receipt head (2026-09-21T16:00:03Z)
+# implementation-sha and reviewed-sha are aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; the receipt head is dddddddddddddddddddddddddddddddddddddddd.
+
+# refusal: --receipt-head differs from implementation-sha/reviewed-sha
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-wave-gate.rkt /var/tmp/q-w2-raw-f3-17899992031789999203535/evidence/w2.rktd --content-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --root /var/tmp/q-w2-raw-f3-17899992031789999203535 --policy /var/tmp/q-w2-raw-f3-17899992031789999203535/policy.rktd --receipt-head dddddddddddddddddddddddddddddddddddddddd
+GSD wave evidence FAIL: /var/tmp/q-w2-raw-f3-17899992031789999203535/evidence/w2.rktd
+  - head-binding-mismatch: evidence implementation-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd
+  - head-binding-mismatch: review reviewed-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd
+exit: 1
+
+# control: --receipt-head equals the verified head
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-wave-gate.rkt /var/tmp/q-w2-raw-f3-17899992031789999203535/evidence/w2.rktd --content-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --root /var/tmp/q-w2-raw-f3-17899992031789999203535 --policy /var/tmp/q-w2-raw-f3-17899992031789999203535/policy.rktd --receipt-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+GSD wave evidence PASS: /var/tmp/q-w2-raw-f3-17899992031789999203535/evidence/w2.rktd
+exit: 0

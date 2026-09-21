@@ -46,20 +46,21 @@
   (call-with-output-file path (lambda (out) (write datum out)) #:exists 'replace))
 
 (define (valid-review)
-  (hash 'reviewer
-        "independent-pi-reviewer"
-        'verdict
-        "APPROVED"
-        'reviewed-sha
-        valid-sha
-        'content-digest
-        valid-digest
-        'timestamp
-        "2026-07-15T12:00:00Z"
-        'scope
-        "W0 F-10 F-13"
-        'report
-        "Independent review found no blockers."))
+  (hash
+   'reviewer
+   "independent-pi-reviewer"
+   'verdict
+   "APPROVED"
+   'reviewed-sha
+   valid-sha
+   'content-digest
+   valid-digest
+   'timestamp
+   "2026-07-15T12:00:00Z"
+   'scope
+   "W0 scope: merge-enforcement refusal surface, F-10 digest binding and F-13 readiness guards"
+   'report
+   "Independent review found no blockers; every evidence field binds to the recorded implementation head and content digest."))
 
 (define (valid-validation)
   (hash 'status
@@ -80,7 +81,7 @@
         (hash 'command
               "raco test tests/test-gsd-governance-workflow.rkt"
               'failure
-              "missing evidence accepted")
+              "missing evidence accepted: gate returned passed with no evidence file present on disk")
         'focused-tests
         (hash 'command "raco test governance-tests" 'result "passed" 'tests 132)
         'format-compile
