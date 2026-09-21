@@ -38,6 +38,30 @@
          "../ci/prepared-environment/compiled-root.rkt"
          "../ci/prepared-environment/compiled-root-manifest.rkt")
 
+;; Nested git commands must not inherit the caller's git plumbing. A git hook
+;; (this repository's pre-commit hook, for instance) exports GIT_DIR/GIT_INDEX_FILE,
+;; and `git -C <scratch fixture> init` then acts on the HOOK's repository: the
+;; fixture's `git init` re-initialised the canonical checkout as bare once
+;; (artifacts/wave-delivery-integrity/v1.00.31-w1/raw/hook-env-incident.txt), which
+;; is why tests/test-compiled-root.rkt carries the same guard. It is applied to the
+;; whole test rather than to the fixture alone because the producer shells out to
+;; git as well (checkout cleanliness) and would inherit the same environment.
+(define (git-plumbing-free-env)
+  (define src (current-environment-variables))
+  (define dst (make-environment-variables))
+  (for ([name (in-list (environment-variables-names src))])
+    (environment-variables-set! dst name (environment-variables-ref src name)))
+  (for ([name (in-list '(#"GIT_DIR" #"GIT_INDEX_FILE"
+                                    #"GIT_WORK_TREE"
+                                    #"GIT_OBJECT_DIRECTORY"
+                                    #"GIT_COMMON_DIR"
+                                    #"GIT_PREFIX"
+                                    #"GIT_ALTERNATE_OBJECT_DIRECTORIES"))])
+    (environment-variables-set! dst name #f))
+  dst)
+
+(current-environment-variables (git-plumbing-free-env))
+
 (define-runtime-path action-yml "../.github/actions/prepare-racket-environment/action.yml")
 ;; Repo root derived from this file's own location rather than from the
 ;; process cwd: `raco test` does not guarantee the cwd is the repo root, and

@@ -114,6 +114,14 @@ test shells out to git too — a fixture-only fix was measurably insufficient. V
 modes: `raco test tests/test-compiled-root.rkt` ⇒ 11/11, and with `GIT_DIR`/`GIT_INDEX_FILE`
 deliberately leaked ⇒ 11/11.
 
+The second git fixture added by this wave (`tests/test-compiled-root-workflow.rkt`) carried the same
+latent exposure and did not inherit the guard, which the round-2 review caught: it too runs
+`git init` inside a scratch fixture, so under the hook's full mode it could have re-initialised the
+canonical checkout a second time. It now sanitizes its environment the same way, and the fix was
+verified against a **decoy** `GIT_DIR` rather than the real repository: `raco test` ⇒ 11/11 in
+direct and simulated-hook modes, with `core.bare` still `false` on both the canonical checkout and
+the decoy afterwards (HEAD `ce13d038` unchanged).
+
 This is F1's class again — an inherited context silently changing what a command means — and it is
 recorded rather than quietly fixed, because it is part of this wave's history.
 
@@ -209,7 +217,8 @@ living outside `tests/workflows/` selected nothing — it believed it was gated 
 ran it. That is F1 again: a declaration that looked meaningful and was inert.
 
 The fix honours the tag for real test files (`tests/**/test-*.rkt`, so a tagged helper or fixture
-still stays out), and `tests/test-run-tests.rkt` now asserts the routing: the suite selects both new
+still stays out) — deliberately **stricter** than its siblings, which accept the tag unconditionally —
+and `tests/test-run-tests.rkt` now asserts the routing: the suite selects both new
 tests and does not select the tagged helper. Measured: `--suite workflows` went from 29 to 31 files
 and the tier-ownership drift gate independently recorded the change — both rows' `required_gates`
 became `("fast" "workflows")` and `("slow/L4" "workflows")`, so the versioned baseline had to be
@@ -260,3 +269,12 @@ replaced by the per-wave statement it was always meant to become.
 - Metadata-window invisibility (§4.4) is a governance-visibility gap, not a correctness hole
   (the runner still executes the file); it is recorded as a candidate for the next legitimate
   plan revision rather than amending the frozen v1.00.31 plan.
+- The producer publishes into the already-allowlisted `q-compiled/` prefix, and
+  `restore-racket-environment/action.yml` mirrors every `compiled/` directory it finds under
+  `q-compiled/` — including the nested `q-compiled/trusted-root/**/compiled` this root would
+  contain. Inert while `compiled-root` stays `'false'` (no workflow passes it `'true'`), but the
+  activation wave (W4/W7) must narrow the `find` or move the root out of the mirrored prefix.
+- `checkout-compilation-clean?` compares git's stdout and ignores its exit code. The live
+  dirty-input refusal (§5.2) shows the check works in practice, but a git that fails before
+  printing anything would read as "clean". The function predates this wave, so it is recorded for
+  the hardening owner rather than changed here.
