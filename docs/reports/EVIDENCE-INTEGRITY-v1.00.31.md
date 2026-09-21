@@ -108,3 +108,22 @@ exclusion contract is byte-identical to Python's
 - `scripts/check-deps.rkt` OK; `scripts/metrics.rkt --lint` OK;
   arch suite 32/32 PASS; fast suite RUN-SUMMARY retained in this directory's
   evidence (see `fast-run-summary.txt`).
+
+## 7. Review loop and the shallow-checkout note
+
+The independent review loop moved the content head twice after the first
+APPROVED: round 3 (delta) required the trio to be rebound by tooling at the
+exact head after the repository `lint-quality` gate surfaced two 151-character
+usage lines and a one-line metric drift, and round 4 required fresh fast-suite
+provenance and honest re-naming after the shallow-checkout fix. The loop
+closed only when the records verified at the exact final head.
+
+One test in `tests/test-gsd-evidence-bind.rkt` — the live-checkout
+reproduction of the W1 publication digest — requires full git history: CI
+clones are depth-1 by design, so the case probes for the publication commits
+non-raisingly and **skips loudly when they are absent**. In a shallow
+checkout the runner reports this file as passed with `skip=0` even though the
+live-range assertion did not execute; the tool contract in CI is carried by
+the synthetic cases, and the live range is asserted wherever full history is
+present (canonical checkout, binding worktrees). This limitation is stated
+here and in the validation record rather than hidden.
