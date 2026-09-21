@@ -601,7 +601,7 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "cb8efb20d98f6295793af05f5cc3cabd97c1f3dc27aca15015a4fa18a679481d"
+                    "bcdbc2c640cc32400aa88fa014e0b8d9d4821536bb948fadf19388642511ed76"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       ;; re-stamped by the campaign's W6 wave: the identity-manifest expansion changed
       ;; setup_action_sha256 inside fast_env_verification_contract

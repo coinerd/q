@@ -251,16 +251,46 @@
 ;; the same check tests/test-workflow-invocation-contract.rkt runs
 ;; repository-wide, so the row flips back to guarded-fail if either side drifts —
 ;; the action line or the script's option set.
-(define (f1-declaration-refused?)
+;; Both directions must hold, or the guard proves nothing:
+;;
+;;   (1) the LIVE declaration — the action's own declared flags against the
+;;       shipped CLI — must verify. A reverted CLI, or an action line naming a
+;;       flag the script no longer accepts, fails this half; and
+;;   (2) the SAME declaration with an unknown flag injected must be refused by
+;;       the contract. A validator that stopped refusing unknown flags — the
+;;       inertness F1 was made of — fails this half.
+;;
+;; Only when both hold does the guard report 'refused, meaning "the contract
+;; refuses this defect". A guard satisfied by the healthy tree alone would
+;; invert the register contract: under W6's expect-refused replay the guard must
+;; report 'refused *because* it catches the injected defect, so it has to
+;; observe the refusal, not merely the absence of the bug.
+(define (f1-declaration)
   (define action (build-path q-root ".github" "actions" "prepare-racket-environment" "action.yml"))
-  (define declaration
-    (for/first ([i (in-list (extract-declared-invocations action))]
-                #:when (equal? (hash-ref i 'target "") "scripts/ci/compiled-root.rkt"))
-      i))
-  (and (hash? declaration)
-       (equal? "ok" (hash-ref (check-invocation declaration q-root) 'status "not-ok"))))
+  (for/first ([i (in-list (extract-declared-invocations action))]
+              #:when (equal? (hash-ref i 'target "") "scripts/ci/compiled-root.rkt"))
+    i))
 
-(register-guard! "F1" (lambda (_repro) (if (f1-declaration-refused?) 'refused 'not-refused)))
+;; Injectable so the guard's failure path is observable instead of merely
+;; asserted: a test hands it the declaration F1 was made of — one naming a flag
+;; the script does not accept — and watches the guard report 'not-refused.
+(define f1-live-declaration-override (make-parameter #f))
+
+(define (f1-live-declaration)
+  (or (f1-live-declaration-override) (f1-declaration)))
+
+(define (invocation-status declaration)
+  (hash-ref (check-invocation declaration q-root) 'status "error"))
+
+(define (f1-defect-refused?)
+  (define live (f1-live-declaration))
+  (and (hash? live)
+       (equal? "ok" (invocation-status live))
+       (let ([injected
+              (hash-set live 'flags (cons "--f1-injected-unknown-flag" (hash-ref live 'flags '())))])
+         (equal? "unknown-flag" (invocation-status injected)))))
+
+(register-guard! "F1" (lambda (_repro) (if (f1-defect-refused?) 'refused 'not-refused)))
 
 ;; ============================================================
 ;; Tests
@@ -438,6 +468,17 @@
                          #:when (equal? (row-result-mode r) "F1"))
                (row-result-guard-status r))
              'guarded-pass)
+  ;; The guard is falsifiable, and this is the falsification: handed the
+  ;; declaration F1 was made of — a flag the script does not accept — it must
+  ;; report 'not-refused. A guard that could only ever observe the healthy tree
+  ;; would prove nothing under W6's expect-refused replay.
+  (check-true (f1-defect-refused?))
+  (parameterize ([f1-live-declaration-override
+                  (hash-set (f1-declaration)
+                            'flags
+                            (cons "--f1-injected-unknown-flag"
+                                  (hash-ref (f1-declaration) 'flags '())))])
+    (check-false (f1-defect-refused?)))
   (for ([r (in-list results)]
         #:unless (equal? (row-result-mode r) "F1"))
     (check-eq? (row-result-guard-status r)

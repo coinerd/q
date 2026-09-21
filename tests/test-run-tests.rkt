@@ -310,6 +310,19 @@
   (check-not-false (member "tests/test-tui-layout.rkt" files))
   (check-not-false (member "tests/tui/test-keybindings-binder.rkt" files)))
 
+(test-case "collect-test-files: workflows suite honours the @suite workflows tag"
+  ;; The workflows suite was selected by path alone while every other area
+  ;; predicate (security, arch, runtime, extensions) also accepted its `@suite`
+  ;; tag. A test living outside tests/workflows/ that declared
+  ;; `@suite workflows` was therefore silently inert: it believed it was gated
+  ;; by the workflows suite and was not. The tag now selects test files too,
+  ;; while helpers and fixtures that happen to carry it stay out.
+  (define collect (runner-ref 'collect-test-files))
+  (define files (collect 'workflows))
+  (check-not-false (member "tests/test-workflow-invocation-contract.rkt" files))
+  (check-not-false (member "tests/test-compiled-root-workflow.rkt" files))
+  (check-false (member "tests/helpers/gsd-golden-trace.rkt" files)))
+
 (test-case "collect-test-files: smoke suite includes curated core files"
   (define collect (runner-ref 'collect-test-files))
   (define files (collect 'smoke))

@@ -37,7 +37,8 @@ Red-first evidence: `artifacts/wave-delivery-integrity/v1.00.31-w1/raw/w4-produc
 | The declared invocation made real (guarded step, `compiled-root` input, `COMPILED_ROOT` env, publishing into the already-allowlisted `q-compiled/` prefix so no `known-safe-prefixes` widening was needed) | `.github/actions/prepare-racket-environment/action.yml` |
 | Extractor/validator: declared `racket`/`raco` invocations parsed from `.github/**` and checked against each target's own `command-line` option set; fail-closed; JSON emitter for the evidence artifact | `scripts/ci/invocation-contract.rkt` |
 | The F1 declaration is **executed verbatim** (argv taken from the action file, never retyped) against a scratch checkout; unknown switch / missing argument / conflicting mode are asserted fail-closed; per-module contract unchanged | `tests/test-compiled-root-workflow.rkt` |
-| Every declaration in the repository is contracted, with anti-vacuity floors and an emitter-reproducibility check; wired into the `workflows` suite | `tests/test-workflow-invocation-contract.rkt` |
+| Every declaration in the repository is contracted, with anti-vacuity floors and an emitter-reproducibility check; selected by the `workflows` suite because the suite now honours the tag its file declares | `tests/test-workflow-invocation-contract.rkt` |
+| A `@suite workflows` tag was silently inert outside `tests/workflows/` — the one area predicate that ignored its own tag; it now routes, and a regression test holds the routing | `scripts/run-tests/classify-filters.rkt`, `tests/test-run-tests.rkt` |
 
 The CLI was extended rather than the action weakened: the producer's intent ("publish a
 trusted root of the whole checkout") is the invariant, and the per-module `build`/`run`
@@ -147,6 +148,17 @@ raco test tests/test-workflow-invocation-contract.rkt
 racket scripts/run-tests.rkt --suite workflows
 ```
 
+Verification at the reviewed head (the wave's own verify chain, run in the worktree whose base-dir
+resolves to itself):
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| focused | `raco test` on the eight touched/related files | **210 passed**, 0 failures |
+| workflows suite | `racket scripts/run-tests.rkt --suite workflows` | **31 files / 180 tests passed** (was 29/162: the two new tests are now selected) |
+| fast suite | `racket scripts/run-tests.rkt --suite fast` | **1203 files / 17909 tests passed**, 0 failures, 960 s |
+| deps / lint | `scripts/check-deps.rkt`, `scripts/metrics.rkt --lint`, `scripts/tier-ownership-matrix.rkt check`, `inventory.rkt --ownership-map --check` | OK / 5 of 5 / green 999 rows / `PASS: no drift` |
+| checksums | `sha256sum -c` on the three touched `SHA256SUMS` | 6/6, 1/1, 1/1 OK |
+
 ### 5.1 A defect only the real tree could show (found by this run, fixed, guarded)
 
 The fixture-based contract test executes the declaration against a scratch checkout with two valid
@@ -180,6 +192,29 @@ payload  : algorithm=sha256 digest=2b9f03498e37c909aa9b9b57c5025f6b8d25c0292fd57
 read-only: #t (no writable file in the published root) · staging: 0 leftovers
 ```
 
+`2389` in the manifest's `sources` versus `2386` derived modules is the harvest, not the build:
+`collect-checkout-compilation-pairs` lists **every** `.zo` under the checkout (excluding `docs/`)
+whose sibling source exists, so bytecode already produced by an earlier `raco make` travels into
+the manifest with it. The derived count is what the producer was asked to compile; the manifest is
+what the payload contains and what the digest covers. Named rather than smoothed over — and
+harmless for identity, since every entry must still resolve to a source inside the checkout.
+
+### 5.3 The same defect one layer up: a tag nobody consulted
+
+Wiring the two new tests into the `workflows` suite exposed the identical failure shape a second
+time. Every other area predicate (`security-file?`, `arch-file?`, `runtime-file?`,
+`extensions-file?`) accepts the file's own `@suite` tag as well as a path pattern;
+`workflows-file?` alone matched on the path only, so a test that declared `@suite workflows` while
+living outside `tests/workflows/` selected nothing — it believed it was gated by a suite that never
+ran it. That is F1 again: a declaration that looked meaningful and was inert.
+
+The fix honours the tag for real test files (`tests/**/test-*.rkt`, so a tagged helper or fixture
+still stays out), and `tests/test-run-tests.rkt` now asserts the routing: the suite selects both new
+tests and does not select the tagged helper. Measured: `--suite workflows` went from 29 to 31 files
+and the tier-ownership drift gate independently recorded the change — both rows' `required_gates`
+became `("fast" "workflows")` and `("slow/L4" "workflows")`, so the versioned baseline had to be
+regenerated precisely because the tag had started to do something.
+
 ## 6. Derived artifacts moved with this wave (checksum-pin discipline)
 
 Making the declared invocation real changes files that other gates pin, so every pin was
@@ -189,18 +224,24 @@ and a provenance note, never by relaxing an assertion:
 | Pin | Old | New | Proof |
 | --- | --- | --- | --- |
 | `prepare_action_sha256` in `artifacts/ci-topology/v1.00.26-w2/dag-checkpoint.json` | `f0e46ee2…` | `608d93c5…` | `raw/action-pin-proof.txt`: deletion-free diff (+22, −0), pre-W1 file is an **ordered subsequence** of the post-W1 file, pinned dimensions unchanged, block inert by default |
-| checkpoint file hash in `tests/test-ci-runtime-contract.rkt` | `e396efb0…` | `cb8efb20…` | same proof; a `w1_restamp` note records wave, old/new and reason |
+| checkpoint file hash in `tests/test-ci-runtime-contract.rkt` | `e396efb0…` | `bcdbc2c6…` | same proof; a `w1_restamp` note records wave, old/new and reason (the note's provenance wording was corrected in the same change, which is why the hash moved once more) |
 | `prepare_action_sha256` literal in `tests/test-w9-ci-workflow-verification.rkt` | `f0e46ee2…` | `608d93c5…` | same, message extended with the re-stamp reason |
-| `artifacts/ci-topology/v1.00.26-w2/SHA256SUMS` | `e396efb0…` | `cb8efb20…` | `sha256sum -c` OK |
+| `artifacts/ci-topology/v1.00.26-w2/SHA256SUMS` | `e396efb0…` | `bcdbc2c6…` | `sha256sum -c` OK |
 | `artifacts/tier-ownership/v1.00.29-w0/ownership-matrix.json` + sibling `SHA256SUMS` | 1400 families | **1402 families** | canonical `inventory.rkt --ownership-map --tier-matrix …`; `run-tier-ownership-check` ⇒ `()` (no drift) |
 | `tests/tier-ownership-matrix.json` | 997 rows | **999 rows** | canonical `scripts/tier-ownership-matrix.rkt generate`; `check` ⇒ green |
-| `README.md` metrics | 187669 src lines | **188343 / 892 / 1504 / 277204 / 41964** | canonical `scripts/metrics.rkt --sync-all`; `--lint` ⇒ 5/5 |
+| `README.md` metrics | 187669 src lines | **188384 / 892 / 1504 / 277303 / 41971** | canonical `scripts/metrics.rkt --sync-all`; `--lint` ⇒ 5/5 |
+| `artifacts/tier-ownership/v1.00.29-w0/SHA256SUMS` | `65b79131…` | `d3f04c56…` | sibling artifact regenerated by the canonical `inventory.rkt --ownership-map --tier-matrix` in the same change; `sha256sum -c` OK |
 
 `setup_action_sha256` is untouched: W1 does not modify `setup-racket/action.yml`.
 
-The register harness itself moved with the wave that fixes the row it guards: F1's
-`guard-status` is now produced by the shipped contract (`register-guard! "F1"` asks the
-extractor + the CLI's own option set), the remaining rows stay `unguarded` with their
+The register harness itself moved with the wave that fixes the row it guards, and the guard it
+registers is a real one: `register-guard! "F1"` verifies the **live** declaration (the action's own
+flags against the shipped CLI) *and* requires the contract to **refuse the defect** — it injects an
+unknown flag into that same declaration and expects `unknown-flag`. Both halves must hold, so the
+row fails if the CLI loses `--out` and equally if the validator stops refusing unknown flags, which
+is the inertness F1 was made of. A falsification assertion in the same test hands the guard the
+pre-fix declaration and asserts it reports `'not-refused`, so the guard's failure path is
+observable rather than asserted. The remaining rows stay `unguarded` with their
 reproduction-liveness checks intact, and the W0-era "no guard is registered" assertion was
 replaced by the per-wave statement it was always meant to become.
 
@@ -211,6 +252,11 @@ replaced by the per-wave statement it was always meant to become.
 - The extraction reads `command-line` clauses statically. A script that builds its option
   table dynamically would fall to the weak tier; the tier is recorded per declaration so such
   a case is visible rather than assumed strong.
+- Task 2 asked to ban substring-only invocation assertions. The one offender is replaced, and the
+  repository-wide contract makes such an assertion worthless — it can no longer pass while the
+  invocation is broken — but the ban is not mechanical: a newly written substring assertion would
+  still be inert on its own. The property that is enforced is the contract, not the syntax of
+  assertions; a lint over assertion *shapes* is a candidate for a later wave.
 - Metadata-window invisibility (§4.4) is a governance-visibility gap, not a correctness hole
   (the runner still executes the file); it is recorded as a candidate for the next legitimate
   plan revision rather than amending the frozen v1.00.31 plan.
