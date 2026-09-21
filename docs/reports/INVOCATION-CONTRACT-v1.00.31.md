@@ -147,6 +147,39 @@ raco test tests/test-workflow-invocation-contract.rkt
 racket scripts/run-tests.rkt --suite workflows
 ```
 
+### 5.1 A defect only the real tree could show (found by this run, fixed, guarded)
+
+The fixture-based contract test executes the declaration against a scratch checkout with two valid
+modules and passed. The first run against **this** repository died:
+
+```
+load-handler: expected a `module` declaration in
+  tests/metadata-discovery/fixture/tests/alpha-test.rkt
+```
+
+The checkout is full of `.rkt` files that are deliberately *not* modules — discovery-parity
+fixtures such as a bare `(module+ test …)` fragment — and `raco make` aborts on them. The producer
+now partitions derived inputs into compilation modules and non-module inputs (a `#lang` line,
+optionally after a shebang, or an explicit `(module …)` form), skips the latter **and says how
+many it skipped**, so the omission is visible rather than silent; the workflow test's fixture now
+contains such a file and asserts exactly that.
+
+This is the wave's own lesson applied to itself: an oracle that only ever sees a well-formed input
+cannot tell you what happens on the real one.
+
+### 5.2 Real-tree execution (the CI shape)
+
+```
+$ racket scripts/ci/compiled-root.rkt build --out /tmp/w1-exec/real-stage/q-compiled/trusted-root \
+      --checkout <this checkout> --trusted-label q-trusted-producer
+published whole-checkout compiled root: … (2386 modules, 10 non-module .rkt input(s) skipped, reason: ok)
+exit code: 0 (wall clock: 269s)
+producer : label=q-trusted-producer trusted=#t
+sources  : 2389 module(s)
+payload  : algorithm=sha256 digest=2b9f03498e37c909aa9b9b57c5025f6b8d25c0292fd57485d570b8b3da7bc338
+read-only: #t (no writable file in the published root) · staging: 0 leftovers
+```
+
 ## 6. Derived artifacts moved with this wave (checksum-pin discipline)
 
 Making the declared invocation real changes files that other gates pin, so every pin was
