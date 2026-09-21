@@ -126,7 +126,27 @@
                        "docs/reports/gsd-wave-evidence/v9.9.9-w2.rktd"
                        "#hasheq((schema-version . 2))\n"
                        "evidence-only record commit")
-    (check-equal? (record-commit-purity pure b (mini-git! pure "rev-parse" "HEAD")) "pure")))
+    (check-equal? (record-commit-purity pure b (mini-git! pure "rev-parse" "HEAD")) "pure"))
+  ;; Register F4's letter protects the FINAL record commit: an older mixed
+  ;; record commit followed by a pure record commit is history, not a live
+  ;; hole - the receipt head's own record commit is what the ladder binds.
+  (parameterize ([current-environment-variables (hermetic-git-env)])
+    (define healed (make-mini-repo! "healed"))
+    (define b (mini-commit-file! healed "src/one.rkt" "one\n" "base"))
+    (make-directory* (build-path healed "docs/reports/gsd-wave-evidence"))
+    (display-to-file "v1\n"
+                     (build-path healed "docs/reports/gsd-wave-evidence/v9.9.9-w2.rktd")
+                     #:exists 'replace)
+    (display-to-file "tainted\n" (build-path healed "README.md") #:exists 'replace)
+    (mini-git! healed "add" "-A" ".")
+    (mini-git! healed "commit" "-q" "-m" "older mixed record commit")
+    (mini-commit-file! healed
+                       "docs/reports/gsd-wave-evidence/v9.9.9-w2.rktd"
+                       "#hasheq((schema-version . 2))\n"
+                       "newest evidence-only record commit")
+    (check-equal? (record-commit-purity healed b (mini-git! healed "rev-parse" "HEAD"))
+                  "pure"
+                  "the newest record commit is pure, so the head is bindable")))
 
 (test-case "gate: the caller-supplied digest is compared, fail-closed"
   (parameterize ([current-environment-variables (hermetic-git-env)])

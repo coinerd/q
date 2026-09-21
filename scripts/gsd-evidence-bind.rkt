@@ -210,37 +210,51 @@
 (define (record-commit-purity repo base head)
   (require-full-sha 'gsd-evidence-bind "base" base)
   (require-full-sha 'gsd-evidence-bind "head" head)
-  (define-values (code revlist stderr)
-    (run/git/bytes repo "rev-list" "--reverse" (string-append base ".." head)))
+  ;; rev-list without --reverse lists newest first: the receipt head's own
+  ;; record commit is the first candidate.
+  (define-values (code revlist stderr) (run/git/bytes repo "rev-list" (string-append base ".." head)))
   (unless (zero? code)
     (error 'gsd-evidence-bind "git rev-list failed: ~a" (string-trim (bytes->string/utf-8 stderr))))
   (define commits
     (for/list ([line (in-lines (open-input-bytes revlist))]
                #:unless (string=? (string-trim line) ""))
       (string-trim line)))
-  (or (for/or ([commit (in-list commits)])
-        (define-values (dcode dstdout dstderr)
-          (run/git/bytes repo "diff-tree" "--no-commit-id" "--name-only" "--no-renames" "-r" commit))
-        (unless (zero? dcode)
-          (error 'gsd-evidence-bind
-                 "git diff-tree failed: ~a"
-                 (string-trim (bytes->string/utf-8 dstderr))))
-        (define paths
-          (for/list ([line (in-lines (open-input-bytes dstdout))]
-                     #:unless (string=? (string-trim line) ""))
-            (string-trim line)))
-        ;; Merge commits list no paths with plain diff-tree; they are skipped.
-        (and (pair? paths)
-             (ormap (lambda (p) (string-prefix? p evidence-dir-prefix)) paths)
-             (let ([foreign (for/list ([p (in-list paths)]
-                                       #:unless (ormap (lambda (prefix) (string-prefix? p prefix))
-                                                       exclusion-prefixes))
-                              p)])
-               (and (pair? foreign)
-                    (format "impure-record-commit: ~a (commit ~a)"
-                            (string-join foreign ", ")
-                            (substring commit 0 12))))))
-      "pure"))
+  (define (changed-paths commit)
+    (define-values (dcode dstdout dstderr)
+      (run/git/bytes repo "diff-tree" "--no-commit-id" "--name-only" "--no-renames" "-r" commit))
+    (unless (zero? dcode)
+      (error 'gsd-evidence-bind
+             "git diff-tree failed: ~a"
+             (string-trim (bytes->string/utf-8 dstderr))))
+    (for/list ([line (in-lines (open-input-bytes dstdout))]
+               #:unless (string=? (string-trim line) ""))
+      (string-trim line)))
+  ;; Register F4's letter: the FINAL record commit must be evidence-only.
+  ;; Inspect the newest base..head commit touching the evidence record
+  ;; directory - the receipt head's own record commit, which is what the
+  ;; ladder's contract comment names - rather than every historical one: an
+  ;; older mixed record commit followed by pure record commits is history,
+  ;; and the purity of the receipt head's own record commit is what F4
+  ;; protects. Refuse with the precise foreign paths when the newest one
+  ;; mixes record paths with anything else.
+  (define newest-record-commit
+    (for/first ([commit (in-list commits)]
+                #:do [(define ps (changed-paths commit))]
+                #:when (ormap (lambda (p) (string-prefix? p evidence-dir-prefix)) ps))
+      commit))
+  (cond
+    [(not newest-record-commit) "pure"]
+    [else
+     (define paths (changed-paths newest-record-commit))
+     (define foreign
+       (for/list ([p (in-list paths)]
+                  #:unless (ormap (lambda (prefix) (string-prefix? p prefix)) exclusion-prefixes))
+         p))
+     (if (pair? foreign)
+         (format "impure-record-commit: ~a (commit ~a)"
+                 (string-join foreign ", ")
+                 (substring newest-record-commit 0 12))
+         "pure")]))
 
 (define (print-usage)
   (displayln
