@@ -1,0 +1,15 @@
+# F2 red-first capture: hand-authored content-digest refused (2026-09-21T15:59:49Z)
+# The recorded digest 000..0 cannot equal the computed excluded-evidence digest.
+
+# refusal: verify-records compares the recorded digest against the recomputed value
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-evidence-bind.rkt verify --repo /var/tmp/q-w2-raw-f2-17899991851789999185315/repo --base 06518d2352247d257a7dd43cf38d2bd4f3fe046a --head 983e0ad26b485d4bef448b9faad5fc8974c274a0 --evidence /var/tmp/q-w2-raw-f2-17899991851789999185315/repo/docs/reports/gsd-wave-evidence/v-w2.rktd
+digest-mismatch: evidence records 0000000000000000000000000000000000000000000000000000000000000000 but the computed excluded-evidence digest at head 983e0ad26b48 is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit: 0
+
+# control: the tool itself writes the computed digest (bind-records!), then verify passes
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-evidence-bind.rkt bind --repo /var/tmp/q-w2-raw-f2-17899991851789999185315/repo --base 06518d2352247d257a7dd43cf38d2bd4f3fe046a --head 983e0ad26b485d4bef448b9faad5fc8974c274a0 --evidence /var/tmp/q-w2-raw-f2-17899991851789999185315/repo/docs/reports/gsd-wave-evidence/v-w2.rktd
+bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit: 0
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-evidence-bind.rkt verify --repo /var/tmp/q-w2-raw-f2-17899991851789999185315/repo --base 06518d2352247d257a7dd43cf38d2bd4f3fe046a --head 983e0ad26b485d4bef448b9faad5fc8974c274a0 --evidence /var/tmp/q-w2-raw-f2-17899991851789999185315/repo/docs/reports/gsd-wave-evidence/v-w2.rktd
+digest-ok e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+exit: 0

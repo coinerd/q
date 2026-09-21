@@ -1,0 +1,73 @@
+{
+ "schema": "wave-delivery-integrity/evidence-integrity-matrix/v1",
+ "version": "1.00.31",
+ "wave": "W2",
+ "register-rows": [
+  "F2",
+  "F3",
+  "F4",
+  "F12"
+ ],
+ "generated-by": "verdict lines extracted verbatim from the red-first captures in raw/ (scripts/gsd-evidence-bind.rkt and scripts/gsd-wave-gate.rkt CLI runs)",
+ "rows": [
+  {
+   "id": "F2",
+   "mode": "Authored, unreproducible content digest",
+   "typed-refusal": "digest-mismatch",
+   "enforced-by": "scripts/gsd-evidence-bind.rkt (verify-records)",
+   "red-first-capture": "raw/f2-digest-mismatch-refusal.txt",
+   "refusal-verdict": "digest-mismatch: evidence records 0000000000000000000000000000000000000000000000000000000000000000 but the computed excluded-evidence digest at head 983e0ad26b48 is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "control-verdict": "digest-ok e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "tests": [
+    "tests/test-gsd-evidence-bind.rkt",
+    "tests/test-gsd-wave-gate-digest.rkt"
+   ],
+   "register-guard": "tests/test-wave-delivery-integrity-register.rkt (F2, guarded-pass)"
+  },
+  {
+   "id": "F3",
+   "mode": "Evidence/review head != durable receipt head",
+   "typed-refusal": "head-binding-mismatch",
+   "enforced-by": "scripts/gsd-wave-gate.rkt validate-wave-evidence #:receipt-head; durable-receipt-head accessor in extensions/gsd/delivery-receipt.rkt",
+   "red-first-capture": "raw/f3-head-binding-mismatch-refusal.txt",
+   "refusal-verdicts": [
+    "  - head-binding-mismatch: evidence implementation-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd",
+    "  - head-binding-mismatch: review reviewed-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd"
+   ],
+   "control-verdict": "GSD wave evidence PASS: /var/tmp/q-w2-raw-f3-17899992031789999203535/evidence/w2.rktd",
+   "tests": [
+    "tests/test-gsd-wave-gate.rkt",
+    "tests/test-gsd-delivery-receipt.rkt"
+   ],
+   "register-guard": "tests/test-wave-delivery-integrity-register.rkt (F3, guarded-pass)"
+  },
+  {
+   "id": "F4",
+   "mode": "Record commit touches non-evidence paths",
+   "typed-refusal": "impure-record-commit",
+   "enforced-by": "scripts/gsd-evidence-bind.rkt (record-commit-purity) wired into scripts/gsd-delivery.py prepare()",
+   "red-first-capture": "raw/f4-impure-record-commit-refusal.txt",
+   "refusal-verdict": "impure-record-commit: README.md (commit 6eb792665809)",
+   "control-verdict": "pure",
+   "tests": [
+    "tests/test-gsd-evidence-bind.rkt",
+    "tests/test-gsd-delivery-controller.py::test_prepare_refuses_mixed_record_commit"
+   ],
+   "register-guard": "tests/test-wave-delivery-integrity-register.rkt (F4, guarded-pass)"
+  },
+  {
+   "id": "F12",
+   "mode": "Sentinel/placeholder evidence finalizable by field flips",
+   "typed-refusal": "placeholder-evidence / insufficient-review-content",
+   "enforced-by": "scripts/gsd-wave-gate.rkt require-genuine! (sentinel deny-list + minimum content: review scope/report >= 64, red-first.failure >= 32); reviewer identity assertion in scripts/gsd-delivery.py read_staged_trio",
+   "red-first-capture": "raw/f12-sentinel-refusal.txt",
+   "refusal-verdict": "  - placeholder-evidence: independent reviewer identity is a placeholder",
+   "control-verdict": "GSD wave evidence PASS: /var/tmp/q-w2-raw-f12ctl-17899992051789999205587/evidence/w2.rktd",
+   "tests": [
+    "tests/test-gsd-wave-gate.rkt",
+    "tests/test-gsd-delivery-controller.py::test_binding_review_refuses_sentinel_reviewer_identity"
+   ],
+   "register-guard": "covered by tests/test-gsd-wave-gate.rkt sentinel cases"
+  }
+ ]
+}

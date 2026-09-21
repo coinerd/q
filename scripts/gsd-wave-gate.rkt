@@ -46,6 +46,31 @@
 (define (valid-digest? value)
   (and (non-empty-string? value) (regexp-match? digest-pattern value)))
 
+;; Register F12: a sentinel/placeholder is not evidence. A record whose
+;; identity or narrative fields carry PENDING/TODO-style placeholders can
+;; never pass the strict gate, so "finalized" is unreachable without genuine
+;; content. Typed refusal: placeholder-evidence.
+(define placeholder-pattern
+  #px"(?i:^\\s*(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/?a)[:.;!,?]*\\s*$)")
+
+(define (placeholder? value)
+  (and (string? value) (regexp-match? placeholder-pattern value)))
+
+;; Substantive minimum content (F12): review scope/report must carry at least
+;; a sentence, the red-first failure an actual observed failure, so a
+;; "finalized" record cannot be reached by flipping status fields alone.
+(define minimum-review-narrative-length 64)
+(define minimum-red-first-failure-length 32)
+
+(define (require-genuine! reject! label value minimum)
+  (cond
+    [(not (non-empty-string? value)) (reject! (format "~a is missing" label))]
+    [(placeholder? value) (reject! (format "placeholder-evidence: ~a is a placeholder" label))]
+    [(< (string-length (string-trim value)) minimum)
+     (reject! (format "insufficient-review-content: ~a carries fewer than ~a characters of content"
+                      label
+                      minimum))]))
+
 (define (read-single-datum path)
   (call-with-input-file path
                         (lambda (in)
@@ -109,6 +134,7 @@
 (define (validate-wave-evidence evidence
                                 #:root [root (current-directory)]
                                 #:actual-content-digest [actual-content-digest #f]
+                                #:receipt-head [receipt-head #f]
                                 #:policy [policy-path
                                           (build-path root "scripts/required-pr-checks.policy")])
   (define reasons '())
@@ -201,6 +227,16 @@
      (define implementation-sha (hash-ref evidence 'implementation-sha #f))
      (unless (valid-sha? implementation-sha)
        (reject! "implementation-sha must be a full lowercase Git SHA"))
+     ;; Register F3: the evidence head is bound to the durable receipt head
+     ;; recorded by verify-with-delivery-receipt. The check is conditional so
+     ;; already-delivered historical trios remain readable and verifiable.
+     (when (and (valid-sha? receipt-head) (valid-sha? implementation-sha))
+       (unless (equal? implementation-sha receipt-head)
+         (reject!
+          (format
+           "head-binding-mismatch: evidence implementation-sha ~a differs from the durable receipt head ~a"
+           implementation-sha
+           receipt-head))))
      (define content-digest (hash-ref evidence 'content-digest #f))
      (unless (valid-digest? content-digest)
        (reject! "content-digest must be a lowercase SHA-256"))
@@ -229,19 +265,31 @@
      (unless (hash? review)
        (reject! "review artifact must contain a hash"))
      (when (hash? review)
-       (unless (non-empty-string? (hash-ref review 'reviewer #f))
-         (reject! "independent reviewer identity is missing"))
+       (require-genuine! reject! "independent reviewer identity" (hash-ref review 'reviewer #f) 1)
        (unless (equal? (hash-ref review 'verdict #f) "APPROVED")
          (reject! "review verdict must be APPROVED"))
        (unless (and (valid-sha? (hash-ref review 'reviewed-sha #f))
                     (equal? (hash-ref review 'reviewed-sha #f) implementation-sha))
          (reject! "reviewed-sha differs from implementation-sha"))
+       (when (and (valid-sha? receipt-head) (valid-sha? (hash-ref review 'reviewed-sha #f)))
+         (unless (equal? (hash-ref review 'reviewed-sha #f) receipt-head)
+           (reject!
+            (format
+             "head-binding-mismatch: review reviewed-sha ~a differs from the durable receipt head ~a"
+             (hash-ref review 'reviewed-sha #f)
+             receipt-head))))
        (unless (and (valid-digest? (hash-ref review 'content-digest #f))
                     (equal? (hash-ref review 'content-digest #f) content-digest))
          (reject! "review content digest differs from evidence"))
-       (for ([key (in-list '(timestamp scope report))])
-         (unless (non-empty-string? (hash-ref review key #f))
-           (reject! (format "review ~a is missing" key))))
+       (require-genuine! reject! "review timestamp" (hash-ref review 'timestamp #f) 1)
+       (require-genuine! reject!
+                         "review scope"
+                         (hash-ref review 'scope #f)
+                         minimum-review-narrative-length)
+       (require-genuine! reject!
+                         "review report"
+                         (hash-ref review 'report #f)
+                         minimum-review-narrative-length)
        (when (hash-has-key? review 'acceptance)
          (validate-acceptance! (hash-ref review 'acceptance) wave "review")))
 
@@ -268,6 +316,12 @@
          (cond
            [(ormap acceptance-critical-item? remaining-items)
             (reject! "validation has acceptance-critical remaining-items")]
+           [(ormap (lambda (item)
+                     (and (hash? item)
+                          (or (placeholder? (hash-ref/label item "OWNER" #f))
+                              (placeholder? (hash-ref/label item "RATIONALE" #f)))))
+                   remaining-items)
+            (reject! "placeholder-evidence: remaining-items owner or rationale is a placeholder")]
            [(not (andmap valid-noncritical-remaining-item? remaining-items))
             (reject! (string-append
                       "validation remaining-items must be structured noncritical or "
@@ -275,10 +329,14 @@
        (when (hash-has-key? validation 'acceptance)
          (validate-acceptance! (hash-ref validation 'acceptance) wave "validation"))
        (define red-first (hash-ref validation 'red-first #f))
-       (unless (and (hash? red-first)
-                    (non-empty-string? (hash-ref red-first 'command #f))
-                    (non-empty-string? (hash-ref red-first 'failure #f)))
+       (unless (hash? red-first)
          (reject! "validation red-first evidence is incomplete"))
+       (when (hash? red-first)
+         (require-genuine! reject! "validation red-first command" (hash-ref red-first 'command #f) 1)
+         (require-genuine! reject!
+                           "validation red-first failure"
+                           (hash-ref red-first 'failure #f)
+                           minimum-red-first-failure-length))
        (unless (passed-result-hash? (hash-ref validation 'focused-tests #f))
          (reject! "validation focused-tests are incomplete"))
        (for ([key (in-list '(format-compile lint fast))])
@@ -292,6 +350,7 @@
 (define (validate-wave-evidence-file path
                                      #:root [root (current-directory)]
                                      #:actual-content-digest [actual-content-digest #f]
+                                     #:receipt-head [receipt-head #f]
                                      #:policy [policy-path
                                                (build-path root "scripts/required-pr-checks.policy")])
   (with-handlers ([exn:fail? (lambda (error)
@@ -304,37 +363,62 @@
     (validate-wave-evidence (read-single-datum path)
                             #:root root
                             #:actual-content-digest actual-content-digest
+                            #:receipt-head receipt-head
                             #:policy policy-path)))
 
 (define (print-usage)
-  (displayln
-   "Usage: racket scripts/gsd-wave-gate.rkt <evidence.rktd> --content-digest <sha256> [--root <dir>] [--policy <file>]"))
+  (displayln (string-append
+              "Usage: racket scripts/gsd-wave-gate.rkt <evidence.rktd> --content-digest <sha256>"
+              " [--root <dir>] [--policy <file>] [--receipt-head <sha>]")))
+
+;; Keyword-style option parse; the evidence path is the single positional.
+;; Unknown flags, a missing --content-digest, or a wrong positional count are
+;; usage errors (fail closed).
+(define (parse-gate-options args)
+  (let loop ([args args]
+             [acc (hash)]
+             [positional '()])
+    (match args
+      ['()
+       (and (= (length positional) 1)
+            (hash-ref acc '--content-digest #f)
+            (hash-set acc '--evidence-path (first positional)))]
+      [(list "--content-digest" value rest ...)
+       (loop rest (hash-set acc '--content-digest value) positional)]
+      [(list "--root" value rest ...) (loop rest (hash-set acc '--root value) positional)]
+      [(list "--policy" value rest ...) (loop rest (hash-set acc '--policy value) positional)]
+      [(list "--receipt-head" value rest ...)
+       (loop rest (hash-set acc '--receipt-head value) positional)]
+      [(list arg rest ...)
+       #:when (not (string-prefix? arg "--"))
+       (loop rest acc (cons arg positional))]
+      [_
+       (print-usage)
+       #f])))
 
 (define (main args)
-  (match args
-    [(list path "--content-digest" digest "--root" root "--policy" policy)
-     (define result
-       (validate-wave-evidence-file path #:root root #:actual-content-digest digest #:policy policy))
-     (if (wave-evidence-result-passed? result)
-         (begin
-           (printf "GSD wave evidence PASS: ~a~n" path)
-           0)
-         (begin
-           (printf "GSD wave evidence FAIL: ~a~n" path)
-           (for ([reason (in-list (wave-evidence-result-reasons result))])
-             (printf "  - ~a~n" reason))
-           1))]
-    [(list path "--content-digest" digest)
-     (main (list path
-                 "--content-digest"
-                 digest
-                 "--root"
-                 "."
-                 "--policy"
-                 "scripts/required-pr-checks.policy"))]
-    [_
-     (print-usage)
-     1]))
+  (define options (parse-gate-options args))
+  (if options
+      (let ([evidence-path (hash-ref options '--evidence-path)])
+        (define result
+          (validate-wave-evidence-file
+           evidence-path
+           #:root (hash-ref options '--root ".")
+           #:actual-content-digest (hash-ref options '--content-digest)
+           #:receipt-head (hash-ref options '--receipt-head #f)
+           #:policy (hash-ref options '--policy "scripts/required-pr-checks.policy")))
+        (if (wave-evidence-result-passed? result)
+            (begin
+              (printf "GSD wave evidence PASS: ~a~n" evidence-path)
+              0)
+            (begin
+              (printf "GSD wave evidence FAIL: ~a~n" evidence-path)
+              (for ([reason (in-list (wave-evidence-result-reasons result))])
+                (printf "  - ~a~n" reason))
+              1)))
+      (begin
+        (displayln "gsd-wave-gate: malformed or missing arguments; see usage above")
+        1)))
 
 (module+ main
   (exit (main (vector->list (current-command-line-arguments)))))

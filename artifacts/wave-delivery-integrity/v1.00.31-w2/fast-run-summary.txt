@@ -1,0 +1,1 @@
+RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1206 pass=1206 fail=0 timeout=0 skip=0 wall-clock-seconds=1035.532 metadata-completeness=explicit:1178/heuristic:0/missing:28

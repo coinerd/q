@@ -1,0 +1,15 @@
+# F12 red-first capture: sentinel/placeholder evidence refused (2026-09-21T16:00:04Z)
+# The review below is identical to the control except reviewer = "PENDING".
+
+# refusal: sentinel reviewer identity in an otherwise complete record
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-wave-gate.rkt /var/tmp/q-w2-raw-f12-17899992041789999204933/evidence/w2.rktd --content-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --root /var/tmp/q-w2-raw-f12-17899992041789999204933 --policy /var/tmp/q-w2-raw-f12-17899992041789999204933/policy.rktd --receipt-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+GSD wave evidence FAIL: /var/tmp/q-w2-raw-f12-17899992041789999204933/evidence/w2.rktd
+  - placeholder-evidence: independent reviewer identity is a placeholder
+exit: 1
+
+# control: the same record with a genuine reviewer identity passes the strict gate
+
+# control: genuine reviewer identity
+$ /usr/bin/racket /home/user/src/q-agent/wt-v10031-w2/q/scripts/gsd-wave-gate.rkt /var/tmp/q-w2-raw-f12ctl-17899992051789999205587/evidence/w2.rktd --content-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --root /var/tmp/q-w2-raw-f12ctl-17899992051789999205587 --policy /var/tmp/q-w2-raw-f12ctl-17899992051789999205587/policy.rktd --receipt-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+GSD wave evidence PASS: /var/tmp/q-w2-raw-f12ctl-17899992051789999205587/evidence/w2.rktd
+exit: 0

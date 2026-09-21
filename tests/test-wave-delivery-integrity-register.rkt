@@ -45,7 +45,12 @@
          racket/system
          json
          (file "../util/json/checksum.rkt")
-         (file "../scripts/ci/invocation-contract.rkt"))
+         (file "../scripts/ci/invocation-contract.rkt")
+         (file "../tests/helpers/w2-mini-git-repo.rkt")
+         (file "../scripts/gsd-evidence-bind.rkt")
+         (only-in (file "../scripts/gsd-wave-gate.rkt")
+                  validate-wave-evidence
+                  wave-evidence-result-reasons))
 
 (define-runtime-path q-root "..")
 (define-runtime-path register-path
@@ -293,6 +298,106 @@
 (register-guard! "F1" (lambda (_repro) (if (f1-defect-refused?) 'refused 'not-refused)))
 
 ;; ============================================================
+;; W2 guards for F2/F3/F4 (evidence identity & digest integrity)
+;; ============================================================
+
+;; F2 guard: the content digest is COMPUTED by tooling at the exact head, and a
+;; hand-authored / mismatched recorded digest is refused with the typed
+;; `digest-mismatch` verdict. Both halves must hold: (1) a record carrying a
+;; digest that does not equal the computed excluded-evidence digest at the tip
+;; is refused; (2) once the tool writes the computed digest (the only sanctioned
+;; authoring path), the same record verifies `digest-ok`. Falsifiable: if the
+;; recompute-and-compare were removed, half (1) would report digest-ok and the
+;; guard would flip to 'not-refused.
+(define (f2-defect-refused?)
+  (define repo (make-mini-repo! "f2"))
+  (mini-commit-file! repo "src/a.rkt" "#lang racket\n" "c1 source")
+  (define base (mini-git! repo "rev-parse" "HEAD"))
+  (define record "docs/reports/gsd-wave-evidence/v-w2.rktd")
+  (define record-path (build-path repo record))
+  ;; hand-authored digest that cannot equal the computed empty (digest-excluded)
+  ;; value — the F2 incident shape.
+  (mini-commit-file! repo
+                     record
+                     (format "#hasheq((content-digest . ~s))\n" (make-string 64 #\0))
+                     "c2 hand-authored digest")
+  (define head (mini-git! repo "rev-parse" "HEAD"))
+  (define refused?
+    (string-prefix? (verify-records repo base head (list record-path)) "digest-mismatch"))
+  ;; control: the tool re-authors the correct digest, then it verifies.
+  (define written (bind-records! repo base head (list record-path)))
+  (define clean? (string-prefix? (verify-records repo base head (list record-path)) "digest-ok"))
+  (and refused? clean? (string? written)))
+(register-guard! "F2" (lambda (_repro) (if (f2-defect-refused?) 'refused 'not-refused)))
+
+;; F3 guard: evidence `implementation-sha` must equal the durable receipt head;
+;; the gate's own #:receipt-head cross-check emits a `head-binding-mismatch`
+;; reason when they differ and stays silent on that axis when they match. The
+;; evidence-only artifact carries both a valid implementation-sha and the two
+;; SHA lengths the gate requires of a receipt head. Missing review/validation
+;; artifacts are separate rejections the guard does not rely on. Falsifiable
+;; both directions: remove the head-binding check and mismatched? becomes #f.
+(define f3-impl-sha (make-string 40 #\a))
+(define f3-other-sha (make-string 40 #\d))
+(define f3-digest-sha (make-string 64 #\b))
+(define (f3-head-binding-reasons? receipt-head)
+  (define root (make-temporary-file "q-w2-f3-~a" 'directory))
+  (define ev-path (build-path root "evidence.rktd"))
+  (display-to-file
+   (format (string-append
+            "#hasheq((schema-version . 2) (milestone . 896) (wave . \"W2\") (issue . 9725)"
+            " (status . \"ready-for-merge\") (implementation-sha . ~s) (content-digest . ~s))\n")
+           f3-impl-sha
+           f3-digest-sha)
+   ev-path
+   #:exists 'replace)
+  (define evidence
+    (call-with-input-file ev-path
+                          (lambda (in)
+                            (parameterize ([read-accept-reader #f]
+                                           [read-accept-lang #f]
+                                           [read-accept-graph #f])
+                              (read in)))))
+  (define result (validate-wave-evidence evidence #:root root #:receipt-head receipt-head))
+  (ormap (lambda (reason) (string-contains? reason "head-binding-mismatch"))
+         (wave-evidence-result-reasons result)))
+(define (f3-defect-refused?)
+  (and (f3-head-binding-reasons? f3-other-sha) (not (f3-head-binding-reasons? f3-impl-sha))))
+(register-guard! "F3" (lambda (_repro) (if (f3-defect-refused?) 'refused 'not-refused)))
+
+;; F4 guard: the evidence record commit must be evidence-only; a commit that
+;; mixes an evidence path with a non-evidence path is refused with
+;; `impure-record-commit` naming the foreign path. Exercised through the
+;; shipped tool's record-commit-purity: (1) an evidence-only commit range reports
+;; `pure`; (2) a range whose later commit mixes an evidence path with a foreign
+;; source path reports `impure-record-commit` naming the foreign path.
+;; Falsifiable: remove the evidence-only enforcement and (2) reports pure.
+(define (f4-defect-refused?)
+  (define repo (make-mini-repo! "f4"))
+  (mini-commit-file! repo "src/a.rkt" "#lang racket\n" "c1 source")
+  (define base (mini-git! repo "rev-parse" "HEAD"))
+  ;; control: evidence-only commit range is pure
+  (mini-commit-file! repo
+                     "docs/reports/gsd-wave-evidence/v.rktd"
+                     "#hasheq((schema-version . 2))\n"
+                     "c2 evidence-only")
+  (define clean? (equal? (record-commit-purity repo base (mini-git! repo "rev-parse" "HEAD")) "pure"))
+  ;; defect: a later commit touches an evidence path AND a foreign source path
+  (define evidence-path (build-path repo "docs/reports/gsd-wave-evidence/v.rktd"))
+  (display-to-file "#hasheq((schema-version . 2) (x . 1))\n" evidence-path #:exists 'replace)
+  (display-to-file "#lang racket\n(define x 1)\n" (build-path repo "src/a.rkt") #:exists 'replace)
+  (mini-git! repo "add" "-A" ".")
+  (mini-git! repo "commit" "-q" "-m" "c3 MIXED evidence+source")
+  (define head-mixed (mini-git! repo "rev-parse" "HEAD"))
+  (define verdict (record-commit-purity repo base head-mixed))
+  (define refused?
+    (and (string-prefix? verdict "impure-record-commit: ") (string-contains? verdict "src/a.rkt")))
+  (and clean? refused?))
+(register-guard! "F4" (lambda (_repro) (if (f4-defect-refused?) 'refused 'not-refused)))
+
+(define original-guard-ids (sort (hash-keys guards) string<?))
+
+;; ============================================================
 ;; Tests
 ;; ============================================================
 
@@ -422,8 +527,8 @@
 (test-case "harness expect-refused mode discriminates (self-test of the W6 mechanism)"
   ;; W0's deliverable is the mechanism W6 replays. Prove it actually
   ;; discriminates by registering a stub guard for one row and observing both
-  ;; outcomes, then restore the registry to exactly its previous state — in W1
-  ;; that means the real F1 guard, not an empty registry.
+  ;; outcomes, then restore the registry to exactly its previous state — in W2
+  ;; that means the real F1/F2/F3/F4 guards, not an empty registry.
   (define saved (hash-ref guards "F1" #f))
   (dynamic-wind void
                 (lambda ()
@@ -443,8 +548,8 @@
                   (if saved
                       (hash-set! guards "F1" saved)
                       (hash-remove! guards "F1"))))
-  (check-equal? (hash-count guards) (if saved 1 0))
-  (unless saved
+  (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
+  (unless (member "F1" original-guard-ids)
     (check-eq? (for/first ([x (in-list (run-register))]
                            #:when (equal? (row-result-mode x) "F1"))
                  (row-result-guard-status x))
@@ -457,19 +562,23 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W1 registers exactly the F1 guard, and only F1 becomes guarded"
+(test-case "W2 guards F1-F4 all guarded-pass; F5+ stay unguarded"
   ;; The register is a per-wave ledger: a row becomes guarded in the wave that
   ;; fixes it and only then. A wave that marked rows guarded without fixing them
-  ;; would show up here as an extra entry; a wave that fixed F1 and forgot to
-  ;; register its guard would show up as F1 falling back to unguarded — and, with
-  ;; the fix live, as a reproduction-liveness failure just above.
-  (check-equal? (sort (hash-keys guards) string<?) '("F1"))
-  (check-eq? (for/first ([r (in-list results)]
-                         #:when (equal? (row-result-mode r) "F1"))
-               (row-result-guard-status r))
-             'guarded-pass)
-  ;; The guard is falsifiable, and this is the falsification: handed the
-  ;; declaration F1 was made of — a flag the script does not accept — it must
+  ;; would show up here as an extra entry; a wave that fixed F2/F3/F4 and forgot
+  ;; to register their guards would show up as those rows falling back to
+  ;; unguarded — and, with the fixes live, as reproduction-liveness failures just
+  ;; above.
+  (check-equal? original-guard-ids '("F1" "F2" "F3" "F4"))
+  (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
+  (for ([id (in-list '("F1" "F2" "F3" "F4"))])
+    (check-eq? (for/first ([r (in-list results)]
+                           #:when (equal? (row-result-mode r) id))
+                 (row-result-guard-status r))
+               'guarded-pass
+               (format "~a guarded-pass" id)))
+  ;; Every guard is falsifiable. F1's falsification is canonical: handed the
+  ;; declaration it was made of — a flag the script does not accept — it must
   ;; report 'not-refused. A guard that could only ever observe the healthy tree
   ;; would prove nothing under W6's expect-refused replay.
   (check-true (f1-defect-refused?))
@@ -479,8 +588,11 @@
                             (cons "--f1-injected-unknown-flag"
                                   (hash-ref (f1-declaration) 'flags '())))])
     (check-false (f1-defect-refused?)))
+  (check-true (f2-defect-refused?))
+  (check-true (f3-defect-refused?))
+  (check-true (f4-defect-refused?))
   (for ([r (in-list results)]
-        #:unless (equal? (row-result-mode r) "F1"))
+        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4")))
     (check-eq? (row-result-guard-status r)
                'unguarded
                (format "~a still unguarded" (row-result-mode r)))))
