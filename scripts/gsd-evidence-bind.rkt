@@ -247,9 +247,12 @@
    (string-append
     "Usage:\n"
     "  racket scripts/gsd-evidence-bind.rkt digest --repo <dir> --base <sha> --head <sha>\n"
-    "  racket scripts/gsd-evidence-bind.rkt bind   --repo <dir> --base <sha> --head <sha> --evidence <path> [--reviews <path>] [--validation <path>]\n"
-    "  racket scripts/gsd-evidence-bind.rkt verify --repo <dir> --base <sha> --head <sha> --evidence <path> [--reviews <path>] [--validation <path>]\n"
-    "  racket scripts/gsd-evidence-bind.rkt check  --repo <dir> --base <sha> --head <sha> --evidence <path>  ; alias of verify\n"
+    "  racket scripts/gsd-evidence-bind.rkt bind   --repo <dir> --base <sha> --head <sha>\n"
+    "       [--evidence <path>] [--reviews <path>] [--validation <path>]\n"
+    "  racket scripts/gsd-evidence-bind.rkt verify --repo <dir> --base <sha> --head <sha>\n"
+    "       [--evidence <path>] [--reviews <path>] [--validation <path>]\n"
+    "  racket scripts/gsd-evidence-bind.rkt check  --repo <dir> --base <sha> --head <sha>\n"
+    "       --evidence <path>  ; alias of verify\n"
     "  racket scripts/gsd-evidence-bind.rkt record-commit --repo <dir> --base <sha> --head <sha>")))
 
 (define (parse-options args required)
