@@ -972,6 +972,51 @@ class DeliveryTests(unittest.TestCase):
                              expected_branch=WAVE_BRANCH)
         self.assertIn('genuine reviewer identity', str(caught.exception))
 
+    def test_binding_review_reviewer_identity_sentinels(self):
+        """Review R6: compound sentinels are refused, genuine names are not.
+
+        The whole-string pattern covers pure sentinels ("PENDING"); the
+        boundary-anchored compound pattern covers identities like
+        "PENDING-INDEPENDENT-REVIEW" without rejecting legitimate names
+        that merely contain sentinel-like letter sequences ("Natalie")."""
+        def staged_world_with_reviewer(reviewer):
+            w = self.world(publish=False)
+            campaign_dir = self.base / ('campaign-%d' % len(list(self.base.iterdir())))
+            campaign = build_campaign(campaign_dir, w['plan'], w['wave'])
+            output = binding_staging(campaign_dir, w['plan'], w['wave'])
+            with self.fake_api(self.prepare_routes(w)):
+                m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                          f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                          campaign, output)
+            binding_branch = m.binding_branch(w['plan'], w['wave'])
+            files = trio(f"{w['plan']}-w{w['wave']}", w['wave'],
+                         impl_sha=w['merge'], digest=m.EMPTY_SHA,
+                         plan_id=w['plan'], merge=w['merge'], head=w['head'],
+                         pr=w['pr'], branch=binding_branch,
+                         evidence_branch=binding_branch, wave_branch=WAVE_BRANCH,
+                         reviewer=reviewer)
+            for relative, text in files.items():
+                target = output / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text)
+            return w, campaign_dir, output
+
+        for reviewer in ('PENDING-INDEPENDENT-REVIEW', 'PLACEHOLDER-REVIEWER'):
+            w, campaign_dir, output = staged_world_with_reviewer(reviewer)
+            with self.fake_api(self.prepare_routes(w)), \
+                    self.assertRaises(m.Pending) as caught:
+                m.binding_review(w['subject'], w['plan'], w['wave'], output,
+                                 campaign_root=campaign_dir,
+                                 expected_branch=WAVE_BRANCH)
+            self.assertIn('genuine reviewer identity', str(caught.exception),
+                          msg=reviewer)
+
+        w, campaign_dir, output = staged_world_with_reviewer('Natalie A. Reviewer')
+        result = m.binding_review(w['subject'], w['plan'], w['wave'], output,
+                                  campaign_root=campaign_dir,
+                                  expected_branch=WAVE_BRANCH)
+        self.assertEqual(result['status'], 'reviewed')
+
     def test_prepare_refuses_mixed_record_commit(self):
         """Register F4: the evidence record must be authored evidence-only."""
         w = self.world(publish=False, mixed_record=True)

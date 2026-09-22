@@ -934,7 +934,7 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
     # well as in the strict gate.
     reviewer = review.get('reviewer')
     require(isinstance(reviewer, str) and reviewer.strip()
-            and not SENTINEL_TEXT.search(reviewer.strip())
+            and not SENTINEL_TEXT.fullmatch(reviewer.strip())
             and not SENTINEL_COMPOUND.search(reviewer.strip()),
             'finalized binding review has no genuine reviewer identity')
     require(review.get('verdict') == 'APPROVED' and
