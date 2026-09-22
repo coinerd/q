@@ -409,8 +409,25 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
     require(head == expected_head and full_sha(expected_head),
             'implementation PR head does not match the verified expected head')
     if pr_is_merged(pr):
+        # Idempotent resume after a lost merge response: the mutation already
+        # happened, so it is not repeated — but the same pre-merge proofs still
+        # run against the PR head. A merge that happened outside this gate,
+        # without the amended approval contract or green required checks, is
+        # refused instead of being accepted as delivered (review R3 finding).
         merge_sha = dig(pr, 'merge_commit_sha')
         validate_merge(pr, api(slug, f'commits/{merge_sha}'), slug, merge_sha, head)
+        fetched = fetch_head(repo, number)
+        require(fetched == head, 'fetched implementation head does not match expected head')
+        evidence, review, _paths = validate_trio(repo, head, source,
+                                                 dig(pr, 'base', 'sha'))
+        author = dig(pr, 'user', 'login') or ''
+        require(isinstance(author, str) and author.strip(),
+                'malformed PR author identity; refusing the non-author review comparison')
+        merge_authorization(evidence, 'W%d' % wave, head, dig(pr, 'base', 'sha'), repo)
+        reviewed_head_approval(review, evidence, author)
+        names = policy_names(repo, main)
+        for name in names:
+            trusted_check(slug, head, name, 'pull_request', expected_branch)
         return {'status': 'already-merged', 'merge-sha': merge_sha, 'plan-id': plan,
                 'wave': wave, 'head': head, 'pr': number}
     require(pr.get('state') == 'open', 'implementation PR is neither open nor already merged')

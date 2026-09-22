@@ -2037,11 +2037,24 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['merge-sha'], w['merge'])
         self.assertFalse([a for a in calls if '/merge' in ' '.join(a)])
 
+    def test_merge_already_merged_still_requires_the_approval_contract(self):
+        """Review R3: the idempotent path re-runs the same pre-merge proofs —
+        a merge that happened outside this gate is refused, not accepted."""
+        w = self.open_impl_world(merged=True, trio_options={'merge_auth': False})
+        routes = self.merge_routes(w, merged=True, merge_sha=w['merge'])
+        routes[(SLUG, f"commits/{w['merge']}", False)] = \
+            commit_payload(w['merge'], w['c0'])
+        with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('no-operator-authorization', str(caught.exception))
+
     def test_merge_already_merged_accepts_merged_at_authoritative_shape(self):
         w = self.open_impl_world(merged=True)
         payload = dict(self.open_pr_payload(w), state='closed', merged=False,
                        merged_at='2026-09-15T10:00:00Z',
-                       merge_commit_sha=w['merge'])
+                       merge_commit_sha=w['merge'],
+                       user={'login': 'wave-author', 'type': 'User'})
         routes = self.merge_routes(w, merged=True, merge_sha=w['merge'])
         routes[(SLUG, f"commits/{w['merge']}", False)] = \
             commit_payload(w['merge'], w['c0'])
