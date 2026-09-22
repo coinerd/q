@@ -13,8 +13,16 @@
    ],
    "route": "commits/03f63857feda2fbe273879014582c243f0819bb8/check-runs?check_name=gsd-governance"
   },
+  "check-runs-paginated": {
+   "observed-sha256": "265f8d628bb8a1a4e2dd9ce5266cce370de54dccf89387130cb05c4a6a974954",
+   "observed-summary": {
+    "runs-on-page": 100,
+    "total_count": 202
+   },
+   "route": "commits/03f63857feda2fbe273879014582c243f0819bb8/check-runs?per_page=100&page=1"
+  },
   "resolve-merged-w3-binding": {
-   "observed-sha256": "979d15b46f1d0f48e0f501e5dc3e047db2a790053125fd7f8098acd2cf5ab502",
+   "observed-sha256": "0905b0d8aa9542717827ce79684551ca44bf389ddd438da1b76573621686f35b",
    "observed-summary": [
     {
      "head-ref": "binding/fb67e0429ed1-w3",
@@ -26,7 +34,7 @@
    "route": "pulls?state=all&head=coinerd:binding/fb67e0429ed1-w3"
   },
   "resolve-merged-w3-impl": {
-   "observed-sha256": "601b9dfc28a97e95a3c9a1c53a41052492f9a3bbbe5d4fb3fa349a9dc73f00b5",
+   "observed-sha256": "71ae85c2c61104c79a1d6d65b3dee1250677f034296298bba7fa67731de3d79a",
    "observed-summary": [
     {
      "head-ref": "campaign/v1.00.31-w3",
@@ -122,7 +130,7 @@
   }
  },
  "publication": "03f63857feda2fbe273879014582c243f0819bb8",
- "recorded-at": "2026-09-22T18:14:13Z",
+ "recorded-at": "2026-09-22T18:59:08Z",
  "repo": "coinerd/q",
  "schema": "gsd-delivery-api-contract/1",
  "wave": "W4"

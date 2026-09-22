@@ -339,11 +339,16 @@ def reviewed_head_approval(review, evidence, author):
     semantics."""
     require(isinstance(review, dict),
             'no-review-artifact: the review artifact is missing or malformed')
+    require(isinstance(author, str) and author.strip(),
+            'no-review-artifact: PR author identity is missing or malformed; '
+            'the non-author property is unverifiable')
     require(review.get('verdict') == 'APPROVED',
             'no-review-artifact: review verdict is %r, not APPROVED'
             % (review.get('verdict'),))
     reviewer = review.get('reviewer')
-    require(isinstance(reviewer, str) and reviewer.strip() and reviewer != author,
+    require(isinstance(reviewer, str) and reviewer.strip(),
+            'no-review-artifact: review has no reviewer identity')
+    require(reviewer.strip().casefold() != author.strip().casefold(),
             'no-review-artifact: review has no non-author reviewer identity')
     receipt = evidence.get('implementation-sha') if isinstance(evidence, dict) else None
     require(review.get('reviewed-sha') == receipt,
@@ -414,8 +419,11 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
     fetched = fetch_head(repo, number)
     require(fetched == head, 'fetched implementation head does not match expected head')
     evidence, review, _paths = validate_trio(repo, head, source, dig(pr, 'base', 'sha'))
+    author = dig(pr, 'user', 'login') or ''
+    require(isinstance(author, str) and author.strip(),
+            'malformed PR author identity; refusing the non-author review comparison')
     merge_authorization(evidence, 'W%d' % wave, head, dig(pr, 'base', 'sha'), repo)
-    reviewed_head_approval(review, evidence, dig(pr, 'user', 'login') or '')
+    reviewed_head_approval(review, evidence, author)
     names = policy_names(repo, main)
     protection(slug, names)
     for name in names:

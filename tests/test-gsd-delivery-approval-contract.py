@@ -143,6 +143,20 @@ class ReviewedHeadApprovalTests(unittest.TestCase):
                                      'coinerd')
         self.assertIn('no-review-artifact', str(caught.exception))
 
+    def test_author_identity_is_normalized(self):
+        # Case/whitespace variants of the author login do not pass as
+        # independent reviewers (review R1 finding).
+        with self.assertRaises(m.Pending) as caught:
+            m.reviewed_head_approval(review(reviewer='  Coinerd '), evidence(),
+                                     'coinerd')
+        self.assertIn('no-review-artifact', str(caught.exception))
+
+    def test_missing_author_identity_refused(self):
+        # A missing PR author login must fail closed, never widen the gate.
+        with self.assertRaises(m.Pending) as caught:
+            m.reviewed_head_approval(review(), evidence(), '')
+        self.assertIn('no-review-artifact', str(caught.exception))
+
     def test_review_bound_to_other_head_refused(self):
         with self.assertRaises(m.Pending) as caught:
             m.reviewed_head_approval(review(**{'reviewed-sha': OTHER}),

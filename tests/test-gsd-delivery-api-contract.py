@@ -141,6 +141,29 @@ class CheckRouteTests(unittest.TestCase):
         for route in check_routes:
             self.assertIn('/check-runs?', route)
 
+    def test_checks_issues_the_recorded_paginated_route(self):
+        """Fixture fidelity for check sampling: m.checks() must issue exactly
+        the tool-shaped paginated route recorded against the live API."""
+        contract = json.loads(CONTRACT_PATH.read_text())
+        recorded = contract['probes']['check-runs-paginated']['route']
+        sha = contract['publication']
+        calls = []
+
+        def fake(slug, route, paginate=False, _refresh=False):
+            calls.append((slug, route))
+            return {'check_runs': [{'name': 'gsd-governance', 'status': 'completed',
+                                    'conclusion': 'success'}],
+                    'total_count': 1}
+
+        m._CHECKS_CACHE.clear()
+        try:
+            with patch.object(m, 'api', fake):
+                runs = m.checks(SLUG, sha)
+        finally:
+            m._CHECKS_CACHE.clear()
+        self.assertEqual(calls, [(SLUG, recorded)])
+        self.assertEqual(len(runs), 1)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=1)

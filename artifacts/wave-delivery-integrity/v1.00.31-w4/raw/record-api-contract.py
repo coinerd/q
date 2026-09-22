@@ -69,6 +69,15 @@ def main():
     pub = subprocess.run(['git', '-C', str(REPO), 'rev-parse',
                           'refs/remotes/origin/main'], capture_output=True,
                          text=True).stdout.strip()
+    # The tool-shaped paginated route (scripts/gsd-delivery.py checks()) is
+    # the contract anchor; the named-check query is recorded as a control.
+    route = f'commits/{pub}/check-runs?per_page=100&page=1'
+    observed = api(route)
+    runs = observed.get('check_runs', [])
+    probes['check-runs-paginated'] = {
+        'route': route, 'observed-sha256': digest(observed),
+        'observed-summary': {'total_count': observed.get('total_count'),
+                             'runs-on-page': len(runs)}}
     route = f'commits/{pub}/check-runs?check_name=gsd-governance'
     observed = api(route)
     runs = observed.get('check_runs', [])
