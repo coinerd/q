@@ -60,7 +60,8 @@ def hexpairs(pairs):
 
 def trio(label, wave, *, impl_sha, digest, milestone=895, issue=9686,
          branch=WAVE_BRANCH, plan_id=None, merge=None, head=None, pr=None,
-         review_verdict='APPROVED', evidence_branch=None, wave_branch=None):
+         review_verdict='APPROVED', evidence_branch=None, wave_branch=None,
+         merge_auth=True, reviewed_sha=None, reviewer='wave-reviewer'):
     review = f'docs/reports/gsd-wave-reviews/{label}.rktd'
     validation = f'docs/reports/gsd-wave-validation/{label}.rktd'
     wave_label = f'W{wave}'
@@ -72,6 +73,21 @@ def trio(label, wave, *, impl_sha, digest, milestone=895, issue=9686,
         ('required-pr-checks', '("' + '" "'.join(POLICY_NAMES) + '")'),
         ('review-artifact', f'"{review}"'), ('validation-artifact', f'"{validation}"'),
     ]
+    if merge_auth is True:
+        # Amended approval contract (F11): the durable operator authorization
+        # travels in the committed evidence record and names the exact verified
+        # implementation head (the receipt head) it authorizes for merge.
+        evidence_pairs.append(('merge-authorization', hexpairs([
+            ('operator', '"coinerd"'), ('wave', f'"{wave_label}"'),
+            ('head', f'"{impl_sha}"'),
+            ('action', '"squash-merge the reviewed wave implementation PR"'),
+            ('source', '"operator directive in the campaign delivery session per the '
+                       'amended approval contract (PLAN-v1.00.31, Approval contract)"')])))
+    elif isinstance(merge_auth, dict):
+        evidence_pairs.append(
+            ('merge-authorization',
+             hexpairs([(k, v if v.startswith('"') else f'"{v}"')
+                       for k, v in merge_auth.items()])))
     if plan_id is not None:
         evidence_pairs.append(('plan-id', f'"{plan_id}"'))
     if evidence_branch is not None:
@@ -84,8 +100,9 @@ def trio(label, wave, *, impl_sha, digest, milestone=895, issue=9686,
         evidence_pairs += [('delivery-head-sha', f'"{head}"'),
                            ('wave-branch', f'"{wave_branch or branch}"')]
     review_pairs = [
-        ('reviewer', '"wave-reviewer"'), ('verdict', f'"{review_verdict}"'),
-        ('timestamp', '"2026-09-14T16:00:00Z"'), ('reviewed-sha', f'"{impl_sha}"'),
+        ('reviewer', f'"{reviewer}"'), ('verdict', f'"{review_verdict}"'),
+        ('timestamp', '"2026-09-14T16:00:00Z"'),
+        ('reviewed-sha', f'"{reviewed_sha if reviewed_sha is not None else impl_sha}"'),
         ('content-digest', f'"{digest}"'),
         ('scope', '"independent read-only review of the wave implementation, '
                   'gate evidence and provenance chain"'),
@@ -870,7 +887,7 @@ class DeliveryTests(unittest.TestCase):
         campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
         output = binding_staging(self.base / 'campaign', w['plan'], w['wave'])
         routes = self.prepare_routes(w)
-        routes[(SLUG, f'pulls?state=all&head={SLUG}:{WAVE_BRANCH}', False)] = [
+        routes[(SLUG, f'pulls?state=all&head=owner:{WAVE_BRANCH}', False)] = [
             dict(pr_payload(w), state='closed')]
         with self.fake_api(routes):
             result = m.prepare(w['subject'], w['plan'], w['wave'], None,
@@ -1042,8 +1059,8 @@ class DeliveryTests(unittest.TestCase):
         pr_data = {'number': pr_number, 'merged': False, 'state': 'open',
                    'head': {'sha': commit, 'ref': branch, 'repo': {'full_name': SLUG}},
                    'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}
-        routes = {(SLUG, f'pulls?state=open&head={SLUG}:{branch}', False): [pr_data],
-                  (SLUG, f'pulls?state=all&head={SLUG}:{branch}', False): [],
+        routes = {(SLUG, f'pulls?state=open&head=owner:{branch}', False): [pr_data],
+                  (SLUG, f'pulls?state=all&head=owner:{branch}', False): [],
                   (SLUG, f'pulls/{pr_number}', False): pr_data}
         with self.fake_api(routes):
             result = m.binding_publish(w['subject'], w['plan'], w['wave'], output,
@@ -1064,8 +1081,8 @@ class DeliveryTests(unittest.TestCase):
         finalize_binding(self.base / 'campaign', w, output)
         branch = m.binding_branch(w['plan'], w['wave'])
         pr_number = 79
-        routes = {(SLUG, f'pulls?state=open&head={SLUG}:{branch}', False): [],
-                  (SLUG, f'pulls?state=all&head={SLUG}:{branch}', False): []}
+        routes = {(SLUG, f'pulls?state=open&head=owner:{branch}', False): [],
+                  (SLUG, f'pulls?state=all&head=owner:{branch}', False): []}
         def created_pr(slug, route, paginate=False, _refresh=False):
             return {'number': pr_number, 'merged': False, 'state': 'open',
                     'head': {'sha': sh('git', 'rev-parse',
@@ -1121,8 +1138,8 @@ class DeliveryTests(unittest.TestCase):
         pr_data = {'number': pr_number, 'merged': False, 'state': 'open',
                    'head': {'sha': commit, 'ref': branch, 'repo': {'full_name': SLUG}},
                    'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}
-        routes = {(SLUG, f'pulls?state=open&head={SLUG}:{branch}', False): [pr_data],
-                  (SLUG, f'pulls?state=all&head={SLUG}:{branch}', False): [],
+        routes = {(SLUG, f'pulls?state=open&head=owner:{branch}', False): [pr_data],
+                  (SLUG, f'pulls?state=all&head=owner:{branch}', False): [],
                   (SLUG, f'pulls/{pr_number}', False): pr_data}
         with self.fake_api(routes), self.assertRaisesRegex(m.Pending, 'staged trio'):
             m.binding_publish(w['subject'], w['plan'], w['wave'], output,
@@ -1133,7 +1150,7 @@ class DeliveryTests(unittest.TestCase):
     # no implementation-receipt ancestry, protected merge delegation.
     # ------------------------------------------------------------------
 
-    def binding_pr_world(self, *, merged=False, bpr=910):
+    def binding_pr_world(self, *, merged=False, bpr=910, trio_options=None):
         """A finalized binding publication branch pushed to origin: main stays
         at the implementation squash M and the binding branch adds only the
         three plan-named evidence artifacts, so its changed-content digest is
@@ -1146,7 +1163,8 @@ class DeliveryTests(unittest.TestCase):
                               impl_sha=w['merge'], digest=m.EMPTY_SHA,
                               plan_id=w['plan'], merge=w['merge'], head=w['head'],
                               pr=w['pr'], branch=branch, evidence_branch=branch,
-                              wave_branch=WAVE_BRANCH).items():
+                              wave_branch=WAVE_BRANCH,
+                              **(trio_options or {})).items():
             write_file(work / rel, text)
         sh('git', 'add', '-A', cwd=work)
         sh('git', 'commit', '-m', 'binding publication', cwd=work)
@@ -1166,9 +1184,9 @@ class DeliveryTests(unittest.TestCase):
 
     def binding_resolve_routes(self, w, *, merged=False):
         return {
-            (SLUG, f'pulls?state=open&head={SLUG}:{w["bbranch"]}', False):
+            (SLUG, f'pulls?state=open&head=owner:{w["bbranch"]}', False):
                 [] if merged else [w['bpayload']],
-            (SLUG, f'pulls?state=all&head={SLUG}:{w["bbranch"]}', False):
+            (SLUG, f'pulls?state=all&head=owner:{w["bbranch"]}', False):
                 [w['bpayload']] if merged else [],
             (SLUG, f"pulls/{w['bpr']}", False): w['bpayload'],
         }
@@ -1188,8 +1206,8 @@ class DeliveryTests(unittest.TestCase):
         # No PR at all: the fetched deterministic branch alone yields the
         # typed none result (publication may not have been opened yet).
         with self.fake_api({
-                (SLUG, f'pulls?state=open&head={SLUG}:{branch}', False): [],
-                (SLUG, f'pulls?state=all&head={SLUG}:{branch}', False): []}):
+                (SLUG, f'pulls?state=open&head=owner:{branch}', False): [],
+                (SLUG, f'pulls?state=all&head=owner:{branch}', False): []}):
             self.assertEqual(m.binding_resolve_pr(w['subject'], branch),
                              {'status': 'none', 'branch': branch})
         # Idempotent resume: exactly one merged PR whose head is the exact
@@ -1262,8 +1280,8 @@ class DeliveryTests(unittest.TestCase):
         w = self.binding_pr_world()
         sh('git', 'push', '-q', w['origin'], f':refs/heads/{w["bbranch"]}', cwd=w['work'])
         with self.fake_api({
-                (SLUG, f'pulls?state=open&head={SLUG}:{w["bbranch"]}', False): [],
-                (SLUG, f'pulls?state=all&head={SLUG}:{w["bbranch"]}', False): []}):
+                (SLUG, f'pulls?state=open&head=owner:{w["bbranch"]}', False): [],
+                (SLUG, f'pulls?state=all&head=owner:{w["bbranch"]}', False): []}):
             self.assertEqual(m.binding_resolve_pr(w['subject'], w['bbranch']),
                              {'status': 'none', 'branch': w['bbranch']})
 
@@ -1320,10 +1338,7 @@ class DeliveryTests(unittest.TestCase):
             m.binding_ci(w['subject'], w['bpr'], w['bbranch'], w['bhead'])
 
     def binding_merge_routes(self, w, *, reviews=None):
-        routes = self.binding_ci_routes(w)
-        routes[(SLUG, f"pulls/{w['bpr']}/reviews", False)] = \
-            reviews if reviews is not None else []
-        return routes
+        return self.binding_ci_routes(w)
 
     def test_binding_merge_delegates_protected_squash_merge(self):
         w = self.binding_pr_world()
@@ -1341,8 +1356,7 @@ class DeliveryTests(unittest.TestCase):
             return real_command(args, cwd=cwd, timeout=timeout, raw=raw)
 
         real_command = m.command
-        routes = self.binding_merge_routes(
-            w, reviews=[self.approval(commit=w['bhead'])])
+        routes = self.binding_merge_routes(w)
         merged_pr = dict(w['bpayload'], merged=True, state='closed',
                          merge_commit_sha=w['bhead'])
         calls_pr = {'n': 0}
@@ -1363,22 +1377,25 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(len(mutation), 1)
         self.assertIn('merge_method=squash', ' '.join(mutation[0]))
 
-    def test_binding_merge_never_fabricates_approval_and_refuses_head_drift(self):
-        w = self.binding_pr_world()
-        with self.fake_api(self.binding_merge_routes(w)):
-            result = m.binding_merge(w['subject'], w['plan'], w['wave'], w['bpr'],
-                                     w['bhead'], w['bbranch'], w['binding'])
-        self.assertEqual(result['status'], 'awaiting-review')
-        self.assertNotIn('merge-sha', result)
-
-        wrong_head = dict(w['bpayload'],
-                          head={'sha': '9' * 40, 'ref': w['bbranch'],
-                                'repo': {'full_name': SLUG}})
-        with self.fake_api({**self.binding_merge_routes(w),
-                            (SLUG, f"pulls/{w['bpr']}", False): wrong_head}), \
+    def test_binding_merge_refuses_unauthorized_evidence_and_head_drift(self):
+        """F11: binding merges obey the same amended approval contract — an
+        unstaged authorization is a typed refusal, and head drift is refused."""
+        w = self.binding_pr_world(trio_options={'merge_auth': False})
+        with self.fake_api(self.binding_merge_routes(w)), \
                 self.assertRaises(m.Pending) as caught:
             m.binding_merge(w['subject'], w['plan'], w['wave'], w['bpr'],
                             w['bhead'], w['bbranch'], w['binding'])
+        self.assertIn('no-operator-authorization', str(caught.exception))
+
+        w2 = self.binding_pr_world()
+        wrong_head = dict(w2['bpayload'],
+                          head={'sha': '9' * 40, 'ref': w2['bbranch'],
+                                'repo': {'full_name': SLUG}})
+        with self.fake_api({**self.binding_merge_routes(w2),
+                            (SLUG, f"pulls/{w2['bpr']}", False): wrong_head}), \
+                self.assertRaises(m.Pending) as caught:
+            m.binding_merge(w2['subject'], w2['plan'], w2['wave'], w2['bpr'],
+                            w2['bhead'], w2['bbranch'], w2['binding'])
         self.assertIn('expected head', str(caught.exception))
 
     def test_binding_merge_is_idempotent_when_already_merged(self):
@@ -1437,7 +1454,7 @@ class DeliveryTests(unittest.TestCase):
                                    'repo': {'full_name': SLUG}},
                           'base': {'ref': 'main', 'repo': {'full_name': SLUG}}}
         routes = status_routes(w, governance=True)
-        routes[(SLUG, f'pulls?state=all&head={SLUG}:{branch}', False)] = [publication_pr]
+        routes[(SLUG, f'pulls?state=all&head=owner:{branch}', False)] = [publication_pr]
         routes[(SLUG, f'commits/{w["publication"]}', False)] = \
             commit_payload(w['publication'], w['merge'])
         with self.fake_api(routes):
@@ -1700,7 +1717,7 @@ class DeliveryTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def merge_routes(self, w, *, names=None, head=None, pr=None, base=None,
-                     reviews=None, author='wave-author', merged=None, merge_sha=None):
+                     author='wave-author', merged=None, merge_sha=None):
         names = POLICY_NAMES if names is None else names
         number = pr or w['pr']
         head = head or w['head']
@@ -1715,8 +1732,6 @@ class DeliveryTests(unittest.TestCase):
                             'repo': {'full_name': SLUG}}}
         routes = {
             (SLUG, f'pulls/{number}', False): payload,
-            (SLUG, f'pulls/{number}/reviews', False):
-                reviews if reviews is not None else [],
             (SLUG, 'branches/main/protection', False): protection(POLICY_NAMES),
             (SLUG, f'commits/{head}/check-runs?per_page=100&page=1', False):
                 {'check_runs': [check_run(name, head, job=i)
@@ -1727,11 +1742,8 @@ class DeliveryTests(unittest.TestCase):
         }
         return routes
 
-    def approval(self, login='wave-reviewer', commit=None, kind='User'):
-        return {'state': 'APPROVED', 'submitted_at': '2026-09-15T10:00:00Z',
-                'commit_id': commit, 'user': {'login': login, 'type': kind}}
-
-    def open_impl_world(self, *, pr=42, merged=False, plan=None, source='version'):
+    def open_impl_world(self, *, pr=42, merged=False, plan=None, source='version',
+                        trio_options=None):
         """An OPEN implementation PR: main stays at c0 (no squash yet) while the
         impl branch carries the source trio and is pushed as refs/pull/<pr>/head.
         When merged=True, main additionally contains the squash M so the
@@ -1756,7 +1768,8 @@ class DeliveryTests(unittest.TestCase):
         label = 'v9.9.9-w1'
         source_label = 'v9.9.9-w1' if source == 'version' else f'{plan}-w1'
         digest = m.digest(work, c0, h1)
-        for rel, text in trio(source_label, 1, impl_sha=h1, digest=digest).items():
+        for rel, text in trio(source_label, 1, impl_sha=h1,
+                              digest=digest, **(trio_options or {})).items():
             write_file(work / rel, text)
         sh('git', 'add', '-A', cwd=work)
         sh('git', 'commit', '-m', 'h2 source trio', cwd=work)
@@ -1838,39 +1851,111 @@ class DeliveryTests(unittest.TestCase):
                     WAVE_BRANCH, w['source'])
         self.assertIn('fetched', str(caught.exception))
 
-    def test_merge_requires_independent_human_approval_at_exact_head(self):
-        w = self.open_impl_world()
-        author = 'wave-author'
+    def test_merge_requires_recorded_operator_authorization(self):
+        """F11 direction (a): no durable merge-authorization, no merge."""
+        w = self.open_impl_world(trio_options={'merge_auth': False})
+        with self.fake_api(self.merge_routes(w)), \
+                self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('no-operator-authorization', str(caught.exception))
+
+    def test_merge_refuses_unbound_or_uncited_authorization(self):
+        """F11 direction (a): an authorization that names another head, another
+        wave, or cites no source is not an authorization for this merge."""
         cases = [
-            [],
-            [self.approval(login=author)],
-            [self.approval(kind='Bot')],
-            [self.approval(commit='c' * 40)],
-            [self.approval(), {'state': 'CHANGES_REQUESTED',
-                               'submitted_at': '2026-09-15T11:00:00Z',
-                               'commit_id': w['head'],
-                               'user': {'login': 'second', 'type': 'User'}}],
+            {'merge_auth': {'operator': 'coinerd', 'wave': 'W1',
+                            'head': 'f' * 40,
+                            'action': 'squash-merge the reviewed wave implementation PR',
+                            'source': 'operator directive'}},
+            {'merge_auth': {'operator': 'coinerd', 'wave': 'W2',
+                            'head': 'placeholder',
+                            'action': 'squash-merge the reviewed wave implementation PR',
+                            'source': 'operator directive'}},
+            {'merge_auth': {'operator': 'coinerd', 'wave': 'W1',
+                            'action': 'squash-merge the reviewed wave implementation PR',
+                            'source': 'operator directive'}},
+            {'merge_auth': {'operator': 'coinerd', 'wave': 'W1',
+                            'head': 'placeholder',
+                            'action': 'squash-merge the reviewed wave implementation PR'}},
+            {'merge_auth': {'operator': 'coinerd', 'wave': 'W1', 'head': 'placeholder',
+                            'action': 'squash-merge the reviewed wave implementation PR',
+                            'source': '   '}},
         ]
-        for reviews in cases:
-            routes = self.merge_routes(w, reviews=reviews)
-            with self.fake_api(routes) as fake:
-                result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'],
-                                 w['head'], WAVE_BRANCH, w['source'])
-            self.assertEqual(result['status'], 'awaiting-review', msg=repr(reviews))
-            self.assertNotIn('merge-sha', result)
+        for options in cases:
+            w = self.open_impl_world(trio_options=options)
+            with self.fake_api(self.merge_routes(w)), \
+                    self.assertRaises(m.Pending) as caught:
+                m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                        WAVE_BRANCH, w['source'])
+            self.assertIn('no-operator-authorization', str(caught.exception),
+                          msg=repr(options))
+
+    def test_merge_requires_approved_nonauthor_review_at_exact_head(self):
+        """F11 direction (b): the review artifact must be APPROVED, from a
+        non-author reviewer, and bound to the exact head."""
+        head = 'placeholder'
+        cases = [
+            # Non-APPROVED verdicts and a reviewed-sha bound to another head
+            # are already refused by the unchanged strict gate inside the trio
+            # preflight (generic typed failure there); the author-identity
+            # direction is refused by the merge gate with the amended-contract
+            # token as defense in depth.
+            ({'review_verdict': 'NEEDS_WORK'}, None),
+            ({'reviewer': 'wave-author'}, 'no-review-artifact'),
+            ({'reviewed_sha': 'a' * 40}, None),
+        ]
+        for options, token in cases:
+            w = self.open_impl_world(trio_options=options)
+            with self.fake_api(self.merge_routes(w)), \
+                    self.assertRaises(m.Pending) as caught:
+                m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                        WAVE_BRANCH, w['source'])
+            if token is not None:
+                self.assertIn(token, str(caught.exception), msg=repr(options))
+
+    def test_merge_permits_authorized_approved_nonauthor_review(self):
+        """F11 direction (c): authorization plus an APPROVED non-author review
+        artifact at the exact head is exactly the satisfiable merge gate."""
+        w = self.open_impl_world()
+        routes = self.merge_routes(w)
+        open_pr = routes[(SLUG, f"pulls/{w['pr']}", False)]
+        merged_pr = dict(open_pr, merged=True, state='closed', merge_commit_sha=w['h1'])
+        calls_pr = {'n': 0}
+        def pull_route(*_args):
+            calls_pr['n'] += 1
+            return open_pr if calls_pr['n'] == 1 else merged_pr
+        routes[(SLUG, f"pulls/{w['pr']}", False)] = pull_route
+        routes[(SLUG, f'commits/{w["h1"]}', False)] = commit_payload(w['h1'], w['c0'])
+
+        class FakeResult:
+            returncode = 0
+            stdout = b'{"merged": true, "sha": "' + w['h1'].encode() + b'"}'
+            stderr = b''
+
+        def fake_command(args, cwd=None, timeout=45, raw=False):
+            if '/merge' in ' '.join(args):
+                return FakeResult.stdout if raw else FakeResult.stdout.decode()
+            return real_command(args, cwd=cwd, timeout=timeout, raw=raw)
+
+        real_command = m.command
+        with self.fake_api(routes), patch.object(m, 'command', fake_command):
+            result = m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                             WAVE_BRANCH, w['source'])
+        self.assertEqual(result['status'], 'merged')
+        self.assertEqual(result['merge-sha'], w['h1'])
 
     def test_merge_requires_every_required_check_at_exact_head(self):
         w = self.open_impl_world()
         routes = self.merge_routes(
-            w, reviews=[self.approval(commit=w['head'])],
-            names=[n for n in POLICY_NAMES if n != 'workflows (0)'])
+            w, names=[n for n in POLICY_NAMES if n != 'workflows (0)'])
         with self.fake_api(routes), self.assertRaises(m.Pending):
             m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
                     WAVE_BRANCH, w['source'])
 
     def test_merge_preflights_source_trio_before_any_mutation(self):
         w = self.open_impl_world()
-        routes = self.merge_routes(w, reviews=[self.approval(commit=w['head'])])
+        routes = self.merge_routes(w)
         with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
             m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
                     WAVE_BRANCH, w['source'] + '-missing')
@@ -1892,7 +1977,7 @@ class DeliveryTests(unittest.TestCase):
             return real_command(args, cwd=cwd, timeout=timeout, raw=raw)
 
         real_command = m.command
-        routes = self.merge_routes(w, reviews=[self.approval(commit=w['head'])])
+        routes = self.merge_routes(w)
         # The post-merge refetch must not be served from the process cache:
         # stage-1 reads never satisfy post-mutation proof. The PR route is
         # stateful — open before the PUT, merged after the (refreshed) refetch.
@@ -1979,7 +2064,7 @@ class DeliveryTests(unittest.TestCase):
 
     def test_merge_refuses_multiple_open_prs_for_one_branch(self):
         w = self.open_impl_world()
-        head = f'{SLUG}:{WAVE_BRANCH}'
+        head = f'owner:{WAVE_BRANCH}'
         open_list = [{'number': w['pr']}, {'number': w['pr'] + 1}]
         with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False): open_list}), \
                 self.assertRaises(m.Pending) as caught:
@@ -2190,7 +2275,7 @@ class DeliveryTests(unittest.TestCase):
         w = self.open_impl_world()
         existing = self.open_pr_payload(w)
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [existing],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [existing],
             (SLUG, f'pulls/{w["pr"]}', False): existing,
         }
         with self.fake_api(routes) as fake:
@@ -2211,7 +2296,7 @@ class DeliveryTests(unittest.TestCase):
             return created
 
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
             (SLUG, f'pulls/{w["pr"]}', False): created,
         }
         with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=post):
@@ -2233,7 +2318,7 @@ class DeliveryTests(unittest.TestCase):
         first = self.open_pr_payload(w)
         second = self.open_pr_payload(w, number=w['pr'] + 1)
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [first, second],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [first, second],
         }
         def fail_post(*args):
             raise AssertionError('duplicate open PRs must not be posted')
@@ -2253,7 +2338,7 @@ class DeliveryTests(unittest.TestCase):
             calls.append(fields)
             return created
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
             (SLUG, f'pulls/{w["pr"]}', False): created,
         }
         with self.fake_api(routes), patch.object(m, 'gh_post', side_effect=post):
@@ -2281,7 +2366,7 @@ class DeliveryTests(unittest.TestCase):
         sh('git', 'push', '-q', 'origin', 'HEAD:refs/heads/' + WAVE_BRANCH,
            cwd=w['subject'])
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
         }
         def fail_post(*args):
             raise AssertionError('drifted branch must not be posted')
@@ -2345,7 +2430,7 @@ class DeliveryTests(unittest.TestCase):
 
         created = self.open_pr_payload(w)
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
             (SLUG, f'pulls/{w["pr"]}', False): created,
         }
         def post(slug, route, fields):
@@ -2397,7 +2482,7 @@ class DeliveryTests(unittest.TestCase):
 
     def test_cli_resolve_pr_resolves_open_pr_by_branch_and_refuses_nonepr(self):
         w = self.open_impl_world()
-        head = f'{SLUG}:{WAVE_BRANCH}'
+        head = f'owner:{WAVE_BRANCH}'
         with self.fake_api({(SLUG, f'pulls?state=open&head={head}', False):
                             [{'number': w['pr']}]}):
             argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
@@ -2439,7 +2524,7 @@ class DeliveryTests(unittest.TestCase):
         # The receipt head is h1; the source trio at the PR tip is allowed
         # evidence-only drift. Resolve must return that actual tip so merge can
         # enforce its exact-head contract without weakening merge().
-        with self.fake_api({(SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False):
+        with self.fake_api({(SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False):
                             [payload]}):
             argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
                     '--plan', w['plan'], '--wave', str(w['wave']),
@@ -2457,8 +2542,8 @@ class DeliveryTests(unittest.TestCase):
         w = self.open_impl_world()
         payload = dict(self.open_pr_payload(w), state='closed', merged=True)
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
-            (SLUG, f'pulls?state=all&head={SLUG}:{WAVE_BRANCH}', False): [payload],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=all&head=owner:{WAVE_BRANCH}', False): [payload],
         }
         with self.fake_api(routes):
             argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
@@ -2474,7 +2559,7 @@ class DeliveryTests(unittest.TestCase):
         w = self.open_impl_world()
         created = self.open_pr_payload(w)
         routes = {
-            (SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
             (SLUG, f'pulls/{w["pr"]}', False): created,
         }
         with self.fake_api(routes), patch.object(m, 'gh_post', return_value=created):
@@ -2522,7 +2607,7 @@ class DeliveryTests(unittest.TestCase):
                             'repo': {'full_name': SLUG}},
                    'base': {'ref': 'main', 'sha': w['c0'],
                             'repo': {'full_name': SLUG}}}
-        with self.fake_api({(SLUG, f'pulls?state=open&head={SLUG}:{WAVE_BRANCH}', False):
+        with self.fake_api({(SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False):
                             [payload]}):
             argv = ['gsd-delivery.py', 'resolve-pr', '--repo', str(w['subject']),
                     '--plan', w['plan'], '--wave', str(w['wave']),

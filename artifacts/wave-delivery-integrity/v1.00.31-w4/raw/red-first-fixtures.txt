@@ -1,0 +1,219 @@
+# Red-first run against pre-fix gsd-delivery.py (2026-09-22T18:14:41Z)
+## tests/test-gsd-delivery-api-contract.py
+EE.FEF.EFF
+======================================================================
+ERROR: test_malformed_slugs_refuse (__main__.BranchOwnerTests.test_malformed_slugs_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 48, in test_malformed_slugs_refuse
+    m.branch_owner(slug)
+    ^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'branch_owner'
+
+======================================================================
+ERROR: test_owner_of_slug (__main__.BranchOwnerTests.test_owner_of_slug)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 42, in test_owner_of_slug
+    self.assertEqual(m.branch_owner('coinerd/q'), 'coinerd')
+                     ^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'branch_owner'
+
+======================================================================
+ERROR: test_merged_pr_found_even_when_head_branch_is_deleted (__main__.MergedRecoveryTests.test_merged_pr_found_even_when_head_branch_is_deleted)
+Idempotent resume: a lost merge response must be recoverable from
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 102, in test_merged_pr_found_even_when_head_branch_is_deleted
+    self.assertEqual(pr['number'], 9743)
+                     ~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_open_pr_resolution_returns_exactly_one (__main__.PullsHeadFilterTests.test_open_pr_resolution_returns_exactly_one)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 88, in test_open_pr_resolution_returns_exactly_one
+    self.assertEqual(pr['number'], 9741)
+                     ~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+FAIL: test_malformed_responses_fail_closed (__main__.MergedRecoveryTests.test_malformed_responses_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 129, in test_malformed_responses_fail_closed
+    with self.assertRaises(m.Pending):
+AssertionError: Pending not raised
+
+======================================================================
+FAIL: test_multiple_merged_candidates_fail_closed (__main__.MergedRecoveryTests.test_multiple_merged_candidates_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 119, in test_multiple_merged_candidates_fail_closed
+    with patch.object(m, 'api', fake), self.assertRaises(m.Pending) as caught:
+AssertionError: Pending not raised
+
+======================================================================
+FAIL: test_resolvers_issue_owner_branch_filter_only (__main__.PullsHeadFilterTests.test_resolvers_issue_owner_branch_filter_only)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 60, in test_resolvers_issue_owner_branch_filter_only
+    self.assertEqual(issued, [
+AssertionError: Lists differ: ['pul[21 chars]inerd/q:binding/fb67e0429ed1-w3', 'pulls?state[40 chars]-w3'] != ['pul[21 chars]inerd:binding/fb67e0429ed1-w3', 'pulls?state=a[36 chars]-w3']
+
+First differing element 0:
+'pulls?state=open&head=coinerd/q:binding/fb67e0429ed1-w3'
+'pulls?state=open&head=coinerd:binding/fb67e0429ed1-w3'
+
+- ['pulls?state=open&head=coinerd/q:binding/fb67e0429ed1-w3',
+?                                --
+
++ ['pulls?state=open&head=coinerd:binding/fb67e0429ed1-w3',
+-  'pulls?state=all&head=coinerd/q:binding/fb67e0429ed1-w3']
+?                               --
+
++  'pulls?state=all&head=coinerd:binding/fb67e0429ed1-w3']
+
+======================================================================
+FAIL: test_routes_equal_the_recorded_live_contract (__main__.PullsHeadFilterTests.test_routes_equal_the_recorded_live_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-api-contract.py", line 78, in test_routes_equal_the_recorded_live_contract
+    self.assertIn(route, recorded,
+AssertionError: 'pulls?state=open&head=coinerd/q:binding/fb67e0429ed1-w3' not found in {'commits/03f63857feda2fbe273879014582c243f0819bb8/check-runs?check_name=gsd-governance', 'pulls?state=open&head=coinerd:campaign/v1.00.31-w3', 'pulls?state=all&head=coinerd:binding/fb67e0429ed1-w3', 'pulls?state=all&head=coinerd/q:binding/fb67e0429ed1-w3', 'pulls?state=all&head=coinerd/q:campaign/v1.00.31-w3', 'pulls?state=open&head=coinerd:binding/fb67e0429ed1-w3', 'pulls?state=all&head=coinerd:campaign/v1.00.31-w3'} : tool route 'pulls?state=open&head=coinerd/q:binding/fb67e0429ed1-w3' is not covered by the recorded live contract
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.003s
+
+FAILED (failures=4, errors=4)
+exit=1
+
+## tests/test-gsd-delivery-approval-contract.py
+EEEEEEEEEEEEE
+======================================================================
+ERROR: test_accepts_complete_authorization (__main__.MergeAuthorizationTests.test_accepts_complete_authorization)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 65, in test_accepts_complete_authorization
+    auth = m.merge_authorization(evidence(), 'W4', RECEIPT, 'd' * 40, None)
+           ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_blank_source_refused (__main__.MergeAuthorizationTests.test_blank_source_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 88, in test_blank_source_refused
+    m.merge_authorization(evidence(**{AUTH_KEY: auth}), 'W4',
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_content_drift_between_receipt_and_tip_refused (__main__.MergeAuthorizationTests.test_content_drift_between_receipt_and_tip_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 111, in test_content_drift_between_receipt_and_tip_refused
+    m.merge_authorization(evidence(), 'W4', RECEIPT, 'd' * 40, None)
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_divergent_authorization_shape_refused (__main__.MergeAuthorizationTests.test_divergent_authorization_shape_refused)
+Task 6: only the evidence-record object shape is accepted — a
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 120, in test_divergent_authorization_shape_refused
+    m.merge_authorization(datum, 'W4', RECEIPT, 'd' * 40, None)
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_each_required_field_refused (__main__.MergeAuthorizationTests.test_each_required_field_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 80, in test_each_required_field_refused
+    m.merge_authorization(evidence(**{AUTH_KEY: auth}), 'W4',
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_foreign_wave_refused (__main__.MergeAuthorizationTests.test_foreign_wave_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 95, in test_foreign_wave_refused
+    m.merge_authorization(evidence(**{AUTH_KEY: auth}), 'W4',
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_head_bound_to_verified_implementation_head (__main__.MergeAuthorizationTests.test_head_bound_to_verified_implementation_head)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 102, in test_head_bound_to_verified_implementation_head
+    m.merge_authorization(evidence(**{AUTH_KEY: auth}), 'W4',
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_missing_object_refused (__main__.MergeAuthorizationTests.test_missing_object_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 71, in test_missing_object_refused
+    m.merge_authorization(datum, 'W4', RECEIPT, 'd' * 40, None)
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'merge_authorization'
+
+======================================================================
+ERROR: test_accepts_approved_nonauthor_review (__main__.ReviewedHeadApprovalTests.test_accepts_approved_nonauthor_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 126, in test_accepts_approved_nonauthor_review
+    got = m.reviewed_head_approval(review(), evidence(), 'coinerd')
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'reviewed_head_approval'
+
+======================================================================
+ERROR: test_author_as_reviewer_refused (__main__.ReviewedHeadApprovalTests.test_author_as_reviewer_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 142, in test_author_as_reviewer_refused
+    m.reviewed_head_approval(review(reviewer='coinerd'), evidence(),
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'reviewed_head_approval'
+
+======================================================================
+ERROR: test_missing_review_refused (__main__.ReviewedHeadApprovalTests.test_missing_review_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 131, in test_missing_review_refused
+    m.reviewed_head_approval(None, evidence(), 'coinerd')
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'reviewed_head_approval'
+
+======================================================================
+ERROR: test_non_approved_verdict_refused (__main__.ReviewedHeadApprovalTests.test_non_approved_verdict_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 136, in test_non_approved_verdict_refused
+    m.reviewed_head_approval(review(verdict='NEEDS_WORK'), evidence(),
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'reviewed_head_approval'
+
+======================================================================
+ERROR: test_review_bound_to_other_head_refused (__main__.ReviewedHeadApprovalTests.test_review_bound_to_other_head_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/src/q-agent/wt-v10031-w4/tests/test-gsd-delivery-approval-contract.py", line 148, in test_review_bound_to_other_head_refused
+    m.reviewed_head_approval(review(**{'reviewed-sha': OTHER}),
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'delivery' has no attribute 'reviewed_head_approval'
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.014s
+
+FAILED (errors=13)
+exit=1
+
+## live control (pre-fix resolver, wrong form, recorded 2026-09-22)
+pulls?state=all&head=coinerd/q:binding/fb67e0429ed1-w3 -> [] (0 candidates; right form returns PR #9743)
