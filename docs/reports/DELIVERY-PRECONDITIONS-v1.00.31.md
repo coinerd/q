@@ -46,9 +46,11 @@ state its own records could not justify:
   blocked message names branch and head with the remedy:
   `delivery blocked: branch-not-published: branch <b> head <h> is not published
   on origin; push the verified head and re-verify`.
-- `go-orchestrator.rkt`: the seam is threaded through `run-campaign!` →
-  campaign request (9th field) → `run-campaign-wave` → `verify-campaign-delivery`,
-  with the production default unchanged.
+- `delivery-receipt.rkt`: `current-gsd-remote-published` is the injectable
+  parameter seam read by the Verify call sites. A caller parameterizes it before
+  starting `run-campaign!`; the campaign thread inherits that value, while the
+  production default remains the real remote probe. No request-struct field or
+  keyword threading was added.
 
 ### Delivery preflight at the handoff seam
 
@@ -130,13 +132,13 @@ their owning waves.
 
 ## 5. Consequential seams
 
-- The runtime delivery test (shared-checkout Verify) injects
-  `#:remote-published` — with the real default it would attempt an origin
-  ls-remote against the fixture's placeholder GitHub URL; injection is the
-  documented DI point for offline determinism.
-- `run-campaign!`'s request struct gained its 9th field (`remote-published`)
-  to keep the seam alive across the thread boundary; the production default is
-  behavior-preserving.
+- The runtime delivery test (shared-checkout Verify) parameterizes
+  `current-gsd-remote-published` — with the real default it would attempt an
+  origin ls-remote against the fixture's placeholder GitHub URL. Parameters are
+  inherited when the campaign thread starts, so this is the documented DI point
+  for offline determinism without expanding `campaign-request`.
+- `campaign-request` remains its existing eight-field boundary; the production
+  remote-published parameter default is behavior-preserving.
 - Metrics resynced (test-line counts) after new test files; README.md synced by
   the canonical generator.
 

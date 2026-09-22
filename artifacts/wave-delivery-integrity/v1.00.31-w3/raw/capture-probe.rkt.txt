@@ -80,13 +80,17 @@
                         "campaign/v1.00.31-w3"
                         head
                         "branch not published on origin; receipt not verified")
-(define marker2 (load-remote-pending root plan 2))
-(printf
- "blocked-message: ~a\n"
- (format
-  "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
-  (hash-ref marker2 'branch "?")
-  (hash-ref marker2 'head "?")))
+;; Invoke the exported coordinator rather than re-authoring its private
+;; blocked-message helper: this captures the actual operator-facing verdict.
+(define coordinator-outcome
+  (run-delivery-coordinator!
+   root
+   plan
+   2
+   #:controller
+   (lambda (_base _plan _wave _target)
+     (error 'capture-probe "remote-pending must block before controller invocation"))))
+(printf "blocked-message: ~a\n" (delivery-outcome-message coordinator-outcome))
 
 ;; --- F8: typed failure classification (python controller) ---
 (section "f8-typed-failures")
