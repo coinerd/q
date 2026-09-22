@@ -133,11 +133,13 @@ their owning waves.
 
 ## 5. Consequential seams
 
-- The runtime delivery test (shared-checkout Verify) parameterizes
-  `current-gsd-remote-published` — with the real default it would attempt an
-  origin ls-remote against the fixture's placeholder GitHub URL. Parameters are
-  inherited when the campaign thread starts, so this is the documented DI point
-  for offline determinism without expanding `campaign-request`.
+- The runtime delivery test (shared-checkout Verify) directly parameterizes
+  `current-gsd-remote-published` around its synchronous `run-campaign!` call —
+  with the real default it would attempt an origin ls-remote against the
+  fixture's placeholder GitHub URL. This is the documented DI point for offline
+  determinism without expanding `campaign-request`; autonomous `/go` uses the
+  real default rather than treating a caller's dynamic parameterization as
+  cross-thread configuration.
 - `campaign-request` remains its existing eight-field boundary; the production
   remote-published parameter default is behavior-preserving.
 - Metrics resynced (test-line counts) after new test files; README.md synced by
@@ -151,9 +153,9 @@ their owning waves.
 - `remote-ref-missing` messages carry the ref but never raw stderr; the auth
   refusal deliberately omits exit codes to stay credential-free.
 - **Content-digest binding convention (review disposition):** the trio's
-  `content-digest` (`34276d07…`) is computed at the record-commit tip — the
-  head whose tree the gate verifies — while `implementation-sha`/`head` name
-  the implementation commit (`f785334fd`, whose own excluded-diff digest is
-  `d1fcfece…`). This is the W2 convention: trio commits are digest-excluded,
-  so the digest is invariant across them, and the receipt-tip ancestry rule
-  binds the named head to the record tip through evidence-only commits.
+  `content-digest` is re-computed at every non-record correction head and
+  re-stamped before its gate runs; trio commits themselves are digest-excluded,
+  so the value is invariant across those record-only commits. The
+  `implementation-sha`/`head` name the independently reviewed implementation
+  head, and the receipt-tip ancestry rule binds that head to the record tip
+  through evidence-only commits (the W2 convention).
