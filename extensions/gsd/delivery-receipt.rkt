@@ -11,6 +11,7 @@
          "../../sandbox/subprocess.rkt"
          (only-in "../../util/credential-redaction.rkt" redact-credential-data))
 (provide committed-delivery-snapshot
+         current-gsd-remote-published
          current-wave-for-attempt
          durable-receipt-head
          default-remote-published?
@@ -24,6 +25,11 @@
 (define (default-remote-published? repo branch head)
   (define out (git repo "ls-remote" "origin" (string-append "refs/heads/" branch)))
   (and (string? out) (string-contains? out head)))
+
+;; Injectable seam for tests and host embeddings: the parameter is read at
+;; the verify call sites, so a campaign thread picks up the value current at
+;; execution time without threading keywords through the request struct.
+(define current-gsd-remote-published (make-parameter default-remote-published?))
 ;; Shared pure attempt fence: the same identity test guards the implementation
 ;; result and the Verify receipt, avoiding a second weaker completion predicate.
 (define (current-wave-for-attempt rec wave-idx fence attempt-id)
@@ -95,7 +101,8 @@
                                       #:evidence evidence
                                       #:snapshot [snapshot committed-delivery-snapshot]
                                       #:attempt [attempt #f]
-                                      #:remote-published [remote-published default-remote-published?])
+                                      #:remote-published
+                                      [remote-published (current-gsd-remote-published)])
   (define before (snapshot cwd))
   (define result (thunk))
   (define after (snapshot cwd))
@@ -152,7 +159,8 @@
                                   context
                                   verifier
                                   current-record
-                                  #:remote-published [remote-published default-remote-published?])
+                                  #:remote-published
+                                  [remote-published (current-gsd-remote-published)])
   (define initial (current-record))
   (define attempt
     (and initial
