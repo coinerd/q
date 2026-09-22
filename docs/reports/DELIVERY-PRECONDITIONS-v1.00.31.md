@@ -88,9 +88,10 @@ state its own records could not justify:
   typed carry-forward record": it is persisted before the DONE commit, carries
   attempt/branch/head and a redacted reason, and gates the ladder (the
   wave-advance checkpoint refuses to advance past an un-delivered done wave).
-  `'require-delivered` is the stricter mode used by recovery/repair paths and by
-  the red-first fixture; making it the production default would invert the
-  verify-first lifecycle (completion triggers delivery).
+  `'require-delivered` is the stricter opt-in mode currently exercised by the
+  red-first fixture and recovery-oriented callers when they are added; making
+  it the production default would invert the verify-first lifecycle (completion
+  triggers delivery).
 
 ### Completion outbox two-way reconcile (F10)
 
