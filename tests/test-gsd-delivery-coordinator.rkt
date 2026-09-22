@@ -279,6 +279,12 @@
     (check-equal? (delivery-effect-result-kind
                    (default-delivery-controller-interpret "sync" (hasheq 'status "synchronized")))
                   'ok)
+    ;; W3 register F5: the preflight ready verdict is an ok — a published
+    ;; head proceeds through the handoff seam.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret "delivery-preflight"
+                                                                         (hasheq 'status "ready")))
+     'ok)
     (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
                                                 "sync"
                                                 (hasheq 'status "pending" 'reason "detached HEAD")))

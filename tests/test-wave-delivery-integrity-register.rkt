@@ -35,8 +35,9 @@
 ;; — so the "no guard" claim is now the frozen W0 statement it was written as,
 ;; while the tests assert the current per-wave registry state.
 
-(require rackunit
+(require racket/port
          racket/file
+         rackunit
          racket/hash
          racket/list
          racket/path
@@ -48,6 +49,11 @@
          (file "../scripts/ci/invocation-contract.rkt")
          (file "../tests/helpers/w2-mini-git-repo.rkt")
          (file "../scripts/gsd-evidence-bind.rkt")
+         (file "../extensions/gsd/campaign-state.rkt")
+         (file "../extensions/gsd/campaign-repository.rkt")
+         (file "../extensions/gsd/wave-completion.rkt")
+         (file "../extensions/gsd/delivery-journal.rkt")
+         (file "../extensions/gsd/delivery-receipt.rkt")
          (only-in (file "../scripts/gsd-wave-gate.rkt")
                   validate-wave-evidence
                   wave-evidence-result-reasons))
@@ -395,6 +401,161 @@
   (and clean? refused?))
 (register-guard! "F4" (lambda (_repro) (if (f4-defect-refused?) 'refused 'not-refused)))
 
+;; ============================================================
+;; W3 guards: F5 (remote backing), F8 (typed failures),
+;; F9 (premature completion), F10 (outbox two-way)
+;; ============================================================
+
+(define (w3-f5-defect-refused?)
+  ;; The defect: a Verify verdict records a verified receipt for a branch
+  ;; that was never pushed. Refused when the unpublished branch gets only
+  ;; the typed remote-pending marker (no receipt, typed blocker) and
+  ;; publication resolves it into a real receipt with the marker cleared.
+  (define root (make-temporary-file "w3reg-f5-~a" 'directory))
+  (define plan (make-string 64 #\a))
+  (define ident
+    (hasheq 'repo
+            "/repo"
+            'branch
+            "campaign/unpublished"
+            'head
+            (make-string 40 #\b)
+            'tree
+            (make-string 40 #\c)
+            'origin
+            "https://github.com/example/q.git"))
+  (define refused?
+    (let ()
+      (verify-with-delivery-receipt root
+                                    plan
+                                    2
+                                    root
+                                    (lambda () 'approved)
+                                    #:approved? (lambda (v) (eq? v 'approved))
+                                    #:evidence (lambda (_) "log")
+                                    #:remote-published (lambda (_r _b _h) #f)
+                                    #:snapshot (lambda (_) ident))
+      (define unpublished-ok?
+        (and (not (load-delivery-journal root plan 2))
+             (hash? (load-remote-pending root plan 2))
+             (equal? (remote-pending-blocker root plan 2) 'branch-not-published)))
+      (verify-with-delivery-receipt root
+                                    plan
+                                    2
+                                    root
+                                    (lambda () 'approved)
+                                    #:approved? (lambda (v) (eq? v 'approved))
+                                    #:evidence (lambda (_) "log")
+                                    #:remote-published (lambda (_r _b _h) #t)
+                                    #:snapshot (lambda (_) ident))
+      (define published-ok?
+        (and (hash? (load-delivery-journal root plan 2)) (not (load-remote-pending root plan 2))))
+      (and unpublished-ok? published-ok?)))
+  (delete-directory/files root #:must-exist? #f)
+  refused?)
+
+(define (w3-f8-defect-refused?)
+  ;; The defect: every subprocess failure surfaces as the bare
+  ;; "delivery command failed (<cmd>, exit 128)". Refused when the
+  ;; classified shapes come back typed with class and remedy while the
+  ;; unclassified shape honestly keeps the generic form.
+  (define quoted (format "~s" "fatal: couldn't find remote ref refs/heads/campaign/x"))
+  (define program
+    (string-append
+     "import importlib.util as u\n"
+     "spec = u.spec_from_file_location('g', r'"
+     (path->string (build-path q-root "scripts" "gsd-delivery.py"))
+     "')\n"
+     "m = u.module_from_spec(spec)\nspec.loader.exec_module(m)\n"
+     "print(m.classify_failure(['git', 'fetch', 'origin', 'refs/heads/campaign/x'], 'git', 128, "
+     quoted
+     "))\n"))
+  (define tmp (make-temporary-file "w3reg-f8-~a.py"))
+  (dynamic-wind (lambda () (display-to-file program tmp #:exists 'truncate))
+                (lambda ()
+                  (define out
+                    (string-trim (with-output-to-string
+                                  (lambda ()
+                                    (void (system (format "python3 ~a" (path->string tmp))))))))
+                  (and (string-prefix? out "remote-ref-missing:")
+                       (string-contains? out "refs/heads/campaign/x")
+                       (string-contains? out "push the verified head first")))
+                (lambda () (delete-file tmp))))
+
+(define (w3-f9-defect-refused?)
+  ;; The defect: a wave can be marked done with delivery-pending and NO
+  ;; journal witness (v1.00.30 W4). Refused when require-delivered refuses
+  ;; with the typed result and zero durable movement.
+  (define dir (make-temporary-file "w3reg-f9-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file
+   (build-path dir ".planning" "PLAN.md")
+   (lambda (o)
+     (display "# Plan: W3 register\n\n## Waves\n\n- [Inbox] W0: Evidence → waves/W0-e.md\n" o)))
+  (call-with-output-file (build-path dir ".planning" "waves" "W0-e.md")
+                         (lambda (o) (display "# Wave 0\n\nGoal: e\n\n## Verify\n\nraco test .\n" o)))
+  (define rec (migrate-campaign! dir))
+  (set-campaign-fence-token! rec 1)
+  (begin-attempt! rec 0 1)
+  (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
+  (persist-campaign! dir rec)
+  (define attempt (campaign-wave-current-attempt (car (campaign-record-waves rec))))
+  (define result
+    (try-complete-wave! dir
+                        rec
+                        0
+                        #:verifier-approve? #t
+                        #:expected-attempt-id (campaign-attempt-id attempt)
+                        #:expected-fence-token (campaign-attempt-fence-token attempt)
+                        #:delivery-proof 'require-delivered))
+  (define durable (load-campaign-record dir (campaign-plan-id rec)))
+  (define refused?
+    (and (eq? (completion-result-status result) 'delivery-pending-cannot-complete)
+         (eq? (campaign-wave-status (car (campaign-record-waves durable))) 'verifying)
+         (equal? (count-completion-events dir durable) 0)))
+  (delete-directory/files dir #:must-exist? #f)
+  refused?)
+
+(define (w3-f10-defect-refused?)
+  ;; The defect: a rolled-back done wave keeps a leading completion event.
+  ;; Refused when the rollback leaves the outbox empty after reconcile and
+  ;; the typed invariant reports 'ok.
+  (define dir (make-temporary-file "w3reg-f10-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file
+   (build-path dir ".planning" "PLAN.md")
+   (lambda (o)
+     (display "# Plan: W3 register\n\n## Waves\n\n- [Inbox] W0: Evidence → waves/W0-e.md\n" o)))
+  (call-with-output-file (build-path dir ".planning" "waves" "W0-e.md")
+                         (lambda (o) (display "# Wave 0\n\nGoal: e\n\n## Verify\n\nraco test .\n" o)))
+  (define rec (migrate-campaign! dir))
+  (set-campaign-fence-token! rec 1)
+  (begin-attempt! rec 0 1)
+  (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
+  (persist-campaign! dir rec)
+  (define attempt (campaign-wave-current-attempt (car (campaign-record-waves rec))))
+  (try-complete-wave! dir
+                      rec
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id attempt)
+                      #:expected-fence-token (campaign-attempt-fence-token attempt))
+  (define durable (load-campaign-record dir (campaign-plan-id rec)))
+  (set-campaign-wave-status! (car (campaign-record-waves durable)) 'pending)
+  (persist-campaign! dir durable)
+  (define rolled (load-campaign-record dir (campaign-plan-id rec)))
+  (define leads? (eq? (completion-outbox-invariant? dir rolled) 'outbox-leads-record))
+  (reconcile-completion-outbox! dir rolled)
+  (define clean?
+    (eq? (completion-outbox-invariant? dir (load-campaign-record dir (campaign-plan-id rec))) 'ok))
+  (delete-directory/files dir #:must-exist? #f)
+  (and leads? clean?))
+
+(register-guard! "F5" (lambda (_repro) (if (w3-f5-defect-refused?) 'refused 'not-refused)))
+(register-guard! "F8" (lambda (_repro) (if (w3-f8-defect-refused?) 'refused 'not-refused)))
+(register-guard! "F9" (lambda (_repro) (if (w3-f9-defect-refused?) 'refused 'not-refused)))
+(register-guard! "F10" (lambda (_repro) (if (w3-f10-defect-refused?) 'refused 'not-refused)))
+
 (define original-guard-ids (sort (hash-keys guards) string<?))
 
 ;; ============================================================
@@ -562,16 +723,16 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W2 guards F1-F4 all guarded-pass; F5+ stay unguarded"
+(test-case "W3 guards F1-F4 plus F5/F8/F9/F10 guarded-pass; F6/F7 stay unguarded"
   ;; The register is a per-wave ledger: a row becomes guarded in the wave that
   ;; fixes it and only then. A wave that marked rows guarded without fixing them
   ;; would show up here as an extra entry; a wave that fixed F2/F3/F4 and forgot
   ;; to register their guards would show up as those rows falling back to
   ;; unguarded — and, with the fixes live, as reproduction-liveness failures just
   ;; above.
-  (check-equal? original-guard-ids '("F1" "F2" "F3" "F4"))
+  (check-equal? original-guard-ids '("F1" "F10" "F2" "F3" "F4" "F5" "F8" "F9"))
   (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
-  (for ([id (in-list '("F1" "F2" "F3" "F4"))])
+  (for ([id (in-list '("F1" "F10" "F2" "F3" "F4" "F5" "F8" "F9"))])
     (check-eq? (for/first ([r (in-list results)]
                            #:when (equal? (row-result-mode r) id))
                  (row-result-guard-status r))
@@ -591,8 +752,14 @@
   (check-true (f2-defect-refused?))
   (check-true (f3-defect-refused?))
   (check-true (f4-defect-refused?))
+  ;; W3: the newly guarded rows are falsifiable too — handed a refusal
+  ;; that did not happen, each guard must report 'not-refused.
+  (check-true (w3-f5-defect-refused?))
+  (check-true (w3-f8-defect-refused?))
+  (check-true (w3-f9-defect-refused?))
+  (check-true (w3-f10-defect-refused?))
   (for ([r (in-list results)]
-        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4")))
+        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4" "F5" "F8" "F9" "F10")))
     (check-eq? (row-result-guard-status r)
                'unguarded
                (format "~a still unguarded" (row-result-mode r)))))

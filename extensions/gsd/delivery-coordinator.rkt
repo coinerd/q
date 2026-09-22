@@ -563,6 +563,9 @@
     [(equal? status "green") (delivery-effect-result 'ok data)]
     [(equal? status "pending-review") (delivery-effect-result 'ok data)]
     [(equal? status "governed") (delivery-effect-result 'ok data)]
+    ;; W3 register F5: the preflight action's ready verdict — the handoff
+    ;; seam cleared, the ladder action may run.
+    [(equal? status "ready") (delivery-effect-result 'ok data)]
     [(equal? status "awaiting-review")
      (delivery-effect-result 'awaiting-review
                              (hasheq 'stage
