@@ -1,0 +1,42 @@
+{
+ "_note": "Live F6 probe, 2026-09-22: the tool's head={owner}/{repo}:{branch} filter matches nothing on the real API for every probed branch, while head={owner}:{branch} returns exactly the intended merged PR (9737/9738/9743). The initial probe typo'd the W2 branch name as binding/fb67e042ed1-w2; corrected here with a live re-check.",
+ "binding/fb67e0429ed1-w2": {
+  "right-key": "coinerd:binding/fb67e0429ed1-w2",
+  "right-result": [
+   [
+    9737,
+    "closed",
+    null,
+    "binding/fb67e0429ed1-w2"
+   ]
+  ],
+  "wrong-key": "coinerd/q:binding/fb67e042ed1-w2",
+  "wrong-result-count": 0
+ },
+ "binding/fb67e0429ed1-w3": {
+  "right-key": "coinerd:binding/fb67e0429ed1-w3",
+  "right-result": [
+   [
+    9743,
+    "closed",
+    null,
+    "binding/fb67e0429ed1-w3"
+   ]
+  ],
+  "wrong-key": "coinerd/q:binding/fb67e0429ed1-w3",
+  "wrong-result-count": 0
+ },
+ "campaign/v1.00.31-w3": {
+  "right-key": "coinerd:campaign/v1.00.31-w3",
+  "right-result": [
+   [
+    9738,
+    "closed",
+    null,
+    "campaign/v1.00.31-w3"
+   ]
+  ],
+  "wrong-key": "coinerd/q:campaign/v1.00.31-w3",
+  "wrong-result-count": 0
+ }
+}

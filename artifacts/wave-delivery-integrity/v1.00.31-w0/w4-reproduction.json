@@ -34,7 +34,16 @@
       "exit-code": 1,
       "stdout": "",
       "stderr": "compiled-root: unknown switch: --out\n",
-      "actual-cli-options": ["--checkout <dir>", "--module <m> (repeatable)", "--final-dir <dir>", "--staging-dir <dir>", "--map-dir <dir>", "--label <l>", "--trusted-label <l> (repeatable)", "--lockfile <p>"],
+      "actual-cli-options": [
+        "--checkout <dir>",
+        "--module <m> (repeatable)",
+        "--final-dir <dir>",
+        "--staging-dir <dir>",
+        "--map-dir <dir>",
+        "--label <l>",
+        "--trusted-label <l> (repeatable)",
+        "--lockfile <p>"
+      ],
       "consequence": "the producer step can never succeed, so the compiled-root lane could never activate in CI; under `set -euo pipefail` the whole job dies",
       "note": "the sibling `manifest.rkt emit --out ...` invocation IS valid (manifest.rkt:351) - only the compiled-root call is wrong"
     },
@@ -73,8 +82,15 @@
       "fixture-kind": "command",
       "executed": "git show --stat ce13d038",
       "exit-code": 0,
-      "non-evidence-paths": ["README.md", "tests/test-w9-ci-workflow-verification.rkt"],
-      "evidence-paths": ["docs/reports/gsd-wave-evidence/v1.00.30-w4.rktd", "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd", "docs/reports/gsd-wave-validation/v1.00.30-w4.rktd"],
+      "non-evidence-paths": [
+        "README.md",
+        "tests/test-w9-ci-workflow-verification.rkt"
+      ],
+      "evidence-paths": [
+        "docs/reports/gsd-wave-evidence/v1.00.30-w4.rktd",
+        "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd",
+        "docs/reports/gsd-wave-validation/v1.00.30-w4.rktd"
+      ],
       "consequence": "the record commit was not evidence-only; the wave's declared record commit carried source/test churn"
     },
     {
@@ -97,7 +113,9 @@
       "executed": "GET /repos/coinerd/q/pulls?state=all&head=coinerd/q:binding/96974d2cd97b-w3 (tool form, gsd-delivery.py:437) vs GET /repos/coinerd/q/pulls?state=all&head=coinerd:binding/96974d2cd97b-w3 (GitHub API form)",
       "exit-code": 0,
       "tool-form-result": [],
-      "api-form-result": [9722],
+      "api-form-result": [
+        9722
+      ],
       "consequence": "resolve_existing_pr / resolve_merged_pr always return none, so the `governance` ladder action can never succeed",
       "note": "tests/test-gsd-delivery-controller.py binds its fakes with the same wrong key, so the suite mirrored the bug and CI stayed green"
     },
@@ -108,15 +126,42 @@
       "guard-status": "unguarded",
       "fixture-kind": "record",
       "stale-head-pins": [
-        {"file": "artifacts/ci-recovery/v1.00.30-w4/activation.json", "field": "implementation-head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"},
-        {"file": "artifacts/ci-recovery/v1.00.30-w4/activation.json", "field": "head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"},
-        {"file": "artifacts/ci-recovery/v1.00.30-w4/rollback-drill.json", "field": "head-sha", "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"}
+        {
+          "file": "artifacts/ci-recovery/v1.00.30-w4/activation.json",
+          "field": "implementation-head-sha",
+          "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"
+        },
+        {
+          "file": "artifacts/ci-recovery/v1.00.30-w4/activation.json",
+          "field": "head-sha",
+          "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"
+        },
+        {
+          "file": "artifacts/ci-recovery/v1.00.30-w4/rollback-drill.json",
+          "field": "head-sha",
+          "value": "8299409c9cf6330a85e66cbe5a9ba445bf739d27"
+        }
       ],
       "actual-head": "ce13d0388b56b850d67fa50f7ca5bea093581e62",
       "timing-disagreement": [
-        {"phase": "global-off-rollback", "prose-ms": 260, "field-ms": 247, "agree": false},
-        {"phase": "current-source-canary", "prose-ms": 250, "field-ms": 250, "agree": true},
-        {"phase": "tamper-canary", "prose-ms": 245, "field-ms": 256, "agree": false}
+        {
+          "phase": "global-off-rollback",
+          "prose-ms": 260,
+          "field-ms": 247,
+          "agree": false
+        },
+        {
+          "phase": "current-source-canary",
+          "prose-ms": 250,
+          "field-ms": 250,
+          "agree": true
+        },
+        {
+          "phase": "tamper-canary",
+          "prose-ms": 245,
+          "field-ms": 256,
+          "agree": false
+        }
       ],
       "consequence": "recorded provenance pinned a superseded head and the artifact's own prose contradicted its machine-readable fields"
     },
@@ -168,6 +213,18 @@
       "invariant-violated": "the outbox is derived and 'may only lag the durable commit, never lead (no invented DONE)'",
       "impact": "inert today - no reader outside wave-completion.rkt consumes the outbox and campaign completion is decided by wave statuses plus delivery proofs - but the invariant is broken and would mislead any future consumer",
       "consequence": "a status rollback can leave the derived ledger asserting a completion the record denies"
+    },
+    {
+      "mode": "F11",
+      "owning-wave": "W4",
+      "expect": "refused",
+      "guard-status": "unguarded",
+      "fixture-kind": "merge-gate",
+      "executed": "gsd-delivery.py merge() on v1.00.31 W3 binding PR #9743 (20/20 required checks green, mergeable_state clean) returned the typed stop awaiting-review: no genuine independent human approval at the exact expected head",
+      "exit-code": 0,
+      "tool-form-result": "awaiting-review",
+      "consequence": "the deterministic protected squash merge was unreachable for every wave in this single-account repository",
+      "note": "approval contract amended by explicit operator decision 2026-09-20 (PLAN-v1.00.31, Approval contract); W4 replaces the gate with the recorded operator authorization plus the APPROVED non-author review artifact"
     }
   ]
 }

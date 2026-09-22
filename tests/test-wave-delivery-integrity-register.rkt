@@ -556,6 +556,35 @@
 (register-guard! "F9" (lambda (_repro) (if (w3-f9-defect-refused?) 'refused 'not-refused)))
 (register-guard! "F10" (lambda (_repro) (if (w3-f10-defect-refused?) 'refused 'not-refused)))
 
+;; ============================================================
+;; W4 guards for F6 (API route contract) and F11 (approval contract)
+;; ============================================================
+
+;; Each row is guarded by the thing W4 actually shipped: the offline python
+;; contract suites, which fail on the unfixed tree (red-first run retained at
+;; artifacts/wave-delivery-integrity/v1.00.31-w4/raw/red-first-fixtures.txt)
+;; and pass only once the resolver route and the amended approval contract
+;; are in place.
+(define (run-python-suite rel)
+  (define python (or (find-executable-path "python3") (find-executable-path "python")))
+  (and python
+       (let-values ([(code _out _err) (run-capture (list python
+                                                         (path->string (build-path q-root rel))))])
+         (zero? code))))
+
+(define (w4-f6-defect-refused?)
+  ;; The defect: resolver routes built with the wrong head filter silently
+  ;; disable PR resolution. Refused when the API-contract fixtures pass.
+  (run-python-suite "tests/test-gsd-delivery-api-contract.py"))
+
+(define (w4-f11-defect-refused?)
+  ;; The defect: an unsatisfiable second-account approval gate. Refused when
+  ;; the approval-contract fixtures pass in both refusal directions.
+  (run-python-suite "tests/test-gsd-delivery-approval-contract.py"))
+
+(register-guard! "F6" (lambda (_repro) (if (w4-f6-defect-refused?) 'refused 'not-refused)))
+(register-guard! "F11" (lambda (_repro) (if (w4-f11-defect-refused?) 'refused 'not-refused)))
+
 (define original-guard-ids (sort (hash-keys guards) string<?))
 
 ;; ============================================================
@@ -567,9 +596,9 @@
 (define (statuses)
   (map row-result-guard-status results))
 
-(test-case "register is the frozen F1-F10 set"
+(test-case "register is the frozen F1-F10 set extended by the amended-contract row F11"
   (check-equal? (map (lambda (r) (row-ref r 'id)) register-rows)
-                '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10"))
+                '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11"))
   (check-true (eq? #t (hash-ref register 'frozen)))
   (check-equal? (hash-ref register 'row-count) (length register-rows))
   ;; the plan digest is recorded provenance for the (repo-external) plan file;
@@ -723,16 +752,16 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W3 guards F1-F4 plus F5/F8/F9/F10 guarded-pass; F6/F7 stay unguarded"
+(test-case "W3 guards F1-F5/F8-F10 guarded-pass; W4 adds F6/F11; F7 stays unguarded"
   ;; The register is a per-wave ledger: a row becomes guarded in the wave that
   ;; fixes it and only then. A wave that marked rows guarded without fixing them
   ;; would show up here as an extra entry; a wave that fixed F2/F3/F4 and forgot
   ;; to register their guards would show up as those rows falling back to
   ;; unguarded — and, with the fixes live, as reproduction-liveness failures just
   ;; above.
-  (check-equal? original-guard-ids '("F1" "F10" "F2" "F3" "F4" "F5" "F8" "F9"))
+  (check-equal? original-guard-ids '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F8" "F9"))
   (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
-  (for ([id (in-list '("F1" "F10" "F2" "F3" "F4" "F5" "F8" "F9"))])
+  (for ([id (in-list '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F8" "F9"))])
     (check-eq? (for/first ([r (in-list results)]
                            #:when (equal? (row-result-mode r) id))
                  (row-result-guard-status r))
@@ -759,7 +788,7 @@
   (check-true (w3-f9-defect-refused?))
   (check-true (w3-f10-defect-refused?))
   (for ([r (in-list results)]
-        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4" "F5" "F8" "F9" "F10")))
+        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4" "F5" "F6" "F8" "F9" "F10" "F11")))
     (check-eq? (row-result-guard-status r)
                'unguarded
                (format "~a still unguarded" (row-result-mode r)))))

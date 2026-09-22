@@ -60,6 +60,13 @@ EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 SENTINEL_TEXT = re.compile(
     r'(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/a|na)[:.;!,?]*',
     re.IGNORECASE)
+# Compound sentinels ("PENDING-INDEPENDENT-REVIEW") are not whole-string
+# placeholders, but they still encode placeholder semantics in an identity
+# field. Boundary-anchored so genuine names never match (no short tokens
+# like "na" here; they remain covered by SENTINEL_TEXT.fullmatch).
+SENTINEL_COMPOUND = re.compile(
+    r'(?i)(?:^|[^a-z])(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx)'
+    r'(?:[^a-z]|$)')
 
 class Pending(RuntimeError):
     pass
@@ -243,7 +250,10 @@ def policy_names(repo, ref):
     return names
 
 def validate_trio(repo, ref, relative, base):
-    """Run the existing, unchanged strict gate on committed blobs and real diff."""
+    """Run the existing, unchanged strict gate on committed blobs and real diff.
+
+    Returns the evidence and review data so callers can enforce the amended
+    approval contract against the very artifacts the strict gate accepted."""
     with tempfile.TemporaryDirectory(prefix='q-delivery-validate-') as temp:
         root = Path(temp)
         evidence = read_datum(materialize(repo, ref, relative, root))
@@ -257,7 +267,7 @@ def validate_trio(repo, ref, relative, base):
         command(['racket', str(HERE / 'gsd-wave-gate.rkt'), str(root / relative),
                  '--content-digest', actual, '--root', str(root), '--policy',
                  str(root / 'scripts/required-pr-checks.policy')], timeout=60)
-        return evidence, [relative, review, validation]
+        return evidence, read_datum(root / review), [relative, review, validation]
 
 def validate_merge(pr, commit, slug, merge, head):
     require(isinstance(pr, dict) and isinstance(commit, dict), 'malformed PR/commit response')
@@ -283,23 +293,75 @@ def validate_pr_identity(pr, slug):
             dig(pr, 'head', 'repo', 'full_name') == slug,
             'implementation PR must be a same-repository main-base pull request')
 
-def independent_approval(reviews, author, head):
-    """One genuine independent human approval at the EXACT head: a review by a
-    non-bot reviewer (not the author) on that commit with no later
-    CHANGES_REQUESTED sweep. Reviewer unavailability is a typed awaiting-review
-    condition, never implicit approval."""
-    require(isinstance(reviews, list), 'malformed pull-request reviews response')
-    on_head = [r for r in reviews if isinstance(r, dict) and
-               r.get('commit_id') == head and
-               dig(r, 'user', 'type') == 'User' and
-               dig(r, 'user', 'login') != author and
-               r.get('state') in ('APPROVED', 'CHANGES_REQUESTED')]
-    if not on_head:
-        return None
-    latest = max(on_head, key=lambda r: r.get('submitted_at') or '')
-    if latest.get('state') != 'APPROVED':
-        return None
-    return latest
+def merge_authorization(evidence, wave, head, base, repo):
+    """Recorded operator authorization from the evidence record's
+    `merge-authorization` object (amended approval contract, F11).
+
+    The authorization must name the operator, this exact wave, the exact
+    authorized head and the authorized action, and must cite its source. The
+    authorized head is the verified implementation head recorded by the same
+    evidence (its `implementation-sha`): a committed record cannot contain its
+    own commit SHA, so the exact-head binding is enforced where it is both
+    meaningful and satisfiable — against the receipt head, and against the
+    merged tip via content equality. The excluded-paths digest from the PR
+    base to the authorized receipt must equal the digest from the base to the
+    merge tip (which the strict gate just verified against the recorded
+    content-digest), so the merge delivers exactly the authorized content and
+    nothing else. Refuses `no-operator-authorization` in every
+    under-specified direction — including an authorization naming another
+    head, another wave, or citing no source."""
+    auth = evidence.get('merge-authorization') if isinstance(evidence, dict) else None
+    require(isinstance(auth, dict),
+            'no-operator-authorization: evidence record carries no merge-authorization object')
+    for field in ('operator', 'wave', 'head', 'action', 'source'):
+        value = auth.get(field)
+        require(isinstance(value, str) and value.strip(),
+                'no-operator-authorization: merge-authorization.%s is missing or empty' % field)
+    require(auth.get('wave') == wave,
+            'no-operator-authorization: merge-authorization names wave %r, not %r'
+            % (auth.get('wave'), wave))
+    receipt = evidence.get('implementation-sha')
+    require(full_sha(receipt),
+            'no-operator-authorization: evidence record has no implementation head to authorize')
+    require(auth.get('head') == receipt,
+            'no-operator-authorization: merge-authorization authorizes head %s, not the verified implementation head %s'
+            % (auth.get('head'), receipt))
+    authorized_digest = digest(repo, base, receipt)
+    require(authorized_digest == evidence.get('content-digest') and
+            digest(repo, base, head) == evidence.get('content-digest'),
+            'no-operator-authorization: the merge tip no longer carries the authorized implementation content')
+    return auth
+
+
+def reviewed_head_approval(review, evidence, author):
+    """APPROVED independent non-author review artifact bound to the exact
+    verified head.
+
+    The schema-2 review artifact is the repository's mandatory independent
+    review (the strict gate already enforces its integrity); the merge gate
+    additionally requires that it is APPROVED, produced by a reviewer other
+    than the PR author, and bound to the exact authorized implementation head
+    (the F3 head-binding rule). This replaces the unsatisfiable second-account
+    GitHub review requirement (F11) without weakening any other merge
+    semantics."""
+    require(isinstance(review, dict),
+            'no-review-artifact: the review artifact is missing or malformed')
+    require(isinstance(author, str) and author.strip(),
+            'no-review-artifact: PR author identity is missing or malformed; '
+            'the non-author property is unverifiable')
+    require(review.get('verdict') == 'APPROVED',
+            'no-review-artifact: review verdict is %r, not APPROVED'
+            % (review.get('verdict'),))
+    reviewer = review.get('reviewer')
+    require(isinstance(reviewer, str) and reviewer.strip(),
+            'no-review-artifact: review has no reviewer identity')
+    require(reviewer.strip().casefold() != author.strip().casefold(),
+            'no-review-artifact: review has no non-author reviewer identity')
+    receipt = evidence.get('implementation-sha') if isinstance(evidence, dict) else None
+    require(review.get('reviewed-sha') == receipt,
+            'head-binding-mismatch: review reviewed-sha %s does not bind the verified implementation head %s'
+            % (review.get('reviewed-sha'), receipt))
+    return review
 
 def gh_put(slug, route, fields):
     """Authenticated GitHub mutation (PUT) through the trusted gh CLI. The
@@ -334,13 +396,15 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
       2. exact expected head (both the PR claim and the actually-fetched refs/pull/N/head)
       3. already-merged at the expected head -> idempotent, no second merge
       4. fresh main (PR based on current origin/main)
-      5. genuine independent human approval at the exact head (else awaiting-review)
+      5. unchanged strict trio/digest preflight at PR base...head, then the
+         amended approval contract (F11) on those exact artifacts: a recorded
+         operator authorization naming the exact head plus an APPROVED
+         non-author review artifact bound to the exact head
       6. every required check green at that exact head (policy snapshot + protection)
-      7. unchanged strict trio/digest preflight at PR base...head
-      8. squash-only PUT to the PR merge endpoint (never admin, never main push)
-      9. post-merge single-parent squash provenance via validate_merge
-    Returns {'status':'merged'|'already-merged'|'awaiting-review', ...}; model
-    or journal completion alone never sets delivery."""
+      7. squash-only PUT to the PR merge endpoint (never admin, never main push)
+      8. post-merge single-parent squash provenance via validate_merge
+    Returns {'status':'merged'|'already-merged', ...}; model or journal
+    completion alone never sets delivery."""
     slug = repository(repo)
     refresh(repo)
     main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
@@ -352,8 +416,26 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
     require(head == expected_head and full_sha(expected_head),
             'implementation PR head does not match the verified expected head')
     if pr_is_merged(pr):
+        # Idempotent resume after a lost merge response: the mutation already
+        # happened, so it is not repeated — but the same pre-merge proofs still
+        # run against the PR head. A merge that happened outside this gate,
+        # without the amended approval contract or green required checks, is
+        # refused instead of being accepted as delivered (review R3 finding).
         merge_sha = dig(pr, 'merge_commit_sha')
         validate_merge(pr, api(slug, f'commits/{merge_sha}'), slug, merge_sha, head)
+        fetched = fetch_head(repo, number)
+        require(fetched == head, 'fetched implementation head does not match expected head')
+        evidence, review, _paths = validate_trio(repo, head, source,
+                                                 dig(pr, 'base', 'sha'))
+        author = dig(pr, 'user', 'login') or ''
+        require(isinstance(author, str) and author.strip(),
+                'malformed PR author identity; refusing the non-author review comparison')
+        merge_authorization(evidence, 'W%d' % wave, head, dig(pr, 'base', 'sha'), repo)
+        reviewed_head_approval(review, evidence, author)
+        names = policy_names(repo, main)
+        protection(slug, names)
+        for name in names:
+            trusted_check(slug, head, name, 'pull_request', expected_branch)
         return {'status': 'already-merged', 'merge-sha': merge_sha, 'plan-id': plan,
                 'wave': wave, 'head': head, 'pr': number}
     require(pr.get('state') == 'open', 'implementation PR is neither open nor already merged')
@@ -361,16 +443,16 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
             'implementation PR is not based on fresh origin/main; reanchor and re-verify')
     fetched = fetch_head(repo, number)
     require(fetched == head, 'fetched implementation head does not match expected head')
-    if independent_approval(api(slug, f'pulls/{number}/reviews'),
-                            dig(pr, 'user', 'login') or '', head) is None:
-        return {'status': 'awaiting-review', 'plan-id': plan, 'wave': wave, 'head': head,
-                'pr': number,
-                'reason': 'no genuine independent human approval at the exact expected head'}
+    evidence, review, _paths = validate_trio(repo, head, source, dig(pr, 'base', 'sha'))
+    author = dig(pr, 'user', 'login') or ''
+    require(isinstance(author, str) and author.strip(),
+            'malformed PR author identity; refusing the non-author review comparison')
+    merge_authorization(evidence, 'W%d' % wave, head, dig(pr, 'base', 'sha'), repo)
+    reviewed_head_approval(review, evidence, author)
     names = policy_names(repo, main)
     protection(slug, names)
     for name in names:
         trusted_check(slug, head, name, 'pull_request', expected_branch)
-    validate_trio(repo, head, source, dig(pr, 'base', 'sha'))
     result = gh_put(slug, f'pulls/{number}/merge', {'merge_method': 'squash'})
     require(result.get('merged') is True and full_sha(result.get('sha')),
             'GitHub did not confirm the protected squash merge')
@@ -460,6 +542,20 @@ def pr_is_merged(pr):
              (pr.get('state') == 'closed' and pr.get('merged_at') is not None)))
 
 
+def branch_owner(slug):
+    """Owner login of an `owner/repo` slug.
+
+    GitHub's pulls head filter is `{owner}:{branch}` (F6); the
+    `{owner}/{repo}:{branch}` form matches nothing, so both open-PR
+    resolution and merged-PR recovery would silently return none and the
+    `governance` ladder action could never succeed."""
+    require(isinstance(slug, str) and slug.count('/') == 1,
+            'malformed repository slug: ' + str(slug))
+    owner, name = slug.split('/')
+    require(bool(owner) and bool(name), 'malformed repository slug: ' + slug)
+    return owner
+
+
 def resolve_prs_for_branch(slug, branch, state):
     """Resolve PRs for a branch at a requested GitHub state.
 
@@ -467,7 +563,7 @@ def resolve_prs_for_branch(slug, branch, state):
     query is used for resolve-before-create; the all-state query is used only
     by the idempotent merged-PR recovery path."""
     require(isinstance(branch, str) and branch.strip(), 'invalid branch identity')
-    candidates = api(slug, f'pulls?state={state}&head={slug}:{branch}')
+    candidates = api(slug, f'pulls?state={state}&head={branch_owner(slug)}:{branch}')
     require(isinstance(candidates, list), 'malformed pull-request response')
     require(len(candidates) <= 1,
             'multiple pull requests already target branch ' + branch)
@@ -486,7 +582,7 @@ def resolve_merged_pr(slug, branch):
 
     This is deliberately separate from open-PR resolution: a lost merge response
     must not make the next delivery attempt invent a new PR or stall forever."""
-    candidates = api(slug, f'pulls?state=all&head={slug}:{branch}')
+    candidates = api(slug, f'pulls?state=all&head={branch_owner(slug)}:{branch}')
     require(isinstance(candidates, list), 'malformed pull-request response')
     merged = [pr for pr in candidates
               if isinstance(pr, dict) and pr.get('state') == 'closed'
@@ -645,7 +741,7 @@ def status(repo, plan, wave):
     require(len(parents) == 2 and parents[0] == publication,
             'binding publication is not a single-parent protected commit')
     parent = parents[1]
-    evidence, paths = validate_trio(repo, publication, relative, parent)
+    evidence, _review, paths = validate_trio(repo, publication, relative, parent)
     require(evidence.get('plan-id') == plan and evidence.get('wave') == f'W{wave}' and
             evidence.get('merge-method') == 'squash', 'campaign/wave/merge identity mismatch')
     merge, head, number = (evidence.get(k) for k in ('merge-sha', 'delivery-head-sha', 'delivery-pr'))
@@ -838,7 +934,8 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
     # well as in the strict gate.
     reviewer = review.get('reviewer')
     require(isinstance(reviewer, str) and reviewer.strip()
-            and not SENTINEL_TEXT.fullmatch(reviewer.strip()),
+            and not SENTINEL_TEXT.fullmatch(reviewer.strip())
+            and not SENTINEL_COMPOUND.search(reviewer.strip()),
             'finalized binding review has no genuine reviewer identity')
     require(review.get('verdict') == 'APPROVED' and
             review.get('reviewed-sha') == merge and

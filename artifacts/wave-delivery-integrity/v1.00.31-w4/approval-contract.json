@@ -1,0 +1,52 @@
+{
+ "accepted-residual-risk": "with a single GitHub account, independent non-author review is satisfied by an independent agent reviewer rather than a separate human colleague; accepted by the operator in the plan's Approval contract section",
+ "approval-contract-section": "Approval contract (amended 2026-09-20 by explicit operator decision)",
+ "backward-compatibility": "waves merged before W4 carry (or lack) authorization only in delivered bindings that are never re-merged; new merges require the same evidence-record shape \u2014 no second, divergent format is accepted",
+ "merge-gate-requires": [
+  {
+   "carrier": "the committed wave evidence record's `merge-authorization` object",
+   "content-equality": "digest(base, receipt) == digest(base, merge tip) == the recorded content-digest, so the merge delivers exactly the authorized content",
+   "head-binding": "head must equal the evidence record's `implementation-sha` (the verified receipt head); a committed record cannot contain its own commit SHA, so the exact-head binding is enforced against the receipt head and, via excluded-paths digest equality, against the merge tip",
+   "kind": "operator-authorization",
+   "required-fields": [
+    "operator",
+    "wave",
+    "head",
+    "action",
+    "source"
+   ]
+  },
+  {
+   "carrier": "the schema-2 review artifact referenced by the evidence record",
+   "kind": "independent-review-artifact",
+   "required-properties": [
+    "verdict == APPROVED",
+    "reviewer non-empty and != the PR author",
+    "reviewed-sha == the verified implementation head (F3 binding)"
+   ]
+  }
+ ],
+ "not-relaxed": [
+  "required checks and protection snapshot",
+  "single-parent protected squash merge",
+  "merge-SHA binding",
+  "schema-2 strict gate",
+  "record-commit purity"
+ ],
+ "plan": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+ "plan-doc": ".planning/PLAN-v1.00.31-GSD-WAVE-DELIVERY-INTEGRITY.md",
+ "recorded-at": "2026-09-22T18:24:13Z",
+ "red-first-evidence": "artifacts/wave-delivery-integrity/v1.00.31-w4/raw/red-first-fixtures.txt",
+ "refusal-taxonomy": {
+  "head-binding-mismatch": "review reviewed-sha bound to a head other than the verified implementation head",
+  "no-operator-authorization": "missing/empty object, missing or blank field, foreign wave, head not equal to the verified implementation head, or content drift between the receipt and the merge tip",
+  "no-review-artifact": "missing/malformed review datum, non-APPROVED verdict, or no non-author reviewer identity"
+ },
+ "register-row": "F11",
+ "replaces": "independent_approval(): a native GitHub review by a non-author human at the exact head \u2014 unsatisfiable by construction in this single-account repository",
+ "schema": "gsd-delivery-approval-contract/1",
+ "tests": [
+  "tests/test-gsd-delivery-approval-contract.py",
+  "tests/test-gsd-delivery-controller.py"
+ ]
+}

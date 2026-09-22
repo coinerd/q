@@ -1,0 +1,137 @@
+{
+ "milestone": 896,
+ "plan": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+ "probes": {
+  "check-runs-governance": {
+   "observed-sha256": "16f363eb7ae362d5bded414a9cb3efd0768152df84bb6374cddba65d7868587c",
+   "observed-summary": [
+    {
+     "conclusion": "success",
+     "name": "gsd-governance",
+     "status": "completed"
+    }
+   ],
+   "route": "commits/03f63857feda2fbe273879014582c243f0819bb8/check-runs?check_name=gsd-governance"
+  },
+  "check-runs-paginated": {
+   "observed-sha256": "265f8d628bb8a1a4e2dd9ce5266cce370de54dccf89387130cb05c4a6a974954",
+   "observed-summary": {
+    "runs-on-page": 100,
+    "total_count": 202
+   },
+   "route": "commits/03f63857feda2fbe273879014582c243f0819bb8/check-runs?per_page=100&page=1"
+  },
+  "resolve-merged-w3-binding": {
+   "observed-sha256": "0905b0d8aa9542717827ce79684551ca44bf389ddd438da1b76573621686f35b",
+   "observed-summary": [
+    {
+     "head-ref": "binding/fb67e0429ed1-w3",
+     "merged_at": "2026-09-22T15:12:44Z",
+     "number": 9743,
+     "state": "closed"
+    }
+   ],
+   "route": "pulls?state=all&head=coinerd:binding/fb67e0429ed1-w3"
+  },
+  "resolve-merged-w3-impl": {
+   "observed-sha256": "71ae85c2c61104c79a1d6d65b3dee1250677f034296298bba7fa67731de3d79a",
+   "observed-summary": [
+    {
+     "head-ref": "campaign/v1.00.31-w3",
+     "merged_at": "2026-09-22T11:15:58Z",
+     "number": 9738,
+     "state": "closed"
+    }
+   ],
+   "route": "pulls?state=all&head=coinerd:campaign/v1.00.31-w3"
+  },
+  "resolve-open-w3-binding": {
+   "observed-sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "observed-summary": [],
+   "route": "pulls?state=open&head=coinerd:binding/fb67e0429ed1-w3"
+  },
+  "resolve-open-w3-impl": {
+   "observed-sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "observed-summary": [],
+   "route": "pulls?state=open&head=coinerd:campaign/v1.00.31-w3"
+  },
+  "tool-binding-resolve-pr": {
+   "argv": [
+    "binding-resolve-pr",
+    "--repo",
+    "/home/user/src/q-agent/wt-v10031-w4",
+    "--plan",
+    "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+    "--wave",
+    "3",
+    "--expected-branch",
+    "binding/fb67e0429ed1-w3"
+   ],
+   "exit-code": 0,
+   "result": {
+    "branch": "binding/fb67e0429ed1-w3",
+    "head": "a9ed5989f909a205c13fc34bd4b650f7a40a9dca",
+    "merge-sha": "03f63857feda2fbe273879014582c243f0819bb8",
+    "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+    "pr": 9743,
+    "status": "already-merged",
+    "wave": 3
+   }
+  },
+  "tool-governance": {
+   "argv": [
+    "governance",
+    "--repo",
+    "/home/user/src/q-agent/wt-v10031-w4",
+    "--plan",
+    "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+    "--wave",
+    "3",
+    "--expected-branch",
+    "binding/fb67e0429ed1-w3"
+   ],
+   "exit-code": 0,
+   "result": {
+    "branch": "binding/fb67e0429ed1-w3",
+    "pr": 9743,
+    "publication-sha": "03f63857feda2fbe273879014582c243f0819bb8",
+    "status": "governed"
+   }
+  },
+  "tool-resolve-pr": {
+   "argv": [
+    "resolve-pr",
+    "--repo",
+    "/home/user/src/q-agent/wt-v10031-w4",
+    "--plan",
+    "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+    "--wave",
+    "3",
+    "--expected-branch",
+    "campaign/v1.00.31-w3"
+   ],
+   "exit-code": 0,
+   "result": {
+    "branch": "campaign/v1.00.31-w3",
+    "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+    "status": "none",
+    "wave": 3
+   }
+  },
+  "wrong-form-control-binding": {
+   "observed-sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "observed-summary": [],
+   "route": "pulls?state=all&head=coinerd/q:binding/fb67e0429ed1-w3"
+  },
+  "wrong-form-control-impl": {
+   "observed-sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "observed-summary": [],
+   "route": "pulls?state=all&head=coinerd/q:campaign/v1.00.31-w3"
+  }
+ },
+ "publication": "03f63857feda2fbe273879014582c243f0819bb8",
+ "recorded-at": "2026-09-22T18:59:08Z",
+ "repo": "coinerd/q",
+ "schema": "gsd-delivery-api-contract/1",
+ "wave": "W4"
+}

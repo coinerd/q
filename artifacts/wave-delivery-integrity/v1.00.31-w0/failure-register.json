@@ -6,7 +6,7 @@
   "plan-sha256": "db92d1ab6e04356985b6f56ca911c9eb6ac1c4a06df7cc3b9e42184e76c3598d",
   "register-source": "Failure-mode register (frozen; each wave closes its row)",
   "frozen": true,
-  "row-count": 10,
+  "row-count": 11,
   "rows": [
     {
       "id": "F1",
@@ -97,6 +97,15 @@
       "structural-fix": "Rollback/un-completion prunes the affected waves' derived outbox events, or reconcile becomes two-way and drops events whose wave is no longer `done`; the invariant is asserted by a test that rolls a wave back",
       "owning-wave": "W3",
       "refusal": "Typed refusal `outbox-leads-record`"
+    },
+    {
+      "id": "F11",
+      "mode": "Unsatisfiable merge gate (second-account GitHub approval demanded in a single-account repository)",
+      "observed": "The delivery ladder's `merge()` gate called `independent_approval(reviews, author, head)`, requiring a native GitHub review by a non-author human at the exact head; GitHub refuses author self-approval and this repository has the single account `coinerd`, so the filter can never match. The ladder stop-typed `awaiting-review` forever while 13/13 required checks were green and `mergeable_state: clean` — observed live on v1.00.30 W3 (#9721/#9722), v1.00.31 W0 (#9731) and v1.00.31 W3 binding (#9743). The tool's own `status` proof states native GitHub approval counts are deliberately NOT required, so the merge ladder was the lone inconsistent outlier.",
+      "evidence-gap": "The unsatisfiable approval form was never tested as satisfiable: no fixture proved the gate reachable, so a policy-shaped defect survived every green suite.",
+      "structural-fix": "Amended approval contract: a recorded operator authorization in the evidence record's `merge-authorization` object (operator, wave, verified implementation head, action, source) plus the APPROVED independent non-author schema-2 review artifact bound to the verified implementation head; both refusal directions enforced by tested code and the unsatisfiable second-account requirement removed",
+      "owning-wave": "W4",
+      "refusal": "Typed refusals `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch`"
     }
   ]
 }
