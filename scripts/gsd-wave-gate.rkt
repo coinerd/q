@@ -266,6 +266,15 @@
        (reject! "review artifact must contain a hash"))
      (when (hash? review)
        (require-genuine! reject! "independent reviewer identity" (hash-ref review 'reviewer #f) 1)
+       ;; A compound sentinel ("PENDING-INDEPENDENT-REVIEW") is not a whole-string
+       ;; placeholder, but it still encodes placeholder semantics in the one field
+       ;; that must name a genuine reviewer (register F12).
+       (when (and
+              (string? (hash-ref review 'reviewer #f))
+              (regexp-match?
+               #px"(?i:(?:^|[^a-z])(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx)(?:[^a-z]|$))"
+               (hash-ref review 'reviewer "")))
+         (reject! "placeholder-evidence: independent reviewer identity encodes a placeholder"))
        (unless (equal? (hash-ref review 'verdict #f) "APPROVED")
          (reject! "review verdict must be APPROVED"))
        (unless (and (valid-sha? (hash-ref review 'reviewed-sha #f))

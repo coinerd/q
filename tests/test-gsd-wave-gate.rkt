@@ -166,7 +166,35 @@
                "a review bound to a foreign head is refused even before identity checks"))
 
 (define placeholder-values
-  (list "PENDING" "pending" "TODO" "TBD" "PLACEHOLDER" "FIXME" "N/A" "n/a" "TBA" "PENDING." "todo!"))
+  (list "PENDING"
+        "pending"
+        "TODO"
+        "TBD"
+        "PLACEHOLDER"
+        "FIXME"
+        "N/A"
+        "n/a"
+        "TBA"
+        "PENDING."
+        "todo!"
+        ;; Compound sentinels encode placeholder semantics inside a longer
+        ;; identity; the whole-string pattern alone would let them pass (R5).
+        "PENDING-INDEPENDENT-REVIEW"
+        "pending-reviewer"
+        "PLACEHOLDER-REVIEWER"
+        "TODO-AGENT"))
+
+(test-case "F12 genuine names are not mistaken for compound sentinels"
+  ;; Boundary-anchored detection must not reject legitimate identities that
+  ;; merely contain sentinel-like letter sequences.
+  (for ([genuine (list "independent read-only reviewer subagent"
+                       "pi-reviewer-subagent:w4-review:origin-main:2026-09-22"
+                       "Natalie A. Reviewer")])
+    (define texts (trio-texts #:reviewer genuine))
+    (define root (make-fixture-root! texts))
+    (define result (validate-at-root root texts))
+    (check-true (wave-evidence-result-passed? result)
+                (format "genuine identity accepted: ~a" genuine))))
 
 (test-case "F12 sentinel refusal: reviewer identity"
   (for ([p placeholder-values])

@@ -60,6 +60,13 @@ EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 SENTINEL_TEXT = re.compile(
     r'(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/a|na)[:.;!,?]*',
     re.IGNORECASE)
+# Compound sentinels ("PENDING-INDEPENDENT-REVIEW") are not whole-string
+# placeholders, but they still encode placeholder semantics in an identity
+# field. Boundary-anchored so genuine names never match (no short tokens
+# like "na" here; they remain covered by SENTINEL_TEXT.fullmatch).
+SENTINEL_COMPOUND = re.compile(
+    r'(?i)(?:^|[^a-z])(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx)'
+    r'(?:[^a-z]|$)')
 
 class Pending(RuntimeError):
     pass
@@ -927,7 +934,8 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
     # well as in the strict gate.
     reviewer = review.get('reviewer')
     require(isinstance(reviewer, str) and reviewer.strip()
-            and not SENTINEL_TEXT.fullmatch(reviewer.strip()),
+            and not SENTINEL_TEXT.search(reviewer.strip())
+            and not SENTINEL_COMPOUND.search(reviewer.strip()),
             'finalized binding review has no genuine reviewer identity')
     require(review.get('verdict') == 'APPROVED' and
             review.get('reviewed-sha') == merge and
