@@ -426,6 +426,7 @@ def merge(repo, plan, wave, number, expected_head, expected_branch, source):
         merge_authorization(evidence, 'W%d' % wave, head, dig(pr, 'base', 'sha'), repo)
         reviewed_head_approval(review, evidence, author)
         names = policy_names(repo, main)
+        protection(slug, names)
         for name in names:
             trusted_check(slug, head, name, 'pull_request', expected_branch)
         return {'status': 'already-merged', 'merge-sha': merge_sha, 'plan-id': plan,

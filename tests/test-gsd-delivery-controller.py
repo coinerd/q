@@ -2049,6 +2049,19 @@ class DeliveryTests(unittest.TestCase):
                     WAVE_BRANCH, w['source'])
         self.assertIn('no-operator-authorization', str(caught.exception))
 
+    def test_merge_already_merged_still_requires_protection(self):
+        """Review R4: the idempotent path also proves the branch-protection
+        snapshot; weakened or absent protection refuses the resume."""
+        w = self.open_impl_world(merged=True)
+        routes = self.merge_routes(w, merged=True, merge_sha=w['merge'])
+        routes[(SLUG, f"commits/{w['merge']}", False)] = \
+            commit_payload(w['merge'], w['c0'])
+        routes[(SLUG, 'branches/main/protection', False)] = protection([])
+        with self.fake_api(routes), self.assertRaises(m.Pending) as caught:
+            m.merge(w['subject'], w['plan'], w['wave'], w['pr'], w['head'],
+                    WAVE_BRANCH, w['source'])
+        self.assertIn('protection', str(caught.exception))
+
     def test_merge_already_merged_accepts_merged_at_authoritative_shape(self):
         w = self.open_impl_world(merged=True)
         payload = dict(self.open_pr_payload(w), state='closed', merged=False,
