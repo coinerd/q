@@ -21,6 +21,7 @@
          "campaign-repository.rkt"
          "../../sandbox/subprocess.rkt")
 (provide verified-wave-merge-sha
+         delivery-handoff-status
          delivery-readback
          delivered-proof-merge-sha
          undelivered-proof-reason
@@ -174,6 +175,14 @@
 ;; ============================================================
 ;; Durable handoff ledger (pending) + delivered reconcile
 ;; ============================================================
+
+;; The journal status of a wave's durable handoff record ('pending,
+;; 'delivered), or #f when no record exists. Register F9's completion gate
+;; reads this; it is a pure disk read with no controller round-trip.
+(define (delivery-handoff-status base-dir plan-id wave-index)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define data (read-handoff (delivery-handoff-path base-dir plan-id wave-index)))
+    (and (hash? data) (hash-ref data 'status #f))))
 
 (define (delivery-handoff-path base-dir plan-id wave-index)
   (unless (and (string? plan-id)

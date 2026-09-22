@@ -24,6 +24,7 @@
          ;; GSD tracking files — update PLAN.md + wave docs on completion
          (only-in "wave-docs.rkt" wave-slug)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
+         (only-in "delivery-handoff.rkt" delivery-handoff-status persist-delivery-handoff!)
          "projection-effects.rkt")
 
 ;; ============================================================
@@ -81,6 +82,21 @@
 ;; returns a reason, completion FAILS with "release not verified: …" — a
 ;; release wave can never be marked DONE without a verified Release object
 ;; (closing the v1.00.21 false-completion class).
+;; Register F9 verdict: does the requested delivery proof authorize DONE?
+;;   'carry-forward      — authorize; the typed pending handoff witness is
+;;                         persisted atomically with the durable DONE
+;;   'require-delivered  — authorize only when the journal says 'delivered
+(define (delivery-proof-verdict base-dir rec wave-idx mode)
+  (case mode
+    [(carry-forward) 'ok]
+    [(require-delivered)
+     (define pid (campaign-plan-id rec))
+     (if (and (regexp-match? #px"^[0-9a-f]{64}$" pid)
+              (eq? (delivery-handoff-status base-dir pid wave-idx) 'delivered))
+         'ok
+         'refused)]
+    [else (raise-argument-error 'try-complete-wave! "(or 'carry-forward 'require-delivered)" mode)]))
+
 (define (try-complete-wave! base-dir
                             rec
                             wave-idx
@@ -88,7 +104,8 @@
                             #:verifier-message [verifier-message ""]
                             #:expected-attempt-id expected-attempt-id
                             #:expected-fence-token expected-fence-token
-                            #:release-check [release-check #f])
+                            #:release-check [release-check #f]
+                            #:delivery-proof [delivery-proof 'carry-forward])
   ;; Resolve the release gate ONCE (before any mutation): a string means the
   ;; release is not verified (that string is the failure reason); #f/void means
   ;; either no release check configured or the release verified cleanly.
@@ -123,6 +140,15 @@
     [(eq? (campaign-wave-status wave) 'deferred) (completion-result 'already-done #f)]
     [(not (eq? (campaign-wave-status wave) 'verifying)) (completion-result 'invalid-state #f)]
     [(not attempt-current?) (completion-result 'stale-attempt #f)]
+    ;; Register F9 (v1.00.31 W3): the wave-completion path refuses to mark a
+    ;; wave 'done while its delivery journal for that wave is not 'delivered,
+    ;; unless a typed carry-forward handoff is recorded with the DONE. The
+    ;; v1.00.30 W4 incident state ([DONE] + Status: DONE with delivery-pending
+    ;; and NO journal witness) is unreachable from here on.
+    [(and approve?
+          release-gate-ok?
+          (eq? (delivery-proof-verdict base-dir durable wave-idx delivery-proof) 'refused))
+     (completion-result 'delivery-pending-cannot-complete #f)]
     [(not approve?)
      ;; v1.00.24 W3 (verification-truth): durable failure reason FIRST —
      ;; the retry prompt reads wave-failure-reason / attempt-failure-reason
@@ -187,6 +213,15 @@
      ;; and the outbox append leaves NO phantom completion event, so a later
      ;; outbox publication can never emit an invented DONE for a wave whose
      ;; durable status is still 'verifying.
+     ;; F9: the typed carry-forward handoff witness is persisted BEFORE the
+     ;; durable commit so a crash can never leave DONE without its journal.
+     (define pid (campaign-plan-id durable))
+     (when (and (regexp-match? #px"^[0-9a-f]{64}$" pid)
+                (not (eq? (delivery-handoff-status base-dir pid wave-idx) 'delivered)))
+       (persist-delivery-handoff! base-dir
+                                  pid
+                                  wave
+                                  "verified; delivery pending (typed carry-forward handoff)"))
      (persist-campaign! base-dir durable)
      (append-completion-event! base-dir durable event-id)
      (when caller-wave
@@ -299,25 +334,63 @@
 (define (count-completion-events base-dir rec)
   (length (load-outbox base-dir (campaign-plan-id rec))))
 
-;; v0.99.90 W2 (#9233): rebuild missing completion outbox events from the
-;; authoritative durable record. Every durable 'done wave must have exactly its
-;; stable completion event-id in the outbox; dedup (append-completion-event!
-;; skips present ids) makes this idempotent, and non-done waves NEVER get an
-;; event — the outbox is derived, it may only lag the durable commit, never
-;; lead (no invented DONE). Returns the number of events appended.
+;; W3 register F10: the outbox is derived and may only LAG the durable
+;; commit, never lead. reconcile-completion-outbox! is therefore two-way:
+;; events whose wave is no longer 'done are dropped (a rollback must not
+;; leave a leading completion event), and events missing for done waves are
+;; appended. Returns the number of events appended (idempotent, atomic).
+(define (event-id-wave-idx id)
+  (define m (regexp-match #px"^campaign/[^/]+/wave/([0-9]+)/" (format "~a" id)))
+  (and m (string->number (second m))))
+
+(define (done-wave-idxes rec)
+  (for/list ([w (in-list (campaign-record-waves rec))]
+             #:when (eq? (campaign-wave-status w) 'done))
+    (campaign-wave-index w)))
+
+(define (write-outbox! base-dir plan-id ids)
+  (define p (outbox-path base-dir plan-id))
+  (cond
+    [(null? ids)
+     (when (file-exists? p)
+       (delete-file p))]
+    [else
+     (define dir (path-only p))
+     (make-directory* dir)
+     (define tmp (path-replace-extension p ".tmp"))
+     (call-with-output-file tmp #:exists 'truncate (lambda (out) (write ids out)))
+     (rename-file-or-directory tmp p #t)]))
+
 (define (reconcile-completion-outbox! base-dir rec)
   (define pid (campaign-plan-id rec))
+  (define done-idx (done-wave-idxes rec))
   (define existing (load-outbox base-dir pid))
+  (define justified
+    (for/list ([id (in-list existing)]
+               #:when (member (event-id-wave-idx id) done-idx))
+      id))
   (define missing
-    (for/list ([w (campaign-record-waves rec)]
-               #:when (eq? (campaign-wave-status w) 'done))
-      (define attempt (campaign-wave-current-attempt w))
-      (and attempt
-           (let ([id (make-event-id pid (campaign-wave-index w) (campaign-attempt-id attempt))])
-             (and (not (member id existing)) id)))))
-  (for ([id (filter (lambda (x) x) missing)])
-    (append-completion-event! base-dir rec id))
-  (length (filter (lambda (x) x) missing)))
+    (for/list ([w (in-list (campaign-record-waves rec))]
+               #:when (eq? (campaign-wave-status w) 'done)
+               #:do [(define attempt (campaign-wave-current-attempt w))]
+               #:when attempt
+               #:do [(define id
+                       (make-event-id pid (campaign-wave-index w) (campaign-attempt-id attempt)))]
+               #:unless (member id existing))
+      id))
+  (when (or (pair? missing) (not (equal? justified existing)))
+    (write-outbox! base-dir pid (append justified missing)))
+  (length missing))
+
+;; The typed invariant: 'ok exactly when every outbox event belongs to a
+;; wave that is durably 'done — 'outbox-leads-record otherwise.
+(define (completion-outbox-invariant? base-dir rec)
+  (define done-idx (done-wave-idxes rec))
+  (if (for/and ([id (in-list (load-outbox base-dir (campaign-plan-id rec)))]
+                #:when (not (member (event-id-wave-idx id) done-idx)))
+        #f)
+      'ok
+      'outbox-leads-record))
 
 ;; ============================================================
 ;; Path helper
@@ -343,4 +416,5 @@
          load-outbox
          count-completion-events
          make-event-id
-         reconcile-completion-outbox!)
+         reconcile-completion-outbox!
+         completion-outbox-invariant?)

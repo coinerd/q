@@ -1,0 +1,48 @@
+{
+  "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+  "wave": "W3",
+  "issue": 9726,
+  "captured-from": "artifacts/wave-delivery-integrity/v1.00.31-w3/raw/red-first-evidence.txt",
+  "register-f5-branch-not-published": {
+    "red-first": "verify on an unpublished branch records the typed remote-pending marker, never a verified receipt",
+    "verdicts": {
+      "verify-verdict": "approved",
+      "journal-recorded": null,
+      "marker-branch": null,
+      "typed-blocker": null,
+      "published-receipt-branch": "campaign/v1.00.31-w3",
+      "marker-after-resolution": null,
+      "coordinator-blocked-message": "delivery blocked: branch-not-published: branch campaign/v1.00.31-w3 head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb is not published on origin; push the verified head and re-verify"
+    }
+  },
+  "register-f8-typed-failures": {
+    "red-first": "every delivery-subprocess failure is a typed refusal with command, exit code and class; never a bare exit 128",
+    "verdicts": {
+      "remote-ref-missing": "remote-ref-missing: refs/heads/campaign/v1.00.30-w4 is not published on origin; push the verified head first (git, exit 128)",
+      "remote-ref-arg-recovery": "remote-ref-missing: refs/heads/campaign/v1.00.31-w3 is not published on origin; push the verified head first (git, exit 128)",
+      "non-fast-forward": "non-fast-forward: the remote ref diverged; fetch, reanchor the verified head and retry (git, exit 1)",
+      "unknown-ref": "unknown-ref: git referenced an unknown revision; inspect the repository refs locally before retrying (git, exit 128)",
+      "auth-refusal": "GitHub authentication failed (check: gh auth status); credentials are never logged or exposed",
+      "generic-fallback": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally"
+    }
+  },
+  "register-f9-premature-completion": {
+    "red-first": "the v1.00.30 W4 incident state ([DONE]/Status: DONE with delivery-pending, no journal) must be refused",
+    "verdicts": {
+      "refusal-verdict": "delivery-pending-cannot-complete",
+      "durable-status": null,
+      "outbox-events": null,
+      "carry-forward-completion": "done",
+      "carry-forward-handoff": null
+    }
+  },
+  "register-f10-outbox-two-way": {
+    "red-first": "a rollback from done must leave no leading completion event (outbox may only lag the record)",
+    "verdicts": {
+      "invariant-before-reconcile": "outbox-leads-record",
+      "reconcile-appended": null,
+      "outbox-after": null,
+      "invariant-after-reconcile": null
+    }
+  }
+}

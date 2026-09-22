@@ -5,12 +5,21 @@
 (require rackunit
          racket/file
          racket/path
+         racket/string
+         racket/port
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-receipt.rkt"
          racket/runtime-path
          "../extensions/gsd/campaign-state.rkt")
+(define-runtime-path journal-module "../extensions/gsd/delivery-journal.rkt")
+(define-runtime-path receipt-module "../extensions/gsd/delivery-receipt.rkt")
 (define plan (make-string 64 #\a))
+
+;; W3 exports under test (red-first: dynamic until the modules provide them).
+(define load-remote-pending (dynamic-require journal-module 'load-remote-pending))
+(define remote-pending-blocker (dynamic-require journal-module 'remote-pending-blocker))
+(define default-remote-published? (dynamic-require receipt-module 'default-remote-published?))
 (define identity
   (hasheq 'repo
           "/repo"
@@ -46,7 +55,6 @@
              'attempt-fence
              7))
 (define journal (hasheq 'schema-version 1 'plan-id plan 'wave 2 'receipt receipt))
-(define-runtime-path receipt-module "../extensions/gsd/delivery-receipt.rkt")
 (module+ test
   (test-case "publication eligibility requires exact DONE attempt, not merely successful Verify"
     (define blocker (dynamic-require receipt-module 'delivery-receipt-blocker))
@@ -122,7 +130,8 @@
                    (set-campaign-wave-current-attempt! (car (campaign-record-waves rec))
                                                        (campaign-attempt "replacement" 7 0))])
                 #t)
-              (lambda () rec)))
+              (lambda () rec)
+              #:remote-published (lambda (_repo _branch _head) #t)))
             (define saved (load-delivery-journal campaign-root plan 2))
             (if (eq? kind 'approved)
                 (begin
@@ -146,6 +155,7 @@
                                                  (lambda () 'approved)
                                                  #:approved? (lambda (v) (eq? v 'approved))
                                                  #:evidence (lambda (_) "full Verify log")
+                                                 #:remote-published (lambda (_repo _branch _head) #t)
                                                  #:snapshot (lambda (_) identity)))
                  (check-eq? result 'approved)
                  (define receipt (hash-ref (load-delivery-journal root plan 2) 'receipt))
@@ -164,6 +174,7 @@
           (lambda () (not (eq? kind 'failed)))
           #:approved? values
           #:evidence (lambda (_) "result")
+          #:remote-published (lambda (_repo _branch _head) #t)
           #:snapshot
           (lambda (_)
             (set! count (add1 count))
@@ -172,6 +183,90 @@
               [(changed) (hash-set identity 'head (make-string 40 (if (= count 1) #\b #\d)))]
               [else identity])))
          (check-false (load-delivery-journal root plan 2))))))
+  (test-case "F5: an unpublished branch records remote-pending, never a verified receipt"
+    (with-root (lambda (root)
+                 (define result
+                   (verify-with-delivery-receipt root
+                                                 plan
+                                                 2
+                                                 root
+                                                 (lambda () 'approved)
+                                                 #:approved? (lambda (v) (eq? v 'approved))
+                                                 #:evidence (lambda (_) "full Verify log")
+                                                 #:remote-published (lambda (_repo _branch _head) #f)
+                                                 #:snapshot (lambda (_) identity)))
+                 ;; Verify's own verdict is untouched; only the receipt is withheld.
+                 (check-eq? result 'approved)
+                 (check-false (load-delivery-journal root plan 2)
+                              "an unpublished branch must not produce a verified receipt")
+                 (define marker (load-remote-pending root plan 2))
+                 (check-true (hash? marker) "the remote-pending state is recorded")
+                 (check-equal? (hash-ref marker 'branch) (hash-ref identity 'branch))
+                 (check-equal? (hash-ref marker 'head) (hash-ref identity 'head))
+                 (check-true (string-contains? (hash-ref marker 'reason) "not published")))))
+
+  (test-case "F5: re-verify after publication records the receipt and clears the marker"
+    (with-root
+     (lambda (root)
+       (verify-with-delivery-receipt root
+                                     plan
+                                     2
+                                     root
+                                     (lambda () 'approved)
+                                     #:approved? (lambda (v) (eq? v 'approved))
+                                     #:evidence (lambda (_) "log")
+                                     #:remote-published (lambda (_repo _branch _head) #f)
+                                     #:snapshot (lambda (_) identity))
+       (check-true (hash? (load-remote-pending root plan 2)))
+       (verify-with-delivery-receipt root
+                                     plan
+                                     2
+                                     root
+                                     (lambda () 'approved)
+                                     #:approved? (lambda (v) (eq? v 'approved))
+                                     #:evidence (lambda (_) "log")
+                                     #:remote-published (lambda (_repo _branch _head) #t)
+                                     #:snapshot (lambda (_) identity))
+       (check-equal? (hash-ref (hash-ref (load-delivery-journal root plan 2) 'receipt) 'head)
+                     (hash-ref identity 'head))
+       (check-false (load-remote-pending root plan 2) "resolution clears the typed marker"))))
+
+  (test-case "remote-pending marker alone blocks the ladder with a typed reason"
+    (with-root (lambda (root)
+                 (verify-with-delivery-receipt root
+                                               plan
+                                               2
+                                               root
+                                               (lambda () 'approved)
+                                               #:approved? (lambda (v) (eq? v 'approved))
+                                               #:evidence (lambda (_) "log")
+                                               #:remote-published (lambda (_repo _branch _head) #f)
+                                               #:snapshot (lambda (_) identity))
+                 (check-equal? (remote-pending-blocker root plan 2) 'branch-not-published)
+                 (check-true (hash? (load-remote-pending root plan 2)))
+                 ;; Without a marker the typed gate is silent.
+                 (check-false (remote-pending-blocker root plan 3)))))
+
+  (test-case "default-remote-published? consults the real origin"
+    (with-root (lambda (root)
+                 (define bare (build-path root "origin.git"))
+                 (define repo (build-path root "q"))
+                 (make-directory* repo)
+                 (make-directory* bare)
+                 (git-quiet! bare "init" "--bare" "-q")
+                 (git-quiet! repo "init" "-q")
+                 (hermetic-identity! repo)
+                 (git-quiet! repo "remote" "add" "origin" (path->string bare))
+                 (git-quiet! repo "commit" "--allow-empty" "-qm" "baseline")
+                 (git-quiet! repo "push" "-q" "origin" "HEAD:refs/heads/campaign/w2")
+                 (define head
+                   (string-trim (with-output-to-string (lambda ()
+                                                         (git-quiet! repo "rev-parse" "HEAD")))))
+                 (check-true (default-remote-published? repo "campaign/w2" head))
+                 (check-false (default-remote-published? repo "campaign/w2" (make-string 40 #\e))
+                              "an unpushed head is not remotely published")
+                 (check-false (default-remote-published? repo "campaign/absent" head)))))
+
   (test-case "legacy empty head cannot be replaced by current checkout"
     (with-root (lambda (root)
                  (check-false (recover-legacy-delivery-receipt! root plan 2 "" "" root))
@@ -188,6 +283,7 @@
                                                  (lambda () 'approved)
                                                  #:approved? (lambda (v) (eq? v 'approved))
                                                  #:evidence (lambda (_) "log")
+                                                 #:remote-published (lambda (_repo _branch _head) #t)
                                                  #:snapshot (lambda (_) identity)))
                  (check-eq? result 'approved)
                  (check-equal? (durable-receipt-head root plan 2) (hash-ref identity 'head))))))

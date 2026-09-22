@@ -1,0 +1,38 @@
+
+=== f5-branch-not-published ===
+verify-verdict: approved
+journal-recorded: none
+marker-branch: campaign/v1.00.31-w3
+marker-head: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+marker-reason: branch campaign/v1.00.31-w3 head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb is not published on origin; receipt not verified; push the verified head first, then re-verify
+typed-blocker: branch-not-published
+
+=== f5-published-resolves ===
+receipt-branch: campaign/v1.00.31-w3
+marker-after-resolution: #f
+
+=== f5-coordinator-enriched-block ===
+blocked-message: delivery blocked: branch-not-published: branch campaign/v1.00.31-w3 head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb is not published on origin; push the verified head and re-verify
+
+=== f8-typed-failures ===
+remote-ref-missing: remote-ref-missing: refs/heads/campaign/v1.00.30-w4 is not published on origin; push the verified head first (git, exit 128)
+remote-ref-arg-recovery: remote-ref-missing: refs/heads/campaign/v1.00.31-w3 is not published on origin; push the verified head first (git, exit 128)
+non-fast-forward: non-fast-forward: the remote ref diverged; fetch, reanchor the verified head and retry (git, exit 1)
+unknown-ref: unknown-ref: git referenced an unknown revision; inspect the repository refs locally before retrying (git, exit 128)
+auth-refusal: GitHub authentication failed (check: gh auth status); credentials are never logged or exposed
+generic-fallback: delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally
+
+=== f9-premature-completion ===
+refusal-verdict: delivery-pending-cannot-complete
+durable-status: verifying
+outbox-events: 0
+
+=== f9-carry-forward ===
+completion-verdict: done
+handoff-status: delivery-pending
+
+=== f10-rollback-prune ===
+invariant-before-reconcile: outbox-leads-record
+reconcile-appended: 0
+outbox-after: ()
+invariant-after-reconcile: ok

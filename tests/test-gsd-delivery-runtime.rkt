@@ -99,7 +99,8 @@
                                  (set! runs (add1 runs))
                                  'ok)
                       #:verifier (lambda (_) #t)
-                      #:delivery-reader pending)
+                      #:delivery-reader pending
+                      #:remote-published (lambda (_repo _branch _head) #t))
        (define journal (load-delivery-journal dir (campaign-plan-id rec) 0))
        (check-true (hash? journal))
        (check-equal? (hash-ref (hash-ref journal 'receipt) 'branch) "campaign/test")
@@ -108,7 +109,8 @@
                       #:runner (lambda (_)
                                  (set! runs (add1 runs))
                                  'ok)
-                      #:delivery-reader pending)
+                      #:delivery-reader pending
+                      #:remote-published (lambda (_repo _branch _head) #t))
        (check-equal? runs 1)
        (define durable (load-campaign-record dir (campaign-plan-id rec)))
        (check-false (delivery-receipt-blocker journal

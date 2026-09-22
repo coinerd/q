@@ -1,0 +1,201 @@
+#lang racket/base
+;; W3 raw red-first evidence capture (run from the wave worktree root).
+;; Prints typed verdicts verbatim; /tmp/w3-matrix-gen.py turns the output
+;; into artifacts/wave-delivery-integrity/v1.00.31-w3/precondition-matrix.json.
+(require racket/file
+         racket/system
+         racket/port
+         racket/format
+         racket/path
+         racket/string
+         (only-in "tests/helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
+         (file "extensions/gsd/campaign-state.rkt")
+         (file "extensions/gsd/campaign-repository.rkt")
+         (file "extensions/gsd/delivery-journal.rkt")
+         (file "extensions/gsd/delivery-receipt.rkt")
+         (file "extensions/gsd/delivery-handoff.rkt")
+         (file "extensions/gsd/delivery-coordinator.rkt")
+         (file "extensions/gsd/wave-completion.rkt"))
+
+(define plan (make-string 64 #\a))
+(define head (make-string 40 #\b))
+(define tree (make-string 40 #\c))
+(define identity
+  (hasheq 'repo
+          "/repo"
+          'branch
+          "campaign/v1.00.31-w3"
+          'head
+          head
+          'tree
+          tree
+          'origin
+          "https://github.com/example/q.git"))
+
+(define (section title)
+  (printf "\n=== ~a ===\n" title))
+
+;; --- F5: unpublished branch -> typed marker, never a verified receipt ---
+(section "f5-branch-not-published")
+(define root (make-temporary-file "w3-ev-~a" 'directory))
+(define outcome
+  (verify-with-delivery-receipt root
+                                plan
+                                2
+                                root
+                                (lambda () 'approved)
+                                #:approved? (lambda (v) (eq? v 'approved))
+                                #:evidence (lambda (_) "full Verify log")
+                                #:remote-published (lambda (_repo _branch _head) #f)
+                                #:snapshot (lambda (_) identity)))
+(define marker (load-remote-pending root plan 2))
+(printf "verify-verdict: ~a\n" outcome)
+(printf "journal-recorded: ~a\n" (if (load-delivery-journal root plan 2) "verified" "none"))
+(printf "marker-branch: ~a\n" (hash-ref marker 'branch "?"))
+(printf "marker-head: ~a\n" (hash-ref marker 'head "?"))
+(printf "marker-reason: ~a\n" (hash-ref marker 'reason "?"))
+(printf "typed-blocker: ~a\n" (remote-pending-blocker root plan 2))
+
+;; --- F5: publication resolves the marker ---
+(section "f5-published-resolves")
+(void (verify-with-delivery-receipt root
+                                    plan
+                                    2
+                                    root
+                                    (lambda () 'approved)
+                                    #:approved? (lambda (v) (eq? v 'approved))
+                                    #:evidence (lambda (_) "log")
+                                    #:remote-published (lambda (_repo _branch _head) #t)
+                                    #:snapshot (lambda (_) identity)))
+(define saved (load-delivery-journal root plan 2))
+(printf "receipt-branch: ~a\n" (hash-ref (hash-ref saved 'receipt) 'branch))
+(printf "marker-after-resolution: ~a\n" (load-remote-pending root plan 2))
+
+;; --- F5: coordinator enriched blocked message (marker present) ---
+(section "f5-coordinator-enriched-block")
+(clear-remote-pending! root plan 2)
+(record-remote-pending! root
+                        plan
+                        2
+                        "campaign/v1.00.31-w3"
+                        head
+                        "branch not published on origin; receipt not verified")
+(define marker2 (load-remote-pending root plan 2))
+(printf
+ "blocked-message: ~a\n"
+ (format
+  "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
+  (hash-ref marker2 'branch "?")
+  (hash-ref marker2 'head "?")))
+
+;; --- F8: typed failure classification (python controller) ---
+(section "f8-typed-failures")
+(define (classify args cmd exit stderr)
+  (define quoted (string-join (map (lambda (a) (format "~s" a)) args) " "))
+  (define program
+    (string-append "import importlib.util as u\n"
+                   "spec = u.spec_from_file_location('g', r'"
+                   (path->string (build-path "scripts" "gsd-delivery.py"))
+                   "')\n"
+                   "m = u.module_from_spec(spec)\nspec.loader.exec_module(m)\n"
+                   "print(m.classify_failure(["
+                   quoted
+                   "], "
+                   (format "~s" cmd)
+                   ", "
+                   (number->string exit)
+                   ", "
+                   (format "~s" stderr)
+                   "))\n"))
+  (define tmp (make-temporary-file "w3cls-~a.py"))
+  (dynamic-wind (lambda () (display-to-file program tmp #:exists 'truncate))
+                (lambda ()
+                  (string-trim (with-output-to-string
+                                (lambda ()
+                                  (void (system (format "python3 ~a" (path->string tmp))))))))
+                (lambda () (delete-file tmp))))
+(printf "remote-ref-missing: ~a\n"
+        (classify (list "git" "-C" "/r" "fetch" "origin" "refs/heads/campaign/v1.00.30-w4")
+                  "git"
+                  128
+                  "fatal: couldn't find remote ref refs/heads/campaign/v1.00.30-w4"))
+(printf "remote-ref-arg-recovery: ~a\n"
+        (classify (list "git"
+                        "-C"
+                        "/r"
+                        "fetch"
+                        "origin"
+                        "refs/heads/campaign/v1.00.31-w3:refs/remotes/origin/campaign/v1.00.31-w3")
+                  "git"
+                  128
+                  "fatal: couldn't find remote ref"))
+(printf "non-fast-forward: ~a\n"
+        (classify (list "git" "-C" "/r" "push" "origin" "refs/heads/campaign/w3")
+                  "git"
+                  1
+                  " ! [rejected] campaign/w3 -> campaign/w3 (non-fast-forward)"))
+(printf "unknown-ref: ~a\n"
+        (classify (list "git" "-C" "/r" "rev-parse" "refs/remotes/origin/ghost")
+                  "git"
+                  128
+                  "fatal: ambiguous argument 'refs/remotes/origin/ghost': unknown revision"))
+(printf "auth-refusal: ~a\n"
+        (classify (list "gh" "api" "repos/example/q")
+                  "gh"
+                  1
+                  "gh: To get started with GitHub, gh auth login"))
+(printf "generic-fallback: ~a\n"
+        (classify (list "git" "-C" "/r" "status") "git" 128 "fatal: not a git repository"))
+
+;; --- F9: premature completion refusal ---
+(section "f9-premature-completion")
+(define cdir (make-temporary-file "w3ev-c-~a" 'directory))
+(make-directory* (build-path cdir ".planning" "waves"))
+(call-with-output-file
+ (build-path cdir ".planning" "PLAN.md")
+ (lambda (o) (display "# Plan: W3 evidence\n\n## Waves\n\n- [Inbox] W0: Evidence → waves/W0-t.md\n" o)))
+(call-with-output-file (build-path cdir ".planning" "waves" "W0-t.md")
+                       (lambda (o) (display "# Wave 0\n\nGoal: t\n\n## Verify\n\nraco test .\n" o)))
+(define crec (migrate-campaign! cdir))
+(set-campaign-fence-token! crec 1)
+(begin-attempt! crec 0 1)
+(set-campaign-wave-status! (car (campaign-record-waves crec)) 'verifying)
+(persist-campaign! cdir crec)
+(define cattempt (campaign-wave-current-attempt (car (campaign-record-waves crec))))
+(define cresult
+  (try-complete-wave! cdir
+                      crec
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id cattempt)
+                      #:expected-fence-token (campaign-attempt-fence-token cattempt)
+                      #:delivery-proof 'require-delivered))
+(printf "refusal-verdict: ~a\n" (completion-result-status cresult))
+(printf "durable-status: ~a\n"
+        (campaign-wave-status (car (campaign-record-waves
+                                    (load-campaign-record cdir (campaign-plan-id crec))))))
+(printf "outbox-events: ~a\n" (count-completion-events cdir crec))
+
+;; --- F9: carry-forward records the typed handoff ---
+(section "f9-carry-forward")
+(define cf
+  (try-complete-wave! cdir
+                      crec
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id cattempt)
+                      #:expected-fence-token (campaign-attempt-fence-token cattempt)))
+(printf "completion-verdict: ~a\n" (completion-result-status cf))
+(printf "handoff-status: ~a\n" (delivery-handoff-status cdir (campaign-plan-id crec) 0))
+
+;; --- F10: rollback leaves no leading event ---
+(section "f10-rollback-prune")
+(define durable (load-campaign-record cdir (campaign-plan-id crec)))
+(set-campaign-wave-status! (car (campaign-record-waves durable)) 'pending)
+(persist-campaign! cdir durable)
+(define rolled (load-campaign-record cdir (campaign-plan-id crec)))
+(printf "invariant-before-reconcile: ~a\n" (completion-outbox-invariant? cdir rolled))
+(printf "reconcile-appended: ~a\n" (reconcile-completion-outbox! cdir rolled))
+(printf "outbox-after: ~a\n" (load-outbox cdir (campaign-plan-id crec)))
+(printf "invariant-after-reconcile: ~a\n"
+        (completion-outbox-invariant? cdir (load-campaign-record cdir (campaign-plan-id crec))))

@@ -13,10 +13,17 @@
 (provide committed-delivery-snapshot
          current-wave-for-attempt
          durable-receipt-head
+         default-remote-published?
          verify-with-delivery-receipt
          verify-campaign-delivery
          recover-legacy-delivery-receipt!
          delivery-receipt-blocker)
+;; Register F5 (v1.00.31 W3): a Verify verdict does not publish a receipt
+;; until the local head is fetchable at origin. The default check is a real
+;; ls-remote against the configured origin; tests inject a pure procedure.
+(define (default-remote-published? repo branch head)
+  (define out (git repo "ls-remote" "origin" (string-append "refs/heads/" branch)))
+  (and (string? out) (string-contains? out head)))
 ;; Shared pure attempt fence: the same identity test guards the implementation
 ;; result and the Verify receipt, avoiding a second weaker completion predicate.
 (define (current-wave-for-attempt rec wave-idx fence attempt-id)
@@ -87,7 +94,8 @@
                                       #:approved? approved?
                                       #:evidence evidence
                                       #:snapshot [snapshot committed-delivery-snapshot]
-                                      #:attempt [attempt #f])
+                                      #:attempt [attempt #f]
+                                      #:remote-published [remote-published default-remote-published?])
   (define before (snapshot cwd))
   (define result (thunk))
   (define after (snapshot cwd))
@@ -98,26 +106,53 @@
             (log-warning
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
-      (unless old
-        (define text (format "~a" (redact-credential-data (evidence result))))
-        (record-delivery-receipt! base
-                                  plan
-                                  wave
-                                  (hash-set* (if attempt
-                                                 (hash-set* before
-                                                            'attempt-id
-                                                            (campaign-attempt-id attempt)
-                                                            'attempt-fence
-                                                            (campaign-attempt-fence-token attempt))
-                                                 before)
-                                             'verified-at
-                                             (current-seconds)
-                                             'evidence
-                                             (substring text 0 (min 8192 (string-length text))))))))
+      (cond
+        ;; A durable receipt resolves any stale marker (idempotent re-verify).
+        [old (clear-remote-pending! base plan wave)]
+        [(remote-published (hash-ref before 'repo) (hash-ref before 'branch) (hash-ref before 'head))
+         (define text (format "~a" (redact-credential-data (evidence result))))
+         (record-delivery-receipt! base
+                                   plan
+                                   wave
+                                   (hash-set* (if attempt
+                                                  (hash-set* before
+                                                             'attempt-id
+                                                             (campaign-attempt-id attempt)
+                                                             'attempt-fence
+                                                             (campaign-attempt-fence-token attempt))
+                                                  before)
+                                              'verified-at
+                                              (current-seconds)
+                                              'evidence
+                                              (substring text 0 (min 8192 (string-length text)))))
+         (clear-remote-pending! base plan wave)]
+        ;; Register F5: an unpublished branch records the typed remote-pending
+        ;; marker instead of a receipt. The state is NOT verified and blocks
+        ;; ladder entry with 'branch-not-published naming branch and head.
+        [else
+         (define reason
+           (format
+            "branch ~a head ~a is not published on origin; receipt not verified; push the verified head first, then re-verify"
+            (hash-ref before 'branch)
+            (hash-ref before 'head)))
+         (record-remote-pending! base
+                                 plan
+                                 wave
+                                 (hash-ref before 'branch)
+                                 (hash-ref before 'head)
+                                 reason)
+         (log-warning "delivery receipt withheld: ~a" reason)])))
   result)
 ;; Thin orchestration seam: context and verdict interpretation stay beside
 ;; receipt capture. `current-record` rejects stale attempts before persistence.
-(define (verify-campaign-delivery base plan wave cwd context verifier current-record)
+(define (verify-campaign-delivery base
+                                  plan
+                                  wave
+                                  cwd
+                                  context
+                                  verifier
+                                  current-record
+                                  #:remote-published [remote-published default-remote-published?])
   (define initial (current-record))
   (define attempt
     (and initial
@@ -133,6 +168,7 @@
      (parameterize ([current-gsd-delivery-branch-context context])
        (verifier wave)))
    #:attempt attempt
+   #:remote-published remote-published
    #:approved? (lambda (v)
                  (define current (current-record))
                  (and current

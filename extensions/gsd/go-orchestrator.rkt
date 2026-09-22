@@ -228,9 +228,10 @@
                   timeout-sec
                   allow-stale?
                   delivery-reader
-                  delivery-coordinator)
+                  delivery-coordinator
+                  remote-published)
   #:transparent
-  #:constructor-name make-campaign-request/8)
+  #:constructor-name make-campaign-request/9)
 
 (define (make-campaign-request base-dir
                                record
@@ -239,15 +240,19 @@
                                #:timeout-sec [timeout-sec #f]
                                #:allow-stale? [allow-stale? #f]
                                #:delivery-reader [delivery-reader delivery-readback]
-                               #:delivery-coordinator [delivery-coordinator #f])
-  (make-campaign-request/8 base-dir
+                               #:delivery-coordinator [delivery-coordinator #f]
+                               ;; Register F5 (v1.00.31 W3): injected by tests;
+                               ;; production default does a real origin ls-remote.
+                               #:remote-published [remote-published default-remote-published?])
+  (make-campaign-request/9 base-dir
                            record
                            prompt-for-wave
                            verifier
                            timeout-sec
                            allow-stale?
                            delivery-reader
-                           delivery-coordinator))
+                           delivery-coordinator
+                           remote-published))
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -300,7 +305,9 @@
                                            record
                                            freshness
                                            #:lease-owner [lease-owner "unknown"]
-                                           #:delivery-coordinator [delivery-coordinator #f])
+                                           #:delivery-coordinator [delivery-coordinator #f]
+                                           #:remote-published
+                                           [remote-published default-remote-published?])
   (define base-dir (campaign-request-base-dir request))
   (define plan-id (campaign-plan-id record))
   ;; v1.00.03: per-campaign wave budget. Resolved at /go time (flag > config
@@ -366,6 +373,7 @@
      #:verifier (campaign-request-verifier request)
      #:delivery-reader (campaign-request-delivery-reader request)
      #:delivery-coordinator (or delivery-coordinator (campaign-request-delivery-coordinator request))
+     #:remote-published (campaign-request-remote-published request)
      #:timeout-sec effective-wave-timeout-secs)))
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
@@ -441,6 +449,9 @@
 (define (run-campaign-wave base-dir
                            rec
                            wave-idx
+                           ;; Register F5 (v1.00.31 W3): the receipt's remote-
+                           ;; backing gate; thread the request's seam through.
+                           #:remote-published [remote-published default-remote-published?]
                            #:runner [runner default-runner]
                            #:verifier [verifier default-verifier]
                            #:meta-fix-predicate [meta-fix-predicate (lambda (_) #f)]
@@ -844,7 +855,8 @@
                                (lambda ()
                                  (define current (observe))
                                  (and (current-wave-for-attempt current wave-idx fence expected-id)
-                                      current))))]
+                                      current))
+                               #:remote-published remote-published))]
                            [approved? (cond
                                         [(delivery-verification? verifier-result)
                                          (delivery-verification-approved? verifier-result)]
@@ -1406,7 +1418,10 @@
                        ;; resolve-worktree-isolation in wave-executor.rkt).
                        #:isolate? [isolate-arg 'auto]
                        #:delivery-reader [delivery-reader delivery-readback]
-                       #:delivery-coordinator [delivery-coordinator #f])
+                       #:delivery-coordinator [delivery-coordinator #f]
+                       ;; Register F5 (v1.00.31 W3): injected by tests; the
+                       ;; production default performs a real origin ls-remote.
+                       #:remote-published [remote-published default-remote-published?])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
   (define project-settings (load-project-settings-silently base-dir))
@@ -1535,7 +1550,8 @@
                                        (delivered-predecessor-resolver base-dir
                                                                        plan-id
                                                                        verified-delivered
-                                                                       delivery-reader))))
+                                                                       delivery-reader)
+                                       #:remote-published remote-published)))
                 (define observed (load-campaign-record base-dir plan-id))
                 (mirror-durable-statuses! rec observed)
                 (case (campaign-result-status result)

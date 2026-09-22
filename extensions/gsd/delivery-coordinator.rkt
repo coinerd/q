@@ -29,7 +29,11 @@
          (only-in "delivery-journal.rkt"
                   delivery-stages
                   load-delivery-journal
-                  update-delivery-journal!))
+                  update-delivery-journal!
+                  load-remote-pending
+                  record-remote-pending!
+                  clear-remote-pending!
+                  remote-pending-blocker))
 
 (provide delivery-effect-result
          delivery-effect-result?
@@ -114,11 +118,26 @@
 ;; that lands while the controller runs must reject the continuation. The
 ;; receipt's attempt-fence is intentionally historical and never used here.
 (define (durable-blocker dir plan wave expected-fence)
-  (with-handlers ([exn:fail? (lambda (_) 'invalid-journal)])
-    (define journal (load-delivery-journal dir plan wave))
-    (define record (load-campaign-record dir plan))
-    (and (not (and record (campaign-record-cancellation record)))
-         (delivery-receipt-blocker journal record plan wave expected-fence))))
+  ;; Register F5: an existing remote-pending marker (the Verify receipt was
+  ;; withheld because the branch was never pushed) refuses before anything
+  ;; else, with the typed reason naming branch and head.
+  (or (remote-pending-blocker dir plan wave)
+      (with-handlers ([exn:fail? (lambda (_) 'invalid-journal)])
+        (define journal (load-delivery-journal dir plan wave))
+        (define record (load-campaign-record dir plan))
+        (and (not (and record (campaign-record-cancellation record)))
+             (delivery-receipt-blocker journal record plan wave expected-fence)))))
+
+;; The operator-facing blocked message; enriched with the marker's branch and
+;; head whenever the typed branch-not-published reason fired.
+(define (blocked-message dir plan wave reason)
+  (define marker (and (eq? reason 'branch-not-published) (load-remote-pending dir plan wave)))
+  (if marker
+      (format
+       "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
+       (hash-ref marker 'branch "?")
+       (hash-ref marker 'head "?"))
+      (format "delivery blocked: ~a" reason)))
 
 ;; Stamp separate delivery usage onto the journal, additive-only. The
 ;; forbidden update fields (receipt plan-id wave schema-version) are never
@@ -161,7 +180,7 @@
             (not (campaign-record-cancellation now))))
      (define block-reason (durable-blocker dir plan wave start-fence))
      (cond
-       [block-reason (blocked (format "delivery blocked: ~a" block-reason))]
+       [block-reason (blocked (blocked-message dir plan wave block-reason))]
        [else
         (define journal (load-delivery-journal dir plan wave))
         (define current (and journal (hash-ref journal 'stage #f)))
@@ -172,6 +191,50 @@
            (define target (next-stage current))
            (cond
              [(not target) (blocked (format "unknown journal stage: ~a" current))]
+             ;; Register F5 preflight (v1.00.31 W3): before the FIRST ladder
+             ;; action, the handoff seam verifies branch published, remote tip
+             ;; equal to the verified head (evidence-only drift allowed) and
+             ;; the required policy object present. Typed refusal; the journal
+             ;; stays at context-ready so the next invocation re-preflights.
+             [(and (equal? current "context-ready") (equal? target "implementation-review"))
+              (define preflight (controller dir plan wave "delivery-preflight"))
+              (cond
+                [(not (delivery-effect-result? preflight))
+                 (blocked "controller returned a malformed effect result")]
+                [(eq? (delivery-effect-result-kind preflight) 'ok)
+                 (define result (controller dir plan wave target))
+                 (cond
+                   [(not (delivery-effect-result? result))
+                    (blocked "controller returned a malformed effect result")]
+                   [else
+                    (define data (delivery-effect-result-data result))
+                    (case (delivery-effect-result-kind result)
+                      [(ok)
+                       (if (and (still-current?) (not (durable-blocker dir plan wave start-fence)))
+                           (begin
+                             (record-delivery-usage! dir plan wave data)
+                             (update-delivery-journal! dir plan wave (hasheq 'stage target))
+                             (delivery-outcome 'ok target))
+                           (blocked "stale continuation: campaign changed during the effect"))]
+                      [(awaiting-review)
+                       (delivery-outcome
+                        'awaiting-review
+                        (hash-ref data 'reason "awaiting genuine independent review"))]
+                      [(retryable)
+                       (delivery-outcome 'retryable
+                                         (hash-ref data 'reason "retryable delivery failure"))]
+                      [else
+                       (delivery-outcome 'blocked
+                                         (hash-ref data 'reason "controller refused the effect"))])])]
+                [else
+                 (define reason
+                   (hash-ref (delivery-effect-result-data preflight)
+                             'reason
+                             "delivery preflight refused"))
+                 (case (delivery-effect-result-kind preflight)
+                   [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
+                   [(retryable) (delivery-outcome 'retryable reason)]
+                   [else (blocked (format "delivery preflight: ~a" reason))])])]
              [else
               (define result (controller dir plan wave target))
               (cond
@@ -296,6 +359,16 @@
            (string->jsexpr (subprocess-result-stdout result))))))
   ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
   (case target-stage
+    [("delivery-preflight")
+     ;; Register F5: the read-only preflight action at the handoff seam —
+     ;; branch published, remote tip at the verified head (evidence-only
+     ;; drift allowed), required-check policy object present. It mutates
+     ;; nothing; a pending result is a typed stop with the remedy.
+     (run-controller "preflight"
+                     "--expected-head"
+                     (default-delivery-receipt-head base-dir plan wave)
+                     "--expected-branch"
+                     (default-delivery-receipt-branch base-dir plan wave))]
     [("implementation-review")
      ;; Durable review validation at the receipt identity: the frozen
      ;; binding-named evidence trio plus the schema-2 review artifact are
