@@ -85,6 +85,10 @@
  ;; test seam: overrides the version-freshness probe (running version vs
  ;; checkout) so tests can simulate a stale build; never set in prod
  ("extensions/gsd/freshness.rkt" (current-gsd-freshness-check . OTHER_REVIEWED))
+ ;; W3 register F5 test/embedding seam: overrides the origin ls-remote
+ ;; remote-backing probe so offline fixtures can withhold receipts; the
+ ;; production default performs the real check and is never set in prod
+ ("extensions/gsd/delivery-receipt.rkt" (current-gsd-remote-published . OTHER_REVIEWED))
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
                               (current-gsd-wave-verification-repair-retries . CONFIGURATION)

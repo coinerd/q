@@ -149,14 +149,16 @@
                         "sandbox/subprocess"))
    ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
    ;; to the legacy effect marker scanner, as with delivery-handoff above.
+   ;; W3 register F5: the remote-pending marker's clear deletes the sibling
+   ;; file, so fs-delete is a declared effect of this module.
    (make-entry "delivery-journal.rkt"
                'persistence
-               '(fs-read)
+               '(fs-read fs-delete)
                '()
                '("json" "racket/file" "racket/list" "racket/path"))
    (make-entry "delivery-receipt.rkt"
                'campaign-state
-               '(git subprocess path-ops parameterize)
+               '(git subprocess path-ops parameterize make-param)
                '()
                '("racket/path" "racket/string"
                                "delivery-journal"
@@ -204,7 +206,7 @@
                                     "runtime/settings-query"))
    (make-entry "wave-completion.rkt"
                'campaign-state
-               '(fs-read fs-write fs-rename mkdir)
+               '(fs-read fs-write fs-rename mkdir fs-delete)
                '()
                '("racket/file" "racket/path"
                                "racket/format"

@@ -85,6 +85,43 @@ _AUTH_ERROR = re.compile(
     r'gh auth|GITHUB_TOKEN|bad credentials|authentication required|HTTP 40[13]',
     re.IGNORECASE)
 
+# W3 register F8: typed failure classification. Every non-auth subprocess
+# failure carries its class, the failing command and the exit code — never a
+# bare "exit 128". Raw stderr is never echoed (it may contain credential
+# URLs or remote text); only the classifier's own typed summary is exposed.
+_REMOTE_REF_MISSING = re.compile(r"couldn't find remote ref|does not (?:appear to|exist)", re.IGNORECASE)
+_NON_FAST_FORWARD = re.compile(r'non-fast-forward|\[rejected\]|fetch first|denied.*push', re.IGNORECASE)
+_UNKNOWN_REF = re.compile(r'unknown revision|bad revision|ambiguous argument', re.IGNORECASE)
+_REFSPEC_RE = re.compile(r'refs/heads/[A-Za-z0-9._/=-]+')
+
+def classify_failure(args, name, exit_code, stderr):
+    """Map exit codes + stderr shapes to typed, actionable refusals."""
+    text = stderr if isinstance(stderr, str) else stderr.decode('utf-8', errors='replace')
+    if _AUTH_ERROR.search(text):
+        # Dedicated credential-free refusal; the raw shape never surfaces.
+        return ('GitHub authentication failed (check: gh auth status); '
+                'credentials are never logged or exposed')
+    if _REMOTE_REF_MISSING.search(text):
+        match = _REFSPEC_RE.search(text)
+        if not match:
+            match = next((m for a in args if isinstance(a, str)
+                          for m in [_REFSPEC_RE.search(a)] if m), None)
+        if match:
+            return ('remote-ref-missing: %s is not published on origin; '
+                    'push the verified head first (%s, exit %s)'
+                    % (match.group(0), name, exit_code))
+        return ('remote-ref-missing: the requested ref is not published on origin; '
+                'push the verified head first (%s, exit %s)' % (name, exit_code))
+    if _NON_FAST_FORWARD.search(text):
+        return ('non-fast-forward: the remote ref diverged; fetch, reanchor '
+                'the verified head and retry (%s, exit %s)' % (name, exit_code))
+    if _UNKNOWN_REF.search(text):
+        return ('unknown-ref: %s referenced an unknown revision; inspect the '
+                'repository refs locally before retrying (%s, exit %s)'
+                % (name, name, exit_code))
+    return ('delivery command failed (%s, exit %s); inspect authentication, '
+            'repository refs and required artifacts locally' % (name, exit_code))
+
 def command(args, cwd=None, timeout=45, raw=False):
     """Bounded fail-closed subprocess. Each call is clamped to the remaining
     process budget so the total can never exceed the 240 s runtime caller."""
@@ -102,17 +139,9 @@ def command(args, cwd=None, timeout=45, raw=False):
         raise Pending('delivery command unavailable: ' + str(error)) from error
     if result.returncode != 0:
         stderr = result.stderr if isinstance(result.stderr, bytes) else b''
-        text = stderr.decode('utf-8', errors='replace')
-        if _AUTH_ERROR.search(text):
-            # Explicit reason, never the command output: stderr could echo
-            # credential-bearing URLs and credentials are never exposed here.
-            raise Pending('GitHub authentication failed (check: gh auth status); '
-                          'credentials are never logged or exposed')
         # git/gh/racket errors may contain credential-bearing URLs or remote
-        # text. Never serialize raw subprocess output into durable handoffs.
-        raise Pending('delivery command failed (%s, exit %s); inspect authentication, '
-                      'repository refs and required artifacts locally'
-                      % (Path(args[0]).name, result.returncode))
+        # text. Only the typed classifier summary is surfaced, never raw output.
+        raise Pending(classify_failure(args, Path(args[0]).name, result.returncode, stderr))
     return result.stdout if raw else result.stdout.decode('utf-8', errors='replace')
 
 def git(repo, *args, raw=False):
@@ -569,6 +598,39 @@ def declared_outputs(facts, repo):
             path = path[2:]
         result[kind] = artifact_path(path, DECLARED_DIRS[kind])
     return result
+
+def preflight(repo, plan, wave, expected_head, expected_branch):
+    """Register F5 read-only preflight at the handoff seam (v1.00.31 W3).
+
+    Before the first ladder action, verify: (1) the verified branch is
+    published at origin, (2) the published tip equals the verified receipt
+    head (or carries only excluded-evidence drift), and (3) the required-
+    check policy object exists at origin/main. Mutates nothing; every
+    refusal is typed with its exact remedy."""
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'preflight requires --expected-branch')
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'preflight requires --expected-head (the durable receipt head)')
+    binding_path(plan, wave)
+    slug = repository(repo)
+    refresh(repo)
+    remote_ref = 'refs/heads/' + expected_branch
+    tracking_ref = 'refs/remotes/origin/' + expected_branch
+    try:
+        git(repo, 'fetch', '--no-tags', 'origin', remote_ref + ':' + tracking_ref)
+    except Pending as error:
+        raise Pending('branch-not-published: branch %s is not published on origin; '
+                      'push the verified head %s... first (underlying: %s)'
+                      % (expected_branch, expected_head[:12], error)) from error
+    tip = git(repo, 'rev-parse', tracking_ref).strip()
+    require(full_sha(tip), 'malformed published branch tip for ' + expected_branch)
+    require_receipt_tip(repo, expected_head, tip, 'preflight')
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    policy_names(repo, main)
+    return {'status': 'ready', 'plan-id': plan, 'wave': wave,
+            'branch': expected_branch, 'head': tip,
+            'receipt-head': expected_head}
 
 def status(repo, plan, wave):
     relative = binding_path(plan, wave)
@@ -1449,7 +1511,7 @@ def main():
     parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review',
                                            'open-pr','pr-ci','binding-review','binding-publish',
                                            'binding-resolve-pr','binding-pr','binding-ci','binding-merge',
-                                           'governance'])
+                                           'governance','preflight'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -1521,6 +1583,11 @@ def main():
                     'binding-merge requires --pr, --expected-branch, --expected-head and --evidence')
             result = binding_merge(args.repo, args.plan, args.wave, args.pr,
                                    args.expected_head, args.expected_branch, args.evidence)
+        elif args.action == 'preflight':
+            require(args.expected_head and args.expected_branch,
+                    'preflight requires --expected-head and --expected-branch')
+            result = preflight(args.repo, args.plan, args.wave,
+                               args.expected_head, args.expected_branch)
         elif args.action == 'governance':
             require(args.expected_branch, 'governance requires --expected-branch')
             result = governance(args.repo, args.plan, args.wave, args.expected_branch)

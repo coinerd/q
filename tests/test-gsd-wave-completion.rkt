@@ -17,6 +17,8 @@
          rackunit/text-ui
          racket/file
          racket/path
+         racket/port
+         racket/runtime-path
          racket/string
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-manifest
@@ -41,12 +43,26 @@
                   stamp-wave-failure!
                   migrate-campaign!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
+         (only-in "../extensions/gsd/delivery-handoff.rkt"
+                  persist-delivery-handoff!
+                  reconcile-delivered-handoff!)
          (only-in "../extensions/gsd/wave-completion.rkt"
                   try-complete-wave!
                   skip-wave!
                   completion-result-status
                   completion-result-event-id
-                  count-completion-events))
+                  count-completion-events
+                  make-event-id
+                  load-outbox))
+
+;; W3 exports under test (red-first: dynamic until the module provides them).
+(define-runtime-path handoff-module "../extensions/gsd/delivery-handoff.rkt")
+(define-runtime-path wave-completion-module "../extensions/gsd/wave-completion.rkt")
+(define delivery-handoff-status (dynamic-require handoff-module 'delivery-handoff-status))
+(define reconcile-completion-outbox!
+  (dynamic-require wave-completion-module 'reconcile-completion-outbox!))
+(define completion-outbox-invariant?
+  (dynamic-require wave-completion-module 'completion-outbox-invariant?))
 
 ;; ============================================================
 ;; Helpers
@@ -91,6 +107,17 @@
                       #:verifier-approve? approve?
                       #:expected-attempt-id (campaign-attempt-id attempt)
                       #:expected-fence-token (campaign-attempt-fence-token attempt)))
+
+;; Seed a canonical "Status: Inbox" header under the H1 so the lockstep
+;; assertions observe real projection writes instead of a missing line.
+(define (seed-status! dir idx)
+  (define p (build-path dir ".planning" "waves" (format "W~a-wave.md" idx)))
+  (define lines (string-split (call-with-input-file p port->string) "\n"))
+  (call-with-output-file
+   p
+   (lambda (out)
+     (display (string-join (append (list (car lines) "Status: Inbox") (cdr lines)) "\n") out))
+   #:exists 'truncate))
 
 ;; ============================================================
 ;; Test suites
@@ -339,6 +366,164 @@
       (cleanup-tmp dir))))
 
 ;; ============================================================
+;; Delivery-gated completion (v1.00.31 W3, register F9 + F10)
+;; ============================================================
+
+(define delivery-gate-suite
+  (test-suite "delivery-gated completion"
+
+    (test-case "F9: completing with require-delivered while delivery is pending is refused"
+      ;; The observed v1.00.30 W4 incident state: [DONE]/Status: DONE while the
+      ;; delivery journal is not delivered. The completion path must refuse
+      ;; with the typed delivery-pending-cannot-complete result and leave all
+      ;; durable surfaces untouched.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (seed-status! dir 0)
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)
+                            #:delivery-proof 'require-delivered))
+      (check-eq? (completion-result-status result) 'delivery-pending-cannot-complete)
+      (define durable (load-campaign-record dir (campaign-plan-id rec)))
+      (check-eq? (wave-status* durable 0) 'verifying "no premature DONE is persisted")
+      (check-equal? (count-completion-events dir durable) 0 "no leading completion event")
+      (check-true (string-contains? (call-with-input-file (build-path dir ".planning" "PLAN.md")
+                                                          port->string)
+                                    "[Inbox] W0")
+                  "plan index bracket stays Inbox on refusal")
+      (check-true
+       (string-contains? (call-with-input-file (build-path dir ".planning" "waves" "W0-wave.md")
+                                               port->string)
+                         "Status: Inbox")
+       "wave doc header stays Inbox on refusal")
+      (check-false (delivery-handoff-status dir (campaign-plan-id rec) 0))
+      (cleanup-tmp dir))
+
+    (test-case "F9: an authoritative delivered journal authorizes require-delivered completion"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define pid (campaign-plan-id rec))
+      (define wave (wave* rec 0))
+      (persist-delivery-handoff! dir pid wave "operator handoff")
+      (reconcile-delivered-handoff! dir pid 0 (make-string 40 #\a))
+      (check-eq? (delivery-handoff-status dir pid 0) 'delivered)
+      (define attempt (campaign-wave-current-attempt wave))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)
+                            #:delivery-proof 'require-delivered))
+      (check-eq? (completion-result-status result) 'done)
+      (define durable (load-campaign-record dir pid))
+      (check-eq? (wave-status* durable 0) 'done)
+      ;; Lockstep: plan index bracket, wave doc header and journal agree.
+      (check-true (string-contains? (call-with-input-file (build-path dir ".planning" "PLAN.md")
+                                                          port->string)
+                                    "[DONE] W0"))
+      (check-true (string-contains?
+                   (call-with-input-file (build-path dir ".planning" "waves" "W0-wave.md")
+                                         port->string)
+                   "Status: DONE"))
+      (check-eq? (delivery-handoff-status dir pid 0) 'delivered)
+      (check-eq? (completion-outbox-invariant? dir durable) 'ok)
+      (cleanup-tmp dir))
+
+    (test-case "F9: default completion records the typed carry-forward handoff"
+      ;; A normal completion (delivery still pending) persists the typed
+      ;; carry-forward record atomically with the durable DONE, so the
+      ;; v1.00.30 W4 incident state (DONE without any journal) is impossible.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define pid (campaign-plan-id rec))
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (define result
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)))
+      (check-eq? (completion-result-status result) 'done)
+      (check-eq? (delivery-handoff-status dir pid 0) 'delivery-pending)
+      (define durable (load-campaign-record dir pid))
+      (check-eq? (completion-outbox-invariant? dir durable) 'ok)
+      (cleanup-tmp dir))
+
+    (test-case "F10: rolling a done wave back leaves no leading completion event"
+      (define dir (make-tmp-campaign-dir 2))
+      (define rec (load-or-migrate dir))
+      (begin
+        (set-campaign-fence-token! rec 1)
+        (begin-attempt! rec 0 1))
+      (set-campaign-wave-status! (wave* rec 0) 'verifying)
+      (persist-campaign! dir rec)
+      (define pid (campaign-plan-id rec))
+      (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+      (try-complete-wave! dir
+                          rec
+                          0
+                          #:verifier-approve? #t
+                          #:expected-attempt-id (campaign-attempt-id attempt)
+                          #:expected-fence-token (campaign-attempt-fence-token attempt))
+      (define durable (load-campaign-record dir pid))
+      (check-equal? (count-completion-events dir durable) 1)
+      ;; Roll the done wave back to pending (the W4-era repair shape).
+      (set-campaign-wave-status! (wave* durable 0) 'pending)
+      (persist-campaign! dir durable)
+      (define rolled (load-campaign-record dir pid))
+      (check-eq? (completion-outbox-invariant? dir rolled)
+                 'outbox-leads-record
+                 "the derived outbox leads the rolled-back record")
+      (check-eq? (reconcile-completion-outbox! dir rolled) 0 "nothing to append")
+      (check-equal? (count-completion-events dir (load-campaign-record dir pid))
+                    0
+                    "the leading event was pruned")
+      (check-eq? (completion-outbox-invariant? dir (load-campaign-record dir pid)) 'ok)
+      (cleanup-tmp dir))
+
+    (test-case "F10: reconcile drops an invented event for a never-done wave"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (persist-campaign! dir rec)
+      (define pid (campaign-plan-id rec))
+      (define fake-id (make-event-id pid 0 "attempt-fake"))
+      ;; Forge a leading event through the same atomic writer the outbox uses.
+      (define p (build-path dir ".planning" "campaigns" (string-append pid ".outbox.rktd")))
+      (make-directory* (build-path dir ".planning" "campaigns"))
+      (call-with-output-file p (lambda (out) (write (list fake-id) out)) #:exists 'truncate)
+      (define durable (load-campaign-record dir pid))
+      (check-eq? (completion-outbox-invariant? dir durable) 'outbox-leads-record)
+      (check-eq? (reconcile-completion-outbox! dir durable) 0)
+      (check-false
+       (file-exists? (build-path dir ".planning" "campaigns" (string-append pid ".outbox.rktd")))
+       "empty pruned outbox is removed")
+      (cleanup-tmp dir))))
+
+;; ============================================================
 ;; Runner
 ;; ============================================================
 
@@ -348,6 +533,7 @@
     skip-suite
     outbox-suite
     no-heuristic-suite
-    failure-reason-suite))
+    failure-reason-suite
+    delivery-gate-suite))
 
 (void (run-tests all-tests))

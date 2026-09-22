@@ -11,7 +11,12 @@
          record-delivery-receipt!
          update-delivery-journal!
          valid-delivery-receipt?
-         delivery-stages)
+         delivery-stages
+         remote-pending-path
+         load-remote-pending
+         record-remote-pending!
+         clear-remote-pending!
+         remote-pending-blocker)
 (define delivery-stages
   '("context-ready" "implementation-review"
                     "implementation-pr"
@@ -125,3 +130,75 @@
          wave
          (for/fold ([data old]) ([(k v) (in-hash fields)])
            (hash-set data k v))))
+
+;; ============================================================
+;; Remote-backing marker (v1.00.31 W3, register F5)
+;; ============================================================
+;; The journal's load validation REQUIRES a verified receipt, so an
+;; unpublished branch can never park its state in the journal itself.
+;; The typed remote-pending marker is a SIBLING record: schema-1, exact
+;; campaign/wave identity, the unpushed branch/head and the reason. Its
+;; presence is a typed ladder-entry refusal naming branch and head; it is
+;; cleared automatically the moment the receipt is recorded (or already
+;; durable), so "push, re-verify, deliver" is the only way forward.
+
+(define (remote-pending-path root plan wave)
+  (unless (and (hex? plan 64) (exact-nonnegative-integer? wave))
+    (error 'delivery-journal "invalid campaign/wave identity"))
+  (build-path (path->complete-path root)
+              ".planning"
+              "campaigns"
+              plan
+              (format "coordinator-w~a.remote-pending.json" wave)))
+
+(define (load-remote-pending root plan wave)
+  (define path (remote-pending-path root plan wave))
+  (and (file-exists? path)
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (define data (call-with-input-file path read-json))
+         (and (hash? data)
+              (equal? (hash-ref data 'schema-version #f) 1)
+              (equal? (hash-ref data 'plan-id #f) plan)
+              (equal? (hash-ref data 'wave #f) wave)
+              (text? (hash-ref data 'branch #f))
+              (hex? (hash-ref data 'head #f) 40)
+              (string? (hash-ref data 'reason #f))
+              data))))
+
+(define (record-remote-pending! root plan wave branch head reason)
+  (unless (and (text? branch) (hex? head 40) (string? reason) (positive? (string-length reason)))
+    (error 'delivery-journal "invalid remote-pending marker"))
+  (define path (remote-pending-path root plan wave))
+  (when (link-exists? path)
+    (error 'delivery-journal "symlinked remote-pending marker refused"))
+  (make-parent-directory* path)
+  (call-with-atomic-output-file path
+                                (lambda (out _)
+                                  (write-json (hasheq 'schema-version
+                                                      1
+                                                      'plan-id
+                                                      plan
+                                                      'wave
+                                                      wave
+                                                      'branch
+                                                      branch
+                                                      'head
+                                                      head
+                                                      'at
+                                                      (current-seconds)
+                                                      'reason
+                                                      reason)
+                                              out)
+                                  (newline out))))
+
+(define (clear-remote-pending! root plan wave)
+  (define path (remote-pending-path root plan wave))
+  (when (file-exists? path)
+    (delete-file path)))
+
+;; The typed ladder-entry gate: (remote-pending-blocker root plan wave)
+;; returns 'branch-not-published exactly when the marker exists, else #f.
+;; Callers that carry the marker hash can name branch and head in the
+;; operator-facing refusal (see delivery-coordinator).
+(define (remote-pending-blocker root plan wave)
+  (and (load-remote-pending root plan wave) 'branch-not-published))

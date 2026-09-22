@@ -15,6 +15,7 @@
 (require rackunit
          racket/file
          racket/format
+         racket/runtime-path
          racket/string
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
@@ -78,6 +79,73 @@
   (define journal (load-delivery-journal dir plan 0))
   (and journal (hash-ref journal 'stage #f)))
 
+(define-runtime-path journal-module "../extensions/gsd/delivery-journal.rkt")
+(define record-remote-pending! (dynamic-require journal-module 'record-remote-pending!))
+(define clear-remote-pending! (dynamic-require journal-module 'clear-remote-pending!))
+
+(module+ test
+  (test-case "W3 preflight runs before the first ladder action and blocks it when refused"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (if (equal? target "delivery-preflight")
+             (delivery-effect-result
+              'blocked
+              (hasheq
+               'stage
+               target
+               'reason
+               (format
+                "branch-not-published: branch campaign/test head ~a is not published on origin; push the verified head first"
+                (make-string 40 #\a))))
+             (delivery-effect-result 'ok (hasheq 'stage target))))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "branch-not-published"))
+       (check-true (string-contains? (delivery-outcome-message outcome) "campaign/test"))
+       (check-true (string-contains? (delivery-outcome-message outcome) (make-string 40 #\a)))
+       (check-true (string-contains? (delivery-outcome-message outcome) "push the verified head"))
+       (check-equal? (reverse calls) '("delivery-preflight"))
+       ;; The journal never advanced: the ladder entry stays sealed.
+       (check-equal? (stage-count dir plan) "context-ready"))))
+  (test-case "W3 branch-not-published durable gate names branch and head with the remedy"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       ;; Replace the verified receipt with a remote-pending marker: the
+       ;; Verify receipt was withheld because the branch was never pushed.
+       (delete-file (build-path dir ".planning" "campaigns" plan "coordinator-w0.json"))
+       (record-remote-pending! dir
+                               plan
+                               0
+                               "campaign/test"
+                               (make-string 40 #\a)
+                               "branch not published on origin; receipt not verified")
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "branch-not-published"))
+       (check-true (string-contains? (delivery-outcome-message outcome) "campaign/test"))
+       (check-true (string-contains? (delivery-outcome-message outcome) (make-string 40 #\a)))
+       (check-true (string-contains? (delivery-outcome-message outcome) "push the verified head"))
+       (check-equal? calls '() "no controller effect ran before the typed refusal")
+       ;; Publishing resolves the marker: the ladder may proceed.
+       (clear-remote-pending! dir plan 0)
+       (record-delivery-receipt! dir plan 0 (receipt-head))
+       (define resumed (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind resumed) 'ok)
+       (check-equal? (reverse calls) '("delivery-preflight" "implementation-review"))))))
+
 (module+ test
   (test-case "one eligible controller effect per invocation; journal advances one stage at a time"
     (call-with-campaign
@@ -95,9 +163,11 @@
          (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
          (check-eq? (delivery-outcome-kind outcome) 'ok)
          (check-equal? (stage-count dir plan) expected))
-       (check-equal?
-        (reverse calls)
-        '("implementation-review" "implementation-pr" "implementation-ci" "implementation-merged")))))
+       (check-equal? (reverse calls)
+                     '("delivery-preflight" "implementation-review"
+                                            "implementation-pr"
+                                            "implementation-ci"
+                                            "implementation-merged")))))
   (test-case "terminal delivered stage is reported and never re-executed"
     (call-with-campaign 1
                         (lambda (dir rec)
@@ -209,6 +279,12 @@
     (check-equal? (delivery-effect-result-kind
                    (default-delivery-controller-interpret "sync" (hasheq 'status "synchronized")))
                   'ok)
+    ;; W3 register F5: the preflight ready verdict is an ok — a published
+    ;; head proceeds through the handoff seam.
+    (check-equal?
+     (delivery-effect-result-kind (default-delivery-controller-interpret "delivery-preflight"
+                                                                         (hasheq 'status "ready")))
+     'ok)
     (check-equal? (delivery-effect-result-kind (default-delivery-controller-interpret
                                                 "sync"
                                                 (hasheq 'status "pending" 'reason "detached HEAD")))

@@ -23,7 +23,14 @@
                   current-gsd-freshness-check
                   campaign-freshness)
          (only-in "../util/loop-result.rkt" make-loop-result)
-         "../extensions/gsd/delivery-receipt.rkt"
+         (only-in "../extensions/gsd/delivery-receipt.rkt"
+                  current-gsd-remote-published
+                  delivery-receipt-blocker
+                  verify-campaign-delivery
+                  committed-delivery-snapshot
+                  verify-with-delivery-receipt
+                  recover-legacy-delivery-receipt!
+                  durable-receipt-head)
          "../extensions/gsd/delivery-coordinator.rkt")
 
 (define (call-with-campaign count proc)
@@ -93,22 +100,24 @@
        (git-quiet! repo "add" "payload")
        (git-quiet! repo "commit" "-qm" "verified implementation")
        (define runs 0)
-       (run-campaign! dir
-                      rec
-                      #:runner (lambda (_)
-                                 (set! runs (add1 runs))
-                                 'ok)
-                      #:verifier (lambda (_) #t)
-                      #:delivery-reader pending)
+       (parameterize ([current-gsd-remote-published (lambda (_repo _branch _head) #t)])
+         (run-campaign! dir
+                        rec
+                        #:runner (lambda (_)
+                                   (set! runs (add1 runs))
+                                   'ok)
+                        #:verifier (lambda (_) #t)
+                        #:delivery-reader pending))
        (define journal (load-delivery-journal dir (campaign-plan-id rec) 0))
        (check-true (hash? journal))
        (check-equal? (hash-ref (hash-ref journal 'receipt) 'branch) "campaign/test")
-       (run-campaign! dir
-                      rec
-                      #:runner (lambda (_)
-                                 (set! runs (add1 runs))
-                                 'ok)
-                      #:delivery-reader pending)
+       (parameterize ([current-gsd-remote-published (lambda (_repo _branch _head) #t)])
+         (run-campaign! dir
+                        rec
+                        #:runner (lambda (_)
+                                   (set! runs (add1 runs))
+                                   'ok)
+                        #:delivery-reader pending))
        (check-equal? runs 1)
        (define durable (load-campaign-record dir (campaign-plan-id rec)))
        (check-false (delivery-receipt-blocker journal
