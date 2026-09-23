@@ -385,6 +385,15 @@
 ;; identity — it is validated against its paired head by check-tree-pairs!.
 (define provenance-key-rx #px"(^|[-_])(head|sha|commit)([-_]|$)")
 
+;; Fields that CLAIM to name the wave's own verified head must equal the wave
+;; tip exactly (the contract's "recorded head must match the commit", F3/F7);
+;; fields that merely record an observation head (recorded-head, head, base,
+;; pinned ...) are pinned by construction — a committed artifact cannot carry
+;; its own commit hash, so they are required to be ancestors of the tip
+;; instead (provenance-drift when they are not).
+(define exact-head-key-rx
+  #px"(^|[-_])(implementation-sha|reviewed-sha|verified-head|receipt-head)([-_]|$)")
+
 (define (walk-provenance-values v path accept!)
   ;; R1: provenance semantics come from the LAST path segment, decided at the
   ;; leaf — a non-provenance ancestor key must not disable its descendants.
@@ -433,6 +442,14 @@
                 "~a: recorded head ~a does not resolve in this checkout (historical record)"
                 field-path
                 sha))]
+          [(and (artifact-dir-current? ad)
+                (regexp-match? exact-head-key-rx (cadr (regexp-match #px"([^/]*)$" field-path)))
+                (not (string=? sha tip)))
+           (provenance-drift!
+            "~a: head-claiming field ~a does not equal the wave tip ~a (exact head binding)"
+            field-path
+            sha
+            tip)]
           [(and (artifact-dir-current? ad) (not (is-ancestor? root sha tip)))
            (provenance-drift!
             "~a: recorded head ~a is not an ancestor of the wave tip ~a (stale provenance)"

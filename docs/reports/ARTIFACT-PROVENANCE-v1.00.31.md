@@ -26,7 +26,13 @@ version directory under `artifacts/**/v*/`:
    resolving it must never raise an uncaught filesystem error).
 2. **Provenance heads** — values of head/sha/commit-named fields (40-hex)
    must resolve to real commits and, for the current wave, be ancestors of the
-   wave tip. Recorded heads that are neither prove stale provenance. A
+   wave tip. Recorded heads that are neither prove stale provenance. Two
+   classes are distinguished: a field that *claims* the wave's verified head
+   (`implementation-sha`, `reviewed-sha`, `verified-head`, `receipt-head`)
+   must equal the tip **exactly**, while a field that records an observation
+   (`recorded-head`, `head`, a base/pinned head) may be an ancestor — a
+   committed artifact cannot carry its own commit hash, so exact self-binding
+   is impossible there and ancestry is the strongest honest requirement. A
    tree-named field is not a commit identity: it is validated against its
    paired head (the tree must equal that commit's tree), so a valid tree is
    never refused as a non-commit.

@@ -323,6 +323,36 @@
                    "non-ASCII escapes are byte-compatible with the generator")
       (delete-directory/files dir))
 
+    (test-case "R13: head-claiming fields equal the tip; pinned records may be ancestors"
+      (define dir (make-fixture-repo!))
+      (write-text! (build-path dir "seed.txt") "seed\n")
+      (define c1 (commit-all! dir))
+      (write-text! (build-path dir "seed.txt") "seed2\n")
+      (define c2 (commit-all! dir))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (define (write-artifact! field value)
+        (define json-p (build-path adir "claim.json"))
+        (write-text! json-p (string-append "{\n \"" field "\": \"" value "\"\n}\n"))
+        (write-text! (build-path adir "SHA256SUMS")
+                     (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                    "  artifacts/prov/v9.99.99-w0/claim.json\n")))
+      ;; (a) a head-claiming field naming an ancestor is refused: the record
+      ;; claims to be the verified head, so it must equal the tip.
+      (write-artifact! "implementation-sha" c1)
+      (define-values (code-a output-a) (run-lint! dir #:current-wave "v9.99.99-w0" #:wave-tip c2))
+      (check-equal? code-a 2 "an ancestor head-claiming field is refused")
+      (check-true (string-contains? output-a "does not equal the wave tip")
+                  "refused with the exact-head-binding reason")
+      ;; (b) the same ancestor recorded as a pinned observation is accepted.
+      (write-artifact! "recorded-head" c1)
+      (define-values (code-b _output-b) (run-lint! dir #:current-wave "v9.99.99-w0" #:wave-tip c2))
+      (check-equal? code-b 0 "a pinned observation head may be an ancestor")
+      ;; (c) a head-claiming field equal to the tip is accepted.
+      (write-artifact! "implementation-sha" c2)
+      (define-values (code-c _output-c) (run-lint! dir #:current-wave "v9.99.99-w0" #:wave-tip c2))
+      (check-equal? code-c 0 "a head-claiming field equal to the tip is accepted")
+      (delete-directory/files dir))
+
     (test-case "R12: nested artifact families are discovered recursively"
       ;; The declared scope is artifacts/**/v*/; a version directory nested
       ;; under a multi-segment family must be checked like any other.
