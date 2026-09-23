@@ -61,7 +61,16 @@ version directory under `artifacts/**/v*/`:
 6. **Recursive coverage** — every check traverses nested subdirectories of the
    version directory; only `raw/` is exempt (captured payloads are bound by
    SHA256SUMS but intentionally unenforced in content). A bound nested
-   artifact therefore cannot bypass any check.
+   artifact therefore cannot bypass any check. Discovery walks `artifacts/` to
+   any depth, so a version directory nested under a multi-segment family is
+   checked like any other.
+7. **Declared current wave is mandatory** — when `--current-wave` is supplied
+   (as the coordinator's gate always does), a wave whose artifact version
+   directory is missing or renamed is refused with a typed `provenance-drift`
+   naming the expected directory. A declared wave with no artifacts can never
+   pass as a silent no-op. `--only-current-wave` is a constrained-environment
+   performance mode that checks just that directory; it does not relax the
+   fail-closed rule.
 
 The F7 failure mode is also registered with the wave-delivery integrity
 harness: `tests/test-wave-delivery-integrity-register.rkt` now guards row F7

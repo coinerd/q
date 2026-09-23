@@ -790,11 +790,13 @@
     (if only-current-wave?
         (filter (lambda (ad) (and (artifact-dir-current? ad) ad)) dirs)
         dirs))
-  ;; Fail closed: on the constrained path a missing/renamed current-wave
-  ;; directory must be a typed refusal, never a silent success.
-  (when (and only-current-wave? (null? checked))
+  ;; Fail closed: whatever the mode, a declared current wave with no matching
+  ;; artifact version directory must be a typed refusal, never a silent pass
+  ;; (the coordinator invokes the lint with --current-wave and no
+  ;; --only-current-wave, so this is the production path).
+  (when (and current-wave (not (ormap artifact-dir-current? dirs)))
     (provenance-drift!
-     "current wave ~a: no artifact version directory named ~a was found under artifacts/** (--only-current-wave)"
+     "current wave ~a: no artifact version directory named ~a was found under artifacts/**"
      current-wave
      current-wave))
   (for ([ad (in-list checked)])

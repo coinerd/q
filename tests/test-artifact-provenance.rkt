@@ -408,7 +408,8 @@
                                   " \"recorded-head\": \"0000000000000000000000000000000000000000\"\n"
                                   "}\n"))
       (write-text! (build-path adir "SHA256SUMS") "not-a-digest-line\n")
-      (define-values (code output) (run-lint! dir #:current-wave "v0.0.1-w0"))
+      ;; no declared current wave: pure historical mode
+      (define-values (code output) (run-lint! dir))
       (check-equal? code 0 "a historical dash-suffixed directory does not hard-fail")
       (check-true (string-contains? output "v9.99.99-final")
                   "the dash-suffixed version directory is discovered")
@@ -550,6 +551,20 @@
       (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
       (check-equal? code 0 "a canonical artifact containing null is accepted")
       (check-false (string-contains? output "not in canonical form") "null is not quoted as a string")
+      (delete-directory/files dir))
+
+    (test-case "R17: a declared current wave with no directory is refused (production path)"
+      (define dir (make-fixture-repo!))
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "old.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"1111111111111111111111111111111111111111\"\n"
+                                  "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "SHA256SUMS") "")
+      ;; no --only-current-wave: this is exactly how the coordinator calls it
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2 "a missing current-wave directory is refused in the default mode")
+      (check-true (string-contains? output "no artifact version directory named v9.99.99-w0")
+                  "the refusal names the expected directory")
       (delete-directory/files dir))
 
     (test-case "R15: the constrained path fails closed when the current wave is missing"
