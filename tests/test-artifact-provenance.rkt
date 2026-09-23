@@ -292,7 +292,7 @@
       (wrel!
        "artifacts/prov/v9.99.99-w0/b.json"
        (string-append "{\n" " \"timing\": {\n" "  \"b-ms\": [\n" "   20\n" "  ]\n" " }\n" "}\n"))
-      (wrel! "docs/reports/r.md" "- metrics 10 ms\n")
+      (wrel! "docs/reports/r.md" "- metrics 10 ms\n\n- metrics 20 ms\n")
       (define entries
         '("artifacts/prov/v9.99.99-w0/a.json" "artifacts/prov/v9.99.99-w0/b.json"
                                               "docs/reports/r.md"))
@@ -321,6 +321,22 @@
       (check-equal? code 0 "a Python-escaped non-ASCII artifact is canonical")
       (check-false (string-contains? output "not in canonical form")
                    "non-ASCII escapes are byte-compatible with the generator")
+      (delete-directory/files dir))
+
+    (test-case "R10: dash-suffixed historical artifact versions are covered"
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-final"))
+      (write-text! (build-path adir "report.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"0000000000000000000000000000000000000000\"\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS") "not-a-digest-line\n")
+      (define-values (code output) (run-lint! dir #:current-wave "v0.0.1-w0"))
+      (check-equal? code 0 "a historical dash-suffixed directory does not hard-fail")
+      (check-true (string-contains? output "v9.99.99-final")
+                  "the dash-suffixed version directory is discovered")
+      (check-true (string-contains? output "provenance-note")
+                  "historical observations are reported as notes")
       (delete-directory/files dir))
 
     (test-case "R8: a recorded sha256 must match the bytes of its named file"

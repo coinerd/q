@@ -17,7 +17,10 @@ version directory under `artifacts/**/v*/`:
 1. **SHA256SUMS binding** — every recorded digest must match the named file;
    every file under the directory must be recorded. Two historical path
    conventions (repository-root-relative and directory-relative) are accepted
-   as recorded spellings; the bytes decide.
+   as recorded spellings; the bytes decide. Coverage spans every declared
+   version directory, including the dash-suffixed historical ones (`-cN`,
+   `-final`, `-census`, `-hotspots`, `-prepared-env`, ...), not just `-wN`
+   waves; historical findings there are notes, never hard failures.
 2. **Provenance heads** — values of head/sha/commit-named fields (40-hex)
    must resolve to real commits and, for the current wave, be ancestors of the
    wave tip. Recorded heads that are neither prove stale provenance. A
@@ -40,7 +43,8 @@ version directory under `artifacts/**/v*/`:
    refusal, blocked-branch, history, or an older wave (`v1.00.2x-`/`v1.00.30-`)
    are exempt because a report may legitimately cite non-delivered values.
    The comparison set is the union of every artifact's structured timings in
-   the version, so a report may cite a value recorded by any of them.
+   the version — collected before the reports are scanned, so a report may
+   cite a value recorded by any artifact regardless of file order.
 5. **Recorded digest fields** — a JSON object carrying a `path` beside a
    64-hex `sha256` must name an existing file whose bytes hash to exactly that
    digest. A stale or wrong recorded digest is refused on the current wave and

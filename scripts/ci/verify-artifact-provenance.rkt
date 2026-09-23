@@ -78,7 +78,11 @@
 
 (define hex40-rx #px"^[0-9a-f]{40}$")
 (define hex64-rx #px"^[0-9a-f]{64}$")
-(define version-dir-rx #px"^v[0-9]+\\.[0-9]+\\.[0-9]+(-w[0-9]+)?$")
+(define version-dir-rx
+  ;; every declared artifact version: vX.Y.Z plus any dash suffix used by
+  ;; the historical records (-wN waves, -cN candidates, -final, -census,
+  ;; -hotspots, -prepared-env, ...)
+  #px"^v[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9]+)*$")
 
 (define (run-git root . args)
   ;; Returns (values exit-code stdout-string). Subprocess ports must be file
@@ -299,9 +303,13 @@
             (artifact-dir-version ad)
             rel)))
      (when (member #f (map car recorded))
-       (provenance-drift! "~a/~a: SHA256SUMS contains malformed lines"
-                          (artifact-dir-family ad)
-                          (artifact-dir-version ad)))
+       (if (artifact-dir-current? ad)
+           (provenance-drift! "~a/~a: SHA256SUMS contains malformed lines"
+                              (artifact-dir-family ad)
+                              (artifact-dir-version ad))
+           (provenance-note! "~a/~a: SHA256SUMS contains malformed lines (historical)"
+                             (artifact-dir-family ad)
+                             (artifact-dir-version ad))))
      (define recorded-paths (list->set (map cdr recorded)))
      ;; R4: for the current wave the binding itself must be canonical —
      ;; regenerating it reproduces byte-identically (sorted repository-root
@@ -608,33 +616,33 @@
              (artifact-dir-version ad)
              n
              (string-join (map number->string (sort structured <)) "/")
-             (car mention))))))
-    ;; Report-vs-JSON agreement over every .md bound by this directory's
-    ;; SHA256SUMS (repository-root-relative entries). Only the current wave is
-    ;; enforced; historical reports keep their notes-only treatment.
-    (define union (unbox union-box))
-    (when (and (artifact-dir-current? ad) (pair? union))
-      (define sums-path (build-path dir "SHA256SUMS"))
-      (when (file-exists? sums-path)
-        (define sums-line-rx #px"^([0-9a-f]{64})  (.+)$")
-        (for ([l (in-list (string-split (file->string sums-path) "\n"))]
-              #:when (and (non-empty-string? (string-trim l))
-                          (let ([m (regexp-match sums-line-rx l)])
-                            ;; group 1 is the digest, group 2 the path
-                            (and m (string-suffix? (caddr m) ".md"))))
-              [md-rel (in-value (caddr (regexp-match sums-line-rx l)))]
-              [md-path (in-value (build-path root (caddr (regexp-match sums-line-rx l))))]
-              #:when (file-exists? md-path))
-          (for ([blk (in-list (report-blocks (file->string md-path)))]
-                #:unless (regexp-match? report-marker-rx (string-join blk " "))
-                [m (in-list (regexp-match* prose-ms-rx (string-join blk " ") #:match-select values))])
-            (define n (string->number (list-ref m 1)))
-            (unless (member n union)
-              (provenance-drift!
-               "~a: bound report prose value ~a ms disagrees with structured timing ~a (report vs JSON agreement)"
-               md-rel
-               n
-               (string-join (map number->string (sort union <)) "/")))))))))
+             (car mention)))))))
+  ;; Report-vs-JSON agreement is decided against the union of EVERY artifact's
+  ;; structured timing, so it runs only after the JSON loop has completed — a
+  ;; report may cite a value recorded by any artifact in the version.
+  (define union (unbox union-box))
+  (when (and (artifact-dir-current? ad) (pair? union))
+    (define sums-path (build-path dir "SHA256SUMS"))
+    (when (file-exists? sums-path)
+      (define sums-line-rx #px"^([0-9a-f]{64})  (.+)$")
+      (for ([l (in-list (string-split (file->string sums-path) "\n"))]
+            #:when (and (non-empty-string? (string-trim l))
+                        (let ([m (regexp-match sums-line-rx l)])
+                          ;; group 1 is the digest, group 2 the path
+                          (and m (string-suffix? (caddr m) ".md"))))
+            [md-rel (in-value (caddr (regexp-match sums-line-rx l)))]
+            [md-path (in-value (build-path root (caddr (regexp-match sums-line-rx l))))]
+            #:when (file-exists? md-path))
+        (for ([blk (in-list (report-blocks (file->string md-path)))]
+              #:unless (regexp-match? report-marker-rx (string-join blk " "))
+              [m (in-list (regexp-match* prose-ms-rx (string-join blk " ") #:match-select values))])
+          (define n (string->number (list-ref m 1)))
+          (unless (member n union)
+            (provenance-drift!
+             "~a: bound report prose value ~a ms disagrees with structured timing ~a (report vs JSON agreement)"
+             md-rel
+             n
+             (string-join (map number->string (sort union <)) "/"))))))))
 
 ;; Current-wave observed digests must be bound to committed raw bytes.
 (define (check-observed-digests! root ad)
