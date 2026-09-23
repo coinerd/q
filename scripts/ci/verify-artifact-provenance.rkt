@@ -209,6 +209,9 @@
                         "]"))]
     [(string? v) (json-escape v)]
     [(boolean? v) (if v "true" "false")]
+    ;; racket/json represents JSON null as the symbol 'null (a JSON string
+    ;; "null" is the string). The empty list is an empty array, handled above.
+    [(eq? v 'null) "null"]
     [(null? v) "null"]
     [(real? v)
      (if (integer? v)

@@ -531,6 +531,27 @@
             (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
             (check-true (string-contains? output "artifact-provenance ok")))))
 
+    (test-case "R16: a JSON null canonicalizes as null, not as a string"
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (define json-p (build-path adir "nulls.json"))
+      (write-text! json-p
+                   (string-append "{\n"
+                                  " \"note\": null,\n"
+                                  " \"timing\": {\n"
+                                  "  \"probe-ms\": [\n"
+                                  "   1\n"
+                                  "  ]\n"
+                                  " }\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS")
+                   (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                  "  artifacts/prov/v9.99.99-w0/nulls.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 0 "a canonical artifact containing null is accepted")
+      (check-false (string-contains? output "not in canonical form") "null is not quoted as a string")
+      (delete-directory/files dir))
+
     (test-case "R15: the constrained path fails closed when the current wave is missing"
       (define dir (make-fixture-repo!))
       (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "old.json")
