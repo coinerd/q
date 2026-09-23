@@ -224,6 +224,47 @@
                   "non-canonical binding refused on the current wave")
       (delete-directory/files dir))
 
+    (test-case "R5: only *-ms timing keys legitimize prose ms values"
+      ;; A non-^-ms numeric field (attempt-count 260) must not make prose
+      ;; "260 ms" agree; the typed refusal must still fire.
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "matrix.json")
+                   (string-append "{\n"
+                                  " \"timing\": {\n"
+                                  "  \"eager-fallback-ms\": [\n"
+                                  "   247\n"
+                                  "  ],\n"
+                                  "  \"attempt-count\": 260\n"
+                                  " },\n"
+                                  " \"steps\": [\n"
+                                  "  {\n"
+                                  "   \"observed\": \"fallback resolved in 260 ms\"\n"
+                                  "  }\n"
+                                  " ]\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS") "")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "prose value 260 ms disagrees")
+                  "non-^-ms timing fields do not legitimize prose values")
+      (delete-directory/files dir))
+
+    (test-case "R5: malformed current-wave SUMS yields typed drift, not a crash"
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "data.json") "{\n \"k\": \"v\"\n}\n")
+      ;; Malformed line (no double-space separator) plus a missing target:
+      ;; the lint must exit 2 with typed drift, never raise.
+      (write-text! (build-path adir "SHA256SUMS")
+                   (string-append "garbage-line-without-separator\n"
+                                  "00aa  artifacts/prov/v9.99.99-w0/missing.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "provenance-drift") "typed refusal")
+      (check-true (string-contains? output "malformed") "malformed lines named")
+      (delete-directory/files dir))
+
     (test-case "current wave JSON must be canonical"
       (define dir (make-fixture-repo!))
       (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))

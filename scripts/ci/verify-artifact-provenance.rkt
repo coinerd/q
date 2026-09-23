@@ -277,7 +277,11 @@
      ;; regenerating it reproduces byte-identically (sorted repository-root
      ;; relative paths, "<hex>  <path>" lines, LF-terminated). Historical
      ;; directories keep their recorded spelling.
-     (when (artifact-dir-current? ad)
+     (when (and (artifact-dir-current? ad) (not (member #f (map car recorded))) (null? broken))
+       ;; R5: canonical regeneration reads every recorded target; skip it
+       ;; when malformed lines or missing/broken files exist — those are
+       ;; already typed drift above, and hashing here could raise a raw
+       ;; filesystem exception instead of the typed refusal.
        (define canonical
          (string-join (for/list ([line (in-list (sort (map cdr recorded) string<?))])
                         (string-append (sha256-file-hex (build-path root line)) "  " line))
@@ -478,7 +482,11 @@
 (define timing-key-rx #px"-ms$")
 
 (define (collect-timing-ms timing)
-  (for/fold ([acc '()]) ([k (in-hash-keys timing)])
+  ;; R5: only keys matching the *-ms convention feed the prose agreement
+  ;; check — unrelated numeric fields must never legitimize prose values.
+  (for/fold ([acc '()])
+            ([k (in-hash-keys timing)]
+             #:when (regexp-match? timing-key-rx (format "~a" k)))
     (define v (hash-ref timing k))
     (define nums
       (cond
