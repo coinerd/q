@@ -157,6 +157,40 @@
                   "tampered binding refused")
       (delete-directory/files dir))
 
+    (test-case "R3: recorded tree/head pairs are verified against the commit"
+      (define dir (make-fixture-repo!))
+      (write-text! (build-path dir "seed.txt") "seed\n")
+      (define head (commit-all! dir))
+      (define tree (git-rev-parse! dir "HEAD^{tree}"))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      ;; Pair 1 matches the real commit; pair 2 names a wrong tree.
+      (write-text! (build-path adir "matrix.json")
+                   (string-append "{\n"
+                                  " \"subject\": {\n"
+                                  "  \"head\": \""
+                                  head
+                                  "\",\n"
+                                  "  \"tree\": \""
+                                  tree
+                                  "\"\n"
+                                  " },\n"
+                                  " \"subject-bad\": {\n"
+                                  "  \"head\": \""
+                                  head
+                                  "\",\n"
+                                  "  \"tree\": \"1111111111111111111111111111111111111111\"\n"
+                                  " }\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS") "")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "does not match the actual tree of")
+                  "wrong tree refused, naming head and tree")
+      (check-false (string-contains? (car (string-split output "subject-bad"))
+                                     "does not match the actual tree")
+                   "the matching pair is not flagged")
+      (delete-directory/files dir))
+
     (test-case "current wave JSON must be canonical"
       (define dir (make-fixture-repo!))
       (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))

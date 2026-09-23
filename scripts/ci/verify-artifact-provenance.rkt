@@ -101,13 +101,34 @@
                   (delete-file out-file)
                   (delete-file err-file))))
 
+;; Per-run memoization: the same recorded SHAs recur across artifact files
+;; and checks; without the cache the real-tree run spawns git hundreds of
+;; times and takes minutes.
+(define commit-cache (make-hash))
+(define ancestor-cache (make-hash))
+(define tree-cache (make-hash))
+
 (define (commit-exists? root sha)
-  (define-values (code _out) (run-git root "cat-file" "-e" (string-append sha "^{commit}")))
-  (equal? 0 code))
+  (hash-ref! commit-cache
+             sha
+             (lambda ()
+               (define-values (code _out)
+                 (run-git root "cat-file" "-e" (string-append sha "^{commit}")))
+               (equal? 0 code))))
 
 (define (is-ancestor? root sha tip)
-  (define-values (code _out) (run-git root "merge-base" "--is-ancestor" sha tip))
-  (equal? 0 code))
+  (hash-ref! ancestor-cache
+             sha
+             (lambda ()
+               (define-values (code _out) (run-git root "merge-base" "--is-ancestor" sha tip))
+               (equal? 0 code))))
+
+(define (commit-tree root sha)
+  (hash-ref! tree-cache
+             sha
+             (lambda ()
+               (define-values (code out) (run-git root "rev-parse" (string-append sha "^{tree}")))
+               (and (equal? 0 code) out))))
 
 (define (git-head root)
   (define-values (_code out) (run-git root "rev-parse" "HEAD"))
@@ -341,6 +362,81 @@
             sha)]
           [else (void)])))))
 
+;; R3: recorded tree fields must match the actual tree of their sibling
+;; recorded head (convention: within the same object, a tree-named field
+;; pairs with a head-named field). Current wave: hard drift; historical:
+;; reported.
+(define (hex40-value? x)
+  (and (string? x) (regexp-match? hex40-rx x)))
+
+(define (tree-pair-of names)
+  ;; A tree-named 40-hex field pairs with a head-named 40-hex sibling field.
+  (define head-v
+    (for/first ([(k2 v2) (in-hash names)]
+                #:when (and (regexp-match? #px"(^|[-_])head([-_]|$)" k2) (hex40-value? v2)))
+      v2))
+  (and head-v
+       (for/first ([(k v) (in-hash names)]
+                   #:when (and (regexp-match? #px"(^|[-_])tree([-_]|$)" k) (hex40-value? v)))
+         (cons v head-v))))
+
+(define (walk-tree-pairs v acc)
+  (cond
+    [(hash? v)
+     (define names
+       (for/hash ([k (in-hash-keys v)])
+         (values (format "~a" k) (hash-ref v k))))
+     (define pair (tree-pair-of names))
+     (define acc*
+       (if pair
+           (cons pair acc)
+           acc))
+     (for/fold ([acc* acc*]) ([k (in-hash-keys v)])
+       (walk-tree-pairs (hash-ref v k) acc*))]
+    [(list? v)
+     (for/fold ([acc* acc]) ([x (in-list v)])
+       (walk-tree-pairs x acc*))]
+    [else acc]))
+
+(define (check-tree-pairs! root ad)
+  (define dir (artifact-dir-path ad))
+  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
+        #:when (string-suffix? f ".json"))
+    (define parsed
+      (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
+        (call-with-input-file (build-path dir f) read-json)))
+    (unless (eq? parsed 'parse-error)
+      (define pairs (walk-tree-pairs parsed '()))
+      (for ([pair (in-list pairs)])
+        (define tree (car pair))
+        (define head (cdr pair))
+        (define rel (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad) "/" f))
+        (cond
+          [(not (commit-exists? root head))
+           (if (artifact-dir-current? ad)
+               (provenance-drift! "~a: paired head ~a does not resolve; tree ~a cannot be verified"
+                                  rel
+                                  head
+                                  tree)
+               (provenance-note! "~a: paired head ~a does not resolve in this checkout (historical)"
+                                 rel
+                                 head))]
+          [else
+           (define actual-tree (commit-tree root head))
+           (cond
+             [(not (equal? actual-tree tree))
+              (if (artifact-dir-current? ad)
+                  (provenance-drift! "~a: recorded tree ~a does not match the actual tree of ~a"
+                                     rel
+                                     tree
+                                     head)
+                  (provenance-note!
+                   "~a: recorded tree ~a does not match the actual tree of ~a (historical)"
+                   rel
+                   tree
+                   head))]
+             [else (void)])])))))
+
 (define (check-canonical-json! root ad)
   (define dir (artifact-dir-path ad))
   (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
@@ -468,6 +564,7 @@
     (check-canonical-json! root ad)
     (check-provenance-heads! root ad wave-tip)
     (check-cross-artifact-consistency! root ad)
+    (check-tree-pairs! root ad)
     (when (artifact-dir-current? ad)
       (check-observed-digests! root ad)))
   (finish!))
