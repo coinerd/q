@@ -14,6 +14,7 @@
 ;; evidence does. The outer run-campaign! loop re-enters after each step.
 (require rackunit
          racket/file
+         json
          racket/format
          racket/runtime-path
          racket/string
@@ -46,7 +47,7 @@
           'verified-at
           1789500000))
 
-(define (call-with-campaign count proc)
+(define (call-with-campaign count proc #:title [title "# Plan: Delivery coordinator test"])
   (define dir (make-temporary-file "delivery-coordinator-~a" 'directory))
   (dynamic-wind
    void
@@ -55,7 +56,7 @@
      (call-with-output-file
       (build-path dir ".planning/PLAN.md")
       (lambda (out)
-        (display "# Plan: Delivery coordinator test\n\n## Waves\n\n" out)
+        (display (string-append title "\n\n## Waves\n\n") out)
         (for ([i (in-range count)])
           (fprintf out "- [Inbox] W~a: Test → waves/W~a-test.md\n" i i)
           (display-to-file "# Test\n\nGoal: test\n\n## Verify\n\nraco test .\n"
@@ -113,6 +114,79 @@
        (check-equal? (reverse calls) '("delivery-preflight"))
        ;; The journal never advanced: the ladder entry stays sealed.
        (check-equal? (stage-count dir plan) "context-ready"))))
+  ;; Register F7 (v1.00.31 W5): the artifact provenance gate runs before the
+  ;; F5 preflight. A current-wave artifact directory without a SHA256SUMS
+  ;; binding is provenance drift; delivery is blocked at context-ready.
+  (test-case "F7 provenance gate blocks delivery on drifting artifacts"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       ;; The durable receipt branch carries the version tag the gate uses
+       ;; to identify the current wave directory.
+       (define journal-path (build-path dir ".planning" "campaigns" plan "coordinator-w0.json"))
+       (define journal-datum (call-with-input-file journal-path read-json))
+       (define receipt (hash-ref journal-datum 'receipt))
+       (define patched-receipt (hash-set receipt 'branch "campaign/v1.00.31-w0"))
+       (call-with-output-file journal-path
+                              (lambda (out)
+                                (write-json (hash-set journal-datum 'receipt patched-receipt) out))
+                              #:exists 'truncate)
+       ;; Keep the campaign record consistent with the patched receipt branch
+       ;; (the durable blocker refuses provenance mismatches first).
+       (define rec* (load-campaign-record dir plan))
+       (set-campaign-wave-delivery-branch! (for/first ([w (in-list (campaign-record-waves rec*))])
+                                             w)
+                                           "campaign/v1.00.31-w0")
+       (persist-campaign! dir rec*)
+       ;; Drift: declared artifact files with no SHA256SUMS binding.
+       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (make-directory* adir)
+       (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
+                        (build-path adir "matrix.json"))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "artifact-provenance")
+                   "the typed provenance refusal surfaces")
+       (check-true (string-contains? (delivery-outcome-message outcome) "binds no SHA256SUMS")
+                   "the drift reason is preserved")
+       (check-equal? calls '() "no ladder action ran past the provenance gate")
+       (check-equal? (stage-count dir plan) "context-ready"))))
+
+  ;; R11 (v1.00.31 W5): the frozen manifest title carries the campaign version,
+  ;; so the provenance gate stays strict even when the delivery branch follows
+  ;; the executor's campaign/<hash8>/w<N> shape and therefore has no version
+  ;; tag. Before this, such a branch silently degraded the gate to historical
+  ;; (advisory) mode and current-wave drift passed unchecked.
+  (test-case "R11: provenance gate is strict without a version-tagged branch"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       ;; Drift: a declared current-wave artifact directory with no SHA256SUMS.
+       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (make-directory* adir)
+       (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
+                        (build-path adir "matrix.json"))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "artifact-provenance")
+                   "the provenance gate refused")
+       (check-true (string-contains? (delivery-outcome-message outcome) "binds no SHA256SUMS")
+                   "current-wave drift is enforced without a version-tagged branch")
+       (check-equal? calls '() "no ladder action ran past the provenance gate"))
+     #:title "# Plan: v1.00.31 Delivery coordinator test"))
+
   (test-case "W3 branch-not-published durable gate names branch and head with the remedy"
     (call-with-campaign
      1

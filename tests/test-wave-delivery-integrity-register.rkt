@@ -585,6 +585,27 @@
 (register-guard! "F6" (lambda (_repro) (if (w4-f6-defect-refused?) 'refused 'not-refused)))
 (register-guard! "F11" (lambda (_repro) (if (w4-f11-defect-refused?) 'refused 'not-refused)))
 
+;; ============================================================
+;; W5 guard for F7 (artifact provenance and determinism)
+;; ============================================================
+
+(define (run-racket-test rel)
+  (define racket-exe (find-executable-path "racket"))
+  (and racket-exe
+       (let-values ([(code _out _err) (run-capture (list racket-exe
+                                                         (path->string (build-path q-root rel))))])
+         (zero? code))))
+
+(define (w5-f7-defect-refused?)
+  ;; The defect: declared artifacts with stale recorded heads, divergent
+  ;; SHA256SUMS bindings, non-canonical JSON, and prose-vs-structured timing
+  ;; disagreement. Refused when the provenance lint's own contract suite
+  ;; passes — it asserts the typed refusal on the F7-shaped fixture and the
+  ;; green path on the real tree.
+  (run-racket-test "tests/test-artifact-provenance.rkt"))
+
+(register-guard! "F7" (lambda (_repro) (if (w5-f7-defect-refused?) 'refused 'not-refused)))
+
 (define original-guard-ids (sort (hash-keys guards) string<?))
 
 ;; ============================================================
@@ -752,16 +773,16 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W3 guards F1-F5/F8-F10 guarded-pass; W4 adds F6/F11; F7 stays unguarded"
+(test-case "W3 guards F1-F5/F8-F10 guarded-pass; W4 adds F6/F11; W5 adds F7"
   ;; The register is a per-wave ledger: a row becomes guarded in the wave that
   ;; fixes it and only then. A wave that marked rows guarded without fixing them
   ;; would show up here as an extra entry; a wave that fixed F2/F3/F4 and forgot
   ;; to register their guards would show up as those rows falling back to
   ;; unguarded — and, with the fixes live, as reproduction-liveness failures just
   ;; above.
-  (check-equal? original-guard-ids '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F8" "F9"))
+  (check-equal? original-guard-ids '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))
   (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
-  (for ([id (in-list '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F8" "F9"))])
+  (for ([id (in-list '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))])
     (check-eq? (for/first ([r (in-list results)]
                            #:when (equal? (row-result-mode r) id))
                  (row-result-guard-status r))
@@ -787,8 +808,13 @@
   (check-true (w3-f8-defect-refused?))
   (check-true (w3-f9-defect-refused?))
   (check-true (w3-f10-defect-refused?))
+  ;; W5: F7's guard runs the provenance lint's own contract suite, which
+  ;; asserts typed refusal on the F7-shaped fixture — passing the suite is
+  ;; the refusal witness.
+  (check-true (w5-f7-defect-refused?))
   (for ([r (in-list results)]
-        #:unless (member (row-result-mode r) '("F1" "F2" "F3" "F4" "F5" "F6" "F8" "F9" "F10" "F11")))
+        #:unless (member (row-result-mode r)
+                         '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11")))
     (check-eq? (row-result-guard-status r)
                'unguarded
                (format "~a still unguarded" (row-result-mode r)))))

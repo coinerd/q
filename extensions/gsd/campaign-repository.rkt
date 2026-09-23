@@ -232,16 +232,22 @@
         (campaign-record-plan-snapshot-digest rec)))
 
 (define (manifest->datum m)
-  (list 'manifest
-        (campaign-manifest-schema-version m)
-        (campaign-manifest-title m)
-        (campaign-manifest-dependencies m)
-        (for/list ([w (campaign-manifest-waves m)])
-          (list (campaign-wave-descriptor-index w)
-                (campaign-wave-descriptor-title w)
-                (campaign-wave-descriptor-doc-path w)
-                (campaign-wave-descriptor-content-hash w)))
-        (campaign-manifest-constraints-hash m)))
+  ;; F13: plan-body-hash is persisted only when bound; legacy records keep
+  ;; the exact 6-field datum shape (absent ≠ corrupt, byte-stable re-persist).
+  (append (list 'manifest
+                (campaign-manifest-schema-version m)
+                (campaign-manifest-title m)
+                (campaign-manifest-dependencies m)
+                (for/list ([w (campaign-manifest-waves m)])
+                  (list (campaign-wave-descriptor-index w)
+                        (campaign-wave-descriptor-title w)
+                        (campaign-wave-descriptor-doc-path w)
+                        (campaign-wave-descriptor-content-hash w)))
+                (campaign-manifest-constraints-hash m))
+          (let ([pbh (campaign-manifest-plan-body-hash m)])
+            (if pbh
+                (list pbh)
+                '()))))
 
 (define (wave->datum w)
   (list (campaign-wave-index w)
@@ -305,7 +311,21 @@
                                                               (list-ref wd 1)
                                                               (list-ref wd 2)
                                                               (list-ref wd 3)))
-                             ch)]))
+                             ch)]
+    ;; F13 (v1.00.31 W5): 7-field form adds the bound plan-body hash.
+    [(list 'manifest sv title deps wds ch pbh)
+     (unless (string? pbh)
+       (corrupt! "manifest plan-body-hash must be a sha256 string, got ~s" pbh))
+     (make-campaign-manifest sv
+                             title
+                             deps
+                             (for/list ([wd wds])
+                               (make-campaign-wave-descriptor (list-ref wd 0)
+                                                              (list-ref wd 1)
+                                                              (list-ref wd 2)
+                                                              (list-ref wd 3)))
+                             ch
+                             pbh)]))
 
 (define (datum->wave d)
   (match d
@@ -675,15 +695,27 @@
      (unless (null? classified)
        (define drifted (map car classified))
        (define has-content-drift? (memq 'content-drift (map cadr classified)))
+       (define frozen-stale? (memq 'frozen-contract-stale (map cadr classified)))
        (corrupt!
         (string-append
          "live planning content drifted from campaign snapshot: ~a; "
-         (if has-content-drift?
-             (string-append "recovery: (restore-plan-from-snapshot! <project-root> "
-                            "<campaign-id> #:override-existing-drift? #t) restores snapshot "
-                            "content (logged), or explicitly replan/archive the changes")
-             (string-append "recovery: (restore-plan-from-snapshot! <project-root> <campaign-id>) "
-                            "reconstructs the missing files from the snapshot")))
+         (cond
+           [frozen-stale?
+            ;; F13: the authored plan body no longer matches the frozen
+            ;; contract. Never silently rewritten: re-freeze under a fresh
+            ;; campaign identity or explicitly restore with override.
+            (string-append "the plan body was amended after the contract was frozen "
+                           "(frozen-contract-stale); recovery: re-freeze the amended plan "
+                           "under a new campaign identity, or (restore-plan-from-snapshot! "
+                           "<project-root> <campaign-id> #:override-existing-drift? #t) "
+                           "discards the amendment")]
+           [has-content-drift?
+            (string-append "recovery: (restore-plan-from-snapshot! <project-root> "
+                           "<campaign-id> #:override-existing-drift? #t) restores snapshot "
+                           "content (logged), or explicitly replan/archive the changes")]
+           [else
+            (string-append "recovery: (restore-plan-from-snapshot! <project-root> <campaign-id>) "
+                           "reconstructs the missing files from the snapshot")]))
         drifted))
      rec]
     [else

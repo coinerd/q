@@ -9,7 +9,6 @@
          racket/file
          "../extensions/gsd/plan-snapshot.rkt"
          (only-in "../util/json/checksum.rkt" sha256-string))
-
 (define plan-text
   (string-append "# Plan\n\n"
                  "- [Inbox] W0: Alpha -> waves/W0-alpha.md\n"
@@ -56,12 +55,60 @@
       (define dir (make-plan-tree))
       (define-values (_path first-digest) (seed-and-bind-plan-snapshot! dir campaign-id))
       (define captured-plan (file->string (build-path (snapshot-dir dir campaign-id) "PLAN.md")))
-      (write-text! (build-path dir ".planning" "PLAN.md")
-                   (string-append plan-text "\nauthored later\n"))
+      ;; Unchanged authored content re-binds to the same snapshot verbatim.
       (define-values (_same-path second-digest) (seed-and-bind-plan-snapshot! dir campaign-id))
       (check-equal? second-digest first-digest)
       (check-equal? (file->string (build-path (snapshot-dir dir campaign-id) "PLAN.md"))
                     captured-plan)
+      (delete-directory/files dir))
+
+    ;; F13 (v1.00.31 W5): seed-and-bind reused an existing snapshot verbatim
+    ;; even when the authored plan BODY had been amended, silently binding a
+    ;; campaign to a frozen contract that no longer matches the plan being
+    ;; executed. The freeze must refuse instead.
+    (test-case "F13: authored plan-body amendment refuses frozen-contract-stale"
+      (define dir (make-plan-tree))
+      (define-values (_p first-digest) (seed-and-bind-plan-snapshot! dir campaign-id))
+      (define amended
+        (string-append plan-text "\n## Failure Modes\n\n" "| F14 | body amendment after freeze |\n"))
+      (write-text! (build-path dir ".planning" "PLAN.md") amended)
+      (check-exn exn:fail:gsd-frozen-contract-stale?
+                 (lambda () (seed-and-bind-plan-snapshot! dir campaign-id)))
+      (check-equal? (snapshot-manifest-digest (load-snapshot-manifest dir campaign-id)) first-digest)
+      (check-equal? (file->string (build-path (snapshot-dir dir campaign-id) "PLAN.md")) plan-text)
+      (delete-directory/files dir))
+
+    (test-case "F13: drift classification names the frozen contract as stale"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (write-text! (build-path dir ".planning" "PLAN.md")
+                   (string-append plan-text "\nAmended contract clause\n"))
+      (check-equal? (snapshot-drift? dir campaign-id) '("PLAN.md"))
+      (check-not-false (member (list "PLAN.md" 'frozen-contract-stale)
+                               (classify-snapshot-drift dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "F13: override restore restores a stale plan body (sanctioned remedy)"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (write-text! (build-path dir ".planning" "PLAN.md")
+                   (string-append plan-text "\nAmended contract clause\n"))
+      (check-not-false (member (list "PLAN.md" 'frozen-contract-stale)
+                               (classify-snapshot-drift dir campaign-id)))
+      (define restored (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t))
+      (check-not-false (member "PLAN.md" restored)
+                       "the documented remedy restores the stale contract")
+      (check-equal? (file->string (build-path dir ".planning" "PLAN.md")) plan-text)
+      (check-equal? (snapshot-drift? dir campaign-id) '())
+      (delete-directory/files dir))
+
+    (test-case "F13: amended wave docs still classify as content drift"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (write-text! (build-path dir ".planning" "waves" "W1-beta.md")
+                   "# Wave 1\n\nbeta body changed\n")
+      (check-not-false (member (list "waves/W1-beta.md" 'content-drift)
+                               (classify-snapshot-drift dir campaign-id)))
       (delete-directory/files dir))
 
     (test-case "manifest traversal entry is rejected before external access"

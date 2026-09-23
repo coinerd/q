@@ -197,44 +197,56 @@
              ;; the required policy object present. Typed refusal; the journal
              ;; stays at context-ready so the next invocation re-preflights.
              [(and (equal? current "context-ready") (equal? target "implementation-review"))
-              (define preflight (controller dir plan wave "delivery-preflight"))
+              ;; Register F7 (v1.00.31 W5): the artifact provenance gate runs
+              ;; before the F5 remote preflight — a wave with stale/drifting
+              ;; artifacts cannot be delivered.
+              (define provenance (artifact-provenance-gate dir plan wave))
               (cond
-                [(not (delivery-effect-result? preflight))
-                 (blocked "controller returned a malformed effect result")]
-                [(eq? (delivery-effect-result-kind preflight) 'ok)
-                 (define result (controller dir plan wave target))
-                 (cond
-                   [(not (delivery-effect-result? result))
-                    (blocked "controller returned a malformed effect result")]
-                   [else
-                    (define data (delivery-effect-result-data result))
-                    (case (delivery-effect-result-kind result)
-                      [(ok)
-                       (if (and (still-current?) (not (durable-blocker dir plan wave start-fence)))
-                           (begin
-                             (record-delivery-usage! dir plan wave data)
-                             (update-delivery-journal! dir plan wave (hasheq 'stage target))
-                             (delivery-outcome 'ok target))
-                           (blocked "stale continuation: campaign changed during the effect"))]
-                      [(awaiting-review)
-                       (delivery-outcome
-                        'awaiting-review
-                        (hash-ref data 'reason "awaiting genuine independent review"))]
-                      [(retryable)
-                       (delivery-outcome 'retryable
-                                         (hash-ref data 'reason "retryable delivery failure"))]
-                      [else
-                       (delivery-outcome 'blocked
-                                         (hash-ref data 'reason "controller refused the effect"))])])]
+                [(eq? (delivery-effect-result-kind provenance) 'blocked)
+                 (blocked (format "artifact-provenance: ~a"
+                                  (hash-ref (delivery-effect-result-data provenance)
+                                            'reason
+                                            "declared artifacts failed the provenance gate")))]
                 [else
-                 (define reason
-                   (hash-ref (delivery-effect-result-data preflight)
-                             'reason
-                             "delivery preflight refused"))
-                 (case (delivery-effect-result-kind preflight)
-                   [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
-                   [(retryable) (delivery-outcome 'retryable reason)]
-                   [else (blocked (format "delivery preflight: ~a" reason))])])]
+                 (define preflight (controller dir plan wave "delivery-preflight"))
+                 (cond
+                   [(not (delivery-effect-result? preflight))
+                    (blocked "controller returned a malformed effect result")]
+                   [(eq? (delivery-effect-result-kind preflight) 'ok)
+                    (define result (controller dir plan wave target))
+                    (cond
+                      [(not (delivery-effect-result? result))
+                       (blocked "controller returned a malformed effect result")]
+                      [else
+                       (define data (delivery-effect-result-data result))
+                       (case (delivery-effect-result-kind result)
+                         [(ok)
+                          (if (and (still-current?) (not (durable-blocker dir plan wave start-fence)))
+                              (begin
+                                (record-delivery-usage! dir plan wave data)
+                                (update-delivery-journal! dir plan wave (hasheq 'stage target))
+                                (delivery-outcome 'ok target))
+                              (blocked "stale continuation: campaign changed during the effect"))]
+                         [(awaiting-review)
+                          (delivery-outcome
+                           'awaiting-review
+                           (hash-ref data 'reason "awaiting genuine independent review"))]
+                         [(retryable)
+                          (delivery-outcome 'retryable
+                                            (hash-ref data 'reason "retryable delivery failure"))]
+                         [else
+                          (delivery-outcome
+                           'blocked
+                           (hash-ref data 'reason "controller refused the effect"))])])]
+                   [else
+                    (define reason
+                      (hash-ref (delivery-effect-result-data preflight)
+                                'reason
+                                "delivery preflight refused"))
+                    (case (delivery-effect-result-kind preflight)
+                      [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
+                      [(retryable) (delivery-outcome 'retryable reason)]
+                      [else (blocked (format "delivery preflight: ~a" reason))])])])]
              [else
               (define result (controller dir plan wave target))
               (cond
@@ -293,6 +305,70 @@
                   subprocess-result-truncated?))
 
 (define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
+(define-runtime-path artifact-provenance-lint-script
+                     "../../scripts/ci/verify-artifact-provenance.rkt")
+
+;; Register F7 (v1.00.31 W5): the artifact provenance gate. Declared wave
+;; artifacts must be bound (SHA256SUMS), canonical, and internally consistent;
+;; recorded heads must descend from the verified wave tip. Drift is a typed
+;; blocked stop BEFORE any ladder action; the journal stays put so the next
+;; invocation re-runs the gate. Strictness requires a current wave. The
+;; version tag is taken from the durable receipt branch when it carries one
+;; (campaign/vX.Y.Z-wN), and otherwise from the frozen campaign manifest title
+;; ("v1.00.31 ..."), which is independent of the branch naming convention —
+;; the executor's own branches are campaign/<hash8>/w<N>, so relying on the
+;; branch alone silently degraded the gate to historical (advisory) mode.
+(define (plan-title-version-tag base-dir plan)
+  (with-handlers ([exn:fail? (lambda (_e) #f)])
+    (define rec (load-campaign-record base-dir plan))
+    (define title (campaign-manifest-title (campaign-record-manifest rec)))
+    (define m (and (string? title) (regexp-match #px"v?[0-9]+\\.[0-9]+\\.[0-9]+" title)))
+    (and m (car m))))
+
+(define (artifact-provenance-gate base-dir plan wave)
+  (with-handlers
+      ([exn:fail?
+        (lambda (e)
+          (delivery-effect-result
+           'blocked
+           (hasheq 'stage "delivery-preflight" 'reason (redact-delivery-text (exn-message e)))))])
+    (define branch (default-delivery-receipt-branch base-dir plan wave))
+    (define version-tag
+      (or (let ([m (regexp-match #px"v[0-9]+\\.[0-9]+\\.[0-9]+" branch)]) (and m (car m)))
+          (plan-title-version-tag base-dir plan)))
+    (define repo
+      (if (or (directory-exists? (build-path base-dir ".git"))
+              (file-exists? (build-path base-dir ".git")))
+          base-dir
+          (build-path base-dir "q")))
+    (define args
+      (list (path->string artifact-provenance-lint-script)
+            "--root"
+            (path->string (path->complete-path repo))))
+    (define args*
+      (if version-tag
+          (append args
+                  (list "--current-wave"
+                        (format "~a-w~a" version-tag wave)
+                        "--wave-tip"
+                        (default-delivery-receipt-head base-dir plan wave)))
+          args))
+    (define result
+      (run-subprocess "racket"
+                      #:args args*
+                      #:directory base-dir
+                      #:environment (controller-environment)
+                      #:timeout 240
+                      #:process-group? #t))
+    (if (zero? (subprocess-result-exit-code result))
+        (delivery-effect-result 'ok (hasheq 'stage "delivery-preflight"))
+        (delivery-effect-result 'blocked
+                                (hasheq 'stage
+                                        "delivery-preflight"
+                                        'reason
+                                        (format "artifact provenance gate: ~a"
+                                                (redact-delivery-text (subprocess-result-stdout
+                                                                       result))))))))
 
 ;; Typed-stop reason preservation: gsd-delivery.py reports typed stops as
 ;; exit 2 with {"status":"delivery-pending","reason":…} on STDOUT while

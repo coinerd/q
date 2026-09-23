@@ -1140,6 +1140,11 @@ jobs:
     # variable restores this default everywhere.
     steps:
       - uses: actions/checkout@v7
+        with:
+          # W5: this shard runs the artifact-provenance check, whose
+          # recorded-head ancestry checks require repository history; the
+          # default fetch-depth 1 shallow clone cannot resolve them.
+          fetch-depth: 0
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
