@@ -142,24 +142,38 @@
 ;; sort_keys=True, ensure_ascii=True) plus a trailing newline)
 ;; ---------------------------------------------------------------------------
 
+(define (u-escape n)
+  ;; Python json.dumps(ensure_ascii=True) uses lowercase four-digit escapes.
+  (string-append "\\u" (string-downcase (~r n #:base 16 #:min-width 4 #:pad-string "0"))))
+
 (define (json-escape s)
-  (string-append "\""
-                 (for/fold ([acc ""]) ([c (in-string s)])
-                   (string-append acc
-                                  (cond
-                                    [(char=? c #\") "\\\""]
-                                    [(char=? c #\\) "\\\\"]
-                                    [(char=? c #\newline) "\\n"]
-                                    [(char=? c #\return) "\\r"]
-                                    [(char=? c #\tab) "\\t"]
-                                    [(char<? c #\space)
-                                     (string-append "\\u"
-                                                    (string-upcase (~r (char->integer c)
-                                                                       #:base 16
-                                                                       #:min-width 4
-                                                                       #:pad-string "0")))]
-                                    [else (string c)])))
-                 "\""))
+  (string-append
+   "\""
+   (for/fold ([acc ""]) ([c (in-string s)])
+     (string-append
+      acc
+      (cond
+        [(char=? c #\") "\\\""]
+        [(char=? c #\\) "\\\\"]
+        [(char=? c #\backspace) "\\b"]
+        [(char=? c #\newline) "\\n"]
+        [(char=? c #\page) "\\f"]
+        [(char=? c #\return) "\\r"]
+        [(char=? c #\tab) "\\t"]
+        [(char<? c #\space) (u-escape (char->integer c))]
+        [(char<=? #\space c #\rubout) (string c)]
+        [(<= (char->integer c) #xFFFF) (u-escape (char->integer c))]
+        [else
+         ;; astral chars are escaped as a surrogate pair
+         (define n (- (char->integer c) #x10000))
+         (string-append
+          "\\u"
+          (string-downcase
+           (~r (+ #xD800 (quotient n #x400)) #:base 16 #:min-width 4 #:pad-string "0"))
+          "\\u"
+          (string-downcase
+           (~r (+ #xDC00 (remainder n #x400)) #:base 16 #:min-width 4 #:pad-string "0")))])))
+   "\""))
 
 (define (json-canonical v indent)
   (define pad (make-string indent #\space))
@@ -336,7 +350,9 @@
 ;; head/sha/commit/tree semantics (segment boundaries, so plan-sha256 or
 ;; observed-sha256 do NOT qualify) and the value must be a bare 40-hex
 ;; string (64-hex plan/digest ids are not commit identities).
-(define provenance-key-rx #px"(^|[-_])(head|sha|commit|tree)([-_]|$)")
+;; `tree` is deliberately absent: a tree-named field is not a commit
+;; identity — it is validated against its paired head by check-tree-pairs!.
+(define provenance-key-rx #px"(^|[-_])(head|sha|commit)([-_]|$)")
 
 (define (walk-provenance-values v path accept!)
   ;; R1: provenance semantics come from the LAST path segment, decided at the
@@ -496,7 +512,7 @@
          (define canonical (canonical-json-string parsed))
          (unless (equal? canonical (file->string p))
            (provenance-drift!
-            "~a: JSON is not in canonical form (sorted keys, 1-space indent, trailing newline)"
+            "~a: JSON is not in canonical form (sorted keys, 1-space indent, trailing newline, Python-compatible escapes)"
             rel))]
         [else (provenance-note! "~a: canonical form not enforced on historical artifacts" rel)]))))
 
@@ -581,7 +597,7 @@
                  (for/or ([k (in-hash-keys timing)])
                    (regexp-match? timing-key-rx (format "~a" k))))
         (define structured (collect-timing-ms timing))
-        (set-box! union-box (remove* (unbox union-box) structured))
+        (set-box! union-box (remove-duplicates (append (unbox union-box) structured)))
         (define prose-mentions (walk-prose-ms parsed "" '()))
         (for ([mention (in-list prose-mentions)])
           (define n (string->number (cdr mention)))

@@ -197,9 +197,9 @@
       (check-equal? code 2)
       (check-true (string-contains? output "does not match the actual tree of")
                   "wrong tree refused, naming head and tree")
-      (check-false (string-contains? (car (string-split output "subject-bad"))
-                                     "does not match the actual tree")
-                   "the matching pair is not flagged")
+      (check-equal? (length (regexp-match* #rx"does not match the actual tree" output))
+                    1
+                    "only the mismatched pair is flagged")
       (delete-directory/files dir))
 
     (test-case "R4: current-wave SHA256SUMS must be byte-identical canonical"
@@ -262,6 +262,65 @@
       (check-equal? code 2)
       (check-true (string-contains? output "prose value 260 ms disagrees")
                   "nested timing drift is refused")
+      (delete-directory/files dir))
+
+    (test-case "R9: a tree field is validated as a tree, not as a commit head"
+      (define dir (make-fixture-repo!))
+      (write-text! (build-path dir "seed.txt") "seed\n")
+      (define sha (commit-all! dir))
+      (define tree (git-rev-parse! dir "HEAD^{tree}"))
+      (define json-p (build-path dir "artifacts" "prov" "v9.99.99-w0" "pair.json"))
+      (write-text!
+       json-p
+       (string-append "{\n" " \"head\": \"" sha "\",\n" " \"tree\": \"" tree "\"\n" "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS")
+                   (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                  "  artifacts/prov/v9.99.99-w0/pair.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 0 "a valid head/tree pair is not refused")
+      (check-false (string-contains? output "does not resolve to a commit")
+                   "the tree value is not walked as a commit identity")
+      (delete-directory/files dir))
+
+    (test-case "R9: report timing agreement uses the union across artifacts"
+      (define dir (make-fixture-repo!))
+      (define (wrel! rel text)
+        (write-text! (build-path dir rel) text))
+      (wrel!
+       "artifacts/prov/v9.99.99-w0/a.json"
+       (string-append "{\n" " \"timing\": {\n" "  \"a-ms\": [\n" "   10\n" "  ]\n" " }\n" "}\n"))
+      (wrel!
+       "artifacts/prov/v9.99.99-w0/b.json"
+       (string-append "{\n" " \"timing\": {\n" "  \"b-ms\": [\n" "   20\n" "  ]\n" " }\n" "}\n"))
+      (wrel! "docs/reports/r.md" "- metrics 10 ms\n")
+      (define entries
+        '("artifacts/prov/v9.99.99-w0/a.json" "artifacts/prov/v9.99.99-w0/b.json"
+                                              "docs/reports/r.md"))
+      (write-text!
+       (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS")
+       (string-append
+        (string-join
+         (for/list ([rel (in-list entries)])
+           (string-append (sha256-hex (port->bytes (open-input-file (build-path dir rel)))) "  " rel))
+         "\n")
+        "\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 0 "a report citing an earlier artifact's timing is accepted")
+      (check-false (string-contains? output "bound report prose value")
+                   "the union retains every artifact's structured timings")
+      (delete-directory/files dir))
+
+    (test-case "R9: canonical JSON uses Python-compatible escapes"
+      (define dir (make-fixture-repo!))
+      (define json-p (build-path dir "artifacts" "prov" "v9.99.99-w0" "uni.json"))
+      (write-text! json-p (string-append "{\n" " \"note\": \"\\u00e9\\u20ac\"\n" "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS")
+                   (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                  "  artifacts/prov/v9.99.99-w0/uni.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 0 "a Python-escaped non-ASCII artifact is canonical")
+      (check-false (string-contains? output "not in canonical form")
+                   "non-ASCII escapes are byte-compatible with the generator")
       (delete-directory/files dir))
 
     (test-case "R8: a recorded sha256 must match the bytes of its named file"

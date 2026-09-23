@@ -18,12 +18,18 @@ version directory under `artifacts/**/v*/`:
    every file under the directory must be recorded. Two historical path
    conventions (repository-root-relative and directory-relative) are accepted
    as recorded spellings; the bytes decide.
-2. **Provenance heads** — values of head/sha/commit/tree-named fields (40-hex)
+2. **Provenance heads** — values of head/sha/commit-named fields (40-hex)
    must resolve to real commits and, for the current wave, be ancestors of the
-   wave tip. Recorded heads that are neither prove stale provenance.
+   wave tip. Recorded heads that are neither prove stale provenance. A
+   tree-named field is not a commit identity: it is validated against its
+   paired head (the tree must equal that commit's tree), so a valid tree is
+   never refused as a non-commit.
 3. **Canonical JSON** — the current wave's non-raw JSON artifacts must equal
-   their canonical form (sorted keys, 1-space indent, trailing newline)
-   byte-for-byte.
+   their canonical form (sorted keys, 1-space indent, trailing newline,
+   Python-`json.dumps(ensure_ascii=True)`-compatible escapes) byte-for-byte.
+   The escaping contract is what makes regeneration with the Python generator
+   byte-identical: non-ASCII and control characters use the same lowercase
+   `\uXXXX` forms (astral characters as surrogate pairs).
 4. **Cross-artifact consistency** — inside an artifact that declares a
    structured `timing` object with `*-ms` keys, every prose `<n> ms` value
    must equal one of the structured numbers. A disagreement is refused naming
@@ -33,6 +39,8 @@ version directory under `artifacts/**/v*/`:
    equal a delivered timing, while blocks explicitly labelled as red-fixture,
    refusal, blocked-branch, history, or an older wave (`v1.00.2x-`/`v1.00.30-`)
    are exempt because a report may legitimately cite non-delivered values.
+   The comparison set is the union of every artifact's structured timings in
+   the version, so a report may cite a value recorded by any of them.
 5. **Recorded digest fields** — a JSON object carrying a `path` beside a
    64-hex `sha256` must name an existing file whose bytes hash to exactly that
    digest. A stale or wrong recorded digest is refused on the current wave and
