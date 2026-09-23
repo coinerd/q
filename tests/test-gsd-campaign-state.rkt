@@ -20,6 +20,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          (only-in "../extensions/gsd/wave-executor.rkt"
@@ -224,7 +225,53 @@
                                 '()
                                 (list (make-campaign-wave-descriptor 0 "W" "w.md" "h"))
                                 "C2"))
-      (check-not-equal? (campaign-manifest-hash m1) (campaign-manifest-hash m2)))))
+      (check-not-equal? (campaign-manifest-hash m1) (campaign-manifest-hash m2))
+
+      ;; F13 (v1.00.31 W5): the plan BODY (failure-mode register, approval
+      ;; contract) must participate in the campaign identity. A body amendment
+      ;; that leaves wave docs untouched previously produced the SAME plan-id,
+      ;; making frozen-vs-executed divergence undetectable at the identity
+      ;; level. Legacy manifests (plan-body-hash #f) keep the historical hash.
+      (test-case "F13: bound plan body participates in campaign identity"
+        (define base
+          (make-campaign-manifest 1
+                                  "T"
+                                  '()
+                                  (list (make-campaign-wave-descriptor 0 "W" "w.md" "h"))
+                                  "C"))
+        (check-false (campaign-manifest-plan-body-hash base)
+                     "legacy manifests carry no plan-body hash")
+        (check-equal? (campaign-manifest-hash base)
+                      (campaign-manifest-hash
+                       (make-campaign-manifest 1
+                                               "T"
+                                               '()
+                                               (list (make-campaign-wave-descriptor 0 "W" "w.md" "h"))
+                                               "C"
+                                               #f))
+                      "legacy hash is unchanged by the explicit #f field")
+        (define body-a (sha256-string "original approval contract"))
+        (define body-b (sha256-string "amended approval contract"))
+        (define with-a
+          (make-campaign-manifest 1
+                                  "T"
+                                  '()
+                                  (list (make-campaign-wave-descriptor 0 "W" "w.md" "h"))
+                                  "C"
+                                  body-a))
+        (define with-b
+          (make-campaign-manifest 1
+                                  "T"
+                                  '()
+                                  (list (make-campaign-wave-descriptor 0 "W" "w.md" "h"))
+                                  "C"
+                                  body-b))
+        (check-not-equal? (campaign-manifest-hash with-a)
+                          (campaign-manifest-hash base)
+                          "binding a plan body changes the identity")
+        (check-not-equal? (campaign-manifest-hash with-a)
+                          (campaign-manifest-hash with-b)
+                          "amending the plan body re-identifies the campaign")))))
 
 ;; ============================================================
 ;; 4. One-active-wave invariant

@@ -509,6 +509,33 @@
       (check-equal? (file->bytes captured-wave) captured-bytes)
       (delete-directory/files dir #:must-exist? #f))
 
+    ;; F13 (v1.00.31 W5): an amended plan BODY is not ordinary drift — the
+    ;; resume refusal must name the frozen contract as stale and offer the
+    ;; re-freeze/override recovery, never silently rebind or rewrite.
+    (test-case "F13: resume names frozen-contract-stale for amended plan body"
+      (define dir (make-temporary-file "repo-migrate-~a" 'directory))
+      (seed-plan-dir! dir)
+      (define rec (load-or-migrate-campaign! dir))
+      (define captured-plan
+        (build-path (string->path (campaign-record-plan-snapshot-path rec)) "PLAN.md"))
+      (define captured-bytes (file->bytes captured-plan))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (display "# Plan: RepoCampaign\n\n## Waves\n" out)
+                               (display "- [Inbox] W0: Zero → waves/W0-zero.md\n" out)
+                               (display "\n## Approval contract (amended)\n\nnever silently stale\n"
+                                        out))
+                             #:exists 'truncate)
+      (define exn-result
+        (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+          (load-or-migrate-campaign! dir)
+          #f))
+      (check-true (and exn-result #t) "resume must refuse")
+      (check-true (string-contains? (or exn-result "") "frozen-contract-stale")
+                  "refusal names frozen-contract-stale")
+      (check-equal? (file->bytes captured-plan) captured-bytes "snapshot is never silently rewritten")
+      (delete-directory/files dir #:must-exist? #f))
+
     (test-case "corrupted existing record fails closed (no silent re-migration)"
       (define dir (make-temporary-file "repo-migrate-~a" 'directory))
       (seed-plan-dir! dir)

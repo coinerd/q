@@ -1,0 +1,7 @@
+frozen digest: 054d72874e6a43d6bbc4d2ded82ffe78546761aab7368719a702de5590dc952f
+re-freeze digest: 054d72874e6a43d6bbc4d2ded82ffe78546761aab7368719a702de5590dc952f
+silent-stale-reuse: YES (bug)
+drift-classification: ((PLAN.md content-drift))
+plan-id before amendment: 9b27f1db4a2541c4265814b52ead7f840e9981197cc019f183452be88d362551
+plan-id after amendment:  9b27f1db4a2541c4265814b52ead7f840e9981197cc019f183452be88d362551
+plan-id-covers-body: NO (bug)

@@ -45,12 +45,28 @@
          exn:fail:gsd-missing-wave-doc
          exn:fail:gsd-missing-wave-doc-path
          exn:fail:gsd-missing-wave-doc?
+         exn:fail:gsd-frozen-contract-stale
+         exn:fail:gsd-frozen-contract-stale?
+         plan-body-normalized-hash
          snapshot-manifest-digest
          normalize-wave-doc-content)
 
 (struct exn:fail:gsd-missing-wave-doc exn:fail (path)
   #:transparent
   #:extra-constructor-name make-exn:fail:gsd-missing-wave-doc)
+
+;; F13 (v1.00.31 W5): raised when the authored plan body no longer matches
+;; the frozen snapshot a campaign is about to bind to. The freeze is never
+;; silently reused and never silently rewritten; the operator must re-freeze
+;; under a fresh campaign identity or explicitly restore.
+(struct exn:fail:gsd-frozen-contract-stale exn:fail (campaign expected-sha actual-sha)
+  #:transparent
+  #:extra-constructor-name make-exn:fail:gsd-frozen-contract-stale)
+
+;; Normalized PLAN.md content hash: the shared projection-normalization used
+;; by the snapshot files, the campaign manifest identity, and drift checks.
+(define (plan-body-normalized-hash text)
+  (normalized-file-hash "PLAN.md" text))
 
 (struct snapshot-file (path size sha256) #:transparent)
 (struct plan-snapshot-manifest (schema-version campaign created-at plan-id files) #:transparent)
@@ -229,6 +245,30 @@
 ;; referenced document is absent (BUG-0052 hard-failure semantics).
 (define (seed-and-bind-plan-snapshot! base-dir campaign-id)
   (define existing (load-snapshot-manifest base-dir campaign-id))
+  (when existing
+    ;; F13 (v1.00.31 W5): reuse is only sound when the authored plan body
+    ;; still matches the frozen contract. Amended bodies are refused with a
+    ;; typed failure — never silently rebound, never silently rewritten.
+    (define live-plan-path (build-path base-dir ".planning" "PLAN.md"))
+    (define frozen-entry
+      (for/first ([f (in-list (plan-snapshot-manifest-files existing))]
+                  #:when (equal? (snapshot-file-path f) "PLAN.md"))
+        f))
+    (define authored-sha (plan-body-normalized-hash (file->string live-plan-path)))
+    (define frozen-sha (and frozen-entry (snapshot-file-sha256 frozen-entry)))
+    (unless (equal? authored-sha frozen-sha)
+      (raise (make-exn:fail:gsd-frozen-contract-stale
+              (format (string-append "plan-snapshot: frozen contract is stale for campaign ~a: "
+                                     "the authored plan body changed after the snapshot was frozen "
+                                     "(authored ~a, frozen ~a); re-freeze under a new campaign "
+                                     "identity or explicitly restore the snapshot content")
+                      campaign-id
+                      authored-sha
+                      frozen-sha)
+              (current-continuation-marks)
+              campaign-id
+              frozen-sha
+              authored-sha))))
   (define m
     (or existing
         (let* ([plan-path (build-path base-dir ".planning" "PLAN.md")]
@@ -352,7 +392,10 @@
                  [(not (file-exists? live)) 'missing]
                  [(not (equal? (normalized-file-hash rel (file->string live))
                                (snapshot-file-sha256 f)))
-                  'content-drift]
+                  ;; F13 (v1.00.31 W5): a diverging PLAN.md body means the
+                  ;; authored contract is no longer the frozen one — named
+                  ;; distinctly from ordinary wave-doc content drift.
+                  (if (equal? rel "PLAN.md") 'frozen-contract-stale 'content-drift)]
                  [else #f]))
              (if kind
                  (cons (list rel kind) acc)

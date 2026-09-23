@@ -40,7 +40,10 @@
                   wave-index-entry-slug
                   wave-index-entry-status)
          (only-in "../../util/json/checksum.rkt" sha256-string)
-         (only-in "plan-snapshot.rkt" seed-and-bind-plan-snapshot! normalize-wave-doc-content))
+         (only-in "plan-snapshot.rkt"
+                  seed-and-bind-plan-snapshot!
+                  normalize-wave-doc-content
+                  plan-body-normalized-hash))
 
 ;; ============================================================
 ;; Public API with contracts (§24)
@@ -135,12 +138,13 @@
           [campaign-record-budget-pause (-> campaign-record? (or/c #f campaign-budget-pause?))]
           [migrate-campaign! (-> path-string? campaign-record?)]
           [make-campaign-manifest
-           (-> exact-nonnegative-integer?
-               string?
-               (listof string?)
-               (listof campaign-wave-descriptor?)
-               string?
-               campaign-manifest?)]
+           (->* (exact-nonnegative-integer? string?
+                                            (listof string?)
+                                            (listof campaign-wave-descriptor?)
+                                            string?)
+                ((or/c #f string?))
+                campaign-manifest?)]
+          [campaign-manifest-plan-body-hash (-> campaign-manifest? (or/c #f string?))]
           [make-campaign-wave-descriptor
            (-> exact-nonnegative-integer? string? string? string? campaign-wave-descriptor?)]
           [campaign-wave-descriptor-index (-> campaign-wave-descriptor? exact-nonnegative-integer?)]
@@ -272,9 +276,26 @@
 ;; ============================================================
 
 ;; Immutable manifest — status/timestamps/evidence excluded (D2).
-(struct campaign-manifest (schema-version title dependencies waves constraints-hash)
+;; F13 (v1.00.31 W5): plan-body-hash binds the plan BODY (failure-mode
+;; register, approval contract) into the campaign identity. Legacy manifests
+;; carry #f (absent ≠ corrupt) and the field is excluded from the canonical
+;; identity string when absent, so historical plan-ids verify unchanged.
+(struct campaign-manifest (schema-version title dependencies waves constraints-hash plan-body-hash)
   #:transparent
-  #:constructor-name make-campaign-manifest)
+  #:constructor-name make-campaign-manifest/constructed)
+
+(define (make-campaign-manifest schema-version
+                                title
+                                dependencies
+                                waves
+                                constraints-hash
+                                [plan-body-hash #f])
+  (make-campaign-manifest/constructed schema-version
+                                      title
+                                      dependencies
+                                      waves
+                                      constraints-hash
+                                      plan-body-hash))
 
 ;; Ordered wave descriptor: index, title, doc path, content hash.
 (struct campaign-wave-descriptor (index title doc-path content-hash)
@@ -520,7 +541,13 @@
                         (campaign-wave-descriptor-title w)
                         (campaign-wave-descriptor-doc-path w)
                         (campaign-wave-descriptor-content-hash w)))
-                (campaign-manifest-constraints-hash m))))
+                (campaign-manifest-constraints-hash m)
+                ;; F13: the plan body participates in identity only when
+                ;; bound; legacy #f omits the field entirely (hash stability).
+                (let ([pbh (campaign-manifest-plan-body-hash m)])
+                  (if pbh
+                      (list 'plan-body-hash pbh)
+                      '())))))
 
 (define (campaign-manifest-hash m)
   (sha256-string (manifest->canonical-string m)))
@@ -935,7 +962,11 @@
                             title
                             '()
                             descriptors
-                            (sha256-string "immutable-global-constraints-v1")))
+                            (sha256-string "immutable-global-constraints-v1")
+                            ;; F13: the plan body (failure-mode register,
+                            ;; approval contract) is part of the campaign
+                            ;; identity; amending it re-identifies the plan.
+                            (plan-body-normalized-hash plan-text)))
   (make-campaign-record (campaign-manifest-hash m)
                         m
                         waves
