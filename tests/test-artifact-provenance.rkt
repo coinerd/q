@@ -1,6 +1,7 @@
 #lang racket/base
 ;; @covers scripts/ci/verify-artifact-provenance.rkt
 ;; @speed fast  ;; @suite workflows
+;; @timeout 240
 
 ;; tests/test-artifact-provenance.rkt — v1.00.31 W5 (#9728, F7).
 ;;
@@ -28,13 +29,18 @@
 (define gen-path
   (build-path repo-root "artifacts" "wave-delivery-integrity" "v1.00.31-w5" "raw" "matrix-gen.py"))
 
-(define (run-lint! root #:current-wave [current-wave #f] #:wave-tip [wave-tip #f])
+(define (run-lint! root
+                   #:current-wave [current-wave #f]
+                   #:wave-tip [wave-tip #f]
+                   #:only-current? [only-current? #f])
   (define out (open-output-string))
   (define args (list (path->string lint-path) "--root" (path->string root)))
   (when current-wave
     (set! args (append args (list "--current-wave" current-wave))))
   (when wave-tip
     (set! args (append args (list "--wave-tip" wave-tip))))
+  (when only-current?
+    (set! args (append args (list "--only-current-wave"))))
   (define exit-code
     (parameterize ([current-output-port out]
                    [current-directory root])
@@ -58,6 +64,14 @@
 (define (git*! root . args)
   (parameterize ([current-directory root])
     (apply system*/exit-code (find-executable-path "git") args)))
+
+(define (shallow-repository?)
+  (define out (open-output-string))
+  (parameterize ([current-output-port out]
+                 [current-directory repo-root])
+    (with-handlers ([exn:fail? (void)])
+      (void (system*/exit-code (find-executable-path "git") "rev-parse" "--is-shallow-repository"))))
+  (equal? "true" (string-trim (get-output-string out))))
 
 (define (git-rev-parse! root arg)
   (define out (open-output-string))
@@ -504,11 +518,37 @@
                   "non-canonical JSON refused on the current wave")
       (delete-directory/files dir))
 
+    ;; The real-tree case needs repository history (recorded heads must resolve
+    ;; and be ancestors of the tip). A shallow CI checkout cannot provide that,
+    ;; so the case is skipped there with an explicit reason; the full historical
+    ;; sweep is what the wave evidence records locally.
     (test-case "integration: the real tree passes with the current wave strict"
-      (define-values (code output) (run-lint! repo-root #:current-wave "v1.00.31-w5"))
-      (check-equal? code 0)
-      (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
-      (check-true (string-contains? output "artifact-provenance ok")))
+      (if (shallow-repository?)
+          (displayln "skipped: shallow checkout has no history for the strict real-tree check")
+          (let-values ([(code output)
+                        (run-lint! repo-root #:current-wave "v1.00.31-w5" #:only-current? #t)])
+            (check-equal? code 0)
+            (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
+            (check-true (string-contains? output "artifact-provenance ok")))))
+
+    (test-case "R14: the constrained path skips historical dirs but keeps current strictness"
+      (define dir (make-fixture-repo!))
+      ;; a historical drifting directory (note only) plus a current-wave drift
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "old.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"1111111111111111111111111111111111111111\"\n"
+                                  "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "SHA256SUMS") "")
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "matrix.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"2222222222222222222222222222222222222222\"\n"
+                                  "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS") "")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0" #:only-current? #t))
+      (check-equal? code 2 "current-wave drift is still refused on the fast path")
+      (check-true (string-contains? output "v9.99.99-w0") "names the current wave directory")
+      (check-false (string-contains? output "v1.00.20-w0") "historical directories are skipped")
+      (delete-directory/files dir))
 
     (test-case "determinism: regenerating W5 artifacts reproduces bytes"
       (define matrix-path

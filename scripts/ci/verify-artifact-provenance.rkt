@@ -776,9 +776,18 @@
 ;; Main
 ;; ---------------------------------------------------------------------------
 
-(define (run! root current-wave wave-tip)
+(define (run! root current-wave wave-tip [only-current-wave? #f])
   (define dirs (discover-artifact-dirs! root current-wave))
-  (for ([ad (in-list dirs)])
+  (define checked
+    ;; `--only-current-wave` is the constrained-environment path: it checks the
+    ;; current wave's directory alone, so a latency-bounded CI shard (and a
+    ;; shallow checkout, where historical heads cannot resolve) does not pay for
+    ;; the full historical sweep. The full sweep remains the default and is what
+    ;; the wave evidence records.
+    (if only-current-wave?
+        (filter (lambda (ad) (and (artifact-dir-current? ad) ad)) dirs)
+        dirs))
+  (for ([ad (in-list checked)])
     (check-sums! root ad)
     (check-canonical-json! root ad)
     (check-provenance-heads! root ad wave-tip)
@@ -793,6 +802,7 @@
   (define root (current-directory))
   (define current-wave #f)
   (define wave-tip #f)
+  (define only-current-wave? #f)
   (command-line
    #:program "verify-artifact-provenance"
    #:once-each ["--root" r "repository root" (set! root (simplify-path (path->complete-path r)))]
@@ -800,5 +810,11 @@
     w
     "version directory treated as the current wave (strict mode)"
     (set! current-wave w)]
-   ["--wave-tip" t "commit the current wave's recorded heads must descend from" (set! wave-tip t)])
-  (run! root current-wave (or wave-tip (git-head root))))
+   ["--wave-tip" t "commit the current wave's recorded heads must descend from" (set! wave-tip t)]
+   ["--only-current-wave"
+    "check the current wave's directory only (constrained-environment path)"
+    (set! only-current-wave? #t)])
+  (when (and only-current-wave? (not current-wave))
+    (displayln "verify-artifact-provenance: --only-current-wave requires --current-wave")
+    (exit 2))
+  (run! root current-wave (or wave-tip (git-head root)) only-current-wave?))
