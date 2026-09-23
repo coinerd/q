@@ -532,22 +532,24 @@
 ;; ============================================================
 
 (define (manifest->canonical-string m)
+  ;; F13: the plan body participates in identity only when bound. A bound
+  ;; body hash appends one (plan-body-hash <sha>) element; legacy manifests
+  ;; (#f) append NOTHING — the canonical form stays the historical
+  ;; five-field list, so historical plan-ids recompute unchanged.
   (format "~s"
-          (list (campaign-manifest-schema-version m)
-                (campaign-manifest-title m)
-                (campaign-manifest-dependencies m)
-                (for/list ([w (campaign-manifest-waves m)])
-                  (list (campaign-wave-descriptor-index w)
-                        (campaign-wave-descriptor-title w)
-                        (campaign-wave-descriptor-doc-path w)
-                        (campaign-wave-descriptor-content-hash w)))
-                (campaign-manifest-constraints-hash m)
-                ;; F13: the plan body participates in identity only when
-                ;; bound; legacy #f omits the field entirely (hash stability).
-                (let ([pbh (campaign-manifest-plan-body-hash m)])
-                  (if pbh
-                      (list 'plan-body-hash pbh)
-                      '())))))
+          (append (list (campaign-manifest-schema-version m)
+                        (campaign-manifest-title m)
+                        (campaign-manifest-dependencies m)
+                        (for/list ([w (campaign-manifest-waves m)])
+                          (list (campaign-wave-descriptor-index w)
+                                (campaign-wave-descriptor-title w)
+                                (campaign-wave-descriptor-doc-path w)
+                                (campaign-wave-descriptor-content-hash w)))
+                        (campaign-manifest-constraints-hash m))
+                  (let ([pbh (campaign-manifest-plan-body-hash m)])
+                    (if pbh
+                        (list (list 'plan-body-hash pbh))
+                        '())))))
 
 (define (campaign-manifest-hash m)
   (sha256-string (manifest->canonical-string m)))

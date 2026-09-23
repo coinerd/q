@@ -284,21 +284,20 @@
 (define provenance-key-rx #px"(^|[-_])(head|sha|commit|tree)([-_]|$)")
 
 (define (walk-provenance-values v path accept!)
+  ;; R1: provenance semantics come from the LAST path segment, decided at the
+  ;; leaf — a non-provenance ancestor key must not disable its descendants.
+  (define last-segment (cadr (regexp-match #px"([^/]*)$" path)))
   (cond
     [(hash? v)
      (for* ([k (in-hash-keys v)]
             [seg (in-value (format "~a" k))])
-       (walk-provenance-values (hash-ref v k)
-                               (string-append path "/" seg)
-                               (if (regexp-match? provenance-key-rx seg)
-                                   accept!
-                                   (lambda (_p _x) (void)))))]
+       (walk-provenance-values (hash-ref v k) (string-append path "/" seg) accept!))]
     [(list? v)
      (for ([x (in-list v)]
            [i (in-naturals)])
        (walk-provenance-values x (string-append path "/" (number->string i)) accept!))]
     [(string? v)
-     (when (regexp-match? hex40-rx v)
+     (when (and (regexp-match? hex40-rx v) (regexp-match? provenance-key-rx last-segment))
        (accept! path v))]
     [else (void)]))
 

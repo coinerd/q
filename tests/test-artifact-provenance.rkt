@@ -126,6 +126,26 @@
                   "stale provenance head refused")
       (delete-directory/files dir))
 
+    (test-case "R1: provenance semantics come from the last path segment"
+      ;; A provenance-named leaf nested under a non-provenance ancestor must
+      ;; still be checked (the recorded head is unresolvable -> refusal).
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "matrix.json")
+                   (string-append
+                    "{\n"
+                    " \"provenance\": {\n"
+                    "  \"recorded-head\": \"0000000000000000000000000000000000000000\"\n"
+                    " }\n"
+                    "}\n"))
+      (write-text! (build-path adir "SHA256SUMS")
+                   "deadbeef  artifacts/prov/v9.99.99-w0/matrix.json\n")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "recorded-head") "nested provenance field is checked")
+      (check-true (string-contains? output "does not resolve to a commit"))
+      (delete-directory/files dir))
+
     (test-case "SHA256SUMS tampering is refused on the current wave"
       (define dir (make-fixture-repo!))
       (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))

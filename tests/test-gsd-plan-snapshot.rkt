@@ -88,6 +88,20 @@
                                (classify-snapshot-drift dir campaign-id)))
       (delete-directory/files dir))
 
+    (test-case "F13: override restore restores a stale plan body (sanctioned remedy)"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (write-text! (build-path dir ".planning" "PLAN.md")
+                   (string-append plan-text "\nAmended contract clause\n"))
+      (check-not-false (member (list "PLAN.md" 'frozen-contract-stale)
+                               (classify-snapshot-drift dir campaign-id)))
+      (define restored (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t))
+      (check-not-false (member "PLAN.md" restored)
+                       "the documented remedy restores the stale contract")
+      (check-equal? (file->string (build-path dir ".planning" "PLAN.md")) plan-text)
+      (check-equal? (snapshot-drift? dir campaign-id) '())
+      (delete-directory/files dir))
+
     (test-case "F13: amended wave docs still classify as content drift"
       (define dir (make-plan-tree))
       (seed-and-bind-plan-snapshot! dir campaign-id)

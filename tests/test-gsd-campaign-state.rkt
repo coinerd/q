@@ -271,7 +271,17 @@
                           "binding a plan body changes the identity")
         (check-not-equal? (campaign-manifest-hash with-a)
                           (campaign-manifest-hash with-b)
-                          "amending the plan body re-identifies the campaign")))))
+                          "amending the plan body re-identifies the campaign"))
+
+      ;; R1 (v1.00.31 W5 review): the legacy canonical form is pinned to the
+      ;; exact historical five-field list — the unbound field appends nothing,
+      ;; so pre-F13 persisted plan-ids recompute identically.
+      (test-case "F13: legacy manifest hash equals the historical five-field form"
+        (define m (make-campaign-manifest 1 "T" '() '() "C" #f))
+        (define historical (sha256-string (format "~s" (list 1 "T" '() '() "C"))))
+        (check-equal? (campaign-manifest-hash m)
+                      historical
+                      "unbound plan-body-hash omits the field from the canonical form")))))
 
 ;; ============================================================
 ;; 4. One-active-wave invariant

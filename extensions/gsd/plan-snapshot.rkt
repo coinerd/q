@@ -436,13 +436,13 @@
   ;; capture-time snapshot content (the durable campaign record, not the doc,
   ;; remains authoritative for wave status).
   (for/list ([item (in-list classified)]
-             #:when (memq (cadr item) '(missing content-drift)))
+             #:when (memq (cadr item) '(missing content-drift frozen-contract-stale)))
     (define rel (car item))
     (define src (build-path (snapshot-dir base-dir campaign-id) rel))
     (define dest (build-path base-dir ".planning" rel))
     (make-directory* (path-only dest))
     ;; Overridden drift replaces the existing (non-symlink) live file.
-    (when (and (eq? (cadr item) 'content-drift) (file-exists? dest))
+    (when (and (memq (cadr item) '(content-drift frozen-contract-stale)) (file-exists? dest))
       (delete-file dest))
     (copy-file src dest)
     rel))
