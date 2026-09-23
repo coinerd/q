@@ -1,6 +1,9 @@
 #lang racket/base
+
+;; @suite workflows
+;; @speed fast
+;; @boundary unit
 ;; @covers scripts/ci/verify-artifact-provenance.rkt
-;; @speed fast  ;; @suite workflows
 ;; @timeout 240
 
 ;; tests/test-artifact-provenance.rkt — v1.00.31 W5 (#9728, F7).
