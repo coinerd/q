@@ -323,6 +323,23 @@
                    "non-ASCII escapes are byte-compatible with the generator")
       (delete-directory/files dir))
 
+    (test-case "R11: a directory-relative current-wave SUMS entry is typed drift"
+      ;; The entry resolves through the directory-relative spelling, so it is
+      ;; not "broken"; canonical regeneration must still refuse it as
+      ;; non-canonical instead of raising a filesystem exception.
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "data.json") "{\n \"k\": \"v\"\n}\n")
+      (write-text! (build-path adir "SHA256SUMS")
+                   (string-append
+                    (sha256-hex (port->bytes (open-input-file (build-path adir "data.json"))))
+                    "  data.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2 "refused with a typed drift, not an exception")
+      (check-true (string-contains? output "provenance-drift") "typed provenance-drift")
+      (check-true (string-contains? output "not canonical") "refused as non-canonical")
+      (delete-directory/files dir))
+
     (test-case "R10: dash-suffixed historical artifact versions are covered"
       (define dir (make-fixture-repo!))
       (define adir (build-path dir "artifacts" "prov" "v9.99.99-final"))

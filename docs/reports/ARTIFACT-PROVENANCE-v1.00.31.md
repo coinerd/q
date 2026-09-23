@@ -20,7 +20,10 @@ version directory under `artifacts/**/v*/`:
    as recorded spellings; the bytes decide. Coverage spans every declared
    version directory, including the dash-suffixed historical ones (`-cN`,
    `-final`, `-census`, `-hotspots`, `-prepared-env`, ...), not just `-wN`
-   waves; historical findings there are notes, never hard failures.
+   waves; historical findings there are notes, never hard failures. On the
+   current wave the canonical spelling is repository-root-relative: a
+   directory-relative entry is refused as `not canonical` (a typed drift —
+   resolving it must never raise an uncaught filesystem error).
 2. **Provenance heads** — values of head/sha/commit-named fields (40-hex)
    must resolve to real commits and, for the current wave, be ancestors of the
    wave tip. Recorded heads that are neither prove stale provenance. A
@@ -59,6 +62,14 @@ harness: `tests/test-wave-delivery-integrity-register.rkt` now guards row F7
 by running this lint's own contract suite, so W6's expect-refused replay can
 exercise the original defect through the canonical harness rather than a
 re-statement of its fixture.
+
+The delivery coordinator runs this lint as the F7 gate before its first ladder
+action and fails closed on drift. Strict mode needs the current wave's version:
+it is taken from the durable receipt branch when that branch carries one
+(`campaign/vX.Y.Z-wN`), and otherwise from the frozen campaign manifest title
+(`v1.00.31 ...`). The wave executor's own branches are `campaign/<hash8>/w<N>`,
+so the manifest-title fallback is what keeps the gate strict for normal wave
+delivery rather than silently degrading it to historical (advisory) mode.
 
 Failures are typed `provenance-drift` (exit 2). Historical observations that
 cannot be strictly verified — blocked-branch pinned heads recorded as

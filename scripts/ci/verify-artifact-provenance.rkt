@@ -320,9 +320,28 @@
        ;; when malformed lines or missing/broken files exist — those are
        ;; already typed drift above, and hashing here could raise a raw
        ;; filesystem exception instead of the typed refusal.
+       ;; P2 (R11): recorded entries may use either spelling; resolve the same
+       ;; way the digest check does, so a directory-relative entry whose file
+       ;; exists yields a typed "not canonical" refusal instead of an uncaught
+       ;; filesystem exception.
+       (define (resolve-recorded line)
+         (cond
+           [(file-exists? (build-path root line)) (build-path root line)]
+           [(file-exists? (build-path dir line)) (build-path dir line)]
+           [else #f]))
        (define canonical
          (string-join (for/list ([line (in-list (sort (map cdr recorded) string<?))])
-                        (string-append (sha256-file-hex (build-path root line)) "  " line))
+                        (define target (resolve-recorded line))
+                        (string-append (if target
+                                           (sha256-file-hex target)
+                                           "")
+                                       "  "
+                                       ;; the canonical spelling is repository-root
+                                       ;; relative, so a directory-relative entry is
+                                       ;; refused as non-canonical (never a crash)
+                                       (if target
+                                           (path->string (find-relative-path root target))
+                                           line)))
                       "\n"))
        (unless (equal? (string-append canonical "\n") (file->string sums-path))
          (provenance-drift!

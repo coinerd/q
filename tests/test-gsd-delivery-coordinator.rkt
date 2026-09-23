@@ -47,7 +47,7 @@
           'verified-at
           1789500000))
 
-(define (call-with-campaign count proc)
+(define (call-with-campaign count proc #:title [title "# Plan: Delivery coordinator test"])
   (define dir (make-temporary-file "delivery-coordinator-~a" 'directory))
   (dynamic-wind
    void
@@ -56,7 +56,7 @@
      (call-with-output-file
       (build-path dir ".planning/PLAN.md")
       (lambda (out)
-        (display "# Plan: Delivery coordinator test\n\n## Waves\n\n" out)
+        (display (string-append title "\n\n## Waves\n\n") out)
         (for ([i (in-range count)])
           (fprintf out "- [Inbox] W~a: Test → waves/W~a-test.md\n" i i)
           (display-to-file "# Test\n\nGoal: test\n\n## Verify\n\nraco test .\n"
@@ -157,6 +157,35 @@
                    "the drift reason is preserved")
        (check-equal? calls '() "no ladder action ran past the provenance gate")
        (check-equal? (stage-count dir plan) "context-ready"))))
+
+  ;; R11 (v1.00.31 W5): the frozen manifest title carries the campaign version,
+  ;; so the provenance gate stays strict even when the delivery branch follows
+  ;; the executor's campaign/<hash8>/w<N> shape and therefore has no version
+  ;; tag. Before this, such a branch silently degraded the gate to historical
+  ;; (advisory) mode and current-wave drift passed unchecked.
+  (test-case "R11: provenance gate is strict without a version-tagged branch"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       ;; Drift: a declared current-wave artifact directory with no SHA256SUMS.
+       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (make-directory* adir)
+       (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
+                        (build-path adir "matrix.json"))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "artifact-provenance")
+                   "the provenance gate refused")
+       (check-true (string-contains? (delivery-outcome-message outcome) "binds no SHA256SUMS")
+                   "current-wave drift is enforced without a version-tagged branch")
+       (check-equal? calls '() "no ladder action ran past the provenance gate"))
+     #:title "# Plan: v1.00.31 Delivery coordinator test"))
 
   (test-case "W3 branch-not-published durable gate names branch and head with the remedy"
     (call-with-campaign

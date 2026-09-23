@@ -312,9 +312,19 @@
 ;; artifacts must be bound (SHA256SUMS), canonical, and internally consistent;
 ;; recorded heads must descend from the verified wave tip. Drift is a typed
 ;; blocked stop BEFORE any ladder action; the journal stays put so the next
-;; invocation re-runs the gate. Strictness requires a current wave: the
-;; version tag comes from the durable receipt branch (campaign/vX.Y.Z-wN); a
-;; receipt without a version tag runs the lint in historical mode only.
+;; invocation re-runs the gate. Strictness requires a current wave. The
+;; version tag is taken from the durable receipt branch when it carries one
+;; (campaign/vX.Y.Z-wN), and otherwise from the frozen campaign manifest title
+;; ("v1.00.31 ..."), which is independent of the branch naming convention —
+;; the executor's own branches are campaign/<hash8>/w<N>, so relying on the
+;; branch alone silently degraded the gate to historical (advisory) mode.
+(define (plan-title-version-tag base-dir plan)
+  (with-handlers ([exn:fail? (lambda (_e) #f)])
+    (define rec (load-campaign-record base-dir plan))
+    (define title (campaign-manifest-title (campaign-record-manifest rec)))
+    (define m (and (string? title) (regexp-match #px"v?[0-9]+\\.[0-9]+\\.[0-9]+" title)))
+    (and m (car m))))
+
 (define (artifact-provenance-gate base-dir plan wave)
   (with-handlers
       ([exn:fail?
@@ -324,7 +334,8 @@
            (hasheq 'stage "delivery-preflight" 'reason (redact-delivery-text (exn-message e)))))])
     (define branch (default-delivery-receipt-branch base-dir plan wave))
     (define version-tag
-      (let ([m (regexp-match #px"v[0-9]+\\.[0-9]+\\.[0-9]+" branch)]) (and m (car m))))
+      (or (let ([m (regexp-match #px"v[0-9]+\\.[0-9]+\\.[0-9]+" branch)]) (and m (car m)))
+          (plan-title-version-tag base-dir plan)))
     (define repo
       (if (or (directory-exists? (build-path base-dir ".git"))
               (file-exists? (build-path base-dir ".git")))
