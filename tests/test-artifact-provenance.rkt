@@ -323,6 +323,22 @@
                    "non-ASCII escapes are byte-compatible with the generator")
       (delete-directory/files dir))
 
+    (test-case "R12: nested artifact families are discovered recursively"
+      ;; The declared scope is artifacts/**/v*/; a version directory nested
+      ;; under a multi-segment family must be checked like any other.
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "foo" "bar" "v9.99.99-w0"))
+      (write-text! (build-path adir "matrix.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"0000000000000000000000000000000000000000\"\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS") "")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2 "nested current-wave drift is refused")
+      (check-true (string-contains? output "foo/bar/v9.99.99-w0")
+                  "the nested version directory is discovered")
+      (delete-directory/files dir))
+
     (test-case "R11: a directory-relative current-wave SUMS entry is typed drift"
       ;; The entry resolves through the directory-relative spelling, so it is
       ;; not "broken"; canonical regeneration must still refuse it as

@@ -225,20 +225,24 @@
 
 (struct artifact-dir (path family version current?) #:transparent)
 
+;; Recursive: every directory named like a version under artifacts/ (the
+;; declared scope is artifacts/**/v*/), at any nesting depth. A version
+;; directory's own subdirectories are not descended into; the family is the
+;; relative path between artifacts/ and the version directory.
 (define (discover-artifact-dirs! root current-wave)
   (define artifacts-root (build-path root "artifacts"))
+  (define (walk dir rel)
+    (for/fold ([acc '()]) ([n (in-list (sort (directory-list dir) string<? #:key path->string))])
+      (define name (path->string n))
+      (define sub (build-path dir n))
+      (cond
+        [(not (directory-exists? sub)) acc]
+        [(regexp-match? version-dir-rx name)
+         (cons (artifact-dir sub rel name (and current-wave (string=? name current-wave))) acc)]
+        [else (append (walk sub (string-append rel (if (string=? rel "") "" "/") name)) acc)])))
   (if (not (directory-exists? artifacts-root))
       '()
-      (for/list ([family (in-list (sort (map path->string (directory-list artifacts-root)) string<?))]
-                 #:when (directory-exists? (build-path artifacts-root family))
-                 [v (in-list (sort (map path->string
-                                        (directory-list (build-path artifacts-root family)))
-                                   string<?))]
-                 #:when (regexp-match? version-dir-rx v))
-        (artifact-dir (build-path artifacts-root family v)
-                      family
-                      v
-                      (and current-wave (string=? v current-wave))))))
+      (walk artifacts-root "")))
 
 ;; ---------------------------------------------------------------------------
 ;; Checks
