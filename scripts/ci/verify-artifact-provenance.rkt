@@ -273,6 +273,20 @@
                           (artifact-dir-family ad)
                           (artifact-dir-version ad)))
      (define recorded-paths (list->set (map cdr recorded)))
+     ;; R4: for the current wave the binding itself must be canonical —
+     ;; regenerating it reproduces byte-identically (sorted repository-root
+     ;; relative paths, "<hex>  <path>" lines, LF-terminated). Historical
+     ;; directories keep their recorded spelling.
+     (when (artifact-dir-current? ad)
+       (define canonical
+         (string-join (for/list ([line (in-list (sort (map cdr recorded) string<?))])
+                        (string-append (sha256-file-hex (build-path root line)) "  " line))
+                      "\n"))
+       (unless (equal? (string-append canonical "\n") (file->string sums-path))
+         (provenance-drift!
+          "~a/~a: SHA256SUMS is not canonical (regeneration diverges from the committed bytes)"
+          (artifact-dir-family ad)
+          (artifact-dir-version ad))))
      (define dir-files
        (for/list ([p (in-directory dir)]
                   #:when (and (file-exists? p) (not (equal? p sums-path))))

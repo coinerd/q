@@ -14,6 +14,7 @@
 
 (require rackunit
          racket/file
+         racket/string
          racket/system
          racket/path
          racket/port
@@ -43,6 +44,16 @@
 (define (write-text! path text)
   (make-directory* (path-only path))
   (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
+
+(require (file "../scripts/run-tests/sha256.rkt"))
+
+(define (bytes->hex-string bs)
+  (apply string-append
+         (for/list ([b (in-bytes bs)])
+           (let ([s (number->string b 16)])
+             (if (= (string-length s) 1)
+                 (string-append "0" s)
+                 s)))))
 
 (define (git*! root . args)
   (parameterize ([current-directory root])
@@ -189,6 +200,28 @@
       (check-false (string-contains? (car (string-split output "subject-bad"))
                                      "does not match the actual tree")
                    "the matching pair is not flagged")
+      (delete-directory/files dir))
+
+    (test-case "R4: current-wave SHA256SUMS must be byte-identical canonical"
+      ;; Every digest is individually correct, but the binding is not the
+      ;; canonical regeneration (unsorted order): refused on the current
+      ;; wave.
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "b.json") "{\n \"b\": 1\n}\n")
+      (write-text! (build-path adir "a.json") "{\n \"a\": 2\n}\n")
+      (define b-hex (bytes->hex-string (sha256-bytes (string->bytes/utf-8 "{\n \"b\": 1\n}\n"))))
+      (define a-hex (bytes->hex-string (sha256-bytes (string->bytes/utf-8 "{\n \"a\": 2\n}\n"))))
+      ;; b.json listed before a.json: valid digests, wrong canonical order.
+      (write-text! (build-path adir "SHA256SUMS")
+                   (string-append b-hex
+                                  "  artifacts/prov/v9.99.99-w0/b.json\n"
+                                  a-hex
+                                  "  artifacts/prov/v9.99.99-w0/a.json\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "SHA256SUMS is not canonical")
+                  "non-canonical binding refused on the current wave")
       (delete-directory/files dir))
 
     (test-case "current wave JSON must be canonical"
