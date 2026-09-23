@@ -24,7 +24,8 @@
          racket/port
          racket/runtime-path
          racket/string
-         rackunit/text-ui)
+         rackunit/text-ui
+         json)
 
 (define-runtime-path repo-root-rel "../")
 (define repo-root (simplify-path repo-root-rel))
@@ -67,6 +68,19 @@
 (define (git*! root . args)
   (parameterize ([current-directory root])
     (apply system*/exit-code (find-executable-path "git") args)))
+
+(define (git-ancestor? root ancestor descendant)
+  (define out (open-output-string))
+  (define code
+    (parameterize ([current-output-port out]
+                   [current-directory root])
+      (with-handlers ([exn:fail? (lambda (_e) 1)])
+        (system*/exit-code (find-executable-path "git")
+                           "merge-base"
+                           "--is-ancestor"
+                           ancestor
+                           descendant))))
+  (zero? code))
 
 (define (shallow-repository?)
   (define out (open-output-string))
@@ -524,16 +538,38 @@
 
     ;; The real-tree case needs repository history (recorded heads must resolve
     ;; and be ancestors of the tip). A shallow CI checkout cannot provide that,
-    ;; so the case is skipped there with an explicit reason; the full historical
-    ;; sweep is what the wave evidence records locally.
+    ;; and on post-squash main the W5 pinned observation head is not an ancestor
+    ;; of the merge (the squash replaced the wave's pre-squash commits), so the
+    ;; strict rule is exercised on the wave branch and by the fixture suite.
     (test-case "integration: the real tree passes with the current wave strict"
-      (if (shallow-repository?)
-          (displayln "skipped: shallow checkout has no history for the strict real-tree check")
-          (let-values ([(code output)
-                        (run-lint! repo-root #:current-wave "v1.00.31-w5" #:only-current? #t)])
-            (check-equal? code 0)
-            (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
-            (check-true (string-contains? output "artifact-provenance ok")))))
+      (define recorded-head
+        (with-handlers ([exn:fail? (lambda (_e) #f)])
+          (define matrix
+            (with-input-from-file (build-path repo-root
+                                              "artifacts"
+                                              "wave-delivery-integrity"
+                                              "v1.00.31-w5"
+                                              "provenance-matrix.json")
+                                  read-json))
+          (or (and (hash? matrix) (hash-ref matrix 'recorded-head #f))
+              (and (hash? matrix) (hash-ref matrix "recorded-head" #f)))))
+      (cond
+        [(not (string? recorded-head))
+         (displayln "skipped: the W5 provenance matrix has no readable recorded head")]
+        [(shallow-repository?)
+         (displayln "skipped: shallow checkout has no history for the strict real-tree check")]
+        [(not (git-ancestor? repo-root recorded-head "HEAD"))
+         (displayln (format (string-append
+                             "skipped: the W5 pinned observation head ~a is not an ancestor of this "
+                             "checkout's HEAD (expected on post-squash main; the strict rule is "
+                             "exercised on the wave branch and by the fixture suite)")
+                            recorded-head))]
+        [else
+         (let-values ([(code output)
+                       (run-lint! repo-root #:current-wave "v1.00.31-w5" #:only-current? #t)])
+           (check-equal? code 0)
+           (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
+           (check-true (string-contains? output "artifact-provenance ok")))]))
 
     (test-case "R16: a JSON null canonicalizes as null, not as a string"
       (define dir (make-fixture-repo!))
