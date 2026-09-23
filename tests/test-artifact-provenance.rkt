@@ -240,6 +240,30 @@
                   "nested provenance field is refused")
       (delete-directory/files dir))
 
+    (test-case "R7: timing drift cannot hide in nested non-raw JSON"
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "evidence" "rollback-drill.json")
+                   (string-append "{\n"
+                                  " \"timing\": {\n"
+                                  "  \"eager-fallback-ms\": [\n"
+                                  "   247\n"
+                                  "  ]\n"
+                                  " },\n"
+                                  " \"steps\": [\n"
+                                  "  {\n"
+                                  "   \"observed\": \"fallback resolved in 260 ms\"\n"
+                                  "  }\n"
+                                  " ]\n"
+                                  "}\n"))
+      (write-text! (build-path adir "SHA256SUMS")
+                   "00aa  artifacts/prov/v9.99.99-w0/evidence/rollback-drill.json\n")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "prose value 260 ms disagrees")
+                  "nested timing drift is refused")
+      (delete-directory/files dir))
+
     (test-case "R5: only *-ms timing keys legitimize prose ms values"
       ;; A non-^-ms numeric field (attempt-count 260) must not make prose
       ;; "260 ms" agree; the typed refusal must still fire.

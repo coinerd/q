@@ -437,17 +437,21 @@
 
 (define (check-tree-pairs! root ad)
   (define dir (artifact-dir-path ad))
-  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
-        #:when (string-suffix? f ".json"))
+  (for ([p (in-list (artifact-json-files dir))])
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
-        (call-with-input-file (build-path dir f) read-json)))
+        (call-with-input-file p read-json)))
     (unless (eq? parsed 'parse-error)
+      (define rel
+        (string-append (artifact-dir-family ad)
+                       "/"
+                       (artifact-dir-version ad)
+                       "/"
+                       (path->string (find-relative-path dir p))))
       (define pairs (walk-tree-pairs parsed '()))
       (for ([pair (in-list pairs)])
         (define tree (car pair))
         (define head (cdr pair))
-        (define rel (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad) "/" f))
         (cond
           [(not (commit-exists? root head))
            (if (artifact-dir-current? ad)
@@ -537,11 +541,10 @@
 
 (define (check-cross-artifact-consistency! root ad)
   (define dir (artifact-dir-path ad))
-  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
-        #:when (string-suffix? f ".json"))
+  (for ([p (in-list (artifact-json-files dir))])
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
-        (call-with-input-file (build-path dir f) read-json)))
+        (call-with-input-file p read-json)))
     (unless (eq? parsed 'parse-error)
       ;; racket/json parses objects into hasheq (symbol keys); accept both
       ;; key types so the check is independent of the parser.
@@ -572,14 +575,17 @@
                    #:when (file-exists? p))
           (values (sha256-file-hex p) #t))
         (hash)))
-  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
-        #:when (string-suffix? f ".json"))
+  (for ([p (in-list (artifact-json-files dir))])
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
-        (call-with-input-file (build-path dir f) read-json)))
+        (call-with-input-file p read-json)))
     (unless (eq? parsed 'parse-error)
       (let loop ([v parsed]
-                 [path (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad) "/" f)])
+                 [path (string-append (artifact-dir-family ad)
+                                      "/"
+                                      (artifact-dir-version ad)
+                                      "/"
+                                      (path->string (find-relative-path dir p)))])
         (cond
           [(hash? v)
            (for ([k (in-hash-keys v)])
