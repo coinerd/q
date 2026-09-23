@@ -787,6 +787,13 @@
     (if only-current-wave?
         (filter (lambda (ad) (and (artifact-dir-current? ad) ad)) dirs)
         dirs))
+  ;; Fail closed: on the constrained path a missing/renamed current-wave
+  ;; directory must be a typed refusal, never a silent success.
+  (when (and only-current-wave? (null? checked))
+    (provenance-drift!
+     "current wave ~a: no artifact version directory named ~a was found under artifacts/** (--only-current-wave)"
+     current-wave
+     current-wave))
   (for ([ad (in-list checked)])
     (check-sums! root ad)
     (check-canonical-json! root ad)

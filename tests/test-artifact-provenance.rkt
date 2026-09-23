@@ -531,6 +531,19 @@
             (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
             (check-true (string-contains? output "artifact-provenance ok")))))
 
+    (test-case "R15: the constrained path fails closed when the current wave is missing"
+      (define dir (make-fixture-repo!))
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "old.json")
+                   (string-append "{\n"
+                                  " \"recorded-head\": \"1111111111111111111111111111111111111111\"\n"
+                                  "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v1.00.20-w0" "SHA256SUMS") "")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0" #:only-current? #t))
+      (check-equal? code 2 "a missing current-wave directory is refused, never a silent pass")
+      (check-true (string-contains? output "no artifact version directory named v9.99.99-w0")
+                  "the refusal names the expected directory")
+      (delete-directory/files dir))
+
     (test-case "R14: the constrained path skips historical dirs but keeps current strictness"
       (define dir (make-fixture-repo!))
       ;; a historical drifting directory (note only) plus a current-wave drift
