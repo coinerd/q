@@ -27,7 +27,26 @@ version directory under `artifacts/**/v*/`:
 4. **Cross-artifact consistency** — inside an artifact that declares a
    structured `timing` object with `*-ms` keys, every prose `<n> ms` value
    must equal one of the structured numbers. A disagreement is refused naming
-   both sources (the F7 rollback-drill shape).
+   both sources (the F7 rollback-drill shape). The same agreement is enforced
+   between the current wave's structured timings and every markdown report
+   bound by the directory's `SHA256SUMS`: unmarked prose milliseconds must
+   equal a delivered timing, while blocks explicitly labelled as red-fixture,
+   refusal, blocked-branch, history, or an older wave (`v1.00.2x-`/`v1.00.30-`)
+   are exempt because a report may legitimately cite non-delivered values.
+5. **Recorded digest fields** — a JSON object carrying a `path` beside a
+   64-hex `sha256` must name an existing file whose bytes hash to exactly that
+   digest. A stale or wrong recorded digest is refused on the current wave and
+   reported as a note for historical artifacts.
+6. **Recursive coverage** — every check traverses nested subdirectories of the
+   version directory; only `raw/` is exempt (captured payloads are bound by
+   SHA256SUMS but intentionally unenforced in content). A bound nested
+   artifact therefore cannot bypass any check.
+
+The F7 failure mode is also registered with the wave-delivery integrity
+harness: `tests/test-wave-delivery-integrity-register.rkt` now guards row F7
+by running this lint's own contract suite, so W6's expect-refused replay can
+exercise the original defect through the canonical harness rather than a
+re-statement of its fixture.
 
 Failures are typed `provenance-drift` (exit 2). Historical observations that
 cannot be strictly verified — blocked-branch pinned heads recorded as

@@ -539,8 +539,36 @@
        (cons (cons path (list-ref m 1)) acc))]
     [else acc]))
 
+;; R8: prose ms values in markdown reports BOUND by this directory's
+;; SHA256SUMS must agree with the version's structured timing. Blocks that
+;; are explicitly labeled (red-fixture, refusal, history, older waves) are
+;; exempt — a report may legitimately cite non-delivered values there.
+(define report-marker-rx #px"(red-first|fixture|refus|blocked-branch|v1\\.00\\.(2[0-9]|30)-|histor)")
+
+(define (report-blocks text)
+  ;; Group lines into blocks: a non-blank, non-indented line starts a block;
+  ;; blank and indented lines continue the current one (markdown lists nest
+  ;; continuation lines under their first line).
+  (define rev-blocks '())
+  (define cur '())
+  (define (flush!)
+    (unless (null? cur)
+      (set! rev-blocks (cons cur rev-blocks))
+      (set! cur '())))
+  (for ([l (in-list (string-split text "\n"))])
+    (if (and (non-empty-string? (string-trim l))
+             (not (and (positive? (string-length l)) (char-whitespace? (string-ref l 0)))))
+        (begin
+          (flush!)
+          (set! cur (list l)))
+        (set! cur (cons l cur))))
+  (flush!)
+  (reverse rev-blocks))
+
 (define (check-cross-artifact-consistency! root ad)
   (define dir (artifact-dir-path ad))
+  ;; version-wide union of structured timing values, for the report scan
+  (define union-box (box '()))
   (for ([p (in-list (artifact-json-files dir))])
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
@@ -553,6 +581,7 @@
                  (for/or ([k (in-hash-keys timing)])
                    (regexp-match? timing-key-rx (format "~a" k))))
         (define structured (collect-timing-ms timing))
+        (set-box! union-box (remove* (unbox union-box) structured))
         (define prose-mentions (walk-prose-ms parsed "" '()))
         (for ([mention (in-list prose-mentions)])
           (define n (string->number (cdr mention)))
@@ -563,7 +592,33 @@
              (artifact-dir-version ad)
              n
              (string-join (map number->string (sort structured <)) "/")
-             (car mention))))))))
+             (car mention))))))
+    ;; Report-vs-JSON agreement over every .md bound by this directory's
+    ;; SHA256SUMS (repository-root-relative entries). Only the current wave is
+    ;; enforced; historical reports keep their notes-only treatment.
+    (define union (unbox union-box))
+    (when (and (artifact-dir-current? ad) (pair? union))
+      (define sums-path (build-path dir "SHA256SUMS"))
+      (when (file-exists? sums-path)
+        (define sums-line-rx #px"^([0-9a-f]{64})  (.+)$")
+        (for ([l (in-list (string-split (file->string sums-path) "\n"))]
+              #:when (and (non-empty-string? (string-trim l))
+                          (let ([m (regexp-match sums-line-rx l)])
+                            ;; group 1 is the digest, group 2 the path
+                            (and m (string-suffix? (caddr m) ".md"))))
+              [md-rel (in-value (caddr (regexp-match sums-line-rx l)))]
+              [md-path (in-value (build-path root (caddr (regexp-match sums-line-rx l))))]
+              #:when (file-exists? md-path))
+          (for ([blk (in-list (report-blocks (file->string md-path)))]
+                #:unless (regexp-match? report-marker-rx (string-join blk " "))
+                [m (in-list (regexp-match* prose-ms-rx (string-join blk " ") #:match-select values))])
+            (define n (string->number (list-ref m 1)))
+            (unless (member n union)
+              (provenance-drift!
+               "~a: bound report prose value ~a ms disagrees with structured timing ~a (report vs JSON agreement)"
+               md-rel
+               n
+               (string-join (map number->string (sort union <)) "/")))))))))
 
 ;; Current-wave observed digests must be bound to committed raw bytes.
 (define (check-observed-digests! root ad)
@@ -603,6 +658,56 @@
                                 v))]
           [else (void)])))))
 
+;; R8: a recorded `sha256` field beside a `path` field must match the bytes
+;; of the file it names. Current wave: typed drift; historical: note (post-hoc
+;; byte drift is reported, never rewritten).
+(define (check-recorded-file-digests! root ad)
+  (define dir (artifact-dir-path ad))
+  (define rel-base (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad)))
+  (for ([p (in-list (artifact-json-files dir))])
+    (define rel (string-append rel-base "/" (path->string (find-relative-path dir p))))
+    (define parsed
+      (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
+        (call-with-input-file p read-json)))
+    (unless (eq? parsed 'parse-error)
+      (let loop ([v parsed])
+        (cond
+          [(hash? v)
+           (define path-field (or (hash-ref v "path" #f) (hash-ref v 'path #f)))
+           (define dig-field (or (hash-ref v "sha256" #f) (hash-ref v 'sha256 #f)))
+           (when (and (string? path-field) (string? dig-field) (regexp-match? hex64-rx dig-field))
+             (define target
+               (cond
+                 [(file-exists? (build-path root path-field)) (build-path root path-field)]
+                 [(file-exists? (build-path dir path-field)) (build-path dir path-field)]
+                 [else #f]))
+             (cond
+               [(not target)
+                (if (artifact-dir-current? ad)
+                    (provenance-drift! "~a: recorded sha256 ~a names no existing file ~a"
+                                       rel
+                                       dig-field
+                                       path-field)
+                    (provenance-note! "~a: recorded sha256 names no existing file ~a (historical)"
+                                      rel
+                                      path-field))]
+               [(not (equal? dig-field (sha256-file-hex target)))
+                (if (artifact-dir-current? ad)
+                    (provenance-drift! "~a: recorded sha256 ~a does not match the bytes of ~a"
+                                       rel
+                                       dig-field
+                                       path-field)
+                    (provenance-note! "~a: recorded sha256 does not match bytes of ~a (historical)"
+                                      rel
+                                      path-field))]
+               [else (void)]))
+           (for ([k (in-hash-keys v)])
+             (loop (hash-ref v k)))]
+          [(list? v)
+           (for ([x (in-list v)])
+             (loop x))]
+          [else (void)])))))
+
 ;; ---------------------------------------------------------------------------
 ;; Main
 ;; ---------------------------------------------------------------------------
@@ -616,7 +721,8 @@
     (check-cross-artifact-consistency! root ad)
     (check-tree-pairs! root ad)
     (when (artifact-dir-current? ad)
-      (check-observed-digests! root ad)))
+      (check-observed-digests! root ad))
+    (check-recorded-file-digests! root ad))
   (finish!))
 
 (module+ main

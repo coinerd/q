@@ -264,6 +264,55 @@
                   "nested timing drift is refused")
       (delete-directory/files dir))
 
+    (test-case "R8: a recorded sha256 must match the bytes of its named file"
+      (define dir (make-fixture-repo!))
+      (define raw-p (build-path dir "artifacts" "prov" "v9.99.99-w0" "raw" "x.txt"))
+      (write-text! raw-p "hello\n")
+      (define json-p (build-path dir "artifacts" "prov" "v9.99.99-w0" "matrix.json"))
+      (write-text! json-p
+                   (string-append "{\n"
+                                  " \"artifacts\": [\n"
+                                  "  {\n"
+                                  "   \"bytes\": 6,\n"
+                                  "   \"path\": \"artifacts/prov/v9.99.99-w0/raw/x.txt\",\n"
+                                  "   \"sha256\": \""
+                                  (make-string 64 #\0)
+                                  "\"\n"
+                                  "  }\n"
+                                  " ]\n"
+                                  "}\n"))
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS")
+                   (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                  "  artifacts/prov/v9.99.99-w0/matrix.json\n"
+                                  (sha256-hex (port->bytes (open-input-file raw-p)))
+                                  "  artifacts/prov/v9.99.99-w0/raw/x.txt\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "recorded sha256") "names the recorded digest field")
+      (check-true (string-contains? output "does not match the bytes of")
+                  "refuses the digest/file mismatch")
+      (delete-directory/files dir))
+
+    (test-case "R8: bound report prose ms must agree with structured timing"
+      (define dir (make-fixture-repo!))
+      (define json-p (build-path dir "artifacts" "prov" "v9.99.99-w0" "probe.json"))
+      (write-text!
+       json-p
+       (string-append "{\n" " \"timing\": {\n" "  \"probe-ms\": [\n" "   1\n" "  ]\n" " }\n" "}\n"))
+      (define md-p (build-path dir "docs" "reports" "rep.md"))
+      (write-text! md-p "- metrics run 999 ms\n\n- red-first fixture run 888 ms\n")
+      (write-text! (build-path dir "artifacts" "prov" "v9.99.99-w0" "SHA256SUMS")
+                   (string-append (sha256-hex (port->bytes (open-input-file json-p)))
+                                  "  artifacts/prov/v9.99.99-w0/probe.json\n"
+                                  (sha256-hex (port->bytes (open-input-file md-p)))
+                                  "  docs/reports/rep.md\n"))
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "bound report prose value 999 ms")
+                  "refuses the unmarked report value")
+      (check-false (string-contains? output "888") "the red-fixture-labeled block is exempt")
+      (delete-directory/files dir))
+
     (test-case "R5: only *-ms timing keys legitimize prose ms values"
       ;; A non-^-ms numeric field (attempt-count 260) must not make prose
       ;; "260 ms" agree; the typed refusal must still fire.
