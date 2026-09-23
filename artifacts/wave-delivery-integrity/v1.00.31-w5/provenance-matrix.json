@@ -19,7 +19,7 @@
  },
  "generator": {
   "path": "artifacts/wave-delivery-integrity/v1.00.31-w5/raw/matrix-gen.py",
-  "sha256": "a55046222ea5f12b2be438f075ebc42f920237e976c94e26aa17a26daccea5f9"
+  "sha256": "b54679a092a020e7c5f6641b104e3ba04a8830cb1c83cb01abab1a0ce6c57edb"
  },
  "issue": 9728,
  "milestone": 896,

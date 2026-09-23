@@ -96,7 +96,17 @@ def main():
             "sha256": sha256_file(p),
         })
 
-    head = git("rev-parse", "HEAD")
+    # R2: the recorded head is a PINNED OBSERVATION, not a live input.
+    # Regeneration reads it from the committed matrix (when present) so the
+    # artifact stays byte-identical at any later commit; a fresh matrix
+    # records the generating head once.
+    matrix_path_check = os.path.join(ARTDIR, "provenance-matrix.json")
+    if os.path.exists(matrix_path_check):
+        with open(matrix_path_check) as f:
+            existing = json.load(f)
+        head = existing["recorded-head"]
+    else:
+        head = git("rev-parse", "HEAD")
     matrix = {
         "schema": "artifact-provenance-matrix/1",
         "plan": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",

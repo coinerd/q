@@ -186,17 +186,19 @@
         (build-path repo-root "artifacts" "wave-delivery-integrity" "v1.00.31-w5" "SHA256SUMS"))
       (define before-matrix (file->string matrix-path))
       (define before-sums (file->string sums-path))
-      ;; Same inputs must produce the same bytes. The recorded head is an
-      ;; input, so the committed bytes are restored afterwards; the lint's
-      ;; SUMS binding (integration case above) proves the committed bytes
-      ;; remain the bound truth.
+      ;; Same inputs must produce the same bytes. R2: the recorded head is
+      ;; a pinned committed observation, so regeneration must reproduce the
+      ;; COMMITTED bytes verbatim, not just a self-consistent second run.
       (system*/exit-code (find-executable-path "python3") (path->string gen-path))
-      (define regen-1-matrix (file->string matrix-path))
-      (define regen-1-sums (file->string sums-path))
+      (check-equal? (file->string matrix-path)
+                    before-matrix
+                    "matrix regeneration reproduces the committed bytes")
+      (check-equal? (file->string sums-path)
+                    before-sums
+                    "SHA256SUMS regeneration reproduces the committed bytes")
       (system*/exit-code (find-executable-path "python3") (path->string gen-path))
-      (check-equal? (file->string matrix-path) regen-1-matrix "matrix regeneration is deterministic")
-      (check-equal? (file->string sums-path) regen-1-sums "SHA256SUMS regeneration is deterministic")
-      (write-text! matrix-path before-matrix)
-      (write-text! sums-path before-sums))))
-
+      (check-equal? (file->string matrix-path) before-matrix "matrix regeneration is deterministic")
+      (check-equal? (file->string sums-path)
+                    before-sums
+                    "SHA256SUMS regeneration is deterministic"))))
 (void (run-tests artifact-provenance-suite))
