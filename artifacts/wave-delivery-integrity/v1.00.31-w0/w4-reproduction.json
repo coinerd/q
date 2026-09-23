@@ -225,6 +225,30 @@
       "tool-form-result": "awaiting-review",
       "consequence": "the deterministic protected squash merge was unreachable for every wave in this single-account repository",
       "note": "approval contract amended by explicit operator decision 2026-09-20 (PLAN-v1.00.31, Approval contract); W4 replaces the gate with the recorded operator authorization plus the APPROVED non-author review artifact"
+    },
+    {
+      "mode": "F12",
+      "owning-wave": "W2",
+      "expect": "refused",
+      "guard-status": "guarded-pass",
+      "fixture-kind": "record",
+      "executed": "racket scripts/gsd-wave-gate.rkt <sentinel trio> --content-digest <empty-sha> --root <scratch> (W6 injection scripts/ci/inject-wave-defect.rkt --row F12)",
+      "exit-code": 1,
+      "tool-form-result": "placeholder-evidence",
+      "consequence": "a staged draft could be 'finalized' by flipping only status/verdict/digest fields while asserting an independent review that never happened",
+      "note": "added by the operator-directed plan amendment of 2026-09-20 after W0 froze F1-F10; W2 shipped the guard, W4 hardened compound sentinels, and W6 replays it as an injection rather than a pre-guard capture (the pre-fix tree no longer exists)"
+    },
+    {
+      "mode": "F13",
+      "owning-wave": "W5",
+      "expect": "refused",
+      "guard-status": "guarded-pass",
+      "fixture-kind": "record",
+      "executed": "racket /tmp/w6-f13.rkt (extensions/gsd/plan-snapshot.rkt seed-and-bind-plan-snapshot! over a scratch campaign root whose authored PLAN.md was amended after the snapshot was taken; W6 injection scripts/ci/inject-wave-defect.rkt --row F13)",
+      "exit-code": 1,
+      "tool-form-result": "frozen-contract-stale",
+      "consequence": "the campaign executed a contract that differed from the frozen snapshot while the plan-id, drift classification and plan validation all reported clean",
+      "note": "added by the operator-directed plan amendment of 2026-09-20 after W0 froze F1-F10; W5 shipped the guard, and W6 replays it as an injection rather than a pre-guard capture"
     }
   ]
 }
