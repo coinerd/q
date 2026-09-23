@@ -231,6 +231,22 @@
 ;; outside the artifact directory, e.g. the wave report), and every file
 ;; under the directory must be recorded. "Regenerating" the checksum file is
 ;; a per-line digest comparison plus coverage, never a format assumption.
+;; R6: artifact JSON checks are recursive over the version directory;
+;; only the raw/ subtree is exempt (captured payloads, intentionally
+;; unenforced). SHA256SUMS coverage is recursive too, so a bound nested
+;; artifact can no longer bypass the checks.
+(define (artifact-json-files dir)
+  (sort (for/list ([p (in-directory dir)]
+                   #:when (and (file-exists? p)
+                               (string-suffix? (path->string (file-name-from-path p)) ".json")
+                               (let ([rel (path->string (find-relative-path dir p))])
+                                 (and (not (equal? rel "raw"))
+                                      ;; path must not be inside raw/
+                                      (not (regexp-match? #px"(^|/)raw/" rel))))))
+          p)
+        string<?
+        #:key path->string))
+
 (define (check-sums! root ad)
   (define dir (artifact-dir-path ad))
   (define sums-path (build-path dir "SHA256SUMS"))
@@ -342,10 +358,13 @@
 
 (define (check-provenance-heads! root ad tip)
   (define dir (artifact-dir-path ad))
-  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
-        #:when (string-suffix? f ".json"))
-    (define p (build-path dir f))
-    (define rel (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad) "/" f))
+  (for ([p (in-list (artifact-json-files dir))])
+    (define rel
+      (string-append (artifact-dir-family ad)
+                     "/"
+                     (artifact-dir-version ad)
+                     "/"
+                     (path->string (find-relative-path dir p))))
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
         (call-with-input-file p read-json)))
@@ -457,10 +476,13 @@
 
 (define (check-canonical-json! root ad)
   (define dir (artifact-dir-path ad))
-  (for ([f (in-list (sort (map path->string (directory-list dir)) string<?))]
-        #:when (string-suffix? f ".json"))
-    (define p (build-path dir f))
-    (define rel (string-append (artifact-dir-family ad) "/" (artifact-dir-version ad) "/" f))
+  (for ([p (in-list (artifact-json-files dir))])
+    (define rel
+      (string-append (artifact-dir-family ad)
+                     "/"
+                     (artifact-dir-version ad)
+                     "/"
+                     (path->string (find-relative-path dir p))))
     (define parsed
       (with-handlers ([exn:fail? (lambda (_e) 'parse-error)])
         (call-with-input-file p read-json)))

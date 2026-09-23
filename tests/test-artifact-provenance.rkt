@@ -224,6 +224,22 @@
                   "non-canonical binding refused on the current wave")
       (delete-directory/files dir))
 
+    (test-case "R6: nested non-raw JSON artifacts are checked recursively"
+      ;; A bound nested artifact under a subdir cannot bypass the stale-head
+      ;; check (raw/ stays exempt).
+      (define dir (make-fixture-repo!))
+      (define adir (build-path dir "artifacts" "prov" "v9.99.99-w0"))
+      (write-text! (build-path adir "evidence" "nested.json")
+                   (string-append
+                    "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"))
+      (write-text! (build-path adir "SHA256SUMS")
+                   "00aa  artifacts/prov/v9.99.99-w0/evidence/nested.json\n")
+      (define-values (code output) (run-lint! dir #:current-wave "v9.99.99-w0"))
+      (check-equal? code 2)
+      (check-true (string-contains? output "does not resolve to a commit")
+                  "nested provenance field is refused")
+      (delete-directory/files dir))
+
     (test-case "R5: only *-ms timing keys legitimize prose ms values"
       ;; A non-^-ms numeric field (attempt-count 260) must not make prose
       ;; "260 ms" agree; the typed refusal must still fire.
