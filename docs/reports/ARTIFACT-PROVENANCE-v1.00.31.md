@@ -1,0 +1,62 @@
+# Artifact Provenance and Determinism — v1.00.31 W5
+
+Wave: W5 · issue #9728 · milestone #896
+Plan: `fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75`
+
+## What this wave closes
+
+F7 — recorded provenance drift and internal artifact inconsistency — and
+F13 — the frozen contract going silently stale (tracked in this wave per the
+frozen plan; implementation landed in the same wave).
+
+## The provenance lint
+
+`scripts/ci/verify-artifact-provenance.rkt` checks every declared artifact
+version directory under `artifacts/**/v*/`:
+
+1. **SHA256SUMS binding** — every recorded digest must match the named file;
+   every file under the directory must be recorded. Two historical path
+   conventions (repository-root-relative and directory-relative) are accepted
+   as recorded spellings; the bytes decide.
+2. **Provenance heads** — values of head/sha/commit/tree-named fields (40-hex)
+   must resolve to real commits and, for the current wave, be ancestors of the
+   wave tip. Recorded heads that are neither prove stale provenance.
+3. **Canonical JSON** — the current wave's non-raw JSON artifacts must equal
+   their canonical form (sorted keys, 1-space indent, trailing newline)
+   byte-for-byte.
+4. **Cross-artifact consistency** — inside an artifact that declares a
+   structured `timing` object with `*-ms` keys, every prose `<n> ms` value
+   must equal one of the structured numbers. A disagreement is refused naming
+   both sources (the F7 rollback-drill shape).
+
+Failures are typed `provenance-drift` (exit 2). Historical observations that
+cannot be strictly verified — blocked-branch pinned heads recorded as
+reproduction evidence, digest drift discovered after delivery, formatting
+frozen before the canonical form existed — are printed as `provenance-note`
+and never silently ignored.
+
+## Historical findings (reported, not repaired)
+
+The lint's first run found genuine pre-existing historical drift on main:
+`test-runtime/v1.00.28-w1` and `tier-ownership/v1.00.28-w0` SHA256SUMS entries
+no longer match the committed artifact bytes. These are recorded here and
+reported by every lint run as `provenance-note`s. Repairing them would mean
+rewriting delivered records; this wave's scope forbids that.
+
+## Determinism
+
+`artifacts/wave-delivery-integrity/v1.00.31-w5/raw/matrix-gen.py` regenerates
+`provenance-matrix.json` and `SHA256SUMS` byte-identically from stable inputs
+(recorded git identity, file bytes). No timestamps are embedded. The fixture
+that reproduces the F7 timing inconsistency carries the measured values; the
+matrix itself carries only digests of committed bytes — measured values are
+separated from digested structure.
+
+## Red-first evidence
+
+- `raw/red-first-f7-lint-refusal.txt` — the F7 fixture (prose 260/245 ms vs
+  `eager-fallback-ms` 247/256 ms; recorded head `8299409c` = the blocked
+  v1.00.30-w4 pin) emitted as a declared artifact and refused by the lint.
+- `raw/red-first-f13-baseline.txt` — the F13 baseline reproduction against
+  the pre-fix commit `d1df9e9b`: silent stale snapshot reuse, generic drift
+  classification, and a plan-id blind to the plan body.

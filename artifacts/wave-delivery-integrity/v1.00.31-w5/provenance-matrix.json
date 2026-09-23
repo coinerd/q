@@ -1,0 +1,30 @@
+{
+ "artifacts": [
+  {
+   "bytes": 453,
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w5/raw/red-first-f13-baseline.txt",
+   "sha256": "edb19cc354bca307ee40bb9e996f2acfb5288252a9ce1c51cbf9a415ada2fa0b"
+  },
+  {
+   "bytes": 9588,
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w5/raw/red-first-f7-lint-refusal.txt",
+   "sha256": "77807a957758b247d792826515944abcd2381cbd4089e553025150015e62f653"
+  }
+ ],
+ "checks": {
+  "canonical-json": "sorted keys, 1-space indent, trailing newline; byte-identity required for the current wave",
+  "cross-artifact": "prose <n> ms values inside timing-bearing artifacts must equal the structured timing.*-ms values",
+  "provenance-heads": "current-wave head/sha/commit/tree fields must resolve and be ancestors of the wave tip",
+  "sha256sums-binding": "per-line digest comparison plus directory coverage"
+ },
+ "generator": {
+  "path": "artifacts/wave-delivery-integrity/v1.00.31-w5/raw/matrix-gen.py",
+  "sha256": "a55046222ea5f12b2be438f075ebc42f920237e976c94e26aa17a26daccea5f9"
+ },
+ "issue": 9728,
+ "milestone": 896,
+ "plan": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+ "recorded-head": "38773504df9fcb9ab3e13a261a37480474399f1a",
+ "schema": "artifact-provenance-matrix/1",
+ "wave": "W5"
+}

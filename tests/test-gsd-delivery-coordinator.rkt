@@ -14,6 +14,7 @@
 ;; evidence does. The outer run-campaign! loop re-enters after each step.
 (require rackunit
          racket/file
+         json
          racket/format
          racket/runtime-path
          racket/string
@@ -113,6 +114,50 @@
        (check-equal? (reverse calls) '("delivery-preflight"))
        ;; The journal never advanced: the ladder entry stays sealed.
        (check-equal? (stage-count dir plan) "context-ready"))))
+  ;; Register F7 (v1.00.31 W5): the artifact provenance gate runs before the
+  ;; F5 preflight. A current-wave artifact directory without a SHA256SUMS
+  ;; binding is provenance drift; delivery is blocked at context-ready.
+  (test-case "F7 provenance gate blocks delivery on drifting artifacts"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       ;; The durable receipt branch carries the version tag the gate uses
+       ;; to identify the current wave directory.
+       (define journal-path (build-path dir ".planning" "campaigns" plan "coordinator-w0.json"))
+       (define journal-datum (call-with-input-file journal-path read-json))
+       (define receipt (hash-ref journal-datum 'receipt))
+       (define patched-receipt (hash-set receipt 'branch "campaign/v1.00.31-w0"))
+       (call-with-output-file journal-path
+                              (lambda (out)
+                                (write-json (hash-set journal-datum 'receipt patched-receipt) out))
+                              #:exists 'truncate)
+       ;; Keep the campaign record consistent with the patched receipt branch
+       ;; (the durable blocker refuses provenance mismatches first).
+       (define rec* (load-campaign-record dir plan))
+       (set-campaign-wave-delivery-branch! (for/first ([w (in-list (campaign-record-waves rec*))])
+                                             w)
+                                           "campaign/v1.00.31-w0")
+       (persist-campaign! dir rec*)
+       ;; Drift: declared artifact files with no SHA256SUMS binding.
+       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (make-directory* adir)
+       (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
+                        (build-path adir "matrix.json"))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind outcome) 'blocked)
+       (check-true (string-contains? (delivery-outcome-message outcome) "artifact-provenance")
+                   "the typed provenance refusal surfaces")
+       (check-true (string-contains? (delivery-outcome-message outcome) "binds no SHA256SUMS")
+                   "the drift reason is preserved")
+       (check-equal? calls '() "no ladder action ran past the provenance gate")
+       (check-equal? (stage-count dir plan) "context-ready"))))
+
   (test-case "W3 branch-not-published durable gate names branch and head with the remedy"
     (call-with-campaign
      1
