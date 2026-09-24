@@ -738,14 +738,15 @@
       (define reasons (trio-reasons terse-dir t-digest))
       (delete-directory/files terse-dir #:must-exist? #f)
       reasons))
-  (define placeholder? (string-contains? output "placeholder-evidence"))
+  (define placeholder-refusal? (token-refusal code output "placeholder-evidence"))
   (define short?
     (ormap (lambda (r) (string-contains? r "insufficient-review-content")) terse-reasons))
   (values code
-          (format "sentinel trio: ~a | terse narrative: ~a"
+          (format "sentinel trio (exit ~a): ~a | terse narrative (in-process): ~a"
+                  code
                   (typed-reason output "placeholder-evidence" "no placeholder reason")
                   (if short? "insufficient-review-content" "no minimum-content reason"))
-          (and placeholder? (and short? #t))))
+          (and placeholder-refusal? (and short? #t))))
 
 (define (f12-clean root)
   ;; Clean: the same trio with genuine content must be ACCEPTED by the strict
@@ -891,13 +892,14 @@
         'suite-exit0
         f11-injected
         f11-clean)
-   (row "F12"
-        "a finalized-looking trio carries sentinel placeholders in its identity and narrative fields"
-        "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)"
-        '("scripts/gsd-wave-gate.rkt")
-        'library
-        f12-injected
-        f12-clean)
+   (row
+    "F12"
+    "a finalized-looking trio carries sentinel placeholders in its identity and narrative fields"
+    "scripts/gsd-wave-gate.rkt CLI (placeholder-evidence, non-zero exit) plus the in-process minimum-content half for a terse narrative"
+    '("scripts/gsd-wave-gate.rkt")
+    'nonzero-exit+token
+    f12-injected
+    f12-clean)
    (row "F13"
         "the authored plan body is amended while the frozen snapshot still reports clean"
         "extensions/gsd/plan-snapshot.rkt seed-and-bind-plan-snapshot! (frozen-contract-stale)"

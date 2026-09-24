@@ -82,7 +82,7 @@
     },
     {
      "exit-code": 0,
-     "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
+     "guard": "scripts/gsd-wave-gate.rkt CLI (placeholder-evidence, non-zero exit) plus the in-process minimum-content half for a terse narrative",
      "id": "F12",
      "outcome": "accepted",
      "reason": "strict gate exit 0, PASS=#t; placeholder/insufficient reasons: 0"
@@ -131,7 +131,7 @@
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "10a7509b3075d7a2429d464781988feda82eaa2d8a19042128ce6cba58c98f4a"
+   "sha256": "eedea39b2fb161e2b040f7523504614bd6781a1a11568b224dfec49666736872"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
@@ -158,7 +158,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "d0b420bc670519ecf54b32e27ad739e0013d117a3ac2796f246d15151bcc7670",
+ "rehearsal-inputs-digest": "41e3b48988c8d9e3e1aa6c47be52b28cf7290e619839b78f0151e97e159655b8",
  "rows": [
   {
    "exit-code": 0,
@@ -261,12 +261,12 @@
   },
   {
    "exit-code": 1,
-   "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
+   "guard": "scripts/gsd-wave-gate.rkt CLI (placeholder-evidence, non-zero exit) plus the in-process minimum-content half for a terse narrative",
    "id": "F12",
    "injected-defect": "a finalized-looking trio carries sentinel placeholders in its identity and narrative fields",
    "outcome": "refused",
-   "reason": "sentinel trio: - placeholder-evidence: independent reviewer identity is a placeholder | terse narrative: insufficient-review-content",
-   "signal": "library"
+   "reason": "sentinel trio (exit 1): - placeholder-evidence: independent reviewer identity is a placeholder | terse narrative (in-process): insufficient-review-content",
+   "signal": "nonzero-exit+token"
   },
   {
    "exit-code": 0,
