@@ -3,7 +3,10 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 300
+;; @timeout 900
+;; The register harness exercises all 13 guard rows, including the full-tree
+;; artifact-provenance lint and the wave-gate CLI, so a full run takes ~6
+;; minutes; the honest timeout is the measured one, never a truncated pass.
 
 ;; This test deliberately declares NO @covers: it exercises no production module.
 ;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
