@@ -5,8 +5,8 @@
  (wave . "W4")
  (issue . 9690)
  (branch . "campaign/v1.00.30-w4")
- (implementation-sha . "391b8d29df485d65cf7af6031b153df5aae2ec60")
- (content-digest . "c37cb466fcb76ac399c2145201f6f857f3c55ea901a652fe5b532e6dd605f83b")
+ (implementation-sha . "c6254a66ca6967d43ad81524ed3ea784f0775fec")
+ (content-digest . "8902bbb6b7adfd5aeb94c71e7280c80dd0bb53aa717606c163115e6283be841c")
  (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd")
  (planning-sync . "current")
  (red-first
