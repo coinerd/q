@@ -382,7 +382,7 @@
                    " and the loud eager fallback retained; see w7_restamp)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
-     "01711b4bde1d5270931c847e0714d549fe6d2c74b98cd5a8561db679a61f631b"
+     "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0"
      (format
       (string-append "the guarded restore action must stay byte-identical (re-stamped by v~a W6, "
                      "re-stamped by v1.00.30 W2 #9688: containment telemetry outputs added; "

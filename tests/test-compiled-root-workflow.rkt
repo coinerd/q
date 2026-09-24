@@ -615,6 +615,58 @@
 ;; loop, whatever the compiled-root mode is.
 (check-true (string-contains? restore-text "trusted-root/*) continue"))
 
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7 (round-4 review): the W4 telemetry the frozen wave doc requires
+;; (producer cost / restore cost / usable-root hit / bounded eager-fallback /
+;; compiled-code source) must actually be emitted, and must not lie.
+
+;; The record's compiled-code outcome must be computed from a variable
+;; (`$code_outcome`), never a hard-coded eager-full-path literal in the
+;; reporter invocation (the value is false on a verified root hit and after a
+;; successful restore). (The literal may still appear in explanatory comments.)
+(check-true (string-contains? ci-text "--compiled-code-outcome \"$code_outcome\""))
+
+;; The root axis and the code axis are classified from what the job ran.
+(check-true (string-contains? ci-text "root_outcome=\"verified-root-hit\""))
+(check-true (string-contains? ci-text "root_outcome=\"eager-fallback\""))
+(check-true (string-contains? ci-text "root_outcome=\"global-off\""))
+(check-true (string-contains? ci-text "code_outcome=\"mounted-verified-root\""))
+(check-true (string-contains? ci-text "code_outcome=\"bounded-eager-gate\""))
+(check-true (string-contains? ci-text "code_outcome=\"eager-full-path\""))
+
+;; Producer cost and the bounded fallback cost reach the record, and an
+;; unobserved cost is omitted rather than invented.
+(check-true (string-contains? ci-text "needs.fast-env.outputs.compiled-root-producer-seconds"))
+(check-true (string-contains? ci-text "--compiled-root-producer-seconds"))
+(check-true (string-contains? ci-text "--compiled-root-fallback-seconds"))
+
+;; The one bounded eager compile runs for the off lane too (never lazy), and
+;; its measured duration is the fallback cost.
+(check-true
+ (string-contains? ci-text "steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'"))
+(check-true (string-contains? ci-text "steps.eager-gate.outputs.seconds"))
+
+;; The launcher writes its usable-root telemetry, and the map is uploaded only
+;; after the shard run so that telemetry is actually captured.
+(check-true (string-contains? ci-text "--telemetry-file \"$RUNNER_TEMP/compiled-root-map/"))
+;; `string-contains?` answers #t/#f here, so compare positions with a helper.
+(define (index-of haystack needle)
+  (let loop ([at 0])
+    (cond
+      [(> (+ at (string-length needle)) (string-length haystack)) #f]
+      [(string=? (substring haystack at (+ at (string-length needle))) needle) at]
+      [else (loop (add1 at))])))
+(define upload-at (index-of ci-text "Upload compiled-root resolution telemetry"))
+(define launch-at (index-of ci-text "compiled-root.rkt launch"))
+(check-true (and upload-at launch-at (> upload-at launch-at))
+            "the compiled-root telemetry upload happens after the shard launch")
+
+;; The producer job publishes the producer cost the shard record consumes.
+(check-true
+ (string-contains?
+  ci-text
+  "compiled-root-producer-seconds: ${{ steps.prepare.outputs.compiled-root-producer-seconds }}"))
+
 (module+ test
   (test-case "Q_CI_COMPILED_ROOT=auto resolves instead of failing closed"
     (define co (make-checkout! "mode-auto"))

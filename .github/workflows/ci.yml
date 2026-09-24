@@ -290,14 +290,6 @@ jobs:
             --flags-file "$flags"
           echo "flags-file=$flags" >> "$GITHUB_OUTPUT"
 
-      - name: Upload compiled-root resolution telemetry
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: compiled-root-map-${{ github.run_id }}-${{ matrix.shard }}
-          path: ${{ runner.temp }}/compiled-root-map/
-          if-no-files-found: ignore
-
       # W1 telemetry contract: normalize the prepared-environment outcome
       # into machine-readable state for the test runner (runner.rkt reads
       # Q_PREPARED_ENV_STATE / Q_PREPARED_ENV_RESTORE_MS /
@@ -321,17 +313,47 @@ jobs:
       # (state, durations, provenance) so real CI runs can be aggregated
       # honestly, including named fallback causes.
       #
-      # W2 containment telemetry (issue #9688): with the rollback switch
-      # pinned to off, this job trusts ONLY code produced by its own
-      # single eager raco setup boundary, so compiled-code-outcome is
-      # `eager-full-path` (restore success does NOT restore usable
-      # compiled code). The duration/purge/cache fields come from the
-      # setup-racket action's W2 outputs.
+      # W2 containment telemetry (issue #9688) + W4 compiled-root telemetry
+      # (issue #9690). The record separates the pilot's cost axes honestly:
+      # producer cost (same-run producer job), restore cost (setup outputs),
+      # usable-root hit / bounded eager-fallback compile (the root axis), and
+      # where this job's compiled code actually came from (the code axis).
+      # v1.00.31 W7 repair: `--compiled-code-outcome eager-full-path` used to
+      # be recorded unconditionally, which is false on a verified root hit
+      # and after a successful restore (the purge removes workspace bytecode).
+      # Every value below is derived from what THIS job actually ran, and the
+      # optional cost fields are omitted (not invented) when unobserved.
       - name: Emit prepared-environment restore record
         if: always()
         shell: bash
         run: |
           mkdir -p prepared-env-records
+          if [ "$COMPILED_ROOT" = "auto" ]; then
+            if [ "${{ steps.compiled-root.outcome }}" = "success" ]; then
+              root_outcome="verified-root-hit"
+              code_outcome="mounted-verified-root"
+            else
+              root_outcome="eager-fallback"
+              code_outcome="bounded-eager-gate"
+            fi
+          else
+            root_outcome="global-off"
+            if [ "$PREPARED_ENV" != "auto" ]; then
+              code_outcome="eager-full-path"
+            else
+              code_outcome="bounded-eager-gate"
+            fi
+          fi
+          root_args=(--compiled-root-outcome "$root_outcome"
+                     --compiled-code-outcome "$code_outcome")
+          producer_seconds="${{ needs.fast-env.outputs.compiled-root-producer-seconds }}"
+          if [ -n "$producer_seconds" ]; then
+            root_args+=(--compiled-root-producer-seconds "$producer_seconds")
+          fi
+          fallback_seconds="${{ steps.eager-gate.outputs.seconds }}"
+          if [ -n "$fallback_seconds" ]; then
+            root_args+=(--compiled-root-fallback-seconds "$fallback_seconds")
+          fi
           racket scripts/ci/prepared-env-report.rkt \
             --emit-restore-record \
             --out "prepared-env-records/record-${{ github.run_id }}-${{ matrix.shard }}.json" \
@@ -342,7 +364,7 @@ jobs:
             --fast-env-producer-result "${{ needs.fast-env.result }}" \
             --prepared-artifact-name "prepared-env-fast" \
             --installer-sha256 "${{ env.INSTALLER_SHA_LINUX_8_10 }}" \
-            --compiled-code-outcome eager-full-path \
+            "${root_args[@]}" \
             --eager-setup-seconds "${{ steps.setup.outputs.eager-setup-seconds }}" \
             --cache-state "${{ steps.setup.outputs.cache-state }}" \
             --purge-zo-count "${{ steps.setup.outputs.purge-zo-count }}"
@@ -365,15 +387,24 @@ jobs:
       - name: Clear stale bytecode (belt; shared purge lives in setup-racket)
         run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
 
-      # On the prepared-env path the restore action's read-only health
-      # checks (racket --version, lock verify, (require quickcheck fmt),
-      # raco fmt --help) replace this gate; the purged workspace is
-      # lazily recompiled from THIS checkout by the fast suite itself
-      # (BUG-0065 systemic invariant — the accepted v1.00.28 release-lane
-      # tradeoff, extended to every lane in v1.00.29 W4).
-      - name: Compile gate (shared deps)
-        if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure'
-        run: raco make main.rkt
+      # W4 (issue #9690): the ONE bounded eager compile boundary. It runs
+      # whenever this job will NOT execute against a mounted verified root:
+      # the prepared restore did not succeed, the same-run resolution failed
+      # (the root-miss path), or the compiled-root lane is off. The off lane
+      # is the global rollback switch and therefore means the full eager
+      # current-source path (v1.00.31 W7 repair: the off lane previously fell
+      # through to lazy per-test compilation after the purge, contradicting
+      # both the documented semantics and this wave's "a miss compiles once
+      # eagerly" acceptance criterion). On a verified root hit the gate is
+      # skipped: the read-only root already carries compiled code.
+      - name: Compile gate (one bounded eager compile)
+        id: eager-gate
+        if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'
+        run: |
+          start=$(date +%s%3N)
+          raco make main.rkt
+          end=$(date +%s%3N)
+          echo "seconds=$(python3 -c "print(round(($end - $start) / 1000, 3))")" >> "$GITHUB_OUTPUT"
 
       - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
         # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
@@ -402,12 +433,26 @@ jobs:
           # eager gate above) runs this exact command unchanged.
           STRICT_TEST_RUNNER=1 racket ci/prepared-environment/compiled-root.rkt launch \
             --flags-file "$COMPILED_ROOT_FLAGS" \
+            --telemetry-file "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.launch.json" \
             -- racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             $PLAN_ARGS \
             --json-out test-results.json \
             2>&1 | tee test-output.log
+
+      # W4 (issue #9690): the resolution map AND the per-shard launch
+      # telemetry are uploaded AFTER the shard runs, because the launch step
+      # writes its usable-root telemetry into the same directory (v1.00.31 W7
+      # repair: uploading before the launch lost exactly the artifact the
+      # pilot needs to prove a root hit).
+      - name: Upload compiled-root resolution telemetry
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiled-root-map-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/compiled-root-map/
+          if-no-files-found: ignore
 
       # v1.00.30 W0 review-fix: shard-side run-SHA attestation.  The
       # aggregate step must never stamp a SHA onto shard evidence itself

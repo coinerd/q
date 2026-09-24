@@ -32,10 +32,11 @@ inputs:
     description: >-
       W4 global compiled-root switch (issue #9690) forwarded as
       Q_CI_COMPILED_ROOT to the resolution gate: 'off' never touches the
-      root (full eager current-source path); 'auto'/'verify'/'resolve' use
-      verified same-run resolution; unset keeps the gate inert (a compiled
-      root present in the artifact is left untouched until a consumer
-      explicitly opts in); any other value fails closed.
+      root (the fast lane keeps the full eager current-source path, with
+      the one bounded eager compile at the gate); 'auto'/'verify'/'resolve'
+      use verified same-run resolution; unset keeps the gate inert (a
+      compiled root present in the artifact is left untouched until a
+      consumer explicitly opts in); any other value fails closed.
     required: false
     default: ''
 outputs:
