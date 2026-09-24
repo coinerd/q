@@ -5,8 +5,8 @@
  (wave . "W4")
  (issue . 9690)
  (branch . "campaign/v1.00.30-w4")
- (implementation-sha . "ca69edb89c911be8fa8d724aca98ae7ab84f849f")
- (content-digest . "3ad22729bcd843b8d80893a67660e180aa4a0c087cc6671a00a844db20e2b919")
+ (implementation-sha . "dd18e1560e91ee8243dbc787eba9734f101f2849")
+ (content-digest . "7dc6e9fd268b284ab5302c2ffe600258fac060244b7ca9574bf8f94f9bb16140")
  (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd")
  (planning-sync . "current")
  (red-first
@@ -34,9 +34,9 @@
      (run-summary . "RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1363.742 metadata-completeness=explicit:1180/heuristic:0/missing:28")))
  (suites
   . #hasheq(
-     (arch . "RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=27.257 metadata-completeness=explicit:32/heuristic:0/missing:0")
-     (security . "RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=62.549 metadata-completeness=explicit:64/heuristic:0/missing:0")
-     (workflows . "RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=78.664 metadata-completeness=explicit:33/heuristic:0/missing:0")))
+     (arch . "RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=27.109 metadata-completeness=explicit:32/heuristic:0/missing:0")
+     (security . "RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=63.182 metadata-completeness=explicit:64/heuristic:0/missing:0")
+     (workflows . "RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=79.063 metadata-completeness=explicit:33/heuristic:0/missing:0")))
  (remaining-items
   . (#hasheq(
       (classification . "deferred-noncritical")
