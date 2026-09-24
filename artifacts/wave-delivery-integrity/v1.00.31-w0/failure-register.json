@@ -6,7 +6,7 @@
   "plan-sha256": "db92d1ab6e04356985b6f56ca911c9eb6ac1c4a06df7cc3b9e42184e76c3598d",
   "register-source": "Failure-mode register (frozen; each wave closes its row)",
   "frozen": true,
-  "row-count": 11,
+  "row-count": 13,
   "rows": [
     {
       "id": "F1",
@@ -106,6 +106,24 @@
       "structural-fix": "Amended approval contract: a recorded operator authorization in the evidence record's `merge-authorization` object (operator, wave, verified implementation head, action, source) plus the APPROVED independent non-author schema-2 review artifact bound to the verified implementation head; both refusal directions enforced by tested code and the unsatisfiable second-account requirement removed",
       "owning-wave": "W4",
       "refusal": "Typed refusals `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch`"
+    },
+    {
+      "id": "F12",
+      "mode": "Gate accepts sentinel placeholders as evidence",
+      "observed": "**Gate accepts sentinel placeholders as evidence.** `scripts/gsd-wave-gate.rkt` validates identity and narrative fields with `non-empty-string?` alone, so the literal sentinel `\"PENDING\"` satisfies `review.reviewer`, `review.timestamp`, `review.scope`, `review.report`, `remaining-items[].owner`/`rationale` and `red-first.command`/`failure`. A staged draft can therefore be \"finalized\" by flipping only `status`/`verdict`/`content-digest`/`planning-sync` and the four `result` fields and still pass the strict gate, publishing a record that asserts an independent review which never happened. Observed live in this wave's own W0 binding draft, whose `prepare` output carries exactly those sentinels; `gsd-delivery.py`'s finalized `read_staged_trio` never inspects the reviewer at all",
+      "evidence-gap": "The strict gate validated identity and narrative fields with `non-empty-string?` alone, so the literal sentinel `PENDING` satisfied every field the gate inspected; no fixture proved that a sentinel-carrying draft is refused, so the placeholder path survived every green suite.",
+      "structural-fix": "Sentinel/placeholder values are refused structurally: a deny-list rejects `PENDING`/TODO-style placeholders in every identity and narrative field, with substantive minimum-content checks on the review `scope`/`report` and on `red-first.failure`, so \"finalized\" is unreachable without genuine content; both directions tested (sentinel draft refused, real-content draft accepted)",
+      "owning-wave": "W2",
+      "refusal": "Typed refusal `placeholder-evidence`"
+    },
+    {
+      "id": "F13",
+      "mode": "Frozen contract can be stale while every gate reports clean",
+      "observed": "**The frozen contract can be stale while every gate reports clean.** `seed-and-bind-plan-snapshot!` (`q/extensions/gsd/plan-snapshot.rkt:230`) reuses an existing snapshot verbatim — `(or existing (make-plan-snapshot! …))` — so a snapshot is captured once per plan-id and never refreshed. The campaign plan-id hashes the wave-doc contents and the plan index rows, **not the plan body**, and the failure-mode register plus the approval contract live in the body. `classify-snapshot-drift` compares the LIVE mirror against the snapshot, so if the mirror itself is stale the comparison is clean. Net effect: a plan-body amendment neither changes the plan-id nor refreshes the snapshot, and nothing detects that the frozen contract differs from the plan actually being executed. Observed live in this campaign: the v1.00.31 snapshot froze a plan body that lacked F12 and still carried the superseded F11 wording, while the plan-id, `classify-snapshot-drift` and plan validation all reported clean; it was found only because an independent review grepped the snapshot for F12",
+      "evidence-gap": "The plan-id hashes the wave-doc contents and the plan index rows, not the plan body, so a plan-body amendment changed neither the plan-id nor the snapshot; drift detection compared the live mirror against the snapshot, and with a stale mirror both sides agreed.",
+      "structural-fix": "Plan-body changes re-freeze the snapshot (or the plan-id covers the plan body's hash), and drift detection compares the **authored** plan against the frozen contract, so \"what is frozen\" cannot silently diverge from \"what is executed\"; amending the plan without a refreshed snapshot is refused",
+      "owning-wave": "W5",
+      "refusal": "Typed refusal `frozen-contract-stale`"
     }
   ]
 }

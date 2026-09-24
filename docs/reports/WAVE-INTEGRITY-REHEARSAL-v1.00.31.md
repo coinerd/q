@@ -1,0 +1,156 @@
+# Wave-integrity permanence rehearsal — v1.00.31 W6
+
+Issue #9729 · milestone #896 · plan-id
+`fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75`
+
+## Purpose
+
+Prove permanence for the frozen wave-delivery integrity register: the defects
+that blocked v1.00.30 W4 are now refused by machinery, on injected inputs, with
+no injection passing silently. The verdict is machine-checkable and bound, so it
+cannot be inherited by a later wave that edits the register.
+
+## Method
+
+`scripts/ci/inject-wave-defect.rkt` is the injection harness. For every register
+row F1–F13 it builds a **scratch** fixture (a temporary directory, or a
+temporary mini git repository with a fixed identity and fixed commit dates —
+never a live branch) and runs the *shipped* guard against the injection:
+
+| Signal | Meaning |
+|---|---|
+| `nonzero-exit+token` | the guard is a CLI that must BOTH exit non-zero and name the typed refusal: a warning-mode regression that prints the token and exits 0 is recorded as `ok`, never as `refused` |
+| `token` | the guard prints a DECIDED typed verdict and exits 0 (verdict-printing CLI); a crash that prints the verdict text and exits non-zero is refused |
+| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, exited 0, met a minimum number of assertion statements, and asserts every typed refusal token the row claims inside an assertion statement (opener line plus its more-indented continuation lines) — a dummy suite with passing tests and the tokens in comments is refused |
+| `library` | the guard is an in-process API returning the typed outcome |
+
+A row is `refused` **only** when the guard's own typed refusal is observed. `ok`
+(the injection passed silently), `unguarded`, `skipped` and `guard-missing` are
+rehearsal failures.
+
+Two negative controls keep the rehearsal from proving nothing:
+
+* **clean synthetic wave** — an un-injected (healthy) variant of every row is run
+  through the same guard and must be *accepted*: for the two gate rows the clean
+  trio must exit 0 with `GSD wave evidence PASS` (not merely lack the injected
+  refusal token), for the suite rows the suite's own green path must run its
+  declared minimum of tests with `OK`, and for the fixture/API rows the healthy
+  call must report its success verdict; and
+* **missing guard** — with the guard files absent from the rehearsal root, every
+  row must report `guard-missing` (fail closed) instead of `skipped`, so a guard
+  cannot be neutered by omission.
+
+The harness writes `artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json`
+(canonical JSON: sorted keys, 1-space indent, ASCII escapes, trailing newline) and
+`raw/injection-matrix-gen.py` regenerates that matrix plus `SHA256SUMS`
+byte-identically. Determinism holds because fixtures pin the git identity and
+commit dates, scratch paths are scrubbed to `<scratch>`, and the rehearsal head is the
+generation-time tip (`git rev-parse HEAD`) — a committed artifact cannot carry its
+own commit hash, so the operative content binding is the rehearsal-inputs digest
+over the harness, both tests, both suite guards, the register, the reproduction
+artifact and the generators.
+
+## Result — verdict `PERMANENT`
+
+Rehearsal head `5899143a5bf50f97dfb802ae52819a69c15b54fd` (the generation-time
+tip). Register digest `4ce067d627506b3b…` over
+`artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json` (13 rows),
+reproduction digest over `w4-reproduction.json`.
+
+| Row | Injected defect | Guard | Observed refusal | Exit |
+|---|---|---|---|---|
+| F1 | a declaration names a flag the script does not accept (`--w6-injected-unknown-flag`) | `scripts/ci/invocation-contract.rkt` | `invocation-contract status: unknown-flag` | 0 |
+| F2 | a hand-authored content digest the tool never recomputed | `scripts/gsd-evidence-bind.rkt verify` | `digest-mismatch: evidence records 0000… but the computed … is e3b0c4…` | 0 |
+| F3 | evidence `implementation-sha` differs from the durable receipt head | `scripts/gsd-wave-gate.rkt` | `head-binding-mismatch: evidence implementation-sha aaaa… differs from the durable receipt head dddd…` | 1 |
+| F4 | the record commit also touches a non-evidence source path | `scripts/gsd-evidence-bind.rkt record-commit` | `impure-record-commit: src/a.rkt` | 0 |
+| F5 | a wave records verified while its branch was never pushed | `verify-with-delivery-receipt` | `branch-not-published` marker, no journal (`journal=#f remote-pending=#t`) | 0 |
+| F6 | PR resolution uses `head={owner}/{repo}:{branch}`, which matches nothing | `tests/test-gsd-delivery-api-contract.py` | wrong head filter rejected; 11 tests ran (minimum 11), `OK`, suite source asserts `resolve_existing_pr` / `head=` | 0 |
+| F7 | an artifact pins a stale recorded head and contradicts its own structured timing | `scripts/ci/verify-artifact-provenance.rkt` | `provenance-drift: … recorded head 8299409c… does not resolve to a commit` | 2 |
+| F8 | a delivery subprocess failure surfaces as a bare exit code | `gsd-delivery.py classify_failure` | `remote-ref-missing: refs/heads/campaign/x is not published on origin; push the verified head first` | 0 |
+| F9 | a wave is marked done while its delivery journal reads delivery-pending | `try-complete-wave! #:delivery-proof 'require-delivered` | `completion-result-status: delivery-pending-cannot-complete` | 0 |
+| F10 | a rolled-back wave leaves its completion event leading the durable record | `completion-outbox-invariant?` + `reconcile-completion-outbox!` | `outbox-leads-record` then reconcile → `ok` | 0 |
+| F11 | a merge with no recorded operator authorization or no APPROVED review artifact | `tests/test-gsd-delivery-approval-contract.py` | absent authorization / absent APPROVED review artifact; 15 tests ran (minimum 15), `OK`, suite source asserts `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch` | 0 |
+| F12 | a finalized-looking trio carries sentinel placeholders in identity and narrative fields | `scripts/gsd-wave-gate.rkt` CLI, plus the in-process minimum-content half for a terse narrative | `placeholder-evidence: independent reviewer identity is a placeholder`; the terse trio yields `insufficient-review-content` | 1 |
+| F13 | the authored plan body is amended while the frozen snapshot still reports clean | `seed-and-bind-plan-snapshot!` | `frozen-contract-stale` (frozen snapshot intact) | 0 |
+
+All 13 rows are refused, every clean control is accepted, and the missing-guard
+control is detected; the matrix therefore carries `verdict: PERMANENT` and an
+empty `failing-rows`.
+
+The dispatch signals in the table are the point of the `signal` column: three
+shipped guards fail closed with a non-zero exit *and* name the refusal (a
+warning-mode regression that only prints the token is caught as `ok`), two print a
+typed verdict and exit 0 (verdict-printing CLIs), two are fixture suites whose
+witnessed green run *is* the refusal witness, and six are in-process APIs.
+Recording the signal with each row keeps the matrix from implying an exit-code
+polarity the guards do not share.
+
+## Binding and invalidation
+
+`injection-matrix.json` records the digest of the frozen register and of the
+reproduction artifact, the register row count, the rehearsal head, the digest of
+every rehearsal input (the harness, both tests, the register and reproduction
+artifacts and the generators) and both controls. The rehearsal head is the
+generation-time tip (`git rev-parse HEAD` at the moment the matrix was produced):
+a committed artifact cannot name its own commit, so the value is the tip as of
+generation, and the operative binding is the rehearsal-inputs digest. The
+adversarial test (`tests/test-wave-integrity-adversarial.rkt`) asserts that the
+recorded digests equal the current file digests (register, reproduction artifact,
+and every rehearsal input), that the recorded head is a full SHA present in this
+repository, that a fresh rehearsal reproduces the committed matrix byte-identically
+except for the rehearsal head (which necessarily advances with the commit carrying
+the matrix), and that a mutated register no longer matches the recorded digest —
+so editing the register, the harness, either test or a generator invalidates the
+verdict instead of silently inheriting `PERMANENT`.
+
+## Falsification checks
+
+Beyond the two controls, the harness was checked to fail closed against a
+neutered guard rather than inherit a `PERMANENT` verdict:
+
+* replacing `scripts/ci/verify-artifact-provenance.rkt` with a warning-mode
+  script that prints `provenance-drift` and exits 0 in a scratch copy of the tree
+  turns F7 into `ok` and the verdict into `NOT PERMANENT` with `failing-rows:
+  ["F7"]`;
+* replacing `scripts/gsd-wave-gate.rkt` with a stub that does not export the
+  gate API makes the rehearsal fail closed at require time instead of reporting a
+  refusal; and
+* the unit-level polarity witness `(token-refusal 0 token token)` → `#f`,
+  `(token-refusal 1 token token)` → `#t` is asserted by the rehearsal test;
+* a suite that prints `Ran N tests … OK` and then exits 99 makes F6/F11 `ok`,
+  their clean controls `refused`, and the verdict `NOT PERMANENT`; and
+* `pure-verdict?` matches the F4 success verdict exactly (never by substring, so
+  `impure-record-commit` cannot satisfy `pure`), asserted by the test;
+* a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
+  and exits 99 makes F2/F4 `ok` (a printed verdict on a non-zero exit is a tool
+  failure, not a decided refusal), verdict `NOT PERMANENT`; and
+* a guard that exits 0 while printing BOTH a refusal verdict and a success
+  verdict (e.g. `digest-mismatch` and `digest-ok`, or `impure-record-commit` and
+  `pure`) makes F2/F4 `ok` and their clean controls `refused`: a decided verdict
+  must be a verdict LINE on exit 0 with no contradictory verdict line alongside;
+* swapping in a vacuous passing suite for either suite row changes a recorded
+  rehearsal-input digest, so the committed `PERMANENT` verdict no longer matches
+  and `tests/test-wave-integrity-adversarial.rkt` fails (the suites are content
+  inputs, and the test asserts both are present in `rehearsal-inputs`);
+* dummy suites (enough passing tests, typed tokens only in comments) make F6/F11
+  `ok` because the witness requires assertion-backed tokens (tokens inside an
+  assertion statement, not merely in the same block) and a minimum number of
+  assertion statements; the witness reports the assertion count.
+
+## Red-first evidence
+
+* `raw/red-first-register-f12-f13.txt` — the register harness with the F12/F13
+  rows already frozen but their guards not yet registered (three failures: the
+  row-set assertion, the missing raw-excerpt narrative, and the unguarded
+  F12/F13 reproduction-liveness).
+* `raw/red-first-harness.txt` — the rehearsal test before the matrix artifact
+  exists (the artifact read raises; nothing is claimed).
+
+## Reproduction
+
+```bash
+racket scripts/ci/inject-wave-defect.rkt --out /tmp/injection-matrix.json
+python3 artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py
+raco test tests/test-wave-integrity-adversarial.rkt tests/test-wave-delivery-integrity-register.rkt
+racket scripts/ci/verify-artifact-provenance.rkt --root . --current-wave v1.00.31-w6
+```

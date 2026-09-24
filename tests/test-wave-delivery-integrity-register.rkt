@@ -3,6 +3,10 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
+;; @timeout 900
+;; The register harness exercises all 13 guard rows, including the full-tree
+;; artifact-provenance lint and the wave-gate CLI, so a full run takes ~6
+;; minutes; the honest timeout is the measured one, never a truncated pass.
 
 ;; This test deliberately declares NO @covers: it exercises no production module.
 ;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
@@ -54,6 +58,7 @@
          (file "../extensions/gsd/wave-completion.rkt")
          (file "../extensions/gsd/delivery-journal.rkt")
          (file "../extensions/gsd/delivery-receipt.rkt")
+         (file "../extensions/gsd/plan-snapshot.rkt")
          (only-in (file "../scripts/gsd-wave-gate.rkt")
                   validate-wave-evidence
                   wave-evidence-result-reasons))
@@ -606,6 +611,166 @@
 
 (register-guard! "F7" (lambda (_repro) (if (w5-f7-defect-refused?) 'refused 'not-refused)))
 
+;; ============================================================
+;; W6 guards for F12 (sentinel placeholders) and F13 (stale frozen contract)
+;; ============================================================
+
+;; Both rows were registered by the operator-directed plan amendment of
+;; 2026-09-20 after W0 froze F1-F11: F12 was shipped by W2 (the strict gate
+;; refuses placeholder identity/narrative fields), F13 by W5 (a plan-body
+;; amendment without a refreshed snapshot is refused). W6 replays them as
+;; injections and registers their guards here so `run-register` covers every
+;; register row F1-F13 in expect-refused mode.
+
+;; F12 guard: the strict gate refuses a trio whose identity and narrative
+;; fields are the literal sentinels the W0 binding draft carried, refuses a trio
+;; whose narrative fields are merely too short to be substantive, and accepts
+;; the same trio once those fields carry genuine content. All three halves must
+;; hold: a gate that refused everything would fail the control, and a gate
+;; satisfied by non-empty strings alone (the W0 defect) would fail the sentinel
+;; case. The terse case pins the minimum-content half independently, because a
+;; placeholder is reported before the length rule can fire.
+(define (w6-f12-fixture mode)
+  (define root (make-temporary-file "w6reg-f12-~a" 'directory))
+  (define impl-sha (make-string 40 #\a))
+  (define digest (make-string 64 #\b))
+  (define genuine-scope
+    (string-append "W6 rehearsal: the sentinel trio is refused by the strict gate "
+                   "with the typed placeholder-evidence refusal, while the same "
+                   "trio with genuine narrative content is not."))
+  (define genuine-report
+    (string-append "The rehearsal injects the W0 binding-draft sentinel shape "
+                   "(reviewer, timestamp, scope, report and red-first fields all "
+                   "PENDING) and observes the refusal; the control replaces every "
+                   "sentinel with substantive content."))
+  (define genuine-red-first
+    (string-append "the injected sentinel trio was refused before any publication "
+                   "with the typed placeholder-evidence reason"))
+  (define-values (reviewer timestamp scope report red-command red-failure owner rationale)
+    (case mode
+      [(sentinel)
+       (values "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING")]
+      [(terse)
+       (values "R. Reviewer"
+               "2026-09-23T00:00:00Z"
+               "too short"
+               "too short"
+               "racket scripts/ci/inject-wave-defect.rkt --row F12"
+               "too short"
+               "W6 rehearsal operator"
+               "documents the injection instead of closing the row by assertion")]
+      [else
+       (values "Independent Reviewer"
+               "2026-09-23T00:00:00Z"
+               genuine-scope
+               genuine-report
+               "racket scripts/ci/inject-wave-defect.rkt --row F12"
+               genuine-red-first
+               "W6 rehearsal operator"
+               "documents the injection instead of closing the row by assertion")]))
+  (define (write! rel text)
+    (define path (build-path root rel))
+    (make-directory* (path-only path))
+    (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
+  (write! "scripts/required-pr-checks.policy" "(\"lint\")\n")
+  (write! "docs/reports/gsd-wave-evidence/w6-f12.rktd"
+          (format (string-append
+                   "#hasheq((schema-version . 2) (milestone . 896) (wave . \"W12\")"
+                   " (issue . 9731) (status . \"ready-for-merge\")"
+                   " (implementation-sha . ~s) (content-digest . ~s)"
+                   " (required-checks . (\"lint\"))"
+                   " (review-artifact . \"docs/reports/gsd-wave-reviews/w6-f12.rktd\")"
+                   " (validation-artifact . \"docs/reports/gsd-wave-validation/w6-f12.rktd\"))\n")
+                  impl-sha
+                  digest))
+  (write!
+   "docs/reports/gsd-wave-reviews/w6-f12.rktd"
+   (format (string-append "#hasheq((reviewer . ~s) (verdict . \"APPROVED\") (reviewed-sha . ~s)"
+                          " (content-digest . ~s) (timestamp . ~s) (scope . ~s) (report . ~s))\n")
+           reviewer
+           impl-sha
+           digest
+           timestamp
+           scope
+           report))
+  (write!
+   "docs/reports/gsd-wave-validation/w6-f12.rktd"
+   (format (string-append "#hasheq((status . \"current\") (milestone . 896) (wave . \"W12\")"
+                          " (issue . 9731) (branch . \"campaign/w6-f12\")"
+                          " (implementation-sha . ~s) (content-digest . ~s)"
+                          " (planning-sync . \"current\")"
+                          " (remaining-items . (#hasheq((classification . \"deferred-noncritical\")"
+                          " (OWNER . ~s) (RATIONALE . ~s))))"
+                          " (red-first . #hasheq((command . ~s) (failure . ~s)))"
+                          " (focused-tests . #hasheq((result . \"passed\")))"
+                          " (format-compile . #hasheq((result . \"passed\")))"
+                          " (lint . #hasheq((result . \"passed\")))"
+                          " (fast . #hasheq((result . \"passed\")))"
+                          " (review-artifact . \"docs/reports/gsd-wave-reviews/w6-f12.rktd\"))\n")
+           impl-sha
+           digest
+           owner
+           rationale
+           red-command
+           red-failure))
+  (define evidence
+    (call-with-input-file (build-path root "docs/reports/gsd-wave-evidence/w6-f12.rktd")
+                          (lambda (in)
+                            (parameterize ([read-accept-reader #f]
+                                           [read-accept-lang #f]
+                                           [read-accept-graph #f])
+                              (read in)))))
+  (define reasons
+    (wave-evidence-result-reasons
+     (validate-wave-evidence evidence #:root root #:actual-content-digest digest)))
+  (delete-directory/files root #:must-exist? #f)
+  reasons)
+
+(define (w6-f12-defect-refused?)
+  (define sentinel-reasons (w6-f12-fixture 'sentinel))
+  (define terse-reasons (w6-f12-fixture 'terse))
+  (define genuine-reasons (w6-f12-fixture 'genuine))
+  (and (ormap (lambda (r) (string-contains? r "placeholder-evidence")) sentinel-reasons)
+       (ormap (lambda (r) (string-contains? r "insufficient-review-content")) terse-reasons)
+       (not (ormap (lambda (r) (string-contains? r "placeholder-evidence")) genuine-reasons))
+       (not (ormap (lambda (r) (string-contains? r "insufficient-review-content")) genuine-reasons))))
+
+;; F13 guard: an authored plan-body amendment after the snapshot was taken is
+;; refused with the typed frozen-contract-stale exception and leaves the frozen
+;; snapshot untouched; restoring the authored body re-binds cleanly (the
+;; control that keeps the guard from refusing every amendment-shaped call).
+(define (w6-f13-defect-refused?)
+  (define dir (make-temporary-file "w6reg-f13-~a" 'directory))
+  (define plan-text "# Plan\n\n- [Inbox] W0: Alpha -> waves/W0-alpha.md\n")
+  (define campaign (make-string 64 #\a))
+  (define (write! rel text)
+    (define path (build-path dir rel))
+    (make-directory* (path-only path))
+    (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
+  (write! (build-path ".planning" "PLAN.md") plan-text)
+  (write! (build-path ".planning" "waves" "W0-alpha.md") "# Wave 0\n\nalpha body\n")
+  (define-values (_path frozen-digest) (seed-and-bind-plan-snapshot! dir campaign))
+  (write! (build-path ".planning" "PLAN.md")
+          (string-append plan-text "\n## Failure Modes\n\n| F14 | body amendment after freeze |\n"))
+  (define refused?
+    (with-handlers ([exn:fail:gsd-frozen-contract-stale? (lambda (_e) #t)]
+                    [exn:fail? (lambda (_e) #f)])
+      (seed-and-bind-plan-snapshot! dir campaign)
+      #f))
+  (define snapshot-intact?
+    (and (equal? (snapshot-manifest-digest (load-snapshot-manifest dir campaign)) frozen-digest)
+         (equal? (file->string (build-path (snapshot-dir dir campaign) "PLAN.md")) plan-text)))
+  (write! (build-path ".planning" "PLAN.md") plan-text)
+  (define clean?
+    (with-handlers ([exn:fail? (lambda (_e) #f)])
+      (seed-and-bind-plan-snapshot! dir campaign)
+      #t))
+  (delete-directory/files dir #:must-exist? #f)
+  (and refused? snapshot-intact? clean?))
+
+(register-guard! "F12" (lambda (_repro) (if (w6-f12-defect-refused?) 'refused 'not-refused)))
+(register-guard! "F13" (lambda (_repro) (if (w6-f13-defect-refused?) 'refused 'not-refused)))
+
 (define original-guard-ids (sort (hash-keys guards) string<?))
 
 ;; ============================================================
@@ -617,9 +782,9 @@
 (define (statuses)
   (map row-result-guard-status results))
 
-(test-case "register is the frozen F1-F10 set extended by the amended-contract row F11"
+(test-case "register is the frozen F1-F10 set extended by the amended-contract rows F11-F13"
   (check-equal? (map (lambda (r) (row-ref r 'id)) register-rows)
-                '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11"))
+                '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11" "F12" "F13"))
   (check-true (eq? #t (hash-ref register 'frozen)))
   (check-equal? (hash-ref register 'row-count) (length register-rows))
   ;; the plan digest is recorded provenance for the (repo-external) plan file;
@@ -773,16 +938,17 @@
                'reproduced
                (format "~a fixture reproduces" (row-result-mode res)))))
 
-(test-case "W3 guards F1-F5/F8-F10 guarded-pass; W4 adds F6/F11; W5 adds F7"
+(test-case "W3 guards F1-F5/F8-F10 guarded-pass; W4 adds F6/F11; W5 adds F7/F13; W2 row F12 guarded"
   ;; The register is a per-wave ledger: a row becomes guarded in the wave that
   ;; fixes it and only then. A wave that marked rows guarded without fixing them
   ;; would show up here as an extra entry; a wave that fixed F2/F3/F4 and forgot
   ;; to register their guards would show up as those rows falling back to
   ;; unguarded — and, with the fixes live, as reproduction-liveness failures just
   ;; above.
-  (check-equal? original-guard-ids '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))
+  (check-equal? original-guard-ids
+                '("F1" "F10" "F11" "F12" "F13" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))
   (check-equal? (sort (hash-keys guards) string<?) original-guard-ids)
-  (for ([id (in-list '("F1" "F10" "F11" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))])
+  (for ([id (in-list '("F1" "F10" "F11" "F12" "F13" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9"))])
     (check-eq? (for/first ([r (in-list results)]
                            #:when (equal? (row-result-mode r) id))
                  (row-result-guard-status r))
@@ -812,9 +978,14 @@
   ;; asserts typed refusal on the F7-shaped fixture — passing the suite is
   ;; the refusal witness.
   (check-true (w5-f7-defect-refused?))
+  ;; W6: the plan-amendment rows F12/F13 are guarded by the shipped refusals
+  ;; (sentinel placeholders, stale frozen contract) and are falsifiable — each
+  ;; guard's control half must fail if the refusal half stopped refusing.
+  (check-true (w6-f12-defect-refused?))
+  (check-true (w6-f13-defect-refused?))
   (for ([r (in-list results)]
         #:unless (member (row-result-mode r)
-                         '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11")))
+                         '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11" "F12" "F13")))
     (check-eq? (row-result-guard-status r)
                'unguarded
                (format "~a still unguarded" (row-result-mode r)))))

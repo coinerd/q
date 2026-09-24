@@ -1,0 +1,26 @@
+# W6 red-first baseline — register extended with F12/F13, guards not yet registered
+# command: racket tests/test-wave-delivery-integrity-register.rkt
+# head: 8db4417ea9f1d50c72bf6436f05d2a9dae5301a2
+
+--------------------
+register is the frozen F1-F10 set extended by the amended-contract row F11
+FAILURE
+name:       check-equal?
+location:   tests/test-wave-delivery-integrity-register.rkt:621:2
+actual:
+  '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11" "F12" "F13")
+expected:   '("F1" "F2" "F3" "F4" "F5" "F6" "F7" "F8" "F9" "F10" "F11")
+--------------------
+--------------------
+unguarded rows still reproduce their defect on the unfixed tree
+FAILURE
+name:       check-eq?
+location:   tests/test-wave-delivery-integrity-register.rkt:772:4
+message:    "F12 fixture reproduces"
+actual:     'not-reproduced
+expected:   'reproduced
+--------------------
+bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
