@@ -16,7 +16,8 @@
 ;; bound to the W0 register digest, so editing the register invalidates the
 ;; verdict instead of silently inheriting a stale PERMANENT.
 
-(require racket/file
+(require "../scripts/ci/inject-wave-defect.rkt"
+         racket/file
          racket/list
          racket/path
          racket/runtime-path
@@ -170,6 +171,16 @@
    (lambda () (delete-file mutated)))
   (check-true (and (regexp-match? #px"^[0-9a-f]{40}$" (hash-ref committed 'rehearsal-head "")) #t)
               "the rehearsal head is a full commit SHA")
+  ;; The human report must name the same rehearsal head as the matrix: a
+  ;; generator-synced literal that drifts is a provenance defect, not cosmetics.
+  (define report-text
+    (file->string (build-path q-root "docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md")))
+  (define report-head
+    (and (regexp-match #px"Rehearsal head `([0-9a-f]{40})`" report-text)
+         (second (regexp-match #px"Rehearsal head `([0-9a-f]{40})`" report-text))))
+  (check-equal? report-head
+                (hash-ref committed 'rehearsal-head)
+                "the report names the same rehearsal head as the matrix")
   ;; The suite guards are bound by the inputs digest: a vacuous replacement suite
   ;; must change the recorded digests rather than leave the verdict byte-identical.
   (define input-paths
@@ -179,6 +190,17 @@
               "the F6 suite guard is a recorded rehearsal input")
   (check-true (and (member "tests/test-gsd-delivery-approval-contract.py" input-paths) #t)
               "the F11 suite guard is a recorded rehearsal input")
+  ;; decided-verdict? is verdict-LINE based and refuses contradictory output, so a
+  ;; guard printing both verdicts satisfies neither the row nor its clean control.
+  (check-true (and (decided-verdict? 0 "digest-mismatch: x\n" "digest-mismatch" (list "digest-ok"))
+                   #t)
+              "a single verdict line on exit 0 is DECIDED")
+  (check-false
+   (and (decided-verdict? 0 "digest-mismatch: x\ndigest-ok y\n" "digest-mismatch" (list "digest-ok"))
+        #t)
+   "contradictory verdicts are not DECIDED")
+  (check-false (and (decided-verdict? 0 "text mentioning digest-ok mid-line\n" "digest-ok" '()) #t)
+               "a mid-line mention is not a verdict line")
   ;; The recorded head names a commit this repository actually contains (the
   ;; generation-time tip), so the observation is real rather than fabricated.
   (check-true (git-object-present? q-root (hash-ref committed 'rehearsal-head))

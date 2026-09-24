@@ -8,9 +8,11 @@ wave's bound files (repository-root-relative, sorted, two spaces, trailing
 newline — the convention the W5 provenance lint enforces for the current wave).
 
 The harness is deterministic: fixtures use fixed git identities and dates,
-scratch paths are scrubbed to <scratch>, and the rehearsal head is a pinned
-observation read back from the committed matrix. Re-running this generator on an
-unchanged tree therefore reproduces the same bytes.
+scratch paths are scrubbed to <scratch>, and the rehearsal head is the
+generation-time tip (git rev-parse HEAD) — a committed artifact cannot carry its
+own commit hash. The generator also keeps the human report's head literal in sync
+with the matrix, so the two cannot drift. Re-running this generator on an
+unchanged tree therefore reproduces the same bytes apart from the advancing head.
 """
 import hashlib
 import json
@@ -60,6 +62,17 @@ def main():
     with open(MATRIX, "w", encoding="utf-8") as handle:
         handle.write(fresh)
     os.unlink(tmp)
+    # The report prints the rehearsal head; keep it in lockstep with the matrix
+    # (the test asserts the two agree, so drift fails rather than ships).
+    report = os.path.join(ROOT, "docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md")
+    with open(report, encoding="utf-8") as handle:
+        report_text = handle.read()
+    import re
+    synced = re.sub(r"(Rehearsal head `)[0-9a-f]{40}(`)",
+                    r"\g<1>" + parsed["rehearsal-head"] + r"\g<2>", report_text, count=1)
+    if synced != report_text:
+        with open(report, "w", encoding="utf-8") as handle:
+            handle.write(synced)
     missing = [rel for rel in BOUND if not os.path.exists(os.path.join(ROOT, rel))]
     if missing:
         raise SystemExit("bound file is missing: %s" % ", ".join(missing))

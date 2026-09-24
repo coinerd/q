@@ -127,15 +127,15 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "f9e7c0f68217ad508a239f1187f33e45d108cca1",
+ "rehearsal-head": "0134f813af73e7b4fe1509950a4a11f04852677d",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "91d33088ea545c31c324fcb10ef5ec53a87cea6c8302df6aa17e1adf9427724d"
+   "sha256": "c731bd9992838bf631e1c5115133f76a00c2ee3cec3ce81f043f8a67bedf2f13"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
-   "sha256": "a3467cb512cbd95400173ed7bb6dbccebf0ce660a0a4837418363022e984677a"
+   "sha256": "0acd126c569fcfcda6db5b7233c81dcc5df0f18b227261a2254284019d1f1577"
   },
   {
    "path": "tests/test-wave-delivery-integrity-register.rkt",
@@ -155,7 +155,7 @@
   },
   {
    "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py",
-   "sha256": "2aebee0be1988a3eb6bd831fa9ff76ebb13b1ded60afa54f73cc38699d5b1666"
+   "sha256": "286bfa5555bcd30eaf5c51ab65740bf6e2d0b23629e97dc0bd2d9eee9070484b"
   },
   {
    "path": "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json",
@@ -166,7 +166,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "a038bd59a2e20c0995afc54e53648cf298a0c2ef0928194400a98aadf4bfa036",
+ "rehearsal-inputs-digest": "f449f8231209bd73c332ed2c33a86f4af840d2640031a6f1923a14782614a020",
  "rows": [
   {
    "exit-code": 0,

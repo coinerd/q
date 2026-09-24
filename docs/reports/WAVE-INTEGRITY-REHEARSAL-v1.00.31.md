@@ -52,7 +52,7 @@ artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `729692d06b0e275d451e2e37a569127b21eb3513` (the generation-time
+Rehearsal head `0134f813af73e7b4fe1509950a4a11f04852677d` (the generation-time
 tip). Register digest `4ce067d627506b3b…` over
 `artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json` (13 rows),
 reproduction digest over `w4-reproduction.json`.
@@ -124,6 +124,10 @@ neutered guard rather than inherit a `PERMANENT` verdict:
 * a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
   and exits 99 makes F2/F4 `ok` (a printed verdict on a non-zero exit is a tool
   failure, not a decided refusal), verdict `NOT PERMANENT`; and
+* a guard that exits 0 while printing BOTH a refusal verdict and a success
+  verdict (e.g. `digest-mismatch` and `digest-ok`, or `impure-record-commit` and
+  `pure`) makes F2/F4 `ok` and their clean controls `refused`: a decided verdict
+  must be a verdict LINE on exit 0 with no contradictory verdict line alongside;
 * swapping in a vacuous passing suite for either suite row changes a recorded
   rehearsal-input digest, so the committed `PERMANENT` verdict no longer matches
   and `tests/test-wave-integrity-adversarial.rkt` fails (the suites are content

@@ -105,8 +105,23 @@
 ;; The evidence-bind CLI and the classifier report DECIDED verdicts only on exit
 ;; 0; a non-zero exit is a tool failure, so a crash that prints the verdict text
 ;; must not count as a refusal or a success.
-(define (decided-verdict? code output token)
-  (and (zero? code) (string-contains? output token) #t))
+;; A decided verdict is a verdict LINE, not a substring anywhere in the output:
+;; `forbidden` names lines (by prefix) that must be absent, so a guard printing
+;; both the refusal and the success verdict is not treated as DECIDED.
+(provide decided-verdict?
+         verdict-line?
+         pure-verdict?)
+
+(define (verdict-line? output token)
+  (for/or ([l (in-list (string-split output "\n"))])
+    (string-prefix? (string-trim l) token)))
+
+(define (decided-verdict? code output token [forbidden '()])
+  (and (zero? code)
+       (verdict-line? output token)
+       (not (for/or ([f (in-list forbidden)])
+              (verdict-line? output f)))
+       #t))
 
 (define (pure-verdict? output)
   (and (not (string-contains? output "impure")) (equal? (string-trim output) "pure")))
@@ -271,7 +286,7 @@
 
 (define (f2-injected root)
   (define-values (code output) (f2-outcome root #t))
-  (values code output (decided-verdict? code output "digest-mismatch")))
+  (values code output (decided-verdict? code output "digest-mismatch" (list "digest-ok"))))
 
 (define (f2-clean root)
   (define-values (code output)
@@ -310,7 +325,7 @@
                                      head
                                      "--evidence"
                                      (path->string record))))))
-  (values code output (decided-verdict? code output "digest-ok")))
+  (values code output (decided-verdict? code output "digest-ok" (list "digest-mismatch"))))
 
 ;; ---------------------------------------------------------------------------
 ;; F3 — evidence/review head ≠ verified head
@@ -446,7 +461,7 @@
 
 (define (f4-injected root)
   (define-values (code output) (f4-outcome root #t))
-  (values code output (decided-verdict? code output "impure-record-commit")))
+  (values code output (decided-verdict? code output "impure-record-commit" (list "pure"))))
 
 (define (f4-clean root)
   (define-values (code output) (f4-outcome root #f))
@@ -716,7 +731,9 @@
 (define (f8-injected root)
   (define-values (code output)
     (f8-classify root "format(\"fatal: couldn't find remote ref refs/heads/campaign/x\")"))
-  (values code output (decided-verdict? code output "remote-ref-missing:")))
+  (values code
+          output
+          (decided-verdict? code output "remote-ref-missing:" (list "delivery command failed"))))
 
 (define (f8-clean root)
   (define-values (code output) (f8-classify root "\"some unclassified failure\""))
