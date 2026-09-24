@@ -333,14 +333,28 @@ jobs:
       # both the documented semantics and this wave's "a miss compiles once
       # eagerly" acceptance criterion). On a verified root hit the gate is
       # skipped: the read-only root already carries compiled code.
+      #
+      # The gate's cost is bracketed by two tiny always-run stamp steps so the
+      # compile declaration itself stays a single, extractor-visible script
+      # invocation. A multi-line run block whose FIRST line is a shell
+      # assignment is classified `not-a-script` by the W1 invocation contract,
+      # and that classification then trips the contract's "a declaration that
+      # names a Racket source file is never not-a-script" guard because the
+      # same block names main.rkt (v1.00.31 W7 repair).
+      - name: Eager gate start stamp
+        run: echo "EAGER_GATE_START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
+
       - name: Compile gate (one bounded eager compile)
-        id: eager-gate
         if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'
+        run: raco make main.rkt
+
+      - name: Eager gate stop stamp
+        id: eager-gate
+        if: always()
         run: |
-          start=$(date +%s%3N)
-          raco make main.rkt
-          end=$(date +%s%3N)
-          echo "seconds=$(python3 -c "print(round(($end - $start) / 1000, 3))")" >> "$GITHUB_OUTPUT"
+          if [ -n "${EAGER_GATE_START_MS:-}" ]; then
+            echo "seconds=$(python3 -c "print(round(($(date +%s%3N) - $EAGER_GATE_START_MS) / 1000, 3))")" >> "$GITHUB_OUTPUT"
+          fi
 
       # W2 containment telemetry (issue #9688) + W4 compiled-root telemetry
       # (issue #9690). The record separates the pilot's cost axes honestly:
@@ -387,7 +401,7 @@ jobs:
             root_args+=(--compiled-root-producer-seconds "$producer_seconds")
           fi
           fallback_seconds="${{ steps.eager-gate.outputs.seconds }}"
-          if [ -n "$fallback_seconds" ]; then
+          if [ "$root_outcome" != "verified-root-hit" ] && [ -n "$fallback_seconds" ]; then
             root_args+=(--compiled-root-fallback-seconds "$fallback_seconds")
           fi
           racket scripts/ci/prepared-env-report.rkt \
@@ -1264,9 +1278,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # W5: this shard runs the artifact-provenance check, whose
-          # recorded-head ancestry checks require repository history; the
-          # default fetch-depth 1 shallow clone cannot resolve them.
+          # W7 repair (issue #9690 re-delivery): the workflows suite runs the
+          # W6 adversarial rehearsal test, whose recorded-head check requires
+          # repository history; the default fetch-depth 1 shallow clone cannot
+          # resolve a recorded head that predates the checkout tip. Same
+          # rationale and precedent as the provenance shard and the governance
+          # job below.
           fetch-depth: 0
       - uses: ./.github/actions/setup-racket
         with:

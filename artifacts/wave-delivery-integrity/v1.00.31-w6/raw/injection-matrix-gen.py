@@ -10,7 +10,15 @@ newline — the convention the W5 provenance lint enforces for the current wave)
 The harness is deterministic: fixtures use fixed git identities and dates,
 scratch paths are scrubbed to <scratch>, and the rehearsal head is the
 generation-time tip (git rev-parse HEAD) — a committed artifact cannot carry its
-own commit hash. The generator also keeps the human report's head literal in sync
+own commit hash.
+
+OPERATIONAL RULE (v1.00.31 W7): the recorded head must name a commit that
+survives publication. A pre-squash branch tip is unfetchable once the delivery
+branch is deleted, which breaks the rehearsal test's recorded-head check on every
+later CI run. Re-run this generator on a published commit (or re-stamp the head in
+the matrix AND this report together, then rebind SHA256SUMS) so the observation
+anchor stays resolvable; the matrix content is bound by rehearsal-inputs-digest, not
+by the head. The generator also keeps the human report's head literal in sync
 with the matrix, so the two cannot drift. Re-running this generator on an
 unchanged tree therefore reproduces the same bytes apart from the advancing head.
 """

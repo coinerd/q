@@ -52,8 +52,16 @@ artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `5899143a5bf50f97dfb802ae52819a69c15b54fd` (the generation-time
-tip). Register digest `4ce067d627506b3b…` over
+Rehearsal head `fc1a6fa36206accff81abb0b9be07a5be72bc9d2`. This head names a
+**published** commit that carries the recorded content: the matrix itself is
+bound by `rehearsal-inputs-digest` over its inputs, and the head is the
+observation anchor. It must survive publication, because a pre-squash branch
+tip becomes unfetchable the moment its branch is deleted — a recorded head of
+`5899143a5bf50f97dfb802ae52819a69c15b54fd` (the original W6 branch tip) is
+absent from a full clone of this repository today, which made the
+recorded-head check fail on every CI run after W6 closed. Re-stamped in the
+v1.00.31 W7 blocked-wave repair; the inputs digest is unchanged (every
+recorded input is byte-identical at this head). Register digest `4ce067d627506b3b…` over
 `artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json` (13 rows),
 reproduction digest over `w4-reproduction.json`.
 
