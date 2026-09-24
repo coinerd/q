@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
+;; @timeout 300
 
 ;; This test deliberately declares NO @covers: it exercises no production module.
 ;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
