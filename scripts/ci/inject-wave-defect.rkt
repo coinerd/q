@@ -99,6 +99,12 @@
 (define (token-refusal code output token)
   (and (not (zero? code)) (string-contains? output token) #t))
 
+;; "pure" is a substring of "impure-record-commit": a success verdict must be
+;; matched exactly, never by substring, or a guard that refuses everything would
+;; satisfy its own clean control.
+(define (pure-verdict? output)
+  (and (not (string-contains? output "impure")) (equal? (string-trim output) "pure")))
+
 (define (typed-reason output token [fallback #f])
   (or (for/first ([l (in-list (string-split output "\n"))]
                   #:when (string-contains? l token))
@@ -298,7 +304,7 @@
                                      head
                                      "--evidence"
                                      (path->string record))))))
-  (values code output (string-contains? output "digest-ok")))
+  (values code output (and (zero? code) (string-contains? output "digest-ok"))))
 
 ;; ---------------------------------------------------------------------------
 ;; F3 — evidence/review head ≠ verified head
@@ -438,7 +444,9 @@
 
 (define (f4-clean root)
   (define-values (code output) (f4-outcome root #f))
-  (values code output (string-contains? output "pure")))
+  ;; "pure" is a substring of "impure-record-commit": the clean control must
+  ;; observe the exact pure verdict, not the injected refusal's text.
+  (values code output (pure-verdict? output)))
 
 ;; ---------------------------------------------------------------------------
 ;; F5 — wave recorded verified with an unpushed branch
@@ -519,7 +527,7 @@
            t))
        (hash-set (hash-set (hash-set (hash-set (hash) 'code code) 'output output) 'ran (or ran 0))
                  'ok?
-                 (and ok? ran (>= ran min-tests) (null? missing))))))
+                 (and (zero? code) ok? ran (>= ran min-tests) (null? missing))))))
   (define accepted? (hash-ref result 'ok?))
   (values (hash-ref result 'code)
           (hash-ref result 'output)
@@ -1219,6 +1227,7 @@
 (provide run-rehearsal
          canonical-json
          token-refusal
+         pure-verdict?
          inputs-digest
          rehearsal-inputs
          row-outcomes

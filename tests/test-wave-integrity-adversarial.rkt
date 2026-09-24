@@ -88,6 +88,15 @@
                 '("guard-missing"))
   (check-equal? (length outcomes) 13))
 
+(test-case "success verdicts are matched exactly, never by substring"
+  ;; "pure" is a substring of "impure-record-commit", so a substring match would
+  ;; let a guard that refuses both fixtures satisfy its own clean control
+  ;; (review R5 finding F1).
+  (check-false (pure-verdict? "impure-record-commit: src/a.rkt (commit deadbeef)"))
+  (check-false (pure-verdict? "not pure"))
+  (check-true (pure-verdict? "pure"))
+  (check-true (pure-verdict? "pure\n")))
+
 (test-case "nonzero-exit rows refuse only on a non-zero exit plus the typed token"
   ;; A warning-mode regression that prints the typed refusal and exits 0 must not
   ;; be recorded as a refusal witness (review R2 finding F1).

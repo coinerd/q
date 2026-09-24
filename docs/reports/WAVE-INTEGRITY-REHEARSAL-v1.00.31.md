@@ -113,7 +113,11 @@ neutered guard rather than inherit a `PERMANENT` verdict:
   gate API makes the rehearsal fail closed at require time instead of reporting a
   refusal; and
 * the unit-level polarity witness `(token-refusal 0 token token)` → `#f`,
-  `(token-refusal 1 token token)` → `#t` is asserted by the rehearsal test.
+  `(token-refusal 1 token token)` → `#t` is asserted by the rehearsal test;
+* a suite that prints `Ran N tests … OK` and then exits 99 makes F6/F11 `ok`,
+  their clean controls `refused`, and the verdict `NOT PERMANENT`; and
+* `pure-verdict?` matches the F4 success verdict exactly (never by substring, so
+  `impure-record-commit` cannot satisfy `pure`), asserted by the test.
 
 ## Red-first evidence
 
