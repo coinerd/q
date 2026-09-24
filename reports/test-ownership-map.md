@@ -11,6 +11,6 @@ Every production area must have an accountable test destination.
 | tools | tools/ + agent/roles/tool-gateway | tools | 3 | unit | tests |
 | extensions | extensions/ | extensions | 145 | e2e, integration, pure, unit | tests |
 | tui | tui/ | tui | 89 | integration, unit | tests |
-| workflows | scripts/run-tests/workflows/ + GSD | workflows | 32 | integration, unit | tests/workflows |
+| workflows | scripts/run-tests/workflows/ + GSD | workflows | 33 | integration, unit | tests/workflows |
 
 No gaps: every production area has a test destination.
