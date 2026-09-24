@@ -5,8 +5,8 @@
  (wave . "W4")
  (issue . 9690)
  (branch . "campaign/v1.00.30-w4")
- (implementation-sha . "b02e44644b8750cf7c06216a99d094fee22826f0")
- (content-digest . "c5679f48bedd1b900b403779513c61bdf2ce67db1e102ad3d58abeec9671b5d5")
+ (implementation-sha . "f706e2c3799d3c2c37a3b2fcfaef041712274715")
+ (content-digest . "c7c51c6a68ae9dc378b4d7f9586156ab6650c636ea54d4556cad78e77543de53")
  (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd")
  (planning-sync . "current")
  (red-first
@@ -17,7 +17,7 @@
   . #hasheq(
      (command . "raco test tests/test-compiled-root-workflow.rkt tests/test-compiled-root.rkt tests/test-compiled-root-manifest.rkt tests/test-prepared-env-report.rkt && raco test tests/test-ci-runtime-contract.rkt tests/test-w9-ci-workflow-verification.rkt")
      (result . "passed")
-     (details . "157 tests in the declared focused group (including the two new CLI `run` cases: resolution-only and module-bearing), plus 38 ci-runtime-contract and 7 workflow-verification cases that pin the re-stamped W2 checkpoint hash and both action hashes.")))
+     (details . "167 tests in the declared focused group (including the round-3 lane-plumbing tests: hyphen-free variable, auto vocabulary across both CLIs, launch step env export, restore exclusion, and a behavioral Q_CI_COMPILED_ROOT=auto run) (including the two new CLI `run` cases: resolution-only and module-bearing), plus 38 ci-runtime-contract and 7 workflow-verification cases that pin the re-stamped W2 checkpoint hash and both action hashes.")))
  (format-compile
   . #hasheq(
      (command . "raco fmt -i && raco make on the changed Racket sources at the reviewed implementation head")
@@ -34,9 +34,9 @@
      (run-summary . "RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1363.742 metadata-completeness=explicit:1180/heuristic:0/missing:28")))
  (suites
   . #hasheq(
-     (arch . "RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=28.265 metadata-completeness=explicit:32/heuristic:0/missing:0")
-     (security . "RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=60.806 metadata-completeness=explicit:64/heuristic:0/missing:0")
-     (workflows . "RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=82.337 metadata-completeness=explicit:33/heuristic:0/missing:0")))
+     (arch . "RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=28.192 metadata-completeness=explicit:32/heuristic:0/missing:0")
+     (security . "RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=65.489 metadata-completeness=explicit:64/heuristic:0/missing:0")
+     (workflows . "RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=80.022 metadata-completeness=explicit:33/heuristic:0/missing:0")))
  (remaining-items
   . (#hasheq(
       (classification . "deferred-noncritical")
