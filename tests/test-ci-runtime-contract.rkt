@@ -601,7 +601,7 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "1950732f17582903b59e95e4a089f9eddfefc566176c80484a6b284e2c18cc86"
+                    "e6310f7a384ffca3134de73691f170837bfbb33af99a77bac1a8b40c27b716d3"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       ;; re-stamped by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
       ;; prepare_action_sha256 inside fast_env_verification_contract
@@ -613,8 +613,8 @@
       ;; artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt
       ;; re-stamped again by the v1.00.31 W7 wave: the repaired v1.00.30 W4 wave
       ;; (issue #9690) carried the guarded compiled-root pilot forward into the same
-      ;; single producer invocation, changing prepare_action_sha256 and
-      ;; setup_action_sha256; see w7_restamp
+      ;; single producer invocation, changing prepare_action_sha256,
+      ;; setup_action_sha256 and this checkpoint hash; see w7_restamp
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)

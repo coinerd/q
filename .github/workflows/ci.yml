@@ -258,6 +258,11 @@ jobs:
           prepared-environment: ${{ env.PREPARED_ENV }}
           prepared-artifact-name: prepared-env-fast
           prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
+          # W4 pilot (issue #9690): only this consumer (the fast test shards)
+          # opts into same-run compiled-root resolution, and only while the
+          # lane gate above evaluates to 'auto'; 'off' leaves a restored root
+          # untouched (global rollback) and other consumers stay full eager.
+          compiled-root-mode: ${{ env.COMPILED_ROOT }}
 
       # v1.00.30 W4 (issue #9690): verify the SAME-RUN compiled root
       # BEFORE any test executes. The root directory comes read-only from

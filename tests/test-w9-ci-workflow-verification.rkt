@@ -382,12 +382,15 @@
                    " and the loud eager fallback retained; see w7_restamp)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
-     "6fb8fd7167932942668baf75d1fc939564c0a925e9ff5d862948e0ce03aab55f"
+     "6ec3fdc518a8147da73af537d80d4398529c638dfff1d362ee3a1c51d4d19bfe"
      (format
       (string-append "the guarded restore action must stay byte-identical (re-stamped by v~a W6, "
                      "re-stamped by v1.00.30 W2 #9688: containment telemetry outputs added; "
                      "re-stamped by v1.00.30 W4 #9690: compiled-root-dir output exposed, "
-                     "read-only inside the verified download; purge and restore steps unchanged)")
+                     "read-only inside the verified download; re-stamped by v1.00.31 W7: the "
+                     "compiled-root resolution step is opted into only by an explicit mode, "
+                     "so a restored root stays untouched unless a consumer asks; purge and "
+                     "restore steps unchanged)")
       q-version))
     (check-true (string-contains? ci-text "needs.fast-env.result")
                 "test shards must keep gating PREPARED_ENV on the fast-env result")

@@ -516,3 +516,68 @@
  (string-contains? setup-text
                    "prepared-env-root: ${{ steps.prepared-env.outputs.compiled-root-dir }}")
  "forwarding is bound to the restore action's output")
+
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7: the CLI `run` contract that the setup-racket pre-resolution step
+;; declares. Independent review round 2 (finding 5) required committed coverage
+;; for BOTH shapes: resolution-only (no --module) and module-bearing launch.
+
+(module+ test
+  (test-case "compiled-root run resolves and maps without a module (declared setup-racket step)"
+    (define co (make-checkout! "run-no-module"))
+    (define root (build-path tmp-base "run-no-module-root"))
+    (define map (build-path tmp-base "run-no-module-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define-values (code transcript)
+      (run-producer "run"
+                    "--checkout"
+                    (path->string co)
+                    "--final-dir"
+                    (path->string root)
+                    "--map-dir"
+                    (path->string map)
+                    "--trusted-label"
+                    "q-trusted-producer"))
+    (check-equal? code 0 transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)
+    (check-true (regexp-match? #rx"no --module to launch" transcript) transcript))
+
+  (test-case "compiled-root run still launches a module through the verified root"
+    (define co (make-checkout! "run-with-module"))
+    (define root (build-path tmp-base "run-with-module-root"))
+    (define map (build-path tmp-base "run-with-module-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define-values (code transcript)
+      (run-producer "run"
+                    "--checkout"
+                    (path->string co)
+                    "--final-dir"
+                    (path->string root)
+                    "--map-dir"
+                    (path->string map)
+                    "--trusted-label"
+                    "q-trusted-producer"
+                    "--module"
+                    "marker/compiled-root-marker.rkt"))
+    (check-equal? code 0 transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))

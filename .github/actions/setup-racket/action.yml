@@ -32,8 +32,10 @@ inputs:
     description: >-
       W4 global compiled-root switch (issue #9690) forwarded as
       Q_CI_COMPILED_ROOT to the resolution gate: 'off' never touches the
-      root (full eager current-source path); 'verify'/'resolve' or unset
-      use verified same-run resolution; any other value fails closed.
+      root (full eager current-source path); 'auto'/'verify'/'resolve' use
+      verified same-run resolution; unset keeps the gate inert (a compiled
+      root present in the artifact is left untouched until a consumer
+      explicitly opts in); any other value fails closed.
     required: false
     default: ''
 outputs:
@@ -170,7 +172,7 @@ runs:
     # cached addon store can never silently serve changed q sources.
     - name: Verified compiled-root resolution (W4, same-run source identity)
       id: compiled-root-resolve
-      if: steps.prepared-env.outcome == 'success'
+      if: steps.prepared-env.outcome == 'success' && (inputs.compiled-root-mode == 'auto' || inputs.compiled-root-mode == 'resolve' || inputs.compiled-root-mode == 'verify')
       shell: bash
       env:
         prepared-env-root: ${{ steps.prepared-env.outputs.compiled-root-dir }}

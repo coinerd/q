@@ -332,10 +332,13 @@
              (define-values (code transcript)
                (launch-with-root root (co-module (first ms)) child-args))
              (display transcript)
-             (exit code))]
+             (exit code))
+           (when (null? ms)
+             (printf "compiled-root: no --module to launch; resolution-only run\n"))]
           [else
-           (eprintf "compiled-root: resolution failed (~a); eager fallback\n"
-                    (reason->string (compiled-root-reason root)))
+           (eprintf "compiled-root: resolution failed (~a); ~a\n"
+                    (reason->string (compiled-root-reason root))
+                    (if (pair? ms) "eager fallback" "resolution-only run, no --module to launch"))
            (when (pair? ms)
              (timed-eager-fallback!)
              (define code
