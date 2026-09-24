@@ -145,10 +145,12 @@
   (define recorded
     (for/set ([entry (in-list sums)])
       (cdr entry)))
+  (define (raw-segment? file)
+    (and (member "raw" (map path->string (explode-path file))) #t))
   (for ([file (in-directory (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w6"))]
         #:when (and (file-exists? file)
                     (not (directory-exists? file))
-                    (not (string-contains? (path->string file) "/raw/"))
+                    (not (raw-segment? file))
                     (not (string-suffix? (path->string file) "SHA256SUMS"))))
     (define rel (find-relative-path q-root (simplify-path file)))
     (check-true (set-member? recorded (path->string rel))
