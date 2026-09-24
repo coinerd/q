@@ -28,6 +28,14 @@ inputs:
       the prepared path and falls through to the full path).
     required: false
     default: ''
+  compiled-root-mode:
+    description: >-
+      W4 global compiled-root switch (issue #9690) forwarded as
+      Q_CI_COMPILED_ROOT to the resolution gate: 'off' never touches the
+      root (full eager current-source path); 'verify'/'resolve' or unset
+      use verified same-run resolution; any other value fails closed.
+    required: false
+    default: ''
 outputs:
   prepared-env-result:
     description: >-
@@ -73,6 +81,14 @@ outputs:
       cold fallback taken), 0 on a verified identity, empty when the
       prepared path was not in play.
     value: ${{ steps.prepared-env-identity.outputs.identity-fallback-count }}
+  prepared-env-root:
+    description: >-
+      v1.00.30 W4 (issue #9690): the verified compiled-root directory
+      carried inside the restored artifact (read-only, outside the
+      checkout), for the job-level resolution step. Empty when the
+      prepared path was not in play or the artifact predates the
+      compiled-root extension.
+    value: ${{ steps.prepared-env.outputs.compiled-root-dir }}
   eager-setup-seconds:
     description: >-
       W2 containment telemetry (issue #9688): wall-clock seconds spent in
@@ -144,6 +160,32 @@ runs:
           echo "- Racket install + package-visible compile skipped per the ubuntu fast-gate lane split (docs/reports/CI-RACKET-CACHE-POLICY.md); the restore's four read-only health checks replace them."
           echo "- Restored workspace bytecode is PURGED + verified before tests run (BUG-0065 systemic invariant, v1.00.29 W4): the fast suite lazily compiles from THIS checkout."
         } >> "$GITHUB_STEP_SUMMARY"
+
+    # ------------------------------------------------------------------
+    # W4 (issue #9690): verified compiled-root resolution. The SAME-RUN
+    # producer root (carried inside the verified prepared artifact) is
+    # resolved BEFORE test resolution and mounted read-only; the global
+    # Q_CI_COMPILED_ROOT switch wins ("off" never touches the root).
+    # Verification gates link/collection identity on THIS checkout, so a
+    # cached addon store can never silently serve changed q sources.
+    - name: Verified compiled-root resolution (W4, same-run source identity)
+      id: compiled-root-resolve
+      if: steps.prepared-env.outcome == 'success'
+      shell: bash
+      env:
+        prepared-env-root: ${{ steps.prepared-env.outputs.compiled-root-dir }}
+        Q_CI_COMPILED_ROOT: ${{ inputs.compiled-root-mode }}
+      run: |
+        set -euo pipefail
+        if [ -z "${prepared-env-root:-}" ]; then
+          echo "compiled-root: prepared artifact has no compiled root; bounded eager path unaffected"
+          exit 0
+        fi
+        racket scripts/ci/compiled-root.rkt run \
+          --checkout "$GITHUB_WORKSPACE" \
+          --final-dir "$prepared-env-root" \
+          --map-dir "$RUNNER_TEMP/compiled-root-map" \
+          --trusted-label q-trusted-producer
 
     # ------------------------------------------------------------------
     # W6 prepared-environment IDENTITY MANIFEST (spec §6 W4: the identity

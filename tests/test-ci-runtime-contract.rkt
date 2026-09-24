@@ -601,11 +601,9 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "bcdbc2c640cc32400aa88fa014e0b8d9d4821536bb948fadf19388642511ed76"
+                    "1950732f17582903b59e95e4a089f9eddfefc566176c80484a6b284e2c18cc86"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
-      ;; re-stamped by the campaign's W6 wave: the identity-manifest expansion changed
-      ;; setup_action_sha256 inside fast_env_verification_contract
-      ;; re-stamped again by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
+      ;; re-stamped by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
       ;; prepare_action_sha256 inside fast_env_verification_contract
       ;; re-stamped again by the v1.00.30 W2 wave (issue #9688): containment telemetry
       ;; outputs changed setup_action_sha256 inside fast_env_verification_contract
@@ -613,6 +611,10 @@
       ;; producer invocation was added to the action, changing prepare_action_sha256;
       ;; the additive-only proof lives in
       ;; artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt
+      ;; re-stamped again by the v1.00.31 W7 wave: the repaired v1.00.30 W4 wave
+      ;; (issue #9690) carried the guarded compiled-root pilot forward into the same
+      ;; single producer invocation, changing prepare_action_sha256 and
+      ;; setup_action_sha256; see w7_restamp
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)

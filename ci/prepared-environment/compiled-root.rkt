@@ -77,6 +77,10 @@
          resolve-compiled-root!
          compiled-root-lookup-directory
          compiled-root-activate-parameters
+         compiled-root-activation-mode
+         compiled-root-load-keys
+         consumer-source-bytes-match?
+         package-link-points-at-checkout?
          install-compiled-root-toctou-guard!
          compiled-root-launch-arguments
          source->zo-name
@@ -85,6 +89,22 @@
          reset-telemetry!
          with-compiled-root
          reason->string)
+
+(module+ test-helpers
+  ;; W4: the activation-contract regression suite
+  ;; (tests/test-compiled-root-workflow.rkt) imports exactly this
+  ;; submodule so it pins the guarded-activation API surface without
+  ;; reaching into module internals.
+  (provide (struct-out compiled-root)
+           (struct-out compiled-root-telemetry)
+           compiled-root-activation-mode
+           compiled-root-load-keys
+           consumer-source-bytes-match?
+           package-link-points-at-checkout?
+           with-compiled-root
+           eager-fallback-compile!
+           telemetry-snapshot
+           reset-telemetry!))
 
 ;; --------------------------------------------------------------- structs
 
@@ -120,6 +140,29 @@
       "ok"
       (format "~a" r)))
 
+;; compiled-root-activation-mode
+;;   W4 guarded-activation precedence, mirrored from the ci.yml lane
+;;   condition so the precedence stays unit-testable:
+;;     1. global kill switch ("off") wins over everything;
+;;     2. the fast-lane opt-in switch must be exactly "on";
+;;     3. the producer step must have succeeded — unknown outcomes
+;;        (including missing outputs) fail closed to 'off, never to a
+;;        lazy per-test compile;
+;;     4. workflow_dispatch replays stay on the legacy eager path;
+;;     5. everything else routes to 'auto (authenticated publication +
+;;     verification BEFORE resolution; bounded eager fallback on miss).
+;;   Global "off" is a hard rollback: no lane expression can override it.
+(define (compiled-root-activation-mode #:global-prepared-artifact global
+                                       #:lane-switch lane
+                                       #:producer-result producer
+                                       #:event-name event)
+  (cond
+    [(equal? global "off") 'off]
+    [(not (equal? lane "on")) 'off]
+    [(not (equal? producer "success")) 'off]
+    [(equal? event "workflow_dispatch") 'off]
+    [else 'auto]))
+
 ;; ------------------------------------------------------ producer helpers
 
 ;; checkout-compilation-clean?
@@ -130,17 +173,22 @@
 ;; matched literally by git and silently matches nothing (which would
 ;; accept dirty inputs — the exact bug class this gate exists for).
 (define (checkout-compilation-clean? checkout source-rel-paths)
-  (define out
-    (with-output-to-string (lambda ()
-                             (apply system*/exit-code
-                                    (find-executable-path "git")
-                                    "-C"
-                                    (path->string (path->complete-path checkout))
-                                    "status"
-                                    "--porcelain"
-                                    "--"
-                                    source-rel-paths))))
-  (string=? (string-trim out) ""))
+  (define out (open-output-string))
+  (define code
+    (parameterize ([current-output-port out])
+      (apply system*/exit-code
+             (find-executable-path "git")
+             "-C"
+             (path->string (path->complete-path checkout))
+             "status"
+             "--porcelain"
+             "--"
+             source-rel-paths)))
+  ;; Fail closed: git failure (non-repository, bare host failure) must be
+  ;; treated as UNVERIFIABLE, never as clean. A non-repo checkout previously
+  ;; slipped through because only stdout emptiness was checked while the
+  ;; fatal error went to stderr (W4 rollback-drill finding).
+  (and (zero? code) (string=? (string-trim (get-output-string out)) "")))
 
 ;; Collect every zo raco make produced for the checkout (module +
 ;; dependency closure that lives inside the checkout tree), as
@@ -326,12 +374,18 @@
          'resolve-compiled-root!
          "consumer source digest mismatch for ~a — current source changed since the producer build"
          (hash-ref e 'path)))
-      ;; Digest-verified byte-identical source: satisfy the runtime
-      ;; freshness gate by aging the SOURCE below the root zo mtime
-      ;; (mtime(zo) >= mtime(src) semantics; content identity is proven
-      ;; by digest, never by mtime).
-      (define zo-mtime (hash-ref e 'zo-mtime-ms))
-      (file-or-directory-modify-seconds consumer-src (- zo-mtime 10000))
+      ;; W4 (W3 review deferral): the resolver no longer MUTATES the
+      ;; consumer checkout. Mtime aging (which also wrote seconds into
+      ;; zo-mtime-ms fields) is removed: the W3 probe proved external
+      ;; roots are consulted unconditionally per lookup, so freshness
+      ;; is not load-bearing, and identity is proven by digests. As the
+      ;; coherence belt, the consumer's on-disk byte count is compared
+      ;; against the manifest entry at resolve time.
+      (unless (consumer-source-bytes-match? consumer-src e)
+        (error
+         'resolve-compiled-root!
+         "consumer source byte count mismatch for ~a — on-disk checkout diverges from the manifest"
+         (hash-ref e 'path)))
       ;; Map the consumer's absolute source path into the payload. The
       ;; probe-verified lookup for source /D.../name.rkt under root R is
       ;; R/D.../compiled/name_rkt.zo: full absolute source directory
@@ -349,8 +403,27 @@
                (hash-ref e 'path)))
       (define lookup-dir (build-path map-dir (substring (path->string consumer-src) 1) "compiled"))
       (make-directory* lookup-dir)
-      (make-file-or-directory-link (path->string payload-zo) (build-path lookup-dir zo-name)))
-    (compiled-root validated final-dir map-dir checkout #t)))
+      ;; W4 rollback-drill finding: map dirs can be re-entered (shard
+      ;; retries, shared map dirs). Remapping must be idempotent: same
+      ;; target => no-op; stale/different target => replace; regular
+      ;; file at the link path => overwrite too (fail-closed integrity
+      ;; is re-proven per run anyway).
+      (define link-path (build-path lookup-dir zo-name))
+      (define link-target (path->string payload-zo))
+      (cond
+        [(and (file-exists? link-path)
+              (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
+                (equal? (bytes->string/utf-8 (file->bytes link-path)) link-target)))
+         (void)]
+        [else
+         (when (file-exists? link-path)
+           (delete-file link-path))
+         (make-file-or-directory-link link-target link-path)]))
+    (compiled-root validated
+                   (simplify-path (path->complete-path final-dir))
+                   (simplify-path (path->complete-path map-dir))
+                   (simplify-path (path->complete-path checkout))
+                   #t)))
 
 (define (compiled-root-lookup-directory root)
   (compiled-root-map-dir root))
@@ -362,6 +435,52 @@
   (unless (eq? (compiled-root-reason root) #t)
     (error 'compiled-root-activate-parameters "root not resolved"))
   (values (list (compiled-root-map-dir root)) 'modify-seconds))
+
+;; compiled-root-load-keys
+;;   The load-path spellings the TOCTOU guard recognizes for a source.
+;;   current-load may deliver the UNRESOLVED path (symlinked checkouts,
+;;   macOS /tmp is itself a symlink) while the manifest digest table is
+;;   keyed on the link-resolved form, so the guard must consult BOTH
+;;   spellings. The result is always exactly two entries: the raw
+;;   string and its link-blind simplified form (use-filesystem? #f so
+;;   the mapping works for paths outside any real filesystem, too).
+(define (compiled-root-load-keys source-path)
+  (define raw
+    (if (path? source-path)
+        (path->string source-path)
+        (~a source-path)))
+  (define simplified (path->string (simplify-path raw #f)))
+  (list raw simplified))
+
+;; consumer-source-bytes-match?
+;;   On-disk-vs-published coherence belt (W3 review deferral fix):
+;;   sources[].bytes is compared against the CONSUMER's on-disk byte
+;;   count at resolve time. Identity itself is proven by digests; the
+;;   byte count is the cheap coherence check that catches truncated or
+;;   partially-updated checkouts before any compiled code is consulted.
+;;   Entries without a bytes field stay digest-governed.
+(define (consumer-source-bytes-match? source-path manifest-entry)
+  (define expected (hash-ref manifest-entry 'bytes #f))
+  (or (not expected) (and (file-exists? source-path) (equal? (file-size source-path) expected))))
+
+;; package-link-points-at-checkout?
+;;   Link/collection identity gate for a restored addon store: the q
+;;   package must be LINKED to THIS checkout before the cached store is
+;;   consulted for changed q sources. Parses `raco pkg show`-style
+;;   output for `source:` lines; a missing package entry or a link to a
+;;   different checkout is a mismatch — never a silent pass. A trailing
+;;   slash on the checkout path normalizes away.
+(define (package-link-points-at-checkout? pkg-show-text checkout-path)
+  (define checkout
+    (regexp-replace #rx"/*$"
+                    (if (path? checkout-path)
+                        (path->string checkout-path)
+                        (~a checkout-path))
+                    ""))
+  (and (positive? (string-length checkout))
+       (for/or ([line (in-lines (open-input-string (~a pkg-show-text)))])
+         (define m (regexp-match #px"^\\s*source:\\s*(.+)$" line))
+         (and m (equal? (regexp-replace #rx"/*$" (string-trim (cadr m)) "") checkout)))))
 
 ;; install-compiled-root-toctou-guard!
 ;;   current-load wrapper that re-verifies a root member's digest at
@@ -387,10 +506,17 @@
       (values (string->path (hash-ref e 'zo)) (hash-ref e 'zo-digest))))
   (define final-dir (compiled-root-root-dir root))
   ;; consumer source path string -> (list zo-path-string zo-digest)
+  ;; W4: key EVERY load-path spelling the guard may receive (raw +
+  ;; link-blind simplified; see compiled-root-load-keys), not just the
+  ;; symlink-resolved form.
   (define by-src
-    (for/hash ([e (in-list entries)])
-      (values (path->string
-               (simplify-path (path->complete-path (build-path checkout-dir (hash-ref e 'path))) #t))
+    (for*/hash ([e (in-list entries)]
+                [k (in-list (compiled-root-load-keys
+                             (path->string (simplify-path
+                                            (path->complete-path (build-path checkout-dir
+                                                                             (hash-ref e 'path)))
+                                            #t))))])
+      (values k
               (list (path->string (build-path final-dir (hash-ref e 'zo))) (hash-ref e 'zo-digest)))))
   (define orig (current-load))
   (current-load
@@ -401,7 +527,10 @@
        ;; payload bytes the digest table is keyed on.
        (define p (simplify-path (path->complete-path path) #t))
        (define hit
-         (or (hash-ref by-src (path->string p) #f)
+         (or (for*/first ([k (in-list (compiled-root-load-keys path))]
+                          [v (in-value (hash-ref by-src k #f))]
+                          #:when v)
+               v)
              (let ([rel (find-relative-path root-path p)])
                (define digest (hash-ref by-zo (string->path (path->string rel)) #f))
                (and digest (list (path->string (build-path final-dir (path->string rel))) digest)))))
@@ -491,8 +620,13 @@
 ;;   fallback and run thunk WITHOUT any root (current source semantics).
 (define (with-compiled-root root checkout modules thunk)
   (if (eq? (compiled-root-reason root) #t)
+      ;; The [current-load (current-load)] frame scopes the guard's
+      ;; imperative install to this dynamic extent (W3 review deferral,
+      ;; fixed in W4): the TOCTOU wrapper is active for the thunk and
+      ;; unwound on return — exceptions included.
       (parameterize ([current-compiled-file-roots (list (compiled-root-map-dir root))]
-                     [use-compiled-file-check 'modify-seconds])
+                     [use-compiled-file-check 'modify-seconds]
+                     [current-load (current-load)])
         (install-compiled-root-toctou-guard! root)
         (telemetry (match-let ([(compiled-root-telemetry h f l b _) (telemetry)])
                      (compiled-root-telemetry h f l b "external-compiled-root(map-dir symlinks)")))
@@ -501,3 +635,215 @@
         (eager-fallback-compile! checkout modules)
         (parameterize ([current-compiled-file-roots '()])
           (thunk)))))
+
+;; --------------------------------------------------------- CI CLI (W4)
+;;
+;; module+ main — the CI-facing entry point for the guarded activation
+;; pilot (issue #9690). Two subcommands:
+;;
+;;   resolve --root DIR --checkout DIR --trusted-label L
+;;           --flags-file FILE [--map-dir DIR]
+;;     Validate the published root against the CURRENT checkout
+;;     (source digests + byte counts, q link/collection identity,
+;;     trusted producer namespace) and write the per-shard flags file
+;;     on success. Any validation failure exits NON-ZERO, loudly, and
+;;     writes no flags file; the caller's continue-on-error gate then
+;;     selects exactly ONE eager fallback compile.
+;;
+;;   launch --flags-file FILE [--telemetry-file FILE] -- CMD [ARGS...]
+;;     Run CMD with the verified compiled-root mapping when (and only
+;;     when) the flags file exists and is well-formed and
+;;     Q_CI_COMPILED_ROOT is not "off"; otherwise run CMD unchanged
+;;     (current-source semantics). Illegal Q_CI_COMPILED_ROOT values
+;;     fail closed. Telemetry (mode, child exit code, wall clock, root
+;;     hit counters) goes to --telemetry-file when given.
+(module+ main
+  (require racket/cmdline
+           racket/file
+           racket/list
+           racket/match
+           racket/string)
+
+  (define (split-dashdash lst)
+    (cond
+      [(null? lst) (values '() '())]
+      [(equal? (car lst) "--") (values '() (cdr lst))]
+      [else
+       (define-values (head tail) (split-dashdash (cdr lst)))
+       (values (cons (car lst) head) tail)]))
+
+  (define raw-argv (vector->list (current-command-line-arguments)))
+  (define-values (flag-argv child-args) (split-dashdash raw-argv))
+  ;; Same subcommand reorder as scripts/ci/compiled-root.rkt: command-line
+  ;; stops flag parsing at the first non-flag token, so move the leading
+  ;; subcommand to the end.
+  (define ordered-argv
+    (if (and (pair? flag-argv) (member (car flag-argv) '("resolve" "launch")))
+        (append (cdr flag-argv) (list (car flag-argv)))
+        flag-argv))
+
+  (define root-dir (make-parameter #f))
+  (define checkout-dir (make-parameter #f))
+  (define trusted-labels (make-parameter '()))
+  (define flags-file (make-parameter #f))
+  (define map-dir-opt (make-parameter #f))
+  (define telemetry-file (make-parameter #f))
+
+  (define rest-args
+    (command-line #:program "ci-compiled-root"
+                  #:argv ordered-argv
+                  #:once-each ["--root" d "published immutable compiled-root directory" (root-dir d)]
+                  ["--checkout" d "consumer checkout directory" (checkout-dir d)]
+                  ["--trusted-label"
+                   l
+                   "accepted producer label (repeatable)"
+                   (trusted-labels (append (trusted-labels) (list l)))]
+                  ["--flags-file"
+                   f
+                   "per-shard activation flags file (written by resolve, read by launch)"
+                   (flags-file f)]
+                  ["--map-dir" d "per-consumer read-only mapping directory" (map-dir-opt d)]
+                  ["--telemetry-file" f "write launch telemetry to this file" (telemetry-file f)]
+                  #:args rest
+                  rest))
+
+  (define cmd
+    (cond
+      [(and (pair? flag-argv) (member (car flag-argv) '("resolve" "launch"))) (car flag-argv)]
+      [(and (pair? rest-args) (member (car rest-args) '("resolve" "launch"))) (car rest-args)]
+      [else #f]))
+  (unless cmd
+    (error 'ci-compiled-root
+           "usage: ci-compiled-root.rkt resolve|launch [options] [-- child args]; got: ~a"
+           raw-argv))
+
+  (define (require-opt! p name)
+    (unless (p)
+      (error 'ci-compiled-root "missing required option --~a" name))
+    (p))
+
+  (define (write-launch-telemetry! mode exit-code wall-ms)
+    (when (telemetry-file)
+      (define t (telemetry-snapshot))
+      (call-with-output-file (telemetry-file)
+                             (lambda (out)
+                               (write (list 'compiled-root-launch-telemetry
+                                            (cons 'mode mode)
+                                            (cons 'exit-code exit-code)
+                                            (cons 'wall-ms wall-ms)
+                                            (cons 'root-hits (compiled-root-telemetry-root-hits t))
+                                            (cons 'fallbacks (compiled-root-telemetry-fallbacks t))
+                                            (cons 'loads (compiled-root-telemetry-loads t))
+                                            (cons 'bytes-served
+                                                  (compiled-root-telemetry-bytes-served t))
+                                            (cons 'mechanism (compiled-root-telemetry-mechanism t)))
+                                      out))
+                             #:exists 'truncate)))
+
+  ;; The launch flags are racket VM flags (-e bootstrap). They are only
+  ;; meaningful for a racket child process; anything else fails closed.
+  (define (racket-child? argv0)
+    (regexp-match? #rx"(^|/)racket$" argv0))
+
+  ;; subprocess does not search PATH for path arguments: a bare "racket"
+  ;; must be resolved via find-executable-path or it fails to exec.
+  (define (resolve-child-program argv0)
+    (or (and (not (string-contains? argv0 "/")) (find-executable-path argv0)) (string->path argv0)))
+
+  (match cmd
+    ["resolve"
+     (define rd (require-opt! root-dir "root"))
+     (define co (require-opt! checkout-dir "checkout"))
+     (define ff (require-opt! flags-file "flags-file"))
+     ;; The resolver API and the flags payload work in path values;
+     ;; normalize CLI strings to complete paths once, here.
+     (define rd-path (path->complete-path (string->path rd)))
+     (define co-path (path->complete-path (string->path co)))
+     (define ff-path (path->complete-path (string->path ff)))
+     (when (null? (trusted-labels))
+       (error 'ci-compiled-root "resolve requires at least one --trusted-label"))
+     (define md
+       ;; map-dir is stored in the root struct and consumed by
+       ;; compiled-root-launch-arguments as a path value.
+       (path->directory-path (path->complete-path (or (map-dir-opt)
+                                                      (build-path (path-only ff-path)
+                                                                  "compiled-root-map")))))
+     (define root
+       (resolve-compiled-root! #:final-dir rd-path
+                               #:checkout co-path
+                               #:trusted-producer-labels (trusted-labels)
+                               #:map-dir md))
+     (unless (eq? (compiled-root-reason root) #t)
+       (eprintf "ci-compiled-root: resolution failed (~a)\n"
+                (reason->string (compiled-root-reason root)))
+       (exit 1))
+     (define launch-args (compiled-root-launch-arguments root))
+     (define ff-complete ff-path)
+     (make-directory* (path-only ff-complete))
+     (call-with-output-file ff-complete
+                            (lambda (out)
+                              (write (list 'compiled-root-flags
+                                           (path->string (compiled-root-root-dir root))
+                                           (path->string (compiled-root-map-dir root))
+                                           (path->string (compiled-root-checkout root))
+                                           launch-args)
+                                     out))
+                            #:exists 'truncate)
+     (printf "ci-compiled-root: verified root resolved; flags written to ~a\n"
+             (path->string ff-complete))]
+    ["launch"
+     (define ff (require-opt! flags-file "flags-file"))
+     (when (null? child-args)
+       (error 'ci-compiled-root "launch requires a child command after --"))
+     ;; Global override precedence mirrors the run CLI: "off" wins over
+     ;; everything and never touches the root mapping; anything else
+     ;; other than verify/resolve fails closed.
+     (define override (getenv "Q_CI_COMPILED_ROOT"))
+     (when override
+       (case (string->symbol override)
+         [(off) (void)]
+         [(verify resolve) (void)]
+         [else
+          (error 'ci-compiled-root
+                 "illegal Q_CI_COMPILED_ROOT value ~s (off|verify|resolve)"
+                 override)]))
+     (define flags
+       (and override
+            (not (equal? (string->symbol override) 'off))
+            (file-exists? ff)
+            (with-handlers ([exn:fail? (lambda (_) #f)])
+              (file->value (path->complete-path ff)))))
+     (define valid-flags?
+       (and (list? flags)
+            (= 5 (length flags))
+            (eq? (list-ref flags 0) 'compiled-root-flags)
+            (string? (list-ref flags 1))
+            (string? (list-ref flags 2))
+            (string? (list-ref flags 3))
+            (and (list? (list-ref flags 4)) (andmap string? (list-ref flags 4)))))
+     (define argv0 (first child-args))
+     (define t0 (current-inexact-milliseconds))
+     (define-values (exit-code mode)
+       (cond
+         [(and valid-flags? (racket-child? argv0))
+          (define code
+            (apply system*/exit-code
+                   (resolve-child-program argv0)
+                   (append (list-ref flags 4) (rest child-args))))
+          (values code "verified-root-hit")]
+         [else
+          ;; Pass-through: no flags file (lane off or failed resolution —
+          ;; the one eager gate already compiled), the global off
+          ;; override won, or the child is not racket. Run the command
+          ;; exactly as given, never silently mapping anything.
+          (when valid-flags?
+            (eprintf "ci-compiled-root: child is not racket (~s); running unmapped\n" argv0))
+          (define code (apply system*/exit-code (resolve-child-program argv0) (rest child-args)))
+          (values code
+                  (cond
+                    [(and override (equal? (string->symbol override) 'off)) "global-off"]
+                    [(not valid-flags?) "no-flags-current-source"]
+                    [else "unmapped-child"]))]))
+     (define wall-ms (inexact->exact (floor (- (current-inexact-milliseconds) t0))))
+     (write-launch-telemetry! mode exit-code wall-ms)
+     (exit exit-code)]))

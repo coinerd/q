@@ -37,6 +37,14 @@ outputs:
   restore-ms:
     description: 'Wall-clock milliseconds spent downloading and restoring'
     value: ${{ steps.restore.outputs.restore-ms }}
+  compiled-root-dir:
+    description: >-
+      v1.00.30 W4 (issue #9690): the artifact's compiled-root directory
+      INSIDE the verified download (read-only for consumers — never
+      materialized into the checkout). Empty when the artifact predates
+      the compiled-root extension, so consumers resolve the failure
+      through their own loud, bounded eager fallback.
+    value: ${{ steps.tuple.outputs.compiled-root-dir }}
 runs:
   using: 'composite'
   steps:
@@ -81,6 +89,17 @@ runs:
 
         git_sha=$(git rev-parse HEAD)
         echo "root=$root" >> "$GITHUB_OUTPUT"
+
+        # W4 (issue #9690): expose the compiled-root directory path only.
+        # It stays inside the verified download and is consumed read-only
+        # by the resolution step; nothing is copied into the checkout. The
+        # root is published by the producer invocation inside the
+        # already-contracted q-compiled/ prefix (v1.00.31 W1).
+        if [ -f "$root/q-compiled/trusted-root/manifest.rktd" ]; then
+          echo "compiled-root-dir=$root/q-compiled/trusted-root" >> "$GITHUB_OUTPUT"
+        else
+          echo "compiled-root-dir=" >> "$GITHUB_OUTPUT"
+        fi
 
         # Lock digest of THIS checkout, derived the same way the producer
         # derived it, so a lock change between producer and consumer is a

@@ -48,6 +48,9 @@ outputs:
   artifact-name:
     description: 'Name of the uploaded prepared-environment artifact'
     value: ${{ inputs.artifact-name }}
+  compiled-root-producer-seconds:
+    description: 'Wall-clock seconds of the same-run compiled-root production + pack (W4 pilot telemetry, issue #9690); empty when not measured'
+    value: ${{ steps.pack.outputs.compiled-root-producer-seconds }}
 runs:
   using: 'composite'
   steps:
@@ -122,7 +125,10 @@ runs:
         raco fmt --help >/dev/null
         racket -e '(require quickcheck fmt) (displayln "producer package store health check passed")'
 
+    # Pack step is timed for W4 pilot producer-cost telemetry: the
+    # seconds value covers THIS run's compiled-root production + pack.
     - name: Pack the allowlisted prepared-environment artifact
+      id: pack
       shell: bash
       env:
         RACKET_VERSION: ${{ inputs.racket-version }}
@@ -136,9 +142,28 @@ runs:
         COMPILED_ROOT: ${{ inputs.compiled-root }}
       run: |
         set -euo pipefail
+        producer_start=$SECONDS
         stage="$RUNNER_TEMP/prepared-env-${ARTIFACT_NAME}"
         rm -rf "$stage"
         mkdir -p "$stage/addon-store" "$stage/q-compiled"
+
+        # W4 activation (issue #9690) through the v1.00.31 W1 invocation
+        # contract: the SAME prepared artifact carries the whole-checkout
+        # compiled root of THIS exact source tree (SAME-RUN SAME-HEAD),
+        # built through the reviewed CLI with the trusted producer
+        # namespace straight into the staged artifact; checkout-relative
+        # reuse is gone. The published root lands inside the already
+        # contracted q-compiled/ prefix, so the artifact contract (I10
+        # allowlist) needs no widening. Guarded by the compiled-root input
+        # (default false): the lane stays a fast-lane pilot and every other
+        # path stays full eager. tests/test-compiled-root-workflow.rkt
+        # executes exactly this line against a scratch checkout.
+        if [ "${COMPILED_ROOT:-false}" = "true" ]; then
+          racket scripts/ci/compiled-root.rkt build \
+            --out "$stage/q-compiled/trusted-root" \
+            --checkout "$PWD" \
+            --trusted-label q-trusted-producer
+        fi
 
         # Allowlisted contents only (I10): the addon store and the q
         # checkout's compiled output. No .git, no credentials, no tokens,
@@ -149,19 +174,6 @@ runs:
           mkdir -p "$stage/q-compiled/$rel"
           cp -a "$dir/." "$stage/q-compiled/$rel/"
         done < <(find . -type d -name compiled -not -path './.git/*' -print0)
-
-        # Whole-checkout trusted compiled root (v1.00.31 W1). This is the
-        # producer invocation the W4 lane activates; it must stay
-        # executable, and tests/test-compiled-root-workflow.rkt executes
-        # exactly this line against a scratch checkout. The published root
-        # lands inside the already-contracted q-compiled/ prefix, so the
-        # artifact contract (I10 allowlist) needs no widening.
-        if [ "${COMPILED_ROOT:-false}" = "true" ]; then
-          racket scripts/ci/compiled-root.rkt build \
-            --out "$stage/q-compiled/trusted-root" \
-            --checkout "$PWD" \
-            --trusted-label q-trusted-producer
-        fi
 
         git_sha=$(git rev-parse HEAD)
         racket ci/prepared-environment/manifest.rkt emit \
@@ -197,6 +209,7 @@ runs:
         # not turn a broken pack into a green step.
         set -o pipefail
         du -sh "$stage" | tee -a "$GITHUB_STEP_SUMMARY"
+        echo "compiled-root-producer-seconds=$((SECONDS - producer_start))" >> "$GITHUB_OUTPUT"
 
     # Immutable by construction: upload-artifact never overwrites an
     # existing name and retention is pinned to one day (24h, I9).

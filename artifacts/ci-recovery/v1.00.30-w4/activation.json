@@ -1,0 +1,52 @@
+{
+  "schema": "v1.00.30-w4-activation/1",
+  "issue": 9690,
+  "milestone": 895,
+  "wave": "W4",
+  "branch": "campaign/v1.00.30-w4",
+  "implementation-head-sha": "f05c21bced97c8e992b3744876342fec80db54f6",
+  "generated-at": "2026-09-24T11:33:42Z",
+  "environment": {
+    "racket": "8.10 [cs]",
+    "os": "linux"
+  },
+  "activation-scope": {
+    "pilot": "required PR fast lanes only",
+    "global-default": "off (full eager compile, unchanged pre-pilot behavior)",
+    "rollout-authority": "none beyond the declared fast pilot; broadening requires a reviewed plan amendment",
+    "windows-macos-crossversion-release": "full eager unless separately proven"
+  },
+  "override-precedence-proven": [
+    "Q_CI_COMPILED_ROOT unset -> resolve+verify trusted root, eager fallback on any mismatch",
+    "Q_CI_COMPILED_ROOT=off -> root skipped entirely, full eager current-source path (rollback proven by drill)",
+    "Q_CI_COMPILED_ROOT=<invalid value> -> fail closed with usage error, no lazy test amplification",
+    "namespace trust: only roots published under the trusted producer label resolve; untrusted publication attempts are refused"
+  ],
+  "drill-evidence": {
+    "artifact": "artifacts/ci-recovery/v1.00.30-w4/rollback-drill.json",
+    "head-sha": "f05c21bced97c8e992b3744876342fec80db54f6",
+    "all-pass": true,
+    "phases-passed": [
+      "producer-build-publish",
+      "consumer-root-hit",
+      "global-off-rollback",
+      "current-source-canary",
+      "tamper-canary"
+    ]
+  },
+  "coordinator-gates": {
+    "status": "HOLD (local evidence only; remote gates owned by coordinator)",
+    "pr-latency-guard": "required on final head before promotion",
+    "regime-comparison": ">=3 genuine candidate heads vs frozen W2 regime references required",
+    "independent-review": "APPROVED review required before promotion",
+    "protected-squash-merge": "required; activation merge SHA bound via campaign binding protocol",
+    "activation-merge-sha": "PENDING (filled at protected merge)",
+    "regime-fingerprint": "PENDING (recorded from final head at merge time for W5 cohort start)"
+  },
+  "repair": {
+    "wave": "v1.00.31-w7",
+    "base-sha": "fc1a6fa36206accff81abb0b9be07a5be72bc9d2",
+    "note": "Re-delivered through the hardened v1.00.31 machinery after the wave was blocked (BROKEN producer invocation, unreproducible content digest, evidence bound to the wrong head, mixed evidence commit, unpushed branch, inconsistent drill timings, stale recovery pins). This record and rollback-drill.json were re-derived at the repaired head above: one guarded whole-checkout producer invocation inside the already-contracted q-compiled/ prefix, consumer restore exposes q-compiled/trusted-root read-only, and every recorded head now names a commit that carries the recorded content."
+  },
+  "no-secrets": true
+}

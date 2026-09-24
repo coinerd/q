@@ -170,13 +170,25 @@ jobs:
     needs: [lint]
     if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
     runs-on: ubuntu-latest
+    # W4 pilot (issue #9690): surface the measured producer cost of the
+    # same-run compiled root so consumer shards can separate producer cost
+    # from restore/execution cost in the campaign telemetry.
+    outputs:
+      compiled-root-producer-seconds: ${{ steps.prepare.outputs.compiled-root-producer-seconds }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-racket-environment
+        id: prepare
         with:
           racket-version: '8.10'
           installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
           artifact-name: prepared-env-fast
+          # W4 pilot (issue #9690): the SAME prepared artifact carries this
+          # run's whole-checkout compiled root, but only while the lane is
+          # enabled — this mirrors the consumer gate below (prepared-artifact
+          # rollback, lane switch, no version override, same-run producer),
+          # so the producer builds the root exactly when a shard will use it.
+          compiled-root: ${{ vars.RACKET_COMPILED_ROOT == 'on' }}
 
   # ────────────────────────────────────────────────────────────
   # Gate 2: Sharded test suite — 3 parallel shards on ubuntu (default)
@@ -215,6 +227,13 @@ jobs:
       # actually in play for this run (producer green, not a dispatch
       # version-override, rollback switch not off).
       PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
+      # v1.00.30 W4 (issue #9690): guarded compiled-root activation for
+      # the ubuntu fast shards ONLY. Precedence is evaluated in order:
+      # the global emergency switch wins BEFORE the lane switch is even
+      # consulted; the lane additionally requires RACKET_COMPILED_ROOT
+      # explicitly 'on', a SAME-RUN successful producer, and no version
+      # override. Windows/macOS/cross-version/release lanes never opt in.
+      COMPILED_ROOT: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_COMPILED_ROOT == 'on' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       # Legacy pre-W3 cache; only pays off on the full path.
@@ -239,6 +258,40 @@ jobs:
           prepared-environment: ${{ env.PREPARED_ENV }}
           prepared-artifact-name: prepared-env-fast
           prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
+
+      # v1.00.30 W4 (issue #9690): verify the SAME-RUN compiled root
+      # BEFORE any test executes. The root directory comes read-only from
+      # the guarded restore (manifest-verified, outside the checkout);
+      # resolution re-checks source identity (digests + byte counts), the
+      # q link/collection identity and the trusted producer namespace.
+      # The mapping/flags live in RUNNER_TEMP, never in the checkout. A
+      # failed resolution is loud and selects exactly ONE eager fallback
+      # compile at the gate below — never lazy per-test compilation.
+      - name: Resolve the verified compiled root (W4 activation)
+        id: compiled-root
+        if: env.COMPILED_ROOT == 'auto'
+        continue-on-error: true
+        shell: bash
+        env:
+          VERIFIED_ROOT: ${{ steps.setup.outputs.prepared-env-root }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compiled-root-map"
+          flags="$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.rktd"
+          racket ci/prepared-environment/compiled-root.rkt resolve \
+            --root "$VERIFIED_ROOT" \
+            --checkout "$PWD" \
+            --trusted-label q-trusted-producer \
+            --flags-file "$flags"
+          echo "flags-file=$flags" >> "$GITHUB_OUTPUT"
+
+      - name: Upload compiled-root resolution telemetry
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiled-root-map-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/compiled-root-map/
+          if-no-files-found: ignore
 
       # W1 telemetry contract: normalize the prepared-environment outcome
       # into machine-readable state for the test runner (runner.rkt reads
@@ -314,7 +367,7 @@ jobs:
       # (BUG-0065 systemic invariant — the accepted v1.00.28 release-lane
       # tradeoff, extended to every lane in v1.00.29 W4).
       - name: Compile gate (shared deps)
-        if: steps.setup.outputs.prepared-env-result != 'success'
+        if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure'
         run: raco make main.rkt
 
       - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
@@ -326,13 +379,20 @@ jobs:
         # keeps the round-robin behavior byte-identical.
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
+          COMPILED_ROOT_FLAGS: ${{ steps.compiled-root.outputs.flags-file }}
         run: |
           set -o pipefail
           PLAN_ARGS=""
           if [ "$FAST_SHARD_PLAN" = "active" ]; then
             PLAN_ARGS="--shard-plan active"
           fi
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+          # W4 (issue #9690): the shard launches through the verified
+          # compiled-root resolution. An empty/unusable flags file (lane
+          # off, or a failed resolution that already triggered the one
+          # eager gate above) runs this exact command unchanged.
+          STRICT_TEST_RUNNER=1 racket ci/prepared-environment/compiled-root.rkt launch \
+            --flags-file "$COMPILED_ROOT_FLAGS" \
+            -- racket scripts/run-tests.rkt \
             --suite fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             $PLAN_ARGS \

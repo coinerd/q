@@ -1,0 +1,54 @@
+{
+  "schema": "v1.00.30-w4-rollback-drill/1",
+  "issue": 9690,
+  "milestone": 895,
+  "wave": "W4",
+  "branch": "campaign/v1.00.30-w4",
+  "head-sha": "f05c21bced97c8e992b3744876342fec80db54f6",
+  "timestamp": "2026-09-24T11:33:42Z",
+  "environment": {
+    "racket": "8.10 [cs]",
+    "os": "linux"
+  },
+  "executor": "local end-to-end drill driving the committed scripts/ci/compiled-root.rkt exactly as CI would: producer build against a real git-repo fixture checkout, consumer resolve+launch, then override/canary runs via /usr/bin/env Q_CI_COMPILED_ROOT=off and post-publish source/manifest mutations. Harness and raw transcript retained at raw/w4-drill.rkt.txt and raw/drill-output.txt (paths relative to this artifact directory).",
+  "phases": [
+    {
+      "phase": "producer-build-publish",
+      "result": "pass",
+      "detail": "published compiled root (reason: ok) from the git-clean fixture checkout via scripts/ci/compiled-root.rkt build; same-run same-head publication outside the checkout"
+    },
+    {
+      "phase": "consumer-root-hit",
+      "result": "pass",
+      "detail": "verified root hit on a fast-shard-shaped consumer; child exit 0; program output 42; fallback-ms-file-created=false (zero eager compiles on the hit path)"
+    },
+    {
+      "phase": "global-off-rollback",
+      "result": "pass",
+      "detail": "Q_CI_COMPILED_ROOT=off short-circuits to the eager current-source path; one fallback compile measured at 493 ms (eager-fallback-ms.global-off); program output 42"
+    },
+    {
+      "phase": "current-source-canary",
+      "result": "pass",
+      "detail": "helper source edited after publish -> resolution refused the stale root -> exactly one eager fallback compile measured at 483 ms (eager-fallback-ms.current-source) -> program output 63 from CURRENT source"
+    },
+    {
+      "phase": "tamper-canary",
+      "result": "pass",
+      "detail": "manifest first byte flipped -> resolution failed (manifest is not a hash) -> exactly one eager fallback compile measured at 490 ms (eager-fallback-ms.tamper) -> program output 42 (the honest current-source result; the stale root's 63 was never served)"
+    }
+  ],
+  "eager-fallback-ms": {
+    "global-off": 493,
+    "current-source": 483,
+    "tamper": 490
+  },
+  "invariants-observed": [
+    "root hit reuses compiled code with zero fallback compiles",
+    "every failure mode compiles exactly once eagerly (no lazy test amplification)",
+    "tampered or stale roots are never launched",
+    "global off fully disables the pilot (rollback proven)"
+  ],
+  "all-pass": true,
+  "no-secrets": true
+}
