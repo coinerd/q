@@ -18,11 +18,11 @@
      "reason": "digest-ok e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-     "exit-code": 1,
+     "exit-code": 0,
      "guard": "scripts/gsd-wave-gate.rkt (strict trio gate, head binding)",
      "id": "F3",
      "outcome": "accepted",
-     "reason": "GSD wave evidence FAIL: <scratch> | - validation field remaining-items is missing | - validation remaining-items must be a list"
+     "reason": "GSD wave evidence PASS: <scratch>"
     },
     {
      "exit-code": 0,
@@ -43,7 +43,7 @@
      "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
      "id": "F6",
      "outcome": "accepted",
-     "reason": "controller suite passes on the healthy routes"
+     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), OK=#t, suite source asserts resolve_existing_pr/head="
     },
     {
      "exit-code": 0,
@@ -78,14 +78,14 @@
      "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
      "id": "F11",
      "outcome": "accepted",
-     "reason": "controller suite passes with a recorded authorization"
+     "reason": "offline approval-contract suite green path (recorded authorization + review): 15 test(s) ran (minimum 15), OK=#t, suite source asserts no-operator-authorization/no-review-artifact/head-binding-mismatch"
     },
     {
      "exit-code": 0,
      "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
      "id": "F12",
      "outcome": "accepted",
-     "reason": "strict gate accepts the genuine-content trio"
+     "reason": "strict gate exit 0, PASS=#t; placeholder/insufficient reasons: 0"
     },
     {
      "exit-code": 0,
@@ -128,6 +128,37 @@
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
  "rehearsal-head": "e2f3dee74fe85c2b7d5f3a0cd3b7a5521f4c90f4",
+ "rehearsal-inputs": [
+  {
+   "path": "scripts/ci/inject-wave-defect.rkt",
+   "sha256": "95be7d9fa1188a1b31d5472c971bd6cab2929da0dff7c3f3621329d61aff73da"
+  },
+  {
+   "path": "tests/test-wave-integrity-adversarial.rkt",
+   "sha256": "f229cb0075e7602a0158b84be4d5d7195bf21dda43d611654b01668f7d52b835"
+  },
+  {
+   "path": "tests/test-wave-delivery-integrity-register.rkt",
+   "sha256": "f2271f734c936efc53e2515806f8621002c67e5bfb8b09fe03a020534ea51293"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py",
+   "sha256": "08ad248ac33f9227b024362e69ffe43e93566d635c28e434a980cfdf6a0b563f"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py",
+   "sha256": "2aebee0be1988a3eb6bd831fa9ff76ebb13b1ded60afa54f73cc38699d5b1666"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json",
+   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json",
+   "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
+  }
+ ],
+ "rehearsal-inputs-digest": "a0c7a9948017220e0bc9829d9647b63011d5690d6f5f24a2c61a77bfdfe66849",
  "rows": [
   {
    "exit-code": 0,
@@ -153,7 +184,7 @@
    "id": "F3",
    "injected-defect": "the evidence implementation-sha differs from the durable receipt head",
    "outcome": "refused",
-   "reason": "GSD wave evidence FAIL: <scratch> | - head-binding-mismatch: evidence implementation-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd | - head-binding-mismatch: review reviewed-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd | - validation field remaining-items is missing | - validation remaining-items must be a list",
+   "reason": "GSD wave evidence FAIL: <scratch> | - head-binding-mismatch: evidence implementation-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd | - head-binding-mismatch: review reviewed-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd",
    "signal": "nonzero-exit+token"
   },
   {
@@ -180,7 +211,7 @@
    "id": "F6",
    "injected-defect": "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing",
    "outcome": "refused",
-   "reason": "typed refusal witnessed by tests/test-gsd-delivery-api-contract.py (wrong head filter rejected)",
+   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), OK=#t, suite source asserts resolve_existing_pr/head=",
    "signal": "suite-exit0"
   },
   {
@@ -225,16 +256,16 @@
    "id": "F11",
    "injected-defect": "a merge is attempted with no recorded operator authorization or no APPROVED review artifact",
    "outcome": "refused",
-   "reason": "typed refusals witnessed (no-operator-authorization / no-review-artifact / head-binding-mismatch)",
+   "reason": "absent authorization / absent APPROVED review artifact: 15 test(s) ran (minimum 15), OK=#t, suite source asserts no-operator-authorization/no-review-artifact/head-binding-mismatch",
    "signal": "suite-exit0"
   },
   {
-   "exit-code": 0,
+   "exit-code": 1,
    "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
    "id": "F12",
    "injected-defect": "a finalized-looking trio carries sentinel placeholders in its identity and narrative fields",
    "outcome": "refused",
-   "reason": "placeholder-evidence: independent reviewer identity is a placeholder | placeholder-evidence: independent reviewer identity encodes a placeholder | placeholder-evidence: review timestamp is a placeholder | placeholder-evidence: remaining-items owner or rationale is a placeholder | insufficient-review-content: review scope carries fewer than 64 characters of content | insufficient-review-content: review report carries fewer than 64 characters of content | insufficient-review-content: validation red-first failure carries fewer than 32 characters of content",
+   "reason": "sentinel trio: - placeholder-evidence: independent reviewer identity is a placeholder | terse narrative: insufficient-review-content",
    "signal": "library"
   },
   {

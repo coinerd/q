@@ -94,9 +94,6 @@
                " | "))
 
 (define (typed-reason output token [fallback #f])
-  (for/first ([l (in-list (string-split output "\n"))]
-              #:when (string-contains? l token))
-    (string-trim l))
   (or (for/first ([l (in-list (string-split output "\n"))]
                   #:when (string-contains? l token))
         (string-trim l))
@@ -301,17 +298,36 @@
 ;; F3 — evidence/review head ≠ verified head
 ;; ---------------------------------------------------------------------------
 
-(define (f3-trio-root tag [mismatch? #t])
-  (define dir (scratch-dir tag))
+;; One complete-trio fixture, parameterised by content quality:
+;;   'sentinel  every identity and narrative field is the literal sentinel the
+;;              W0 binding draft carried (F12's defect)
+;;   'terse     genuine identity, narrative below the substantive minimum
+;;   'genuine   valid content that the strict gate ACCEPTS (the clean control)
+(define (trio-root mode)
+  (define dir (scratch-dir (format "trio-~a" mode)))
   (define impl (make-string 40 #\a))
   (define other (make-string 40 #\d))
   (define digest (make-string 64 #\b))
+  (define (field name)
+    (if (eq? mode 'sentinel) "PENDING" name))
+  (define scope
+    (if (eq? mode 'terse)
+        "too short"
+        (make-string 70 #\s)))
+  (define report
+    (if (eq? mode 'terse)
+        "too short"
+        (make-string 90 #\r)))
+  (define red-failure
+    (if (eq? mode 'terse)
+        "too short"
+        (make-string 60 #\f)))
+  (define red-command "racket scripts/ci/inject-wave-defect.rkt --row F12")
   (write-text! (build-path dir "scripts/required-pr-checks.policy") "(\"lint\")\n")
   (write-text!
    (build-path dir "docs/reports/gsd-wave-evidence/w6.rktd")
-   (format (string-append "#hasheq((schema-version . 2) (milestone . 896)"
-                          " (wave . \"W12\") (issue . 9731)"
-                          " (status . \"ready-for-merge\")"
+   (format (string-append "#hasheq((schema-version . 2) (milestone . 896) (wave . \"W12\")"
+                          " (issue . 9731) (status . \"ready-for-merge\")"
                           " (implementation-sha . ~s) (content-digest . ~s)"
                           " (required-checks . (\"lint\"))"
                           " (review-artifact . \"docs/reports/gsd-wave-reviews/w6.rktd\")"
@@ -319,20 +335,22 @@
            impl
            digest))
   (write-text! (build-path dir "docs/reports/gsd-wave-reviews/w6.rktd")
-               (format (string-append "#hasheq((reviewer . \"Independent Reviewer\")"
-                                      " (verdict . \"APPROVED\") (reviewed-sha . ~s)"
-                                      " (content-digest . ~s) (timestamp . \"2026-09-23T00:00:00Z\")"
+               (format (string-append "#hasheq((reviewer . ~s) (verdict . \"APPROVED\")"
+                                      " (reviewed-sha . ~s) (content-digest . ~s) (timestamp . ~s)"
                                       " (scope . ~s) (report . ~s))\n")
+                       (field "Independent Reviewer")
                        impl
                        digest
-                       (make-string 70 #\s)
-                       (make-string 90 #\r)))
+                       (field "2026-09-23T00:00:00Z")
+                       scope
+                       report))
   (write-text!
    (build-path dir "docs/reports/gsd-wave-validation/w6.rktd")
-   (format (string-append "#hasheq((status . \"current\") (milestone . 896)"
-                          " (wave . \"W12\") (issue . 9731)"
-                          " (branch . \"campaign/w6\") (implementation-sha . ~s)"
+   (format (string-append "#hasheq((status . \"current\") (milestone . 896) (wave . \"W12\")"
+                          " (issue . 9731) (branch . \"campaign/w6\") (implementation-sha . ~s)"
                           " (content-digest . ~s) (planning-sync . \"current\")"
+                          " (remaining-items . (#hasheq((classification . \"deferred-noncritical\")"
+                          " (OWNER . ~s) (RATIONALE . ~s))))"
                           " (red-first . #hasheq((command . ~s) (failure . ~s)))"
                           " (focused-tests . #hasheq((result . \"passed\")))"
                           " (format-compile . #hasheq((result . \"passed\")))"
@@ -341,37 +359,45 @@
                           " (review-artifact . \"docs/reports/gsd-wave-reviews/w6.rktd\"))\n")
            impl
            digest
-           (make-string 40 #\c)
-           (make-string 60 #\f)))
-  (values dir digest (if mismatch? other impl)))
+           (field "W6 rehearsal operator")
+           (field "documents the injection instead of closing the row by assertion")
+           red-command
+           red-failure))
+  (values dir digest impl other))
 
-(define (f3-run root mismatch?)
-  (define-values (dir digest receipt) (f3-trio-root "f3" mismatch?))
+(define (trio-reasons dir digest)
+  (define evidence (read-datum (build-path dir "docs/reports/gsd-wave-evidence/w6.rktd")))
+  (wave-evidence-result-reasons
+   (validate-wave-evidence evidence #:root dir #:actual-content-digest digest)))
+
+(define (gate-run root dir digest receipt)
   (define gate (build-path root "scripts/gsd-wave-gate.rkt"))
-  (define-values (code output)
-    (capture (list (racket-exe)
-                   (path->string gate)
-                   (path->string (build-path dir "docs/reports/gsd-wave-evidence/w6.rktd"))
-                   "--content-digest"
-                   digest
-                   "--root"
-                   dir
-                   "--policy"
-                   (path->string (build-path dir "scripts/required-pr-checks.policy"))
-                   "--receipt-head"
-                   receipt)))
-  (delete-directory/files dir #:must-exist? #f)
-  (values code output))
+  (capture (list (racket-exe)
+                 (path->string gate)
+                 (path->string (build-path dir "docs/reports/gsd-wave-evidence/w6.rktd"))
+                 "--content-digest"
+                 digest
+                 "--root"
+                 dir
+                 "--policy"
+                 (path->string (build-path dir "scripts/required-pr-checks.policy"))
+                 "--receipt-head"
+                 receipt)))
 
 (define (f3-injected root)
-  (define-values (code output) (f3-run root #t))
+  (define-values (dir digest impl other) (trio-root 'genuine))
+  (define-values (code output) (gate-run root dir digest other))
+  (delete-directory/files dir #:must-exist? #f)
   (values code output (string-contains? output "head-binding-mismatch")))
 
 (define (f3-clean root)
-  (define-values (code output) (f3-run root #f))
-  (values code output (not (string-contains? output "head-binding-mismatch"))))
+  ;; The clean control must be a wave the guard ACCEPTS — exit 0 and PASS — not
+  ;; merely the absence of the injected refusal token.
+  (define-values (dir digest impl _other) (trio-root 'genuine))
+  (define-values (code output) (gate-run root dir digest impl))
+  (delete-directory/files dir #:must-exist? #f)
+  (values code output (and (zero? code) (string-contains? output "PASS"))))
 
-;; ---------------------------------------------------------------------------
 ;; F4 — record commit touches non-evidence paths
 ;; ---------------------------------------------------------------------------
 
@@ -458,45 +484,85 @@
 ;; F6 / F11 — GitHub API route contract / amended approval contract
 ;; ---------------------------------------------------------------------------
 
+;; A fixture suite is a valid guard witness only when it actually ran and passed
+;; its own assertions: exit 0 alone is vacuous (an empty suite would "refuse" by
+;; passing). The witness therefore requires a `Ran N tests` line with at least
+;; the row's declared minimum, an OK verdict, and every typed refusal token
+;; present in the suite source — the suite must assert the refusal the row
+;; claims. Both halves of each row replay the same offline suite: its failing
+;; direction is the injected-defect witness, its green direction (the suite
+;; asserts the correct route/authorized merge too) is the clean control.
+(define suite-cache (make-hash))
+
+(define (suite-outcome root rel min-tests tokens)
+  (define path (build-path root rel))
+  (define key (path->string path))
+  (define result
+    (hash-ref
+     suite-cache
+     key
+     (lambda ()
+       (define source (and (file-exists? path) (file->string path)))
+       (define-values (code output) (capture (list (python-exe) (path->string path)) root))
+       (define ran-match (regexp-match #px"Ran ([0-9]+) tests?" output))
+       (define ran (and ran-match (string->number (second ran-match))))
+       (define ok? (and (string-contains? output "OK") #t))
+       (define missing
+         (for/list ([t (in-list tokens)]
+                    #:unless (and source (string-contains? source t)))
+           t))
+       (hash-set (hash-set (hash-set (hash-set (hash) 'code code) 'output output) 'ran (or ran 0))
+                 'ok?
+                 (and ok? ran (>= ran min-tests) (null? missing))))))
+  (define accepted? (hash-ref result 'ok?))
+  (values (hash-ref result 'code)
+          (hash-ref result 'output)
+          accepted?
+          (format "~a test(s) ran (minimum ~a), OK=~a, suite source asserts ~a"
+                  (hash-ref result 'ran)
+                  min-tests
+                  (and accepted? #t)
+                  (string-join tokens "/"))))
+
 (define (f6-injected root)
-  (define suite (build-path root "tests/test-gsd-delivery-api-contract.py"))
-  (define-values (code output) (capture (list (python-exe) (path->string suite)) root))
-  (values
-   code
-   (if (zero? code)
-       "typed refusal witnessed by tests/test-gsd-delivery-api-contract.py (wrong head filter rejected)"
-       (normalize output root))
-   (zero? code)))
+  (define-values (code output accepted? witness)
+    (suite-outcome root
+                   "tests/test-gsd-delivery-api-contract.py"
+                   11
+                   (list "resolve_existing_pr" "head=")))
+  (values code (format "wrong {owner}/{repo} head filter: ~a" witness) accepted?))
 
 (define (f6-clean root)
-  (define suite (build-path root "tests/test-gsd-delivery-controller.py"))
-  (define-values (code output) (capture (list (python-exe) (path->string suite)) root))
+  (define-values (code output accepted? witness)
+    (suite-outcome root
+                   "tests/test-gsd-delivery-api-contract.py"
+                   11
+                   (list "resolve_existing_pr" "head=")))
   (values code
-          (if (zero? code)
-              "controller suite passes on the healthy routes"
-              (normalize output root))
-          (zero? code)))
+          (format "offline API-contract suite green path (correct head filter): ~a" witness)
+          accepted?))
 
 (define (f11-injected root)
-  (define suite (build-path root "tests/test-gsd-delivery-approval-contract.py"))
-  (define-values (code output) (capture (list (python-exe) (path->string suite)) root))
-  (values
-   code
-   (if (zero? code)
-       "typed refusals witnessed (no-operator-authorization / no-review-artifact / head-binding-mismatch)"
-       (normalize output root))
-   (zero? code)))
+  (define-values (code output accepted? witness)
+    (suite-outcome root
+                   "tests/test-gsd-delivery-approval-contract.py"
+                   15
+                   (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
+  (values code
+          (format "absent authorization / absent APPROVED review artifact: ~a" witness)
+          accepted?))
 
 (define (f11-clean root)
-  (define suite (build-path root "tests/test-gsd-delivery-controller.py"))
-  (define-values (code output) (capture (list (python-exe) (path->string suite)) root))
+  (define-values (code output accepted? witness)
+    (suite-outcome root
+                   "tests/test-gsd-delivery-approval-contract.py"
+                   15
+                   (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
   (values code
-          (if (zero? code)
-              "controller suite passes with a recorded authorization"
-              (normalize output root))
-          (zero? code)))
+          (format "offline approval-contract suite green path (recorded authorization + review): ~a"
+                  witness)
+          accepted?))
 
-;; ---------------------------------------------------------------------------
 ;; F7 — stale recorded head and cross-artifact timing disagreement
 ;; ---------------------------------------------------------------------------
 
@@ -654,101 +720,46 @@
 ;; F12 — sentinel placeholders accepted as evidence
 ;; ---------------------------------------------------------------------------
 
-(define (f12-reasons mode)
-  (define dir (scratch-dir "f12"))
-  (define impl (make-string 40 #\a))
-  (define digest (make-string 64 #\b))
-  (define (field name)
-    (if (eq? mode 'sentinel) "PENDING" name))
-  (define scope
-    (if (eq? mode 'terse)
-        "too short"
-        (make-string 70 #\s)))
-  (define report
-    (if (eq? mode 'terse)
-        "too short"
-        (make-string 90 #\r)))
-  (define red-command "racket scripts/ci/inject-wave-defect.rkt --row F12")
-  (define red-failure
-    (if (eq? mode 'terse)
-        "too short"
-        (make-string 60 #\f)))
-  (write-text! (build-path dir "scripts/required-pr-checks.policy") "(\"lint\")\n")
-  (write-text!
-   (build-path dir "docs/reports/gsd-wave-evidence/w6-f12.rktd")
-   (format
-    (string-append "#hasheq((schema-version . 2) (milestone . 896)"
-                   " (wave . \"W12\") (issue . 9731)"
-                   " (status . \"ready-for-merge\")"
-                   " (implementation-sha . ~s) (content-digest . ~s)"
-                   " (required-checks . (\"lint\"))"
-                   " (review-artifact . \"docs/reports/gsd-wave-reviews/w6-f12.rktd\")"
-                   " (validation-artifact . \"docs/reports/gsd-wave-validation/w6-f12.rktd\"))\n")
-    impl
-    digest))
-  (write-text! (build-path dir "docs/reports/gsd-wave-reviews/w6-f12.rktd")
-               (format (string-append "#hasheq((reviewer . ~s) (verdict . \"APPROVED\")"
-                                      " (reviewed-sha . ~s) (content-digest . ~s) (timestamp . ~s)"
-                                      " (scope . ~s) (report . ~s))\n")
-                       (field "Independent Reviewer")
-                       impl
-                       digest
-                       (field "2026-09-23T00:00:00Z")
-                       scope
-                       report))
-  (write-text!
-   (build-path dir "docs/reports/gsd-wave-validation/w6-f12.rktd")
-   (format (string-append "#hasheq((status . \"current\") (milestone . 896)"
-                          " (wave . \"W12\") (issue . 9731)"
-                          " (branch . \"campaign/w6\") (implementation-sha . ~s)"
-                          " (content-digest . ~s) (planning-sync . \"current\")"
-                          " (remaining-items . (#hasheq((classification . \"deferred-noncritical\")"
-                          " (OWNER . ~s) (RATIONALE . ~s))))"
-                          " (red-first . #hasheq((command . ~s) (failure . ~s)))"
-                          " (focused-tests . #hasheq((result . \"passed\")))"
-                          " (format-compile . #hasheq((result . \"passed\")))"
-                          " (lint . #hasheq((result . \"passed\")))"
-                          " (fast . #hasheq((result . \"passed\")))"
-                          " (review-artifact . \"docs/reports/gsd-wave-reviews/w6-f12.rktd\"))\n")
-           impl
-           digest
-           (field "W6 rehearsal operator")
-           (field "documents the injection instead of closing the row by assertion")
-           red-command
-           red-failure))
-  (define evidence (read-datum (build-path dir "docs/reports/gsd-wave-evidence/w6-f12.rktd")))
-  (define reasons
-    (wave-evidence-result-reasons
-     (validate-wave-evidence evidence #:root dir #:actual-content-digest digest)))
-  (delete-directory/files dir #:must-exist? #f)
-  reasons)
-
 (define (f12-injected root)
-  (define sentinel (f12-reasons 'sentinel))
-  (define terse (f12-reasons 'terse))
-  (define placeholder? (ormap (lambda (r) (string-contains? r "placeholder-evidence")) sentinel))
-  (define short? (ormap (lambda (r) (string-contains? r "insufficient-review-content")) terse))
-  (values 0
-          (string-join
-           (append (filter (lambda (r) (string-contains? r "placeholder-evidence")) sentinel)
-                   (filter (lambda (r) (string-contains? r "insufficient-review-content")) terse))
-           " | ")
-          (and placeholder? short?)))
+  ;; Injected: the sentinel trio through the strict gate (typed refusal,
+  ;; non-zero exit). The terse variant pins the minimum-content rule separately,
+  ;; because a placeholder is reported before the length rule can fire.
+  (define-values (dir digest impl _other) (trio-root 'sentinel))
+  (define-values (code output) (gate-run root dir digest impl))
+  (delete-directory/files dir #:must-exist? #f)
+  (define terse-reasons
+    (let-values ([(terse-dir t-digest _t-impl _t-other) (trio-root 'terse)])
+      (define reasons (trio-reasons terse-dir t-digest))
+      (delete-directory/files terse-dir #:must-exist? #f)
+      reasons))
+  (define placeholder? (string-contains? output "placeholder-evidence"))
+  (define short?
+    (ormap (lambda (r) (string-contains? r "insufficient-review-content")) terse-reasons))
+  (values code
+          (format "sentinel trio: ~a | terse narrative: ~a"
+                  (typed-reason output "placeholder-evidence" "no placeholder reason")
+                  (if short? "insufficient-review-content" "no minimum-content reason"))
+          (and placeholder? (and short? #t))))
 
 (define (f12-clean root)
-  (define genuine (f12-reasons 'genuine))
+  ;; Clean: the same trio with genuine content must be ACCEPTED by the strict
+  ;; gate (exit 0 + PASS) and must produce neither refusal reason.
+  (define-values (dir digest impl _other) (trio-root 'genuine))
+  (define genuine-reasons (trio-reasons dir digest))
+  (define-values (code output) (gate-run root dir digest impl))
+  (delete-directory/files dir #:must-exist? #f)
   (define bad
     (filter (lambda (r)
               (or (string-contains? r "placeholder-evidence")
                   (string-contains? r "insufficient-review-content")))
-            genuine))
-  (values 0
-          (if (null? bad)
-              "strict gate accepts the genuine-content trio"
-              (string-join bad " | "))
-          (null? bad)))
+            genuine-reasons))
+  (values code
+          (format "strict gate exit ~a, PASS=~a; placeholder/insufficient reasons: ~a"
+                  code
+                  (and (string-contains? output "PASS") #t)
+                  (length bad))
+          (and (zero? code) (string-contains? output "PASS") (null? bad))))
 
-;; ---------------------------------------------------------------------------
 ;; F13 — frozen contract stale while every gate reports clean
 ;; ---------------------------------------------------------------------------
 
@@ -889,6 +900,24 @@
         f13-injected
         f13-clean)))
 
+;; The rehearsal inputs whose digests bind the verdict to CONTENT, not merely
+;; to a commit: any edit to the harness, either test, the register, the
+;; reproduction artifact or the generators invalidates the recorded verdict
+;; until the matrix is regenerated.
+(define rehearsal-inputs
+  (list "scripts/ci/inject-wave-defect.rkt"
+        "tests/test-wave-integrity-adversarial.rkt"
+        "tests/test-wave-delivery-integrity-register.rkt"
+        "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py"
+        "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py"
+        "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json"
+        "artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json"))
+
+(define (inputs-digest root)
+  (sha256-string (string-join (for/list ([rel (in-list rehearsal-inputs)])
+                                (format "~a ~a" rel (sha256-file (root-path root rel))))
+                              "\n")))
+
 (define (row-outcome root r)
   (define missing
     (for/list ([p (in-list (row-guard-paths r))]
@@ -961,11 +990,28 @@
   (define-values (code out) (capture (list (git-exe) "rev-parse" "HEAD") root))
   (and (zero? code) (string-trim out)))
 
+(define (commit-ancestor? root ancestor descendant)
+  (and ancestor
+       descendant
+       (let-values ([(code _out)
+                     (capture (list (git-exe) "merge-base" "--is-ancestor" ancestor descendant)
+                              root)])
+         (zero? code))))
+
 (define (rehearsal-head root committed)
   ;; A committed artifact cannot carry its own commit hash: the rehearsal head
-  ;; is a pinned observation read back from the committed matrix (else the
-  ;; current HEAD), exactly like the W5 provenance matrix's recorded head.
-  (or (and committed (hash-ref committed 'rehearsal-head #f)) (git-head root) "unknown"))
+  ;; is a pinned observation (the head at first generation, kept stable so
+  ;; repeated rehearsals reproduce byte-identically) that SELF-HEALS when it is
+  ;; no longer an ancestor of the current tip, so a later commit cannot silently
+  ;; inherit a stale head. The content binding (rehearsal-inputs-digest) is the
+  ;; stronger anti-inheritance mechanism.
+  (define pinned (and committed (hash-ref committed 'rehearsal-head #f)))
+  (define current (git-head root))
+  (if (and (string? pinned)
+           (regexp-match? #px"^[0-9a-f]{40}$" pinned)
+           (commit-ancestor? root pinned current))
+      pinned
+      (or current "unknown")))
 
 (define (canonical-json v)
   (define (escape s)
@@ -1093,6 +1139,11 @@
                          "accepted by every guard, and a missing guard detected instead of skipped.")
           'rehearsal-head
           head
+          'rehearsal-inputs
+          (for/list ([rel (in-list rehearsal-inputs)])
+            (hasheq 'path rel 'sha256 (sha256-file (root-path root rel))))
+          'rehearsal-inputs-digest
+          (inputs-digest root)
           'register
           (hasheq 'path
                   register-path
@@ -1150,6 +1201,8 @@
 
 (provide run-rehearsal
          canonical-json
+         inputs-digest
+         rehearsal-inputs
          row-outcomes
          rows
          row-id

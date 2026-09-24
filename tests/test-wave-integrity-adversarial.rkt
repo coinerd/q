@@ -109,6 +109,16 @@
                 "the recorded reproduction digest is the current reproduction digest")
   (check-equal? (hash-ref (hash-ref committed 'register) 'row-count)
                 (length (hash-ref register 'rows)))
+  ;; The verdict is bound to CONTENT: every rehearsal input's recorded digest
+  ;; must equal the current file digest, so editing the harness, either test, the
+  ;; register, the reproduction artifact or a generator invalidates it.
+  (check-equal? (hash-ref committed 'rehearsal-inputs-digest)
+                (inputs-digest q-root)
+                "the recorded rehearsal-inputs digest is the current digest")
+  (for ([entry (in-list (hash-ref committed 'rehearsal-inputs))])
+    (check-equal? (hash-ref entry 'sha256)
+                  (sha256-file (build-path q-root (hash-ref entry 'path)))
+                  (format "~a input digest" (hash-ref entry 'path))))
   (check-equal? (hash-ref (hash-ref committed 'register) 'row-count) 13)
   ;; Invalidation: a register edit changes the digest, so the recorded binding
   ;; stops matching and the verdict can no longer be inherited silently.
