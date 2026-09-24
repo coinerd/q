@@ -1,7 +1,7 @@
 + raco test tests/test-compiled-root-workflow.rkt tests/test-compiled-root.rkt tests/test-compiled-root-manifest.rkt tests/test-prepared-env-report.rkt
 raco test: (submod "tests/test-compiled-root-workflow.rkt" test)
 raco test: (submod "tests/test-compiled-root.rkt" test)
-published compiled root: /var/tmp/qcr-e2e17902852641790285264053/cli-published-root (reason: ok)
+published compiled root: /var/tmp/qcr-e2e17902878161790287816970/cli-published-root (reason: ok)
 5748
 raco test: (submod "tests/test-compiled-root-manifest.rkt" test)
 1048576
@@ -22,11 +22,11 @@ TEST-EXIT=0
   Files:     32 total, 32 passed, 0 failed, 0 timeouts
   Tests:     306 total, 306 passed, 0 failed
   Category:  PASS=32
-  Elapsed:   27.601s
+  Elapsed:   27.413s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=27.601 metadata-completeness=explicit:32/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=27.413 metadata-completeness=explicit:32/heuristic:0/missing:0
 + echo ARCH-EXIT=0
 ARCH-EXIT=0
 + racket scripts/run-tests.rkt --suite security
@@ -40,11 +40,11 @@ ARCH-EXIT=0
   Files:     64 total, 64 passed, 0 failed, 0 timeouts
   Tests:     740 total, 740 passed, 0 failed
   Category:  PASS=64
-  Elapsed:   1m 1.395s
+  Elapsed:   1m 3.85s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=61.395 metadata-completeness=explicit:64/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=63.85 metadata-completeness=explicit:64/heuristic:0/missing:0
 + echo SEC-EXIT=0
 SEC-EXIT=0
 + racket scripts/run-tests.rkt --suite workflows
@@ -60,11 +60,11 @@ SEC-EXIT=0
   Files:     33 total, 33 passed, 0 failed, 0 timeouts
   Tests:     214 total, 214 passed, 0 failed
   Category:  PASS=33
-  Elapsed:   1m 19.89s
+  Elapsed:   1m 19.376s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=79.89 metadata-completeness=explicit:33/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=79.376 metadata-completeness=explicit:33/heuristic:0/missing:0
 + echo WF-EXIT=0
 WF-EXIT=0
 + racket scripts/check-deps.rkt
@@ -83,7 +83,6 @@ All 5 static metrics match README.md.
 METRICS-EXIT=0
 + racket scripts/ci/verify-artifact-provenance.rkt --root .
 provenance-note: wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: canonical form not enforced on historical artifacts
-provenance-note: wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: recorded sha256 does not match bytes of artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py (historical)
 provenance-note: wave-delivery-integrity/v1.00.31-w5/provenance-matrix.json: canonical form not enforced on historical artifacts
 provenance-note: wave-delivery-integrity/v1.00.31-w5/provenance-matrix.json/recorded-head: recorded head 454436d1d866edf8840bade4bce2a288105cb476 is not an ancestor of the tip (historical pinned record)
 provenance-note: wave-delivery-integrity/v1.00.31-w4/api-contract.json: canonical form not enforced on historical artifacts
@@ -1029,7 +1028,7 @@ provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/16/
 provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/17/sha: recorded head dc79a2a1a7d90448b6f9748e6b5710ac3fe8daca is not an ancestor of the tip (historical pinned record)
 provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/18/sha: recorded head cf1c6648c2a097940e3d66f65955ab7b8e6f6cdb is not an ancestor of the tip (historical pinned record)
 provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/19/sha: recorded head bb16fdb1fe17914f923c70c7e5fecb6447e8839a is not an ancestor of the tip (historical pinned record)
-artifact-provenance ok (947 note(s))
+artifact-provenance ok (946 note(s))
 + echo PROV-EXIT=0
 PROV-EXIT=0
 + racket scripts/run-tests.rkt --suite fast
@@ -1045,10 +1044,10 @@ PROV-EXIT=0
   Files:     1208 total, 1208 passed, 0 failed, 0 timeouts
   Tests:     17987 total, 17987 passed, 0 failed
   Category:  PASS=1208
-  Elapsed:   22m 4.697s
+  Elapsed:   21m 59.426s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1324.697 metadata-completeness=explicit:1180/heuristic:0/missing:28
+RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1319.426 metadata-completeness=explicit:1180/heuristic:0/missing:28
 + echo FAST-EXIT=0
 FAST-EXIT=0
