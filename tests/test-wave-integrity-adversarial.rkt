@@ -170,6 +170,15 @@
    (lambda () (delete-file mutated)))
   (check-true (and (regexp-match? #px"^[0-9a-f]{40}$" (hash-ref committed 'rehearsal-head "")) #t)
               "the rehearsal head is a full commit SHA")
+  ;; The suite guards are bound by the inputs digest: a vacuous replacement suite
+  ;; must change the recorded digests rather than leave the verdict byte-identical.
+  (define input-paths
+    (for/list ([p (in-list (hash-ref committed 'rehearsal-inputs))])
+      (hash-ref p 'path)))
+  (check-true (and (member "tests/test-gsd-delivery-api-contract.py" input-paths) #t)
+              "the F6 suite guard is a recorded rehearsal input")
+  (check-true (and (member "tests/test-gsd-delivery-approval-contract.py" input-paths) #t)
+              "the F11 suite guard is a recorded rehearsal input")
   ;; The recorded head names a commit this repository actually contains (the
   ;; generation-time tip), so the observation is real rather than fabricated.
   (check-true (git-object-present? q-root (hash-ref committed 'rehearsal-head))

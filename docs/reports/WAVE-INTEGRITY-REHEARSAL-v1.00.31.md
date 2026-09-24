@@ -44,13 +44,15 @@ The harness writes `artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matr
 (canonical JSON: sorted keys, 1-space indent, ASCII escapes, trailing newline) and
 `raw/injection-matrix-gen.py` regenerates that matrix plus `SHA256SUMS`
 byte-identically. Determinism holds because fixtures pin the git identity and
-commit dates, scratch paths are scrubbed to `<scratch>`, and the rehearsal head is
-a pinned observation read back from the committed matrix (a committed artifact
-cannot carry its own commit hash).
+commit dates, scratch paths are scrubbed to `<scratch>`, and the rehearsal head is the
+generation-time tip (`git rev-parse HEAD`) — a committed artifact cannot carry its
+own commit hash, so the operative content binding is the rehearsal-inputs digest
+over the harness, both tests, both suite guards, the register, the reproduction
+artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `e2f3dee74fe85c2b7d5f3a0cd3b7a5521f4c90f4` (ancestor of the wave
+Rehearsal head `729692d06b0e275d451e2e37a569127b21eb3513` (the generation-time
 tip). Register digest `4ce067d627506b3b…` over
 `artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json` (13 rows),
 reproduction digest over `w4-reproduction.json`.
@@ -122,6 +124,10 @@ neutered guard rather than inherit a `PERMANENT` verdict:
 * a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
   and exits 99 makes F2/F4 `ok` (a printed verdict on a non-zero exit is a tool
   failure, not a decided refusal), verdict `NOT PERMANENT`; and
+* swapping in a vacuous passing suite for either suite row changes a recorded
+  rehearsal-input digest, so the committed `PERMANENT` verdict no longer matches
+  and `tests/test-wave-integrity-adversarial.rkt` fails (the suites are content
+  inputs, and the test asserts both are present in `rehearsal-inputs`);
 * dummy suites (enough passing tests, typed tokens only in comments) make F6/F11
   `ok` because the witness requires assertion-backed tokens (tokens inside an
   assertion statement, not merely in the same block) and a minimum number of

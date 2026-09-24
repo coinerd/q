@@ -127,19 +127,27 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "729692d06b0e275d451e2e37a569127b21eb3513",
+ "rehearsal-head": "f9e7c0f68217ad508a239f1187f33e45d108cca1",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "dbaf6142f6e8c9f5e0a360bb29c4d6998b01f19117fa2d2823cb8bafb84ed641"
+   "sha256": "91d33088ea545c31c324fcb10ef5ec53a87cea6c8302df6aa17e1adf9427724d"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
-   "sha256": "438ab3634736cbdd9f0f0ded3b69ca207e902cb5fc2f674f1de0d4f3471168cb"
+   "sha256": "a3467cb512cbd95400173ed7bb6dbccebf0ce660a0a4837418363022e984677a"
   },
   {
    "path": "tests/test-wave-delivery-integrity-register.rkt",
    "sha256": "f2271f734c936efc53e2515806f8621002c67e5bfb8b09fe03a020534ea51293"
+  },
+  {
+   "path": "tests/test-gsd-delivery-api-contract.py",
+   "sha256": "07b796736e3b024fa03f09a69cacd670e3c73097a55b6930604f07d0560664f9"
+  },
+  {
+   "path": "tests/test-gsd-delivery-approval-contract.py",
+   "sha256": "0bc295d9e043bbbaca4067ace2b6de601f7e89b1bf4d5df807b87cd521857480"
   },
   {
    "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py",
@@ -158,7 +166,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "2170a33e174087923d9628b61d9485e22cd3580724512947b691573201379fa5",
+ "rehearsal-inputs-digest": "a038bd59a2e20c0995afc54e53648cf298a0c2ef0928194400a98aadf4bfa036",
  "rows": [
   {
    "exit-code": 0,

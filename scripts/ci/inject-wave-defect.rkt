@@ -995,6 +995,11 @@
   (list "scripts/ci/inject-wave-defect.rkt"
         "tests/test-wave-integrity-adversarial.rkt"
         "tests/test-wave-delivery-integrity-register.rkt"
+        ;; The suite guards for the two suite-exit0 rows are inputs too: the
+        ;; token witness is a secondary, static check, so swapping in a vacuous
+        ;; passing suite must change a recorded digest and force regeneration.
+        "tests/test-gsd-delivery-api-contract.py"
+        "tests/test-gsd-delivery-approval-contract.py"
         "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py"
         "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py"
         "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json"
