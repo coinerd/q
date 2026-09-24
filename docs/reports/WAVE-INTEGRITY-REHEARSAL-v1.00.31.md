@@ -21,7 +21,7 @@ never a live branch) and runs the *shipped* guard against the injection:
 |---|---|
 | `nonzero-exit+token` | the guard is a CLI that must BOTH exit non-zero and name the typed refusal: a warning-mode regression that prints the token and exits 0 is recorded as `ok`, never as `refused` |
 | `token` | the guard prints a DECIDED typed verdict and exits 0 (verdict-printing CLI); a crash that prints the verdict text and exits non-zero is refused |
-| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, exited 0, met a minimum number of assertion lines, and asserts every typed refusal token the row claims inside an assertion block — a dummy suite with passing tests and the tokens in comments is refused |
+| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, exited 0, met a minimum number of assertion statements, and asserts every typed refusal token the row claims inside an assertion statement (opener line plus its more-indented continuation lines) — a dummy suite with passing tests and the tokens in comments is refused |
 | `library` | the guard is an in-process API returning the typed outcome |
 
 A row is `refused` **only** when the guard's own typed refusal is observed. `ok`
@@ -88,17 +88,18 @@ polarity the guards do not share.
 `injection-matrix.json` records the digest of the frozen register and of the
 reproduction artifact, the register row count, the rehearsal head, the digest of
 every rehearsal input (the harness, both tests, the register and reproduction
-artifacts and the generators) and both controls. The rehearsal head is a pinned
-observation that self-heals: it is kept stable across regenerations while it is
-an ancestor of the current tip, and re-pinned to the tip when it is no longer
-one, so a later commit can neither inherit a stale head nor silently keep a head
-outside its own history. The rehearshal test (`tests/test-wave-integrity-adversarial.rkt`)
-asserts that the recorded digests equal the current file digests (register,
-reproduction artifact, and every rehearsal input), that a fresh rehearsal
-reproduces the committed matrix byte-identically, and that a mutated register no
-longer matches the recorded digest — so editing the register, the harness,
-either test or a generator invalidates the verdict instead of silently
-inheriting `PERMANENT`.
+artifacts and the generators) and both controls. The rehearsal head is the
+generation-time tip (`git rev-parse HEAD` at the moment the matrix was produced):
+a committed artifact cannot name its own commit, so the value is the tip as of
+generation, and the operative binding is the rehearsal-inputs digest. The
+adversarial test (`tests/test-wave-integrity-adversarial.rkt`) asserts that the
+recorded digests equal the current file digests (register, reproduction artifact,
+and every rehearsal input), that the recorded head is a full SHA present in this
+repository, that a fresh rehearsal reproduces the committed matrix byte-identically
+except for the rehearsal head (which necessarily advances with the commit carrying
+the matrix), and that a mutated register no longer matches the recorded digest —
+so editing the register, the harness, either test or a generator invalidates the
+verdict instead of silently inheriting `PERMANENT`.
 
 ## Falsification checks
 
@@ -121,9 +122,10 @@ neutered guard rather than inherit a `PERMANENT` verdict:
 * a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
   and exits 99 makes F2/F4 `ok` (a printed verdict on a non-zero exit is a tool
   failure, not a decided refusal), verdict `NOT PERMANENT`; and
-* dummy suites (enough passing tests, typed tokens only in a comment) make F6/F11
-  `ok` because the witness requires assertion-backed tokens and a minimum number
-  of assertion lines.
+* dummy suites (enough passing tests, typed tokens only in comments) make F6/F11
+  `ok` because the witness requires assertion-backed tokens (tokens inside an
+  assertion statement, not merely in the same block) and a minimum number of
+  assertion statements; the witness reports the assertion count.
 
 ## Red-first evidence
 

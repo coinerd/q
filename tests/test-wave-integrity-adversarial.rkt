@@ -22,6 +22,7 @@
          racket/runtime-path
          racket/set
          racket/string
+         racket/system
          rackunit
          json
          (file "../util/json/checksum.rkt")
@@ -36,6 +37,16 @@
   (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json"))
 (define reproduction-path
   (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json"))
+
+(define (git-object-present? root sha)
+  (define code
+    (parameterize ([current-directory root])
+      (with-handlers ([exn:fail? (lambda (_e) 1)])
+        (system*/exit-code (or (find-executable-path "git") "git")
+                           "cat-file"
+                           "-e"
+                           (string-append sha "^{commit}")))))
+  (zero? code))
 
 (define (read-json-file p)
   (with-input-from-file p (lambda () (read-json))))
@@ -115,9 +126,13 @@
 
 (test-case "the matrix is bound to the frozen register and reproduces byte-identically"
   (define committed (read-json-file matrix-path))
-  (check-equal? (canonical-json rehearsal)
-                (file->string matrix-path)
-                "a fresh rehearsal reproduces the committed matrix byte-identically")
+  ;; A fresh rehearsal reproduces the committed matrix byte-identically apart
+  ;; from the rehearsal head, which necessarily advances with the commit that
+  ;; carries the matrix (a committed artifact cannot name its own commit).
+  (check-equal?
+   (canonical-json (hash-set rehearsal 'rehearsal-head (hash-ref committed 'rehearsal-head)))
+   (file->string matrix-path)
+   "a fresh rehearsal reproduces the committed matrix except the rehearsal head")
   (check-equal? (hash-ref (hash-ref committed 'register) 'sha256)
                 (sha256-file register-path)
                 "the recorded register digest is the current register digest")
@@ -154,7 +169,11 @@
                        "a mutated register no longer matches the recorded digest"))
    (lambda () (delete-file mutated)))
   (check-true (and (regexp-match? #px"^[0-9a-f]{40}$" (hash-ref committed 'rehearsal-head "")) #t)
-              "the rehearsal head is a full commit SHA"))
+              "the rehearsal head is a full commit SHA")
+  ;; The recorded head names a commit this repository actually contains (the
+  ;; generation-time tip), so the observation is real rather than fabricated.
+  (check-true (git-object-present? q-root (hash-ref committed 'rehearsal-head))
+              "the rehearsal head is present in this repository"))
 
 (test-case "the matrix is bound by SHA256SUMS and stays canonical"
   (define sums

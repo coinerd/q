@@ -43,7 +43,7 @@
      "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
      "id": "F6",
      "outcome": "accepted",
-     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: resolve_existing_pr/head=coinerd:"
+     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: head=coinerd:/pulls?state=open"
     },
     {
      "exit-code": 0,
@@ -127,15 +127,15 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "e2f3dee74fe85c2b7d5f3a0cd3b7a5521f4c90f4",
+ "rehearsal-head": "729692d06b0e275d451e2e37a569127b21eb3513",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "1bc35552c3a1c06f504a9f6e4692e8ca5c20d3e89b2e1dd16bb7a045d8bdb059"
+   "sha256": "dbaf6142f6e8c9f5e0a360bb29c4d6998b01f19117fa2d2823cb8bafb84ed641"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
-   "sha256": "c32ae273f6b3e2c224858b48f33121ecb1216b2d04bc0644909a8228f9f5e2b0"
+   "sha256": "438ab3634736cbdd9f0f0ded3b69ca207e902cb5fc2f674f1de0d4f3471168cb"
   },
   {
    "path": "tests/test-wave-delivery-integrity-register.rkt",
@@ -158,7 +158,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "cbca1a7f035c939e1244e761e135eb5bab03939acf8dedc495c9642f7d61d645",
+ "rehearsal-inputs-digest": "2170a33e174087923d9628b61d9485e22cd3580724512947b691573201379fa5",
  "rows": [
   {
    "exit-code": 0,
@@ -211,7 +211,7 @@
    "id": "F6",
    "injected-defect": "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing",
    "outcome": "refused",
-   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: resolve_existing_pr/head=coinerd:",
+   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: head=coinerd:/pulls?state=open",
    "signal": "suite-exit0"
   },
   {

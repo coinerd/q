@@ -514,18 +514,39 @@
 ;; asserts the correct route/authorized merge too) is the clean control.
 (define suite-cache (make-hash))
 
+(define (line-indent line)
+  (- (string-length line) (string-length (string-trim line #:left? #t))))
+
+(define (assertion-opener? line)
+  (regexp-match? #rx"^[ \t]*(?:self\\.)?assert|^[ \t]*with self\\.assertRaises" line))
+
+;; The lines belonging to the assertion statement that starts at `i`: the
+;; opener plus every following line indented deeper than it. Comment tokens that
+;; merely sit in the same blank-line-separated block are NOT part of any window,
+;; so a token only counts when it is inside an assertion statement.
+(define (assertion-window lines i)
+  (define base (line-indent (vector-ref lines i)))
+  (define (walk j acc)
+    (cond
+      [(>= j (vector-length lines)) (reverse acc)]
+      [(and (non-empty-string? (string-trim (vector-ref lines j)))
+            (> (line-indent (vector-ref lines j)) base))
+       (walk (add1 j) (cons (vector-ref lines j) acc))]
+      [else (reverse acc)]))
+  (string-join (walk (add1 i) (list (vector-ref lines i))) "\n"))
+
+(define (assertion-windows source)
+  (define lines (list->vector (string-split source "\n")))
+  (for/list ([i (in-range (vector-length lines))]
+             #:when (assertion-opener? (vector-ref lines i)))
+    (assertion-window lines i)))
+
 (define (assertion-count source)
-  ;; Count assertion statements line by line (no inline regex modes needed).
-  (for/sum
-   ([line (in-list (string-split source "\n"))])
-   (if (regexp-match? #rx"^[ \t]*(?:self\\.)?assert|^[ \t]*with self\\.assertRaises" line) 1 0)))
+  (length (assertion-windows source)))
 
 (define (asserted-token? source token)
-  ;; A token merely present in the file (a comment, an import) proves nothing;
-  ;; the suite must assert it. Assertions span several lines, so the unit is a
-  ;; blank-line-separated block containing both an assertion and the token.
-  (for/or ([block (in-list (regexp-split #rx"\n[ \t]*\n" source))])
-    (and (string-contains? block "assert") (string-contains? block token))))
+  (for/or ([window (in-list (assertion-windows source))])
+    (and (string-contains? window token) #t)))
 
 (define (suite-outcome root rel min-tests min-assertions tokens)
   (define path (build-path root rel))
@@ -581,7 +602,7 @@
                    "tests/test-gsd-delivery-api-contract.py"
                    11
                    15
-                   (list "resolve_existing_pr" "head=coinerd:")))
+                   (list "head=coinerd:" "pulls?state=open")))
   (values code (format "wrong {owner}/{repo} head filter: ~a" witness) accepted?))
 
 (define (f6-clean root)
@@ -590,7 +611,7 @@
                    "tests/test-gsd-delivery-api-contract.py"
                    11
                    15
-                   (list "resolve_existing_pr" "head=coinerd:")))
+                   (list "head=coinerd:" "pulls?state=open")))
   (values code
           (format "offline API-contract suite green path (correct head filter): ~a" witness)
           accepted?))
@@ -1064,20 +1085,13 @@
                               root)])
          (zero? code))))
 
-(define (rehearsal-head root committed)
-  ;; A committed artifact cannot carry its own commit hash: the rehearsal head
-  ;; is a pinned observation (the head at first generation, kept stable so
-  ;; repeated rehearsals reproduce byte-identically) that SELF-HEALS when it is
-  ;; no longer an ancestor of the current tip, so a later commit cannot silently
-  ;; inherit a stale head. The content binding (rehearsal-inputs-digest) is the
-  ;; stronger anti-inheritance mechanism.
-  (define pinned (and committed (hash-ref committed 'rehearsal-head #f)))
-  (define current (git-head root))
-  (if (and (string? pinned)
-           (regexp-match? #px"^[0-9a-f]{40}$" pinned)
-           (commit-ancestor? root pinned current))
-      pinned
-      (or current "unknown")))
+(define (rehearsal-head root _committed)
+  ;; The head of the tree that was actually rehearsed: the generation-time tip.
+  ;; A committed artifact cannot name its own commit, so the recorded value is
+  ;; the tip as of generation; the content binding (rehearsal-inputs-digest) is
+  ;; what prevents a later commit from silently inheriting the verdict, and the
+  ;; adversarial test asserts that binding against the current files.
+  (or (git-head root) "unknown"))
 
 (define (canonical-json v)
   (define (escape s)
