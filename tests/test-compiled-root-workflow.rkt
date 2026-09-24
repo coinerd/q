@@ -674,6 +674,15 @@
 (check-true (and record-at record-upload-at (> record-upload-at record-at))
             "the restore record is uploaded after it is emitted")
 
+;; The resolution step that creates the map directory is SKIPPED when the lane
+;; is off, so the shard step must create it before launching: the launcher
+;; opens the telemetry file for writing and fails closed on a missing
+;; directory (v1.00.31 W7 repair, found by the PR's own CI on the off lane).
+(define launch-arg-at (index-of ci-text "ci/prepared-environment/compiled-root.rkt launch"))
+(define map-mkdir-at (index-of ci-text "mkdir -p \"$RUNNER_TEMP/compiled-root-map\""))
+(check-true (and launch-arg-at map-mkdir-at (< map-mkdir-at launch-arg-at))
+            "the shard step creates the compiled-root map dir before the launcher runs")
+
 ;; The producer job publishes the producer cost the shard record consumes.
 (check-true
  (string-contains?

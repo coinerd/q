@@ -342,6 +342,7 @@ jobs:
       # names a Racket source file is never not-a-script" guard because the
       # same block names main.rkt (v1.00.31 W7 repair).
       - name: Eager gate start stamp
+        if: always()
         run: echo "EAGER_GATE_START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
 
       - name: Compile gate (one bounded eager compile)
@@ -449,6 +450,12 @@ jobs:
           if [ "$FAST_SHARD_PLAN" = "active" ]; then
             PLAN_ARGS="--shard-plan active"
           fi
+          # The launcher's usable-root telemetry is written into this
+          # directory, and the resolution step that creates it is SKIPPED when
+          # the lane is off — so the shard step must create it itself
+          # (v1.00.31 W7 repair: on the off lane the launcher failed with
+          # open-output-file: No such file or directory).
+          mkdir -p "$RUNNER_TEMP/compiled-root-map"
           # W4 (issue #9690): the shard launches through the verified
           # compiled-root resolution. An empty/unusable flags file (lane
           # off, or a failed resolution that already triggered the one
