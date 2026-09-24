@@ -102,6 +102,12 @@
 ;; "pure" is a substring of "impure-record-commit": a success verdict must be
 ;; matched exactly, never by substring, or a guard that refuses everything would
 ;; satisfy its own clean control.
+;; The evidence-bind CLI and the classifier report DECIDED verdicts only on exit
+;; 0; a non-zero exit is a tool failure, so a crash that prints the verdict text
+;; must not count as a refusal or a success.
+(define (decided-verdict? code output token)
+  (and (zero? code) (string-contains? output token) #t))
+
 (define (pure-verdict? output)
   (and (not (string-contains? output "impure")) (equal? (string-trim output) "pure")))
 
@@ -265,7 +271,7 @@
 
 (define (f2-injected root)
   (define-values (code output) (f2-outcome root #t))
-  (values code output (string-contains? output "digest-mismatch")))
+  (values code output (decided-verdict? code output "digest-mismatch")))
 
 (define (f2-clean root)
   (define-values (code output)
@@ -304,7 +310,7 @@
                                      head
                                      "--evidence"
                                      (path->string record))))))
-  (values code output (and (zero? code) (string-contains? output "digest-ok"))))
+  (values code output (decided-verdict? code output "digest-ok")))
 
 ;; ---------------------------------------------------------------------------
 ;; F3 — evidence/review head ≠ verified head
@@ -440,13 +446,13 @@
 
 (define (f4-injected root)
   (define-values (code output) (f4-outcome root #t))
-  (values code output (string-contains? output "impure-record-commit")))
+  (values code output (decided-verdict? code output "impure-record-commit")))
 
 (define (f4-clean root)
   (define-values (code output) (f4-outcome root #f))
   ;; "pure" is a substring of "impure-record-commit": the clean control must
   ;; observe the exact pure verdict, not the injected refusal's text.
-  (values code output (pure-verdict? output)))
+  (values code output (and (zero? code) (pure-verdict? output))))
 
 ;; ---------------------------------------------------------------------------
 ;; F5 — wave recorded verified with an unpushed branch
@@ -508,42 +514,74 @@
 ;; asserts the correct route/authorized merge too) is the clean control.
 (define suite-cache (make-hash))
 
-(define (suite-outcome root rel min-tests tokens)
+(define (assertion-count source)
+  ;; Count assertion statements line by line (no inline regex modes needed).
+  (for/sum
+   ([line (in-list (string-split source "\n"))])
+   (if (regexp-match? #rx"^[ \t]*(?:self\\.)?assert|^[ \t]*with self\\.assertRaises" line) 1 0)))
+
+(define (asserted-token? source token)
+  ;; A token merely present in the file (a comment, an import) proves nothing;
+  ;; the suite must assert it. Assertions span several lines, so the unit is a
+  ;; blank-line-separated block containing both an assertion and the token.
+  (for/or ([block (in-list (regexp-split #rx"\n[ \t]*\n" source))])
+    (and (string-contains? block "assert") (string-contains? block token))))
+
+(define (suite-outcome root rel min-tests min-assertions tokens)
   (define path (build-path root rel))
   (define key (path->string path))
   (define result
-    (hash-ref
-     suite-cache
-     key
-     (lambda ()
-       (define source (and (file-exists? path) (file->string path)))
-       (define-values (code output) (capture (list (python-exe) (path->string path)) root))
-       (define ran-match (regexp-match #px"Ran ([0-9]+) tests?" output))
-       (define ran (and ran-match (string->number (second ran-match))))
-       (define ok? (and (string-contains? output "OK") #t))
-       (define missing
-         (for/list ([t (in-list tokens)]
-                    #:unless (and source (string-contains? source t)))
-           t))
-       (hash-set (hash-set (hash-set (hash-set (hash) 'code code) 'output output) 'ran (or ran 0))
-                 'ok?
-                 (and (zero? code) ok? ran (>= ran min-tests) (null? missing))))))
+    (hash-ref suite-cache
+              key
+              (lambda ()
+                (define source (and (file-exists? path) (file->string path)))
+                (define source-text (or source ""))
+                (define-values (code output) (capture (list (python-exe) (path->string path)) root))
+                (define ran-match (regexp-match #px"Ran ([0-9]+) tests?" output))
+                (define ran (and ran-match (string->number (second ran-match))))
+                (define assertions (assertion-count source-text))
+                (define ok? (and (string-contains? output "OK") #t))
+                (define missing
+                  (for/list ([tok (in-list tokens)]
+                             #:unless (asserted-token? source-text tok))
+                    tok))
+                (hash-set* (hash)
+                           'code
+                           code
+                           'output
+                           output
+                           'ran
+                           (or ran 0)
+                           'assertions
+                           assertions
+                           'ok?
+                           (and (zero? code)
+                                ok?
+                                ran
+                                (>= ran min-tests)
+                                (>= assertions min-assertions)
+                                (null? missing))))))
   (define accepted? (hash-ref result 'ok?))
-  (values (hash-ref result 'code)
-          (hash-ref result 'output)
-          accepted?
-          (format "~a test(s) ran (minimum ~a), OK=~a, suite source asserts ~a"
-                  (hash-ref result 'ran)
-                  min-tests
-                  (and accepted? #t)
-                  (string-join tokens "/"))))
+  (values
+   (hash-ref result 'code)
+   (hash-ref result 'output)
+   accepted?
+   (format
+    "~a test(s) ran (minimum ~a), ~a assertion line(s) (minimum ~a), OK=~a, tokens asserted: ~a"
+    (hash-ref result 'ran)
+    min-tests
+    (hash-ref result 'assertions)
+    min-assertions
+    (and accepted? #t)
+    (string-join tokens "/"))))
 
 (define (f6-injected root)
   (define-values (code output accepted? witness)
     (suite-outcome root
                    "tests/test-gsd-delivery-api-contract.py"
                    11
-                   (list "resolve_existing_pr" "head=")))
+                   15
+                   (list "resolve_existing_pr" "head=coinerd:")))
   (values code (format "wrong {owner}/{repo} head filter: ~a" witness) accepted?))
 
 (define (f6-clean root)
@@ -551,7 +589,8 @@
     (suite-outcome root
                    "tests/test-gsd-delivery-api-contract.py"
                    11
-                   (list "resolve_existing_pr" "head=")))
+                   15
+                   (list "resolve_existing_pr" "head=coinerd:")))
   (values code
           (format "offline API-contract suite green path (correct head filter): ~a" witness)
           accepted?))
@@ -561,6 +600,7 @@
     (suite-outcome root
                    "tests/test-gsd-delivery-approval-contract.py"
                    15
+                   25
                    (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
   (values code
           (format "absent authorization / absent APPROVED review artifact: ~a" witness)
@@ -571,6 +611,7 @@
     (suite-outcome root
                    "tests/test-gsd-delivery-approval-contract.py"
                    15
+                   25
                    (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
   (values code
           (format "offline approval-contract suite green path (recorded authorization + review): ~a"
@@ -654,7 +695,7 @@
 (define (f8-injected root)
   (define-values (code output)
     (f8-classify root "format(\"fatal: couldn't find remote ref refs/heads/campaign/x\")"))
-  (values code output (string-contains? output "remote-ref-missing:")))
+  (values code output (decided-verdict? code output "remote-ref-missing:")))
 
 (define (f8-clean root)
   (define-values (code output) (f8-classify root "\"some unclassified failure\""))

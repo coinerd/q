@@ -20,8 +20,8 @@ never a live branch) and runs the *shipped* guard against the injection:
 | Signal | Meaning |
 |---|---|
 | `nonzero-exit+token` | the guard is a CLI that must BOTH exit non-zero and name the typed refusal: a warning-mode regression that prints the token and exits 0 is recorded as `ok`, never as `refused` |
-| `token` | the guard prints the typed verdict and exits 0 (verdict-printing CLI) |
-| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite actually ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, and its source asserts every typed refusal token the row claims — exit 0 alone would be vacuous |
+| `token` | the guard prints a DECIDED typed verdict and exits 0 (verdict-printing CLI); a crash that prints the verdict text and exits non-zero is refused |
+| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, exited 0, met a minimum number of assertion lines, and asserts every typed refusal token the row claims inside an assertion block — a dummy suite with passing tests and the tokens in comments is refused |
 | `library` | the guard is an in-process API returning the typed outcome |
 
 A row is `refused` **only** when the guard's own typed refusal is observed. `ok`
@@ -117,7 +117,13 @@ neutered guard rather than inherit a `PERMANENT` verdict:
 * a suite that prints `Ran N tests … OK` and then exits 99 makes F6/F11 `ok`,
   their clean controls `refused`, and the verdict `NOT PERMANENT`; and
 * `pure-verdict?` matches the F4 success verdict exactly (never by substring, so
-  `impure-record-commit` cannot satisfy `pure`), asserted by the test.
+  `impure-record-commit` cannot satisfy `pure`), asserted by the test;
+* a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
+  and exits 99 makes F2/F4 `ok` (a printed verdict on a non-zero exit is a tool
+  failure, not a decided refusal), verdict `NOT PERMANENT`; and
+* dummy suites (enough passing tests, typed tokens only in a comment) make F6/F11
+  `ok` because the witness requires assertion-backed tokens and a minimum number
+  of assertion lines.
 
 ## Red-first evidence
 

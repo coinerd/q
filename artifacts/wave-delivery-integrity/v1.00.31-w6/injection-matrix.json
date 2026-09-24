@@ -43,7 +43,7 @@
      "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
      "id": "F6",
      "outcome": "accepted",
-     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), OK=#t, suite source asserts resolve_existing_pr/head="
+     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: resolve_existing_pr/head=coinerd:"
     },
     {
      "exit-code": 0,
@@ -78,7 +78,7 @@
      "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
      "id": "F11",
      "outcome": "accepted",
-     "reason": "offline approval-contract suite green path (recorded authorization + review): 15 test(s) ran (minimum 15), OK=#t, suite source asserts no-operator-authorization/no-review-artifact/head-binding-mismatch"
+     "reason": "offline approval-contract suite green path (recorded authorization + review): 15 test(s) ran (minimum 15), 28 assertion line(s) (minimum 25), OK=#t, tokens asserted: no-operator-authorization/no-review-artifact/head-binding-mismatch"
     },
     {
      "exit-code": 0,
@@ -131,7 +131,7 @@
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "1ed846beed6d1bc22cbc4238e5335ff4c38dc3008db635bb56a7cd1ce92ce8b5"
+   "sha256": "1bc35552c3a1c06f504a9f6e4692e8ca5c20d3e89b2e1dd16bb7a045d8bdb059"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
@@ -158,7 +158,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "d5054434a0b1d4646c0b9ee1d4b7ad72eea71c1a1fbdbdc7e81e397dc3b94c6c",
+ "rehearsal-inputs-digest": "cbca1a7f035c939e1244e761e135eb5bab03939acf8dedc495c9642f7d61d645",
  "rows": [
   {
    "exit-code": 0,
@@ -211,7 +211,7 @@
    "id": "F6",
    "injected-defect": "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing",
    "outcome": "refused",
-   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), OK=#t, suite source asserts resolve_existing_pr/head=",
+   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: resolve_existing_pr/head=coinerd:",
    "signal": "suite-exit0"
   },
   {
@@ -256,7 +256,7 @@
    "id": "F11",
    "injected-defect": "a merge is attempted with no recorded operator authorization or no APPROVED review artifact",
    "outcome": "refused",
-   "reason": "absent authorization / absent APPROVED review artifact: 15 test(s) ran (minimum 15), OK=#t, suite source asserts no-operator-authorization/no-review-artifact/head-binding-mismatch",
+   "reason": "absent authorization / absent APPROVED review artifact: 15 test(s) ran (minimum 15), 28 assertion line(s) (minimum 25), OK=#t, tokens asserted: no-operator-authorization/no-review-artifact/head-binding-mismatch",
    "signal": "suite-exit0"
   },
   {
