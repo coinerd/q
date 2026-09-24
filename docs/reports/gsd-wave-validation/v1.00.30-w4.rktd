@@ -1,1 +1,48 @@
-#hasheq((branch . "campaign/v1.00.30-w4") (content-digest . "542f7cbb35e3fe2e0f9de82265cfc7b9837f640aa5a887ed67809d14a75a234e") (fast . #hasheq((command . "racket scripts/run-tests.rkt --suite fast") (detail . "RUN-SUMMARY runner-version=1.00.29 suite=fast file-count=1202 pass=1202 fail=0 timeout=0 wall-clock-seconds=515.901 at final head bbb6500a. First fast run on this resume failed 1/1202: tests/test-w9-ci-workflow-verification.rkt still pinned the W2-era restore-action sha256 da753d04... while W4 #9690 (declared scope) legitimately added the read-only compiled-root-dir output; re-stamped to 6fb8fd71... with a provenance annotation, README test-lines synced 276575 -> 276576, then green on rerun.") (result . "passed"))) (focused-tests . #hasheq((command . "raco test tests/test-compiled-root-workflow.rkt tests/test-prepared-env-report.rkt") (detail . "38 successes + 109 tests passed, 0 failures/errors at final head bbb6500a: override-precedence rows, TOCTOU double-keying, consumer byte-count belt, link/collection identity mismatch rejection, exactly-one-eager-fallback telemetry, load-wrapper restoration, ci.yml/action text contracts, plus the prepared-env-report aggregation cases") (result . "passed"))) (format-compile . #hasheq((command . "raco fmt -i ci/prepared-environment/compiled-root.rkt scripts/ci/compiled-root.rkt scripts/ci/prepared-env-report.rkt tests/test-ci-runtime-contract.rkt tests/test-compiled-root-workflow.rkt tests/test-w9-ci-workflow-verification.rkt ; raco make <same modules>") (detail . "raco fmt produced no diff on the final tree; raco make bytecode compilation clean on every wave-touched module") (result . "passed"))) (implementation-sha . "bbb6500aa242c94dc53aefd7a840f7a3c91fc836") (issue . 9690) (lint . #hasheq((command . "racket scripts/metrics.rkt --lint ; racket scripts/check-deps.rkt") (detail . "all 5 static metrics match README.md (test-lines synced to 276576 after the checksum and W9-pin re-stamps regenerated pinned counts); all external packages declared in info.rkt (2415 .rkt files scanned)") (result . "passed"))) (milestone . 895) (planning-sync . "current") (red-first . #hasheq((command . "W4 guard TDD during the implementation commits (8299409c and earlier): override-precedence table and TOCTOU regression rows were added and shown failing before the production resolver/activation guard edits") (failure . "failing-for-the-right-reason: pre-fix rows expecting global-off wins and exactly-one-eager-compile semantics failed because the unguarded resolver reused producer-era bytecode and had no exact-once fallback counter; this resume session made no production Racket or workflow edits (checksum re-stamps, report records and README metric sync only), so no additional red cycle was required"))) (remaining-items . (#hasheq((classification . "deferred-noncritical") (owner . "v1.00.30 campaign owner (W5+)") (rationale . "A literal manifest digest-mismatch tamper row is not directly exercised in the new suite; covered indirectly by the byte-count and link/collection rejection paths, the W3 resolver suite, and the drill's byte-flip canary.")) #hasheq((classification . "deferred-noncritical") (owner . "v1.00.30 campaign owner (W5+)") (rationale . "Fallback-telemetry file write is non-atomic; acceptable in the single-writer CI context.")) #hasheq((classification . "deferred-noncritical") (owner . "v1.00.30 campaign owner (W5+)") (rationale . "The 'off' override branch still requires syntactically unused --final-dir/--map-dir options.")))) (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd") (status . "current") (wave . "W4"))
+#hasheq(
+ (schema-version . 2)
+ (status . "current")
+ (milestone . 895)
+ (wave . "W4")
+ (issue . 9690)
+ (branch . "campaign/v1.00.30-w4")
+ (implementation-sha . "b02e44644b8750cf7c06216a99d094fee22826f0")
+ (content-digest . "c5679f48bedd1b900b403779513c61bdf2ce67db1e102ad3d58abeec9671b5d5")
+ (review-artifact . "docs/reports/gsd-wave-reviews/v1.00.30-w4.rktd")
+ (planning-sync . "current")
+ (red-first
+  . #hasheq(
+     (command . "reproduced against the blocked wave head ce13d0388: `grep -c 'compiled-root:' .github/workflows/ci.yml` and `racket scripts/ci/compiled-root.rkt run --checkout $PWD --final-dir ... --map-dir ... --trusted-label q-trusted-producer`")
+     (failure . "The blocked wave was not deliverable at all: its producer invocation was unexecutable (`compiled-root: unknown switch: --out`, reproduced in the v1.00.31 W0 w4-reproduction.json), no consumer could ever hit a root because ci.yml never enabled the producer input (0 matching lines at ce13d0388), and setup-racket's declared pre-resolution step failed with `compiled-root: run requires at least one --module`. Both additional captures are retained at artifacts/ci-recovery/v1.00.30-w4/raw/red-first-review-fixes.txt.")))
+ (focused-tests
+  . #hasheq(
+     (command . "raco test tests/test-compiled-root-workflow.rkt tests/test-compiled-root.rkt tests/test-compiled-root-manifest.rkt tests/test-prepared-env-report.rkt && raco test tests/test-ci-runtime-contract.rkt tests/test-w9-ci-workflow-verification.rkt")
+     (result . "passed")
+     (details . "157 tests in the declared focused group (including the two new CLI `run` cases: resolution-only and module-bearing), plus 38 ci-runtime-contract and 7 workflow-verification cases that pin the re-stamped W2 checkpoint hash and both action hashes.")))
+ (format-compile
+  . #hasheq(
+     (command . "raco fmt -i && raco make on the changed Racket sources at the reviewed implementation head")
+     (result . "passed")))
+ (lint
+  . #hasheq(
+     (command . "racket scripts/check-deps.rkt && racket scripts/metrics.rkt --lint && racket scripts/ci/verify-artifact-provenance.rkt --root .")
+     (result . "passed")
+     (details . "dependencies OK; all 5 static metrics match README.md after the canonical resync; the artifact provenance lint exits 0 (only historical provenance notes), including the re-derived ci-recovery/v1.00.30-w4 artifacts whose SHA256SUMS binds all six files and whose recorded heads are ancestors of the tip.")))
+ (fast
+  . #hasheq(
+     (command . "racket scripts/run-tests.rkt --suite fast")
+     (result . "passed")
+     (run-summary . "RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1363.742 metadata-completeness=explicit:1180/heuristic:0/missing:28")))
+ (suites
+  . #hasheq(
+     (arch . "RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=28.265 metadata-completeness=explicit:32/heuristic:0/missing:0")
+     (security . "RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=60.806 metadata-completeness=explicit:64/heuristic:0/missing:0")
+     (workflows . "RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=82.337 metadata-completeness=explicit:33/heuristic:0/missing:0")))
+ (remaining-items
+  . (#hasheq(
+      (classification . "deferred-noncritical")
+      (owner . "coordinator (W4 pilot activation)")
+      (rationale . "The wave is a fast-lane pilot: promotion beyond the declared fast lanes, the pr-latency-guard sample on the exact final head, and the regime comparison against the frozen W2 references are coordinator-owned remote gates recorded in artifacts/ci-recovery/v1.00.30-w4/activation.json (status HOLD; activation-merge-sha and regime-fingerprint PENDING until the protected merge lands)."))
+     #hasheq(
+      (classification . "deferred-noncritical")
+      (owner . "W7 release record")
+      (rationale . "The v1.00.30 W4 outcome (delivered through the hardened ladder, with its merge SHA) is recorded in the v1.00.31 W7 wave artifacts (artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json) rather than inside this wave's own records, so the blocked-wave outcome is explicit without editing frozen v1.00.30 wave documents.")))))
