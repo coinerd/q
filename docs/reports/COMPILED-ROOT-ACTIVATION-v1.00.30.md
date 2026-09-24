@@ -1,8 +1,11 @@
 # Compiled Root Activation — v1.00.30 (Wave W4)
 
 - **Issue:** coinerd/q#9690 · **Milestone:** #895
-- **Branch:** `campaign/v1.00.30-w4` · **Implementation head:** `ba35b090f`
-- **Date:** 2026-09-19 (content) · 2026-09-24 (repaired re-delivery at `ba35b090f`)
+- **Branch:** `campaign/v1.00.30-w4` · **Repaired code / drill head:** `ba35b090f`
+  (the tree the retained drill harness ran against; the schema-2 evidence
+  records bind the implementation head that carries this record — both are
+  ancestors carrying the recorded content)
+- **Date:** 2026-09-19 (content) · 2026-09-24 (repaired re-delivery, drill re-derived at `ba35b090f`)
 - **Scope:** guarded compiled-root activation on required PR fast lanes only; global default remains `off`.
 - **Repair (v1.00.31 W7):** this wave was blocked on the unfixed tree, so the
 definition of done above is realized through the hardened v1.00.31 machinery:
