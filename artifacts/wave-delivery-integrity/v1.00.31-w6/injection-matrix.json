@@ -127,7 +127,7 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "0134f813af73e7b4fe1509950a4a11f04852677d",
+ "rehearsal-head": "5899143a5bf50f97dfb802ae52819a69c15b54fd",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
@@ -139,7 +139,7 @@
   },
   {
    "path": "tests/test-wave-delivery-integrity-register.rkt",
-   "sha256": "f2271f734c936efc53e2515806f8621002c67e5bfb8b09fe03a020534ea51293"
+   "sha256": "16ccffb13a636943ad30d285710a1f67bf1e0097c53e803a806611f4a7598a23"
   },
   {
    "path": "tests/test-gsd-delivery-api-contract.py",
@@ -166,7 +166,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "f449f8231209bd73c332ed2c33a86f4af840d2640031a6f1923a14782614a020",
+ "rehearsal-inputs-digest": "a1b99fe22383cc23c298fdc521df69b5062301fd40ea5bb62255183e110963b3",
  "rows": [
   {
    "exit-code": 0,

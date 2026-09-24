@@ -52,7 +52,7 @@ artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `0134f813af73e7b4fe1509950a4a11f04852677d` (the generation-time
+Rehearsal head `5899143a5bf50f97dfb802ae52819a69c15b54fd` (the generation-time
 tip). Register digest `4ce067d627506b3b…` over
 `artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json` (13 rows),
 reproduction digest over `w4-reproduction.json`.
