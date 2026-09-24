@@ -1,7 +1,7 @@
 + raco test tests/test-compiled-root-workflow.rkt tests/test-compiled-root.rkt tests/test-compiled-root-manifest.rkt tests/test-prepared-env-report.rkt
 raco test: (submod "tests/test-compiled-root-workflow.rkt" test)
 raco test: (submod "tests/test-compiled-root.rkt" test)
-published compiled root: /var/tmp/qcr-e2e17902515201790251520531/cli-published-root (reason: ok)
+published compiled root: /var/tmp/qcr-e2e17902539561790253956102/cli-published-root (reason: ok)
 5748
 raco test: (submod "tests/test-compiled-root-manifest.rkt" test)
 1048576
@@ -22,11 +22,11 @@ TEST-EXIT=0
   Files:     32 total, 32 passed, 0 failed, 0 timeouts
   Tests:     306 total, 306 passed, 0 failed
   Category:  PASS=32
-  Elapsed:   28.373s
+  Elapsed:   29.214s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=28.373 metadata-completeness=explicit:32/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=29.214 metadata-completeness=explicit:32/heuristic:0/missing:0
 + echo ARCH-EXIT=0
 ARCH-EXIT=0
 + racket scripts/run-tests.rkt --suite security
@@ -40,11 +40,11 @@ ARCH-EXIT=0
   Files:     64 total, 64 passed, 0 failed, 0 timeouts
   Tests:     740 total, 740 passed, 0 failed
   Category:  PASS=64
-  Elapsed:   1m 3.648s
+  Elapsed:   1m 3.758s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=63.648 metadata-completeness=explicit:64/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=63.758 metadata-completeness=explicit:64/heuristic:0/missing:0
 + echo SEC-EXIT=0
 SEC-EXIT=0
 + racket scripts/run-tests.rkt --suite workflows
@@ -60,11 +60,11 @@ SEC-EXIT=0
   Files:     33 total, 33 passed, 0 failed, 0 timeouts
   Tests:     214 total, 214 passed, 0 failed
   Category:  PASS=33
-  Elapsed:   1m 23.001s
+  Elapsed:   1m 23.655s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=83.001 metadata-completeness=explicit:33/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=83.655 metadata-completeness=explicit:33/heuristic:0/missing:0
 + echo WF-EXIT=0
 WF-EXIT=0
 + racket scripts/check-deps.rkt
@@ -78,9 +78,10 @@ All external packages declared in info.rkt. OK
 + echo DEPS-EXIT=0
 DEPS-EXIT=0
 + racket scripts/metrics.rkt --lint
-All 5 static metrics match README.md.
-+ echo METRICS-EXIT=0
-METRICS-EXIT=0
+ERROR: Source lines: expected 191959, found 191950
+Metrics lint FAILED (1 errors)
++ echo METRICS-EXIT=1
+METRICS-EXIT=1
 + racket scripts/run-tests.rkt --suite fast
 ;; run-tests: suite=fast files=1208 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
 
@@ -94,10 +95,10 @@ METRICS-EXIT=0
   Files:     1208 total, 1208 passed, 0 failed, 0 timeouts
   Tests:     17987 total, 17987 passed, 0 failed
   Category:  PASS=1208
-  Elapsed:   23m 20.846s
+  Elapsed:   23m 5.108s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1400.846 metadata-completeness=explicit:1180/heuristic:0/missing:28
+RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1385.108 metadata-completeness=explicit:1180/heuristic:0/missing:28
 + echo FAST-EXIT=0
 FAST-EXIT=0
