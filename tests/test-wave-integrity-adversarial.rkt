@@ -88,6 +88,14 @@
                 '("guard-missing"))
   (check-equal? (length outcomes) 13))
 
+(test-case "nonzero-exit rows refuse only on a non-zero exit plus the typed token"
+  ;; A warning-mode regression that prints the typed refusal and exits 0 must not
+  ;; be recorded as a refusal witness (review R2 finding F1).
+  (check-false (token-refusal 0 "provenance-drift: injected" "provenance-drift"))
+  (check-false (token-refusal 0 "nothing" "provenance-drift"))
+  (check-false (token-refusal 1 "nothing" "provenance-drift"))
+  (check-true (token-refusal 1 "provenance-drift: injected" "provenance-drift")))
+
 (test-case "the verdict is PERMANENT only with all rows refused and both controls"
   (check-equal? (hash-ref rehearsal 'verdict) "PERMANENT")
   ;; The verdict's inputs are exactly the three conditions, so a single failing

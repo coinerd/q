@@ -19,7 +19,7 @@ never a live branch) and runs the *shipped* guard against the injection:
 
 | Signal | Meaning |
 |---|---|
-| `nonzero-exit+token` | the guard is a CLI that exits non-zero and names the typed refusal |
+| `nonzero-exit+token` | the guard is a CLI that must BOTH exit non-zero and name the typed refusal: a warning-mode regression that prints the token and exits 0 is recorded as `ok`, never as `refused` |
 | `token` | the guard prints the typed verdict and exits 0 (verdict-printing CLI) |
 | `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite actually ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, and its source asserts every typed refusal token the row claims — exit 0 alone would be vacuous |
 | `library` | the guard is an in-process API returning the typed outcome |
@@ -68,18 +68,20 @@ reproduction digest over `w4-reproduction.json`.
 | F9 | a wave is marked done while its delivery journal reads delivery-pending | `try-complete-wave! #:delivery-proof 'require-delivered` | `completion-result-status: delivery-pending-cannot-complete` | 0 |
 | F10 | a rolled-back wave leaves its completion event leading the durable record | `completion-outbox-invariant?` + `reconcile-completion-outbox!` | `outbox-leads-record` then reconcile → `ok` | 0 |
 | F11 | a merge with no recorded operator authorization or no APPROVED review artifact | `tests/test-gsd-delivery-approval-contract.py` | absent authorization / absent APPROVED review artifact; 15 tests ran (minimum 15), `OK`, suite source asserts `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch` | 0 |
-| F12 | a finalized-looking trio carries sentinel placeholders in identity and narrative fields | `scripts/gsd-wave-gate.rkt` | `placeholder-evidence: independent reviewer identity is a placeholder` (+ terse narrative → `insufficient-review-content`) | 1 |
+| F12 | a finalized-looking trio carries sentinel placeholders in identity and narrative fields | `scripts/gsd-wave-gate.rkt` CLI, plus the in-process minimum-content half for a terse narrative | `placeholder-evidence: independent reviewer identity is a placeholder`; the terse trio yields `insufficient-review-content` | 1 |
 | F13 | the authored plan body is amended while the frozen snapshot still reports clean | `seed-and-bind-plan-snapshot!` | `frozen-contract-stale` (frozen snapshot intact) | 0 |
 
 All 13 rows are refused, every clean control is accepted, and the missing-guard
 control is detected; the matrix therefore carries `verdict: PERMANENT` and an
 empty `failing-rows`.
 
-The dispatch signals in the table are the point of the `signal` column: four
-shipped guards print a typed verdict and exit 0, three fail closed with a
-non-zero exit, two are fixture suites whose witnessed green run *is* the refusal
-witness, and four are in-process APIs. Recording the signal with each row keeps
-the matrix from implying an exit-code polarity the guards do not share.
+The dispatch signals in the table are the point of the `signal` column: three
+shipped guards fail closed with a non-zero exit *and* name the refusal (a
+warning-mode regression that only prints the token is caught as `ok`), two print a
+typed verdict and exit 0 (verdict-printing CLIs), two are fixture suites whose
+witnessed green run *is* the refusal witness, and six are in-process APIs.
+Recording the signal with each row keeps the matrix from implying an exit-code
+polarity the guards do not share.
 
 ## Binding and invalidation
 
@@ -97,6 +99,21 @@ reproduces the committed matrix byte-identically, and that a mutated register no
 longer matches the recorded digest — so editing the register, the harness,
 either test or a generator invalidates the verdict instead of silently
 inheriting `PERMANENT`.
+
+## Falsification checks
+
+Beyond the two controls, the harness was checked to fail closed against a
+neutered guard rather than inherit a `PERMANENT` verdict:
+
+* replacing `scripts/ci/verify-artifact-provenance.rkt` with a warning-mode
+  script that prints `provenance-drift` and exits 0 in a scratch copy of the tree
+  turns F7 into `ok` and the verdict into `NOT PERMANENT` with `failing-rows:
+  ["F7"]`;
+* replacing `scripts/gsd-wave-gate.rkt` with a stub that does not export the
+  gate API makes the rehearsal fail closed at require time instead of reporting a
+  refusal; and
+* the unit-level polarity witness `(token-refusal 0 token token)` → `#f`,
+  `(token-refusal 1 token token)` → `#t` is asserted by the rehearsal test.
 
 ## Red-first evidence
 

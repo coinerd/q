@@ -93,6 +93,12 @@
                  (trim-line l))
                " | "))
 
+;; A `nonzero-exit+token` row is refused only when the guard BOTH fails closed
+;; (non-zero exit) and names the typed refusal: a warning-mode regression that
+;; prints the token and exits 0 must not be recorded as a refusal witness.
+(define (token-refusal code output token)
+  (and (not (zero? code)) (string-contains? output token) #t))
+
 (define (typed-reason output token [fallback #f])
   (or (for/first ([l (in-list (string-split output "\n"))]
                   #:when (string-contains? l token))
@@ -388,7 +394,7 @@
   (define-values (dir digest impl other) (trio-root 'genuine))
   (define-values (code output) (gate-run root dir digest other))
   (delete-directory/files dir #:must-exist? #f)
-  (values code output (string-contains? output "head-binding-mismatch")))
+  (values code output (token-refusal code output "head-binding-mismatch")))
 
 (define (f3-clean root)
   ;; The clean control must be a wave the guard ACCEPTS — exit 0 and PASS — not
@@ -592,7 +598,7 @@
                    "v9.99.99-w0"
                    "--only-current-wave")))
   (delete-directory/files scratch #:must-exist? #f)
-  (values code output (string-contains? output "provenance-drift")))
+  (values code output (token-refusal code output "provenance-drift")))
 
 (define (f7-clean root)
   (define scratch (scratch-dir "f7clean"))
@@ -1201,6 +1207,7 @@
 
 (provide run-rehearsal
          canonical-json
+         token-refusal
          inputs-digest
          rehearsal-inputs
          row-outcomes
