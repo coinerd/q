@@ -1,8 +1,8 @@
 # Compiled Root Activation — v1.00.30 (Wave W4)
 
 - **Issue:** coinerd/q#9690 · **Milestone:** #895
-- **Branch:** `campaign/v1.00.30-w4` · **Implementation head:** `f05c21bce`
-- **Date:** 2026-09-19 (content) · 2026-09-24 (repaired re-delivery at `f05c21bce`)
+- **Branch:** `campaign/v1.00.30-w4` · **Implementation head:** `ba35b090f`
+- **Date:** 2026-09-19 (content) · 2026-09-24 (repaired re-delivery at `ba35b090f`)
 - **Scope:** guarded compiled-root activation on required PR fast lanes only; global default remains `off`.
 - **Repair (v1.00.31 W7):** this wave was blocked on the unfixed tree, so the
 definition of done above is realized through the hardened v1.00.31 machinery:
@@ -67,12 +67,12 @@ macOS, cross-version, and release paths remain full eager. Activation carries
   1. producer build + publish → published root, reason `ok`;
   2. consumer fast-shard-shaped run → verified root hit, output `42`,
      zero fallback compiles;
-  3. `Q_CI_COMPILED_ROOT=off` → global off, one eager compile (493 ms),
+  3. `Q_CI_COMPILED_ROOT=off` → global off, one eager compile (481 ms),
      output `42` — **the rollback drill**;
   4. current-source canary (source edited after publish) → stale root
-     refused, one eager compile (483 ms), output `63` from current source;
+     refused, one eager compile (480 ms), output `63` from current source;
   5. tamper canary (manifest byte flipped) → integrity failure, one eager
-     compile (490 ms), output `42` — the poisoned root's stale `63` was
+     compile (480 ms), output `42` — the poisoned root's stale `63` was
      never served.
 - **Artifact integrity:** `SHA256SUMS` covers the drill and activation
   records (and the raw drill harness plus its transcript); the timings in

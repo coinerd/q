@@ -4,8 +4,8 @@
   "milestone": 895,
   "wave": "W4",
   "branch": "campaign/v1.00.30-w4",
-  "implementation-head-sha": "f05c21bced97c8e992b3744876342fec80db54f6",
-  "generated-at": "2026-09-24T11:33:42Z",
+  "implementation-head-sha": "ba35b090f78f00cc287133f2b77792fa836919cd",
+  "generated-at": "2026-09-24T19:30:33Z",
   "environment": {
     "racket": "8.10 [cs]",
     "os": "linux"
@@ -24,7 +24,7 @@
   ],
   "drill-evidence": {
     "artifact": "artifacts/ci-recovery/v1.00.30-w4/rollback-drill.json",
-    "head-sha": "f05c21bced97c8e992b3744876342fec80db54f6",
+    "head-sha": "ba35b090f78f00cc287133f2b77792fa836919cd",
     "all-pass": true,
     "phases-passed": [
       "producer-build-publish",
