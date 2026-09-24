@@ -291,18 +291,19 @@
      (when (null? (trusted-labels))
        (error 'compiled-root "run requires at least one --trusted-label"))
      ;; W4 override precedence (issue #9690): the global switch wins.
-     ;; "off" never touches the root at all; "verify"/"resolve" (or
-     ;; unset) use verified resolution; anything else fails closed so a
-     ;; typo cannot silently disable verification.
+     ;; "off" never touches the root at all; "auto"/"verify"/"resolve"
+     ;; (or unset) use verified resolution — "auto" is the value the
+     ;; ci.yml lane expression publishes — and anything else fails closed
+     ;; so a typo cannot silently disable verification.
      (define override (getenv "Q_CI_COMPILED_ROOT"))
      (define off?
        (and override
             (case (string->symbol override)
               [(off) #t]
-              [(verify resolve) #f]
+              [(auto verify resolve) #f]
               [else
                (error 'compiled-root
-                      "illegal Q_CI_COMPILED_ROOT value ~s (off|verify|resolve)"
+                      "illegal Q_CI_COMPILED_ROOT value ~s (off|auto|verify|resolve)"
                       override)])))
      (cond
        [off?

@@ -175,17 +175,20 @@ runs:
       if: steps.prepared-env.outcome == 'success' && (inputs.compiled-root-mode == 'auto' || inputs.compiled-root-mode == 'resolve' || inputs.compiled-root-mode == 'verify')
       shell: bash
       env:
-        prepared-env-root: ${{ steps.prepared-env.outputs.compiled-root-dir }}
+        # Shell variable names may not contain hyphens: the hyphenated spelling
+        # of this name parsed as `$prepared` plus literal text under `set -u`
+        # (v1.00.31 W7 repair); the step-output name keeps its hyphenated form.
+        PREPARED_ENV_ROOT: ${{ steps.prepared-env.outputs.compiled-root-dir }}
         Q_CI_COMPILED_ROOT: ${{ inputs.compiled-root-mode }}
       run: |
         set -euo pipefail
-        if [ -z "${prepared-env-root:-}" ]; then
+        if [ -z "${PREPARED_ENV_ROOT:-}" ]; then
           echo "compiled-root: prepared artifact has no compiled root; bounded eager path unaffected"
           exit 0
         fi
         racket scripts/ci/compiled-root.rkt run \
           --checkout "$GITHUB_WORKSPACE" \
-          --final-dir "$prepared-env-root" \
+          --final-dir "$PREPARED_ENV_ROOT" \
           --map-dir "$RUNNER_TEMP/compiled-root-map" \
           --trusted-label q-trusted-producer
 

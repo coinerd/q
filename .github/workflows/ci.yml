@@ -385,6 +385,11 @@ jobs:
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
           COMPILED_ROOT_FLAGS: ${{ steps.compiled-root.outputs.flags-file }}
+          # W4 (issue #9690): the launcher consults the resolved flags only
+          # when this switch is set and not 'off' (v1.00.31 W7 repair — the
+          # flags file was otherwise ignored and every shard silently ran the
+          # no-flags current-source path).
+          Q_CI_COMPILED_ROOT: ${{ env.COMPILED_ROOT }}
         run: |
           set -o pipefail
           PLAN_ARGS=""

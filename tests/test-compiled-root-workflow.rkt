@@ -512,10 +512,15 @@
             "setup-racket forwards the verified root directory")
 (check-true (string-contains? setup-text "./tests/metadata-discovery/fixture/*")
             "the BUG-0065 purge keeps its frozen fixture exclusions")
+;; v1.00.31 W7: the resolution step consumes the restore action's output through
+;; a hyphen-free shell variable; the step OUTPUT keeps the hyphenated name the
+;; job-level resolution step reads.
 (check-true
  (string-contains? setup-text
-                   "prepared-env-root: ${{ steps.prepared-env.outputs.compiled-root-dir }}")
- "forwarding is bound to the restore action's output")
+                   "PREPARED_ENV_ROOT: ${{ steps.prepared-env.outputs.compiled-root-dir }}")
+ "the resolution step is bound to the restore action's compiled-root-dir output")
+(check-true (string-contains? setup-text "prepared-env-root:")
+            "setup-racket still exposes the verified root as a step output")
 
 ;; ---------------------------------------------------------------------------
 ;; v1.00.31 W7: the CLI `run` contract that the setup-racket pre-resolution step
@@ -580,4 +585,68 @@
                     "--module"
                     "marker/compiled-root-marker.rkt"))
     (check-equal? code 0 transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))
+
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7 (round-3 review): the lane's shell/env plumbing must match the
+;; mode vocabulary both CLIs implement.
+
+;; Shell variable names may not contain hyphens: the setup-racket step consumes
+;; a hyphen-free name (the hyphenated spelling parsed as `$prepared` under
+;; `set -u`), and no step references the hyphenated form as a variable.
+(check-true (string-contains? setup-text "PREPARED_ENV_ROOT:"))
+(check-false (string-contains? setup-text "${prepared-env-root:"))
+(check-false (string-contains? setup-text "$prepared-env-root"))
+
+;; The lane expression publishes 'auto' and both CLIs must accept it: a
+;; rejected 'auto' would fail the activated path closed.
+(check-true (string-contains? ci-text "'auto'"))
+(check-true (string-contains? (file->string (build-path repo-root "scripts" "ci" "compiled-root.rkt"))
+                              "(auto verify resolve)"))
+(check-true (string-contains?
+             (file->string (build-path repo-root "ci" "prepared-environment" "compiled-root.rkt"))
+             "(auto verify resolve)"))
+
+;; The launcher only consults the resolved flags when the lane switch is
+;; exported into its step environment.
+(check-true (string-contains? ci-text "Q_CI_COMPILED_ROOT: ${{ env.COMPILED_ROOT }}"))
+
+;; The verified root is never materialized into the checkout by the restore
+;; loop, whatever the compiled-root mode is.
+(check-true (string-contains? restore-text "trusted-root/*) continue"))
+
+(module+ test
+  (test-case "Q_CI_COMPILED_ROOT=auto resolves instead of failing closed"
+    (define co (make-checkout! "mode-auto"))
+    (define root (build-path tmp-base "mode-auto-root"))
+    (define map (build-path tmp-base "mode-auto-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define base-env (current-environment-variables))
+    (define child-env (make-environment-variables))
+    (for ([n (in-list (environment-variables-names base-env))])
+      (environment-variables-set! child-env n (environment-variables-ref base-env n)))
+    (environment-variables-set! child-env #"Q_CI_COMPILED_ROOT" #"auto")
+    (define-values (code transcript)
+      (parameterize ([current-environment-variables child-env])
+        (run-producer "run"
+                      "--checkout"
+                      (path->string co)
+                      "--final-dir"
+                      (path->string root)
+                      "--map-dir"
+                      (path->string map)
+                      "--trusted-label"
+                      "q-trusted-producer")))
+    (check-equal? code 0 transcript)
+    (check-false (regexp-match? #rx"illegal Q_CI_COMPILED_ROOT" transcript) transcript)
     (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))

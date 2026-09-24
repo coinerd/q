@@ -137,9 +137,16 @@ runs:
 
         # q compiled output is placed back at its original checkout-relative
         # paths. This is a copy, never a rebuild: if a compiled tree is
-        # missing from the artifact the health checks below fail.
+        # missing from the artifact the health checks below fail. The
+        # verified compiled root (q-compiled/trusted-root, published by the
+        # W4 producer invocation) is deliberately NOT materialized: it is
+        # handed to the resolution step read-only and must never be copied
+        # into the checkout (v1.00.31 W7 repair).
         while IFS= read -r -d '' dir; do
           rel="${dir#$ROOT/q-compiled/}"
+          case "$rel" in
+            trusted-root/*) continue ;;
+          esac
           mkdir -p "$rel"
           cp -a "$dir/." "$rel/"
         done < <(find "$ROOT/q-compiled" -mindepth 1 -maxdepth 5 -type d -name compiled -print0)

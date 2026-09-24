@@ -796,16 +796,17 @@
      (when (null? child-args)
        (error 'ci-compiled-root "launch requires a child command after --"))
      ;; Global override precedence mirrors the run CLI: "off" wins over
-     ;; everything and never touches the root mapping; anything else
-     ;; other than verify/resolve fails closed.
+     ;; everything and never touches the root mapping; "auto" (the ci.yml
+     ;; lane value), "verify" and "resolve" use the resolved flags;
+     ;; anything else fails closed.
      (define override (getenv "Q_CI_COMPILED_ROOT"))
      (when override
        (case (string->symbol override)
          [(off) (void)]
-         [(verify resolve) (void)]
+         [(auto verify resolve) (void)]
          [else
           (error 'ci-compiled-root
-                 "illegal Q_CI_COMPILED_ROOT value ~s (off|verify|resolve)"
+                 "illegal Q_CI_COMPILED_ROOT value ~s (off|auto|verify|resolve)"
                  override)]))
      (define flags
        (and override
