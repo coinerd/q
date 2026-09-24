@@ -313,6 +313,35 @@ jobs:
       # (state, durations, provenance) so real CI runs can be aggregated
       # honestly, including named fallback causes.
       #
+      # BUG-0065 systemic (v1.00.29 W4): the shared purge inside
+      # setup-racket now runs on EVERY path — including a successful
+      # prepared-environment restore, whose .zo extraction timestamps are
+      # newer than this checkout (the v1.00.27 cohort-report root cause).
+      # This job-level purge is a fail-closed belt between setup and the
+      # test run; the invariant is pinned repo-wide by
+      # tests/test-workflow-purge-contract.rkt.
+      - name: Clear stale bytecode (belt; shared purge lives in setup-racket)
+        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
+
+      # W4 (issue #9690): the ONE bounded eager compile boundary. It runs
+      # whenever this job will NOT execute against a mounted verified root:
+      # the prepared restore did not succeed, the same-run resolution failed
+      # (the root-miss path), or the compiled-root lane is off. The off lane
+      # is the global rollback switch and therefore means the full eager
+      # current-source path (v1.00.31 W7 repair: the off lane previously fell
+      # through to lazy per-test compilation after the purge, contradicting
+      # both the documented semantics and this wave's "a miss compiles once
+      # eagerly" acceptance criterion). On a verified root hit the gate is
+      # skipped: the read-only root already carries compiled code.
+      - name: Compile gate (one bounded eager compile)
+        id: eager-gate
+        if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'
+        run: |
+          start=$(date +%s%3N)
+          raco make main.rkt
+          end=$(date +%s%3N)
+          echo "seconds=$(python3 -c "print(round(($end - $start) / 1000, 3))")" >> "$GITHUB_OUTPUT"
+
       # W2 containment telemetry (issue #9688) + W4 compiled-root telemetry
       # (issue #9690). The record separates the pilot's cost axes honestly:
       # producer cost (same-run producer job), restore cost (setup outputs),
@@ -323,6 +352,13 @@ jobs:
       # and after a successful restore (the purge removes workspace bytecode).
       # Every value below is derived from what THIS job actually ran, and the
       # optional cost fields are omitted (not invented) when unobserved.
+      #
+      # ORDERING (v1.00.31 W7 repair): this step is emitted AFTER the one
+      # bounded eager gate on purpose. It reads the gate's measured duration
+      # (`steps.eager-gate.outputs.seconds`), and a step output read before
+      # that step has run is always empty — which would silently drop the
+      # bounded-fallback cost from every record. `if: always()` keeps the
+      # emission unconditional even when the gate or the shard fails.
       - name: Emit prepared-environment restore record
         if: always()
         shell: bash
@@ -377,34 +413,6 @@ jobs:
           path: prepared-env-records/
           if-no-files-found: error
 
-      # BUG-0065 systemic (v1.00.29 W4): the shared purge inside
-      # setup-racket now runs on EVERY path — including a successful
-      # prepared-environment restore, whose .zo extraction timestamps are
-      # newer than this checkout (the v1.00.27 cohort-report root cause).
-      # This job-level purge is a fail-closed belt between setup and the
-      # test run; the invariant is pinned repo-wide by
-      # tests/test-workflow-purge-contract.rkt.
-      - name: Clear stale bytecode (belt; shared purge lives in setup-racket)
-        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
-
-      # W4 (issue #9690): the ONE bounded eager compile boundary. It runs
-      # whenever this job will NOT execute against a mounted verified root:
-      # the prepared restore did not succeed, the same-run resolution failed
-      # (the root-miss path), or the compiled-root lane is off. The off lane
-      # is the global rollback switch and therefore means the full eager
-      # current-source path (v1.00.31 W7 repair: the off lane previously fell
-      # through to lazy per-test compilation after the purge, contradicting
-      # both the documented semantics and this wave's "a miss compiles once
-      # eagerly" acceptance criterion). On a verified root hit the gate is
-      # skipped: the read-only root already carries compiled code.
-      - name: Compile gate (one bounded eager compile)
-        id: eager-gate
-        if: steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'
-        run: |
-          start=$(date +%s%3N)
-          raco make main.rkt
-          end=$(date +%s%3N)
-          echo "seconds=$(python3 -c "print(round(($end - $start) / 1000, 3))")" >> "$GITHUB_OUTPUT"
 
       - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
         # W7 duration-aware sharding: `active` is evidence-gated. Flip repo

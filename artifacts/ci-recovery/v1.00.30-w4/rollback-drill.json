@@ -25,12 +25,12 @@
     {
       "phase": "global-off-rollback",
       "result": "pass",
-      "detail": "Q_CI_COMPILED_ROOT=off short-circuits to the eager current-source path; one fallback compile measured at 481 ms (eager-fallback-ms.global-off); program output 42"
+      "detail": "Q_CI_COMPILED_ROOT=off short-circuits to the eager current-source path; one fallback compile measured at 472 ms (eager-fallback-ms.global-off); program output 42"
     },
     {
       "phase": "current-source-canary",
       "result": "pass",
-      "detail": "helper source edited after publish -> resolution refused the stale root -> exactly one eager fallback compile measured at 480 ms (eager-fallback-ms.current-source) -> program output 63 from CURRENT source"
+      "detail": "helper source edited after publish -> resolution refused the stale root -> exactly one eager fallback compile measured at 481 ms (eager-fallback-ms.current-source) -> program output 63 from CURRENT source"
     },
     {
       "phase": "tamper-canary",
@@ -39,8 +39,8 @@
     }
   ],
   "eager-fallback-ms": {
-    "global-off": 481,
-    "current-source": 480,
+    "global-off": 472,
+    "current-source": 481,
     "tamper": 480
   },
   "invariants-observed": [

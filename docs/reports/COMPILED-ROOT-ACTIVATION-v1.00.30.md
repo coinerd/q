@@ -67,10 +67,10 @@ macOS, cross-version, and release paths remain full eager. Activation carries
   1. producer build + publish → published root, reason `ok`;
   2. consumer fast-shard-shaped run → verified root hit, output `42`,
      zero fallback compiles;
-  3. `Q_CI_COMPILED_ROOT=off` → global off, one eager compile (481 ms),
+  3. `Q_CI_COMPILED_ROOT=off` → global off, one eager compile (472 ms),
      output `42` — **the rollback drill**;
   4. current-source canary (source edited after publish) → stale root
-     refused, one eager compile (480 ms), output `63` from current source;
+     refused, one eager compile (481 ms), output `63` from current source;
   5. tamper canary (manifest byte flipped) → integrity failure, one eager
      compile (480 ms), output `42` — the poisoned root's stale `63` was
      never served.

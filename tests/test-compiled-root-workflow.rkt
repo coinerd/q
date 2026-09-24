@@ -661,6 +661,19 @@
 (check-true (and upload-at launch-at (> upload-at launch-at))
             "the compiled-root telemetry upload happens after the shard launch")
 
+;; Dataflow, not just presence: the record MUST be emitted after the gate that
+;; produces the fallback duration it reads. A step output read before its
+;; producer step has run is always empty, which would silently drop the
+;; bounded-fallback cost from every record (and the upload must follow the
+;; emission so it captures the file).
+(define gate-at (index-of ci-text "Compile gate (one bounded eager compile)"))
+(define record-at (index-of ci-text "Emit prepared-environment restore record"))
+(define record-upload-at (index-of ci-text "Upload prepared-environment restore records"))
+(check-true (and gate-at record-at (> record-at gate-at))
+            "the restore record is emitted after the eager gate whose duration it reads")
+(check-true (and record-at record-upload-at (> record-upload-at record-at))
+            "the restore record is uploaded after it is emitted")
+
 ;; The producer job publishes the producer cost the shard record consumes.
 (check-true
  (string-contains?
