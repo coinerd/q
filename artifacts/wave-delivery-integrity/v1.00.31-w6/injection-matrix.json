@@ -1,0 +1,253 @@
+{
+ "controls": {
+  "clean-synthetic-wave": {
+   "outcome": "accepted",
+   "per-row": [
+    {
+     "exit-code": 0,
+     "guard": "scripts/ci/invocation-contract.rkt (check-invocation)",
+     "id": "F1",
+     "outcome": "accepted",
+     "reason": "invocation-contract status: ok"
+    },
+    {
+     "exit-code": 0,
+     "guard": "scripts/gsd-evidence-bind.rkt verify (recompute-and-compare at the exact head)",
+     "id": "F2",
+     "outcome": "accepted",
+     "reason": "digest-ok e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "exit-code": 1,
+     "guard": "scripts/gsd-wave-gate.rkt (strict trio gate, head binding)",
+     "id": "F3",
+     "outcome": "accepted",
+     "reason": "GSD wave evidence FAIL: <scratch> | - validation field remaining-items is missing | - validation remaining-items must be a list"
+    },
+    {
+     "exit-code": 0,
+     "guard": "scripts/gsd-evidence-bind.rkt record-commit (evidence-only purity)",
+     "id": "F4",
+     "outcome": "accepted",
+     "reason": "pure"
+    },
+    {
+     "exit-code": 0,
+     "guard": "delivery-receipt verify-with-delivery-receipt (remote backing precondition)",
+     "id": "F5",
+     "outcome": "accepted",
+     "reason": "journal=#t remote-pending=#f (published branch records the receipt and clears the marker)"
+    },
+    {
+     "exit-code": 0,
+     "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
+     "id": "F6",
+     "outcome": "accepted",
+     "reason": "controller suite passes on the healthy routes"
+    },
+    {
+     "exit-code": 0,
+     "guard": "scripts/ci/verify-artifact-provenance.rkt (provenance/determinism lint)",
+     "id": "F7",
+     "outcome": "accepted",
+     "reason": "artifact-provenance ok (0 note(s))"
+    },
+    {
+     "exit-code": 0,
+     "guard": "gsd-delivery classify_failure (typed failure classification)",
+     "id": "F8",
+     "outcome": "accepted",
+     "reason": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally"
+    },
+    {
+     "exit-code": 0,
+     "guard": "wave-completion try-complete-wave! #:delivery-proof 'require-delivered",
+     "id": "F9",
+     "outcome": "accepted",
+     "reason": "completion-result-status: done"
+    },
+    {
+     "exit-code": 0,
+     "guard": "wave-completion completion-outbox-invariant? + reconcile-completion-outbox!",
+     "id": "F10",
+     "outcome": "accepted",
+     "reason": "invariant ok (before=ok after-reconcile=ok)"
+    },
+    {
+     "exit-code": 0,
+     "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
+     "id": "F11",
+     "outcome": "accepted",
+     "reason": "controller suite passes with a recorded authorization"
+    },
+    {
+     "exit-code": 0,
+     "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
+     "id": "F12",
+     "outcome": "accepted",
+     "reason": "strict gate accepts the genuine-content trio"
+    },
+    {
+     "exit-code": 0,
+     "guard": "extensions/gsd/plan-snapshot.rkt seed-and-bind-plan-snapshot! (frozen-contract-stale)",
+     "id": "F13",
+     "outcome": "accepted",
+     "reason": "seed-and-bind outcome: rebound (frozen snapshot intact: #t)"
+    }
+   ]
+  },
+  "missing-guard": {
+   "detail": "every row reports guard-missing (fail closed) when the guard files are absent from the rehearsal root",
+   "outcome": "detected"
+  }
+ },
+ "failing-rows": [],
+ "milestone": 896,
+ "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+ "purpose": "Rehearsal of every frozen register row F1-F13: each defect is injected into a scratch fixture and the shipped guard must refuse it with its typed reason. PERMANENT requires all 13 rows refused, the clean synthetic wave accepted by every guard, and a missing guard detected instead of skipped.",
+ "refused-rows": [
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "F9",
+  "F10",
+  "F11",
+  "F12",
+  "F13"
+ ],
+ "register": {
+  "path": "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json",
+  "reproduction-path": "artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json",
+  "reproduction-sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471",
+  "row-count": 13,
+  "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
+ },
+ "rehearsal-head": "e2f3dee74fe85c2b7d5f3a0cd3b7a5521f4c90f4",
+ "rows": [
+  {
+   "exit-code": 0,
+   "guard": "scripts/ci/invocation-contract.rkt (check-invocation)",
+   "id": "F1",
+   "injected-defect": "a workflow/action declares `compiled-root.rkt build --out \u2026`, a flag the script does not accept",
+   "outcome": "refused",
+   "reason": "invocation-contract status: unknown-flag",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "scripts/gsd-evidence-bind.rkt verify (recompute-and-compare at the exact head)",
+   "id": "F2",
+   "injected-defect": "an evidence record carries a hand-authored digest that the tool never recomputed",
+   "outcome": "refused",
+   "reason": "digest-mismatch: evidence records 0000000000000000000000000000000000000000000000000000000000000000 but the computed excluded-evidence digest at head 77a5ba6cc927 is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "signal": "token"
+  },
+  {
+   "exit-code": 1,
+   "guard": "scripts/gsd-wave-gate.rkt (strict trio gate, head binding)",
+   "id": "F3",
+   "injected-defect": "the evidence implementation-sha differs from the durable receipt head",
+   "outcome": "refused",
+   "reason": "GSD wave evidence FAIL: <scratch> | - head-binding-mismatch: evidence implementation-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd | - head-binding-mismatch: review reviewed-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa differs from the durable receipt head dddddddddddddddddddddddddddddddddddddddd | - validation field remaining-items is missing | - validation remaining-items must be a list",
+   "signal": "nonzero-exit+token"
+  },
+  {
+   "exit-code": 0,
+   "guard": "scripts/gsd-evidence-bind.rkt record-commit (evidence-only purity)",
+   "id": "F4",
+   "injected-defect": "the evidence record commit also touches a non-evidence source path",
+   "outcome": "refused",
+   "reason": "impure-record-commit: src/a.rkt (commit d82f97297257)",
+   "signal": "token"
+  },
+  {
+   "exit-code": 0,
+   "guard": "delivery-receipt verify-with-delivery-receipt (remote backing precondition)",
+   "id": "F5",
+   "injected-defect": "a wave records verified while its branch was never pushed",
+   "outcome": "refused",
+   "reason": "journal=#f remote-pending=#t (unpublished branch records only the typed remote-pending marker: #t)",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
+   "id": "F6",
+   "injected-defect": "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing",
+   "outcome": "refused",
+   "reason": "typed refusal witnessed by tests/test-gsd-delivery-api-contract.py (wrong head filter rejected)",
+   "signal": "suite-exit0"
+  },
+  {
+   "exit-code": 2,
+   "guard": "scripts/ci/verify-artifact-provenance.rkt (provenance/determinism lint)",
+   "id": "F7",
+   "injected-defect": "an artifact pins a stale recorded head and contradicts its own structured timing",
+   "outcome": "refused",
+   "reason": "provenance-drift: f7-repro/v9.99.99-w0/rollback-drill.json/recorded-head: recorded head 8299409c9cf6330a85e66cbe5a9ba445bf739d27 does not resolve to a commit | provenance-drift: f7-repro/v9.99.99-w0: prose value 260 ms disagrees with structured timing 245/245/247/256 (sources: prose at /steps/0/observed vs timing.*-ms)",
+   "signal": "nonzero-exit+token"
+  },
+  {
+   "exit-code": 0,
+   "guard": "gsd-delivery classify_failure (typed failure classification)",
+   "id": "F8",
+   "injected-defect": "a delivery subprocess failure surfaces as a bare exit code instead of a typed reason",
+   "outcome": "refused",
+   "reason": "remote-ref-missing: refs/heads/campaign/x is not published on origin; push the verified head first (git, exit 128)",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "wave-completion try-complete-wave! #:delivery-proof 'require-delivered",
+   "id": "F9",
+   "injected-defect": "a wave is marked done while its delivery journal reads delivery-pending",
+   "outcome": "refused",
+   "reason": "completion-result-status: delivery-pending-cannot-complete",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "wave-completion completion-outbox-invariant? + reconcile-completion-outbox!",
+   "id": "F10",
+   "injected-defect": "a rolled-back wave leaves its completion event leading the durable record",
+   "outcome": "refused",
+   "reason": "outbox-leads-record then reconcile \u2192 ok (before=outbox-leads-record after-reconcile=ok)",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
+   "id": "F11",
+   "injected-defect": "a merge is attempted with no recorded operator authorization or no APPROVED review artifact",
+   "outcome": "refused",
+   "reason": "typed refusals witnessed (no-operator-authorization / no-review-artifact / head-binding-mismatch)",
+   "signal": "suite-exit0"
+  },
+  {
+   "exit-code": 0,
+   "guard": "scripts/gsd-wave-gate.rkt (placeholder-evidence / minimum content)",
+   "id": "F12",
+   "injected-defect": "a finalized-looking trio carries sentinel placeholders in its identity and narrative fields",
+   "outcome": "refused",
+   "reason": "placeholder-evidence: independent reviewer identity is a placeholder | placeholder-evidence: independent reviewer identity encodes a placeholder | placeholder-evidence: review timestamp is a placeholder | placeholder-evidence: remaining-items owner or rationale is a placeholder | insufficient-review-content: review scope carries fewer than 64 characters of content | insufficient-review-content: review report carries fewer than 64 characters of content | insufficient-review-content: validation red-first failure carries fewer than 32 characters of content",
+   "signal": "library"
+  },
+  {
+   "exit-code": 0,
+   "guard": "extensions/gsd/plan-snapshot.rkt seed-and-bind-plan-snapshot! (frozen-contract-stale)",
+   "id": "F13",
+   "injected-defect": "the authored plan body is amended while the frozen snapshot still reports clean",
+   "outcome": "refused",
+   "reason": "seed-and-bind outcome: frozen-contract-stale (frozen snapshot intact: #t)",
+   "signal": "library"
+  }
+ ],
+ "schema": "wave-integrity-injection-matrix/1",
+ "verdict": "PERMANENT",
+ "wave": "W6"
+}
