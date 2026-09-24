@@ -617,7 +617,9 @@
                    "v9.99.99-w0"
                    "--only-current-wave")))
   (delete-directory/files scratch #:must-exist? #f)
-  (values code output (not (string-contains? output "provenance-drift"))))
+  ;; The clean control must be a run the guard ACCEPTS (exit 0 and its success
+  ;; verdict), never merely an output that lacks the injected refusal token.
+  (values code output (and (zero? code) (string-contains? output "artifact-provenance ok"))))
 
 ;; ---------------------------------------------------------------------------
 ;; F8 — opaque failure surfacing
@@ -650,7 +652,12 @@
   (define-values (code output) (f8-classify root "\"some unclassified failure\""))
   (values code
           output
-          (and (not (string-contains? output "remote-ref-missing:")) (non-empty-string? output))))
+          ;; The clean control must be a classifier run that actually succeeded
+          ;; and produced the honest generic form -- not a crash whose traceback
+          ;; merely lacks the typed token.
+          (and (zero? code)
+               (string-contains? output "delivery command failed")
+               (not (string-contains? output "remote-ref-missing:")))))
 
 ;; ---------------------------------------------------------------------------
 ;; F9 / F10 — completion integrity and outbox two-way invariant
@@ -690,7 +697,9 @@
 
 (define (f9-clean root)
   (define-values (code reason status) (f9-outcome root #t))
-  (values code reason (not (eq? status 'delivery-pending-cannot-complete))))
+  ;; The sanctioned carry-forward path must actually COMPLETE the wave; merely
+  ;; "not the delivery-pending refusal" would accept a crash.
+  (values code reason (eq? status 'done)))
 
 (define (f10-outcome root rollback?)
   (define dir (scratch-dir "f10"))
