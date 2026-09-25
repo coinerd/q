@@ -153,9 +153,12 @@ result.
 
 - **PERMANENT** is the W6 verdict and is bounded to its rehearsal: 13 registered
   rows, 13 injected defects refused, 0 failing, clean synthetic control accepted,
-  rehearsal head `fc1a6fa36…`, inputs digest `a1b99fe2…`. It is evidence that
+  rehearsal head `50bdf7334…`, inputs digest `fb224a6f…`. It is evidence that
   these 13 guards refuse these 13 defects — not a claim that no future defect can
-  pass.
+  pass. (Both identities moved when this bake regenerated the matrix after its own
+  derivation sweep changed two of the nine digest-bound rehearsal inputs; the
+  head is re-stamped to a published commit so it still resolves, and
+  `docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md` carries the full account.)
 - **DELIVERED** for v1.00.30 W4 is a delivery statement with a real merge-SHA
   binding and a successful governance run behind it, not a statement about the
   compiled-root pilot's latency.

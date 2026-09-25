@@ -1,0 +1,51 @@
+tests/test-worker-security.rkt — red-first proof that the W2 overlap gate can fail
+
+Defect (pre-existing, exposed by the v1.00.31 bake). Two independent faults, and
+the second one hid the first:
+
+  1. The W2 overlap-review and SHA256SUMS paths were derived from q-version, so
+     after the 1.00.29 -> 1.00.31 bake they named
+     artifacts/tier-ownership/v1.00.31-w2/, which does not exist. The frozen
+     artifacts are the v1.00.29 campaign's.
+
+  2. The W2 checks could not fail the process. They were bare module-body
+     test-cases placed after this file's first (run-tests suite) call, paired
+     with a hand-rolled current-check-handler that was supposed to count failures
+     and exit non-zero. rackunit printed their FAILURE blocks, but the file's own
+     summary line read "0 failure(s)", the process exited 0, and the suite runner
+     — whose failed-result? is purely "exit code is neither 0 nor 2" — reported
+     the file as PASSED. So fault 1 was invisible to the gate: a 3-check red W2
+     read as green through the whole pipeline.
+
+Fix: the W2 checks are now an ordinary test-suite invoked through run-tests, whose
+return value is the number of failed checks, and the process exits non-zero on
+that count. The W2 artifact paths are pinned to the frozen v1.00.29 campaign; the
+W0 ownership matrix stays derived, so the checks double as a live drift check.
+
+Once the checks could actually run, one more pre-existing failure appeared and was
+fixed in the same commit: the strict-runner assertion matched the literal string
+"STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt", which the v1.00.30 W4
+compiled-root repair legitimately changed for the fast lane (it is now
+"STRICT_TEST_RUNNER=1 racket ci/prepared-environment/compiled-root.rkt launch ...
+-- racket scripts/run-tests.rkt"). The check now asserts the intent — the tier
+sets STRICT_TEST_RUNNER=1 and invokes scripts/run-tests.rkt — rather than one
+invocation shape.
+
+--- RED: W2 paths pointed at a directory that does not exist (post-fix code) ---
+  Files:     1 total, 0 passed, 1 failed, 0 timeouts
+  Tests:     38 total, 35 passed, 3 failed
+  Category:  MODULE_LOAD_FAILURE=1
+  VERDICT:   ❌ FAIL
+  ✗ tests/test-worker-security.rkt [MODULE_LOAD_FAILURE] (exit=1, 35 passed, 3 failed, 3.295s)
+
+The identical broken state BEFORE the fix reported:
+
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:    33 total, 33 passed, 0 failed
+  VERDICT:   PASS          (exit=0 — the missing artifact was invisible)
+
+--- GREEN: W2 paths pinned to the frozen v1.00.29 artifacts ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     38 total, 38 passed, 0 failed
+  Category:  PASS=1
+  VERDICT:   ✅ PASS

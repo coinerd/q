@@ -20,7 +20,7 @@ injecting every registered failure mode.
 The W6 rehearsal returns the exact verdict **PERMANENT** over 13 rows: all 13
 injected defects refused, 0 failing, and the clean synthetic control accepted by
 every guard (artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json,
-rehearsal head `fc1a6fa36…`, inputs digest `a1b99fe2…`, 9 rehearsal inputs). The
+rehearsal head `50bdf7334…`, inputs digest `fb224a6f…`, 9 rehearsal inputs). The
 permanence claim is bounded to that rehearsal: it is evidence that these 13
 guards refuse these 13 defects, not a claim that no future defect can pass.
 
@@ -37,10 +37,15 @@ success so `governance` returned governed, `sync` returned synchronized and
 also surfaced three post-squash defects in already-published state and one
 main-CI teardown race, all fixed and proved by their own tests.
 
-Every release-preflight gate passes locally on the release tree
-(artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json); the
-annotated `v1.00.31` tag is pushed only after a green main run, and public
-assets, checksums and provenance are verified before the milestone closes.
+Six of the seven CI-strict release-preflight gates pass locally on the release
+tree (artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json):
+release notes, fmt canonicality, metrics lint, README status sync, the plain-tar
+symlink audit and the bundle dry-run. The seventh, release readiness, is
+**deferred, not passed** — it refuses to run on a campaign branch and requires
+`.gate-evidence` records naming the release commit and version, so it runs on
+clean main after this wave merges and before the tag. The annotated `v1.00.31`
+tag is pushed only if all seven gates pass there, after a green main run, and
+public assets, checksums and provenance are verified before the milestone closes.
 
 Scheduler states for this release are explicit (milestone #896). Activated in
 this release: the wave-delivery integrity guards and the delivery of the
@@ -64,6 +69,16 @@ for this release.
   tree now wins; the `q`-shaped candidates remain only as a monorepo fallback
   (`scripts/run-tests/classify-metadata.rkt`,
   `tests/test-runner-base-dir-resolution.rkt`).
+- A gate that could not fail: `tests/test-worker-security.rkt` ran its W2
+  overlap-governance checks as module-body cases after the file's first
+  `run-tests`, paired with a hand-rolled `current-check-handler` that was meant
+  to exit non-zero. rackunit printed their FAILURE blocks, but the file exited 0
+  and the runner — which treats a file as failed purely on a non-zero exit code
+  — reported it PASSED. The W2 checks are now an ordinary `test-suite` run
+  through `run-tests`, whose failure count drives the exit, and the W2 artifact
+  paths are pinned to the frozen v1.00.29 campaign. Red-first proof that the
+  gate can now fail:
+  `artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt`.
 - Version-coincidence defects surfaced by that fix, in both directions. A
   sweep pinned eight tests that derived FROZEN v1.00.29-campaign artifact paths
   from the live version; two further files, unchanged from main, had the mirror
@@ -103,9 +118,11 @@ for this release.
 ### Testing
 - W6 rehearsal: 13/13 registered rows refused, 0 failing, clean synthetic control
   accepted (artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json).
-- W7 release bake: the declared verify chain plus every release-preflight gate
-  (readiness, release notes, fmt canonicality, metrics lint, README status sync,
-  tarball symlink audit, bundle dry-run) on the release tree
+- W7 release bake: the declared verify chain on the release tree, plus six of the
+  seven release-preflight gates (release notes, fmt canonicality, metrics lint,
+  README status sync, tarball symlink audit, bundle dry-run). The seventh,
+  release readiness, is deferred by design to clean main after the merge because
+  it is branch-gated and consumes gate evidence that cannot exist before then
   (artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json).
 - W4 repair: full local verify chain at the repaired head plus 22/22 required
   PR checks and a green main run before the governance gate
