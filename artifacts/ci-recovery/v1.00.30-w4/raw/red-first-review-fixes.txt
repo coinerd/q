@@ -1,0 +1,14 @@
+# Red-first captures for the two defects the independent review of the repaired wave found
+# (reproduced against the BLOCKED wave head ce13d0388, the pre-fix state).
+
+$ grep -c 'compiled-root:' .github/workflows/ci.yml   # producer input wiring
+0
+
+$ racket scripts/ci/compiled-root.rkt run --checkout $PWD --final-dir /tmp/w4-prefix-root --map-dir /tmp/w4-prefix-map --trusted-label q-trusted-producer
+compiled-root: run requires at least one --module
+  context...:
+   body of (submod "/tmp/w4-prefix/scripts/ci/compiled-root.rkt" main)
+exit=1
+
+$ grep -c 'compiled-root:' .github/workflows/ci.yml   # after the repair
+1

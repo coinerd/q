@@ -367,7 +367,7 @@
     ;; the prepared-env producer and the guarded restore stay byte-identical
     (define contract (hash-ref cp 'fast_env_verification_contract))
     (check-equal? (hash-ref contract 'prepare_action_sha256)
-                  "608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c"
+                  "49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e"
                   (string-append
                    "manifest/OS/Racket/lockfile verification steps must stay byte-identical"
                    " (re-stamped by v1.00.30 W0 BUG-0073: pipefail added before the step-summary tee;"
@@ -375,14 +375,22 @@
                    " (re-stamped by v1.00.31 W1: the guarded compiled-root producer invocation"
                    " was inserted into the pack step; deletion-free diff, ordered-subsequence"
                    " proof in artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt"
-                   "; with the default the block does not execute)"))
+                   "; with the default the block does not execute)"
+                   " (re-stamped by v1.00.31 W7: the repaired v1.00.30 W4 guarded compiled-root"
+                   " pilot, issue #9690, is carried forward into that same single guarded"
+                   " producer invocation, publishing before resolution with same-run restore,"
+                   " and the loud eager fallback retained; see w7_restamp)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
-     "da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772"
+     "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0"
      (format
       (string-append "the guarded restore action must stay byte-identical (re-stamped by v~a W6, "
                      "re-stamped by v1.00.30 W2 #9688: containment telemetry outputs added; "
-                     "purge and restore steps unchanged)")
+                     "re-stamped by v1.00.30 W4 #9690: compiled-root-dir output exposed, "
+                     "read-only inside the verified download; re-stamped by v1.00.31 W7: the "
+                     "compiled-root resolution step is opted into only by an explicit mode, "
+                     "uses a hyphen-free shell variable, and the launcher receives the lane "
+                     "switch; purge and restore steps unchanged)")
       q-version))
     (check-true (string-contains? ci-text "needs.fast-env.result")
                 "test shards must keep gating PREPARED_ENV on the fast-env result")

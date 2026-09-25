@@ -127,7 +127,7 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "5899143a5bf50f97dfb802ae52819a69c15b54fd",
+ "rehearsal-head": "fc1a6fa36206accff81abb0b9be07a5be72bc9d2",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",

@@ -36,7 +36,8 @@
          rackunit
          "../scripts/ci/invocation-contract.rkt"
          "../ci/prepared-environment/compiled-root.rkt"
-         "../ci/prepared-environment/compiled-root-manifest.rkt")
+         "../ci/prepared-environment/compiled-root-manifest.rkt"
+         (submod "../ci/prepared-environment/compiled-root.rkt" test-helpers))
 
 ;; Nested git commands must not inherit the caller's git plumbing. A git hook
 ;; (this repository's pre-commit hook, for instance) exports GIT_DIR/GIT_INDEX_FILE,
@@ -292,3 +293,446 @@
     (check-equal? code 0 transcript)
     (define m (load-compiled-root-manifest single-final))
     (check-equal? (hash-ref (hash-ref m 'producer) 'label) "per-module-producer")))
+
+;; ---------------------------------------------------------------------------
+;; v1.00.30 W4 guarded compiled-root activation (issue #9690), repaired by
+;; v1.00.31 W7.
+;;
+;; The blocked W4 wave carried these proofs and they are preserved verbatim
+;; (path-adapated to the invocation the W1 contract pinned: the whole-checkout
+;; root is published inside the already-contracted q-compiled/ prefix):
+;; override precedence, fail-closed resolution, TOCTOU/current-load hygiene,
+;; source byte counts, link/collection identity, and the lane's workflow-text
+;; contract.
+
+(define ci-yml (build-path repo-root ".github" "workflows" "ci.yml"))
+(define prepare-action-yml action-yml)
+(define restore-action-yml
+  (build-path repo-root ".github" "actions" "restore-racket-environment" "action.yml"))
+(define setup-racket-yml (build-path repo-root ".github" "actions" "setup-racket" "action.yml"))
+
+(define (file-string path)
+  (file->string path))
+
+(define (string-index-of haystack needle)
+  (let loop ([i 0])
+    (cond
+      [(> (+ i (string-length needle)) (string-length haystack)) -1]
+      [(equal? (substring haystack i (+ i (string-length needle))) needle) i]
+      [else (loop (add1 i))])))
+
+;; ----------------------------------------------------- switch precedence
+
+;; The activation switch is evaluated exactly as the ci.yml env expression
+;; evaluates it: the global emergency switch RACKET_PREPARED_ARTIFACT=off
+;; wins unconditionally; the dedicated lane switch RACKET_COMPILED_ROOT must
+;; be explicitly 'on'; the producer must have succeeded in the same run; and
+;; workflow_dispatch (version override) keeps the lane off. Windows/macOS/
+;; cross-version lanes never opt in because the lane lives only on the ubuntu
+;; fast shards.
+(for ([row (in-list (list ; global off wins over every other combination
+                     (list "off" "on" "success" "push" 'off)
+                     (list "off" "on" "success" "workflow_dispatch" 'off)
+                     (list "off" "off" "success" "push" 'off)
+                     (list "off" "" "failure" "push" 'off)
+                     ; lane switch off/absent keeps the lane off
+                     (list "on" "off" "success" "push" 'off)
+                     (list "on" "" "success" "push" 'off)
+                     ; producer must have succeeded in THIS run
+                     (list "on" "on" "failure" "push" 'off)
+                     (list "on" "on" "skipped" "push" 'off)
+                     (list "on" "on" "unknown" "push" 'off)
+                     ; workflow_dispatch version override keeps it off
+                     (list "on" "on" "success" "workflow_dispatch" 'off)
+                     ; the one activation combination
+                     (list "on" "on" "success" "push" 'auto)))]
+      #:when #t)
+  (define-values (global lane producer event expected) (apply values row))
+  (check-equal?
+   (compiled-root-activation-mode #:global-prepared-artifact global
+                                  #:lane-switch lane
+                                  #:producer-result producer
+                                  #:event-name event)
+   expected
+   (format "precedence: global=~a lane=~a producer=~a event=~a" global lane producer event)))
+
+;; ------------------------------------------------- TOCTOU guard keying
+
+;; W3 review deferral: current-load may deliver an unresolved path while the
+;; guard keyed only the symlink-resolved form (symlinked checkouts, macOS
+;; /tmp). Both forms must be present in the key set.
+(define (keys-of p)
+  (compiled-root-load-keys p))
+
+(check-equal? (length (keys-of "/some/checkout/main.rkt")) 2)
+(check-true (boolean? (and (member "/some/checkout/main.rkt" (keys-of "/some/checkout/main.rkt")) #t))
+            "unresolved form present")
+(check-true (boolean? (and (member "/some/checkout/./nested/../main.rkt"
+                                   (keys-of "/some/checkout/./nested/../main.rkt"))
+                           #t))
+            "unresolved simplified form present")
+
+;; --------------------------------------------------- source byte-count
+
+;; W3 review deferral: sources[].bytes was shape-validated only; the resolver
+;; must compare the CONSUMER's on-disk byte count at resolve time (identity is
+;; proven by digests; the byte count is the on-disk-vs-published coherence
+;; belt).
+(define tmp-parent (make-temporary-file "cr-bytes~a" 'directory))
+(define tmp-src (build-path tmp-parent "mod.rkt"))
+(displayln "(module mod racket/base)" (open-output-file tmp-src #:exists 'replace))
+(check-true (consumer-source-bytes-match? tmp-src (hash 'bytes (file-size tmp-src))))
+(check-false (consumer-source-bytes-match? tmp-src (hash 'bytes (add1 (file-size tmp-src)))))
+(check-true (consumer-source-bytes-match? tmp-src (hash))
+            "entries without a bytes field stay digest-governed")
+
+;; ----------------------------------------------- link/collection identity
+
+;; The cached addon store is not automatically trusted for changed q sources:
+;; the consumer must verify the q package link points at THIS checkout before
+;; the restored store is consulted.
+(define ci-checkout-path (string-append "/home" "/ci" "/checkout"))
+(check-true (package-link-points-at-checkout? (format "Package: q [installed]\n  source: ~a\n"
+                                                      ci-checkout-path)
+                                              ci-checkout-path))
+(check-false (package-link-points-at-checkout?
+              "Package: q [installed]\n  source: /some/other/checkout\n"
+              ci-checkout-path))
+(check-false (package-link-points-at-checkout? "" ci-checkout-path)
+             "missing package entry is a mismatch, never a silent pass")
+(define x-repo-path (string-append "/x" "/q-repo"))
+(check-true (package-link-points-at-checkout? (format "Package: q\n  source: ~a\n" x-repo-path)
+                                              (string-append x-repo-path "/"))
+            "trailing-slash checkout normalizes")
+
+;; ------------------------------------------- fail-closed fallback path
+
+;; An unresolvable root (reason != #t) must select exactly ONE eager fallback
+;; compile of the CURRENT source and must NOT install a current-load wrapper
+;; (producer-era code never executes; no guard is active because no root is
+;; active). The fallback compiles a tiny module in a disposable checkout.
+(define fallback-checkout (make-temporary-file "cr-fallback~a" 'directory))
+(define fallback-mod (build-path fallback-checkout "tiny.rkt"))
+(with-output-to-file fallback-mod
+                     (lambda () (displayln "#lang racket/base (provide answer) (define answer 42)")))
+(define unresolved-root (compiled-root #f #f #f fallback-checkout "fixture-missing-manifest"))
+(check-false (eq? (compiled-root-reason unresolved-root) #t))
+(define load-before (current-load))
+(with-compiled-root unresolved-root fallback-checkout (list "tiny.rkt") (lambda () (void)))
+(check-eq? (current-load) load-before "no current-load wrapper survives a failed resolution")
+(check-equal? (compiled-root-telemetry-mechanism (telemetry-snapshot)) "eager-fallback(raco-make)")
+(check-equal? (compiled-root-telemetry-fallbacks (telemetry-snapshot))
+              1
+              "exactly ONE eager fallback compile")
+
+;; ------------------------ current-load restoration, success path
+
+;; W3 review deferral (W4): with-compiled-root installs the TOCTOU wrapper for
+;; a RESOLVED root. The wrapper must be active during the thunk
+;; (dynamic-extent hygiene) but must NOT survive the call — otherwise every
+;; later load on this thread pays guard overhead.
+(define ok-manifest (hasheq 'sources '()))
+(define ok-root-dir (make-temporary-file "cr-ok-root~a" 'directory))
+(define ok-map-dir (make-temporary-file "cr-ok-map~a" 'directory))
+(define ok-checkout (make-temporary-file "cr-ok-co~a" 'directory))
+(define ok-root (compiled-root ok-manifest ok-root-dir ok-map-dir ok-checkout #t))
+(check-eq? (compiled-root-reason ok-root) #t)
+(define load-before-ok (current-load))
+(define wrapper-during-thunk? #f)
+(with-compiled-root ok-root
+                    ok-checkout
+                    '()
+                    (lambda ()
+                      (set! wrapper-during-thunk? (not (eq? (current-load) load-before-ok)))))
+(check-true wrapper-during-thunk? "TOCTOU guard is active during the thunk")
+(check-eq? (current-load) load-before-ok "current-load is restored after with-compiled-root returns")
+
+;; ----------------------------------------------- workflow text contracts
+
+;; Lane exclusivity: only ci.yml may reference the compiled-root switch.
+(define workflows-dir (build-path repo-root ".github" "workflows"))
+(define workflow-files
+  (for/list ([p (in-list (directory-list workflows-dir))]
+             #:when (string-suffix? (path->string p) ".yml"))
+    (build-path workflows-dir p)))
+(for ([wf (in-list workflow-files)]
+      #:unless (equal? wf ci-yml))
+  (check-false (string-contains? (file->string wf) "RACKET_COMPILED_ROOT")
+               (format "~a must not reference the compiled-root pilot switch" wf))
+  (check-false (string-contains? (file->string wf) "compiled-root-fast")
+               (format "~a must not consume the compiled-root artifact" wf)))
+
+;; ci.yml: the lane expression encodes the full precedence in order (global
+;; off wins BEFORE the lane switch is even consulted).
+(define ci-text (file->string ci-yml))
+(check-true (string-contains? ci-text "COMPILED_ROOT:")
+            "test shards carry the compiled-root lane switch")
+(check-true (< (string-index-of ci-text "vars.RACKET_PREPARED_ARTIFACT != 'off'")
+               (string-index-of ci-text "vars.RACKET_COMPILED_ROOT == 'on'"))
+            "global rollback switch is evaluated before the lane switch")
+(check-true (string-contains? ci-text "vars.RACKET_COMPILED_ROOT == 'on'")
+            "the dedicated lane switch must be explicitly on")
+(check-true (string-contains? ci-text "needs.fast-env.result == 'success'")
+            "a same-run successful producer is required (SAME-RUN SAME-HEAD)")
+(check-true (string-contains? ci-text "--trusted-label q-trusted-producer")
+            "consumers accept only the trusted producer namespace")
+(check-true (string-contains? ci-text "steps.setup.outputs.prepared-env-root")
+            "the verified root directory comes from the guarded restore")
+(check-true (string-contains? ci-text "$RUNNER_TEMP/compiled-root-map")
+            "the per-consumer mapping lives outside the checkout")
+(check-true (string-contains? ci-text "--flags-file")
+            "the shard launches through the verified resolution flags")
+(check-true (string-contains? ci-text "steps.compiled-root.outcome")
+            "activation failure selects the one eager compile gate, never lazy amplification")
+
+;; Producer: the SAME prepared artifact carries the compiled root inside the
+;; already-contracted q-compiled/ prefix (v1.00.31 W1 invocation contract).
+(define prepare-text (file->string prepare-action-yml))
+(check-true (string-contains? prepare-text "'q-compiled/'")
+            "the trusted root joins the q-compiled/ allowlist")
+(check-true (string-contains? prepare-text "q-compiled/trusted-root")
+            "the producer publishes inside the contracted q-compiled/ prefix")
+(check-true (string-contains? prepare-text "scripts/ci/compiled-root.rkt build")
+            "the producer builds through the reviewed CLI")
+(check-true (string-contains? prepare-text "q-trusted-producer")
+            "the producer label is the trusted namespace")
+
+;; Consumer restore: the verified root directory is exposed read-only; nothing
+;; is materialized back INTO the checkout.
+(define restore-text (file->string restore-action-yml))
+(check-true (string-contains? restore-text "compiled-root-dir")
+            "restore exports the verified compiled-root directory")
+(check-false (string-contains? restore-text "cp -a \"$ROOT/compiled-root")
+             "the compiled root is never copied into the checkout (read-only mount)")
+
+;; setup-racket: purge invariant + fixture exclusions preserved, and the
+;; verified root path is forwarded to the job.
+(define setup-text (file->string setup-racket-yml))
+(check-true (string-contains? setup-text "prepared-env-root")
+            "setup-racket forwards the verified root directory")
+(check-true (string-contains? setup-text "./tests/metadata-discovery/fixture/*")
+            "the BUG-0065 purge keeps its frozen fixture exclusions")
+;; v1.00.31 W7: the resolution step consumes the restore action's output through
+;; a hyphen-free shell variable; the step OUTPUT keeps the hyphenated name the
+;; job-level resolution step reads.
+(check-true
+ (string-contains? setup-text
+                   "PREPARED_ENV_ROOT: ${{ steps.prepared-env.outputs.compiled-root-dir }}")
+ "the resolution step is bound to the restore action's compiled-root-dir output")
+(check-true (string-contains? setup-text "prepared-env-root:")
+            "setup-racket still exposes the verified root as a step output")
+
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7: the CLI `run` contract that the setup-racket pre-resolution step
+;; declares. Independent review round 2 (finding 5) required committed coverage
+;; for BOTH shapes: resolution-only (no --module) and module-bearing launch.
+
+(module+ test
+  (test-case "compiled-root run resolves and maps without a module (declared setup-racket step)"
+    (define co (make-checkout! "run-no-module"))
+    (define root (build-path tmp-base "run-no-module-root"))
+    (define map (build-path tmp-base "run-no-module-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define-values (code transcript)
+      (run-producer "run"
+                    "--checkout"
+                    (path->string co)
+                    "--final-dir"
+                    (path->string root)
+                    "--map-dir"
+                    (path->string map)
+                    "--trusted-label"
+                    "q-trusted-producer"))
+    (check-equal? code 0 transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)
+    (check-true (regexp-match? #rx"no --module to launch" transcript) transcript))
+
+  (test-case "compiled-root run still launches a module through the verified root"
+    (define co (make-checkout! "run-with-module"))
+    (define root (build-path tmp-base "run-with-module-root"))
+    (define map (build-path tmp-base "run-with-module-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define-values (code transcript)
+      (run-producer "run"
+                    "--checkout"
+                    (path->string co)
+                    "--final-dir"
+                    (path->string root)
+                    "--map-dir"
+                    (path->string map)
+                    "--trusted-label"
+                    "q-trusted-producer"
+                    "--module"
+                    "marker/compiled-root-marker.rkt"))
+    (check-equal? code 0 transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))
+
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7 (round-3 review): the lane's shell/env plumbing must match the
+;; mode vocabulary both CLIs implement.
+
+;; Shell variable names may not contain hyphens: the setup-racket step consumes
+;; a hyphen-free name (the hyphenated spelling parsed as `$prepared` under
+;; `set -u`), and no step references the hyphenated form as a variable.
+(check-true (string-contains? setup-text "PREPARED_ENV_ROOT:"))
+(check-false (string-contains? setup-text "${prepared-env-root:"))
+(check-false (string-contains? setup-text "$prepared-env-root"))
+
+;; The lane expression publishes 'auto' and both CLIs must accept it: a
+;; rejected 'auto' would fail the activated path closed.
+(check-true (string-contains? ci-text "'auto'"))
+(check-true (string-contains? (file->string (build-path repo-root "scripts" "ci" "compiled-root.rkt"))
+                              "(auto verify resolve)"))
+(check-true (string-contains?
+             (file->string (build-path repo-root "ci" "prepared-environment" "compiled-root.rkt"))
+             "(auto verify resolve)"))
+
+;; The launcher only consults the resolved flags when the lane switch is
+;; exported into its step environment.
+(check-true (string-contains? ci-text "Q_CI_COMPILED_ROOT: ${{ env.COMPILED_ROOT }}"))
+
+;; The verified root is never materialized into the checkout by the restore
+;; loop, whatever the compiled-root mode is.
+(check-true (string-contains? restore-text "trusted-root/*) continue"))
+
+;; ---------------------------------------------------------------------------
+;; v1.00.31 W7 (round-4 review): the W4 telemetry the frozen wave doc requires
+;; (producer cost / restore cost / usable-root hit / bounded eager-fallback /
+;; compiled-code source) must actually be emitted, and must not lie.
+
+;; The record's compiled-code outcome must be computed from a variable
+;; (`$code_outcome`), never a hard-coded eager-full-path literal in the
+;; reporter invocation (the value is false on a verified root hit and after a
+;; successful restore). (The literal may still appear in explanatory comments.)
+(check-true (string-contains? ci-text "--compiled-code-outcome \"$code_outcome\""))
+
+;; The root axis and the code axis are classified from what the job ran.
+(check-true (string-contains? ci-text "root_outcome=\"verified-root-hit\""))
+(check-true (string-contains? ci-text "root_outcome=\"eager-fallback\""))
+(check-true (string-contains? ci-text "root_outcome=\"global-off\""))
+(check-true (string-contains? ci-text "code_outcome=\"mounted-verified-root\""))
+(check-true (string-contains? ci-text "code_outcome=\"bounded-eager-gate\""))
+(check-true (string-contains? ci-text "code_outcome=\"eager-full-path\""))
+
+;; Producer cost and the bounded fallback cost reach the record, and an
+;; unobserved cost is omitted rather than invented.
+(check-true (string-contains? ci-text "needs.fast-env.outputs.compiled-root-producer-seconds"))
+(check-true (string-contains? ci-text "--compiled-root-producer-seconds"))
+(check-true (string-contains? ci-text "--compiled-root-fallback-seconds"))
+
+;; The one bounded eager compile runs for the off lane too (never lazy), and
+;; its measured duration is the fallback cost.
+(check-true
+ (string-contains? ci-text "steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'"))
+(check-true (string-contains? ci-text "steps.eager-gate.outputs.seconds"))
+
+;; The launcher writes its usable-root telemetry, and the map is uploaded only
+;; after the shard run so that telemetry is actually captured.
+(check-true (string-contains? ci-text "--telemetry-file \"$RUNNER_TEMP/compiled-root-map/"))
+;; `string-contains?` answers #t/#f here, so compare positions with a helper.
+(define (index-of haystack needle)
+  (let loop ([at 0])
+    (cond
+      [(> (+ at (string-length needle)) (string-length haystack)) #f]
+      [(string=? (substring haystack at (+ at (string-length needle))) needle) at]
+      [else (loop (add1 at))])))
+(define upload-at (index-of ci-text "Upload compiled-root resolution telemetry"))
+(define launch-at (index-of ci-text "compiled-root.rkt launch"))
+(check-true (and upload-at launch-at (> upload-at launch-at))
+            "the compiled-root telemetry upload happens after the shard launch")
+
+;; Dataflow, not just presence: the record MUST be emitted after the gate that
+;; produces the fallback duration it reads. A step output read before its
+;; producer step has run is always empty, which would silently drop the
+;; bounded-fallback cost from every record (and the upload must follow the
+;; emission so it captures the file).
+(define gate-at (index-of ci-text "Compile gate (one bounded eager compile)"))
+(define record-at (index-of ci-text "Emit prepared-environment restore record"))
+(define record-upload-at (index-of ci-text "Upload prepared-environment restore records"))
+(check-true (and gate-at record-at (> record-at gate-at))
+            "the restore record is emitted after the eager gate whose duration it reads")
+(check-true (and record-at record-upload-at (> record-upload-at record-at))
+            "the restore record is uploaded after it is emitted")
+
+;; The resolution step that creates the map directory is SKIPPED when the lane
+;; is off, so the shard step must create it before launching: the launcher
+;; opens the telemetry file for writing and fails closed on a missing
+;; directory (v1.00.31 W7 repair, found by the PR's own CI on the off lane).
+;; The mkdir is anchored INSIDE the shard step's run block: the resolution
+;; step has an earlier, identically-worded mkdir that is skipped on the off
+;; lane, so a whole-file search would pass even with the fix removed.
+(define (index-of-from haystack needle from)
+  (let loop ([at from])
+    (cond
+      [(> (+ at (string-length needle)) (string-length haystack)) #f]
+      [(string=? (substring haystack at (+ at (string-length needle))) needle) at]
+      [else (loop (add1 at))])))
+(define shard-step-at (index-of ci-text "Run test shard"))
+(define launch-arg-at
+  (index-of-from ci-text "ci/prepared-environment/compiled-root.rkt launch" (or shard-step-at 0)))
+(define map-mkdir-at
+  (index-of-from ci-text "mkdir -p \"$RUNNER_TEMP/compiled-root-map\"" (or shard-step-at 0)))
+(check-true (and shard-step-at launch-arg-at map-mkdir-at (< map-mkdir-at launch-arg-at))
+            "the shard step creates the compiled-root map dir before the launcher runs")
+
+;; The producer job publishes the producer cost the shard record consumes.
+(check-true
+ (string-contains?
+  ci-text
+  "compiled-root-producer-seconds: ${{ steps.prepare.outputs.compiled-root-producer-seconds }}"))
+
+(module+ test
+  (test-case "Q_CI_COMPILED_ROOT=auto resolves instead of failing closed"
+    (define co (make-checkout! "mode-auto"))
+    (define root (build-path tmp-base "mode-auto-root"))
+    (define map (build-path tmp-base "mode-auto-map"))
+    (define-values (bcode bout)
+      (run-producer "build"
+                    "--checkout"
+                    (path->string co)
+                    "--module"
+                    "marker/compiled-root-marker.rkt"
+                    "--final-dir"
+                    (path->string root)
+                    "--label"
+                    "q-trusted-producer"))
+    (check-equal? bcode 0 bout)
+    (define base-env (current-environment-variables))
+    (define child-env (make-environment-variables))
+    (for ([n (in-list (environment-variables-names base-env))])
+      (environment-variables-set! child-env n (environment-variables-ref base-env n)))
+    (environment-variables-set! child-env #"Q_CI_COMPILED_ROOT" #"auto")
+    (define-values (code transcript)
+      (parameterize ([current-environment-variables child-env])
+        (run-producer "run"
+                      "--checkout"
+                      (path->string co)
+                      "--final-dir"
+                      (path->string root)
+                      "--map-dir"
+                      (path->string map)
+                      "--trusted-label"
+                      "q-trusted-producer")))
+    (check-equal? code 0 transcript)
+    (check-false (regexp-match? #rx"illegal Q_CI_COMPILED_ROOT" transcript) transcript)
+    (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))

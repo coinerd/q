@@ -37,6 +37,14 @@ outputs:
   restore-ms:
     description: 'Wall-clock milliseconds spent downloading and restoring'
     value: ${{ steps.restore.outputs.restore-ms }}
+  compiled-root-dir:
+    description: >-
+      v1.00.30 W4 (issue #9690): the artifact's compiled-root directory
+      INSIDE the verified download (read-only for consumers — never
+      materialized into the checkout). Empty when the artifact predates
+      the compiled-root extension, so consumers resolve the failure
+      through their own loud, bounded eager fallback.
+    value: ${{ steps.tuple.outputs.compiled-root-dir }}
 runs:
   using: 'composite'
   steps:
@@ -82,6 +90,17 @@ runs:
         git_sha=$(git rev-parse HEAD)
         echo "root=$root" >> "$GITHUB_OUTPUT"
 
+        # W4 (issue #9690): expose the compiled-root directory path only.
+        # It stays inside the verified download and is consumed read-only
+        # by the resolution step; nothing is copied into the checkout. The
+        # root is published by the producer invocation inside the
+        # already-contracted q-compiled/ prefix (v1.00.31 W1).
+        if [ -f "$root/q-compiled/trusted-root/manifest.rktd" ]; then
+          echo "compiled-root-dir=$root/q-compiled/trusted-root" >> "$GITHUB_OUTPUT"
+        else
+          echo "compiled-root-dir=" >> "$GITHUB_OUTPUT"
+        fi
+
         # Lock digest of THIS checkout, derived the same way the producer
         # derived it, so a lock change between producer and consumer is a
         # hard mismatch rather than a stale restore.
@@ -118,9 +137,16 @@ runs:
 
         # q compiled output is placed back at its original checkout-relative
         # paths. This is a copy, never a rebuild: if a compiled tree is
-        # missing from the artifact the health checks below fail.
+        # missing from the artifact the health checks below fail. The
+        # verified compiled root (q-compiled/trusted-root, published by the
+        # W4 producer invocation) is deliberately NOT materialized: it is
+        # handed to the resolution step read-only and must never be copied
+        # into the checkout (v1.00.31 W7 repair).
         while IFS= read -r -d '' dir; do
           rel="${dir#$ROOT/q-compiled/}"
+          case "$rel" in
+            trusted-root/*) continue ;;
+          esac
           mkdir -p "$rel"
           cp -a "$dir/." "$rel/"
         done < <(find "$ROOT/q-compiled" -mindepth 1 -maxdepth 5 -type d -name compiled -print0)

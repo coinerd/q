@@ -1,0 +1,10 @@
+phase=producer-build-publish exit=0
+published compiled root: /var/tmp/w4-drill-root17902782331790278233846/final (reason: ok)
+1364
+(w4-drill
+  (producer-build-publish #t "published compiled root: /var/tmp/w4-drill-root17902782331790278233846/final (reason: ok)")
+  (consumer-root-hit #t "compiled-root: verified root hit (/var/tmp/w4-drill-root17902782331790278233846/final)\n42 | fallback-ms-file-created=#f")
+  (global-off-rollback #t "compiled-root: global off; eager current-source path\n42 | fallback-ms=472")
+  (current-source-canary #t "compiled-root: resolution failed (bytes->string/utf-8: byte string is not a well-formed UTF-8 encoding\n  byte string: #\"#~\\48.10\\vchez-schemeD\\2\\0\\0\\0\\22\\0\\0\\0\\21configure-runtime\\r\\16\\0\\0\\371\\n\\0\\0>\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0R\\0\\0\\0\\273\\r\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0#~\\48.10\\vchez-schemeB\\272\\254>\\237\\31~c\\273`d1\\371\\212\\5\\246O\\331\\221\\277\\25\\217\\r\\0\\0\\0\\0\\0\\0chez\\310\\244\\222\\21\\0(...); eager fallback\n63 | fallback-ms=481")
+  (tamper-canary #t "compiled-root: resolution failed (manifest is not a hash); eager fallback\n42 | fallback-ms=480")
+)

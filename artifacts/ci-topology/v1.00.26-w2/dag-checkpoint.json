@@ -38,9 +38,9 @@
   },
   "fast_env_verification_contract": {
     "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
-    "prepare_action_sha256": "608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c",
+    "prepare_action_sha256": "49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e",
     "setup_action": ".github/actions/setup-racket/action.yml",
-    "setup_action_sha256": "da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772",
+    "setup_action_sha256": "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0",
     "pinned_dimensions": [
       "manifest.rkt emit",
       "manifest.rkt verify",
@@ -65,6 +65,10 @@
     "w1_restamp": {
       "wave": "v1.00.31-w1",
       "note": "v1.00.31 W1 (register F1) re-stamped prepare_action_sha256 from the value the v1.00.26-w2 checkpoint recorded (f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501) to 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c so that the invocation the action DECLARES is executable: the action gains the compiled-root input (default 'false'), the COMPILED_ROOT env, and a guarded whole-checkout producer invocation inside the pack step's run: script (the same shape as the v1.00.30 W0 BUG-0073 pipefail re-stamp). Verification semantics are unchanged and mechanically proven in artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt: the diff is deletion-free (+22, -0), the pre-W1 file is an ORDERED SUBSEQUENCE of the post-W1 file, and the pinned dimensions (manifest.rkt emit, manifest.rkt verify, lock_digest, ::error::, exit 1) are unchanged; with the default the inserted block does not execute at all. setup_action_sha256 is untouched. The literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (prepare_action_sha256)."
+    },
+    "w7_restamp": {
+      "wave": "v1.00.31-w7",
+      "note": "v1.00.31 W7 repaired the blocked v1.00.30 W4 wave (issue #9690) on top of this commit: the W4 lane's producer declaration is now the SAME single guarded whole-checkout invocation the W1 contract pinned (the duplicate ungated invocation the blocked wave carried was dropped, and the published root stays inside the already-contracted q-compiled/ prefix), so the action carries both the W4 activation semantics (SAME-RUN SAME-HEAD publication before resolution, same-run restore, loud eager fallback, default off) and the W1 invocation contract (tests/test-compiled-root-workflow.rkt executes exactly the declared line). prepare_action_sha256 is re-stamped from the W1 value 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c to 49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e, because the W4 wave's producer telemetry output (compiled-root-producer-seconds) is carried forward with the lane. The independent W4 review then required the setup action's resolution gate to be opted into explicitly: the step now runs only when the compiled-root mode input is a resolution mode (default unset keeps a restored root untouched) and tests/ci pass the mode at the fast-shard call site, so setup_action_sha256 is re-stamped again from 6fb8fd7167932942668baf75d1fc939564c0a925e9ff5d862948e0ce03aab55f to 4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0 within this same wave. Verified against the merged files themselves (sha256sum of the two action files) and pinned by tests/test-ci-runtime-contract.rkt (checkpoint file hash) and tests/test-w9-ci-workflow-verification.rkt (both action hashes and the lane's byte-identity contract)."
     }
   },
   "timing_checkpoint": {

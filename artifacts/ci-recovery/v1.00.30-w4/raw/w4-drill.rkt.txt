@@ -1,0 +1,186 @@
+;; W4 rollback/activation drill (scratch, disposable).
+;; Exercises the committed CLI exactly as CI would:
+;;   1. producer: build + publish a compiled root from a fixture checkout
+;;   2. consumer: verified root hit (fast-shard reuse)
+;;   3. rollback: Q_CI_COMPILED_ROOT=off -> one eager fallback compile
+;;   4. current-source canary: source edited after publish -> reject + fallback
+;;   5. tamper canary: manifest byte flipped -> reject + fallback
+;; Prints a machine-readable summary to stdout. No secrets, offline.
+#lang racket/base
+
+(require racket/file
+         racket/format
+         racket/match
+         racket/path
+         racket/port
+         racket/string
+         racket/system)
+
+(define repo (string->path "/home/user/src/q-agent/wt-v10030-w4"))
+(define cli (build-path repo "scripts" "ci" "compiled-root.rkt"))
+(define root-dir (make-temporary-file "w4-drill-root~a" 'directory))
+(define checkout (build-path root-dir "checkout"))
+(define final-dir (build-path root-dir "final"))
+(define map-dir (build-path root-dir "map"))
+(define stage-dir (build-path root-dir "stage"))
+(define drill-tmp (build-path root-dir "tmp"))
+(make-directory* checkout)
+(make-directory* stage-dir)
+(make-directory* drill-tmp)
+
+(define (w p s)
+  (with-output-to-file p (lambda () (display s)) #:exists 'truncate))
+(w (build-path checkout "helper.rkt")
+   "#lang racket/base\n(define (twice x) (* 2 x))\n(provide twice)\n")
+(w (build-path checkout "app.rkt")
+   "#lang racket/base\n(require \"helper.rkt\")\n(displayln (twice 21))\n")
+(define lockfile (build-path checkout "package-lock.json"))
+(w lockfile "{\"name\":\"drill-fixture\",\"version\":\"1.0.0\"}\n")
+
+;; Producer gate requires a real git checkout (fail-closed clean check).
+(define (git . args)
+  (unless (zero?
+           (apply system*/exit-code (find-executable-path "git") "-C" (path->string checkout) args))
+    (error 'w4-drill "git ~a failed" args)))
+(git "init" "-q")
+(git "config" "user.email" "drill@example.invalid")
+(git "config" "user.name" "W4 Drill")
+(git "add" ".")
+(git "commit" "-q" "-m" "drill fixture")
+
+(define ms-file (build-path drill-tmp "fallback-ms.txt"))
+(define results '())
+(define (record! phase ok detail)
+  (set! results (cons (list phase ok detail) results)))
+
+(define (build-cli-argv)
+  (list "--checkout"
+        (path->string checkout)
+        "--module"
+        "app.rkt"
+        "--final-dir"
+        (path->string final-dir)
+        "--map-dir"
+        (path->string map-dir)
+        "--trusted-label"
+        "drill-trusted-producer"
+        "--lockfile"
+        (path->string lockfile)
+        "--fallback-ms-file"
+        (path->string ms-file)
+        "run"))
+
+;; Runs the CLI in a subprocess; ENV-ASSIGN is a string like
+;; "Q_CI_COMPILED_ROOT=off" or #f (unset). Uses /usr/bin/env so the
+;; child observes the override exactly like a CI step would.
+(define (run-cli env-assign argv)
+  (define out (open-output-string))
+  (define-values (exe args)
+    (if env-assign
+        (values "/usr/bin/env"
+                (list env-assign (path->string (find-executable-path "racket")) (path->string cli)))
+        (values (find-executable-path "racket") (list (path->string cli)))))
+  (define code
+    (parameterize ([current-output-port out]
+                   [current-error-port out])
+      (apply system*/exit-code exe (append args argv))))
+  (values code (string-trim (get-output-string out))))
+
+;; ---- 1. producer build/publish
+(define build-argv
+  (list "--checkout"
+        (path->string checkout)
+        "--module"
+        "helper.rkt"
+        "--module"
+        "app.rkt"
+        "--staging-dir"
+        (path->string stage-dir)
+        "--final-dir"
+        (path->string final-dir)
+        "--label"
+        "drill-trusted-producer"
+        "--lockfile"
+        (path->string lockfile)
+        "build"))
+(define-values (build-code build-out) (run-cli #f build-argv))
+(printf "phase=producer-build-publish exit=~a\n~a\n" build-code build-out)
+(define build-ok (and (= build-code 0) (string-contains? build-out "published compiled root")))
+(record! "producer-build-publish" build-ok build-out)
+
+;; ---- 2. consumer verified root hit
+(when (file-exists? ms-file)
+  (delete-file ms-file))
+(define-values (hit-code hit-out) (run-cli #f (build-cli-argv)))
+(define hit-ms-present (file-exists? ms-file))
+(define hit-ok
+  (and (= hit-code 0)
+       (string-contains? hit-out "verified root hit")
+       (string-contains? hit-out "42")
+       (not hit-ms-present)))
+(record! "consumer-root-hit"
+         hit-ok
+         (format "~a | fallback-ms-file-created=~a" hit-out hit-ms-present))
+
+;; ---- 3. global-off rollback drill
+(when (file-exists? ms-file)
+  (delete-file ms-file))
+(define-values (off-code off-out) (run-cli "Q_CI_COMPILED_ROOT=off" (build-cli-argv)))
+(define off-ms (and (file-exists? ms-file) (file->value ms-file)))
+(define off-ok
+  (and (= off-code 0)
+       (string-contains? off-out "global off; eager current-source path")
+       (string-contains? off-out "42")
+       (exact-nonnegative-integer? off-ms)))
+(record! "global-off-rollback" off-ok (format "~a | fallback-ms=~a" off-out off-ms))
+
+;; ---- 4. current-source canary (edit source after publish)
+(sleep 1) ; coarse mtime resolution
+(w (build-path checkout "helper.rkt")
+   "#lang racket/base\n(define (twice x) (* 3 x))\n(provide twice)\n")
+(when (file-exists? ms-file)
+  (delete-file ms-file))
+(define-values (cur-code cur-out) (run-cli #f (build-cli-argv)))
+(define cur-ms (and (file-exists? ms-file) (file->value ms-file)))
+(define cur-ok
+  (and (= cur-code 0)
+       (string-contains? cur-out "resolution failed")
+       (string-contains? cur-out "63") ; recompiled from CURRENT source
+       (exact-nonnegative-integer? cur-ms)))
+(record! "current-source-canary" cur-ok (format "~a | fallback-ms=~a" cur-out cur-ms))
+
+;; ---- 5. tamper canary (flip first byte of manifest sexp; source restored)
+(w (build-path checkout "helper.rkt")
+   "#lang racket/base\n(define (twice x) (* 2 x))\n(provide twice)\n")
+(define manifest-path
+  (for/first ([p (in-directory final-dir)]
+              #:when (equal? (path->string (file-name-from-path p)) "manifest.rktd"))
+    p))
+(unless manifest-path
+  (error 'w4-drill "no manifest.rktd under final dir"))
+(define tampered (bytes-copy (file->bytes manifest-path)))
+(bytes-set! tampered 0 (char->integer #\;)) ; corrupt first sexp char
+;; Published roots are read-only by design; a real attacker (or this
+;; drill) must first re-grant write access to mutate the manifest.
+;; file-or-directory-permissions! is unavailable in the CI Racket (repo
+;; precedent: tests/helpers/pristine-git-fixture.rkt); chmod via system.
+(unless (zero? (system*/exit-code (find-executable-path "chmod") "u+w" manifest-path))
+  (error 'w4-drill "chmod u+w failed: ~a" manifest-path))
+(call-with-output-file manifest-path (lambda (p) (write-bytes tampered p)) #:exists 'truncate)
+(when (file-exists? ms-file)
+  (delete-file ms-file))
+(define-values (tam-code tam-out) (run-cli #f (build-cli-argv)))
+(define tam-ms (and (file-exists? ms-file) (file->value ms-file)))
+(define tam-ok
+  (and (= tam-code 0)
+       (string-contains? tam-out "resolution failed")
+       (string-contains? tam-out "42") ; current source result, not poisoned root
+       (exact-nonnegative-integer? tam-ms)))
+(record! "tamper-canary" tam-ok (format "~a | fallback-ms=~a" tam-out tam-ms))
+
+(printf "(w4-drill\n")
+(for ([r (reverse results)])
+  (match-define (list phase ok detail) r)
+  (printf "  (~a ~a ~s)\n" phase ok detail))
+(printf ")\n")
+(exit (if (andmap (lambda (r) (cadr r)) (reverse results)) 0 1))

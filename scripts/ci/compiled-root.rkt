@@ -42,7 +42,10 @@
   (define argv
     (append (list (path->string (find-executable-path "racket")))
             flag-expr
-            (list "-t" (path->string module-path))
+            (list "-t"
+                  (if (path? module-path)
+                      (path->string module-path)
+                      module-path))
             extra-args))
   (define out-port (open-output-string))
   (define exit-code
@@ -123,6 +126,7 @@
   (define label (make-parameter "unknown-producer"))
   (define trusted-labels (make-parameter '()))
   (define lockfile (make-parameter #f))
+  (define fallback-ms-file (make-parameter #f))
   ;; Raw argv: the child-argument tail after a literal "--" is captured
   ;; first, because command-line consumes the separator and would merge
   ;; the child args into the positional list.
@@ -154,16 +158,21 @@
       dir
       "whole-checkout build: publish a trusted root of the entire checkout into dir"
       (out dir)]
-     ["--module" m "module relative to checkout (repeatable)" (modules (append (modules) (list m)))]
      ["--final-dir" dir "published immutable root directory" (final-dir dir)]
      ["--staging-dir" dir "staging directory for atomic publish" (staging-dir dir)]
      ["--map-dir" dir "per-consumer read-only mapping directory" (map-dir dir)]
      ["--label" l "producer identity label" (label l)]
+     ["--lockfile" p "lockfile checked into root identity" (lockfile p)]
+     ["--fallback-ms-file"
+      f
+      "write eager-fallback compile milliseconds to this file when a fallback compiles (W4 telemetry)"
+      (fallback-ms-file f)]
+     #:multi
+     ["--module" m "module relative to checkout (repeatable)" (modules (append (modules) (list m)))]
      ["--trusted-label"
       l
       "accepted producer label (repeatable)"
       (trusted-labels (append (trusted-labels) (list l)))]
-     ["--lockfile" p "lockfile checked into root identity" (lockfile p)]
      #:args rest
      rest))
 
@@ -175,6 +184,18 @@
     (unless (p)
       (error 'compiled-root "missing required option --~a" name))
     (p))
+
+  ;; W4 telemetry (issue #9690): the bounded eager-fallback compile is a
+  ;; measured cost, not a silent one. Wall-clock milliseconds of the one
+  ;; fallback compile are written to --fallback-ms-file when given, so
+  ;; the consumer record can separate usable-root hits from fallback
+  ;; compiles. Absent file => no fallback ran (root hit path).
+  (define (timed-eager-fallback!)
+    (define t0 (current-inexact-milliseconds))
+    (eager-fallback-compile! (checkout) (modules))
+    (define ms (inexact->exact (floor (- (current-inexact-milliseconds) t0))))
+    (when (fallback-ms-file)
+      (call-with-output-file (fallback-ms-file) (lambda (out) (writeln ms out)) #:exists 'truncate)))
 
   (match cmd
     ["build"
@@ -252,28 +273,79 @@
     ["run"
      (define co (require-opt! checkout "checkout"))
      (define ms (modules))
-     (when (null? ms)
-       (error 'compiled-root "run requires at least one --module"))
+     ;; --module is optional: with no module the run performs resolution,
+     ;; verification and read-only mapping only (setup-racket's
+     ;; pre-resolution step), and launches nothing. With at least one
+     ;; module it also compiles/launches the first module exactly as
+     ;; before. Requiring a module here made the declared setup-racket
+     ;; step unrunnable (v1.00.31 W7 repair).
+     ;; --module values are checkout-relative by contract (workflow and
+     ;; drill both pass e.g. app.rkt); resolve them against --checkout
+     ;; so child -t lookups are cwd-independent.
+     (define (co-module m)
+       (if (absolute-path? m)
+           m
+           (path->string (build-path co m))))
      (define fd (require-opt! final-dir "final-dir"))
      (define md (require-opt! map-dir "map-dir"))
      (when (null? (trusted-labels))
        (error 'compiled-root "run requires at least one --trusted-label"))
-     (define root
-       (resolve-compiled-root! #:final-dir fd
-                               #:checkout co
-                               #:trusted-producer-labels (trusted-labels)
-                               #:map-dir md
-                               #:expect-lockfile-digest (and (lockfile) (sha256-file (lockfile)))))
+     ;; W4 override precedence (issue #9690): the global switch wins.
+     ;; "off" never touches the root at all; "auto"/"verify"/"resolve"
+     ;; (or unset) use verified resolution — "auto" is the value the
+     ;; ci.yml lane expression publishes — and anything else fails closed
+     ;; so a typo cannot silently disable verification.
+     (define override (getenv "Q_CI_COMPILED_ROOT"))
+     (define off?
+       (and override
+            (case (string->symbol override)
+              [(off) #t]
+              [(auto verify resolve) #f]
+              [else
+               (error 'compiled-root
+                      "illegal Q_CI_COMPILED_ROOT value ~s (off|auto|verify|resolve)"
+                      override)])))
      (cond
-       [(eq? (compiled-root-reason root) #t)
-        (define-values (code transcript) (launch-with-root root (first ms) child-args))
-        (display transcript)
-        (exit code)]
+       [off?
+        (eprintf "compiled-root: global off; eager current-source path\n")
+        (when (pair? ms)
+          (timed-eager-fallback!)
+          (define code
+            (apply system*/exit-code
+                   (find-executable-path "racket")
+                   "-t"
+                   (co-module (first ms))
+                   child-args))
+          (exit code))
+        (eprintf "compiled-root: no --module to launch; resolution-only run\n")]
        [else
-        ;; Fail closed to the single eager current-source fallback.
-        (eprintf "compiled-root: resolution failed (~a); eager fallback\n"
-                 (reason->string (compiled-root-reason root)))
-        (eager-fallback-compile! co ms)
-        (define code
-          (apply system*/exit-code (find-executable-path "racket") "-t" (first ms) child-args))
-        (exit code)])]))
+        (define root
+          (resolve-compiled-root! #:final-dir fd
+                                  #:checkout co
+                                  #:trusted-producer-labels (trusted-labels)
+                                  #:map-dir md
+                                  #:expect-lockfile-digest (and (lockfile) (sha256-file (lockfile)))))
+        (cond
+          [(eq? (compiled-root-reason root) #t)
+           (printf "compiled-root: verified root hit (~a)\n" fd)
+           (flush-output)
+           (when (pair? ms)
+             (define-values (code transcript)
+               (launch-with-root root (co-module (first ms)) child-args))
+             (display transcript)
+             (exit code))
+           (when (null? ms)
+             (printf "compiled-root: no --module to launch; resolution-only run\n"))]
+          [else
+           (eprintf "compiled-root: resolution failed (~a); ~a\n"
+                    (reason->string (compiled-root-reason root))
+                    (if (pair? ms) "eager fallback" "resolution-only run, no --module to launch"))
+           (when (pair? ms)
+             (timed-eager-fallback!)
+             (define code
+               (apply system*/exit-code
+                      (find-executable-path "racket")
+                      "-t"
+                      (co-module (first ms))
+                      child-args))
+             (exit code))])])]))

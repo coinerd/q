@@ -15,6 +15,11 @@
 ;;                           (Q_PREPARED_ENV_STATE / _RESTORE_MS /
 ;;                           _FALLBACK_MS) without changing install/relink
 ;;                           semantics or the loud-fallback behavior.
+;;                           W4 (issue #9690) adds the compiled-root pilot
+;;                           split: --compiled-root-outcome (usable-root
+;;                           hit vs bounded eager fallback vs global off),
+;;                           --compiled-root-producer-seconds and
+;;                           --compiled-root-fallback-seconds.
 ;;   --aggregate DIR         fold shard records into the committed report.
 ;;   --manifest F --check    the durable machine-checked gate; optionally
 ;;                           --write-checksums to (re)bind SHA256SUMS.
@@ -199,6 +204,7 @@
 usage:
   prepared-env-report.rkt --emit-restore-record --out F --run-id N --head-sha S --shard N --created-at-utc T \
   [--wall-clock-seconds V] [--fast-env-producer-result R] [--prepared-artifact-name A] [--installer-sha256 H]
+  [--compiled-root-outcome O] [--compiled-root-producer-seconds S] [--compiled-root-fallback-seconds S]
   prepared-env-report.rkt --aggregate DIR --out F [--filter-prefix P] [--campaign C]
   prepared-env-report.rkt --manifest F --check [--write-checksums]
   prepared-env-report.rkt --identity-emit --out F --os OS --os-image IMG --arch A --racket-version V \
@@ -253,6 +259,36 @@ usage:
   (define eager-setup (or (number-arg args "--eager-setup-seconds") "unknown"))
   (define cache-state (or (assoc-value args "--cache-state") "unknown"))
   (define purge-zo (or (count-or-unknown (count-arg args "--purge-zo-count")) "unknown"))
+  ;; W4 (issue #9690) guarded compiled-root activation telemetry: the
+  ;; usable compiled ROOT outcome is a third axis, separate from the
+  ;; store restore outcome and from eager compiled code. It splits the
+  ;; pilot's cost surface so aggregation can attribute latency honestly:
+  ;;   verified-root-hit   — this run's source-identical root resolved
+  ;;                         and was mounted for this shard
+  ;;   eager-fallback      — resolution failed and the ONE bounded eager
+  ;;                         compile ran at the setup/gate boundary
+  ;;   global-off          — the Q_CI_COMPILED_ROOT=off override won;
+  ;;                         the root was never touched
+  ;;   unavailable         — the producer lane never published a root
+  ;; The producer cost (build+publish in the producer lane) and the
+  ;; bounded fallback compile cost are separate fields; both stay
+  ;; "unknown" unless actually observed, never a fabricated zero.
+  (define root-outcome (or (assoc-value args "--compiled-root-outcome") "unknown"))
+  (unless (member root-outcome
+                  (list "verified-root-hit" "eager-fallback" "global-off" "unavailable" "unknown"))
+    (exit
+     (usage-fail
+      (format
+       "--compiled-root-outcome must be one of verified-root-hit|eager-fallback|global-off|unavailable|unknown (got ~s)"
+       root-outcome))))
+  (define root-producer-seconds (or (number-arg args "--compiled-root-producer-seconds") "unknown"))
+  (define root-fallback-seconds (or (number-arg args "--compiled-root-fallback-seconds") "unknown"))
+  (for ([pair (in-list (list (cons "--compiled-root-producer-seconds" root-producer-seconds)
+                             (cons "--compiled-root-fallback-seconds" root-fallback-seconds)))])
+    (unless (or (equal? (cdr pair) "unknown") (and (real? (cdr pair)) (positive? (cdr pair))))
+      (exit (usage-fail (format "~a must be a positive number (seconds) when given, not ~s"
+                                (car pair)
+                                (cdr pair))))))
   (define record
     (json-obj (cons 'schema "prepared-env-restore-record")
               (cons 'run-id (or (string->number run-id-raw) run-id-raw))
@@ -273,6 +309,12 @@ usage:
               (cons 'eager-setup-seconds eager-setup)
               (cons 'cache-state cache-state)
               (cons 'purge-zo-count purge-zo)
+              ;; W4 pilot: separate usable-root hit, producer cost and
+              ;; bounded eager-fallback compile cost from the restore
+              ;; fields above (honesty: "unknown" when unobserved).
+              (cons 'compiled-root-outcome root-outcome)
+              (cons 'compiled-root-producer-seconds root-producer-seconds)
+              (cons 'compiled-root-fallback-seconds root-fallback-seconds)
               (cons 'cache-key cache-key)
               (cons 'sha-context (or (assoc-value args "--head-sha") "unknown"))))
   (write-json-file out record)
@@ -332,6 +374,20 @@ usage:
                   (let ([v (hash-ref h 'purge-zo-count #f)])
                     (if v
                         (count-or-unknown v)
+                        "unknown")))
+            ;; W4 pilot: carry the compiled-root fields through
+            ;; aggregation so the report keeps the root-hit/fallback
+            ;; picture (unknown stays unknown — never zero-filled).
+            (cons 'compiled-root-outcome (hash-ref-unknown h 'compiled-root-outcome))
+            (cons 'compiled-root-producer-seconds
+                  (let ([v (hash-ref h 'compiled-root-producer-seconds #f)])
+                    (if v
+                        (duration-or-unknown v)
+                        "unknown")))
+            (cons 'compiled-root-fallback-seconds
+                  (let ([v (hash-ref h 'compiled-root-fallback-seconds #f)])
+                    (if v
+                        (duration-or-unknown v)
                         "unknown")))
             (cons 'cache-key
                   ;; Emitted records already carry the composed cache key; only
@@ -473,6 +529,23 @@ usage:
         (if (and critical (real? wall) (real? restore-ms))
             (* 1.0 (+ wall (/ restore-ms 1000)))
             "unknown"))
+      ;; W4 pilot: the FULL critical path includes the pilot's producer
+      ;; publication cost and the shard's bounded eager-fallback compile
+      ;; when the root missed. Each component stays "unknown" when the
+      ;; telemetry did not observe it; the sum is only computed when every
+      ;; component is known (never partially zero-filled).
+      (define producer-s
+        (if critical
+            (alist-ref critical 'compiled-root-producer-seconds)
+            "unknown"))
+      (define fallback-s
+        (if critical
+            (alist-ref critical 'compiled-root-fallback-seconds)
+            "unknown"))
+      (define full-critical-path
+        (if (and (real? setup-plus-exec) (real? producer-s) (real? fallback-s))
+            (* 1.0 (+ setup-plus-exec producer-s fallback-s))
+            "unknown"))
       (json-obj (cons 'run-id rid)
                 (cons 'head-sha
                       (if critical
@@ -480,7 +553,14 @@ usage:
                           "unknown"))
                 (cons 'slowest-shard-execution-seconds wall)
                 (cons 'critical-path-restore-ms restore-ms)
-                (cons 'setup-plus-execution-seconds setup-plus-exec))))
+                (cons 'setup-plus-execution-seconds setup-plus-exec)
+                (cons 'compiled-root-outcome
+                      (if critical
+                          (alist-ref critical 'compiled-root-outcome)
+                          "unknown"))
+                (cons 'compiled-root-producer-seconds producer-s)
+                (cons 'compiled-root-fallback-seconds fallback-s)
+                (cons 'full-critical-path-seconds full-critical-path))))
   (define report
     (json-obj
      (cons 'schema-version 1)
@@ -609,7 +689,30 @@ usage:
           (unless (non-empty-string? (hash-ref r 'sha-context #f))
             (violate "restore ~a: sha-context must be a non-empty string" i))
           (unless (non-empty-string? (hash-ref r 'cache-key #f))
-            (violate "restore ~a: cache-key must be a non-empty string" i)))))
+            (violate "restore ~a: cache-key must be a non-empty string" i))
+          ;; W4 pilot fields: validated when present so legacy committed
+          ;; reports round-trip, while any record that DOES carry the
+          ;; compiled-root telemetry stays honest (enum outcome; costs
+          ;; positive-or-unknown, never a fabricated zero or null).
+          (define root-outcome (hash-ref r 'compiled-root-outcome #f))
+          (when root-outcome
+            (unless (member
+                     root-outcome
+                     (list "verified-root-hit" "eager-fallback" "global-off" "unavailable" "unknown"))
+              (violate
+               "restore ~a: compiled-root-outcome ~s is outside verified-root-hit|eager-fallback|global-off|unavailable|unknown"
+               i
+               root-outcome)))
+          (for ([field (in-list (list 'compiled-root-producer-seconds
+                                      'compiled-root-fallback-seconds))])
+            (define v (hash-ref r field #f))
+            (when v
+              (unless (positive-real-or-unknown? v)
+                (violate
+                 "restore ~a: ~a must be a positive number or the string \"unknown\", never zero or null (got ~s)"
+                 i
+                 field
+                 v)))))))
     (define recs
       (if (list? restores)
           restores
