@@ -1,9 +1,9 @@
 69499e220030dc65f1514f3c50902f9c5eb0dd163c7a692efbbb2b9df09ed2f5  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt
 009289726b99cc902277df0d031d1e8f7531571bf0785b102c19934651c39a1a  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt
 8c84f552d49c524dfb902154867a0c5797a404e57c5a0400b591e6dfbd2da415  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt
-357b8173f8da1c358c5d00b092f214f8c01bd952460e9362179b898cc1e2c954  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt
+b8c24250f0cbbce40ee75590b13608442b1e672cf0a92c6100a7bcd17f43f5aa  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt
 da403d4017490c9dc8389338f1a1ee4c92af185a5e688e0c87a68949161ee560  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log
 ad8e27ef5de236c94f12af88d201707b57cb56e51f667fb916e37c41a605b1c2  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt
-ee9867970a58241b3fc93240fcf7aab403163ef8e62335a34f1a5c8c8d1f0eee  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
+f34f121940d12bf08b0ce23f991ab2d22976618f1e3286f1c469092b8dc5aae1  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
 0588c52cb0eac5f56b6df6eb962e4af41db3aa7b69e4c994039ceb906cea7a46  artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json
 f42f42e7dfb2066c55bee207c38d329d3fad179ce9126fbedaa109c27c191c5b  docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md
