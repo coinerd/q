@@ -2,14 +2,14 @@ W7 final verification chain — the single capture all W7 evidence is bound to
 
 tree:   /home/user/src/q-agent/wt-v10031-w7
 branch: campaign/v1.00.31-w7
-head:   1935c2c90512206e365e9d66d3a7a4aac98b2e01
+head:   e9af72fee9c652b16a017d37219d15e7eb5f9f0b
 note:   run with scripts/run-tests.rkt so the runner's resolve-base-dir lands on this
         worktree; a runner that resolved the neighbouring q/ clone would report a
         different tree's q-version and file inventory.
 
 results:
-  full regression (suite=all)  1409 files  1400 passed  1 failed  8 skipped-by-profile  29m40s
-  fast                          1209 files  1209 passed  0 failed              20m51s
+  full regression (suite=all)  1409 files  1400 passed  1 failed  8 skipped-by-profile  29m36s
+  fast                          1209 files  1209 passed  0 failed              20m53s
   arch                            32 files    32 passed  0 failed
   workflows                       33 files    33 passed  0 failed
   security                        64 files    64 passed  0 failed
@@ -19,6 +19,9 @@ results:
   artifact provenance            w6 ok (951 notes), w7 ok (950 notes)
   artifact checksums             w6, w7 and tier-ownership all OK from the repo root
 
+Every RUN-SUMMARY line reports runner-version=1.00.31 and the resolver's base-dir is this
+worktree, which is the property the base-dir fix restores.
+
 The single full-regression failure is tests/test-browser-playwright-sidecar.rkt
 (Sidecar EOF): the playwright npm module does not resolve for the node on this host, so
 the sidecar exits at launch. The file is untouched by this branch, it fails identically on
@@ -27,7 +30,7 @@ pre-existing environmental, not a W7 regression.
 
 --- the verbatim chain log follows ---
 
-=== W7 FINAL verify at 1935c2c90512206e365e9d66d3a7a4aac98b2e01 (2026-09-25T14:32:22Z) ===
+=== W7 FINAL verify at e9af72fee9c652b16a017d37219d15e7eb5f9f0b (2026-09-25T16:04:04Z) ===
 branch: campaign/v1.00.31-w7
 resolver base-dir=/home/user/src/q-agent/wt-v10031-w7/
 --- suite: all (full regression)
@@ -45,14 +48,14 @@ resolver base-dir=/home/user/src/q-agent/wt-v10031-w7/
              Skipped by profile: 8
   Tests:     20554 total, 20553 passed, 1 failed
   Category:  PASS=1400, SKIPPED_BY_PROFILE=8, ASSERTION_FAILURE=1
-  Elapsed:   29m 39.946s
+  Elapsed:   29m 35.83s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ❌ FAIL
 ═══════════════════════════════════════════════════════════
 
 FAILURES:
-  ✗ tests/test-browser-playwright-sidecar.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 1 failed, 1.606s)
-RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1409 pass=1400 fail=1 timeout=0 skip=8 wall-clock-seconds=1779.946 metadata-completeness=explicit:1380/heuristic:0/missing:29
+  ✗ tests/test-browser-playwright-sidecar.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 1 failed, 1.579s)
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1409 pass=1400 fail=1 timeout=0 skip=8 wall-clock-seconds=1775.83 metadata-completeness=explicit:1380/heuristic:0/missing:29
 FULL-EXIT=1
 --- suite: fast
 ;; run-tests: suite=fast files=1209 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
@@ -67,11 +70,11 @@ FULL-EXIT=1
   Files:     1209 total, 1209 passed, 0 failed, 0 timeouts
   Tests:     17996 total, 17996 passed, 0 failed
   Category:  PASS=1209
-  Elapsed:   20m 50.749s
+  Elapsed:   20m 53.076s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.31 suite=fast profile=local shard=none execution-mode=subprocess file-count=1209 pass=1209 fail=0 timeout=0 skip=0 wall-clock-seconds=1250.749 metadata-completeness=explicit:1180/heuristic:0/missing:29
+RUN-SUMMARY runner-version=1.00.31 suite=fast profile=local shard=none execution-mode=subprocess file-count=1209 pass=1209 fail=0 timeout=0 skip=0 wall-clock-seconds=1253.076 metadata-completeness=explicit:1180/heuristic:0/missing:29
 SUITE-fast-EXIT=0
 --- suite: arch
 ;; run-tests: suite=arch files=32 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
@@ -84,11 +87,11 @@ SUITE-fast-EXIT=0
   Files:     32 total, 32 passed, 0 failed, 0 timeouts
   Tests:     306 total, 306 passed, 0 failed
   Category:  PASS=32
-  Elapsed:   26.555s
+  Elapsed:   26.549s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.31 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=26.555 metadata-completeness=explicit:32/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.31 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=26.549 metadata-completeness=explicit:32/heuristic:0/missing:0
 SUITE-arch-EXIT=0
 --- suite: workflows
 ;; run-tests: suite=workflows files=33 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
@@ -103,11 +106,11 @@ SUITE-arch-EXIT=0
   Files:     33 total, 33 passed, 0 failed, 0 timeouts
   Tests:     316 total, 316 passed, 0 failed
   Category:  PASS=33
-  Elapsed:   1m 25.822s
+  Elapsed:   1m 24.604s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.31 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=85.822 metadata-completeness=explicit:33/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.31 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=84.604 metadata-completeness=explicit:33/heuristic:0/missing:0
 SUITE-workflows-EXIT=0
 --- suite: security
 ;; run-tests: suite=security files=64 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
@@ -120,11 +123,11 @@ SUITE-workflows-EXIT=0
   Files:     64 total, 64 passed, 0 failed, 0 timeouts
   Tests:     745 total, 745 passed, 0 failed
   Category:  PASS=64
-  Elapsed:   1m 0.263s
+  Elapsed:   1m 1.902s
 ═══════════════════════════════════════════════════════════
   VERDICT:   ✅ PASS
 ═══════════════════════════════════════════════════════════
-RUN-SUMMARY runner-version=1.00.31 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=60.263 metadata-completeness=explicit:64/heuristic:0/missing:0
+RUN-SUMMARY runner-version=1.00.31 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=61.902 metadata-completeness=explicit:64/heuristic:0/missing:0
 SUITE-security-EXIT=0
 --- lint-all
   [PASS] hotspot
@@ -146,4 +149,4 @@ artifact-provenance ok (950 note(s))
 docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: OK
 docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: OK
 artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json: OK
-=== W7 FINAL DONE 1935c2c90512206e365e9d66d3a7a4aac98b2e01 2026-09-25T15:32:57Z ===
+=== W7 FINAL DONE e9af72fee9c652b16a017d37219d15e7eb5f9f0b 2026-09-25T17:04:37Z ===
