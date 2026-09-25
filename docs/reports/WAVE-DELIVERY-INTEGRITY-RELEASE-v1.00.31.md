@@ -55,6 +55,39 @@ The fingerprint needs a hosted latency sample on the exact activation head, whic
 is a coordinator-owned measurement; it is recorded as outstanding rather than
 estimated or back-filled.
 
+### A correction to the W4 local capture, and how it was found
+
+The W4 repair retained a local `verify-chain.txt` capture, and the W4 review
+narrative cites its numbers. When the W7 bake ran its own verification chain, the
+`RUN-SUMMARY` line reported `runner-version=1.00.29` on a tree at 1.00.31 — and the
+cause was that `resolve-base-dir` in `scripts/run-tests/classify-metadata.rkt` tried
+the `q`-shaped candidates *before* the directory it was handed. Every worktree here
+sits next to a `q/` clone, so the runner silently collected and executed **the clone's**
+tests and printed a summary for a checkout nobody asked about.
+
+Two things follow, and both are recorded rather than smoothed over:
+
+- **The W4 capture's four runner-suite sections** (arch, security, workflows, fast)
+  described that neighbouring clone, not the repaired W4 tree. The suite passed
+  there, so the capture was not wrong in its verdict — it was simply not a
+  measurement of the wave it was filed under. The focused `raco test`,
+  `check-deps`, metrics and provenance sections did run against the W4 worktree
+  (their outputs carry its absolute paths). W4's authoritative gates are untouched:
+  PR #9752's 22/22 required checks ran on the branch in CI, main run 36087264560
+  concluded success, and governance/`status delivered` followed from those.
+- **The W4 content is green when measured properly.** Re-measured on 2026-09-25
+  against implementation head `1158f1b70…` in a worktree with no `q/` sibling:
+  focused 185 tests, arch 32/32, security 64/64, workflows 33/33, fast 1208/1208
+  (17987 tests), deps/metrics/provenance all exit 0, and all six bound W4 artifact
+  checksums verify. Retained at
+  `artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt`.
+
+The root cause is fixed in this bake — the launch tree now wins over any `q`-shaped
+sibling, with four regression tests — and the first chain that actually measured its
+own tree is what surfaced it, along with **12 test files that every previous
+misdirected run had been hiding**. That is the whole argument for measuring the tree
+you think you are measuring.
+
 ## 2. Release bake of v1.00.31
 
 v1.00.30 never shipped a tag: its W4 wave was blocked, so v1.00.31 is the next

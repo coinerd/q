@@ -57,7 +57,8 @@
  "raw": [
   "raw/preflight-locally-runnable.txt",
   "raw/red-first-version-expectations.txt",
-  "raw/version-derivation-tests.log"
+  "raw/version-derivation-tests.log",
+  "raw/w4-remeasure-2026-09-25.txt"
  ],
  "schema": "wave-release-preflight/1",
  "supporting-verification": {
@@ -65,7 +66,8 @@
   "check-deps": "All external packages declared in info.rkt. OK",
   "focused-release-tests": "109 tests passed (test-version, test-lint-release-readiness, test-lint-release-notes, test-release-workflow-contract)",
   "lint-all": "23 passed, 0 failed, 2 non-blocking warnings (arch; release-readiness is the branch-gated gate above)",
-  "version-expectations": "PASS \u2014 1510 test files scanned, 0 hard-coded 1.00.31 literals. Red-first capture retained: raw/red-first-version-expectations.txt (the same lint at the version-bumped, pre-derivation tree exits 1 with 56 literals)."
+  "version-expectations": "PASS \u2014 1510 test files scanned, 0 hard-coded 1.00.31 literals. Red-first capture retained: raw/red-first-version-expectations.txt (the same lint at the version-bumped, pre-derivation tree exits 1 with 56 literals).",
+  "w4-remeasure": "The v1.00.30 W4 implementation head re-measured on 2026-09-25 in a q/-sibling-free worktree: focused 185 tests, arch 32/32, security 64/64, workflows 33/33, fast 1208/1208, deps/metrics/provenance exit 0, all six W4 checksums OK (raw/w4-remeasure-2026-09-25.txt). This supersedes the runner-suite sections of the W4-retained capture, which had been produced against a neighbouring checkout."
  },
  "verdict": "PASS-WITH-DEFERRED-GATE",
  "version": "1.00.31",

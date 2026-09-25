@@ -34,7 +34,18 @@
    "operator": "coinerd"
   }
  },
+ "local-chain-correction": {
+  "capture": "raw/w4-remeasure-2026-09-25.txt",
+  "classification": "evidence-provenance-defect in a supporting local capture, corrected here",
+  "correction": "Re-measured on 2026-09-25 against the W4 implementation head 1158f1b7023b08c9608f59c8cd4c0c04915d5de6 in a worktree with no q/ sibling, so the resolver lands on the intended tree: focused 185 tests, arch 32/32, security 64/64, workflows 33/33, fast 1208/1208 (17987 tests), check-deps, metrics lint and the provenance lint all exit 0, and sha256sum -c verifies all six bound W4 artifact files. The wave's content is green when measured properly; the retained capture is superseded for its runner-suite sections by this re-measurement.",
+  "root-cause-fix": "Fixed in the v1.00.31 W7 bake: the launch tree now wins over any q/-shaped sibling, with four regression tests in tests/test-runner-base-dir-resolution.rkt. The defect was invisible until a suite finally ran against the tree it was launched in \u2014 the W7 bake's own first chain run surfaced 12 failing files that every previous misdirected run had hidden.",
+  "what-happened": "The verify-chain capture retained with the W4 repair was produced by the test runner with scripts/run-tests/classify-metadata.rkt resolve-base-dir preferring the neighbouring q/ clone over the worktree the runner was launched in (the candidate list tried <orig>/q and <parent-of-orig>/q before the launch tree). All four runner-suite sections of that capture (arch, security, workflows, fast) therefore describe a different checkout, not the repaired W4 tree. The suite happened to pass there, so the capture was not wrong in its verdict \u2014 it was not a measurement of the wave it was filed under.",
+  "what-is-unaffected": "The wave's authoritative delivery evidence: implementation PR #9752's 22/22 required checks ran on the branch in CI, which checks the branch out itself; main run 36087264560 concluded success; the merge-SHA binding, the governance gate and status delivered are unaffected. The W4 focused raco test, check-deps, metrics lint and the provenance lint in the original capture did run against the W4 worktree \u2014 their outputs carry its absolute paths \u2014 so only the four runner-suite sections needed re-measurement."
+ },
  "outcome": "DELIVERED",
+ "raw": [
+  "raw/w4-remeasure-2026-09-25.txt"
+ ],
  "repair": {
   "base": "fc1a6fa36206accff81abb0b9be07a5be72bc9d2",
   "content-digest": "cc357910188fae92cc8b1f0b04cbd3485e367c363c12f007ee5634930db5cea3",
