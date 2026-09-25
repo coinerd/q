@@ -17,9 +17,9 @@ results:
   version-expectation lint       1511 test files, 0 hard-coded 1.00.31 literals
   check-deps / metrics / notes   all clean
   artifact provenance            w6 ok (951 notes), w7 ok (950 notes)
-  artifact checksums             see raw/checksums-final.txt — the excerpt below shows one
-                                  representative line per manifest, which is why this chain
-                                  cannot by itself substantiate the 'all OK' claim
+  artifact checksums             16/16 entries OK across w6, w7 and tier-ownership, from the repo
+                                  root; the full unfiltered per-manifest output is in the
+                                  checksum section at the end of this log
 
 Every RUN-SUMMARY line reports runner-version=1.00.31 and the resolver's base-dir is this
 worktree, which is the property the base-dir fix restores.
@@ -159,11 +159,13 @@ requires every file under the wave artifact directory to be bound by SHA256SUMS,
 an unbound sidecar would be a drift finding in itself. Review round 3 finding F4 was
 that the excerpt above shows one line per manifest while claiming all of them verify.
 
-One self-reference is unavoidable and is stated rather than hidden: the W7 manifest's
-entry for this log records the hash of the log including the section below, so the
-log cannot also contain the verification of its own entry. The manifest is bound in
-the same commit and re-verifying it is one `sha256sum -c` from the repository root.
-Every other entry in all three manifests is verified in full below.
+On the self-reference: this section is written first, then SHA256SUMS is bound over the
+finalized log, and the verification is then re-run — so the `verify-chain.txt: OK` line
+below is true of the committed bytes rather than of a superseded state. Review round 4
+challenged this caveat because it claimed the log could not contain the verification of
+its own entry while the output contains exactly that line; the challenge was right about
+the wording and the run confirms the line. The authoritative check is still one
+`sha256sum -c` from the repository root, which returns 16/16 OK at this commit.
 --- artifacts/wave-delivery-integrity/v1.00.31-w6/SHA256SUMS (6 entries)
 artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: OK
 artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py: OK

@@ -112,14 +112,13 @@ silently pinning a stale literal), frozen prior-release artifacts stay literal
 with the reason recorded in a comment, and comment-only mentions are reworded.
 The `define-runtime-path` forms keep their literal runtime-path anchor and compute
 only the version segment. The lint now reports
-`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and all 19 files
-the sweep touched — plus the W6 rehearsal test and the two new runner tests — run
-green at the final head with 0 failures and 0 errors
-(`raw/version-derivation-tests.log`, a final-head re-run that supersedes the
-mid-repair capture of the same name; that superseded capture recorded a red
-`test-wave-integrity-adversarial.rkt` while the W6 matrix was still pinned to the
-pre-regeneration identity, which is the state review round 3 read as contradicting
-this claim).
+`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and a 19-file
+sweep re-run green at the final head with 0 failures and 0 errors
+(`raw/version-derivation-tests.log`) — the 13 files the derivation sweep touched,
+plus `test-wave-integrity-adversarial.rkt` (the W6 rehearsal test, which the
+mid-repair capture caught red), `test-runner-base-dir-resolution.rkt` (this
+wave's new base-dir regression file, 4 cases), and four runner/workflow-contract
+files re-confirmed alongside them.
 
 ### Release preflight
 
@@ -149,12 +148,14 @@ drift finding in itself.
 
 That section exists because the first chain excerpt showed one representative
 line per manifest while its summary claimed all of them verified, so the evidence
-did not substantiate the claim. One self-reference is unavoidable and is stated
-rather than hidden: the W7 manifest's entry for the chain log records the hash of
-that log *including* the checksum section, so the log cannot also contain the
-verification of its own entry. The manifest is bound in the same commit and
-re-verifying it is one `sha256sum -c` from the repository root. Every other entry
-in all three manifests is verified in full in the retained output.
+did not substantiate the claim. On the self-reference, the section is written
+first, `SHA256SUMS` is bound over the finalized log, and the verification is
+re-run — so the `verify-chain.txt: OK` line in the retained output is true of the
+committed bytes rather than of a superseded state. Review round 4 challenged the
+earlier wording of that caveat, which claimed the log could not contain the
+verification of its own entry while the output contains exactly that line; the
+challenge was upheld and the wording corrected. The authoritative check is still
+one `sha256sum -c` from the repository root, which returns 16/16 OK.
 
 It is therefore run, in this order, after this wave is merged and main CI is
 green:

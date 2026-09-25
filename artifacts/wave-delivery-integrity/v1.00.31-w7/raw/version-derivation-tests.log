@@ -1,17 +1,28 @@
-=== W7 version-derivation affected tests — FINAL-HEAD RE-RUN (2026-09-25T21:53:56Z) ===
-head: 4946645c3429266a947cbdd4767968c3c8a09635
-tree:  tracked modifications at run time: 1
+=== W7 version-derivation affected tests — FINAL RE-RUN (2026-09-25T22:38:01Z) ===
+head: 0ca034f18f7aea79aaa0175515994f938c2206ba
+tracked modifications present at run time: 1
 
 Supersedes the 2026-09-25T05:11:28Z capture, which was taken mid-repair: its
 test-wave-integrity-adversarial.rkt section is a red state (1/8 failures) recorded
 while the W6 rehearsal matrix was still pinned to the superseded identity
 (fc1a6fa36 / a1b99fe2) before the matrix was regenerated to 50bdf7334 / fb224a6f.
-That intermediate capture is what review round 3 correctly read as contradicting
-the preflight's '0 failures' claim; this file is the claim's actual evidence.
+Review round 3 read that superseded red state as contradicting release-preflight.json's
+'0 failures' claim, correctly. This file is that claim's actual evidence.
+
+It also supersedes the 2026-09-25T21:53Z re-run of the same 19 files, whose content
+was correct but whose footer was not: the detector matched rackunit's green
+`0 failure(s)` summary line and so reported 11 of 19 files failing when all 19 were
+green. Review round 4 found it. The detector now requires a non-zero failure or error
+count, and the footer below agrees with the per-file counts above it.
+
+Note the tracked-modification count above: it is non-zero because this capture is
+being rewritten during the very commit that binds it, and because round 4's F2/F3/F4
+prose fixes are uncommitted at run time. No test file is among them, so the 19 results
+describe the merge candidate's code.
 
 --- raco test tests/test-arch-parameters.rkt
 raco test: "tests/test-arch-parameters.rkt"
-INFO: parameter inventory distribution: ((OTHER_REVIEWED . 15) (TURN_LOCAL . 12) (ITERATION_LOCAL . 2) (PROMPT_LOCAL . 1) (CONFIGURATION . 138) (SERVICE_HANDLE . 68))
+INFO: parameter inventory distribution: ((ITERATION_LOCAL . 2) (OTHER_REVIEWED . 15) (SERVICE_HANDLE . 68) (CONFIGURATION . 138) (PROMPT_LOCAL . 1) (TURN_LOCAL . 12))
 4 success(es) 0 failure(s) 0 error(s) 4 test(s) run
 0
 6 success(es) 0 failure(s) 0 error(s) 6 test(s) run
@@ -132,5 +143,5 @@ raco test: "tests/test-workflow-purge-contract.rkt"
 15 tests passed
 EXIT=0
 
-=== files with a reported failure: 11 of 19 ===
-=== DONE 2026-09-25T21:53:56Z ===
+=== files with a reported failure: 0 of 19 ===
+=== DONE 2026-09-25T22:38:01Z ===
