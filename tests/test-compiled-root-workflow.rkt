@@ -678,9 +678,21 @@
 ;; is off, so the shard step must create it before launching: the launcher
 ;; opens the telemetry file for writing and fails closed on a missing
 ;; directory (v1.00.31 W7 repair, found by the PR's own CI on the off lane).
-(define launch-arg-at (index-of ci-text "ci/prepared-environment/compiled-root.rkt launch"))
-(define map-mkdir-at (index-of ci-text "mkdir -p \"$RUNNER_TEMP/compiled-root-map\""))
-(check-true (and launch-arg-at map-mkdir-at (< map-mkdir-at launch-arg-at))
+;; The mkdir is anchored INSIDE the shard step's run block: the resolution
+;; step has an earlier, identically-worded mkdir that is skipped on the off
+;; lane, so a whole-file search would pass even with the fix removed.
+(define (index-of-from haystack needle from)
+  (let loop ([at from])
+    (cond
+      [(> (+ at (string-length needle)) (string-length haystack)) #f]
+      [(string=? (substring haystack at (+ at (string-length needle))) needle) at]
+      [else (loop (add1 at))])))
+(define shard-step-at (index-of ci-text "Run test shard"))
+(define launch-arg-at
+  (index-of-from ci-text "ci/prepared-environment/compiled-root.rkt launch" (or shard-step-at 0)))
+(define map-mkdir-at
+  (index-of-from ci-text "mkdir -p \"$RUNNER_TEMP/compiled-root-map\"" (or shard-step-at 0)))
+(check-true (and shard-step-at launch-arg-at map-mkdir-at (< map-mkdir-at launch-arg-at))
             "the shard step creates the compiled-root map dir before the launcher runs")
 
 ;; The producer job publishes the producer cost the shard record consumes.
