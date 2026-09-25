@@ -1,0 +1,72 @@
+{
+ "branch": "campaign/v1.00.31-w7",
+ "commit": "fcfa9ab3b8887181a9f04655bf1e87d6b60e0159",
+ "deferred": [
+  {
+   "command": "racket scripts/lint-release-readiness.rkt --strict --context pre-tag (and --context tag-publish after the tag is created locally)",
+   "name": "readiness",
+   "reason": "The gate is branch-gated by design and refuses to run on a campaign branch: check-main-branch accepts only branch 'main' or a detached HEAD in tag-publish context, and the .gate-evidence/ records it consumes (fast, tui, arch, workflows) must name the release commit SHA and the release version. This wave's own Verify block runs the bake on a feature branch, so this gate cannot pass before the merge without faking either the branch or the evidence.",
+   "recorded-in": ".planning/STATE.md and .planning/HANDOFF.json (the post-merge release step); the in-repo evidence for this wave is this artifact plus docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md",
+   "run-when": "After this wave is merged and main CI is green: check out clean main at the release SHA, run the fast, tui, arch and workflows suites with --record-gate-evidence, then run the readiness gate in pre-tag context, then create the annotated v1.00.31 tag locally and run the full CI-strict preflight in tag-publish context. The tag is pushed only if all seven gates pass.",
+   "status": "deferred-by-design"
+  }
+ ],
+ "gates": [
+  {
+   "command": "racket scripts/lint-release-notes.rkt --version 1.00.31 --check",
+   "detail": "release notes template valid for v1.00.31",
+   "name": "release-notes",
+   "status": "pass"
+  },
+  {
+   "command": "raco fmt canonicality over .rkt files changed since the last release tag (v1.00.29)",
+   "detail": "84 changed .rkt files checked, all canonical",
+   "name": "fmt-canonical",
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/metrics.rkt --lint",
+   "detail": "README metrics pins match computed values",
+   "name": "metrics",
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/sync-readme-status.rkt --check",
+   "detail": "README status block in sync with CHANGELOG",
+   "name": "readme-status",
+   "status": "pass"
+  },
+  {
+   "command": "plain-tar tarball symlink audit (replicating release-core.yml)",
+   "detail": "plain-tar replication is symlink-free and extracts cleanly",
+   "name": "tarball-symlinks",
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/release-dry-run.rkt --version 1.00.31",
+   "detail": "bundle semantics OK for v1.00.31 (manifest, notes, tarball command)",
+   "name": "bundle-dry-run",
+   "status": "pass"
+  }
+ ],
+ "generated-at": "2026-09-25T06:18:38Z",
+ "issue": 9730,
+ "milestone": 896,
+ "plan": "v1.00.31 GSD Wave Delivery Integrity",
+ "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
+ "raw": [
+  "raw/preflight-locally-runnable.txt",
+  "raw/version-derivation-tests.log"
+ ],
+ "schema": "wave-release-preflight/1",
+ "supporting-verification": {
+  "affected-tests": "13 files touched by the derivation sweep: 0 failures, 0 errors (raw/version-derivation-tests.log)",
+  "check-deps": "All external packages declared in info.rkt. OK",
+  "focused-release-tests": "109 tests passed (test-version, test-lint-release-readiness, test-lint-release-notes, test-release-workflow-contract)",
+  "lint-all": "23 passed, 0 failed, 2 non-blocking warnings (arch; release-readiness is the branch-gated gate above)",
+  "version-expectations": "PASS \u2014 1510 test files scanned, 0 hard-coded 1.00.31 literals (BUG-0009 sweep over 15 test files)"
+ },
+ "verdict": "PASS-WITH-DEFERRED-GATE",
+ "version": "1.00.31",
+ "wave": "W7"
+}

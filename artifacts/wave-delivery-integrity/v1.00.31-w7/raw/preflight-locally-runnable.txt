@@ -1,0 +1,40 @@
+Release pre-flight — v1.00.31 — /home/user/src/q-agent/wt-v10031-w7
+PREFLIGHT: PASS (6 pass, 0 fail, 1 skip)
+
+[SKIP] readiness
+       skipped by caller
+[PASS] release-notes
+       release notes template valid for v1.00.31
+[PASS] fmt-canonical
+       84 changed .rkt files checked
+[PASS] metrics
+       README metrics pins match computed values
+[PASS] readme-status
+       README status block in sync with CHANGELOG
+[PASS] tarball-symlinks
+       plain-tar replication is symlink-free and extracts cleanly
+[PASS] bundle-dry-run
+       bundle semantics OK for v1.00.31 (manifest, notes, tarball command)
+
+note: skipped gates did not run — treat PASS as conditional on them.
+
+---
+Additional locally-verified evidence at the same commit (fcfa9ab3b8887181a9f04655bf1e87d6b60e0159):
+
+$ racket scripts/check-version-expectations.rkt
+Version-expectation lint PASSED — 1510 test files scanned, 0 hard-coded "1.00.31" literals
+
+$ racket scripts/lint-all.rkt
+── Summary: 23 passed, 2 warnings ──
+(the 2 warnings are the non-blocking arch and release-readiness lints; release-readiness
+ is branch-gated pre-merge and is re-run in its proper context after the merge)
+
+$ raco test tests/test-version.rkt tests/test-lint-release-readiness.rkt \
+      tests/test-lint-release-notes.rkt tests/test-release-workflow-contract.rkt
+109 tests passed (0 failures)
+
+$ racket scripts/check-deps.rkt
+All external packages declared in info.rkt. OK
+
+$ raco test <13 files touched by the BUG-0009 derivation sweep>
+all 13 files: 0 failures, 0 errors (log: artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log)

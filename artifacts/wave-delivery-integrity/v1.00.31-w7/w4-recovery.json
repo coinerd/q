@@ -1,0 +1,81 @@
+{
+ "collateral-defects-found-during-repair": [
+  "The W6 permanence rehearsal matrix recorded a pre-squash W6 branch tip as its rehearsal-head, which becomes unfetchable once that branch is deleted; re-stamped to the published commit fc1a6fa36 with byte-identical inputs.",
+  "Editing that matrix generator invalidated its own recorded input digest; caught by the provenance guard it feeds.",
+  "A multi-line workflow run block whose first line is a shell assignment is classified not-a-script by the W1 invocation contract and then refused because the block names main.rkt (a regression introduced during the repair itself).",
+  "The fast-shard launcher failed closed on the off lane because --telemetry-file pointed into a directory only created by the skipped resolution step; the consuming step now creates it, mutation-proven.",
+  "A mutation test asserted against the skipped step's identical mkdir and was therefore vacuous; it now anchors inside the shard step's own run block."
+ ],
+ "delivery": {
+  "binding-pr": 9753,
+  "binding-publication-diff": "exactly the three gsd-wave-{evidence,reviews,validation} record files; content-digest EMPTY_SHA (e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855) as required for a publication commit",
+  "binding-publication-sha": "5f4a80fcda0c80396ca033184ae085139f02002c",
+  "binding-review-verdict": "APPROVED",
+  "campaign-record": ".planning/campaigns/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8.rktd (W4 status done; W5-W8 remain deferred, which is truthful: they were never delivered)",
+  "governance": {
+   "delivery-status": "delivered",
+   "main-run": 36087264560,
+   "run-note": "The first attempt of this main run failed on a teardown race inside the delivery controller's own disposable test-world fixtures (detached git gc --auto repacking .git/objects during unittest TemporaryDirectory cleanup, reported as a case ERROR although all 129 assertions passed). The root cause was fixed on main in #9754 (50bdf7334a9161e9e930b40be0870c52a498a0b9) and the failed job was re-run, after which the run concluded success and the governance gate accepted it. No check was skipped, weakened or re-implemented to obtain that result.",
+   "status": "governed",
+   "sync": "synchronized"
+  },
+  "implementation-merge-sha": "cc25b3663362d032b9a23a9d22f9dd5edbe637d8",
+  "implementation-pr": 9752,
+  "implementation-required-checks": "22/22 green on the PR",
+  "issue-closure": {
+   "board-status": "Done",
+   "issue": 9690,
+   "order": "after status delivered",
+   "state": "closed",
+   "state-reason": "completed"
+  },
+  "merge-authorization": {
+   "head": "cc25b3663362d032b9a23a9d22f9dd5edbe637d8",
+   "operator": "coinerd"
+  }
+ },
+ "outcome": "DELIVERED",
+ "repair": {
+  "base": "fc1a6fa36206accff81abb0b9be07a5be72bc9d2",
+  "content-digest": "cc357910188fae92cc8b1f0b04cbd3485e367c363c12f007ee5634930db5cea3",
+  "independent-review": {
+   "final-verdict": "APPROVED",
+   "non-blocking-observations": 0,
+   "request-changes-rounds": 11,
+   "review-record": "docs/reports/gsd-wave-reviews/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd",
+   "rounds": 12
+  },
+  "note": "implementation-head is the pre-squash branch tip the review approved; squash merging rewrites history, which is why the published evidence binds the merge SHA in merge-sha and merge-authorization.head rather than claiming the branch tip is an ancestor of main.",
+  "record-commit": "pure",
+  "repaired-by-wave": "W7 of the v1.00.31 GSD Wave Delivery Integrity campaign (issue 9730)",
+  "reviewed-branch-tip": "1158f1b7023b08c9608f59c8cd4c0c04915d5de6",
+  "reviewed-branch-tip-note": "pre-squash tip of campaign/v1.00.30-w4, the exact head the independent review approved and the value bound as implementation-sha in the W4 evidence record. Squash merging rewrote that history, so it is deliberately NOT an ancestor of any main commit and is not a head binding of this wave; the authoritative identity of the delivered wave is the merge SHA below, which is what the publication binds."
+ },
+ "schema": "wave-recovery-outcome/1",
+ "still-outstanding": [
+  {
+   "item": "PR latency regime fingerprint for the guarded compiled-root pilot at the activation merge SHA",
+   "owner": "coordinator",
+   "recorded-here-because": "W4's frozen doc requires the activation merge SHA and regime fingerprint to be recorded for the W5 cohort start. The merge SHA is now known and recorded; the fingerprint requires a hosted latency sample on the exact activation head, which is a coordinator-owned measurement and is not derivable from this repair. It is recorded as outstanding rather than estimated or back-filled.",
+   "status": "outstanding"
+  }
+ ],
+ "verdict": "A7 satisfied: the blocked v1.00.30 W4 wave is DELIVERED through the hardened ladder with a real merge-SHA binding and a successful governance run. It was not silently dropped and was not marked complete without its delivery proof.",
+ "wave-under-repair": {
+  "block-report": ".planning/campaigns/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8/BLOCKED-w4.md",
+  "branch": "campaign/v1.00.30-w4",
+  "campaign": "v1.00.30 PR/CI recovery",
+  "frozen-wave-doc": ".planning/campaigns/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8/plan-snapshot/waves/W4-guarded-compiled-root-activation.md",
+  "issue": 9690,
+  "milestone": 895,
+  "plan-id": "96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8",
+  "title": "Guarded compiled root activation",
+  "wave": "W4"
+ },
+ "why-it-was-blocked": {
+  "note": "Counts and wording are taken verbatim from the block report; the launch itself was additionally on HOLD because the predecessor main run 34749378379 failed gsd-governance ('evidence is not a hash' in the W11 binding) and live protection omitted the policy-required lint-quality check. No delivery, merge, binding publication or journal advance was performed while blocked: delivery-w4.rktd stayed delivery-pending.",
+  "numbered-required-repairs": 6,
+  "primary": "The action declared a producer invocation of scripts/ci/compiled-root.rkt that could not execute as written: the CLI required --checkout/--module/--final-dir while the action passed a whole-checkout form, so no trusted root was ever published. The text-only contract test matched the declared string and the rollback drill drove the CLI with the correct flags, so both '109/109 focused' and '1202/1202 fast' went green on a broken call.",
+  "secondary-findings": 7
+ }
+}
