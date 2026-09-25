@@ -1,6 +1,7 @@
 release_preflight (CI-strict, tag-publish gate set) — v1.00.31
-tree: /home/user/src/q-agent/wt-v10031-w7  branch: campaign/v1.00.31-w7  commit: 58d302dbb2baf41a81007faedb95082ae2cdab50
-run: 2026-09-25T14:28:42Z
+tree: /home/user/src/q-agent/wt-v10031-w7  branch: campaign/v1.00.31-w7
+commit: b0f19d6bd (clean tree at run time)
+run: 2026-09-25T17:57:01Z
 
 PREFLIGHT: FAIL (6 pass, 1 fail, 0 skip)
 
@@ -30,3 +31,7 @@ HEAD, and the .gate-evidence/ records it consumes must name the release commit a
 release version. Running it here would require faking the branch or the evidence. It runs
 on clean main after the merge, before the tag, with all seven gates required to pass
 before the annotated v1.00.31 tag is pushed.
+
+head-coherence note: this capture names b0f19d6bd, the tree it ran against. The commit that
+carries it changes only this file and release-preflight.json; no test reads either, so the
+gate results above describe the merge candidate unchanged.

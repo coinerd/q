@@ -1,6 +1,6 @@
 {
  "branch": "campaign/v1.00.31-w7",
- "commit": "58d302dbb",
+ "commit": "b0f19d6bd",
  "deferred": [
   {
    "command": "racket scripts/lint-release-readiness.rkt --strict --context pre-tag (and --context tag-publish after the tag is created locally)",
@@ -49,7 +49,7 @@
    "status": "pass"
   }
  ],
- "generated-at": "2026-09-25T14:28:42Z",
+ "generated-at": "2026-09-25T17:57:01Z",
  "issue": 9730,
  "milestone": 896,
  "plan": "v1.00.31 GSD Wave Delivery Integrity",
