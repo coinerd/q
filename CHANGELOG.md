@@ -56,6 +56,23 @@ for this release.
 
 ### Wave-delivery integrity: PERMANENT over the frozen 13-row register; v1.00.30 W4 DELIVERED
 
+### Fixes
+- Test-runner base-dir resolution: a runner launched in any worktree of this
+  monorepo silently resolved `base-dir` to the neighbouring `q/` clone instead
+  of its own tree, so a local suite run collected and executed a different
+  checkout and printed a RUN-SUMMARY naming that tree's version. The launch
+  tree now wins; the `q`-shaped candidates remain only as a monorepo fallback
+  (`scripts/run-tests/classify-metadata.rkt`,
+  `tests/test-runner-base-dir-resolution.rkt`).
+- Version-coincidence defects surfaced by that fix, in both directions. A
+  sweep pinned eight tests that derived FROZEN v1.00.29-campaign artifact paths
+  from the live version; two further files, unchanged from main, had the mirror
+  defect — a derived path/field that is really a frozen authoring identity (the
+  shard-plan report's `wave`, which the committed example artifact pairs with
+  its own `spec_reference`, and the v1.00.29 final-cohort directory, a frozen
+  >=20-unique-head-SHA measurement this release did not reproduce). Both classes
+  are correct on main only while the canonical version happens to be 1.00.29.
+
 ### Features
 - Wave-delivery integrity register with a 13-row failure-mode freeze and a
   red-first reproduction of the blocked v1.00.30 W4 wave
