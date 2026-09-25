@@ -16,7 +16,6 @@
 
 (require racket/runtime-path
          json
-         (only-in "../util/version.rkt" q-version)
          (only-in "../scripts/run-tests/shard-plan.rkt"
                   build-shard-plan
                   build-shard-plan/safe
@@ -321,7 +320,18 @@
                                 #:duration-source "fixture"
                                 #:seed-path (path->string seed-fixture-path)))
       (check-equal? (hash-ref report 'schema) "shard-plan-regeneration/1")
-      (check-equal? (hash-ref report 'wave) (format "v~a-w10" q-version))
+      ;; `wave` and the `spec_reference` beside it are FROZEN AUTHORING IDs:
+      ;; they name the wave and the PLAN document that specified this report
+      ;; schema. The committed example artifact
+      ;; artifacts/ci-baseline/v1.00.29-final/shard-plan-regeneration.json
+      ;; carries exactly these two values together, which is what settles their
+      ;; meaning. Deriving `wave` from q-version is wrong for that reason: a live
+      ;; report regenerated in a later release would claim to belong to a wave
+      ;; that did not author it, contradicting its own spec_reference and the
+      ;; frozen example. This assertion held before this release's bake only
+      ;; because q-version happened to be 1.00.29. Pinned literally, reason
+      ;; recorded.
+      (check-equal? (hash-ref report 'wave) "v1.00.29-w10")
       (check-true (hash? (hash-ref report 'plan)))
       (check-true (hash? (hash-ref (hash-ref report 'checks) 'starvation)))
       (check-true (hash? (hash-ref (hash-ref report 'checks) 'tail_straddle)))
