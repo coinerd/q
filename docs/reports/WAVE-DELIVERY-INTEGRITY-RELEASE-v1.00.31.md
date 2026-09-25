@@ -112,14 +112,14 @@ silently pinning a stale literal), frozen prior-release artifacts stay literal
 with the reason recorded in a comment, and comment-only mentions are reworded.
 The `define-runtime-path` forms keep their literal runtime-path anchor and compute
 only the version segment. The lint now reports
-`1510 test files scanned, 0 hard-coded "1.00.31" literals`, and all 13 affected
+`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and all 13 affected
 test files pass (`raw/version-derivation-tests.log`).
 
 ### Release preflight
 
 Six of the seven CI-strict tag-publish gates run on the clean bake commit
-`fcfa9ab3b8887181a9f04655bf1e87d6b60e0159` and pass: release-notes,
-fmt-canonicality (84 changed `.rkt` files since the last tag), metrics lint,
+`58d302dbb` and pass: release-notes,
+fmt-canonicality (93 changed `.rkt` files since the last tag), metrics lint,
 README status sync, the plain-tar symlink audit and the bundle dry-run
 (`artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json`,
 `raw/preflight-locally-runnable.txt`).
