@@ -1,0 +1,59 @@
+=== W7 DEFINITIVE verify at 4e23f1f8c7c88512999a74aa6cd144c1ac75fffa (2026-09-25T12:40:21Z) ===
+resolver base-dir=/home/user/src/q-agent/wt-v10031-w7/
+--- full suite (all)
+;; run-tests: suite=all files=1409 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: profile=local skipped 1 file by @requires metadata
+;; run-tests: serializing 23 mutation-sensitive files before parallel batches
+.......................
+.......................................................................................................................F................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................SSSSSSS..........................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1409 total, 1400 passed, 1 failed, 0 timeouts
+             Skipped by profile: 8
+  Tests:     20549 total, 20548 passed, 1 failed
+  Category:  PASS=1400, SKIPPED_BY_PROFILE=8, ASSERTION_FAILURE=1
+  Elapsed:   30m 1.212s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ❌ FAIL
+═══════════════════════════════════════════════════════════
+
+FAILURES:
+  ✗ tests/test-browser-playwright-sidecar.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 1 failed, 1.628s)
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1409 pass=1400 fail=1 timeout=0 skip=8 wall-clock-seconds=1801.212 metadata-completeness=explicit:1380/heuristic:0/missing:29
+FULL-EXIT=1
+--- lint-all
+  [PASS] hotspot
+
+── Summary: 23 passed, 2 warnings ──
+LINT-EXIT=0
+--- version-expectations
+Version-expectation lint PASSED — 1511 test files scanned, 0 hard-coded "1.00.31" literals
+--- deps
+All external packages declared in info.rkt. OK
+--- metrics
+All 5 static metrics match README.md.
+--- provenance w6/w7
+artifact-provenance ok (951 note(s))
+artifact-provenance ok (950 note(s))
+--- artifact sums
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-harness.txt: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-register-f12-f13.txt: Datei oder Verzeichnis nicht gefunden
+sha256sum: docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: Datei oder Verzeichnis nicht gefunden
+sha256sum: WARNUNG: 6 aufgeführte Dateien konnten nicht gelesen werden
+docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: FEHLSCHLAG öffnen oder lesen
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json: Datei oder Verzeichnis nicht gefunden
+sha256sum: artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json: Datei oder Verzeichnis nicht gefunden
+sha256sum: docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: Datei oder Verzeichnis nicht gefunden
+sha256sum: WARNUNG: 7 aufgeführte Dateien konnten nicht gelesen werden
+docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: FEHLSCHLAG öffnen oder lesen
+=== DEFINITIVE DONE 2026-09-25T13:17:11Z ===

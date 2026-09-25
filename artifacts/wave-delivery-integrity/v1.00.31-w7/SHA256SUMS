@@ -1,7 +1,8 @@
 43a707b38298a8ebf912c29c2433ee9cfe693c2e2c09b42d0171aee758c15bef  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt
 009289726b99cc902277df0d031d1e8f7531571bf0785b102c19934651c39a1a  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt
+357b8173f8da1c358c5d00b092f214f8c01bd952460e9362179b898cc1e2c954  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt
 da403d4017490c9dc8389338f1a1ee4c92af185a5e688e0c87a68949161ee560  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log
 ad8e27ef5de236c94f12af88d201707b57cb56e51f667fb916e37c41a605b1c2  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt
-562680c8a4574422aec683e2323ee59999b091542b1ba416085b2c437557343f  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
+ca75753d34d6c4e4f7e1c91ea2f28e4761c8179e930bb62e8997998ab440ba74  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
 0588c52cb0eac5f56b6df6eb962e4af41db3aa7b69e4c994039ceb906cea7a46  artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json
 ffcd32286d94241426800f01176496326fa800b227d6dec22203afee2d145d52  docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md
