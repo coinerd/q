@@ -44,6 +44,15 @@ def init_repo(path):
     sh('git', 'init', '-b', 'main', path)
     sh('git', 'config', 'user.email', 'fixture@example.com', cwd=path)
     sh('git', 'config', 'user.name', 'fixture', cwd=path)
+    # v1.00.31 W7: `git gc --auto` can run DETACHED after a commit/push, so it
+    # may still be repacking .git/objects while TemporaryDirectory cleanup
+    # walks the tree. That surfaced in the cross-version CI job as
+    # OSError: [Errno 39] directory not empty: 'objects' raised from the
+    # TemporaryDirectory finalizer, which unittest reports as an ERROR even
+    # though every assertion in the case passed. The fixture is disposable, so
+    # auto-gc buys nothing here: disabling it removes the race at its source
+    # instead of swallowing cleanup errors.
+    sh('git', 'config', 'gc.auto', '0', cwd=path)
     return path
 
 
@@ -236,6 +245,8 @@ def build_world(base, *, publish=True, plan='a' * 64, wave=1, pr=42, q_named=Fal
     base = Path(base)
     origin_path = base / 'origin.git'
     sh('git', 'init', '--bare', '-b', 'main', origin_path)
+    # See init_repo: no detached auto-gc racing TemporaryDirectory cleanup.
+    sh('git', 'config', 'gc.auto', '0', cwd=origin_path)
     work = init_repo(base / 'work')
     write_file(work / 'scripts/required-pr-checks.policy',
                '("' + '" "'.join(POLICY_NAMES) + '")')
