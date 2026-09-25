@@ -1,147 +1,189 @@
-=== W7 version-derivation affected tests — FINAL RE-RUN (2026-09-25T22:38:01Z) ===
-head: 0ca034f18f7aea79aaa0175515994f938c2206ba
+=== W7 version-derivation affected tests — FINAL RE-RUN (2026-09-25T23:18:18Z) ===
+head: 18c69e04b309718fd5ca025596d45dab9e5e6aad
 tracked modifications present at run time: 1
+instrument: racket scripts/run-tests.rkt <file>  (the project's own runner)
+note: each file's section carries the runner's own Tests:/Files: lines and its exit code, so a
+      vacuous green is detectable here rather than assumed absent.
 
-Supersedes the 2026-09-25T05:11:28Z capture, which was taken mid-repair: its
-test-wave-integrity-adversarial.rkt section is a red state (1/8 failures) recorded
-while the W6 rehearsal matrix was still pinned to the superseded identity
-(fc1a6fa36 / a1b99fe2) before the matrix was regenerated to 50bdf7334 / fb224a6f.
-Review round 3 read that superseded red state as contradicting release-preflight.json's
-'0 failures' claim, correctly. This file is that claim's actual evidence.
+Instrument history, because the earlier captures of this file were wrong twice over.
 
-It also supersedes the 2026-09-25T21:53Z re-run of the same 19 files, whose content
-was correct but whose footer was not: the detector matched rackunit's green
-`0 failure(s)` summary line and so reported 11 of 19 files failing when all 19 were
-green. Review round 4 found it. The detector now requires a non-zero failure or error
-count, and the footer below agrees with the per-file counts above it.
+1) The 05:11Z capture was taken mid-repair and records
+   test-wave-integrity-adversarial.rkt red (1/8) while the W6 rehearsal matrix was still
+   pinned to the superseded identity (fc1a6fa36 / a1b99fe2) before regeneration to
+   50bdf7334 / fb224a6f. Review round 3 read that as contradicting release-preflight.json's
+   0-failures claim, correctly.
 
-Note the tracked-modification count above: it is non-zero because this capture is
-being rewritten during the very commit that binds it, and because round 4's F2/F3/F4
-prose fixes are uncommitted at run time. No test file is among them, so the 19 results
+2) The 21:53Z and 22:38Z re-runs used bare 'raco test'. That is the wrong instrument here:
+   it exits 0 even when a case fails, AND for a file whose entry point is 'module+ main'
+   rather than 'module+ test' it executes NOTHING and still exits 0. Two of the 19 files are
+   shaped that way - test-deterministic-clock.rkt and
+   test-wave-delivery-integrity-register.rkt - so for those the green was vacuous: a pass that
+   ran zero tests. The 21:53Z run also miscounted its own footer, matching rackunit's green
+   '0 failure(s)' line as a failure and reporting 11 of 19. Review rounds 3 and 4 found both.
+
+3) This run uses the project's own runner per file, which is the instrument whose exit code
+   scripts/run-tests/reporting.rkt actually gates on (failed-result? is purely 'exit code
+   neither 0 nor 2'). The per-file PASS/FAIL lines below come from that runner, and the
+   footer counts those lines rather than grepping test output - the same lesson applied to
+   the detector that was itself wrong twice.
+
+The tracked-modification count is non-zero because this capture is being rewritten during
+the commit that binds it. No test file is among the uncommitted changes, so these results
 describe the merge candidate's code.
 
---- raco test tests/test-arch-parameters.rkt
-raco test: "tests/test-arch-parameters.rkt"
-INFO: parameter inventory distribution: ((ITERATION_LOCAL . 2) (OTHER_REVIEWED . 15) (SERVICE_HANDLE . 68) (CONFIGURATION . 138) (PROMPT_LOCAL . 1) (TURN_LOCAL . 12))
-4 success(es) 0 failure(s) 0 error(s) 4 test(s) run
-0
-6 success(es) 0 failure(s) 0 error(s) 6 test(s) run
-0
-1 success(es) 0 failure(s) 0 error(s) 1 test(s) run
-0
-11 tests passed
-EXIT=0
+--- tests/test-arch-parameters.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     11 total, 11 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=1.222 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 11
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-artifact-provenance.rkt
-raco test: "tests/test-artifact-provenance.rkt"
-/home/user/src/q-agent/wt-v10031-w7/artifacts/wave-delivery-integrity/v1.00.31-w5/provenance-matrix.json
-/home/user/src/q-agent/wt-v10031-w7/artifacts/wave-delivery-integrity/v1.00.31-w5/provenance-matrix.json
-skipped: the W5 pinned observation head 454436d1d866edf8840bade4bce2a288105cb476 is not an ancestor of this checkout's HEAD (expected on post-squash main; the strict rule is exercised on the wave branch and by the fixture suite)
-26 success(es) 0 failure(s) 0 error(s) 26 test(s) run
-26 tests passed
-EXIT=0
+--- tests/test-artifact-provenance.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     26 total, 26 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=54.616 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 26
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-delivery-failure-classification.rkt
-raco test: (submod "tests/test-delivery-failure-classification.rkt" test)
-7 tests passed
-EXIT=0
+--- tests/test-delivery-failure-classification.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     7 total, 7 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=3.462 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 7
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-deterministic-clock.rkt
-raco test: "tests/test-deterministic-clock.rkt"
-EXIT=0
+--- tests/test-deterministic-clock.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     10 total, 10 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.868 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 10
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-flake-forensics.rkt
-raco test: "tests/test-flake-forensics.rkt"
-12 success(es) 0 failure(s) 0 error(s) 12 test(s) run
-12 tests passed
-EXIT=0
+--- tests/test-flake-forensics.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     12 total, 12 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.595 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 12
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-gsd-campaign-repository.rkt
-raco test: "tests/test-gsd-campaign-repository.rkt"
-34 success(es) 0 failure(s) 0 error(s) 34 test(s) run
-34 tests passed
-EXIT=0
+--- tests/test-gsd-campaign-repository.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     34 total, 34 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.769 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 34
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-gsd-campaign-state.rkt
-raco test: "tests/test-gsd-campaign-state.rkt"
-29 success(es) 0 failure(s) 0 error(s) 29 test(s) run
-29 tests passed
-EXIT=0
+--- tests/test-gsd-campaign-state.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     29 total, 29 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.986 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 29
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-gsd-delivery-coordinator.rkt
-raco test: (submod "tests/test-gsd-delivery-coordinator.rkt" test)
-20 tests passed
-EXIT=0
+--- tests/test-gsd-delivery-coordinator.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     20 total, 20 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=11.868 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 20
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-gsd-plan-snapshot.rkt
-raco test: "tests/test-gsd-plan-snapshot.rkt"
-17 success(es) 0 failure(s) 0 error(s) 17 test(s) run
-17 tests passed
-EXIT=0
+--- tests/test-gsd-plan-snapshot.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     17 total, 17 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.608 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 17
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-gsd-wave-completion.rkt
-raco test: "tests/test-gsd-wave-completion.rkt"
-18 success(es) 0 failure(s) 0 error(s) 18 test(s) run
-18 tests passed
-EXIT=0
+--- tests/test-gsd-wave-completion.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     18 total, 18 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.712 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 18
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-milestone-gate.rkt
-raco test: "tests/test-milestone-gate.rkt"
-75 tests passed
-EXIT=0
+--- tests/test-milestone-gate.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     75 total, 75 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=11.672 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 75
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-prepared-env-report.rkt
-raco test: (submod "tests/test-prepared-env-report.rkt" test)
-38 success(es) 0 failure(s) 0 error(s) 38 test(s) run
-38 tests passed
-EXIT=0
+--- tests/test-prepared-env-report.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     38 total, 38 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=49.219 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 38
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-proof-bundle-consume.rkt
-raco test: (submod "tests/test-proof-bundle-consume.rkt" test)
-consume.rkt write: refusing to write an unprovable bundle: write-command: claims document section result must be an object
-consume.rkt write: requires --claims-json F --producer-identity S --workflow-revision-sha S --commit-sha S --tree-sha S --repository S --out F [--retention-days N]
-sha256:48c7cf6ba711b5b87e178656c6e4471a2de5346fea0e32017c98f8a9e634c2df
-25 success(es) 0 failure(s) 0 error(s) 25 test(s) run
-0
-25 tests passed
-EXIT=0
+--- tests/test-proof-bundle-consume.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     25 total, 25 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=1.063 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 25
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-wave-delivery-integrity-register.rkt
-raco test: "tests/test-wave-delivery-integrity-register.rkt"
-bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-bound evidence e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-10 tests passed
-EXIT=0
+--- tests/test-wave-delivery-integrity-register.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     10 total, 10 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=259.793 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 10
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-wave-integrity-adversarial.rkt
-raco test: "tests/test-wave-integrity-adversarial.rkt"
-8 tests passed
-EXIT=0
+--- tests/test-wave-integrity-adversarial.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     8 total, 8 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=19.512 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 8
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-runner-base-dir-resolution.rkt
-raco test: "tests/test-runner-base-dir-resolution.rkt"
-4 success(es) 0 failure(s) 0 error(s) 4 test(s) run
-4 tests passed
-EXIT=0
+--- tests/test-runner-base-dir-resolution.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     4 total, 4 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.415 metadata-completeness=explicit:0/heuristic:0/missing:1
+RUNNER-EXIT=0
+tests-reported: 4
+metadata-completeness=explicit:0/heuristic:0/missing:1
 
---- raco test tests/test-run-tests-profiles.rkt
-raco test: "tests/test-run-tests-profiles.rkt"
-9 success(es) 0 failure(s) 0 error(s) 9 test(s) run
-1 success(es) 0 failure(s) 0 error(s) 1 test(s) run
-10 tests passed
-EXIT=0
+--- tests/test-run-tests-profiles.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     10 total, 10 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=11.846 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 10
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-workflow-invocation-contract.rkt
-raco test: "tests/test-workflow-invocation-contract.rkt"
-7 tests passed
-EXIT=0
+--- tests/test-workflow-invocation-contract.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     7 total, 7 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=2.985 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 7
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
---- raco test tests/test-workflow-purge-contract.rkt
-raco test: "tests/test-workflow-purge-contract.rkt"
-15 tests passed
-EXIT=0
+--- tests/test-workflow-purge-contract.rkt
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     15 total, 15 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=2.03 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+tests-reported: 15
+metadata-completeness=explicit:1/heuristic:0/missing:0
 
-=== files with a reported failure: 0 of 19 ===
-=== DONE 2026-09-25T22:38:01Z ===
+=== files run through the project runner: 19 ===
+=== passed: 19  failed: 0 ===
+=== files reporting no test count (would be a vacuous green): 0 ===
+=== DONE 2026-09-25T23:18:18Z ===

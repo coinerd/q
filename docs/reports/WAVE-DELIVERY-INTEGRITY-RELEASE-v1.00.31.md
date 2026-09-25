@@ -112,13 +112,21 @@ silently pinning a stale literal), frozen prior-release artifacts stay literal
 with the reason recorded in a comment, and comment-only mentions are reworded.
 The `define-runtime-path` forms keep their literal runtime-path anchor and compute
 only the version segment. The lint now reports
-`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and a 19-file
-sweep re-run green at the final head with 0 failures and 0 errors
-(`raw/version-derivation-tests.log`) — the 13 files the derivation sweep touched,
-plus `test-wave-integrity-adversarial.rkt` (the W6 rehearsal test, which the
-mid-repair capture caught red), `test-runner-base-dir-resolution.rkt` (this
-wave's new base-dir regression file, 4 cases), and four runner/workflow-contract
-files re-confirmed alongside them.
+`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and a 19-file sweep
+run green at the final head through the project's **own** runner: **376 tests,
+376 passed, 0 failed, 0 timeouts**, every file exit 0, and 0 files reporting no
+test count (`raw/version-derivation-tests.log`). The instrument is the point.
+Bare `raco test` — which the first two attempts used — is wrong twice over: it
+exits 0 even when a case fails, and for a file whose entry point is `module+ main`
+rather than `module+ test` it executes *nothing* and still exits 0. Two of the 19
+have that shape, so their greens were vacuous: a pass that ran zero tests. The
+capture also miscounted its own footer once, by matching rackunit's green
+`0 failure(s)` line as a failure. Three detectors in a row were wrong before the
+subject was finally measured with the instrument the runner actually gates on
+(`failed-result?` is purely *exit code neither 0 nor 2*) — which is precisely the
+trap that hid the `worker-security` W2 regression in the first place, and the
+reason the capture now carries the runner's own `Tests:` lines so a vacuous green
+is detectable rather than assumed absent.
 
 ### Release preflight
 
