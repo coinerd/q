@@ -607,11 +607,11 @@
       ;; prepare_action_sha256 inside fast_env_verification_contract
       ;; re-stamped again by the v1.00.30 W2 wave (issue #9688): containment telemetry
       ;; outputs changed setup_action_sha256 inside fast_env_verification_contract
-      ;; re-stamped again by the v1.00.31 W1 wave (register F1): the compiled-root
+      ;; re-stamped again by this campaign's W1 wave (register F1): the compiled-root
       ;; producer invocation was added to the action, changing prepare_action_sha256;
       ;; the additive-only proof lives in
-      ;; artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt
-      ;; re-stamped again by the v1.00.31 W7 wave: the repaired v1.00.30 W4 wave
+      ;; artifacts/wave-delivery-integrity/<campaign>-w1/raw/action-pin-proof.txt
+      ;; re-stamped again by this campaign's W7 wave: the repaired v1.00.30 W4 wave
       ;; (issue #9690) carried the guarded compiled-root pilot forward into the same
       ;; single producer invocation, changing prepare_action_sha256,
       ;; setup_action_sha256 and this checkpoint hash; see w7_restamp

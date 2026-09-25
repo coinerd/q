@@ -509,7 +509,7 @@
       (check-equal? (file->bytes captured-wave) captured-bytes)
       (delete-directory/files dir #:must-exist? #f))
 
-    ;; F13 (v1.00.31 W5): an amended plan BODY is not ordinary drift — the
+    ;; F13 (this campaign's W5): an amended plan BODY is not ordinary drift — the
     ;; resume refusal must name the frozen contract as stale and offer the
     ;; re-freeze/override recovery, never silently rebind or rewrite.
     (test-case "F13: resume names frozen-contract-stale for amended plan body"

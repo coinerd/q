@@ -227,7 +227,7 @@
                                 "C2"))
       (check-not-equal? (campaign-manifest-hash m1) (campaign-manifest-hash m2))
 
-      ;; F13 (v1.00.31 W5): the plan BODY (failure-mode register, approval
+      ;; F13 (this campaign's W5): the plan BODY (failure-mode register, approval
       ;; contract) must participate in the campaign identity. A body amendment
       ;; that leaves wave docs untouched previously produced the SAME plan-id,
       ;; making frozen-vs-executed divergence undetectable at the identity
@@ -273,7 +273,7 @@
                           (campaign-manifest-hash with-b)
                           "amending the plan body re-identifies the campaign"))
 
-      ;; R1 (v1.00.31 W5 review): the legacy canonical form is pinned to the
+      ;; R1 (this campaign's W5 review): the legacy canonical form is pinned to the
       ;; exact historical five-field list — the unbound field appends nothing,
       ;; so pre-F13 persisted plan-ids recompute identically.
       (test-case "F13: legacy manifest hash equals the historical five-field form"
