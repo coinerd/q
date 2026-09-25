@@ -56,6 +56,7 @@
  "plan-id": "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75",
  "raw": [
   "raw/preflight-locally-runnable.txt",
+  "raw/red-first-version-expectations.txt",
   "raw/version-derivation-tests.log"
  ],
  "schema": "wave-release-preflight/1",
@@ -64,7 +65,7 @@
   "check-deps": "All external packages declared in info.rkt. OK",
   "focused-release-tests": "109 tests passed (test-version, test-lint-release-readiness, test-lint-release-notes, test-release-workflow-contract)",
   "lint-all": "23 passed, 0 failed, 2 non-blocking warnings (arch; release-readiness is the branch-gated gate above)",
-  "version-expectations": "PASS \u2014 1510 test files scanned, 0 hard-coded 1.00.31 literals (BUG-0009 sweep over 15 test files)"
+  "version-expectations": "PASS \u2014 1510 test files scanned, 0 hard-coded 1.00.31 literals. Red-first capture retained: raw/red-first-version-expectations.txt (the same lint at the version-bumped, pre-derivation tree exits 1 with 56 literals)."
  },
  "verdict": "PASS-WITH-DEFERRED-GATE",
  "version": "1.00.31",
