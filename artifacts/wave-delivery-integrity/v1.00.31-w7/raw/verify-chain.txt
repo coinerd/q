@@ -17,7 +17,9 @@ results:
   version-expectation lint       1511 test files, 0 hard-coded 1.00.31 literals
   check-deps / metrics / notes   all clean
   artifact provenance            w6 ok (951 notes), w7 ok (950 notes)
-  artifact checksums             w6, w7 and tier-ownership all OK from the repo root
+  artifact checksums             see raw/checksums-final.txt — the excerpt below shows one
+                                  representative line per manifest, which is why this chain
+                                  cannot by itself substantiate the 'all OK' claim
 
 Every RUN-SUMMARY line reports runner-version=1.00.31 and the resolver's base-dir is this
 worktree, which is the property the base-dir fix restores.
@@ -150,3 +152,45 @@ docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: OK
 docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: OK
 artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json: OK
 === W7 FINAL DONE e9af72fee9c652b16a017d37219d15e7eb5f9f0b 2026-09-25T17:04:37Z ===
+
+---- artifact checksum verification, full unfiltered output ----
+Retained here rather than in a separate log because the artifact-provenance linter
+requires every file under the wave artifact directory to be bound by SHA256SUMS, and
+an unbound sidecar would be a drift finding in itself. Review round 3 finding F4 was
+that the excerpt above shows one line per manifest while claiming all of them verify.
+
+One self-reference is unavoidable and is stated rather than hidden: the W7 manifest's
+entry for this log records the hash of the log including the section below, so the
+log cannot also contain the verification of its own entry. The manifest is bound in
+the same commit and re-verifying it is one `sha256sum -c` from the repository root.
+Every other entry in all three manifests is verified in full below.
+--- artifacts/wave-delivery-integrity/v1.00.31-w6/SHA256SUMS (6 entries)
+artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-harness.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-register-f12-f13.txt: OK
+docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: OK
+EXIT=0
+verified: 6 of 6 entries OK
+
+--- artifacts/wave-delivery-integrity/v1.00.31-w7/SHA256SUMS (9 entries)
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json: OK
+docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: OK
+EXIT=0
+verified: 9 of 9 entries OK
+
+--- artifacts/tier-ownership/v1.00.31-w0/SHA256SUMS (1 entries)
+artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json: OK
+EXIT=0
+verified: 1 of 1 entries OK
+
+=== manifests failing: 0 ===
+=== DONE 2026-09-25T22:01:51Z ===

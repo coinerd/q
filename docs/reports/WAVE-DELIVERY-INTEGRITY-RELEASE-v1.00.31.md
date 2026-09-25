@@ -112,13 +112,19 @@ silently pinning a stale literal), frozen prior-release artifacts stay literal
 with the reason recorded in a comment, and comment-only mentions are reworded.
 The `define-runtime-path` forms keep their literal runtime-path anchor and compute
 only the version segment. The lint now reports
-`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and all 13 affected
-test files pass (`raw/version-derivation-tests.log`).
+`1511 test files scanned, 0 hard-coded "1.00.31" literals`, and all 19 files
+the sweep touched — plus the W6 rehearsal test and the two new runner tests — run
+green at the final head with 0 failures and 0 errors
+(`raw/version-derivation-tests.log`, a final-head re-run that supersedes the
+mid-repair capture of the same name; that superseded capture recorded a red
+`test-wave-integrity-adversarial.rkt` while the W6 matrix was still pinned to the
+pre-regeneration identity, which is the state review round 3 read as contradicting
+this claim).
 
 ### Release preflight
 
 Six of the seven CI-strict tag-publish gates run on the clean bake commit
-`58d302dbb` and pass: release-notes,
+`b0f19d6bd` and pass: release-notes,
 fmt-canonicality (93 changed `.rkt` files since the last tag), metrics lint,
 README status sync, the plain-tar symlink audit and the bundle dry-run
 (`artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json`,
@@ -130,6 +136,25 @@ design**, not skipped for convenience. It refuses to run on a campaign branch
 context), and the `.gate-evidence/` records it consumes must name the release
 commit SHA and the release version. Running it before the merge would require
 faking either the branch or the evidence.
+
+### Artifact checksums
+
+All three manifests verify in full from the repository root — 6/6 W6, 9/9 W7,
+1/1 tier-ownership, 16/16 entries — and the **unfiltered per-manifest output is
+retained in the chain capture** (`raw/verify-chain.txt`, section "artifact
+checksum verification, full unfiltered output"). It lives there rather than in a
+separate log because the artifact-provenance linter requires every file under the
+wave artifact directory to be bound by `SHA256SUMS`, and an unbound sidecar is a
+drift finding in itself.
+
+That section exists because the first chain excerpt showed one representative
+line per manifest while its summary claimed all of them verified, so the evidence
+did not substantiate the claim. One self-reference is unavoidable and is stated
+rather than hidden: the W7 manifest's entry for the chain log records the hash of
+that log *including* the checksum section, so the log cannot also contain the
+verification of its own entry. The manifest is bound in the same commit and
+re-verifying it is one `sha256sum -c` from the repository root. Every other entry
+in all three manifests is verified in full in the retained output.
 
 It is therefore run, in this order, after this wave is merged and main CI is
 green:
