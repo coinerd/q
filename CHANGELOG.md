@@ -42,6 +42,18 @@ Every release-preflight gate passes locally on the release tree
 annotated `v1.00.31` tag is pushed only after a green main run, and public
 assets, checksums and provenance are verified before the milestone closes.
 
+Scheduler states for this release are explicit (milestone #896). Activated in
+this release: the wave-delivery integrity guards and the delivery of the
+repaired v1.00.30 W4 wave, and one runner fix with direct evidence impact — the
+test runner now measures the tree it was launched from instead of silently
+preferring a neighbouring `q/` checkout, so a local suite run can no longer
+report a RUN-SUMMARY for a tree nobody asked about
+(tests/test-runner-base-dir-resolution.rkt). Not activated in this release:
+every CI scheduling and sharding lever — no shard-plan, queue, lane-promotion or
+timeout change; the guarded compiled-root pilot stays scoped to the fast lanes
+it was defined for; and no latency target is claimed, because none was measured
+for this release.
+
 ### Wave-delivery integrity: PERMANENT over the frozen 13-row register; v1.00.30 W4 DELIVERED
 
 ### Features

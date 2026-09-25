@@ -89,7 +89,7 @@
  (test-case "wait-audit lint: audit exists and is self-consistent"
    (define audit (call-with-input-file WAIT-AUDIT-PATH read-json))
    (check-true (hash? audit) "wait-audit.json must parse to a JSON object")
-   (check-equal? (hash-ref audit 'wave) (format "v~a-w1" q-version))
+   (check-equal? (hash-ref audit 'wave) "v1.00.29-w1")
    (define summary (hash-ref audit 'summary))
    (check-equal? (hash-ref summary 'unjustified-unit-fast-sleeps)
                  0
@@ -145,7 +145,11 @@
 ;; Lint support
 ;; ============================================================
 
-(define WAIT-AUDIT-PATH (format "artifacts/test-runtime/v~a-w1/wait-audit.json" q-version))
+;; The wait audit is a FROZEN v1.00.29-campaign artifact (that campaign's W1
+;; produced it). Its path was derived from q-version, which only held while the
+;; canonical version was 1.00.29. Pinned literally, reason recorded; the recorded
+;; `wave` field below is asserted against the same frozen value.
+(define WAIT-AUDIT-PATH "artifacts/test-runtime/v1.00.29-w1/wait-audit.json")
 (define raw-sleep-rx #px"\\(sleep\\s")
 (define allowed-dispositions '("remediated" "retained-canary" "not-a-test-sleep" "verified-clean"))
 

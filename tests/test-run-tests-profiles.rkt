@@ -136,19 +136,14 @@
                     (lambda ()
                       (error 'w2-overlap "inventory.rkt no longer exports tier-ownership-rows")))))
 
-;; W2 checksummed overlap-review artifact.
+;; W2 checksummed overlap-review artifact. Frozen v1.00.29-campaign artifact: the
+;; paths and the recorded milestone/wave below are pinned literally, because
+;; deriving them from q-version only held while the canonical version was
+;; 1.00.29 and otherwise names a directory that does not exist.
 (define overlap-review-path*
-  (build-path project-root
-              "artifacts"
-              "tier-ownership"
-              (string-append "v" q-version "-w2")
-              "overlap-review.json"))
+  (build-path project-root "artifacts" "tier-ownership" "v1.00.29-w2" "overlap-review.json"))
 (define w2-sha256sums-path*
-  (build-path project-root
-              "artifacts"
-              "tier-ownership"
-              (string-append "v" q-version "-w2")
-              "SHA256SUMS"))
+  (build-path project-root "artifacts" "tier-ownership" "v1.00.29-w2" "SHA256SUMS"))
 
 ;; read-json yields hashes with symbol keys; jref accepts either spelling.
 (define (jref payload key)
@@ -366,11 +361,14 @@
        (check-true (file-exists? overlap-review-path*) "W2 overlap review artifact is missing")
        (define payload (call-with-input-file overlap-review-path* read-json))
        (check-equal? (jref payload "schema") "tier-ownership-overlap-review/v1")
-       (check-equal? (jref payload "milestone") (format "v~a" q-version))
-       (check-equal? (jref payload "wave") (string-append "v" q-version "-w2"))
-       (check-equal?
-        (jref payload "source_matrix")
-        (string-append "artifacts/tier-ownership/v" q-version "-w0/ownership-matrix.json"))
+       (check-equal? (jref payload "milestone") "v1.00.29")
+       (check-equal? (jref payload "wave") "v1.00.29-w2")
+       (check-equal? (jref payload "source_matrix")
+                     ;; The frozen v1.00.29-w2 review records the v1.00.29 census it was
+                     ;; derived from. That recorded field is history, so it is pinned rather
+                     ;; than re-derived from the current version (which only agreed while the
+                     ;; canonical version was 1.00.29).
+                     "artifacts/tier-ownership/v1.00.29-w0/ownership-matrix.json")
        (check-equal? (jref payload "overlap_axes") '("platform/fast" "security/fast"))
        (check-true (file-exists? w2-sha256sums-path*) "W2 SHA256SUMS is missing")
        (define review-digest (sha256-hex* (open-input-file overlap-review-path*)))
