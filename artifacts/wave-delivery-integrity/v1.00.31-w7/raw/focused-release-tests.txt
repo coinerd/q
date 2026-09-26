@@ -1,0 +1,54 @@
+focused release-surface + W7-touched tests
+head: 9841fed8f2e24bb343e54d310ff836044a903602
+base: 50bdf7334a9161e9e930b40be0870c52a498a0b9
+note: each file run through the project's own runner (racket scripts/run-tests.rkt), whose exit code scripts/run-tests/reporting.rkt gates on - failed-result? is 'exit code neither 0 nor 2'. Bare raco test is NOT used: it exits 0 even when a case fails, and executes nothing in a file whose entry point is module+ main.
+note: RUNNER-EXIT below is the runner's own status, captured directly from the command rather than after a pipe.
+
+--- tests/test-worker-security.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     38 total, 38 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=3.645 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-runner-base-dir-resolution.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     4 total, 4 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.417 metadata-completeness=explicit:0/heuristic:0/missing:1
+RUNNER-EXIT=0
+
+--- tests/test-wave-integrity-adversarial.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     8 total, 8 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=19.155 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-release-entry-current.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     5 total, 5 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.846 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-version.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     4 total, 4 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.678 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-lint-release-readiness.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     25 total, 25 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.805 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-lint-release-notes.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     27 total, 27 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=0.834 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
+--- tests/test-release-workflow-contract.rkt ---
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     53 total, 53 passed, 0 failed
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=1.025 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
+
