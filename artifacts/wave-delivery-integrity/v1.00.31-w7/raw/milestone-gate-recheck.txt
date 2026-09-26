@@ -1,0 +1,23 @@
+# Round-9 remediation: a comment-only change to tests/test-milestone-gate.rkt
+# W7-R9-F4 asked for a reword; this capture shows the file's behaviour is unchanged.
+# Instrument: the project runner (bare raco test is not authoritative).
+# date: 2026-09-26T12:16:03Z
+
+$ racket scripts/run-tests.rkt tests/test-milestone-gate.rkt
+;; run-tests: cleaned 1 stale compiled/ directory
+;; run-tests: suite=all files=1 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+.
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1 total, 1 passed, 0 failed, 0 timeouts
+  Tests:     75 total, 75 passed, 0 failed
+  Category:  PASS=1
+  Elapsed:   11.165s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1 pass=1 fail=0 timeout=0 skip=0 wall-clock-seconds=11.165 metadata-completeness=explicit:1/heuristic:0/missing:0
+RUNNER-EXIT=0
