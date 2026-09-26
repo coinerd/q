@@ -4,9 +4,11 @@ ba388ed4270c8e1b5b14e0cbea9afc426399a72b1ce90ab0d71af0b02a9924a2  artifacts/wave
 7283e3a950bc6f0ee83b592dd0c5392df57eb4d1c92727712728c55fc4a367cf  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt
 009289726b99cc902277df0d031d1e8f7531571bf0785b102c19934651c39a1a  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt
 8c84f552d49c524dfb902154867a0c5797a404e57c5a0400b591e6dfbd2da415  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt
+2120a971b42636d4576f819849fd6dfb69fe65a40b1178e3e801963295c6dfda  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/restate-chain-field.py
+c8441e7a8b91c704f5009359f44cc387d59d8cd8af8a61df638ed7161313d7c7  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/restate-round11-counts.py
 64897732352b342567de9c9ff7791b872f14af1941ca83348a6e5c9b772a25b6  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt
 c298ee8a865794975b534ed038e4c5ece3621cc9589488bb973b92cfd0f0dd6f  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log
 ad8e27ef5de236c94f12af88d201707b57cb56e51f667fb916e37c41a605b1c2  artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt
-dab5bdab3e9153680d6b6d6d8a5e80d37df5d9c8d00c5d7913fd520970f35743  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
+2318d24e53df2ff9857ef2cd369f5a23c1e187b91729c032ae3a2af798fe3f41  artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json
 c2b21eb4e5eb2d4ca1ed252f312765d83ac8ce15a54c87bdb8229d80b1132ee4  artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json
-a9e5780413703b3ca2cc90c76baeb76b791d280cb28d013f5fa397af641d9b35  docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md
+49616170d433cb8a8ccbc3fd599a04e5e997869f91198667de2655b0fd43f981  docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md
