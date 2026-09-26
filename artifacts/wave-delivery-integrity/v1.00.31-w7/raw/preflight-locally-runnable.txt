@@ -1,0 +1,37 @@
+release_preflight (CI-strict, tag-publish gate set) — v1.00.31
+tree: /home/user/src/q-agent/wt-v10031-w7  branch: campaign/v1.00.31-w7
+commit: b0f19d6bd (clean tree at run time)
+run: 2026-09-25T17:57:01Z
+
+PREFLIGHT: FAIL (6 pass, 1 fail, 0 skip)
+
+[FAIL] readiness
+       [PASS] version sync: 1.00.31
+       [PASS] CHANGELOG has one valid release entry for 1.00.31
+       [PASS] git working tree clean
+       [FAIL] on branch 'campaign/v1.00.31-w7' — must be on main
+       [PASS] no merge conflict markers in release files
+       [FAIL] no .gate-evidence/ directory — run test suites with --record-gate-evidence
+[PASS] release-notes
+       release notes template valid for v1.00.31
+[PASS] fmt-canonical
+       93 changed .rkt files checked
+[PASS] metrics
+       README metrics pins match computed values
+[PASS] readme-status
+       README status block in sync with CHANGELOG
+[PASS] tarball-symlinks
+       plain-tar replication is symlink-free and extracts cleanly
+[PASS] bundle-dry-run
+       bundle semantics OK for v1.00.31 (manifest, notes, tarball command)
+
+The single FAIL is the branch-gated readiness gate, recorded as deferred-by-design
+in release-preflight.json: check-main-branch accepts only main or a detached tag-publish
+HEAD, and the .gate-evidence/ records it consumes must name the release commit and the
+release version. Running it here would require faking the branch or the evidence. It runs
+on clean main after the merge, before the tag, with all seven gates required to pass
+before the annotated v1.00.31 tag is pushed.
+
+head-coherence note: this capture names b0f19d6bd, the tree it ran against. The commit that
+carries it changes only this file and release-preflight.json; no test reads either, so the
+gate results above describe the merge candidate unchanged.

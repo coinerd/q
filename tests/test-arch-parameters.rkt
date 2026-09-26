@@ -283,7 +283,7 @@
       ;; +1 — BUG-0069 campaign auto-retry visibility
       ;; (runtime/gsd-query.rkt): current-gsd-campaign-active-query
       ;; (SERVICE_HANDLE, injectable runtime campaign-state query).
-      ;; +1 — v1.00.31 W3 (register F5): current-gsd-remote-published
+      ;; +1 — this campaign's W3 (register F5): current-gsd-remote-published
       ;; (extensions/gsd/delivery-receipt.rkt, OTHER_REVIEWED): the
       ;; origin ls-remote remote-backing probe seam for offline
       ;; fixtures; the production default performs the real check.

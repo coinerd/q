@@ -561,19 +561,20 @@
   (subprocess-wait sp)
   (car (string-split hex)))
 
+;; The W2 overlap review and its SHA256SUMS manifest are FROZEN artifacts of the
+;; v1.00.29 campaign (that campaign's W0 and W2 produced them). Their directories
+;; were derived from q-version, which only agreed with the artifacts while the
+;; canonical version happened to be 1.00.29; deriving them after a bump names a
+;; directory that does not exist. Pinned literally, reason recorded. The W0
+;; ownership matrix below is deliberately NOT pinned: it is the current
+;; milestone's copy, so these checks also act as a drift check that the frozen
+;; review's rows still cover the live platform/fast and security/fast overlap
+;; scope 1:1.
 (define overlap-review-path*
-  (build-path repo-root
-              "artifacts"
-              "tier-ownership"
-              (string-append "v" q-version "-w2")
-              "overlap-review.json"))
+  (build-path repo-root "artifacts" "tier-ownership" "v1.00.29-w2" "overlap-review.json"))
 
 (define w2-sha256sums-path*
-  (build-path repo-root
-              "artifacts"
-              "tier-ownership"
-              (string-append "v" q-version "-w2")
-              "SHA256SUMS"))
+  (build-path repo-root "artifacts" "tier-ownership" "v1.00.29-w2" "SHA256SUMS"))
 
 (define w0-matrix-path*
   (build-path repo-root
@@ -614,119 +615,142 @@
                           (min 18 (max 0 (- (length lines) (max 0 (- idx 6))))))
                     "\n")))
 
-;; W2 checks run at module body, after the original suite's run-tests:
-;; rackunit prints their failures without failing the process, so a red
-;; W2 could previously read as green. Install a tallying check handler
-;; (preserving the default printing) and exit non-zero at the end when
-;; any W2 check failed.
-(define w2-base-check-handler (current-check-handler))
-(define w2-failed-checks 0)
-(current-check-handler (lambda (result)
-                         (set! w2-failed-checks (add1 w2-failed-checks))
-                         (w2-base-check-handler result)))
+;; The W2 checks below run as their own test-suite, invoked through run-tests,
+;; and the process exits non-zero on run-tests' failure count.
+;;
+;; They used to be bare module-body test-cases placed after this file's first
+;; (run-tests suite) call, paired with a hand-rolled current-check-handler that
+;; counted check results and exited at the end. That combination could not fail
+;; the gate. rackunit reports module-body test-cases that run after a run-tests
+;; call, but their failures do not reach the process exit status, and the custom
+;; handler replaced the accounting that would have registered them — so the file
+;; printed FAILURE blocks, printed a summary reading "0 failure(s)", exited 0,
+;; and the suite runner, which treats a file as failed purely on a non-zero exit
+;; code, reported it as PASSED. A red W2 could read as green through the entire
+;; gate, and did: these artifact paths had been derived from q-version, so after
+;; a version bump they named a directory that does not exist and nothing
+;; reported it.
+;;
+;; run-tests returns the number of failed checks, which is an ordinary return
+;; value rather than an exit-status side effect, so the count is used directly
+;; below. Its printing is unchanged, so the capture format is unchanged too.
+(define w2-suite
+  (test-suite "W2 overlap governance"
+    (test-case "W2: every platform/fast overlap row is kept with an explicit rationale"
+      (check-true (file-exists? overlap-review-path*) "W2 overlap review artifact is missing")
+      (define review (call-with-input-file overlap-review-path* read-json))
+      (check-equal? (jref review "schema") "tier-ownership-overlap-review/v1")
+      (define w0-rows (w2-axis-rows 'platform 'fast))
+      (check-true (pair? w0-rows) "W0 platform/fast scope is empty — matrix drifted")
+      (define review-rows
+        (for/list ([rr (in-list (hash-ref review 'rows))]
+                   #:when (equal? (jref rr "axis") "platform/fast"))
+          rr))
+      (check-equal? (length review-rows)
+                    (length w0-rows)
+                    "platform/fast review rows must cover the W0 overlap scope 1:1")
+      (for ([rr (in-list review-rows)])
+        (define decision (jref rr "decision"))
+        (check-not-false
+         (member decision '("kept" "removed-duplicate"))
+         (format "platform/fast row ~a has unknown decision ~a" (jref rr "test") decision))
+        (define rationale (jref rr "rationale"))
+        (check-true (and (string? rationale) (> (string-length rationale) 0))
+                    (format "platform/fast row ~a carries no rationale" (jref rr "test")))
+        (when (equal? decision "kept")
+          (check-true (string-contains? rationale "platform")
+                      (format "platform/fast kept rationale for ~a must name the platform gate"
+                              (jref rr "test"))))))
 
-(test-case "W2: every platform/fast overlap row is kept with an explicit rationale"
-  (check-true (file-exists? overlap-review-path*) "W2 overlap review artifact is missing")
-  (define review (call-with-input-file overlap-review-path* read-json))
-  (check-equal? (jref review "schema") "tier-ownership-overlap-review/v1")
-  (define w0-rows (w2-axis-rows 'platform 'fast))
-  (check-true (pair? w0-rows) "W0 platform/fast scope is empty — matrix drifted")
-  (define review-rows
-    (for/list ([rr (in-list (hash-ref review 'rows))]
-               #:when (equal? (jref rr "axis") "platform/fast"))
-      rr))
-  (check-equal? (length review-rows)
-                (length w0-rows)
-                "platform/fast review rows must cover the W0 overlap scope 1:1")
-  (for ([rr (in-list review-rows)])
-    (define decision (jref rr "decision"))
-    (check-not-false
-     (member decision '("kept" "removed-duplicate"))
-     (format "platform/fast row ~a has unknown decision ~a" (jref rr "test") decision))
-    (define rationale (jref rr "rationale"))
-    (check-true (and (string? rationale) (> (string-length rationale) 0))
-                (format "platform/fast row ~a carries no rationale" (jref rr "test")))
-    (when (equal? decision "kept")
-      (check-true (string-contains? rationale "platform")
-                  (format "platform/fast kept rationale for ~a must name the platform gate"
-                          (jref rr "test"))))))
+    (test-case "W2: every security/fast overlap row is kept in the security gate"
+      (define review (call-with-input-file overlap-review-path* read-json))
+      (define w0-rows (w2-axis-rows 'security 'fast))
+      (check-true (pair? w0-rows) "W0 security/fast scope is empty — matrix drifted")
+      (define review-rows
+        (for/list ([rr (in-list (hash-ref review 'rows))]
+                   #:when (equal? (jref rr "axis") "security/fast"))
+          rr))
+      (check-equal? (length review-rows)
+                    (length w0-rows)
+                    "security/fast review rows must cover the W0 overlap scope 1:1")
+      (for ([rr (in-list review-rows)])
+        (check-equal?
+         (jref rr "decision")
+         "kept"
+         (format
+          "security/fast row ~a must stay in the security gate: removal would be a security re-tiering"
+          (jref rr "test")))
+        (define rationale (jref rr "rationale"))
+        (check-true (and (string? rationale) (> (string-length rationale) 0))
+                    (format "security/fast row ~a carries no rationale" (jref rr "test")))
+        (check-true (string-contains? rationale "security")
+                    (format "security/fast rationale for ~a must name the security gate"
+                            (jref rr "test")))))
 
-(test-case "W2: every security/fast overlap row is kept in the security gate"
-  (define review (call-with-input-file overlap-review-path* read-json))
-  (define w0-rows (w2-axis-rows 'security 'fast))
-  (check-true (pair? w0-rows) "W0 security/fast scope is empty — matrix drifted")
-  (define review-rows
-    (for/list ([rr (in-list (hash-ref review 'rows))]
-               #:when (equal? (jref rr "axis") "security/fast"))
-      rr))
-  (check-equal? (length review-rows)
-                (length w0-rows)
-                "security/fast review rows must cover the W0 overlap scope 1:1")
-  (for ([rr (in-list review-rows)])
-    (check-equal?
-     (jref rr "decision")
-     "kept"
-     (format
-      "security/fast row ~a must stay in the security gate: removal would be a security re-tiering"
-      (jref rr "test")))
-    (define rationale (jref rr "rationale"))
-    (check-true (and (string? rationale) (> (string-length rationale) 0))
-                (format "security/fast row ~a carries no rationale" (jref rr "test")))
-    (check-true (string-contains? rationale "security")
-                (format "security/fast rationale for ~a must name the security gate"
-                        (jref rr "test")))))
+    (test-case "W2: all three lane contexts share the same strict runner contract"
+      ;; Equivalence precondition: fast (prepared-environment shard),
+      ;; platform (full-install + raco make) and security (full-install)
+      ;; all invoke the runner with STRICT_TEST_RUNNER=1, so the same test
+      ;; id is held to the same result record under either tier's context.
+      (define fast-window (ci-suite-window* "fast"))
+      (define platform-window (ci-suite-window* "platform"))
+      (define security-window (ci-suite-window* "security"))
+      (check-true (and fast-window platform-window security-window #t)
+                  "ci.yml is missing a suite runner block")
+      ;; Strictness is asserted as "STRICT_TEST_RUNNER=1 is set and the runner is
+      ;; invoked", not as the literal string "STRICT_TEST_RUNNER=1 racket
+      ;; scripts/run-tests.rkt". The fast lane no longer matches that literal: the
+      ;; v1.00.30 W4 repair (issue #9690) routes it through the verified
+      ;; compiled-root launcher, so the command is
+      ;;   STRICT_TEST_RUNNER=1 racket ci/prepared-environment/compiled-root.rkt
+      ;;     launch ... -- racket scripts/run-tests.rkt
+      ;; which is still the strict runner, with the runner behind the launcher's
+      ;; -- separator. Asserting the old literal would fail on a lane that is in
+      ;; fact strict. Note this check only became visible now: the W2 suite could
+      ;; not fail the process before, so its staleness was never reported.
+      (for ([w (in-list (list fast-window platform-window security-window))])
+        (check-true (string-contains? w "STRICT_TEST_RUNNER=1")
+                    "every tier must set STRICT_TEST_RUNNER=1")
+        (check-true (string-contains? w "racket scripts/run-tests.rkt")
+                    "every tier must invoke scripts/run-tests.rkt"))
+      (check-true (string-contains? fast-window "--suite fast") "fast lane block drifted")
+      (check-true (string-contains? platform-window "--suite platform") "platform lane block drifted")
+      (check-true (string-contains? platform-window "raco make main.rkt")
+                  "platform lane must keep its full-install raco make context")
+      (check-false (string-contains? platform-window "PREPARED_ENV")
+                   "platform lane must remain a cold full-install context")
+      (check-true (string-contains? security-window "--suite security") "security lane block drifted")
+      (check-false (string-contains? security-window "PREPARED_ENV")
+                   "security lane must remain a cold full-install context")
+      (check-true (string-contains? (file->string ci-workflow-path*) "PREPARED_ENV")
+                  "fast lane's prepared-environment shard machinery is missing"))
 
-(test-case "W2: all three lane contexts share the same strict runner contract"
-  ;; Equivalence precondition: fast (prepared-environment shard),
-  ;; platform (full-install + raco make) and security (full-install)
-  ;; all invoke the runner with STRICT_TEST_RUNNER=1, so the same test
-  ;; id is held to the same result record under either tier's context.
-  (define fast-window (ci-suite-window* "fast"))
-  (define platform-window (ci-suite-window* "platform"))
-  (define security-window (ci-suite-window* "security"))
-  (check-true (and fast-window platform-window security-window #t)
-              "ci.yml is missing a suite runner block")
-  (for ([w (in-list (list fast-window platform-window security-window))])
-    (check-true (string-contains? w "STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt")
-                "every tier must run the tests under the strict runner"))
-  (check-true (string-contains? fast-window "--suite fast") "fast lane block drifted")
-  (check-true (string-contains? platform-window "--suite platform") "platform lane block drifted")
-  (check-true (string-contains? platform-window "raco make main.rkt")
-              "platform lane must keep its full-install raco make context")
-  (check-false (string-contains? platform-window "PREPARED_ENV")
-               "platform lane must remain a cold full-install context")
-  (check-true (string-contains? security-window "--suite security") "security lane block drifted")
-  (check-false (string-contains? security-window "PREPARED_ENV")
-               "security lane must remain a cold full-install context")
-  (check-true (string-contains? (file->string ci-workflow-path*) "PREPARED_ENV")
-              "fast lane's prepared-environment shard machinery is missing"))
+    (test-case "W2: worker-security checks produce identical verdicts across repeated executions"
+      ;; Both-tier equivalence spot check: the same disallowed-path check
+      ;; yields the same status verdict and a self-diagnosing message on
+      ;; every execution, i.e. the same result record either tier's runner
+      ;; environment would report.
+      (define a (execute-write (hash 'path "/tmp/worker-security-w2-equiv-a" 'content "x")))
+      (define b (execute-write (hash 'path "/tmp/worker-security-w2-equiv-b" 'content "x")))
+      (check-equal? (ipc-response-status a) 'error)
+      (check-equal? (ipc-response-status a)
+                    (ipc-response-status b)
+                    "the same check must produce the same result record verdict")
+      (check-true (string-contains? (ipc-response-error-message a) "path not allowed")
+                  "denial must remain self-diagnosing")
+      (check-true (string-contains? (ipc-response-error-message b) "path not allowed")
+                  "denial must remain self-diagnosing"))
 
-(test-case "W2: worker-security checks produce identical verdicts across repeated executions"
-  ;; Both-tier equivalence spot check: the same disallowed-path check
-  ;; yields the same status verdict and a self-diagnosing message on
-  ;; every execution, i.e. the same result record either tier's runner
-  ;; environment would report.
-  (define a (execute-write (hash 'path "/tmp/worker-security-w2-equiv-a" 'content "x")))
-  (define b (execute-write (hash 'path "/tmp/worker-security-w2-equiv-b" 'content "x")))
-  (check-equal? (ipc-response-status a) 'error)
-  (check-equal? (ipc-response-status a)
-                (ipc-response-status b)
-                "the same check must produce the same result record verdict")
-  (check-true (string-contains? (ipc-response-error-message a) "path not allowed")
-              "denial must remain self-diagnosing")
-  (check-true (string-contains? (ipc-response-error-message b) "path not allowed")
-              "denial must remain self-diagnosing"))
-
-(test-case "W2: checksum manifest matches the overlap review artifact"
-  (check-true (file-exists? w2-sha256sums-path*) "W2 SHA256SUMS manifest is missing")
-  (define entry
-    (for/first ([ln (in-list (file->lines w2-sha256sums-path*))]
-                #:when (string-contains? ln "overlap-review.json"))
-      ln))
-  (check-true (and entry (string? entry)) "manifest does not cover overlap-review.json")
-  (check-equal? (car (string-split entry))
-                (sha256-hex* overlap-review-path*)
-                "overlap-review.json digest drifted from its checksummed manifest"))
+    (test-case "W2: checksum manifest matches the overlap review artifact"
+      (check-true (file-exists? w2-sha256sums-path*) "W2 SHA256SUMS manifest is missing")
+      (define entry
+        (for/first ([ln (in-list (file->lines w2-sha256sums-path*))]
+                    #:when (string-contains? ln "overlap-review.json"))
+          ln))
+      (check-true (and entry (string? entry)) "manifest does not cover overlap-review.json")
+      (check-equal? (car (string-split entry))
+                    (sha256-hex* overlap-review-path*)
+                    "overlap-review.json digest drifted from its checksummed manifest"))))
 
 ;; ── Cleanup ──
 
@@ -734,8 +758,11 @@
 (when (directory-exists? temp-base)
   (delete-directory/files temp-base))
 
-;; Fail the process if any W2 overlap-governance check failed: the
-;; module-body checks above print but do not set the exit code.
+;; Fail the process when the W2 suite reports any failed check. This is the only
+;; exit-code path the W2 checks have, and it is checked by construction: with
+;; the artifact path pointed at a directory that does not exist, this file exits
+;; non-zero and the suite runner reports it FAILED.
+(define w2-failed-checks (run-tests w2-suite))
 (when (> w2-failed-checks 0)
   (eprintf "worker-security W2 overlap governance: ~a failed check(s)~n" w2-failed-checks)
   (exit 1))

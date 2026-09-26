@@ -6,7 +6,7 @@
 ;; @covers scripts/ci/verify-artifact-provenance.rkt
 ;; @timeout 240
 
-;; tests/test-artifact-provenance.rkt — v1.00.31 W5 (#9728, F7).
+;; tests/test-artifact-provenance.rkt — this campaign's W5 (#9728, F7).
 ;;
 ;; Red-first contract for the artifact provenance lint:
 ;;   - the F7 red fixture (rollback-drill prose timings vs structured
@@ -25,13 +25,21 @@
          racket/runtime-path
          racket/string
          rackunit/text-ui
-         json)
+         json
+         (only-in (file "../util/version.rkt") q-version))
 
 (define-runtime-path repo-root-rel "../")
 (define repo-root (simplify-path repo-root-rel))
 (define lint-path (build-path repo-root "scripts" "ci" "verify-artifact-provenance.rkt"))
+;; BUG-0009: this campaign's own artifact directory is derived from the version
+;; module, so a later bump fails loudly here instead of pinning a stale literal.
 (define gen-path
-  (build-path repo-root "artifacts" "wave-delivery-integrity" "v1.00.31-w5" "raw" "matrix-gen.py"))
+  (build-path repo-root
+              "artifacts"
+              "wave-delivery-integrity"
+              (format "v~a-w5" q-version)
+              "raw"
+              "matrix-gen.py"))
 
 (define (run-lint! root
                    #:current-wave [current-wave #f]
@@ -548,7 +556,7 @@
             (with-input-from-file (build-path repo-root
                                               "artifacts"
                                               "wave-delivery-integrity"
-                                              "v1.00.31-w5"
+                                              (format "v~a-w5" q-version)
                                               "provenance-matrix.json")
                                   read-json))
           (or (and (hash? matrix) (hash-ref matrix 'recorded-head #f))
@@ -565,8 +573,9 @@
                              "exercised on the wave branch and by the fixture suite)")
                             recorded-head))]
         [else
-         (let-values ([(code output)
-                       (run-lint! repo-root #:current-wave "v1.00.31-w5" #:only-current? #t)])
+         (let-values ([(code output) (run-lint! repo-root
+                                                #:current-wave (format "v~a-w5" q-version)
+                                                #:only-current? #t)])
            (check-equal? code 0)
            (check-false (string-contains? output "provenance-drift:") "no drift on the real tree")
            (check-true (string-contains? output "artifact-provenance ok")))]))
@@ -643,10 +652,14 @@
         (build-path repo-root
                     "artifacts"
                     "wave-delivery-integrity"
-                    "v1.00.31-w5"
+                    (format "v~a-w5" q-version)
                     "provenance-matrix.json"))
       (define sums-path
-        (build-path repo-root "artifacts" "wave-delivery-integrity" "v1.00.31-w5" "SHA256SUMS"))
+        (build-path repo-root
+                    "artifacts"
+                    "wave-delivery-integrity"
+                    (format "v~a-w5" q-version)
+                    "SHA256SUMS"))
       (define before-matrix (file->string matrix-path))
       (define before-sums (file->string sums-path))
       ;; Same inputs must produce the same bytes. R2: the recorded head is

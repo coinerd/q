@@ -134,7 +134,12 @@
       (check-equal? flake-forensics-schema "q.flake-forensics/1")
       (cleanup-fixture! root))
 
-    (test-case (format "bundle file is written under artifacts/proof-graph/v~a-w3/bundles" q-version)
+    ;; The bundle directory is the frozen v1.00.29-campaign path that
+    ;; scripts/run-tests/flake-forensics.rkt pins (bundles-dir). The expectation
+    ;; used to derive it from q-version, which only agreed with the script while
+    ;; the canonical version was 1.00.29; the test must assert what the script
+    ;; actually writes, so it is pinned to the script's own literal.
+    (test-case "bundle file is written under artifacts/proof-graph/v1.00.29-w3/bundles"
       (define root (make-fixture-root))
       (define bundle (capture-into-root! root #:write? #t))
       (define id (hash-ref bundle 'incident-id))
@@ -142,7 +147,7 @@
       (define expected (bundle-path-for root id))
       (check-true (file-exists? expected) "bundle file must exist at the canonical path")
       (check-equal? (path->string (find-relative-path root expected))
-                    (format "artifacts/proof-graph/v~a-w3/bundles/~a.json" q-version id))
+                    (format "artifacts/proof-graph/v1.00.29-w3/bundles/~a.json" id))
       (check-equal? (hash-ref bundle 'bundle-path) (path->string expected))
       (cleanup-fixture! root))
 

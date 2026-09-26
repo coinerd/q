@@ -13,7 +13,8 @@
 (require rackunit
          racket/list
          racket/port
-         racket/string)
+         racket/string
+         (only-in (file "../util/version.rkt") q-version))
 
 (define gate-path "../scripts/gsd-wave-gate.rkt")
 (require (file "../scripts/gsd-wave-gate.rkt"))
@@ -79,7 +80,7 @@
             (cons 'milestone '896)
             (cons 'wave "\"W2\"")
             (cons 'issue '9725)
-            (cons 'branch "\"campaign/v1.00.31-w2\"")
+            (cons 'branch (escaped (format "campaign/v~a-w2" q-version)))
             (cons 'implementation-sha (escaped impl))
             (cons 'content-digest (escaped digest))
             (cons 'red-first

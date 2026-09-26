@@ -1,0 +1,18 @@
+Red-first capture — BUG-0009 version-expectation sweep (W7 v1.00.31 bake)
+
+state: commit fcfa9ab3b8887181a9f04655bf1e87d6b60e0159 with util/version.rkt at 1.00.31 and the 15 test files reverted to their pre-derivation content from 50bdf7334a9161e9e930b40be0870c52a498a0b9
+repro: git worktree add --detach /tmp/w7-redfirst fcfa9ab3b && git checkout 50bdf7334 -- <the 15 test files> && racket scripts/check-version-expectations.rkt   (run with cwd = the scratch tree; the lint resolves util/version.rkt relative to the cwd)
+
+--- RED: version bumped, literals not yet derived ---
+=== Version Expectation Check (BUG-0009) ===
+FAIL: 56 hard-coded version literal(s) "1.00.31" in tests/ (derive from q-version instead):
+  ERROR: tests/test-arch-parameters.rkt:286
+  ERROR: tests/test-artifact-provenance.rkt:9
+  ERROR: tests/test-artifact-provenance.rkt:34
+  ERROR: tests/test-artifact-provenance.rkt:551
+EXIT=1
+
+--- GREEN: the same lint at the delivered head ---
+=== Version Expectation Check (BUG-0009) ===
+Version-expectation lint PASSED — 1510 test files scanned, 0 hard-coded "1.00.31" literals
+EXIT=0

@@ -9,7 +9,7 @@
 ;; no tier at all and drops out of the ownership matrix (observed during this
 ;; wave: 997 rows did not grow by two).
 
-;; tests/test-workflow-invocation-contract.rkt — v1.00.31 W1
+;; tests/test-workflow-invocation-contract.rkt — this campaign's W1
 ;;
 ;; Repo-wide invocation contract (register F1).
 ;;

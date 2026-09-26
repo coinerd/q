@@ -914,13 +914,14 @@
       (script-fails (format "--identity-fallback-record --out ~a --consumer ci:smoke"
                             (path->string rec))))
 
+    ;; The prepared-environment consumer matrix and setup-savings file are FROZEN
+    ;; v1.00.29-campaign artifacts (that campaign's W6 produced them). Their
+    ;; directory was derived from q-version, which only held while the canonical
+    ;; version was 1.00.29; it now names the current milestone's own W6
+    ;; directory, which has neither file. Pinned literally, reason recorded.
     (test-case "consumers-check: the committed W6 matrix passes its fail-closed gate"
       (define consumers-path
-        (build-path project-root
-                    "artifacts"
-                    "proof-graph"
-                    (format "v~a-w6" q-version)
-                    "consumers.json"))
+        (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "consumers.json"))
       (check-true (file-exists? consumers-path) "the W6 consumers.json must exist")
       (script-succeeds (string-append "--consumers-check " (path->string consumers-path))))
 
@@ -928,12 +929,9 @@
       ;; An activated consumer whose racket-version differs from the
       ;; producer's is a cross-Racket reuse attempt — the gate must reject it.
       (define doc
-        (call-with-input-file (build-path project-root
-                                          "artifacts"
-                                          "proof-graph"
-                                          (format "v~a-w6" q-version)
-                                          "consumers.json")
-                              read-json))
+        (call-with-input-file
+         (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "consumers.json")
+         read-json))
       (define producer-identity (hash-ref (hash-ref doc 'producer) 'artifact-identity))
       (define producer-profile (hash-ref (hash-ref doc 'producer) 'env-profile))
       (define (fixture-row profile identity activation)
@@ -955,7 +953,7 @@
         (hasheq 'schema
                 "prepared-env-consumers@1"
                 'wave
-                (format "v~a-w6" q-version)
+                "v1.00.29-w6"
                 'identity-dimensions
                 (hash-ref doc 'identity-dimensions)
                 'producer
@@ -997,28 +995,18 @@
 
     (test-case "savings-check: the committed W6 savings file passes its honesty gate"
       (define savings-path
-        (build-path project-root
-                    "artifacts"
-                    "proof-graph"
-                    (format "v~a-w6" q-version)
-                    "setup-savings.json"))
+        (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "setup-savings.json"))
       (check-true (file-exists? savings-path) "the W6 setup-savings.json must exist")
       (script-succeeds (string-append "--savings-check " (path->string savings-path))))
 
     (test-case "savings-check: fabricated or formula-free rows are rejected"
       (define doc
-        (call-with-input-file (build-path project-root
-                                          "artifacts"
-                                          "proof-graph"
-                                          (format "v~a-w6" q-version)
-                                          "setup-savings.json")
-                              read-json))
+        (call-with-input-file
+         (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "setup-savings.json")
+         read-json))
       (define consumers-path
-        (path->string (build-path project-root
-                                  "artifacts"
-                                  "proof-graph"
-                                  (format "v~a-w6" q-version)
-                                  "consumers.json")))
+        (path->string
+         (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "consumers.json")))
       (define row-projected
         (for/first ([r (in-list (hash-ref doc 'consumers))]
                     #:when (equal? (hash-ref r 'measurement) "projected-from-w0-baseline"))
@@ -1069,11 +1057,8 @@
 
     (test-case "rollback drill: the §11.6 one-command switch flips exactly its consumer"
       (define consumers-path
-        (path->string (build-path project-root
-                                  "artifacts"
-                                  "proof-graph"
-                                  (format "v~a-w6" q-version)
-                                  "consumers.json")))
+        (path->string
+         (build-path project-root "artifacts" "proof-graph" "v1.00.29-w6" "consumers.json")))
       (define (drill extra)
         (define-values (code out)
           (run-script

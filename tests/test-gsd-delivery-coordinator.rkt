@@ -25,7 +25,8 @@
                   load-delivery-journal
                   record-delivery-receipt!
                   update-delivery-journal!)
-         "../extensions/gsd/delivery-coordinator.rkt")
+         "../extensions/gsd/delivery-coordinator.rkt"
+         (only-in (file "../util/version.rkt") q-version))
 
 (define (receipt-head)
   (hasheq 'repo
@@ -114,9 +115,12 @@
        (check-equal? (reverse calls) '("delivery-preflight"))
        ;; The journal never advanced: the ladder entry stays sealed.
        (check-equal? (stage-count dir plan) "context-ready"))))
-  ;; Register F7 (v1.00.31 W5): the artifact provenance gate runs before the
+  ;; Register F7 (this campaign's W5): the artifact provenance gate runs before the
   ;; F5 preflight. A current-wave artifact directory without a SHA256SUMS
   ;; binding is provenance drift; delivery is blocked at context-ready.
+  ;; BUG-0009: the fixture's version-tagged branch/artifact names derive from
+  ;; q-version, because the production gate keys "current wave" off the
+  ;; canonical version.
   (test-case "F7 provenance gate blocks delivery on drifting artifacts"
     (call-with-campaign
      1
@@ -128,7 +132,7 @@
        (define journal-path (build-path dir ".planning" "campaigns" plan "coordinator-w0.json"))
        (define journal-datum (call-with-input-file journal-path read-json))
        (define receipt (hash-ref journal-datum 'receipt))
-       (define patched-receipt (hash-set receipt 'branch "campaign/v1.00.31-w0"))
+       (define patched-receipt (hash-set receipt 'branch (format "campaign/v~a-w0" q-version)))
        (call-with-output-file journal-path
                               (lambda (out)
                                 (write-json (hash-set journal-datum 'receipt patched-receipt) out))
@@ -138,10 +142,10 @@
        (define rec* (load-campaign-record dir plan))
        (set-campaign-wave-delivery-branch! (for/first ([w (in-list (campaign-record-waves rec*))])
                                              w)
-                                           "campaign/v1.00.31-w0")
+                                           (format "campaign/v~a-w0" q-version))
        (persist-campaign! dir rec*)
        ;; Drift: declared artifact files with no SHA256SUMS binding.
-       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (define adir (build-path dir "q" "artifacts" "probe" (format "v~a-w0" q-version)))
        (make-directory* adir)
        (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
                         (build-path adir "matrix.json"))
@@ -158,7 +162,7 @@
        (check-equal? calls '() "no ladder action ran past the provenance gate")
        (check-equal? (stage-count dir plan) "context-ready"))))
 
-  ;; R11 (v1.00.31 W5): the frozen manifest title carries the campaign version,
+  ;; R11 (this campaign's W5): the frozen manifest title carries the campaign version,
   ;; so the provenance gate stays strict even when the delivery branch follows
   ;; the executor's campaign/<hash8>/w<N> shape and therefore has no version
   ;; tag. Before this, such a branch silently degraded the gate to historical
@@ -170,7 +174,7 @@
        (define ready (done-record dir))
        (define plan (campaign-plan-id ready))
        ;; Drift: a declared current-wave artifact directory with no SHA256SUMS.
-       (define adir (build-path dir "q" "artifacts" "probe" "v1.00.31-w0"))
+       (define adir (build-path dir "q" "artifacts" "probe" (format "v~a-w0" q-version)))
        (make-directory* adir)
        (display-to-file "{\n \"recorded-head\": \"0000000000000000000000000000000000000000\"\n}\n"
                         (build-path adir "matrix.json"))
@@ -185,7 +189,7 @@
        (check-true (string-contains? (delivery-outcome-message outcome) "binds no SHA256SUMS")
                    "current-wave drift is enforced without a version-tagged branch")
        (check-equal? calls '() "no ladder action ran past the provenance gate"))
-     #:title "# Plan: v1.00.31 Delivery coordinator test"))
+     #:title (format "# Plan: v~a Delivery coordinator test" q-version)))
 
   (test-case "W3 branch-not-published durable gate names branch and head with the remedy"
     (call-with-campaign
