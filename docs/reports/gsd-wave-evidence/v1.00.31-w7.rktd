@@ -1,7 +1,7 @@
 #hasheq((schema-version . 2) (milestone . 896) (wave . "W7") (issue . 9730)
- (status . "awaiting-final-review — content complete and verified through four CHANGES-REQUESTED review rounds with all nineteen findings fixed; NOT merge-authorized while the review record shows no APPROVED verdict at this head")
- (implementation-sha . "9841fed8f2e24bb343e54d310ff836044a903602")
- (content-digest . "72f83ed86f0d0fa4280c39ef311997ff0a4721f8b42bf19ec5d76bfcb45749d2")
+ (status . "awaiting-final-review — content complete and verified through five CHANGES-REQUESTED review rounds with all thirty-three findings fixed; NOT merge-authorized while the review record shows no APPROVED verdict at this head")
+ (implementation-sha . "3a3d3297fe5172c26303a159a67a187e4639a459")
+ (content-digest . "9dd3efed0134d6ed5671601252cf8531b80e5a1000d7479283aeaced10887aed")
  (plan-id . "fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75")
  (base-sha . "50bdf7334a9161e9e930b40be0870c52a498a0b9")
  (required-checks . ("lint" "lint-quality" "security" "release-dry-run" "workflows (0)"
@@ -12,7 +12,7 @@
  (merge-authorization
   . #hasheq((operator . "coinerd")
             (wave . "W7")
-            (head . "9841fed8f2e24bb343e54d310ff836044a903602")
+            (head . "3a3d3297fe5172c26303a159a67a187e4639a459")
             (action . "squash-merge the W7 implementation pull request (campaign/v1.00.31-w7) through the protected merge gate after all required checks are green and the APPROVED independent review is bound at this exact head")
             (source . "Operator directive in the v1.00.31 delivery session of 2026-09-25 authorizing the W7 merge once CI and the independent review are green, per the amended Approval contract in PLAN-v1.00.31-GSD-WAVE-DELIVERY-INTEGRITY.md")))
  (delivery-scope
