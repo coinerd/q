@@ -146,8 +146,8 @@ faking either the branch or the evidence.
 
 ### Artifact checksums
 
-All three manifests verify in full from the repository root — 6/6 W6, 9/9 W7,
-1/1 tier-ownership, 16/16 entries — and the **unfiltered per-manifest output is
+All three manifests verify in full from the repository root — 6/6 W6, 11/11 W7,
+1/1 tier-ownership, 18/18 entries — and the **unfiltered per-manifest output is
 retained in the chain capture** (`raw/verify-chain.txt`, section "artifact
 checksum verification, full unfiltered output"). It lives there rather than in a
 separate log because the artifact-provenance linter requires every file under the
@@ -163,7 +163,7 @@ committed bytes rather than of a superseded state. Review round 4 challenged the
 earlier wording of that caveat, which claimed the log could not contain the
 verification of its own entry while the output contains exactly that line; the
 challenge was upheld and the wording corrected. The authoritative check is still
-one `sha256sum -c` from the repository root, which returns 16/16 OK.
+one `sha256sum -c` from the repository root, which returns 18/18 OK.
 
 It is therefore run, in this order, after this wave is merged and main CI is
 green:
