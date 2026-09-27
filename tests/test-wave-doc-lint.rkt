@@ -221,6 +221,48 @@
                                   "warning names both spellings"))
                     (lambda () (cleanup! dir))))
 
+    (test-case "a co-located doc from ANOTHER campaign is not a slug mismatch"
+      ;; Reproduces the v1.00.30 W0 false positive. Several campaigns share
+      ;; .planning/waves/, so a wave can have BOTH its own doc and a doc
+      ;; belonging to a different, already-completed campaign. The arrow target
+      ;; EXISTS, so the plan resolves unambiguously and there is nothing to
+      ;; align. Reporting this told operators to re-point a correct arrow at
+      ;; another campaign's document, after which load-plan-from-index would
+      ;; load the WRONG content for that wave.
+      (define dir (make-temporary-file "w4-slug-2campaign~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory* (build-path dir ".planning" "waves"))
+                      (with-output-to-file (build-path dir ".planning" "PLAN.md")
+                                           (lambda ()
+                                             (displayln "# Plan: two campaigns share waves/")
+                                             (newline)
+                                             (displayln "- [DONE] W0: Mine → waves/W0-mine.md"))
+                                           #:exists 'replace)
+                      ;; this campaign's doc -- the arrow target, which exists
+                      (with-output-to-file (build-path dir ".planning" "waves" "W0-mine.md")
+                                           (lambda ()
+                                             (displayln "# Wave 0")
+                                             (displayln "Status: DONE")
+                                             (newline)
+                                             (displayln "## Goal")
+                                             (displayln "This campaign's own W0."))
+                                           #:exists 'replace)
+                      ;; a DIFFERENT campaign's W0, co-located in the same directory
+                      (with-output-to-file (build-path dir ".planning" "waves" "W0-theirs.md")
+                                           (lambda ()
+                                             (displayln "# Wave 0")
+                                             (displayln "Status: DONE")
+                                             (newline)
+                                             (displayln "## Goal")
+                                             (displayln "Another campaign's W0."))
+                                           #:exists 'replace)
+                      (check-equal? (check-slug-consistency dir)
+                                    '()
+                                    "a doc whose arrow target exists is not drift")
+                      (check-equal? (slug-mismatch-warning-lines dir) '()))
+                    (lambda () (cleanup! dir))))
+
     (test-case "the lint seam now exists in the plan tooling (W0 pin flipped)"
       (check-equal? (file-exists? wave-docs-src) #t)
       (check-true (string-contains? (file->string wave-docs-src) "lint-wave-doc")
