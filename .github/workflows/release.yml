@@ -63,6 +63,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          # This job runs the workflows suite, which includes the W6
+          # adversarial rehearsal test
+          # (tests/test-wave-integrity-adversarial.rkt). Its recorded-head
+          # check requires the recorded rehearsal head to be a commit this
+          # repository actually contains, and the default depth-1 shallow
+          # clone cannot resolve a head that predates the checkout tip. The
+          # same omission was already repaired in ci.yml for the same test
+          # (see the fetch-depth: 0 on that workflow's workflows job, which
+          # cites this exact test); the release lane was the sibling that was
+          # missed, and it failed the v1.00.31 release with
+          # "the rehearsal head is present in this repository" before
+          # reaching prepare. The preflight job above already uses
+          # fetch-depth: 0 for the same class of history-dependent check.
+          fetch-depth: 0
       - uses: ./.github/actions/setup-racket
 
       - name: Version consistency check
