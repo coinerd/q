@@ -50,10 +50,13 @@
 (define-runtime-path workflows-dir "../.github/workflows")
 (define-runtime-path setup-racket-action-path "../.github/actions/setup-racket/action.yml")
 (define-runtime-path artifacts-dir "../artifacts")
-;; The current campaign's W6 consumer matrix (derived from the version
-;; module per BUG-0009).
-(define consumers-json-path
-  (build-path artifacts-dir "proof-graph" (format "v~a-w6" q-version) "consumers.json"))
+;; The prepared-environment consumer matrix is a FROZEN v1.00.29-campaign
+;; artifact (that campaign's W6 is the wave that produced it). Deriving its
+;; directory from q-version only held while the canonical version was 1.00.29;
+;; it now names the current milestone's own W6 directory, which has no consumer
+;; matrix. Frozen predecessor artifacts are pinned literally with the reason
+;; recorded here.
+(define consumers-json-path (build-path artifacts-dir "proof-graph" "v1.00.29-w6" "consumers.json"))
 
 (define workflow-paths
   (sort (for/list ([p (in-directory workflows-dir)]

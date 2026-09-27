@@ -82,10 +82,16 @@
          (if (string=? (path->string up) (path->string dir))
              #f ; filesystem root reached
              (loop up))])))
-  (or (for/first ([candidate (in-list candidates)]
+  ;; The launch tree wins. A `q`-shaped sibling is a FALLBACK for the
+  ;; monorepo layout (launched from a directory that is not inside a repo),
+  ;; never a substitute for the tree the runner was started in: preferring
+  ;; it first made every worktree in this working area silently measure the
+  ;; neighbouring `q/` clone — different files, different commit, different
+  ;; q-version — while reporting a RUN-SUMMARY for it.
+  (or ancestor-root
+      (for/first ([candidate (in-list candidates)]
                   #:when (q-root-candidate? candidate))
         candidate)
-      ancestor-root
       orig))
 
 (define base-dir (resolve-base-dir (find-system-path 'orig-dir)))

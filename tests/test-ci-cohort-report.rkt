@@ -1872,11 +1872,13 @@
 ;; ============================================================
 
 (define-runtime-path ci-baseline-dir "../artifacts/ci-baseline")
-;; v29-dir names the CURRENT milestone's final-cohort artifact, derived
-;; from the version module (BUG-0009): during this release's bake window
-;; the canonical q-version points at this release, so the derived path
-;; names exactly the artifact this suite guards.
-(define v29-dir (build-path ci-baseline-dir (format "v~a-final" q-version)))
+;; The final cohort guarded below is a FROZEN v1.00.29-campaign measurement: a
+;; closed set of >= 20 eligible unique head SHAs observed by that campaign's W10.
+;; This bake produced no new cohort, so the guarded artifact is the 1.00.29 one.
+;; Deriving this path from q-version (as an earlier BUG-0009 pass here did) only
+;; worked while the canonical version happened to be 1.00.29 and named a
+;; directory that does not exist afterwards. Pinned literally, reason recorded.
+(define v29-dir (build-path ci-baseline-dir "v1.00.29-final"))
 ;; The PRIOR final cohort is a frozen v1.00.28-series artifact (older
 ;; per-entry schema: `sha`, not `head_sha`), pinned literally like every
 ;; other frozen predecessor artifact in this repo — deriving it from the

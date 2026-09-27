@@ -5,7 +5,11 @@
 ;; @timeout 900
 ;; @boundary integration
 
-;; v1.00.31 W6 — adversarial permanence rehearsal.
+;; This campaign's W6 — adversarial permanence rehearsal.
+;;
+;; BUG-0009: every path below that names THIS campaign's own artifacts is
+;; derived from the version module, so a later bump fails loudly here instead
+;; of silently pinning stale literals.
 ;;
 ;; Replays the frozen register harness in expect-refused mode over injected
 ;; fixtures: every register row F1-F13 must be refused by its shipped guard, a
@@ -27,17 +31,22 @@
          rackunit
          json
          (file "../util/json/checksum.rkt")
-         (file "../scripts/ci/inject-wave-defect.rkt"))
+         (file "../scripts/ci/inject-wave-defect.rkt")
+         (only-in (file "../util/version.rkt") q-version))
 
 (define-runtime-path q-root-rel "..")
 (define q-root (simplify-path q-root-rel))
 (define matrix-path
-  (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json"))
-(define sums-path (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w6/SHA256SUMS"))
+  (build-path q-root
+              (format "artifacts/wave-delivery-integrity/v~a-w6/injection-matrix.json" q-version)))
+(define sums-path
+  (build-path q-root (format "artifacts/wave-delivery-integrity/v~a-w6/SHA256SUMS" q-version)))
 (define register-path
-  (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json"))
+  (build-path q-root
+              (format "artifacts/wave-delivery-integrity/v~a-w0/failure-register.json" q-version)))
 (define reproduction-path
-  (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json"))
+  (build-path q-root
+              (format "artifacts/wave-delivery-integrity/v~a-w0/w4-reproduction.json" q-version)))
 
 (define (git-object-present? root sha)
   (define code
@@ -174,7 +183,8 @@
   ;; The human report must name the same rehearsal head as the matrix: a
   ;; generator-synced literal that drifts is a provenance defect, not cosmetics.
   (define report-text
-    (file->string (build-path q-root "docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md")))
+    (file->string (build-path q-root
+                              (format "docs/reports/WAVE-INTEGRITY-REHEARSAL-v~a.md" q-version))))
   (define report-head
     (and (regexp-match #px"Rehearsal head `([0-9a-f]{40})`" report-text)
          (second (regexp-match #px"Rehearsal head `([0-9a-f]{40})`" report-text))))
@@ -224,7 +234,8 @@
       (cdr entry)))
   (define (raw-segment? file)
     (and (member "raw" (map path->string (explode-path file))) #t))
-  (for ([file (in-directory (build-path q-root "artifacts/wave-delivery-integrity/v1.00.31-w6"))]
+  (for ([file (in-directory
+               (build-path q-root (format "artifacts/wave-delivery-integrity/v~a-w6" q-version)))]
         #:when (and (file-exists? file)
                     (not (directory-exists? file))
                     (not (raw-segment? file))

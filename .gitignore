@@ -87,3 +87,8 @@ tmp/
 # v1.00.28 W0: runtime-generated census files (counter scope marker + probe output)
 .q-census-counters
 artifacts/test-runtime/.probe-census.json
+
+# GSD chain logs: working captures for long verification runs. They are local
+# evidence-in-progress and must never be committed - a committed chain log is a
+# hygiene failure in this campaign (one was tracked at .chainlogs/w7-version-derive-tests.log).
+.chainlogs/

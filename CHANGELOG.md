@@ -1,3 +1,142 @@
+## v1.00.31 — 2026-09-25
+
+Released 2026-09-25.
+
+> v1.00.31: wave-delivery integrity — freeze the failure modes that let a wave
+> look delivered when it was not, ship the guards that refuse them, prove the
+> guards by injection, repair the one wave they caught, and release the result.
+
+This campaign did not add agent features. It hardened the path by which a wave
+is declared delivered, then used that hardened path to repair a wave the old
+path had let through. W0 froze a 13-row failure-mode register (F1-F13,
+sha256 `4ce067d6…`, artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json)
+with a red-first reproduction for the v1.00.30 W4 block. W1 enforced the
+invocation contract; W2 made evidence identity digest-bound
+(gsd-evidence-bind.rkt recomputes and compares at the exact head); W3 added
+remote-backing preconditions; W4 corrected the delivery tool's API and approval
+contract; W5 made artifact provenance deterministic; W6 rehearsed permanence by
+injecting every registered failure mode.
+
+The W6 rehearsal returns the exact verdict **PERMANENT** over 13 rows: all 13
+injected defects refused, 0 failing, and the clean synthetic control accepted by
+every guard (artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json,
+rehearsal head `50bdf7334…`, inputs digest `fb224a6f…`, 9 rehearsal inputs). The
+permanence claim is bounded to that rehearsal: it is evidence that these 13
+guards refuse these 13 defects, not a claim that no future defect can pass.
+
+W7 then repaired the blocked v1.00.30 W4 wave through the hardened ladder and
+delivered this release. The v1.00.30 W4 outcome is **DELIVERED**: implementation
+squash-merged as `cc25b3663…` (PR #9752, 22/22 required checks green) after 12
+independent review rounds (11 REQUEST_CHANGES, every finding fixed, final
+APPROVED), evidence bound to the real merge SHA by binding publication
+`5f4a80fcd…` (PR #9753, EMPTY_SHA publication diff, record-commit pure,
+independent binding review APPROVED), and main run 36087264560 concluded
+success so `governance` returned governed, `sync` returned synchronized and
+`status` returned `delivered`; issue #9690 was closed as completed afterwards
+(artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json). The repair
+also surfaced three post-squash defects in already-published state and one
+main-CI teardown race, all fixed and proved by their own tests.
+
+Six of the seven CI-strict release-preflight gates pass locally on the release
+tree (artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json):
+release notes, fmt canonicality, metrics lint, README status sync, the plain-tar
+symlink audit and the bundle dry-run. The seventh, release readiness, is
+**deferred, not passed** — it refuses to run on a campaign branch and requires
+`.gate-evidence` records naming the release commit and version, so it runs on
+clean main after this wave merges and before the tag. The annotated `v1.00.31`
+tag is pushed only if all seven gates pass there, after a green main run, and
+public assets, checksums and provenance are verified before the milestone closes.
+
+Scheduler states for this release are explicit (milestone #896). Activated in
+this release: the wave-delivery integrity guards and the delivery of the
+repaired v1.00.30 W4 wave, and one runner fix with direct evidence impact — the
+test runner now measures the tree it was launched from instead of silently
+preferring a neighbouring `q/` checkout, so a local suite run can no longer
+report a RUN-SUMMARY for a tree nobody asked about
+(tests/test-runner-base-dir-resolution.rkt). Not activated in this release:
+every CI scheduling and sharding lever — no shard-plan, queue, lane-promotion or
+timeout change; the guarded compiled-root pilot stays scoped to the fast lanes
+it was defined for; and no latency target is claimed, because none was measured
+for this release.
+
+### Wave-delivery integrity: PERMANENT over the frozen 13-row register; v1.00.30 W4 DELIVERED
+
+### Fixes
+- Test-runner base-dir resolution: a runner launched in any worktree of this
+  monorepo silently resolved `base-dir` to the neighbouring `q/` clone instead
+  of its own tree, so a local suite run collected and executed a different
+  checkout and printed a RUN-SUMMARY naming that tree's version. The launch
+  tree now wins; the `q`-shaped candidates remain only as a monorepo fallback
+  (`scripts/run-tests/classify-metadata.rkt`,
+  `tests/test-runner-base-dir-resolution.rkt`).
+- A gate that could not fail: `tests/test-worker-security.rkt` ran its W2
+  overlap-governance checks as module-body cases after the file's first
+  `run-tests`, paired with a hand-rolled `current-check-handler` that was meant
+  to exit non-zero. rackunit printed their FAILURE blocks, but the file exited 0
+  and the runner — which treats a file as failed purely on a non-zero exit code
+  — reported it PASSED. The W2 checks are now an ordinary `test-suite` run
+  through `run-tests`, whose failure count drives the exit, and the W2 artifact
+  paths are pinned to the frozen v1.00.29 campaign. Red-first proof that the
+  gate can now fail:
+  `artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt`.
+- Version-coincidence defects surfaced by that fix, in both directions. A
+  sweep pinned eight tests that derived FROZEN v1.00.29-campaign artifact paths
+  from the live version; two further files, unchanged from main, had the mirror
+  defect — a derived path/field that is really a frozen authoring identity (the
+  shard-plan report's `wave`, which the committed example artifact pairs with
+  its own `spec_reference`, and the v1.00.29 final-cohort directory, a frozen
+  >=20-unique-head-SHA measurement this release did not reproduce). Both classes
+  are correct on main only while the canonical version happens to be 1.00.29.
+
+### Features
+- Wave-delivery integrity register with a 13-row failure-mode freeze and a
+  red-first reproduction of the blocked v1.00.30 W4 wave
+  (artifacts/wave-delivery-integrity/v1.00.31-w0/).
+- Invocation-contract enforcement over declared workflow/action commands
+  (scripts/ci/invocation-contract.rkt), digest-bound evidence identity
+  (scripts/gsd-evidence-bind.rkt), artifact-provenance determinism
+  (scripts/ci/verify-artifact-provenance.rkt) and the corrected delivery-tool
+  API/approval contract (scripts/gsd-delivery.py, extensions/gsd/).
+- Adversarial permanence rehearsal: every registered failure mode is injected and
+  must be refused, and a clean control must be accepted, so a guard cannot pass
+  by refusing everything (artifacts/wave-delivery-integrity/v1.00.31-w6/).
+- Delivery of the repaired v1.00.30 W4 guarded compiled-root activation through
+  the full ladder, bound to its real merge SHA.
+
+### Breaking / Behavior Changes
+- None for users of the CLI or the library. Internal delivery governance is
+  stricter: an evidence record whose digest, head binding, review artifact or
+  operator authorization does not match the verified head is refused by type
+  (`head-binding-mismatch`, `no-review-artifact`, `no-operator-authorization`)
+  rather than being repaired automatically.
+
+### Migration Notes
+- No action required. Campaign maintainers get typed refusals instead of silent
+  acceptance; release surfaces (version, README, metrics) are regenerated by the
+  canonical generators only.
+
+### Testing
+- W6 rehearsal: 13/13 registered rows refused, 0 failing, clean synthetic control
+  accepted (artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json).
+- W7 release bake: the declared verify chain on the release tree, plus six of the
+  seven release-preflight gates (release notes, fmt canonicality, metrics lint,
+  README status sync, tarball symlink audit, bundle dry-run). The seventh,
+  release readiness, is deferred by design to clean main after the merge because
+  it is branch-gated and consumes gate evidence that cannot exist before then
+  (artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json).
+- W4 repair: full local verify chain at the repaired head plus 22/22 required
+  PR checks and a green main run before the governance gate
+  (artifacts/ci-recovery/v1.00.30-w4/).
+
+### Operational / Release
+- Tag `v1.00.31` is annotated and pushed only after a green main CI run; public
+  assets, checksums, manifest/provenance and the verify-public workflow are
+  verified before milestone closure.
+- The v1.00.30 W4 wave is closed as DELIVERED with its merge-SHA binding
+  (artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json); the
+  coordinator-owned latency-regime fingerprint for the compiled-root pilot stays
+  outstanding and is recorded as such rather than filled in.
+
 ## v1.00.29 — 2026-09-13
 
 Released 2026-09-13.

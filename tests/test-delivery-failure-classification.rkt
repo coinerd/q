@@ -2,7 +2,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @covers scripts/gsd-delivery.py
-;; tests/test-delivery-failure-classification.rkt — v1.00.31 W3 (register F5/F8):
+;; tests/test-delivery-failure-classification.rkt — this campaign's W3 (register F5/F8):
 ;; every delivery-subprocess failure is a typed, diagnosable refusal carrying
 ;; the command, exit code and class — never a bare "exit 128".
 ;;
@@ -16,7 +16,8 @@
          racket/string
          racket/port
          racket/path
-         racket/system)
+         racket/system
+         (only-in (file "../util/version.rkt") q-version))
 
 (define-runtime-path controller "../scripts/gsd-delivery.py")
 
@@ -70,13 +71,15 @@
                       "/repo"
                       "fetch"
                       "origin"
-                      "refs/heads/campaign/v1.00.31-w3:refs/remotes/origin/campaign/v1.00.31-w3")
+                      (format "refs/heads/campaign/v~a-w3:refs/remotes/origin/campaign/v~a-w3"
+                              q-version
+                              q-version))
                 "git"
                 128
                 "fatal: couldn't find remote ref"))
     (check-true (string-prefix? reason "remote-ref-missing:")
                 (format "typed class expected, got: ~a" reason))
-    (check-true (string-contains? reason "refs/heads/campaign/v1.00.31-w3")
+    (check-true (string-contains? reason (format "refs/heads/campaign/v~a-w3" q-version))
                 "the refspec's source ref is named"))
 
   (test-case "F8: a non-fast-forward push classifies as non-fast-forward"

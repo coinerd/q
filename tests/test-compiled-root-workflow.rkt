@@ -4,7 +4,7 @@
 ;; @suite workflows
 ;; @timeout 600
 
-;; tests/test-compiled-root-workflow.rkt — v1.00.31 W1
+;; tests/test-compiled-root-workflow.rkt — this campaign's W1
 ;;
 ;; Workflow/action ↔ script invocation contract for the compiled-root
 ;; producer (register F1).
@@ -43,7 +43,7 @@
 ;; (this repository's pre-commit hook, for instance) exports GIT_DIR/GIT_INDEX_FILE,
 ;; and `git -C <scratch fixture> init` then acts on the HOOK's repository: the
 ;; fixture's `git init` re-initialised the canonical checkout as bare once
-;; (artifacts/wave-delivery-integrity/v1.00.31-w1/raw/hook-env-incident.txt), which
+;; (artifacts/wave-delivery-integrity/<campaign>-w1/raw/hook-env-incident.txt), which
 ;; is why tests/test-compiled-root.rkt carries the same guard. It is applied to the
 ;; whole test rather than to the fixture alone because the producer shells out to
 ;; git as well (checkout cleanliness) and would inherit the same environment.
@@ -296,7 +296,7 @@
 
 ;; ---------------------------------------------------------------------------
 ;; v1.00.30 W4 guarded compiled-root activation (issue #9690), repaired by
-;; v1.00.31 W7.
+;; the current campaign's W7.
 ;;
 ;; The blocked W4 wave carried these proofs and they are preserved verbatim
 ;; (path-adapated to the invocation the W1 contract pinned: the whole-checkout
@@ -486,7 +486,7 @@
             "activation failure selects the one eager compile gate, never lazy amplification")
 
 ;; Producer: the SAME prepared artifact carries the compiled root inside the
-;; already-contracted q-compiled/ prefix (v1.00.31 W1 invocation contract).
+;; already-contracted q-compiled/ prefix (this campaign's W1 invocation contract).
 (define prepare-text (file->string prepare-action-yml))
 (check-true (string-contains? prepare-text "'q-compiled/'")
             "the trusted root joins the q-compiled/ allowlist")
@@ -512,7 +512,7 @@
             "setup-racket forwards the verified root directory")
 (check-true (string-contains? setup-text "./tests/metadata-discovery/fixture/*")
             "the BUG-0065 purge keeps its frozen fixture exclusions")
-;; v1.00.31 W7: the resolution step consumes the restore action's output through
+;; This campaign's W7: the resolution step consumes the restore action's output through
 ;; a hyphen-free shell variable; the step OUTPUT keeps the hyphenated name the
 ;; job-level resolution step reads.
 (check-true
@@ -523,7 +523,7 @@
             "setup-racket still exposes the verified root as a step output")
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.31 W7: the CLI `run` contract that the setup-racket pre-resolution step
+;; This campaign's W7: the CLI `run` contract that the setup-racket pre-resolution step
 ;; declares. Independent review round 2 (finding 5) required committed coverage
 ;; for BOTH shapes: resolution-only (no --module) and module-bearing launch.
 
@@ -588,7 +588,7 @@
     (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.31 W7 (round-3 review): the lane's shell/env plumbing must match the
+;; This campaign's W7 (round-3 review): the lane's shell/env plumbing must match the
 ;; mode vocabulary both CLIs implement.
 
 ;; Shell variable names may not contain hyphens: the setup-racket step consumes
@@ -616,7 +616,7 @@
 (check-true (string-contains? restore-text "trusted-root/*) continue"))
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.31 W7 (round-4 review): the W4 telemetry the frozen wave doc requires
+;; This campaign's W7 (round-4 review): the W4 telemetry the frozen wave doc requires
 ;; (producer cost / restore cost / usable-root hit / bounded eager-fallback /
 ;; compiled-code source) must actually be emitted, and must not lie.
 
@@ -677,7 +677,7 @@
 ;; The resolution step that creates the map directory is SKIPPED when the lane
 ;; is off, so the shard step must create it before launching: the launcher
 ;; opens the telemetry file for writing and fails closed on a missing
-;; directory (v1.00.31 W7 repair, found by the PR's own CI on the off lane).
+;; directory (this campaign's W7 repair, found by the PR's own CI on the off lane).
 ;; The mkdir is anchored INSIDE the shard step's run block: the resolution
 ;; step has an earlier, identically-worded mkdir that is skipped on the off
 ;; lane, so a whole-file search would pass even with the fix removed.

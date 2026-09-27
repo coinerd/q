@@ -366,7 +366,7 @@
       (cleanup-tmp dir))))
 
 ;; ============================================================
-;; Delivery-gated completion (v1.00.31 W3, register F9 + F10)
+;; Delivery-gated completion (this campaign's W3, register F9 + F10)
 ;; ============================================================
 
 (define delivery-gate-suite

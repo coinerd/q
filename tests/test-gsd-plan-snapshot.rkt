@@ -62,7 +62,7 @@
                     captured-plan)
       (delete-directory/files dir))
 
-    ;; F13 (v1.00.31 W5): seed-and-bind reused an existing snapshot verbatim
+    ;; F13 (this campaign's W5): seed-and-bind reused an existing snapshot verbatim
     ;; even when the authored plan BODY had been amended, silently binding a
     ;; campaign to a frozen contract that no longer matches the plan being
     ;; executed. The freeze must refuse instead.

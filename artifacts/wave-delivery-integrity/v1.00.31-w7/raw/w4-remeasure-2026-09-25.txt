@@ -1,0 +1,84 @@
+v1.00.30 W4 re-measurement (2026-09-25) — a true local measurement of the W4 tree
+
+why this file exists: the verify-chain capture retained with the W4 repair was produced by a
+test runner whose resolve-base-dir preferred the neighbouring q/ clone over the worktree it was
+launched in, so its four runner-suite sections described a different checkout. The wave's
+authoritative gates (PR #9752 22/22 required checks on the branch, main run 36087264560,
+governance -> governed, status -> delivered) are unaffected: CI checks out the branch itself.
+This capture is a fresh, correctly-resolved local run against the W4 implementation head.
+
+worktree: /home/user/src/q-agent/remeasure/q (checked out at the W4 implementation head; no q/ sibling)
+head: 1158f1b7023b08c9608f59c8cd4c0c04915d5de6
+
+--- the full log follows ---
+
+=== v1.00.30 W4 re-measurement at 1158f1b7023b08c9608f59c8cd4c0c04915d5de6 (2026-09-25T08:20:07Z) ===
+--- resolver proof: the runner's base-dir for THIS invocation
+base-dir=/home/user/src/q-agent/remeasure/q
+--- focused raco test (cwd-relative, measures this tree)
+84
+raco test: (submod "tests/test-prepared-env-report.rkt" test)
+38 success(es) 0 failure(s) 0 error(s) 38 test(s) run
+185 tests passed
+FOCUSED-EXIT=0
+--- suite arch
+  Files:     32 total, 32 passed, 0 failed, 0 timeouts
+  Tests:     306 total, 306 passed, 0 failed
+  Category:  PASS=32
+  Elapsed:   1m 27.353s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.29 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=87.353 metadata-completeness=explicit:32/heuristic:0/missing:0
+SUITE-arch-EXIT=0
+--- suite security
+  Files:     64 total, 64 passed, 0 failed, 0 timeouts
+  Tests:     740 total, 740 passed, 0 failed
+  Category:  PASS=64
+  Elapsed:   1m 18.55s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.29 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=78.55 metadata-completeness=explicit:64/heuristic:0/missing:0
+SUITE-security-EXIT=0
+--- suite workflows
+  Files:     33 total, 33 passed, 0 failed, 0 timeouts
+  Tests:     316 total, 316 passed, 0 failed
+  Category:  PASS=33
+  Elapsed:   2m 0.691s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.29 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=120.691 metadata-completeness=explicit:33/heuristic:0/missing:0
+SUITE-workflows-EXIT=0
+--- suite fast
+  Files:     1208 total, 1208 passed, 0 failed, 0 timeouts
+  Tests:     17987 total, 17987 passed, 0 failed
+  Category:  PASS=1208
+  Elapsed:   25m 25.303s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.29 suite=fast profile=local shard=none execution-mode=subprocess file-count=1208 pass=1208 fail=0 timeout=0 skip=0 wall-clock-seconds=1525.303 metadata-completeness=explicit:1180/heuristic:0/missing:28
+SUITE-fast-EXIT=0
+--- check-deps
+--- Results ---
+All external packages declared in info.rkt. OK
+DEPS-EXIT=0
+--- metrics lint
+All 5 static metrics match README.md.
+METRICS-EXIT=0
+--- provenance lint
+provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/18/sha: recorded head cf1c6648c2a097940e3d66f65955ab7b8e6f6cdb is not an ancestor of the tip (historical pinned record)
+provenance-note: ci-baseline/v1.00.23-c0/report.json/queue-telemetry/samples/19/sha: recorded head bb16fdb1fe17914f923c70c7e5fecb6447e8839a is not an ancestor of the tip (historical pinned record)
+artifact-provenance ok (946 note(s))
+PROV-EXIT=0
+--- sha256sums
+activation.json: OK
+raw/drill-output.txt: OK
+raw/red-first-review-fixes.txt: OK
+raw/verify-chain.txt: OK
+raw/w4-drill.rkt.txt: OK
+rollback-drill.json: OK
+SUMS-EXIT=0
+=== REMEASURE DONE 2026-09-25T08:57:23Z ===

@@ -9,14 +9,15 @@
 ;; minutes; the honest timeout is the measured one, never a truncated pass.
 
 ;; This test deliberately declares NO @covers: it exercises no production module.
-;; It freezes the v1.00.31 contract artifacts (failure register, red-fixture
+;; It freezes this campaign's contract artifacts (failure register, red-fixture
 ;; reproductions, contract document) and cross-checks them against each other and
 ;; against the committed raw plan excerpt. Claiming @covers here would create a
 ;; false impact link in tests/.coverage-manifest.json. (From W1 on it also
 ;; requires scripts/ci/invocation-contract.rkt — a CI tool — to serve as the
 ;; oracle for F1's guard, not a production module.)
 
-;; Register harness for the frozen v1.00.31 wave-delivery integrity register.
+;; Register harness for the frozen wave-delivery integrity register of this
+;; campaign.
 ;;
 ;; W0 deliverable (task 3): a harness that runs each register row's fixture in
 ;; `expect-refused` mode and reports per-row status, so W6 can re-run it against
@@ -61,18 +62,22 @@
          (file "../extensions/gsd/plan-snapshot.rkt")
          (only-in (file "../scripts/gsd-wave-gate.rkt")
                   validate-wave-evidence
-                  wave-evidence-result-reasons))
+                  wave-evidence-result-reasons)
+         (only-in (file "../util/version.rkt") q-version))
 
 (define-runtime-path q-root "..")
-(define-runtime-path register-path
-                     "../artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json")
-(define-runtime-path reproduction-path
-                     "../artifacts/wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json")
-(define-runtime-path
- raw-register-path
- "../artifacts/wave-delivery-integrity/v1.00.31-w0/raw/plan-failure-mode-register.txt")
-(define-runtime-path sums-path "../artifacts/wave-delivery-integrity/v1.00.31-w0/SHA256SUMS")
-(define-runtime-path contract-doc-path "../docs/reports/WAVE-DELIVERY-INTEGRITY-CONTRACT-v1.00.31.md")
+;; BUG-0009: the paths below name THIS campaign's own frozen artifacts, so the
+;; version segment derives from the version module (a later bump fails loudly
+;; here instead of silently pinning a stale literal). The `define-runtime-path`
+;; anchor stays a literal path; only the derived version segment is computed.
+(define wave0-dir
+  (build-path q-root "artifacts" "wave-delivery-integrity" (format "v~a-w0" q-version)))
+(define register-path (build-path wave0-dir "failure-register.json"))
+(define reproduction-path (build-path wave0-dir "w4-reproduction.json"))
+(define raw-register-path (build-path wave0-dir "raw" "plan-failure-mode-register.txt"))
+(define sums-path (build-path wave0-dir "SHA256SUMS"))
+(define contract-doc-path
+  (build-path q-root "docs" "reports" (format "WAVE-DELIVERY-INTEGRITY-CONTRACT-v~a.md" q-version)))
 
 (define (read-json-file p)
   (with-input-from-file p (lambda () (read-json))))
@@ -150,7 +155,7 @@
 ;; do not exist in the checked-out tree, so re-deriving them in CI is impossible
 ;; by design. F1 is the exception and is executed live below. W6 replays all of
 ;; them as injections through the guards W1-W5 register; the raw inputs are kept
-;; under artifacts/wave-delivery-integrity/v1.00.31-w0/raw/ for offline replay.
+;; under artifacts/wave-delivery-integrity/<campaign>-w0/raw/ for offline replay.
 (define (hex64? s)
   (and (string? s) (regexp-match? #px"^[0-9a-f]{64}$" s)))
 
@@ -567,7 +572,7 @@
 
 ;; Each row is guarded by the thing W4 actually shipped: the offline python
 ;; contract suites, which fail on the unfixed tree (red-first run retained at
-;; artifacts/wave-delivery-integrity/v1.00.31-w4/raw/red-first-fixtures.txt)
+;; artifacts/wave-delivery-integrity/<campaign>-w4/raw/red-first-fixtures.txt)
 ;; and pass only once the resolver route and the amended approval contract
 ;; are in place.
 (define (run-python-suite rel)

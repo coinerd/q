@@ -690,14 +690,15 @@
 (define fr-yml-path (build-path repo-root ".github" "workflows" "full-regression.yml"))
 (define nightly-yml-path (build-path repo-root ".github" "workflows" "nightly.yml"))
 (define release-yml-path (build-path repo-root ".github" "workflows" "release.yml"))
+;; The duplicate classification and the removals accounting are FROZEN
+;; v1.00.29-campaign artifacts (that campaign's W0 and W9 produced them). Their
+;; directories were derived from q-version, which only held while the canonical
+;; version was 1.00.29; once it moves on they name a directory that does not
+;; exist. Pinned literally, reason recorded.
 (define dup-json-path
-  (build-path repo-root
-              "artifacts"
-              "proof-graph"
-              (format "v~a-w0" q-version)
-              "duplicate-classification.json"))
+  (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w0" "duplicate-classification.json"))
 (define removals-json-path
-  (build-path repo-root "artifacts" "proof-graph" (format "v~a-w9" q-version) "removals.json"))
+  (build-path repo-root "artifacts" "proof-graph" "v1.00.29-w9" "removals.json"))
 
 ;; Extracts a top-level (2-space indented) job section from workflow text.
 (define (job-section text job-name)

@@ -1,0 +1,198 @@
+W7 final verification chain — the single capture all W7 evidence is bound to
+
+tree:   /home/user/src/q-agent/wt-v10031-w7
+branch: campaign/v1.00.31-w7
+head:   e9af72fee9c652b16a017d37219d15e7eb5f9f0b
+note:   run with scripts/run-tests.rkt so the runner's resolve-base-dir lands on this
+        worktree; a runner that resolved the neighbouring q/ clone would report a
+        different tree's q-version and file inventory.
+
+results:
+  full regression (suite=all)  1409 files  1400 passed  1 failed  8 skipped-by-profile  29m36s
+  fast                          1209 files  1209 passed  0 failed              20m53s
+  arch                            32 files    32 passed  0 failed
+  workflows                       33 files    33 passed  0 failed
+  security                        64 files    64 passed  0 failed
+  lint-all                      23 passed, 0 failed, 2 non-blocking warnings
+  version-expectation lint       1511 test files, 0 hard-coded 1.00.31 literals
+  check-deps / metrics / notes   all clean
+  artifact provenance            w6 ok (951 notes), w7 ok (950 notes)
+  artifact checksums             16/16 entries OK across w6, w7 and tier-ownership, from the repo
+                                  root; the full unfiltered per-manifest output is in the
+                                  checksum section at the end of this log
+
+Every RUN-SUMMARY line reports runner-version=1.00.31 and the resolver's base-dir is this
+worktree, which is the property the base-dir fix restores.
+
+The single full-regression failure is tests/test-browser-playwright-sidecar.rkt
+(Sidecar EOF): the playwright npm module does not resolve for the node on this host, so
+the sidecar exits at launch. The file is untouched by this branch, it fails identically on
+main at 50bdf7334, and the ci profile declares @requires browser so CI skips it —
+pre-existing environmental, not a W7 regression.
+
+--- the verbatim chain log follows ---
+
+=== W7 FINAL verify at e9af72fee9c652b16a017d37219d15e7eb5f9f0b (2026-09-25T16:04:04Z) ===
+branch: campaign/v1.00.31-w7
+resolver base-dir=/home/user/src/q-agent/wt-v10031-w7/
+--- suite: all (full regression)
+;; run-tests: suite=all files=1409 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: profile=local skipped 1 file by @requires metadata
+;; run-tests: serializing 23 mutation-sensitive files before parallel batches
+.......................
+.......................................................................................................................F................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................SSSSSSS..........................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1409 total, 1400 passed, 1 failed, 0 timeouts
+             Skipped by profile: 8
+  Tests:     20554 total, 20553 passed, 1 failed
+  Category:  PASS=1400, SKIPPED_BY_PROFILE=8, ASSERTION_FAILURE=1
+  Elapsed:   29m 35.83s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ❌ FAIL
+═══════════════════════════════════════════════════════════
+
+FAILURES:
+  ✗ tests/test-browser-playwright-sidecar.rkt [ASSERTION_FAILURE] (exit=1, 0 passed, 1 failed, 1.579s)
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=1409 pass=1400 fail=1 timeout=0 skip=8 wall-clock-seconds=1775.83 metadata-completeness=explicit:1380/heuristic:0/missing:29
+FULL-EXIT=1
+--- suite: fast
+;; run-tests: suite=fast files=1209 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 13 mutation-sensitive files before parallel batches
+.............
+............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1209 total, 1209 passed, 0 failed, 0 timeouts
+  Tests:     17996 total, 17996 passed, 0 failed
+  Category:  PASS=1209
+  Elapsed:   20m 53.076s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=fast profile=local shard=none execution-mode=subprocess file-count=1209 pass=1209 fail=0 timeout=0 skip=0 wall-clock-seconds=1253.076 metadata-completeness=explicit:1180/heuristic:0/missing:29
+SUITE-fast-EXIT=0
+--- suite: arch
+;; run-tests: suite=arch files=32 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     32 total, 32 passed, 0 failed, 0 timeouts
+  Tests:     306 total, 306 passed, 0 failed
+  Category:  PASS=32
+  Elapsed:   26.549s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=arch profile=local shard=none execution-mode=subprocess file-count=32 pass=32 fail=0 timeout=0 skip=0 wall-clock-seconds=26.549 metadata-completeness=explicit:32/heuristic:0/missing:0
+SUITE-arch-EXIT=0
+--- suite: workflows
+;; run-tests: suite=workflows files=33 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 1 mutation-sensitive file before parallel batches
+.
+................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     33 total, 33 passed, 0 failed, 0 timeouts
+  Tests:     316 total, 316 passed, 0 failed
+  Category:  PASS=33
+  Elapsed:   1m 24.604s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=workflows profile=local shard=none execution-mode=subprocess file-count=33 pass=33 fail=0 timeout=0 skip=0 wall-clock-seconds=84.604 metadata-completeness=explicit:33/heuristic:0/missing:0
+SUITE-workflows-EXIT=0
+--- suite: security
+;; run-tests: suite=security files=64 jobs=12 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     64 total, 64 passed, 0 failed, 0 timeouts
+  Tests:     745 total, 745 passed, 0 failed
+  Category:  PASS=64
+  Elapsed:   1m 1.902s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=security profile=local shard=none execution-mode=subprocess file-count=64 pass=64 fail=0 timeout=0 skip=0 wall-clock-seconds=61.902 metadata-completeness=explicit:64/heuristic:0/missing:0
+SUITE-security-EXIT=0
+--- lint-all
+  [PASS] hotspot
+
+── Summary: 23 passed, 2 warnings ──
+LINT-EXIT=0
+--- version-expectations
+Version-expectation lint PASSED — 1511 test files scanned, 0 hard-coded "1.00.31" literals
+--- deps
+All external packages declared in info.rkt. OK
+--- metrics
+All 5 static metrics match README.md.
+--- release notes
+PASSED: CHANGELOG.md version 1.00.31
+--- artifact provenance
+artifact-provenance ok (951 note(s))
+artifact-provenance ok (950 note(s))
+--- artifact checksums (from repo root: the sums are repo-root-relative)
+docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: OK
+docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: OK
+artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json: OK
+=== W7 FINAL DONE e9af72fee9c652b16a017d37219d15e7eb5f9f0b 2026-09-25T17:04:37Z ===
+
+---- artifact checksum verification, full unfiltered output ----
+Retained here rather than in a separate log because the artifact-provenance linter
+requires every file under the wave artifact directory to be bound by SHA256SUMS, and
+an unbound sidecar would be a drift finding in itself. Review round 3 finding F4 was
+that the excerpt above shows one line per manifest while claiming all of them verify.
+
+On the self-reference: this section is written first, then SHA256SUMS is bound over the
+finalized log, and the verification is then re-run — so the `verify-chain.txt: OK` line
+below is true of the committed bytes rather than of a superseded state. Review round 4
+challenged this caveat because it claimed the log could not contain the verification of
+its own entry while the output contains exactly that line; the challenge was right about
+the wording and the run confirms the line. The authoritative check is still one
+`sha256sum -c` from the repository root, which returns 16/16 OK at this commit.
+--- artifacts/wave-delivery-integrity/v1.00.31-w6/SHA256SUMS (6 entries)
+artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-harness.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w6/raw/red-first-register-f12-f13.txt: OK
+docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md: OK
+EXIT=0
+verified: 6 of 6 entries OK
+
+--- artifacts/wave-delivery-integrity/v1.00.31-w7/SHA256SUMS (9 entries)
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json: OK
+artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json: OK
+docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md: OK
+EXIT=0
+verified: 9 of 9 entries OK
+
+--- artifacts/tier-ownership/v1.00.31-w0/SHA256SUMS (1 entries)
+artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json: OK
+EXIT=0
+verified: 1 of 1 entries OK
+
+=== manifests failing: 0 ===
+=== DONE 2026-09-25T22:01:51Z ===

@@ -1,0 +1,35 @@
+format + compile over every changed .rkt file
+head: 9841fed8f2e24bb343e54d310ff836044a903602
+base: 50bdf7334a9161e9e930b40be0870c52a498a0b9
+canonicality test: identical to scripts/pre-commit.rkt check-fmt-canonical (raco fmt, compare stdout to the file on disk).
+note: raco fmt has no --check switch; the pre-commit comparison is the project's own definition and is what is used here.
+
+info.rkt                                                   make=ok canonical
+scripts/run-tests/classify-metadata.rkt                    make=ok canonical
+tests/test-arch-parameters.rkt                             make=ok canonical
+tests/test-artifact-provenance.rkt                         make=ok canonical
+tests/test-ci-cohort-report.rkt                            make=ok canonical
+tests/test-ci-runtime-contract.rkt                         make=ok canonical
+tests/test-compiled-root-workflow.rkt                      make=ok canonical
+tests/test-delivery-failure-classification.rkt             make=ok canonical
+tests/test-deterministic-clock.rkt                         make=ok canonical
+tests/test-flake-forensics.rkt                             make=ok canonical
+tests/test-gsd-campaign-repository.rkt                     make=ok canonical
+tests/test-gsd-campaign-state.rkt                          make=ok canonical
+tests/test-gsd-delivery-coordinator.rkt                    make=ok canonical
+tests/test-gsd-plan-snapshot.rkt                           make=ok canonical
+tests/test-gsd-wave-completion.rkt                         make=ok canonical
+tests/test-gsd-wave-gate.rkt                               make=ok canonical
+tests/test-milestone-gate.rkt                              make=ok canonical
+tests/test-prepared-env-report.rkt                         make=ok canonical
+tests/test-proof-bundle-consume.rkt                        make=ok canonical
+tests/test-run-tests-profiles.rkt                          make=ok canonical
+tests/test-run-tests-shard-plan.rkt                        make=ok canonical
+tests/test-runner-base-dir-resolution.rkt                  make=ok canonical
+tests/test-w9-ci-workflow-verification.rkt                 make=ok canonical
+tests/test-wave-delivery-integrity-register.rkt            make=ok canonical
+tests/test-wave-integrity-adversarial.rkt                  make=ok canonical
+tests/test-worker-security.rkt                             make=ok canonical
+tests/test-workflow-invocation-contract.rkt                make=ok canonical
+tests/test-workflow-purge-contract.rkt                     make=ok canonical
+util/version.rkt                                           make=ok canonical
