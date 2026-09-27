@@ -774,6 +774,18 @@
 ;; W<n>-*.md wave doc whose filename slug differs from the row's slug.
 ;; (The arrow-target file itself missing is BUG-0023 strict-validation
 ;; territory.) Never writes; callers turn mismatches into warnings.
+;;
+;; Scoped to rows whose ARROW TARGET IS ABSENT (v1.00.30 W0 fix). .planning/
+;; waves/ is shared by every campaign, so one wave index can legitimately have
+;; both its own doc and a co-located doc from a different campaign (v1.00.30
+;; and v1.00.31 both ship W0, W1, W2, W5, W6 and W7). When the arrow target
+;; EXISTS the plan resolves that wave unambiguously and there is nothing to
+;; align; the earlier unconditional directory scan reported the other
+;; campaign's doc as drift, and its remedy text ("align the arrow target")
+;; would have re-pointed a correct arrow at a foreign document - after which
+;; load-plan-from-index loads the WRONG content for that wave. A genuinely
+;; misnamed doc still reports, because then the arrow target is missing and the
+;; only candidate carries a different slug.
 (define (check-slug-consistency base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (if (not (file-exists? plan-path))
@@ -783,16 +795,18 @@
          (define idx (wave-index-entry-idx e))
          (define idx-prefix-rx (regexp (format "^W~a-" idx)))
          (define waves-dir (build-path base-dir ".planning" "waves"))
-         (for/list ([f (in-list (if (directory-exists? waves-dir)
-                                    (sort (directory-list waves-dir) path<?)
-                                    '()))]
-                    #:when (regexp-match? idx-prefix-rx (path->string f))
-                    #:do [(define disk-slug (wave-doc-filename-slug idx f))]
-                    #:when (and disk-slug (not (string=? disk-slug (wave-index-entry-slug e)))))
-           (slug-mismatch idx
-                          (wave-index-entry-slug e)
-                          disk-slug
-                          (format ".planning/waves/~a" (path->string f))))))))
+         (if (wave-exists? base-dir idx (wave-index-entry-slug e))
+             '()
+             (for/list ([f (in-list (if (directory-exists? waves-dir)
+                                        (sort (directory-list waves-dir) path<?)
+                                        '()))]
+                        #:when (regexp-match? idx-prefix-rx (path->string f))
+                        #:do [(define disk-slug (wave-doc-filename-slug idx f))]
+                        #:when (and disk-slug (not (string=? disk-slug (wave-index-entry-slug e)))))
+               (slug-mismatch idx
+                              (wave-index-entry-slug e)
+                              disk-slug
+                              (format ".planning/waves/~a" (path->string f)))))))))
 
 ;; format-slug-mismatch-warning : slug-mismatch? -> string?
 ;; One named, user-visible warning per mismatch (BUG-0041): names BOTH
