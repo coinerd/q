@@ -15,6 +15,7 @@
 ;;   6. Campaign completes when all waves done.
 
 (require rackunit
+         racket/list
          rackunit/text-ui
          racket/file
          racket/port
@@ -33,6 +34,8 @@
                   campaign-wave-status
                   campaign-wave-attempt-count
                   set-campaign-wave-status!
+                  set-campaign-wave-delivery-branch!
+                  set-campaign-wave-delivery-head-sha!
                   set-campaign-cancellation!
                   set-campaign-fence-token!
                   make-campaign-cancellation
@@ -45,9 +48,14 @@
                   set-campaign-record-build-version!
                   set-campaign-record-stale-override!
                   campaign-wave-current-attempt
+                  campaign-attempt-id
+                  campaign-attempt-fence-token
                   wave-failure-reason
                   attempt-failure-reason)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
+         (only-in "../extensions/gsd/delivery-journal.rkt"
+                  record-delivery-receipt!
+                  update-delivery-journal!)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   run-campaign-wave
                   wave-merge-sha
@@ -56,10 +64,13 @@
                   campaign-result-status
                   campaign-result-message
                   campaign-result-completed-waves
+                  campaign-result
                   acquire-lease
                   release-lease!
                   campaign-lease?
                   make-campaign-request
+                  campaign-request-base-dir
+                  campaign-request-record
                   campaign-request-timeout-sec
                   campaign-request-allow-stale?
                   execute-campaign-request!
@@ -160,19 +171,129 @@
   (lambda (_base _plan idx) (and (>= idx 0) BUG-0064-FAKE-SHA)))
 
 ;; ============================================================
+;; BUG-0077 honest-completion fixtures (TEST-ONLY operator stand-in)
+;; A verifier-approved attempt parks in 'awaiting-delivery with a
+;; pending handoff. Between /go invocations the operator completes the
+;; protected merge; these helpers model exactly that receipt-bound step
+;; for tests whose subject REQUIRES durable completion. They are never
+;; seeded into rejection, failure, refusal, or blocked-subject paths.
+;; ============================================================
+
+(define TEST-DELIVERY-BRANCH "campaign/test")
+(define TEST-DELIVERY-HEAD (make-string 40 #\a))
+
+(define (awaiting-wave-indices dir plan-id)
+  (define rec (load-campaign-record dir plan-id))
+  (for/list ([w (in-list (campaign-record-waves rec))]
+             #:when (eq? (campaign-wave-status w) 'awaiting-delivery))
+    (campaign-wave-index w)))
+
+;; Bind an attempt-fenced Verify receipt, mirror branch/head provenance
+;; into the durable wave, and advance the coordinator journal to its
+;; terminal stage. Returns #f when nothing was awaiting (no progress).
+(define (deliver-awaiting-waves! dir plan-id)
+  (define indices (awaiting-wave-indices dir plan-id))
+  (and (pair? indices)
+       (let ([rec (load-campaign-record dir plan-id)])
+         (for ([w (in-list (campaign-record-waves rec))]
+               #:when (eq? (campaign-wave-status w) 'awaiting-delivery))
+           (define idx (campaign-wave-index w))
+           (define attempt (campaign-wave-current-attempt w))
+           (record-delivery-receipt! dir
+                                     plan-id
+                                     idx
+                                     (hasheq 'repo
+                                             "git@github.com:example/q.git"
+                                             'branch
+                                             TEST-DELIVERY-BRANCH
+                                             'origin
+                                             "https://github.com/example/q.git"
+                                             'evidence
+                                             "docs/reports/gsd-wave-evidence/fixture.rktd"
+                                             'head
+                                             TEST-DELIVERY-HEAD
+                                             'tree
+                                             (make-string 40 #\b)
+                                             'attempt-id
+                                             (campaign-attempt-id attempt)
+                                             'attempt-fence
+                                             (campaign-attempt-fence-token attempt)
+                                             'verified-at
+                                             42))
+           (set-campaign-wave-delivery-branch! w TEST-DELIVERY-BRANCH)
+           (set-campaign-wave-delivery-head-sha! w TEST-DELIVERY-HEAD))
+         (persist-campaign! dir rec)
+         (for ([idx (in-list indices)])
+           (update-delivery-journal! dir plan-id idx (hasheq 'stage "delivered")))
+         #t)))
+
+;; Drive /go the way an operator would across delivery boundaries: each
+;; invocation stops honestly at awaiting delivery; the operator completes
+;; the protected merge; the next invocation finalizes WITHOUT rerunning.
+;; `go` is any /go-shaped thunk (run-campaign!, execute-campaign-request!).
+(define (call-with-deliveries! dir plan-id go [max-rounds 8])
+  ;; Each invocation reports only its own completions; the campaign-visible
+  ;; outcome unions them across operator delivery boundaries.
+  (let loop ([rounds max-rounds]
+             [completed '()])
+    (define result (go))
+    (define all (remove-duplicates (append completed (campaign-result-completed-waves result))))
+    (if (and (> rounds 1)
+             (eq? (campaign-result-status result) 'wave-blocked)
+             (deliver-awaiting-waves! dir plan-id))
+        (loop (sub1 rounds) all)
+        (if (eq? (campaign-result-status result) 'campaign-complete)
+            (campaign-result 'campaign-complete all (campaign-result-message result))
+            result))))
+
+(define (run-with-deliveries! dir
+                              rec
+                              runner
+                              verifier
+                              reader
+                              #:lease-owner [lease-owner "unknown"]
+                              #:max-rounds [max-rounds 8])
+  (call-with-deliveries! dir
+                         (campaign-plan-id rec)
+                         (lambda ()
+                           (run-campaign! dir
+                                          rec
+                                          #:runner runner
+                                          #:verifier verifier
+                                          #:delivery-reader reader
+                                          #:lease-owner lease-owner))
+                         max-rounds))
+
+(define (run-request-with-deliveries! request
+                                      run-prompt
+                                      #:lease-owner [lease-owner "unknown"]
+                                      #:allow-stale? [allow-stale? #f]
+                                      #:max-rounds [max-rounds 8])
+  (call-with-deliveries! (campaign-request-base-dir request)
+                         (campaign-plan-id (campaign-request-record request))
+                         (lambda ()
+                           (execute-campaign-request! request
+                                                      run-prompt
+                                                      #:lease-owner lease-owner
+                                                      #:allow-stale? allow-stale?))
+                         max-rounds))
+
+;; ============================================================
 ;; Test suites
 ;; ============================================================
 
 (define single-wave-suite
   (test-suite "single-wave execution"
 
-    (test-case "runner succeeds + verifier approves → DONE"
+    (test-case "runner succeeds + verifier approves → durable awaiting-delivery"
+      ;; BUG-0077: verifier approval is implementation truth only; DONE needs
+      ;; authenticated protected delivery, so the attempt parks durably.
       (define dir (make-tmp-campaign-dir 2))
       (define rec (load-or-migrate dir))
       (define result
         (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
-      (check-eq? (campaign-result-status result) 'wave-done)
-      (check-eq? (wave-status* rec 0) 'done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 0) 'awaiting-delivery)
       (cleanup-tmp dir))
 
     (test-case "verifier rejects → no DONE"
@@ -246,8 +367,8 @@
                                    'ok))
                              #:verifier (lambda (_) #t))))
       (check-equal? (unbox runs) 3)
-      (check-eq? (campaign-result-status result) 'wave-done)
-      (check-eq? (wave-status* rec 0) 'done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 0) 'awaiting-delivery)
       (cleanup-tmp dir))
 
     (test-case "wave-timeout retries=0 preserves single-run fail-closed"
@@ -281,11 +402,7 @@
       ;; authenticated delivered-proof reader (explicit mock; covered
       ;; fail-closed by delivery-runtime-suite).
       (define result
-        (run-campaign! dir
-                       rec
-                       #:runner (lambda (_) 'ok)
-                       #:verifier (lambda (_) #t)
-                       #:delivery-reader (make-delivered-reader)))
+        (run-with-deliveries! dir rec (lambda (_) 'ok) (lambda (_) #t) (make-delivered-reader)))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? (campaign-result-completed-waves result) '(0 1 2))
       (cleanup-tmp dir))
@@ -295,13 +412,13 @@
       (define rec (load-or-migrate dir))
       (define call-count 0)
       (define result
-        (run-campaign! dir
-                       rec
-                       #:runner (lambda (idx)
-                                  (set! call-count (add1 call-count))
-                                  (if (= idx 1) 'error 'ok))
-                       #:verifier (lambda (_) #t)
-                       #:delivery-reader (make-delivered-reader)))
+        (run-with-deliveries! dir
+                              rec
+                              (lambda (idx)
+                                (set! call-count (add1 call-count))
+                                (if (= idx 1) 'error 'ok))
+                              (lambda (_) #t)
+                              (make-delivered-reader)))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-equal? call-count 2 "runner called for W0 and W1 only")
       (check-eq? (wave-status* rec 0) 'done)
@@ -326,17 +443,17 @@ check-equal? actual 14 expected 12")
                                               verify-detail)))
       (define result
         (parameterize ([current-gsd-wave-verification-repair-retries 1])
-          (run-campaign! dir
-                         rec
-                         #:runner (lambda (_)
-                                    (set! runner-calls (add1 runner-calls))
-                                    (when (= runner-calls 2)
-                                      (set! repair-context (current-gsd-wave-failure-context)))
-                                    'ok)
-                         #:verifier (lambda (_)
-                                      (set! verifier-calls (add1 verifier-calls))
-                                      (if (= verifier-calls 1) failed-verification #t))
-                         #:delivery-reader (make-delivered-reader))))
+          (run-with-deliveries! dir
+                                rec
+                                (lambda (_)
+                                  (set! runner-calls (add1 runner-calls))
+                                  (when (= runner-calls 2)
+                                    (set! repair-context (current-gsd-wave-failure-context)))
+                                  'ok)
+                                (lambda (_)
+                                  (set! verifier-calls (add1 verifier-calls))
+                                  (if (= verifier-calls 1) failed-verification #t))
+                                (make-delivered-reader))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? runner-calls 2)
       (check-equal? verifier-calls 2 "the complete verifier is rerun after repair")
@@ -360,24 +477,28 @@ check-equal? actual 14 expected 12")
         (parameterize ([current-gsd-campaign-infra-retries 1]
                        [current-gsd-campaign-infra-retry-delay (lambda (_) 0)]
                        [current-gsd-wave-verification-repair-retries 1])
-          (run-campaign!
+          (call-with-deliveries!
            dir
-           rec
-           #:runner
-           (lambda (_)
-             (set! calls (add1 calls))
-             (when (= calls 3)
-               (set! resumed-context (current-gsd-wave-failure-context))
-               (set! durable-reason
-                     (wave-failure-reason (car (campaign-record-waves
-                                                (load-campaign-record dir (campaign-plan-id rec)))))))
-             (if (= calls 2)
-                 (wave-execution-outcome 'infra-failed "provider disconnected")
-                 'ok))
-           #:verifier (lambda (_)
-                        (set! verifies (add1 verifies))
-                        (if (= verifies 1) failure #t))
-           #:delivery-reader (make-delivered-reader))))
+           (campaign-plan-id rec)
+           (lambda ()
+             (run-campaign! dir
+                            rec
+                            #:runner
+                            (lambda (_)
+                              (set! calls (add1 calls))
+                              (when (= calls 3)
+                                (set! resumed-context (current-gsd-wave-failure-context))
+                                (set! durable-reason
+                                      (wave-failure-reason
+                                       (car (campaign-record-waves
+                                             (load-campaign-record dir (campaign-plan-id rec)))))))
+                              (if (= calls 2)
+                                  (wave-execution-outcome 'infra-failed "provider disconnected")
+                                  'ok))
+                            #:verifier (lambda (_)
+                                         (set! verifies (add1 verifies))
+                                         (if (= verifies 1) failure #t))
+                            #:delivery-reader (make-delivered-reader))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? calls 3)
       (check-equal? verifies 2)
@@ -392,23 +513,27 @@ check-equal? actual 14 expected 12")
       (define calls 0)
       (define verifies 0)
       (define result
-        (run-campaign!
+        (call-with-deliveries!
          dir
-         rec
-         #:runner (lambda (_)
-                    (set! calls (add1 calls))
-                    'ok)
-         #:verifier
-         (lambda (_)
-           (set! verifies (add1 verifies))
-           (if (<= verifies 3)
-               (let ([detail
-                      (format
-                       "cmd=raco test tests/test-engine.rkt exit=1 state=failed log=/tmp/v.log missing deliverable ~a"
-                       verifies)])
-                 (delivery-verification #f (list (cons "verify" (cons #f detail))) detail))
-               #t))
-         #:delivery-reader (make-delivered-reader)))
+         (campaign-plan-id rec)
+         (lambda ()
+           (run-campaign!
+            dir
+            rec
+            #:runner (lambda (_)
+                       (set! calls (add1 calls))
+                       'ok)
+            #:verifier
+            (lambda (_)
+              (set! verifies (add1 verifies))
+              (if (<= verifies 3)
+                  (let ([detail
+                         (format
+                          "cmd=raco test tests/test-engine.rkt exit=1 state=failed log=/tmp/v.log missing deliverable ~a"
+                          verifies)])
+                    (delivery-verification #f (list (cons "verify" (cons #f detail))) detail))
+                  #t))
+            #:delivery-reader (make-delivered-reader)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? verifies 5 "four W0 verifications then W1")
       (check-equal? calls 5)
@@ -499,11 +624,14 @@ check-equal? actual 14 expected 12")
       (define cancel-count 0)
       (define result
         (parameterize ([current-gsd-wave-cancel! (lambda () (set! cancel-count (add1 cancel-count)))])
-          (run-campaign! dir
-                         rec
-                         #:runner (lambda (_) 'ok)
-                         #:verifier (lambda (idx) (not (= idx 1)))
-                         #:delivery-reader (make-delivered-reader))))
+          (call-with-deliveries! dir
+                                 (campaign-plan-id rec)
+                                 (lambda ()
+                                   (run-campaign! dir
+                                                  rec
+                                                  #:runner (lambda (_) 'ok)
+                                                  #:verifier (lambda (idx) (not (= idx 1)))
+                                                  #:delivery-reader (make-delivered-reader))))))
       (check-eq? (campaign-result-status result) 'wave-failed)
       (check-eq? (wave-status* rec 0) 'done)
       (check-false (eq? (wave-status* rec 1) 'done))
@@ -608,16 +736,20 @@ check-equal? actual 14 expected 12")
         (build-path dir ".planning" "campaigns" (string-append (campaign-plan-id rec) ".lock")))
       (define observed-owner (box #f))
       (define result
-        (run-campaign! dir
-                       rec
-                       #:lease-owner "main-tui-session"
-                       #:verifier (lambda (_) #t)
-                       #:delivery-reader (make-delivered-reader)
-                       #:runner
-                       (lambda (_idx)
-                         (set-box! observed-owner
-                                   (hash-ref (with-input-from-file lock-path read) 'owner #f))
-                         'ok)))
+        (call-with-deliveries!
+         dir
+         (campaign-plan-id rec)
+         (lambda ()
+           (run-campaign! dir
+                          rec
+                          #:lease-owner "main-tui-session"
+                          #:verifier (lambda (_) #t)
+                          #:delivery-reader (make-delivered-reader)
+                          #:runner
+                          (lambda (_idx)
+                            (set-box! observed-owner
+                                      (hash-ref (with-input-from-file lock-path read) 'owner #f))
+                            'ok)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? (unbox observed-owner) "main-tui-session")
       (cleanup-tmp dir))))
@@ -672,10 +804,10 @@ check-equal? actual 14 expected 12")
       ;; delivered-proof reader (same authenticated source as the final
       ;; full-loop check); unbound advance is covered by advance-gate-suite.
       (define result
-        (execute-campaign-request! request
-                                   (lambda (prompt)
-                                     (set! prompts (append prompts (list prompt)))
-                                     (make-loop-result '() 'completed (hasheq)))))
+        (run-request-with-deliveries! request
+                                      (lambda (prompt)
+                                        (set! prompts (append prompts (list prompt)))
+                                        (make-loop-result '() 'completed (hasheq)))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? prompts '("ONLY-W0" "ONLY-W1"))
       (cleanup-tmp dir))
@@ -710,16 +842,17 @@ check-equal? actual 14 expected 12")
       (define result
         (parameterize ([current-gsd-campaign-infra-retries 1]
                        [current-gsd-campaign-infra-retry-delay (lambda (_) 0)])
-          (execute-campaign-request! (make-campaign-request dir
-                                                            rec
-                                                            (lambda (_) "W0")
-                                                            (lambda (_) #t)
-                                                            #:delivery-reader (make-delivered-reader))
-                                     (lambda (_)
-                                       (set! calls (add1 calls))
-                                       (if (= calls 1)
-                                           (make-loop-result '() 'empty-response (hasheq))
-                                           (make-loop-result '() 'completed (hasheq)))))))
+          (run-request-with-deliveries! (make-campaign-request dir
+                                                               rec
+                                                               (lambda (_) "W0")
+                                                               (lambda (_) #t)
+                                                               #:delivery-reader
+                                                               (make-delivered-reader))
+                                        (lambda (_)
+                                          (set! calls (add1 calls))
+                                          (if (= calls 1)
+                                              (make-loop-result '() 'empty-response (hasheq))
+                                              (make-loop-result '() 'completed (hasheq)))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-equal? calls 2)
       (check-eq? (wave-status* rec 0) 'done)
@@ -814,7 +947,7 @@ check-equal? actual 14 expected 12")
                                (lambda (_) #t)
                                #:delivery-reader (make-delivered-reader)))
       (define result
-        (execute-campaign-request!
+        (run-request-with-deliveries!
          request
          (lambda (_) (values 'updated-session (make-loop-result '() 'completed (hasheq))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
@@ -906,7 +1039,7 @@ check-equal? actual 14 expected 12")
                                         (set! observed-status (wave-status* rec 0))
                                         #t)))
       (check-eq? observed-status 'verifying)
-      (check-eq? (campaign-result-status result) 'wave-done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
       (cleanup-tmp dir))))
 
 ;; ============================================================
@@ -1084,8 +1217,9 @@ check-equal? actual 14 expected 12")
          rec
          (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)
          (lambda ()
-           (execute-campaign-request! request
-                                      (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
+           (run-request-with-deliveries! request
+                                         (lambda (_) (make-loop-result '() 'completed (hasheq)))
+                                         #:allow-stale? #t))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-true (campaign-record-stale-override rec)
                   "override must record stale-override: true in the campaign record")
@@ -1108,9 +1242,9 @@ check-equal? actual 14 expected 12")
          rec
          (fake-freshness (string-append q-version "-old") (string-append q-version "-new") #f #f #f)
          (lambda ()
-           (execute-campaign-request! request
-                                      (lambda (_) (make-loop-result '() 'completed (hasheq)))
-                                      #:allow-stale? #t))))
+           (run-request-with-deliveries! request
+                                         (lambda (_) (make-loop-result '() 'completed (hasheq)))
+                                         #:allow-stale? #t))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
       (check-true (campaign-record-stale-override rec))
       (cleanup-tmp dir))
@@ -1129,7 +1263,7 @@ check-equal? actual 14 expected 12")
                                  rec
                                  (fake-freshness q-version q-version #f #f #t)
                                  (lambda ()
-                                   (execute-campaign-request!
+                                   (run-request-with-deliveries!
                                     request
                                     (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
@@ -1150,7 +1284,7 @@ check-equal? actual 14 expected 12")
                                  rec
                                  (fake-freshness q-version q-version #f #f #f)
                                  (lambda ()
-                                   (execute-campaign-request!
+                                   (run-request-with-deliveries!
                                     request
                                     (lambda (_) (make-loop-result '() 'completed (hasheq)))))))
       (check-eq? (campaign-result-status result) 'campaign-complete)
@@ -1353,7 +1487,7 @@ check-equal? actual 14 expected 12")
       (define rec (load-or-migrate dir))
       (check-eq? (campaign-result-status
                   (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
-                 'wave-done)
+                 'wave-awaiting-delivery)
       (define result
         (run-campaign-wave dir
                            rec
@@ -1380,7 +1514,8 @@ check-equal? actual 14 expected 12")
                            #:runner (lambda (_) 'ok)
                            #:verifier (lambda (_) #t)
                            #:predecessor-merge-sha (delivered-predecessor-resolver)))
-      (check-eq? (campaign-result-status result) 'wave-done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 1) 'awaiting-delivery)
       (cleanup-tmp dir))
 
     (test-case "a predecessor resolver without a full 40-hex SHA is not proof"
@@ -1412,8 +1547,8 @@ check-equal? actual 14 expected 12")
                            #:verifier (lambda (_) #t)
                            #:predecessor-merge-sha (lambda (_b _p _w) #f)
                            #:advance-override? #t))
-      (check-eq? (campaign-result-status result) 'wave-done)
-      (check-eq? (wave-status* rec 1) 'done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 1) 'awaiting-delivery)
       (cleanup-tmp dir))
 
     (test-case "wave-merge-sha ignores stale local regex fixtures (authenticated proof only)"
@@ -1435,7 +1570,7 @@ check-equal? actual 14 expected 12")
       (define rec (load-or-migrate dir))
       (define result
         (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
-      (check-eq? (campaign-result-status result) 'wave-done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
       (cleanup-tmp dir))))
 
 ;; ============================================================

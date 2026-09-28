@@ -11,6 +11,7 @@
 ;;; completion with a named "release not verified: …" reason.
 
 (require rackunit
+         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
          rackunit/text-ui
          racket/file
          racket/path
@@ -145,6 +146,16 @@
       (define dir (make-release-campaign-dir))
       (define rec (release-campaign-in-verifying dir))
       (define attempt (release-attempt rec))
+      ;; Honest delivery provenance precedes DONE even for release waves.
+      (define merge-sha (seed-awaiting-delivery! dir (campaign-plan-id rec) 0))
+      (try-complete-wave! dir
+                          rec
+                          0
+                          #:verifier-approve? #t
+                          #:verifier-message "delivery verified"
+                          #:expected-attempt-id (campaign-attempt-id attempt)
+                          #:expected-fence-token (campaign-attempt-fence-token attempt)
+                          #:release-check (lambda () #f))
       (define result
         (try-complete-wave! dir
                             rec
@@ -153,16 +164,25 @@
                             #:verifier-message "delivery verified"
                             #:expected-attempt-id (campaign-attempt-id attempt)
                             #:expected-fence-token (campaign-attempt-fence-token attempt)
-                            #:release-check (lambda () #f)))
+                            #:release-check (lambda () #f)
+                            #:delivered-merge-sha merge-sha))
       (check-eq? (completion-result-status result)
                  'done
                  "completion succeeds when the Release object is verified")
       (cleanup-tmp dir))
 
-    (test-case "non-release wave without a release check is unaffected"
+    (test-case "non-release wave without a release check finalizes after delivery"
       (define dir (make-release-campaign-dir))
       (define rec (release-campaign-in-verifying dir))
       (define attempt (release-attempt rec))
+      (define merge-sha (seed-awaiting-delivery! dir (campaign-plan-id rec) 0))
+      (try-complete-wave! dir
+                          rec
+                          0
+                          #:verifier-approve? #t
+                          #:verifier-message "delivery verified"
+                          #:expected-attempt-id (campaign-attempt-id attempt)
+                          #:expected-fence-token (campaign-attempt-fence-token attempt))
       (define result
         (try-complete-wave! dir
                             rec
@@ -170,7 +190,8 @@
                             #:verifier-approve? #t
                             #:verifier-message "delivery verified"
                             #:expected-attempt-id (campaign-attempt-id attempt)
-                            #:expected-fence-token (campaign-attempt-fence-token attempt)))
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)
+                            #:delivered-merge-sha merge-sha))
       (check-eq? (completion-result-status result)
                  'done
                  "no release gate when #:release-check is not provided")

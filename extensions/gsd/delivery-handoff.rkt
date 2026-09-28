@@ -19,6 +19,8 @@
          racket/string
          "campaign-state.rkt"
          "campaign-repository.rkt"
+         (only-in "delivery-journal.rkt" load-delivery-journal)
+         (only-in "delivery-receipt.rkt" delivery-receipt-blocker)
          "../../sandbox/subprocess.rkt")
 (provide verified-wave-merge-sha
          delivery-handoff-status
@@ -143,27 +145,46 @@
                            (lambda (r) (if (string? r) r "publication or sync pending"))]
                           [else "publication or sync pending"])))
 
-;; Scan durable done-waves for the first one whose authenticated delivery
-;; proof is NOT verified-delivered for the exact campaign/wave. A newly
-;; verified wave is memoized in `verified` only during one loop iteration.
-;; The caller clears it after any execution: checkout bytes can change
-;; and its pending handoff ledger is reconciled to 'delivered
-;; idempotently. Returns (cons wave reason) for the first undelivered
-;; done-wave, or #f when every done wave carries exact delivered proof.
-;; Verified DONE waves and their attempts are never touched.
+;; A verified attempt awaits protected delivery without becoming DONE. Never
+;; reconcile its handoff solely from a typed coordinator result: require fresh
+;; exact controller readback AND the attempt-bound immutable Verify journal at
+;; terminal delivery stage. DONE waves retain the historical readback gate.
+(define (awaiting-journal-valid? base-dir plan-id idx w)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define journal (load-delivery-journal base-dir plan-id idx))
+    (define rec (load-campaign-record base-dir plan-id))
+    (define receipt (and journal (hash-ref journal 'receipt #f)))
+    (and journal
+         rec
+         (equal? (hash-ref journal 'stage #f) "delivered")
+         (not (delivery-receipt-blocker journal rec plan-id idx (campaign-fence-token rec)))
+         (hash? receipt)
+         (string? (campaign-wave-delivery-branch w))
+         (not (string=? (campaign-wave-delivery-branch w) ""))
+         (equal? (campaign-wave-delivery-branch w) (hash-ref receipt 'branch #f))
+         (equal? (campaign-wave-delivery-head-sha w) (hash-ref receipt 'head #f)))))
+
 (define (delivery-pending-wave base-dir plan-id waves delivery-reader verified)
   (for/or ([w (in-list waves)]
-           #:when (eq? (campaign-wave-status w) 'done))
+           #:when (memq (campaign-wave-status w) '(done awaiting-delivery)))
     (define idx (campaign-wave-index w))
     (and (not (hash-ref verified idx #f))
          (let* ([proof (delivery-reader base-dir plan-id idx)]
-                [sha (delivered-proof-merge-sha proof plan-id idx)])
+                [sha (delivered-proof-merge-sha proof plan-id idx)]
+                [awaiting? (eq? (campaign-wave-status w) 'awaiting-delivery)])
            (cond
-             [sha
+             [(and sha
+                   (or (not awaiting?) (awaiting-journal-valid? base-dir plan-id idx w))
+                   (or (not awaiting?) (reconcile-delivered-handoff! base-dir plan-id idx sha)))
               (hash-set! verified idx sha)
-              (reconcile-delivered-handoff! base-dir plan-id idx sha)
+              (unless awaiting?
+                (reconcile-delivered-handoff! base-dir plan-id idx sha))
               #f]
-             [else (cons w (undelivered-proof-reason proof))])))))
+             [else
+              (cons w
+                    (if (and sha awaiting?)
+                        "missing or mismatched terminal Verify receipt/handoff"
+                        (undelivered-proof-reason proof)))])))))
 
 ;; ============================================================
 ;; Merge-SHA provenance for the wave-advance gate
@@ -355,15 +376,24 @@
                                 verified)))
   (define reloaded (load-campaign-record base-dir plan-id))
   (define live (or reloaded current))
-  (define disappeared (and (not reloaded) (not (null? completed))))
+  (define disappeared
+    (and (not reloaded)
+         (or (not (null? completed))
+             (for/or ([w (in-list (campaign-record-waves current))])
+               (not (eq? (campaign-wave-status w) 'pending))))))
   (define stale?
     (or disappeared
         (and reloaded (not (= (campaign-fence-token reloaded) (campaign-fence-token current))))
         (and reloaded
              (not (equal? (map campaign-wave-status (campaign-record-waves reloaded))
                           (map campaign-wave-status (campaign-record-waves current)))))))
-  (define next-idx
+  (define awaiting
     (and (not (or stale? pending (campaign-record-cancellation live)))
+         (for/first ([w (in-list (campaign-record-waves live))]
+                     #:when (eq? (campaign-wave-status w) 'awaiting-delivery))
+           w)))
+  (define next-idx
+    (and (not (or stale? pending awaiting (campaign-record-cancellation live)))
          (select-next-actionable-wave live)))
   (cond
     [stale?
@@ -375,6 +405,7 @@
      (values 'wave-cancelled live #f "campaign cancellation requested")]
     [pending
      (values 'wave-blocked live (car pending) (pending-delivery-message base-dir plan-id pending))]
+    [awaiting (values 'finalize-wave live awaiting "authenticated delivery ready for finalization")]
     [(not next-idx) (values 'campaign-complete live #f "all waves done or deferred")]
     [else (values 'run live next-idx #f)]))
 

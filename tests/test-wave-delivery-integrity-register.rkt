@@ -53,6 +53,7 @@
          (file "../util/json/checksum.rkt")
          (file "../scripts/ci/invocation-contract.rkt")
          (file "../tests/helpers/w2-mini-git-repo.rkt")
+         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
          (file "../scripts/gsd-evidence-bind.rkt")
          (file "../extensions/gsd/campaign-state.rkt")
          (file "../extensions/gsd/campaign-repository.rkt")
@@ -544,12 +545,22 @@
   (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
   (persist-campaign! dir rec)
   (define attempt (campaign-wave-current-attempt (car (campaign-record-waves rec))))
+  ;; Honest completion is two-phase (BUG-0077): approval parks the attempt,
+  ;; authenticated delivery finalizes DONE and appends the derived event.
+  (define merge-sha (seed-awaiting-delivery! dir (campaign-plan-id rec) 0))
   (try-complete-wave! dir
                       rec
                       0
                       #:verifier-approve? #t
                       #:expected-attempt-id (campaign-attempt-id attempt)
                       #:expected-fence-token (campaign-attempt-fence-token attempt))
+  (try-complete-wave! dir
+                      rec
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id attempt)
+                      #:expected-fence-token (campaign-attempt-fence-token attempt)
+                      #:delivered-merge-sha merge-sha)
   (define durable (load-campaign-record dir (campaign-plan-id rec)))
   (set-campaign-wave-status! (car (campaign-record-waves durable)) 'pending)
   (persist-campaign! dir durable)

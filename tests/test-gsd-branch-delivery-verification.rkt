@@ -33,6 +33,7 @@
          rackunit
          rackunit/text-ui
          "../extensions/gsd/wave-executor.rkt"
+         (only-in "../extensions/gsd/delivery-receipt.rkt" current-gsd-remote-published)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   run-delivery-verification
                   delivery-verification?
@@ -379,8 +380,12 @@
             (write-plan! proj 0 "Wave Zero" "zero" '("q/ui-core/preferences.rkt"))
             (define rec (migrate-campaign! proj))
             (define plan (plan-for '("q/ui-core/preferences.rkt")))
+            ;; The verified wave branch is treated as published on origin so
+            ;; the Verify receipt (branch+head provenance) can be recorded —
+            ;; the honest source for the durable delivery fields.
             (define result
-              (parameterize ([current-gsd-delivery-verify-command "true"])
+              (parameterize ([current-gsd-delivery-verify-command "true"]
+                             [current-gsd-remote-published (lambda (_repo _branch _head) #t)])
                 (run-campaign-wave
                  proj
                  rec
@@ -397,7 +402,9 @@
                               (parameterize ([current-gsd-delivery-verify-command "true"])
                                 (run-delivery-verification proj plan idx)))
                  #:isolate? #t)))
-            (check-equal? (campaign-result-status result) 'wave-done (campaign-result-message result))
+            (check-eq? (campaign-result-status result)
+                       'wave-awaiting-delivery
+                       (campaign-result-message result))
             ;; durable record carries the delivery provenance. NOTE:
             ;; migrate-campaign! RE-SEEDS from PLAN.md and never reads the
             ;; persisted .rktd — reading delivery evidence through it would
@@ -411,7 +418,7 @@
             (when wave
               (define expected-branch
                 (format "campaign/~a/w0" (worktree-hash8 (campaign-plan-id final))))
-              (check-equal? (campaign-wave-status wave) 'done)
+              (check-eq? (campaign-wave-status wave) 'awaiting-delivery)
               ;; W7 action 3: branch name + head SHA recorded in the
               ;; campaign record; merge/PR stays outside this flow
               (check-equal? (campaign-wave-delivery-branch wave) expected-branch)

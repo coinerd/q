@@ -455,8 +455,8 @@
   ;; W0 itself is never gated (no predecessor) and completes with stubs.
   (check-eq? (campaign-result-status
               (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
-             'wave-done)
-  (check-eq? (gov-wave-status rec 0) 'done)
+             'wave-awaiting-delivery)
+  (check-eq? (gov-wave-status rec 0) 'awaiting-delivery)
   ;; Advancing to W1 without W0's merge-SHA proof is refused.
   (define result (run-campaign-wave dir rec 1 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
   (check-eq? (campaign-result-status result) 'wave-blocked)
@@ -490,8 +490,8 @@
                        #:runner (lambda (_) 'ok)
                        #:verifier (lambda (_) #t)
                        #:predecessor-merge-sha (lambda (b p w) (and (= w 0) valid-sha))))
-  (check-eq? (campaign-result-status result) 'wave-done)
-  (check-eq? (gov-wave-status rec 1) 'done)
+  (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+  (check-eq? (gov-wave-status rec 1) 'awaiting-delivery)
   (delete-directory/files dir #:must-exist? #f))
 
 (test-case "explicit operator override advances under an open wave and is logged for audit"
@@ -506,6 +506,6 @@
                        #:runner (lambda (_) 'ok)
                        #:verifier (lambda (_) #t)
                        #:advance-override? #t))
-  (check-eq? (campaign-result-status result) 'wave-done)
-  (check-eq? (gov-wave-status rec 1) 'done)
+  (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+  (check-eq? (gov-wave-status rec 1) 'awaiting-delivery)
   (delete-directory/files dir #:must-exist? #f))

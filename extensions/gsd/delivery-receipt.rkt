@@ -220,7 +220,7 @@
     [(not (and (exact-nonnegative-integer? expected-fence)
                (equal? (campaign-fence-token record) expected-fence)))
      'stale-coordinator]
-    [(not (eq? (campaign-wave-status w) 'done)) 'implementation-not-done]
+    [(not (memq (campaign-wave-status w) '(done awaiting-delivery))) 'implementation-not-done]
     [(not (and attempt
                (string? (hash-ref receipt 'attempt-id #f))
                (exact-nonnegative-integer? (hash-ref receipt 'attempt-fence #f))

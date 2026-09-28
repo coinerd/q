@@ -23,10 +23,20 @@
 ;; unit-tested in tests/test-gsd-prompts.rkt); the orchestrator keeps
 ;; only the one-line call site plus the wave-retry-context import.
 ;; 1698 -> 1699 lines, defines unchanged at 20, below the 1700 target.
+;;
+;; Re-recorded for BUG-0077 (honest completion): verifier approval now
+;; parks a wave in 'awaiting-delivery instead of completing it, and DONE
+;; requires authenticated delivered proof. The delivery state machine was
+;; EXTRACTED, not inlined: extensions/gsd/delivery-finalize.rkt (attempt
+;; delivery provenance, park/finalize checkpoint drivers, coordinator
+;; checkpoint decision) and extensions/gsd/campaign-result.rkt (the
+;; campaign-result struct, re-provided by the orchestrator). The
+;; orchestrator keeps the thin call sites. 1699 -> 1696 lines, defines
+;; unchanged at 20, below the 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "#9709 wave-retry-context extraction to prompts.rkt: 1699 lines / 20 defines; below the 1700 target")
- (line-count . 1699)
+  "BUG-0077 honest-completion extraction to delivery-finalize.rkt + campaign-result.rkt: 1698 lines / 20 defines; below the 1700 target")
+ (line-count . 1696)
  (top-level-define-count . 20)
  (w7-target-max-lines . 1700))

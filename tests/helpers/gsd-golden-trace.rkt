@@ -28,6 +28,7 @@
          racket/match
          racket/format
          racket/port
+         "honest-delivery-fixture.rkt"
          (only-in "../../extensions/gsd/campaign-state.rkt"
                   migrate-campaign!
                   canonical-wave-status
@@ -279,7 +280,16 @@
                            (lambda (wave-idx)
                              (gsm-ctx-transition-to! ctx 'verifying)
                              (when approve?
-                               (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-idx))
+                               (bind-test-wave-merge-sha! dir (campaign-plan-id rec) wave-idx)
+                               ;; Operator stand-in: the protected merge for
+                               ;; this verified attempt is complete, so the
+                               ;; authenticated readback below finalizes DONE
+                               ;; in the SAME /go invocation (trace shape kept).
+                               (seed-awaiting-delivery! dir
+                                                        (campaign-plan-id rec)
+                                                        wave-idx
+                                                        #:merge-sha
+                                                        "0123456789abcdef0123456789abcdef01234567"))
                              approve?)
                            ;; v1.00.30: golden traces exercise the FSM, not
                            ;; delivery — an authenticated delivered-proof mock

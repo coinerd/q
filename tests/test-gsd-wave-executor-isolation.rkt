@@ -11,6 +11,7 @@
 ;; cancellation → interrupted (no event), and legacy symbol runner compat.
 
 (require rackunit
+         (only-in "helpers/honest-delivery-fixture.rkt" finalize-awaiting!)
          rackunit/text-ui
          racket/file
          racket/path
@@ -92,7 +93,9 @@
   (test-suite "exactly-once completion"
 
     (test-case "structured done runner → exactly one completion event"
-      (define dir (make-tmp-campaign-dir 2))
+      ;; Single wave: the campaign must end by finalizing THIS wave's
+      ;; delivery, never by starting a successor.
+      (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
       (define result
         (run-campaign-wave dir
@@ -101,17 +104,22 @@
                            #:runner (make-wave-runner-port
                                      (lambda (idx) (wave-execution-outcome 'done "wave finished")))
                            #:verifier (lambda (_) #t)))
-      (check-eq? (campaign-result-status result) 'wave-done)
-      (check-eq? (wave-status* rec 0) 'done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 0) 'awaiting-delivery)
+      (check-equal? (count-completion-events dir rec)
+                    0
+                    "no completion event before authenticated delivery")
+      (finalize-awaiting! dir rec)
       (check-equal? (count-completion-events dir rec) 1 "exactly one completion event per done wave")
       (cleanup-tmp dir))
 
     (test-case "re-execution of a done attempt is stale-ignored (no duplicate)"
-      (define dir (make-tmp-campaign-dir 2))
+      (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
       (define runner (make-wave-runner-port (lambda (idx) (wave-execution-outcome 'done "ok"))))
       (define first (run-campaign-wave dir rec 0 #:runner runner #:verifier (lambda (_) #t)))
-      (check-eq? (campaign-result-status first) 'wave-done)
+      (check-eq? (campaign-result-status first) 'wave-awaiting-delivery)
+      (finalize-awaiting! dir rec)
       ;; second run with the same record: fence/attempt are stale
       (define second (run-campaign-wave dir rec 0 #:runner runner))
       (check-eq? (campaign-result-status second) 'wave-cancelled)
@@ -285,8 +293,8 @@
       (define rec (load-or-migrate dir))
       (define result
         (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
-      (check-eq? (campaign-result-status result) 'wave-done)
-      (check-eq? (wave-status* rec 0) 'done)
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-eq? (wave-status* rec 0) 'awaiting-delivery)
       (cleanup-tmp dir))
 
     (test-case "symbol runner 'cancelled still interrupts"

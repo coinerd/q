@@ -24,7 +24,11 @@
          ;; GSD tracking files — update PLAN.md + wave docs on completion
          (only-in "wave-docs.rkt" wave-slug)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
-         (only-in "delivery-handoff.rkt" delivery-handoff-status persist-delivery-handoff!)
+         (only-in "delivery-handoff.rkt"
+                  delivery-handoff-path
+                  delivery-handoff-status
+                  persist-delivery-handoff!)
+         (only-in "delivery-journal.rkt" load-delivery-journal)
          "projection-effects.rkt")
 
 ;; ============================================================
@@ -82,20 +86,84 @@
 ;; returns a reason, completion FAILS with "release not verified: …" — a
 ;; release wave can never be marked DONE without a verified Release object
 ;; (closing the v1.00.21 false-completion class).
-;; Register F9 verdict: does the requested delivery proof authorize DONE?
-;;   'carry-forward      — authorize; the typed pending handoff witness is
-;;                         persisted atomically with the durable DONE
-;;   'require-delivered  — authorize only when the journal says 'delivered
-(define (delivery-proof-verdict base-dir rec wave-idx mode)
-  (case mode
-    [(carry-forward) 'ok]
-    [(require-delivered)
-     (define pid (campaign-plan-id rec))
-     (if (and (regexp-match? #px"^[0-9a-f]{64}$" pid)
-              (eq? (delivery-handoff-status base-dir pid wave-idx) 'delivered))
-         'ok
-         'refused)]
-    [else (raise-argument-error 'try-complete-wave! "(or 'carry-forward 'require-delivered)" mode)]))
+;; Register F9/BUG-0077: verifier approval is not delivery completion.
+;; The default path parks a VERIFYING approval in 'awaiting-delivery with a
+;; pending handoff; DONE can be finalized only from that durable state and
+;; only with a fresh authenticated merge SHA plus a matching delivered
+;; handoff and a delivered, attempt-bound Verify journal.
+;;
+;; A caller that EXPLICITLY requests a delivery proof mode gets the stricter
+;; typed refusal instead: `delivery-pending-cannot-complete` without any
+;; mutation. Both behaviours are fail-closed; neither can write DONE.
+(define (valid-delivery-proof-mode! mode)
+  (unless (memq mode '(strict carry-forward require-delivered))
+    (raise-argument-error 'try-complete-wave! "(or 'strict 'carry-forward 'require-delivered)" mode)))
+
+;; The verified merge SHA of an already-delivered handoff for this exact
+;; campaign/wave, or #f.
+(define (load-delivery-handoff-merge-sha base-dir plan-id wave-idx)
+  (define handoff (load-delivery-handoff base-dir plan-id wave-idx))
+  (and (hash? handoff)
+       (equal? (hash-ref handoff 'schema-version #f) 1)
+       (equal? (hash-ref handoff 'plan-id #f) plan-id)
+       (equal? (hash-ref handoff 'wave #f) wave-idx)
+       (eq? (hash-ref handoff 'status #f) 'delivered)
+       (hash-ref handoff 'merge-sha #f)))
+
+;; A requested proof mode authorizes only an already-delivered handoff for
+;; this exact campaign/wave carrying a real 40-hex merge SHA.
+(define (delivery-proof-verdict base-dir plan-id wave-idx mode)
+  (valid-delivery-proof-mode! mode)
+  (if (and (regexp-match? #px"^[0-9a-f]{64}$" plan-id)
+           (hex-string? (load-delivery-handoff-merge-sha base-dir plan-id wave-idx) 40))
+      'ok
+      'refused))
+
+(define (hex-string? s n)
+  (and (string? s)
+       (= (string-length s) n)
+       (for/and ([ch (in-string s)])
+         (or (char<=? #\0 ch #\9) (char<=? #\a ch #\f)))))
+
+(define (nonempty-string? s)
+  (and (string? s) (positive? (string-length s))))
+
+(define (load-delivery-handoff base-dir plan-id wave-idx)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define p (delivery-handoff-path base-dir plan-id wave-idx))
+    (and (file-exists? p) (call-with-input-file p read))))
+
+(define (finalization-authorized? base-dir plan-id wave-idx wave delivered-merge-sha)
+  (define attempt (campaign-wave-current-attempt wave))
+  (define handoff (load-delivery-handoff base-dir plan-id wave-idx))
+  (define journal
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (load-delivery-journal base-dir plan-id wave-idx)))
+  (define receipt (and (hash? journal) (hash-ref journal 'receipt #f)))
+  (define receipt-branch (and (hash? receipt) (hash-ref receipt 'branch #f)))
+  (define receipt-head (and (hash? receipt) (hash-ref receipt 'head #f)))
+  (define wave-branch (campaign-wave-delivery-branch wave))
+  (define wave-head (campaign-wave-delivery-head-sha wave))
+  (and attempt
+       (hex-string? delivered-merge-sha 40)
+       (hash? handoff)
+       (equal? (hash-ref handoff 'schema-version #f) 1)
+       (equal? (hash-ref handoff 'plan-id #f) plan-id)
+       (equal? (hash-ref handoff 'wave #f) wave-idx)
+       (eq? (hash-ref handoff 'status #f) 'delivered)
+       (equal? (hash-ref handoff 'merge-sha #f) delivered-merge-sha)
+       (hash? journal)
+       (equal? (hash-ref journal 'stage #f) "delivered")
+       (hash? receipt)
+       (equal? (hash-ref receipt 'attempt-id #f) (campaign-attempt-id attempt))
+       (equal? (hash-ref receipt 'attempt-fence #f) (campaign-attempt-fence-token attempt))
+       (nonempty-string? receipt-branch)
+       (not (member receipt-branch '("main" "master")))
+       (hex-string? receipt-head 40)
+       (nonempty-string? wave-branch)
+       (hex-string? wave-head 40)
+       (equal? wave-branch receipt-branch)
+       (equal? wave-head receipt-head)))
 
 (define (try-complete-wave! base-dir
                             rec
@@ -105,7 +173,10 @@
                             #:expected-attempt-id expected-attempt-id
                             #:expected-fence-token expected-fence-token
                             #:release-check [release-check #f]
-                            #:delivery-proof [delivery-proof 'carry-forward])
+                            #:delivery-proof [delivery-proof #f]
+                            #:delivered-merge-sha [delivered-merge-sha #f])
+  (when delivery-proof
+    (valid-delivery-proof-mode! delivery-proof))
   ;; Resolve the release gate ONCE (before any mutation): a string means the
   ;; release is not verified (that string is the failure reason); #f/void means
   ;; either no release check configured or the release verified cleanly.
@@ -138,16 +209,17 @@
     [(not wave) (completion-result 'invalid-wave #f)]
     [(eq? (campaign-wave-status wave) 'done) (completion-result 'already-done #f)]
     [(eq? (campaign-wave-status wave) 'deferred) (completion-result 'already-done #f)]
-    [(not (eq? (campaign-wave-status wave) 'verifying)) (completion-result 'invalid-state #f)]
+    [(campaign-record-cancellation durable) (completion-result 'cancelled #f)]
+    [(not (memq (campaign-wave-status wave) '(verifying awaiting-delivery)))
+     (completion-result 'invalid-state #f)]
     [(not attempt-current?) (completion-result 'stale-attempt #f)]
-    ;; Register F9 (v1.00.31 W3): the wave-completion path refuses to mark a
-    ;; wave 'done while its delivery journal for that wave is not 'delivered,
-    ;; unless a typed carry-forward handoff is recorded with the DONE. The
-    ;; v1.00.30 W4 incident state ([DONE] + Status: DONE with delivery-pending
-    ;; and NO journal witness) is unreachable from here on.
-    [(and approve?
+    ;; An EXPLICITLY requested delivery proof (register F9) refuses with a
+    ;; typed result and mutates nothing when the handoff is not delivered.
+    [(and delivery-proof
+          approve?
           release-gate-ok?
-          (eq? (delivery-proof-verdict base-dir durable wave-idx delivery-proof) 'refused))
+          (eq? (delivery-proof-verdict base-dir (campaign-plan-id durable) wave-idx delivery-proof)
+               'refused))
      (completion-result 'delivery-pending-cannot-complete #f)]
     [(not approve?)
      ;; v1.00.24 W3 (verification-truth): durable failure reason FIRST —
@@ -197,43 +269,50 @@
                            (lambda (idx) (wave-slug base-dir idx))
                            release-failure-message)
      (completion-result 'failed #f)]
+    [(eq? (campaign-wave-status wave) 'awaiting-delivery)
+     (cond
+       [(finalization-authorized? base-dir
+                                  (campaign-plan-id durable)
+                                  wave-idx
+                                  wave
+                                  delivered-merge-sha)
+        (clear-wave-failure! wave)
+        (set-campaign-wave-status! wave 'done)
+        (define event-id
+          (make-event-id (campaign-plan-id durable) wave-idx (campaign-attempt-id attempt)))
+        (persist-campaign! base-dir durable)
+        (append-completion-event! base-dir durable event-id)
+        (when caller-wave
+          (clear-wave-failure! caller-wave)
+          (set-campaign-wave-status! caller-wave 'done))
+        (apply-wave-status-projections! base-dir
+                                        wave-idx
+                                        STATUS-DONE
+                                        (lambda (idx) (wave-slug base-dir idx)))
+        (completion-result 'done event-id)]
+       [else (completion-result 'delivery-pending-cannot-complete #f)])]
     [else
-     ;; v1.00.24 W3 (verification-truth): success clears the durable failure
-     ;; reason — a completed wave carries none (same lifecycle rule as the
-     ;; BUG-0024 attempt-context hand-off clear).
+     ;; Verifier approval is durable implementation truth, not protected-main
+     ;; delivery truth. Park the exact attempt/fence in a non-actionable,
+     ;; non-complete state and persist the pending handoff BEFORE the status
+     ;; change. No DONE projection or completion outbox is produced here.
      (clear-wave-failure! wave)
-     (set-campaign-wave-status! wave 'done)
-     (define event-id
-       (make-event-id (campaign-plan-id durable) wave-idx (campaign-attempt-id attempt)))
-     ;; v0.99.90 W2 (#9233): the durable record is the transaction COMMIT
-     ;; POINT — persist it FIRST. The completion outbox and the
-     ;; PLAN/STATE/wave-doc projections are DERIVED files: they may lag after
-     ;; a crash (reconcile-completion-outbox! / reconcile-projections-from-waves!
-     ;; rebuild them) but must never lead — a crash between the durable commit
-     ;; and the outbox append leaves NO phantom completion event, so a later
-     ;; outbox publication can never emit an invented DONE for a wave whose
-     ;; durable status is still 'verifying.
-     ;; F9: the typed carry-forward handoff witness is persisted BEFORE the
-     ;; durable commit so a crash can never leave DONE without its journal.
      (define pid (campaign-plan-id durable))
+     ;; A handoff already reconciled to delivered by authenticated readback
+     ;; is never demoted back to pending by the parking path.
      (when (and (regexp-match? #px"^[0-9a-f]{64}$" pid)
                 (not (eq? (delivery-handoff-status base-dir pid wave-idx) 'delivered)))
-       (persist-delivery-handoff! base-dir
-                                  pid
-                                  wave
-                                  "verified; delivery pending (typed carry-forward handoff)"))
+       (persist-delivery-handoff!
+        base-dir
+        pid
+        wave
+        "verified; delivery pending (protected delivery/finalization required)"))
+     (set-campaign-wave-status! wave 'awaiting-delivery)
      (persist-campaign! base-dir durable)
-     (append-completion-event! base-dir durable event-id)
      (when caller-wave
        (clear-wave-failure! caller-wave)
-       (set-campaign-wave-status! caller-wave 'done))
-     ;; Update GSD tracking files (PLAN.md + wave doc + STATE.md) through the
-     ;; atomic projection shell — a crash cannot leave partial tracking.
-     (apply-wave-status-projections! base-dir
-                                     wave-idx
-                                     STATUS-DONE
-                                     (lambda (idx) (wave-slug base-dir idx)))
-     (completion-result 'done event-id)]))
+       (set-campaign-wave-status! caller-wave 'awaiting-delivery))
+     (completion-result 'awaiting-delivery #f)]))
 ;; ============================================================
 
 ;; Retry-with-adaptation: persist the failure reason into the wave document so
