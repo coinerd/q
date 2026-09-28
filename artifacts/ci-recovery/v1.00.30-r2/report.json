@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "record": "v1.00.30 R2 performance report",
+  "no_secrets": true,
+  "generated_by": "raw/build-cohort.py",
+  "status": "COHORT OPEN",
+  "measured": false,
+  "reason": "No performance statistics are reported. The cohort never reached the required 20 eligible heads, so p50/p95, trigger/queue time, max fast-shard time and runner-minutes have no valid population. Reporting statistics over 4 heads would misrepresent the measurement.",
+  "baselines_for_context_only": {
+    "prior_clean_p50_seconds": 820.5,
+    "prior_clean_p95_seconds": 850.3,
+    "v1_00_29_p50_seconds": 2558.0,
+    "v1_00_29_p95_seconds": 3023.0,
+    "note": "Shown for orientation only. These are NOT achieved values and were not recomputed; R2 was never evaluated."
+  },
+  "r2_thresholds_not_evaluated": {
+    "closed_cohort_p50_must_be_at_most": 820.5,
+    "evaluated": false
+  },
+  "eligible_heads": [
+    "435d59031c77c0fa421da60b8cc42b7e7a75bbf3",
+    "49d9bb088ffe25c44c5757a7546293e57316e150",
+    "5dfd3434430ebbc321eba3144e34adf2e2511f26",
+    "c5375e605bc9a724b4b105ce5697e0e774a271bd"
+  ],
+  "excluded_candidates": [
+    {
+      "pr": 9753,
+      "head_sha": "839de8b61b9e9a9b54fe4bb5c4907dfec7999b75",
+      "reasons": [
+        "no-execution-change: touches only docs/reports/gsd-wave-evidence/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, docs/reports/gsd-wave-reviews/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, docs/reports/gsd-wave-validation/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, so the trusted reporter issues NOT_APPLICABLE and it cannot fill a performance cohort"
+      ]
+    },
+    {
+      "pr": 9756,
+      "head_sha": "ee31a8a677d3ea67da17ab2ba0e370fca52d6b2d",
+      "reasons": [
+        "no-execution-change: touches only docs/reports/gsd-wave-evidence/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, docs/reports/gsd-wave-reviews/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, docs/reports/gsd-wave-validation/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, so the trusted reporter issues NOT_APPLICABLE and it cannot fill a performance cohort"
+      ]
+    }
+  ],
+  "next_authorized_action": "operator resumption or a separately reviewed plan amendment; deadlines never authorize a pass"
+}

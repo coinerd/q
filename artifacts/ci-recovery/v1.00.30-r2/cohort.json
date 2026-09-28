@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "record": "v1.00.30 R2 baseline recovery cohort",
+  "status": "COHORT OPEN",
+  "no_secrets": true,
+  "generated_by": "raw/build-cohort.py",
+  "w4_final_activation": "2026-09-25T02:10:14Z",
+  "w4_final_activation_commit": "cc25b3663362d032b9a23a9d22f9dd5edbe637d8",
+  "w4_final_activation_committer_date": "2026-09-25T04:10:14+02:00",
+  "window_rule": "created_at strictly after the W4 final activation merge",
+  "required_heads": 20,
+  "candidate_prs_after_w4": 6,
+  "eligible_heads": 4,
+  "unique_eligible_heads": 4,
+  "heads_unique": true,
+  "shortfall": 16,
+  "r2_evaluated": false,
+  "r2_verdict": null,
+  "blocking_reason": "population is insufficient: 4 unique eligible post-W4 PR head SHAs against a required 20. A missing population is COHORT OPEN, not a completed wave, and never a pass.",
+  "no_samples_manufactured": true,
+  "candidates": [
+    {
+      "pr": 9753,
+      "title": "W4 binding publication: binding/96974d2cd97b-w4",
+      "created_at": "2026-09-25T02:15:13Z",
+      "merged_at": "2026-09-25T02:40:54Z",
+      "head_sha": "839de8b61b9e9a9b54fe4bb5c4907dfec7999b75",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 3,
+      "execution_affecting_files": [],
+      "doc_only_files": [
+        "docs/reports/gsd-wave-evidence/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd",
+        "docs/reports/gsd-wave-reviews/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd",
+        "docs/reports/gsd-wave-validation/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd"
+      ],
+      "ci_runs_observed": 3,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": false,
+      "exclusion_reasons": [
+        "no-execution-change: touches only docs/reports/gsd-wave-evidence/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, docs/reports/gsd-wave-reviews/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, docs/reports/gsd-wave-validation/96974d2cd97b152f99d296d6956f13b4f3b2bc4f79428894f74a1f3df49753d8-w4.rktd, so the trusted reporter issues NOT_APPLICABLE and it cannot fill a performance cohort"
+      ]
+    },
+    {
+      "pr": 9754,
+      "title": "fix(delivery-controller): disable git auto-gc in the disposable test worlds",
+      "created_at": "2026-09-25T03:18:34Z",
+      "merged_at": "2026-09-25T03:43:53Z",
+      "head_sha": "49d9bb088ffe25c44c5757a7546293e57316e150",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 1,
+      "execution_affecting_files": [
+        "tests/test-gsd-delivery-controller.py"
+      ],
+      "doc_only_files": [],
+      "ci_runs_observed": 3,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": true,
+      "exclusion_reasons": []
+    },
+    {
+      "pr": 9755,
+      "title": "feat(v1.00.31): wave 7 \u2014 blocked-wave repair, v1.00.31 bake and release (W7 of milestone #896)",
+      "created_at": "2026-09-25T18:01:31Z",
+      "merged_at": "2026-09-27T07:24:43Z",
+      "head_sha": "435d59031c77c0fa421da60b8cc42b7e7a75bbf3",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 75,
+      "execution_affecting_files": [
+        ".gitignore",
+        "README.md",
+        "artifacts/tier-ownership/v1.00.31-w0/SHA256SUMS",
+        "artifacts/tier-ownership/v1.00.31-w0/ownership-matrix.json",
+        "artifacts/wave-delivery-integrity/v1.00.31-w6/SHA256SUMS",
+        "artifacts/wave-delivery-integrity/v1.00.31-w6/injection-matrix.json",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/SHA256SUMS",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/focused-release-tests.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/format-compile-canonicality.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/milestone-gate-recheck.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/preflight-locally-runnable.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-version-expectations.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/red-first-worker-security-w2.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/restate-chain-field.py",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/restate-round11-counts.py",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/verify-chain.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/version-derivation-tests.log",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/raw/w4-remeasure-2026-09-25.txt",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/release-preflight.json",
+        "artifacts/wave-delivery-integrity/v1.00.31-w7/w4-recovery.json",
+        "docs/agent-harness-runbook.md",
+        "docs/architecture/overview.md",
+        "docs/distributed-execution-guide.md",
+        "docs/editing-rules.md",
+        "docs/event-taxonomy.md",
+        "docs/extension-guide.md",
+        "docs/getting-started/credentials.md",
+        "docs/getting-started/index.md",
+        "docs/install.md",
+        "docs/mcp-capability-security.md",
+        "docs/operations/release-runbook.md",
+        "docs/security-mtls.md",
+        "docs/security-trust-model.md",
+        "docs/self-hosting.md",
+        "docs/spawn-approval-security.md",
+        "docs/style-guide.md",
+        "docs/system-overview.md",
+        "docs/trust-model.md",
+        "docs/workflow-testing.md",
+        "info.rkt",
+        "scripts/run-tests/classify-metadata.rkt",
+        "tests/test-arch-parameters.rkt",
+        "tests/test-artifact-provenance.rkt",
+        "tests/test-ci-cohort-report.rkt",
+        "tests/test-ci-runtime-contract.rkt",
+        "tests/test-compiled-root-workflow.rkt",
+        "tests/test-delivery-failure-classification.rkt",
+        "tests/test-deterministic-clock.rkt",
+        "tests/test-flake-forensics.rkt",
+        "tests/test-gsd-campaign-repository.rkt",
+        "tests/test-gsd-campaign-state.rkt",
+        "tests/test-gsd-delivery-coordinator.rkt",
+        "tests/test-gsd-plan-snapshot.rkt",
+        "tests/test-gsd-wave-completion.rkt",
+        "tests/test-gsd-wave-gate.rkt",
+        "tests/test-milestone-gate.rkt",
+        "tests/test-prepared-env-report.rkt",
+        "tests/test-proof-bundle-consume.rkt",
+        "tests/test-run-tests-profiles.rkt",
+        "tests/test-run-tests-shard-plan.rkt",
+        "tests/test-runner-base-dir-resolution.rkt",
+        "tests/test-w9-ci-workflow-verification.rkt",
+        "tests/test-wave-delivery-integrity-register.rkt",
+        "tests/test-wave-integrity-adversarial.rkt",
+        "tests/test-worker-security.rkt",
+        "tests/test-workflow-invocation-contract.rkt",
+        "tests/test-workflow-purge-contract.rkt",
+        "util/version.rkt",
+        "wiki-src/Architecture-Overview.md"
+      ],
+      "doc_only_files": [
+        "CHANGELOG.md",
+        "docs/reports/WAVE-DELIVERY-INTEGRITY-RELEASE-v1.00.31.md",
+        "docs/reports/WAVE-INTEGRITY-REHEARSAL-v1.00.31.md",
+        "docs/reports/gsd-wave-evidence/v1.00.31-w7.rktd",
+        "docs/reports/gsd-wave-reviews/v1.00.31-w7.rktd",
+        "docs/reports/gsd-wave-validation/v1.00.31-w7.rktd"
+      ],
+      "ci_runs_observed": 2,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": true,
+      "exclusion_reasons": []
+    },
+    {
+      "pr": 9756,
+      "title": "W7 binding publication: binding/fb67e0429ed1-w7",
+      "created_at": "2026-09-27T08:40:30Z",
+      "merged_at": "2026-09-27T15:21:46Z",
+      "head_sha": "ee31a8a677d3ea67da17ab2ba0e370fca52d6b2d",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 3,
+      "execution_affecting_files": [],
+      "doc_only_files": [
+        "docs/reports/gsd-wave-evidence/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd",
+        "docs/reports/gsd-wave-reviews/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd",
+        "docs/reports/gsd-wave-validation/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd"
+      ],
+      "ci_runs_observed": 2,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": false,
+      "exclusion_reasons": [
+        "no-execution-change: touches only docs/reports/gsd-wave-evidence/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, docs/reports/gsd-wave-reviews/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, docs/reports/gsd-wave-validation/fb67e0429ed155a4b4e3f31afe3ef3ca7748ee891c06247b11e5e2a86cfebd75-w7.rktd, so the trusted reporter issues NOT_APPLICABLE and it cannot fill a performance cohort"
+      ]
+    },
+    {
+      "pr": 9757,
+      "title": "fix(release): give the release test lane full history so the recorded rehearsal head resolves",
+      "created_at": "2026-09-27T18:21:13Z",
+      "merged_at": "2026-09-27T18:42:18Z",
+      "head_sha": "c5375e605bc9a724b4b105ce5697e0e774a271bd",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 1,
+      "execution_affecting_files": [
+        ".github/workflows/release.yml"
+      ],
+      "doc_only_files": [],
+      "ci_runs_observed": 3,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": true,
+      "exclusion_reasons": []
+    },
+    {
+      "pr": 9758,
+      "title": "fix(gsd): scope slug-consistency warnings to rows whose arrow target is absent",
+      "created_at": "2026-09-27T21:56:37Z",
+      "merged_at": "2026-09-27T22:16:53Z",
+      "head_sha": "5dfd3434430ebbc321eba3144e34adf2e2511f26",
+      "base_repo": "coinerd/q",
+      "author": "coinerd",
+      "is_internal_repo_pr": true,
+      "files_total": 3,
+      "execution_affecting_files": [
+        "README.md",
+        "extensions/gsd/wave-docs.rkt",
+        "tests/test-wave-doc-lint.rkt"
+      ],
+      "doc_only_files": [],
+      "ci_runs_observed": 3,
+      "ci_run_conclusions": [
+        "success"
+      ],
+      "eligible": true,
+      "exclusion_reasons": []
+    }
+  ],
+  "unique_eligible_head_shas": [
+    "435d59031c77c0fa421da60b8cc42b7e7a75bbf3",
+    "49d9bb088ffe25c44c5757a7546293e57316e150",
+    "5dfd3434430ebbc321eba3144e34adf2e2511f26",
+    "c5375e605bc9a724b4b105ce5697e0e774a271bd"
+  ],
+  "comparability_caveats": [
+    "PR #9754 (head 49d9bb088) is a W4-era test-harness fix, created 68 minutes after the activation merge. It is strictly inside the window and execution-affecting, so it is counted, but it is campaign maintenance rather than representative feature traffic and its timing may not be comparable to ordinary PR load.",
+    "PRs #9755 and #9758 are campaign implementation work (69 and 3 changed files). Their run-time profile is dominated by that change's own size, not by repository-wide cost, so neither is a clean latency sample.",
+    "PR #9757 changes .github/workflows/release.yml only; it exercises the CI definition rather than the codebase.",
+    "The window cutoff is the activation commit's UTC instant (2026-09-25T02:10:14Z). The commit's own date carries a +02:00 offset; using the local wall-clock time as if it were UTC would silently drop PRs #9753 and #9754 from the candidate set."
+  ]
+}
