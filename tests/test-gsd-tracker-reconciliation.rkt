@@ -137,13 +137,15 @@
            [(equal? (take argv 2) '("api" "graphql"))
             (values
              0
-             (format (string-append
-                      "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
-                      "\"project\":{\"id\":\"PVT_project\"},"
-                      "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
-                      "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\"},"
-                      "\"optionId\":\"~a\"}}}}}")
-                     (if (= (length calls) 1) "inbox" "done123"))
+             (format
+              (string-append
+               "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+               "\"project\":{\"id\":\"PVT_project\"},"
+               "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
+               "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
+               "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
+               "\"optionId\":\"~a\"}}}}}")
+              (if (= (length calls) 1) "inbox" "done123"))
              "")]
            [else (values 0 "{\"number\":74,\"state\":\"closed\"}" "")]))
        (define tracker
