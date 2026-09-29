@@ -41,6 +41,7 @@
          (file "../../extensions/gsd/wave-completion.rkt")
          (file "../../extensions/gsd/delivery-journal.rkt")
          (file "../../extensions/gsd/delivery-receipt.rkt")
+         (file "../../extensions/gsd/delivery-handoff.rkt")
          (file "../../extensions/gsd/plan-snapshot.rkt")
          (only-in (file "../gsd-wave-gate.rkt") validate-wave-evidence wave-evidence-result-reasons))
 
@@ -763,17 +764,77 @@
   (persist-campaign! dir rec)
   (values rec (campaign-wave-current-attempt (car (campaign-record-waves rec)))))
 
+;; BUG-0077: the honest contract is two-phase. Verifier approval PARKS the
+;; attempt as 'awaiting-delivery; only the seeded attempt-bound delivered
+;; receipt + terminal delivered journal + delivered handoff authorize the
+;; finalizing call. A bare #:delivery-proof mode never completes.
+(define (seed-delivered-proof! dir rec idx merge-sha)
+  (define pid (campaign-plan-id rec))
+  (define durable (load-campaign-record dir pid))
+  (define wave (car (campaign-record-waves durable)))
+  (define attempt (campaign-wave-current-attempt wave))
+  (define head (make-string 40 #\a))
+  (set-campaign-wave-delivery-branch! wave "campaign/test")
+  (set-campaign-wave-delivery-head-sha! wave head)
+  (persist-campaign! dir durable)
+  (record-delivery-receipt! dir
+                            pid
+                            idx
+                            (hasheq 'repo
+                                    "/repo"
+                                    'branch
+                                    "campaign/test"
+                                    'head
+                                    head
+                                    'tree
+                                    (make-string 40 #\b)
+                                    'origin
+                                    "https://github.com/example/q.git"
+                                    'verified-at
+                                    0
+                                    'evidence
+                                    "Verify passed"
+                                    'attempt-id
+                                    (campaign-attempt-id attempt)
+                                    'attempt-fence
+                                    (campaign-attempt-fence-token attempt)))
+  (update-delivery-journal! dir pid idx (hasheq 'stage "delivered"))
+  (reconcile-delivered-handoff! dir pid idx merge-sha)
+  merge-sha)
+
+(define (honest-complete! dir rec)
+  (define attempt0 (campaign-wave-current-attempt (car (campaign-record-waves rec))))
+  (try-complete-wave! dir
+                      rec
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id attempt0)
+                      #:expected-fence-token (campaign-attempt-fence-token attempt0))
+  (define merge-sha (make-string 40 #\c))
+  (seed-delivered-proof! dir rec 0 merge-sha)
+  (define fresh (load-campaign-record dir (campaign-plan-id rec)))
+  (define attempt (campaign-wave-current-attempt (car (campaign-record-waves fresh))))
+  (try-complete-wave! dir
+                      fresh
+                      0
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id attempt)
+                      #:expected-fence-token (campaign-attempt-fence-token attempt)
+                      #:delivered-merge-sha merge-sha))
+
 (define (f9-outcome root complete?)
   (define dir (scratch-dir "f9"))
   (define-values (rec attempt) (f9-fixture dir))
   (define result
-    (try-complete-wave! dir
-                        rec
-                        0
-                        #:verifier-approve? #t
-                        #:expected-attempt-id (campaign-attempt-id attempt)
-                        #:expected-fence-token (campaign-attempt-fence-token attempt)
-                        #:delivery-proof (if complete? 'carry-forward 'require-delivered)))
+    (if complete?
+        (honest-complete! dir rec)
+        (try-complete-wave! dir
+                            rec
+                            0
+                            #:verifier-approve? #t
+                            #:expected-attempt-id (campaign-attempt-id attempt)
+                            #:expected-fence-token (campaign-attempt-fence-token attempt)
+                            #:delivery-proof 'require-delivered)))
   (define status (completion-result-status result))
   (delete-directory/files dir #:must-exist? #f)
   (values 0 (format "completion-result-status: ~a" status) status))
@@ -791,12 +852,10 @@
 (define (f10-outcome root rollback?)
   (define dir (scratch-dir "f10"))
   (define-values (rec attempt) (f9-fixture dir))
-  (try-complete-wave! dir
-                      rec
-                      0
-                      #:verifier-approve? #t
-                      #:expected-attempt-id (campaign-attempt-id attempt)
-                      #:expected-fence-token (campaign-attempt-fence-token attempt))
+  ;; F10's defect only exists for a wave that was HONESTLY delivered (DONE +
+  ;; completion event) and then rolled back; an undelivered wave emits no
+  ;; completion event at all (BUG-0077).
+  (honest-complete! dir rec)
   (define durable (load-campaign-record dir (campaign-plan-id rec)))
   (when rollback?
     (set-campaign-wave-status! (car (campaign-record-waves durable)) 'pending)
