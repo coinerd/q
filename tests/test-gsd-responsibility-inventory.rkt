@@ -105,11 +105,12 @@
                     (length inventory)
                     "inventory must cover every GSD module exactly once")
       ;; +3 BUG-0077 honest completion (delivery-finalize, campaign-result,
-      ;; tracker-reconciliation), on top of journal/receipt/coordinator +3.
+      ;; tracker-reconciliation), on top of journal/receipt/coordinator +3;
+      ;; +1 for the v1.00.33 W0 post-DONE reconciliation checkpoint.
       (check-equal?
        (length inventory)
-       53
-       "GSD module count is stable at 53 (journal, receipt, coordinator; BUG-0077 completion +3)"))
+       54
+       "GSD module count is stable at 54 (journal, receipt, coordinator; BUG-0077 completion +3; W0 checkpoint +1)"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])
