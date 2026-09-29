@@ -499,6 +499,11 @@
                '()
                '()
                '("racket/contract" "racket/string" "effect-ports"))
+   (make-entry "gh-cli-tracker-adapter.rkt"
+               'external-ports
+               '(subprocess)
+               '()
+               '("json" "racket/string" "github-port" "../../sandbox/subprocess"))
    (make-entry
     "system-adapters.rkt"
     'external-ports
