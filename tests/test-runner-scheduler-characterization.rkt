@@ -85,6 +85,14 @@
   (path->string (build-path (find-system-path 'temp-dir)
                             (format "~a-~a-~a.txt" base (current-milliseconds) (random 1000000)))))
 
+(define (wait-for-file path [timeout-ms 60000])
+  (define deadline (+ (current-inexact-milliseconds) timeout-ms))
+  (let loop ()
+    (cond
+      [(file-exists? path) #t]
+      [(>= (current-inexact-milliseconds) deadline) #f]
+      [else (sync/timeout 0.01 never-evt) (loop)])))
+
 (define (capture-stdout thunk)
   (define out (open-output-string))
   (parameterize ([current-output-port out])
@@ -105,10 +113,18 @@
 
 (define fixture-slow
   (string-append "#lang racket/base\n"
+                 "(define slow-started (getenv \"W0_SCHED_SLOW_STARTED\"))\n"
+                 "(define slow-release (getenv \"W0_SCHED_SLOW_RELEASE\"))\n"
                  "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
-                 "(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n"
-                 ";; Deliberately exceed loaded subprocess startup variance.\n"
-                 "(sleep 10)\n"
+                 "(unless (and slow-started slow-release slow-done)\n"
+                 "  (error \"W0 scheduler handshake env unset\"))\n"
+                 "(call-with-output-file slow-started\n"
+                 "  #:exists 'replace\n"
+                 "  (lambda (o) (display \"started\" o)))\n"
+                 "(let wait-for-release ()\n"
+                 "  (unless (file-exists? slow-release)\n"
+                 "    (sync/timeout 0.01 never-evt)\n"
+                 "    (wait-for-release)))\n"
                  "(call-with-output-file slow-done\n"
                  "  #:exists 'append\n"
                  "  (lambda (o) (display \"done\" o)))\n"))
@@ -191,13 +207,37 @@
       (define quick (write-fixture! dir "batch-quick.rkt" fixture-quick))
       (define probe (write-fixture! dir "batch-probe.rkt" fixture-probe))
       (define (run-once scheduler)
+        (define slow-started (unique-tmp-path "w2-sched-slow-started"))
+        (define slow-release (unique-tmp-path "w2-sched-slow-release"))
         (define quick-done (unique-tmp-path "w2-sched-quick-done"))
         (define slow-done (unique-tmp-path "w2-sched-slow-done"))
         (define probe-out (unique-tmp-path "w2-sched-probe-out"))
+        (putenv "W0_SCHED_SLOW_STARTED" slow-started)
+        (putenv "W0_SCHED_SLOW_RELEASE" slow-release)
         (putenv "W0_SCHED_QUICK_DONE" quick-done)
         (putenv "W0_SCHED_SLOW_DONE" slow-done)
         (putenv "W0_SCHED_PROBE_OUT" probe-out)
-        (define results (run-all-files (list slow quick probe) 2 #f #:scheduler scheduler))
+        (define result-channel (make-channel))
+        (thread
+         (lambda ()
+           (channel-put
+            result-channel
+            (with-handlers ([exn? (lambda (e) (list 'error e))])
+              (list 'ok (run-all-files (list slow quick probe) 2 #f #:scheduler scheduler))))))
+        (define slow-started? (wait-for-file slow-started))
+        (define quick-completed? (wait-for-file quick-done))
+        (check-true slow-started? (format "~a mode: slow fixture started and is waiting for release" scheduler))
+        (check-true quick-completed? (format "~a mode: quick fixture completed before slow release" scheduler))
+        (when (eq? scheduler 'queue)
+          (check-true (wait-for-file probe-out)
+                      "queue mode: probe observes the available worker before slow release"))
+        (call-with-output-file slow-release #:exists 'replace (lambda (out) (void)))
+        (define outcome (sync/timeout 150 result-channel))
+        (check-true (and outcome (eq? (car outcome) 'ok))
+                    (format "~a mode: scheduler fixture run completed" scheduler))
+        (define results (if (and outcome (eq? (car outcome) 'ok)) (cadr outcome) '()))
+        (putenv "W0_SCHED_SLOW_STARTED" "")
+        (putenv "W0_SCHED_SLOW_RELEASE" "")
         (putenv "W0_SCHED_QUICK_DONE" "")
         (putenv "W0_SCHED_SLOW_DONE" "")
         (putenv "W0_SCHED_PROBE_OUT" "")
