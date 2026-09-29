@@ -54,7 +54,8 @@
                   delivery-outcome-message)
          (only-in "campaign-result.rkt" campaign-result)
          (only-in "delivery-handoff.rkt" delivery-readback)
-         (only-in "reconciliation-checkpoint.rkt" run-tracker-reconciliation!))
+         (only-in "reconciliation-checkpoint.rkt" run-tracker-reconciliation!)
+         (only-in "tracker-production-wiring.rkt" resolve-live-tracker-reconciler))
 
 (provide record-attempt-delivery-provenance!
          finalize-delivered-wave!
@@ -227,7 +228,8 @@
      (run-tracker-reconciliation! base-dir
                                   plan-id
                                   wave-idx
-                                  tracker-reconciler
+                                  (or tracker-reconciler
+                                      (resolve-live-tracker-reconciler base-dir plan-id wave-idx))
                                   #:delivery-reader delivery-reader)
      (on-delivered)]
     [(stale)

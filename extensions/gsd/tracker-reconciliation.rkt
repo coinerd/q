@@ -143,10 +143,14 @@
     (set! actions
           (append actions
                   (list ((gsd-github-port-execute github-port)
-                         (gsd-github-command 'board-set-field
-                                             (corr plan-id wave-index merge-sha "board" issue-number)
-                                             (hash-set (hash-set common 'field field) 'value value)
-                                             #f))))))
+                         (gsd-github-command
+                          'board-set-field
+                          (corr plan-id wave-index merge-sha "board" issue-number)
+                          (for/fold ([params (hash-set (hash-set common 'field field) 'value value)])
+                                    ([key '(project-item-id project-id field-id option-id)]
+                                     #:when (hash-has-key? binding key))
+                            (hash-set params key (hash-ref binding key)))
+                          #f))))))
   (set! actions
         (append actions
                 (list ((gsd-github-port-execute github-port)

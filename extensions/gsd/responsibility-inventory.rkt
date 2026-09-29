@@ -207,7 +207,9 @@
                                "attempt-artifacts"
                                "delivery-verifier"
                                "delivery-coordinator"
-                               "campaign-result"))
+                               "campaign-result"
+                               "reconciliation-checkpoint"
+                               "tracker-production-wiring"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -232,6 +234,13 @@
                                "delivery-handoff"
                                "delivery-journal"
                                "effect-ports"))
+   ;; v1.00.33 W1: opt-in settings composition for the in-repo Racket adapter.
+   (make-entry
+    "tracker-production-wiring.rkt"
+    'external-ports
+    '()
+    '()
+    '("../../runtime/settings" "gh-cli-tracker-adapter" "github-port" "tracker-reconciliation"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence
