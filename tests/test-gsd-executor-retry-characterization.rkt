@@ -116,8 +116,10 @@
       (contains? orchestrator-src "(delivery-verification-message verifier-result)")
       (contains? repair-src "\"verifier rejected\"")
       (contains? orchestrator-src "\"unexpected completion state\"")
-      ;; campaign-result is the transparent outcome struct.
-      (contains? orchestrator-src
+      ;; campaign-result is the transparent outcome struct. BUG-0077:
+      ;; the struct itself was extracted to campaign-result.rkt (the
+      ;; orchestrator re-provides it); the pin follows the definition.
+      (contains? (src (build-path "extensions" "gsd" "campaign-result.rkt"))
                  "(struct campaign-result (status completed-waves message) #:transparent)"))
 
     ;; ── 4. Empty-result mapping: 'complete + no content => 'approved-empty ──

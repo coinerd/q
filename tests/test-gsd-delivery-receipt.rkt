@@ -60,6 +60,9 @@
     (define blocker (dynamic-require receipt-module 'delivery-receipt-blocker))
     (define rec (done-record))
     (check-false (blocker journal rec plan 2 8))
+    (set-campaign-wave-status! (car (campaign-record-waves rec)) 'awaiting-delivery)
+    (check-false (blocker journal rec plan 2 8))
+    (set-campaign-wave-status! (car (campaign-record-waves rec)) 'done)
     ;; Resuming increments coordinator fence without rewriting the old attempt.
     (set-campaign-fence-token! rec 9)
     (check-false (blocker journal rec plan 2 9))

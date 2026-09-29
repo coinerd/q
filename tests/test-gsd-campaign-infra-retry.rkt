@@ -142,12 +142,12 @@
                                             "HTTP read timeout (120 seconds) waiting for SSE chunk")
                                            'ok))
                             #:verifier (lambda (_) #t))))
-     (check-eq? (campaign-result-status result) 'wave-done)
+     (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
      ;; 1 infra run + 1 automatic re-attempt = 2 executor runs,
      ;; with NO manual /retry in between.
      (check-equal? (unbox runs) 2)
      (define after (load-or-migrate dir))
-     (check-eq? (wave-status* after 0) 'done)
+     (check-eq? (wave-status* after 0) 'awaiting-delivery)
      ;; Infra failure did not consume the attempt; the successful
      ;; re-attempt is the only one recorded.
      (check-equal? (wave-attempt-count* after 0) 1)
@@ -258,7 +258,7 @@
                          (wave-execution-outcome 'infra-failed "connection reset by peer mid-wave")
                          'ok))
           #:verifier (lambda (_) #t))))
-     (check-eq? (campaign-result-status result) 'wave-done)
+     (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
      (check-equal? (length contexts) 2)
      ;; First attempt: no prior-attempt context.
      (check-false (and (string? (car contexts))
@@ -377,7 +377,7 @@
                          'ok))
           #:verifier (lambda (_) #t))))
      ;; The campaign CONTINUED past the stall kill and completed the wave.
-     (check-eq? (campaign-result-status result) 'wave-done)
+     (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
      (check-equal? (unbox runs) 2 "1 stall-killed run + 1 automatic re-attempt")
      ;; Retry observability: exactly one gsd.campaign.infra-retry event.
      (define infra-events
@@ -392,7 +392,7 @@
      ;; Durable record: done, retryable death consumed no attempt,
      ;; success cleared the hand-off context.
      (define after (load-or-migrate dir))
-     (check-eq? (wave-status* after 0) 'done)
+     (check-eq? (wave-status* after 0) 'awaiting-delivery)
      (check-equal? (wave-attempt-count* after 0) 1)
      (check-equal? (wave-attempt-context* after 0) ""))
    (lambda ()

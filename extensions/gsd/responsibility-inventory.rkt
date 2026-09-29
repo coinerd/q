@@ -21,6 +21,10 @@
    ;; pure planning (8)
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
    (make-entry "wave-status.rkt" 'pure-planning '() '() '())
+   ;; BUG-0077: the campaign terminal result struct, extracted from
+   ;; go-orchestrator so the delivery checkpoint modules can construct
+   ;; results without depending on the orchestrator (size pin).
+   (make-entry "campaign-result.rkt" 'pure-planning '() '() '())
    (make-entry "stall-policy.rkt"
                'transition-logic
                '(parameterize make-param
@@ -185,6 +189,39 @@
                                  "delivery-journal"
                                  "delivery-handoff"
                                  "sandbox/subprocess"))
+   ;; BUG-0077: honest-completion state machine extracted from
+   ;; go-orchestrator (attempt delivery provenance, park/finalize
+   ;; checkpoint drivers, coordinator checkpoint decision). All durable
+   ;; effects are delegated to the required modules (campaign-repository,
+   ;; delivery-journal, wave-completion, attempt-artifacts); this module's
+   ;; own source carries no marker-visible effects.
+   (make-entry "delivery-finalize.rkt"
+               'campaign-state
+               '()
+               '()
+               '("racket/list" "racket/string"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "wave-completion"
+                               "attempt-artifacts"
+                               "delivery-verifier"
+                               "delivery-coordinator"
+                               "campaign-result"))
+   ;; BUG-0074: receipt-authoritative tracker reconciliation after durable
+   ;; delivery. Reads durable campaign/handoff/journal state locally and
+   ;; mirrors issue/board status through the injected GitHub effect port;
+   ;; idempotent and restart-safe. No local durable writes.
+   (make-entry "tracker-reconciliation.rkt"
+               'external-ports
+               '(fs-read parameterize)
+               '()
+               '("racket/file" "racket/list"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-handoff"
+                               "delivery-journal"
+                               "effect-ports"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence

@@ -17,6 +17,7 @@
 ;; the SAME canonical final state as a clean completion — idempotently.
 
 (require rackunit
+         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
          rackunit/text-ui
          racket/file
          racket/path
@@ -98,12 +99,25 @@
 
 (define (complete! dir rec idx)
   (define attempt (campaign-wave-current-attempt (wave* rec idx)))
+  ;; Operator stand-in: the verified attempt's protected delivery is
+  ;; complete (attempt-bound receipt + terminal journal + delivered
+  ;; handoff) so completion may finalize DONE.
+  (define merge-sha (seed-awaiting-delivery! dir (campaign-plan-id rec) idx))
+  ;; Phase 1 — verifier approval parks the attempt durably.
   (try-complete-wave! dir
                       rec
                       idx
                       #:verifier-approve? #t
                       #:expected-attempt-id (campaign-attempt-id attempt)
-                      #:expected-fence-token (campaign-attempt-fence-token attempt)))
+                      #:expected-fence-token (campaign-attempt-fence-token attempt))
+  ;; Phase 2 — authenticated delivery finalizes DONE from awaiting-delivery.
+  (try-complete-wave! dir
+                      rec
+                      idx
+                      #:verifier-approve? #t
+                      #:expected-attempt-id (campaign-attempt-id attempt)
+                      #:expected-fence-token (campaign-attempt-fence-token attempt)
+                      #:delivered-merge-sha merge-sha))
 
 ;; The canonical final state after a clean approval of wave 0.
 (define (check-canonical-done! dir rec)

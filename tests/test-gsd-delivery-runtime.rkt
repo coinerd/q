@@ -125,8 +125,30 @@
                                               (campaign-plan-id rec)
                                               0
                                               (campaign-fence-token durable)))
-       (check-equal? journal (load-delivery-journal dir (campaign-plan-id rec) 0)))))
-  (test-case "verified first wave stops before successor; resume only runs successor"
+       (check-equal? journal (load-delivery-journal dir (campaign-plan-id rec) 0))
+       (check-eq? (campaign-wave-status (car (campaign-record-waves durable))) 'awaiting-delivery)
+       (check-equal? (load-outbox dir (campaign-plan-id rec)) '())
+       ;; Delivered-shaped readback cannot substitute for terminal journal state.
+       (check-eq? (campaign-result-status
+                   (run-campaign! dir
+                                  durable
+                                  #:runner (lambda (_) (error 'test "verified implementation reran"))
+                                  #:delivery-reader delivered))
+                  'wave-blocked)
+       ;; The injected reader represents authenticated controller readback in
+       ;; this test. A journal stage alone cannot authorize completion.
+       (update-delivery-journal! dir (campaign-plan-id rec) 0 (hasheq 'stage "delivered"))
+       (define completed
+         (run-campaign! dir
+                        durable
+                        #:runner (lambda (_) (error 'test "verified implementation reran"))
+                        #:delivery-reader delivered))
+       (check-eq? (campaign-result-status completed) 'campaign-complete)
+       (check-equal? runs 1)
+       (check-eq? (campaign-wave-status (car (campaign-record-waves
+                                              (load-campaign-record dir (campaign-plan-id rec)))))
+                  'done))))
+  (test-case "unreceipted first wave stays blocked before successor even on delivered-shaped readback"
     (call-with-campaign
      2
      (lambda (dir rec)
@@ -140,7 +162,7 @@
        (check-equal? runs '(0))
        (define plan (campaign-plan-id rec))
        (define saved (load-campaign-record dir plan))
-       (check-eq? (campaign-wave-status (car (campaign-record-waves saved))) 'done)
+       (check-eq? (campaign-wave-status (car (campaign-record-waves saved))) 'awaiting-delivery)
        (define attempt-count (campaign-wave-attempt-count (car (campaign-record-waves saved))))
        (define resumed
          (run-campaign! dir
@@ -148,14 +170,14 @@
                         #:runner runner
                         #:verifier (lambda (_) #t)
                         #:delivery-reader delivered))
-       (check-eq? (campaign-result-status resumed) 'campaign-complete)
-       (check-equal? runs '(1 0))
+       (check-eq? (campaign-result-status resumed) 'wave-blocked)
+       (check-equal? runs '(0))
        (check-equal? attempt-count
                      (campaign-wave-attempt-count
                       (car (campaign-record-waves (load-campaign-record dir plan)))))
        (check-eq? (hash-ref (call-with-input-file (delivery-handoff-path dir plan 0) read) 'status)
-                  'delivered))))
-  (test-case "final wave cannot complete campaign without delivery; resume does not rerun or duplicate outbox"
+                  'delivery-pending))))
+  (test-case "unreceipted final wave cannot complete; resume never reruns or duplicates outbox"
     (call-with-campaign
      1
      (lambda (dir rec)
@@ -176,13 +198,13 @@
        (check-equal? ledger (file->bytes (delivery-handoff-path dir plan 0)))
        (check-eq?
         (campaign-result-status (run-campaign! dir rec #:runner runner #:delivery-reader delivered))
-        'campaign-complete)
+        'wave-blocked)
        (check-equal? count 1)
        (check-equal? outbox (load-outbox dir plan)))))
   ;; ============================================================
   ;; B2b: injectable delivery-coordinator seam at the wave-blocked checkpoint
   ;; ============================================================
-  (test-case "wired coordinator that returns ok advances the blocked campaign loop"
+  (test-case "a coordinator claiming ok without durable progress cannot advance the loop"
     (call-with-campaign
      2
      (lambda (dir rec)
@@ -195,8 +217,8 @@
          (run-campaign! dir rec #:runner runner #:verifier (lambda (_) #t) #:delivery-reader pending))
        (check-eq? (campaign-result-status blocked) 'wave-blocked)
        (check-equal? runs '(0))
-       ;; The coordinator's single ok step flips the readback to delivered;
-       ;; the re-entered checkpoint must then advance without re-running W0.
+       ;; Coordinator text and a delivered-shaped reader are insufficient:
+       ;; no Verify receipt exists and no journal stage can advance.
        (define resumed
          (run-campaign! dir
                         rec
@@ -209,8 +231,8 @@
                         #:delivery-coordinator (lambda (b p w)
                                                  (set! ran-coordinator? #t)
                                                  (delivery-outcome 'ok "advanced one stage"))))
-       (check-eq? (campaign-result-status resumed) 'campaign-complete)
-       (check-equal? runs '(1 0)))))
+       (check-eq? (campaign-result-status resumed) 'wave-blocked)
+       (check-equal? runs '(0)))))
   (test-case "typed coordinator stops return typed wave-blocked without advancing"
     (for ([kind (in-list '(awaiting-review retryable blocked))])
       (call-with-campaign 1
@@ -244,33 +266,35 @@
        (check-eq? (campaign-result-status result) 'wave-blocked)
        (check-false (string-contains? (campaign-result-message result) "already delivered")))))
   (test-case "all implementation waves done: /go enters final delivery and completes without any rerun"
-    (call-with-campaign 1
-                        (lambda (dir rec)
-                          (define rec-done (done-record dir))
-                          (define plan (campaign-plan-id rec-done))
-                          ;; All waves done; readback pending on first check, delivered after
-                          ;; the coordinator's single ok step. The campaign must complete via
-                          ;; delivery with the implementation runner NEVER invoked again.
-                          (define runs 0)
-                          (define coordinated? #f)
-                          (define result
-                            (run-campaign! dir
-                                           rec-done
-                                           #:runner (lambda (_)
-                                                      (set! runs (add1 runs))
-                                                      'ok)
-                                           #:verifier (lambda (_) #t)
-                                           #:delivery-reader (lambda (b p w)
-                                                               (if coordinated?
-                                                                   (delivered b p w)
-                                                                   (pending b p w)))
-                                           #:delivery-coordinator
-                                           (lambda (b p w)
-                                             (set! coordinated? #t)
-                                             (delivery-outcome 'ok "delivery advanced"))))
-                          (check-eq? (campaign-result-status result) 'campaign-complete)
-                          (check-equal? runs 0)
-                          (check-true coordinated?))))
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define rec-done (done-record dir))
+       (define plan (campaign-plan-id rec-done))
+       ;; All waves done; readback pending on first check, delivered after
+       ;; the coordinator's single ok step. The campaign must complete via
+       ;; delivery with the implementation runner NEVER invoked again.
+       (define runs 0)
+       (define coordinated? #f)
+       (define result
+         (run-campaign! dir
+                        rec-done
+                        #:runner (lambda (_)
+                                   (set! runs (add1 runs))
+                                   'ok)
+                        #:verifier (lambda (_) #t)
+                        #:delivery-reader (lambda (b p w)
+                                            (if coordinated?
+                                                (delivered b p w)
+                                                (pending b p w)))
+                        #:delivery-coordinator
+                        (lambda (b p w)
+                          (update-delivery-journal! b p w (hasheq 'stage "implementation-review"))
+                          (set! coordinated? #t)
+                          (delivery-outcome 'ok "delivery advanced"))))
+       (check-eq? (campaign-result-status result) 'campaign-complete)
+       (check-equal? runs 0)
+       (check-true coordinated?))))
   (test-case "no coordinator wired preserves the block-only wave-blocked behavior"
     (call-with-campaign 1
                         (lambda (dir rec)

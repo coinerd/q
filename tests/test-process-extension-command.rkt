@@ -9,6 +9,7 @@
 ;; tests/test-process-extension-command.rkt -- Tests for process-extension-command (N-10)
 
 (require rackunit
+         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
          "../tui/commands.rkt"
          "../tui/state-types.rkt"
          (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
@@ -111,6 +112,10 @@
                               (lambda (idx) (format "isolated-W~a" idx))
                               (lambda (idx)
                                 (bind-test-wave-merge-sha! dir (campaign-plan-id rec) idx)
+                                ;; Operator stand-in: the protected merge for this
+                                ;; verified attempt is complete (attempt-bound
+                                ;; receipt + terminal journal + delivered handoff).
+                                (seed-awaiting-delivery! dir (campaign-plan-id rec) idx)
                                 #t)
                               ;; v1.00.30: delivered-proof mock so the
                               ;; isolated-runner cycle reaches the W1 token.

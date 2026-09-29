@@ -16,8 +16,8 @@
 ;;   provenance; both-conflict fails closed; never infer completion from
 ;;   docs/edits/mode/prior-wave completion.
 ;;
-;; D4 — Canonical status mapping: PENDING/IN-PROGRESS/VERIFYING/DONE/FAILED/
-;;   INTERRUPTED/DEFERRED.  No REWORK status; FAILED never counts as successful
+;; D4 — Canonical status mapping: PENDING/IN-PROGRESS/VERIFYING/AWAITING-DELIVERY/
+;;   DONE/FAILED/INTERRUPTED/DEFERRED.  No REWORK status; FAILED never counts as successful
 ;;   completion; INTERRUPTED retries with a new attempt.
 ;;
 ;; D5 — Fencing: every transition requires the current fencing token and
@@ -499,7 +499,8 @@
 ;; Canonical status mapping (D4)
 ;; ============================================================
 
-(define CANONICAL-WAVE-STATUSES '(pending in-progress verifying done failed interrupted deferred))
+(define CANONICAL-WAVE-STATUSES
+  '(pending in-progress verifying awaiting-delivery done failed interrupted deferred))
 
 (define canonical-wave-statuses CANONICAL-WAVE-STATUSES)
 
@@ -512,6 +513,7 @@
     [(or (string=? up "INBOX") (string=? up "PENDING") (string=? up "NOT STARTED")) 'pending]
     [(or (string=? up "IN-PROGRESS") (string=? up "IN PROGRESS")) 'in-progress]
     [(string=? up "VERIFYING") 'verifying]
+    [(string=? up "AWAITING-DELIVERY") 'awaiting-delivery]
     [(or (string=? up "DONE") (string=? up "COMPLETED")) 'done]
     [(string=? up "FAILED") 'failed]
     [(string=? up "INTERRUPTED") 'interrupted]

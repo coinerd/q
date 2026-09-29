@@ -25,10 +25,26 @@
          racket/system
          (only-in "../../util/version.rkt" q-version)
          "campaign-state.rkt"
+         (only-in "campaign-result.rkt"
+                  campaign-result
+                  campaign-result-status
+                  campaign-result-completed-waves
+                  campaign-result-message)
          "campaign-repository.rkt"
          "wave-completion.rkt"
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
+         (only-in "delivery-finalize.rkt"
+                  record-attempt-delivery-provenance!
+                  finalize-delivered-wave!
+                  delivery-finalization-done?
+                  delivery-finalization-failed?
+                  delivery-finalization-stale?
+                  delivery-journal-advanced?
+                  delivery-journal-snapshot
+                  run-delivery-finalization
+                  run-coordinator-checkpoint
+                  park-approved-attempt-result!)
          (only-in "delivery-coordinator.rkt"
                   delivery-outcome
                   delivery-outcome?
@@ -186,8 +202,6 @@
 ;; ============================================================
 ;; Coordinator result
 ;; ============================================================
-
-(struct campaign-result (status completed-waves message) #:transparent)
 
 ;; ============================================================
 ;; Wave runner abstraction (injectable for testing)
@@ -859,6 +873,15 @@
                         [(not (current-wave-for-attempt after-verifier wave-idx fence expected-id))
                          (campaign-result 'wave-cancelled '() "stale verifier result ignored")]
                         [else
+                         ;; REAL delivery provenance before parking (BUG-0077).
+                         (when approved?
+                           (record-attempt-delivery-provenance! base-dir
+                                                                (campaign-plan-id active)
+                                                                wave-idx
+                                                                expected-id
+                                                                fence
+                                                                #:worktree wt
+                                                                #:delivery-context delivery-ctx))
                          (define result
                            (try-complete-wave!
                             base-dir
@@ -875,67 +898,19 @@
                             #:release-check (and (current-gsd-release-check)
                                                  (lambda () ((current-gsd-release-check) wave-idx)))))
                          (define completion-status (completion-result-status result))
-                         (when (memq completion-status '(done failed))
+                         (when (memq completion-status '(done failed awaiting-delivery))
                            (mirror-status! completion-status))
                          (case completion-status
-                           [(done)
-                            ;; W7: record delivery provenance (branch + head
-                            ;; SHA) in the durable campaign record; the
-                            ;; merge/PR itself stays with the operator or
-                            ;; wave-finish flow (no silent auto-merge in
-                            ;; v1.00.17).
-                            (when delivery-ctx
-                              (record-wave-delivery! base-dir
-                                                     (campaign-plan-id active)
-                                                     wave-idx
-                                                     (branch-delivery-context-ref delivery-ctx
-                                                                                  'branch)
-                                                     (wave-worktree-head-sha wt))
-                              ;; BUG-0030 (action 2): verification is
-                              ;; files/targets-based, NEVER commit-count
-                              ;; based — a delivered branch may legitimately
-                              ;; carry N mid-wave checkpoints plus the final
-                              ;; state. A DONE branch with ZERO commits is
-                              ;; nonsensical, so WARN (never fail).
-                              (warn-zero-commit-delivery-branch! delivery-ctx))
-                            ;; Delivery approved: the release wrapper must
-                            ;; KEEP the branch (it is the merge evidence).
-                            (when wt
-                              (set-box! keep-branch-box #t))
-                            ;; BUG-0024 W3: success clears the durable
-                            ;; prior-attempt context so the next wave starts
-                            ;; from zero context.
-                            (let ([done-rec (observe)])
-                              (define done-wave
-                                (and done-rec
-                                     (for/first ([w (campaign-record-waves done-rec)]
-                                                 #:when (= (campaign-wave-index w) wave-idx))
-                                       w)))
-                              (when (and done-wave
-                                         (positive? (string-length (campaign-wave-attempt-context
-                                                                    done-wave))))
-                                (set-campaign-wave-attempt-context! done-wave "")
-                                (persist-campaign! base-dir done-rec)))
-                            ;; v1.00.21 W5 (BUG-0029 action 1): terminal
-                            ;; 'success + locally-determinable merge status
-                            ;; for the delivered branch — the ledger owns it
-                            ;; until merged/reclaimed.
-                            (mark-attempt-artifact-terminal!
-                             base-dir
-                             (campaign-plan-id active)
-                             wave-idx
-                             expected-id
-                             'success
-                             #:merge-status
-                             (and delivery-ctx
-                                  (artifact-merge-status/local
-                                   (branch-delivery-context-ref delivery-ctx 'repo-root)
-                                   (branch-delivery-context-ref delivery-ctx 'branch))))
-                            (notify-terminal-transition*! (campaign-plan-id active)
-                                                          wave-idx
-                                                          'wave-done
-                                                          #:reason "wave completed")
-                            (campaign-result 'wave-done (list wave-idx) "wave completed")]
+                           [(awaiting-delivery)
+                            ;; Approved but undelivered: park the SAME attempt (BUG-0077).
+                            (park-approved-attempt-result! base-dir
+                                                           (campaign-plan-id active)
+                                                           wave-idx
+                                                           expected-id
+                                                           #:delivery-context delivery-ctx
+                                                           #:worktree wt
+                                                           #:keep-branch-box keep-branch-box
+                                                           #:refresh observe)]
                            [(failed)
                             (cond
                               [(and (> no-change-retries-left 0)
@@ -1378,22 +1353,16 @@
                                        message
                                        delivery-coordinator
                                        loop-again)
-  (if (campaign-record-cancellation (load-campaign-record dir plan-id))
-      (campaign-result 'wave-cancelled (reverse completed) message)
-      (let ([outcome (delivery-coordinator dir
-                                           plan-id
-                                           (and (campaign-wave? extra) (campaign-wave-index extra)))])
-        (case (and outcome (delivery-outcome-kind outcome))
-          [(ok) (loop-again)]
-          [else
-           (campaign-result
-            'wave-blocked
-            (reverse completed)
-            (cond
-              [(eq? (and outcome (delivery-outcome-kind outcome)) 'delivered)
-               "terminal stage lacks authenticated readback; no delivery proof advanced"]
-              [(delivery-outcome? outcome) (delivery-outcome-message outcome)]
-              [else message]))]))))
+  (run-coordinator-checkpoint
+   dir
+   plan-id
+   extra
+   message
+   delivery-coordinator
+   #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
+   #:on-advance loop-again
+   #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
+
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
@@ -1503,6 +1472,27 @@
                      delivery-coordinator
                      (lambda () (loop (load-campaign-record base-dir plan-id) completed)))
                     (campaign-result 'wave-blocked (reverse completed) message))]
+               [(finalize-wave)
+                ;; Authenticated delivered proof commits DONE (BUG-0077).
+                (run-delivery-finalization
+                 base-dir
+                 plan-id
+                 live
+                 (campaign-wave-index extra)
+                 (hash-ref verified-delivered (campaign-wave-index extra) #f)
+                 completed
+                 #:release-check
+                 (and (current-gsd-release-check)
+                      (lambda () ((current-gsd-release-check) (campaign-wave-index extra))))
+                 #:on-delivered
+                 (lambda ()
+                   (mirror-durable-statuses! rec (load-campaign-record base-dir plan-id))
+                   (notify-terminal-transition*! plan-id
+                                                 (campaign-wave-index extra)
+                                                 'wave-done
+                                                 #:reason "wave delivered")
+                   (loop (load-campaign-record base-dir plan-id)
+                         (cons (campaign-wave-index extra) completed))))]
                [(wave-cancelled)
                 (when (campaign-record-cancellation live)
                   (notify-terminal-transition*! (campaign-plan-id live)
@@ -1543,6 +1533,11 @@
                    (define refreshed (load-campaign-record base-dir plan-id))
                    (if refreshed
                        (loop refreshed (cons next-idx completed))
+                       (campaign-result 'error (reverse completed) "campaign record disappeared"))]
+                  [(wave-awaiting-delivery)
+                   (define refreshed (load-campaign-record base-dir plan-id))
+                   (if refreshed
+                       (loop refreshed completed)
                        (campaign-result 'error (reverse completed) "campaign record disappeared"))]
                   [(meta-fix)
                    ;; Meta-fix: retry the same wave, attempt not consumed
@@ -1603,6 +1598,8 @@
          campaign-result-status
          campaign-result-completed-waves
          campaign-result-message
+         ;; re-provided from campaign-result.rkt (extracted to keep the
+         ;; orchestrator under its size pin).
          ;; v1.00.29 W1 (BUG-0064, #9620): Delivery-Contract merge-SHA
          ;; provenance + wave-advance gate.
          wave-merge-sha
