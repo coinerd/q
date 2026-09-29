@@ -521,6 +521,11 @@
                '()
                '()
                '("racket/contract" "racket/string" "effect-ports"))
+   ;; W0 canary (cd3814e7): the board mutation refuses an operator-supplied
+   ;; option-id that is not a member of the bound Status field's option
+   ;; list. The option list is read by the same authenticated GraphQL
+   ;; readback that already gates the mutation, so the refusal happens
+   ;; before `gh project item-edit` — no new effect class is introduced.
    (make-entry "gh-cli-tracker-adapter.rkt"
                'external-ports
                '(subprocess)
