@@ -3,6 +3,8 @@
 ;; @speed fast
 ;; @suite gsd
 (require rackunit
+         racket/list
+         racket/string
          "../extensions/gsd/gh-cli-tracker-adapter.rkt"
          "../extensions/gsd/github-port.rkt")
 
@@ -52,42 +54,65 @@
                 (hasheq 'issue-number 9763 'field "Status" 'value "Done"))))
   (check-equal? calls 0))
 
-(test-case "project item edit requires a matching authenticated response"
-  (define params
-    (hasheq 'issue-number
-            9763
-            'field
-            "Status"
-            'value
-            "Done"
-            'project-item-id
-            "PVTI_item"
-            'project-id
-            "PVT_project"
-            'field-id
-            "PVTSSF_status"
-            'option-id
-            "done123"))
-  (define seen #f)
+(define board-params
+  (hasheq 'issue-number
+          9763
+          'field
+          "Status"
+          'value
+          "Done"
+          'project-item-id
+          "PVTI_item"
+          'project-id
+          "PVT_project"
+          'field-id
+          "PVTSSF_status"
+          'option-id
+          "done123"))
+(define (item-proof number option)
+  (format (string-append "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+                         "\"project\":{\"id\":\"PVT_project\"},"
+                         "\"content\":{\"number\":~a,"
+                         "\"repository\":{\"nameWithOwner\":\"coinerd/q\"}},"
+                         "\"fieldValueByName\":{\"optionId\":\"~a\","
+                         "\"field\":{\"id\":\"PVTSSF_status\"}}}}}")
+          number
+          option))
+
+(test-case "board update checks issue/project identity before mutation and option afterward"
+  (define calls '())
   (define (runner args)
-    (set! seen args)
-    (values 0 "{\"id\":\"PVTI_item\"}" ""))
+    (set! calls (append calls (list args)))
+    (cond
+      [(equal? (take args 2) '("api" "graphql"))
+       (values 0 (item-proof 9763 (if (= (length calls) 1) "inbox" "done123")) "")]
+      [else (values 0 "{\"id\":\"PVTI_item\"}" "")]))
   (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
-  ((github-adapter-set-board-field! adapter) params)
-  (check-equal? seen
-                '("project" "item-edit"
-                            "--id"
-                            "PVTI_item"
-                            "--project-id"
-                            "PVT_project"
-                            "--field-id"
-                            "PVTSSF_status"
-                            "--single-select-option-id"
-                            "done123"
-                            "--format"
-                            "json"))
-  (define bad
-    (make-gh-cli-tracker-adapter #:live? #t
-                                 #:repository "coinerd/q"
-                                 #:runner (lambda (_) (values 0 "{\"id\":\"other\"}" ""))))
-  (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! bad) params))))
+  ((github-adapter-set-board-field! adapter) board-params)
+  (check-equal? (map (lambda (args) (take args 2)) calls)
+                '(("api" "graphql") ("project" "item-edit") ("api" "graphql"))))
+
+(test-case "wrong project item issue, repo, or project blocks before mutation"
+  (for ([proof (in-list (list (item-proof 9764 "inbox")
+                              (string-replace (item-proof 9763 "inbox") "coinerd/q" "other/repo")
+                              (string-replace (item-proof 9763 "inbox") "PVT_project" "PVT_wrong")))])
+    (define calls '())
+    (define (runner args)
+      (set! calls (append calls (list args)))
+      (values 0 proof ""))
+    (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+    (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
+    (check-equal? (length calls) 1)))
+
+(test-case "wrong post-update option fails closed"
+  (define calls 0)
+  (define (runner args)
+    (set! calls (add1 calls))
+    (values 0
+            (if (equal? (car args) "project")
+                "{\"id\":\"PVTI_item\"}"
+                (item-proof 9763 "inbox"))
+            ""))
+  (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+  (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
+  (check-equal? calls 3))

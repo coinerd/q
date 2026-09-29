@@ -54,7 +54,10 @@
                   delivery-outcome-message)
          (only-in "campaign-result.rkt" campaign-result)
          (only-in "delivery-handoff.rkt" delivery-readback)
-         (only-in "reconciliation-checkpoint.rkt" run-tracker-reconciliation!)
+         (only-in "reconciliation-checkpoint.rkt"
+                  run-tracker-reconciliation!
+                  reconciliation-checkpoint-result-status
+                  reconciliation-checkpoint-result-actions)
          (only-in "tracker-production-wiring.rkt" resolve-live-tracker-reconciler))
 
 (provide record-attempt-delivery-provenance!
@@ -225,12 +228,23 @@
      ;; tracker may be reconciled from its receipt. Deliberately BEFORE
      ;; on-delivered and deliberately non-fatal: reconciliation is an output
      ;; of delivery, so its refusal can never move this wave off `done`.
-     (run-tracker-reconciliation! base-dir
-                                  plan-id
-                                  wave-idx
-                                  (or tracker-reconciler
-                                      (resolve-live-tracker-reconciler base-dir plan-id wave-idx))
-                                  #:delivery-reader delivery-reader)
+     (define tracker-result
+       (run-tracker-reconciliation! base-dir
+                                    plan-id
+                                    wave-idx
+                                    (or tracker-reconciler
+                                        (resolve-live-tracker-reconciler base-dir plan-id wave-idx))
+                                    #:delivery-reader delivery-reader))
+     ;; Do not conflate wave delivery and tracker delivery. This warning makes
+     ;; a blocked or partially applied tracker pass visible to the operator;
+     ;; the wave remains DONE and the exact actions can be inspected separately.
+     (unless (eq? (reconciliation-checkpoint-result-status tracker-result) 'reconciled)
+       (log-warning
+        "tracker reconciliation ~a for plan ~a wave ~a (~a completed action(s)); wave remains delivered"
+        (reconciliation-checkpoint-result-status tracker-result)
+        plan-id
+        wave-idx
+        (length (reconciliation-checkpoint-result-actions tracker-result))))
      (on-delivered)]
     [(stale)
      (campaign-result 'wave-cancelled (reverse completed) "stale delivery completion ignored")]

@@ -57,8 +57,8 @@
 (define (reconciliation-checkpoint-not-configured)
   (reconciliation-checkpoint-result 'not-configured "no tracker reconciler configured" '()))
 
-(define (reconciliation-checkpoint-blocked reason)
-  (reconciliation-checkpoint-result 'blocked reason '()))
+(define (reconciliation-checkpoint-blocked reason [actions '()])
+  (reconciliation-checkpoint-result 'blocked reason actions))
 
 (define (reconciliation-checkpoint-reconciled merge-sha actions)
   (reconciliation-checkpoint-result 'reconciled
@@ -67,7 +67,8 @@
                                         actions
                                         '())))
 
-;; Any status other than 'reconciled means the pass performed NO effects.
+;; A blocked pass may contain partial actions: board updated but issue close
+;; failed is not a zero-effect refusal. This predicate only tests the status.
 (define (reconciliation-blocked-status? result)
   (and (reconciliation-checkpoint-result? result)
        (not (eq? (reconciliation-checkpoint-result-status result) 'reconciled))))
@@ -123,5 +124,6 @@
              (reconciliation-checkpoint-reconciled (tracker-reconciliation-result-merge-sha outcome)
                                                    (tracker-reconciliation-result-actions outcome))]
             [else
-             (reconciliation-checkpoint-blocked (or (tracker-reconciliation-result-reason outcome)
-                                                    "tracker reconciliation refused"))])]))]))
+             (reconciliation-checkpoint-blocked
+              (or (tracker-reconciliation-result-reason outcome) "tracker reconciliation refused")
+              (tracker-reconciliation-result-actions outcome))])]))]))

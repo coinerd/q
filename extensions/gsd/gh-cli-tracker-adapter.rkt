@@ -40,6 +40,39 @@
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (string->jsexpr output)))
 
+;; Resolve the item through GitHub's GraphQL API rather than trusting the
+;; operator-supplied opaque ID alone. This is a READ before any write and a
+;; second read after the edit, bound to the exact issue, project, field and
+;; selected option. `gh` credentials stay in its own credential store.
+(define item-query
+  (string-append "query($id:ID!){node(id:$id){... on ProjectV2Item{"
+                 "id project{id} content{... on Issue{number repository{nameWithOwner}}}"
+                 " fieldValueByName(name:\"Status\"){... on ProjectV2ItemFieldSingleSelectValue{"
+                 "optionId field{... on ProjectV2SingleSelectField{id}}}}}}}"))
+(define (nested-ref h keys)
+  (for/fold ([value h]) ([key (in-list keys)])
+    (and (hash? value) (hash-ref value key #f))))
+(define (verify-item! runner item project field repo issue [expected-option #f])
+  (define result
+    (json-response (checked-call runner
+                                 (list "api"
+                                       "graphql"
+                                       "-f"
+                                       (string-append "query=" item-query)
+                                       "-F"
+                                       (string-append "id=" item)))))
+  (unless (and (hash? result)
+               (not (hash-ref result 'errors #f))
+               (equal? (nested-ref result '(data node id)) item)
+               (equal? (nested-ref result '(data node project id)) project)
+               (equal? (nested-ref result '(data node content number)) issue)
+               (equal? (nested-ref result '(data node content repository nameWithOwner)) repo)
+               (equal? (nested-ref result '(data node fieldValueByName field id)) field)
+               (or (not expected-option)
+                   (equal? (nested-ref result '(data node fieldValueByName optionId))
+                           expected-option)))
+    (error 'gh-cli-tracker-adapter "project item identity/status readback not verified")))
+
 (define (make-gh-cli-tracker-adapter #:live? [live? #f]
                                      #:repository repository
                                      #:runner [runner default-runner])
@@ -56,53 +89,56 @@
     (raise-argument-error 'make-gh-cli-tracker-adapter "procedure?" runner))
   (define (unsupported _)
     (error 'gh-cli-tracker-adapter "unsupported GitHub operation"))
-  (github-adapter unsupported
-                  (lambda (n)
-                    (positive-issue! n)
-                    (define response
-                      (json-response (checked-call runner
-                                                   (list "api"
-                                                         (format "repos/~a/issues/~a" repository n)
-                                                         "--method"
-                                                         "PATCH"
-                                                         "-f"
-                                                         "state=closed"))))
-                    (unless (and (hash? response)
-                                 (equal? (hash-ref response 'number #f) n)
-                                 (equal? (hash-ref response 'state #f) "closed"))
-                      (error 'gh-cli-tracker-adapter "issue close response not verified")))
-                  (lambda (params)
-                    (unless (hash? params)
-                      (raise-argument-error 'gh-cli-tracker-adapter "hash?" params))
-                    (positive-issue! (hash-ref params 'issue-number #f))
-                    ;; These opaque IDs must come from an authenticated project binding, not
-                    ;; inferred from a label such as "Status" or a milestone number.
-                    (define item (safe-id! (hash-ref params 'project-item-id #f) "project-item-id"))
-                    (define project (safe-id! (hash-ref params 'project-id #f) "project-id"))
-                    (define field (safe-id! (hash-ref params 'field-id #f) "field-id"))
-                    (define option (safe-id! (hash-ref params 'option-id #f) "option-id"))
-                    (unless (and (equal? (hash-ref params 'field #f) "Status")
-                                 (equal? (hash-ref params 'value #f) "Done"))
-                      (error 'gh-cli-tracker-adapter "only Status=Done is supported"))
-                    (define response
-                      (json-response (checked-call runner
-                                                   (list "project"
-                                                         "item-edit"
-                                                         "--id"
-                                                         item
-                                                         "--project-id"
-                                                         project
-                                                         "--field-id"
-                                                         field
-                                                         "--single-select-option-id"
-                                                         option
-                                                         "--format"
-                                                         "json"))))
-                    (unless (and (hash? response) (equal? (hash-ref response 'id #f) item))
-                      (error 'gh-cli-tracker-adapter "project item update response not verified")))
-                  unsupported
-                  unsupported
-                  (lambda (_) #f)
-                  (lambda (_) #f)
-                  (lambda (_) #f)
-                  (lambda (_) #f)))
+  (github-adapter
+   unsupported
+   (lambda (n)
+     (positive-issue! n)
+     (define response
+       (json-response (checked-call runner
+                                    (list "api"
+                                          (format "repos/~a/issues/~a" repository n)
+                                          "--method"
+                                          "PATCH"
+                                          "-f"
+                                          "state=closed"))))
+     (unless (and (hash? response)
+                  (equal? (hash-ref response 'number #f) n)
+                  (equal? (hash-ref response 'state #f) "closed"))
+       (error 'gh-cli-tracker-adapter "issue close response not verified")))
+   (lambda (params)
+     (unless (hash? params)
+       (raise-argument-error 'gh-cli-tracker-adapter "hash?" params))
+     (positive-issue! (hash-ref params 'issue-number #f))
+     ;; These opaque IDs must come from an authenticated project binding, not
+     ;; inferred from a label such as "Status" or a milestone number.
+     (define item (safe-id! (hash-ref params 'project-item-id #f) "project-item-id"))
+     (define project (safe-id! (hash-ref params 'project-id #f) "project-id"))
+     (define field (safe-id! (hash-ref params 'field-id #f) "field-id"))
+     (define option (safe-id! (hash-ref params 'option-id #f) "option-id"))
+     (unless (and (equal? (hash-ref params 'field #f) "Status")
+                  (equal? (hash-ref params 'value #f) "Done"))
+       (error 'gh-cli-tracker-adapter "only Status=Done is supported"))
+     (verify-item! runner item project field repository (hash-ref params 'issue-number))
+     (define response
+       (json-response (checked-call runner
+                                    (list "project"
+                                          "item-edit"
+                                          "--id"
+                                          item
+                                          "--project-id"
+                                          project
+                                          "--field-id"
+                                          field
+                                          "--single-select-option-id"
+                                          option
+                                          "--format"
+                                          "json"))))
+     (unless (and (hash? response) (equal? (hash-ref response 'id #f) item))
+       (error 'gh-cli-tracker-adapter "project item update response not verified"))
+     (verify-item! runner item project field repository (hash-ref params 'issue-number) option))
+   unsupported
+   unsupported
+   (lambda (_) #f)
+   (lambda (_) #f)
+   (lambda (_) #f)
+   (lambda (_) #f)))
