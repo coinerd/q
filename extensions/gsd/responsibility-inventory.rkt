@@ -126,6 +126,7 @@
                                  "projection-effects"
                                  "delivery-verifier"
                                  "delivery-handoff"
+                                 "tracker-resume"
                                  "util/loop-result"
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
@@ -220,6 +221,18 @@
                '()
                '()
                '("racket/base" "racket/format" "delivery-handoff" "tracker-reconciliation"))
+   ;; v1.00.33 W1: retry previously delivered DONE waves after process
+   ;; restart. The explicit live plan/wave binding filters historical waves;
+   ;; the receipt-authoritative reconciler rechecks proof on each retry.
+   (make-entry "tracker-resume.rkt"
+               'transition-logic
+               '()
+               '()
+               '("campaign-state" "campaign-repository"
+                                  "delivery-handoff"
+                                  "reconciliation-checkpoint"
+                                  "tracker-production-wiring"
+                                  "tracker-reconciliation"))
    ;; BUG-0074: receipt-authoritative tracker reconciliation after durable
    ;; delivery. Reads durable campaign/handoff/journal state locally and
    ;; mirrors issue/board status through the injected GitHub effect port;

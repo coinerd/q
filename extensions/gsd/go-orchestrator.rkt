@@ -34,6 +34,7 @@
          "wave-completion.rkt"
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
+         (only-in "tracker-resume.rkt" resume-tracker-reconciliation!)
          (only-in "delivery-finalize.rkt"
                   record-attempt-delivery-provenance!
                   finalize-delivered-wave!
@@ -1362,7 +1363,6 @@
    #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
    #:on-advance loop-again
    #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
-
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
@@ -1381,6 +1381,7 @@
   (define project-settings (load-project-settings-silently base-dir))
   (define isolate? (apply-worktree-isolation-setting! project-settings #:isolate? isolate-arg))
   (define plan-id (campaign-plan-id rec))
+  (resume-tracker-reconciliation! base-dir rec #:delivery-reader delivery-reader)
   ;; v1.00.22 W6 (BUG-0040): resolve the notification sinks ONCE from
   ;; project settings (gsd.notify.* keys; silent default outside tmux
   ;; with no keys — then the fan-out below is a no-op). Wave-level
@@ -1568,7 +1569,6 @@
          (report-campaign-artifact-leftovers! base-dir plan-id #:repo-root (find-repo-root base-dir))
          final-result)
        (lambda () (release-lease! lease)))))
-
 ;; ============================================================
 ;; /go N assertion (D8)
 ;; ============================================================

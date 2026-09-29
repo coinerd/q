@@ -30,8 +30,11 @@
     (values 0 "{\"number\":9763,\"state\":\"closed\"}" ""))
   (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
   ((github-adapter-close-issue! adapter) 9763)
+  ;; A restart can safely repeat the PATCH: already-closed returns closed.
+  ((github-adapter-close-issue! adapter) 9763)
   (check-equal? calls
-                '(("api" "repos/coinerd/q/issues/9763" "--method" "PATCH" "-f" "state=closed"))))
+                '(("api" "repos/coinerd/q/issues/9763" "--method" "PATCH" "-f" "state=closed")
+                  ("api" "repos/coinerd/q/issues/9763" "--method" "PATCH" "-f" "state=closed"))))
 
 (test-case "HTTP failure, missing response, and wrong issue fail closed"
   (for ([response (in-list (list (list 1 "" "forbidden")

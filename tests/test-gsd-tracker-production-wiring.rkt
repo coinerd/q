@@ -63,6 +63,16 @@
                                 #:settings (settings (hash-set full-binding 'live #f)))))
                 (lambda () (delete-directory/files dir))))
 
+(test-case "resume target is limited to the explicit live plan and wave"
+  (check-true
+   (live-tracker-target? "/tmp/no-real-campaign" PLAN 1 #:settings (settings full-binding)))
+  (check-false
+   (live-tracker-target? "/tmp/no-real-campaign" PLAN 0 #:settings (settings full-binding)))
+  (check-false (live-tracker-target? "/tmp/no-real-campaign"
+                                     PLAN
+                                     1
+                                     #:settings (settings (hash-set full-binding 'live #f)))))
+
 (test-case "no binding or no explicit live authorization means no reconciler"
   (for ([tracker (in-list (list #f (hash) (hash-set full-binding 'live #f)))])
     (define-values (reconciler made) (attempt tracker))

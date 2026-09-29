@@ -7,7 +7,21 @@
          "gh-cli-tracker-adapter.rkt"
          "github-port.rkt"
          "tracker-reconciliation.rkt")
-(provide resolve-live-tracker-reconciler)
+(provide resolve-live-tracker-reconciler
+         live-tracker-target?)
+
+(define (live-tracker-target? base-dir
+                              plan-id
+                              wave-index
+                              #:settings [settings
+                                          (with-handlers ([exn:fail? (lambda (_) #f)])
+                                            (load-settings base-dir))])
+  (define tracker (and settings (setting-ref* settings '(gsd tracker) #f)))
+  (and (hash? tracker)
+       (eq? (hash-ref tracker 'live #f) #t)
+       (equal? (hash-ref tracker 'plan-id #f) plan-id)
+       (equal? (hash-ref tracker 'wave #f) wave-index)
+       #t))
 
 (define (required-binding tracker plan-id wave-index)
   (unless (and (hash? tracker)
