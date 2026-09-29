@@ -72,15 +72,21 @@
           "PVTSSF_status"
           'option-id
           "done123"))
-(define (item-proof number option)
+(define (field-options-json ids)
+  (string-append "\"options\":["
+                 (string-join (map (lambda (id) (format "{\"id\":\"~a\"}" id)) ids)
+                              ",")
+                 "]"))
+(define (item-proof number option [field-options (list "inbox" "inprogress" "done123")])
   (format (string-append "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
                          "\"project\":{\"id\":\"PVT_project\"},"
                          "\"content\":{\"number\":~a,"
                          "\"repository\":{\"nameWithOwner\":\"coinerd/q\"}},"
                          "\"fieldValueByName\":{\"optionId\":\"~a\","
-                         "\"field\":{\"id\":\"PVTSSF_status\"}}}}}")
+                         "\"field\":{\"id\":\"PVTSSF_status\",~a}}}}}")
           number
-          option))
+          option
+          (field-options-json field-options)))
 
 (test-case "board update checks issue/project identity before mutation and option afterward"
   (define calls '())
