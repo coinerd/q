@@ -137,24 +137,32 @@
             'merge-sha
             merge-sha))
   (define actions '())
-  (when board
-    (define field (car board))
-    (define value (cdr board))
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (tracker-reconciliation-result 'blocked (exn-message e) merge-sha actions))])
+    (when board
+      (define field (car board))
+      (define value (cdr board))
+      (set! actions
+            (append
+             actions
+             (list ((gsd-github-port-execute github-port)
+                    (gsd-github-command
+                     'board-set-field
+                     (corr plan-id wave-index merge-sha "board" issue-number)
+                     (for/fold ([params (hash-set (hash-set common 'field field) 'value value)])
+                               ([key '(project-item-id project-id field-id option-id)]
+                                #:when (hash-has-key? binding key))
+                       (hash-set params key (hash-ref binding key)))
+                     #f))))))
     (set! actions
           (append actions
                   (list ((gsd-github-port-execute github-port)
-                         (gsd-github-command 'board-set-field
-                                             (corr plan-id wave-index merge-sha "board" issue-number)
-                                             (hash-set (hash-set common 'field field) 'value value)
-                                             #f))))))
-  (set! actions
-        (append actions
-                (list ((gsd-github-port-execute github-port)
-                       (gsd-github-command 'issue-close
-                                           (corr plan-id wave-index merge-sha "close" issue-number)
-                                           common
-                                           #f)))))
-  actions)
+                         (gsd-github-command 'issue-close
+                                             (corr plan-id wave-index merge-sha "close" issue-number)
+                                             common
+                                             #f)))))
+    (reconciled merge-sha actions)))
 
 (define (reconcile-tracker-after-delivery! base-dir
                                            plan-id
@@ -191,12 +199,11 @@
     (define handoff (safe-load-handoff base-dir plan-id wave-index))
     (unless (handoff-delivered-with-merge? handoff plan-id wave-index merge-sha)
       (return (blocked "delivered handoff missing or merge SHA mismatch" merge-sha)))
-    (reconciled merge-sha
-                (execute-tracker-commands! github-port
-                                           plan-id
-                                           wave-index
-                                           wave
-                                           receipt
-                                           merge-sha
-                                           tracker-binding
-                                           issue-number))))
+    (execute-tracker-commands! github-port
+                               plan-id
+                               wave-index
+                               wave
+                               receipt
+                               merge-sha
+                               tracker-binding
+                               issue-number)))

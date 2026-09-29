@@ -126,6 +126,7 @@
                                  "projection-effects"
                                  "delivery-verifier"
                                  "delivery-handoff"
+                                 "tracker-resume"
                                  "util/loop-result"
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
@@ -207,7 +208,9 @@
                                "attempt-artifacts"
                                "delivery-verifier"
                                "delivery-coordinator"
-                               "campaign-result"))
+                               "campaign-result"
+                               "reconciliation-checkpoint"
+                               "tracker-production-wiring"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -218,6 +221,18 @@
                '()
                '()
                '("racket/base" "racket/format" "delivery-handoff" "tracker-reconciliation"))
+   ;; v1.00.33 W1: retry previously delivered DONE waves after process
+   ;; restart. The explicit live plan/wave binding filters historical waves;
+   ;; the receipt-authoritative reconciler rechecks proof on each retry.
+   (make-entry "tracker-resume.rkt"
+               'transition-logic
+               '()
+               '()
+               '("campaign-state" "campaign-repository"
+                                  "delivery-handoff"
+                                  "reconciliation-checkpoint"
+                                  "tracker-production-wiring"
+                                  "tracker-reconciliation"))
    ;; BUG-0074: receipt-authoritative tracker reconciliation after durable
    ;; delivery. Reads durable campaign/handoff/journal state locally and
    ;; mirrors issue/board status through the injected GitHub effect port;
@@ -232,6 +247,13 @@
                                "delivery-handoff"
                                "delivery-journal"
                                "effect-ports"))
+   ;; v1.00.33 W1: opt-in settings composition for the in-repo Racket adapter.
+   (make-entry
+    "tracker-production-wiring.rkt"
+    'external-ports
+    '()
+    '()
+    '("../../runtime/settings" "gh-cli-tracker-adapter" "github-port" "tracker-reconciliation"))
    ;; v1.00.22 W7 (BUG-0042): extracted from go-orchestrator verbatim
    (make-entry "attempt-artifacts.rkt"
                'persistence
@@ -499,6 +521,11 @@
                '()
                '()
                '("racket/contract" "racket/string" "effect-ports"))
+   (make-entry "gh-cli-tracker-adapter.rkt"
+               'external-ports
+               '(subprocess)
+               '()
+               '("json" "racket/string" "github-port" "../../sandbox/subprocess"))
    (make-entry
     "system-adapters.rkt"
     'external-ports

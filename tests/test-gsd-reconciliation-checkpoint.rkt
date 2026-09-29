@@ -262,6 +262,19 @@
   (check-equal? (reconciliation-checkpoint-result-actions r) '())
   (delete-directory/files dir #:must-exist? #f))
 
+(test-case "a partial board write remains visible when issue close is blocked"
+  (define dir (make-parked-campaign))
+  (define r
+    (run-tracker-reconciliation!
+     dir
+     (plan-id-of dir)
+     0
+     (lambda (_b _p _w #:delivery-reader _r)
+       (tracker-reconciliation-result 'blocked "issue close failed" #f '(board-updated)))))
+  (check-equal? (reconciliation-checkpoint-result-status r) 'blocked)
+  (check-equal? (reconciliation-checkpoint-result-actions r) '(board-updated))
+  (delete-directory/files dir #:must-exist? #f))
+
 (test-case "a reconciler that raises becomes a typed block, never an exception"
   (define dir (make-parked-campaign))
   (define r

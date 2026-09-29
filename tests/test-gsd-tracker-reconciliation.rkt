@@ -12,6 +12,9 @@
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/effect-ports.rkt"
          "../extensions/gsd/github-port.rkt"
+         "../runtime/settings.rkt"
+         "../extensions/gsd/gh-cli-tracker-adapter.rkt"
+         "../extensions/gsd/tracker-production-wiring.rkt"
          "../extensions/gsd/tracker-reconciliation.rkt")
 
 (define MANIFEST
@@ -92,6 +95,127 @@
                 (lambda () (delete-directory/files dir #:must-exist? #f))))
 
 (module+ test
+  (test-case "issue-close failure preserves the successful board action as a partial result"
+    (with-temp-dir
+     (lambda (dir)
+       (seed-authoritative-delivery! dir)
+       (define port
+         (gsd-github-port (lambda (cmd)
+                            (if (eq? (gsd-github-command-kind cmd) 'issue-close)
+                                (error 'fake "close refused")
+                                (gsd-github-command-result (gsd-github-command-correlation-id cmd)
+                                                           'board-set-field
+                                                           #f
+                                                           #f
+                                                           #f
+                                                           "field set")))
+                          (lambda () #f)
+                          (lambda () '())))
+       (define result
+         (reconcile-tracker-after-delivery!
+          dir
+          PLAN-ID
+          0
+          (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done")
+          port
+          #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status result) 'blocked)
+       (check-equal? (length (tracker-reconciliation-result-actions result)) 1)
+       (check-equal?
+        (gsd-github-command-result-kind (car (tracker-reconciliation-result-actions result)))
+        'board-set-field))))
+
+  (test-case "full configured pass routes authenticated delivery through the Racket adapter"
+    (with-temp-dir
+     (lambda (dir)
+       (seed-authoritative-delivery! dir)
+       (define calls '())
+       (define (runner argv)
+         (set! calls (append calls (list argv)))
+         (cond
+           [(equal? (car argv) "project") (values 0 "{\"id\":\"PVTI_item\"}" "")]
+           [(equal? (take argv 2) '("api" "graphql"))
+            (values
+             0
+             (format (string-append
+                      "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+                      "\"project\":{\"id\":\"PVT_project\"},"
+                      "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
+                      "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\"},"
+                      "\"optionId\":\"~a\"}}}}}")
+                     (if (= (length calls) 1) "inbox" "done123"))
+             "")]
+           [else (values 0 "{\"number\":74,\"state\":\"closed\"}" "")]))
+       (define tracker
+         (hasheq 'live
+                 #t
+                 'plan-id
+                 PLAN-ID
+                 'wave
+                 0
+                 'repository
+                 "owner/repo"
+                 'issue-number
+                 74
+                 'board-field
+                 "Status"
+                 'board-value
+                 "Done"
+                 'project-item-id
+                 "PVTI_item"
+                 'project-id
+                 "PVT_project"
+                 'field-id
+                 "PVTSSF_status"
+                 'option-id
+                 "done123"))
+       (define settings (make-minimal-settings #:overrides (hasheq 'gsd (hasheq 'tracker tracker))))
+       (define reconciler
+         (resolve-live-tracker-reconciler
+          dir
+          PLAN-ID
+          0
+          #:settings settings
+          #:adapter-maker
+          (lambda (#:live? live? #:repository repo)
+            (make-gh-cli-tracker-adapter #:live? live? #:repository repo #:runner runner))))
+       (define result (reconciler dir PLAN-ID 0 #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status result) 'reconciled)
+       (check-equal? (map car calls) '("api" "project" "api" "api"))
+       (check-equal? (length calls) 4))))
+
+  (test-case "opaque project IDs from the exact binding reach the board command"
+    (with-temp-dir (lambda (dir)
+                     (seed-authoritative-delivery! dir)
+                     (define-values (port state) (make-logging-github-port))
+                     (reconcile-tracker-after-delivery! dir
+                                                        PLAN-ID
+                                                        0
+                                                        (hasheq 'plan-id
+                                                                PLAN-ID
+                                                                'wave
+                                                                0
+                                                                'issue-number
+                                                                74
+                                                                'board-field
+                                                                "Status"
+                                                                'board-value
+                                                                "Done"
+                                                                'project-item-id
+                                                                "PVTI_item"
+                                                                'project-id
+                                                                "PVT_project"
+                                                                'field-id
+                                                                "PVTSSF_status"
+                                                                'option-id
+                                                                "done123")
+                                                        port
+                                                        #:delivery-reader
+                                                        (lambda _ (delivered-proof)))
+                     (define params (caddr (car (gh-log-state-calls state))))
+                     (for ([key '(project-item-id project-id field-id option-id)])
+                       (check-true (string? (hash-ref params key #f)))))))
+
   (test-case "reconciles issue and board only after durable DONE plus receipt and delivered handoff"
     (with-temp-dir
      (lambda (dir)
