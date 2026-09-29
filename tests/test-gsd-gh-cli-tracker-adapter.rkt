@@ -72,15 +72,20 @@
           "PVTSSF_status"
           'option-id
           "done123"))
-(define (item-proof number option)
+(define (field-options-json ids)
+  (string-append "\"options\":["
+                 (string-join (map (lambda (id) (format "{\"id\":\"~a\"}" id)) ids) ",")
+                 "]"))
+(define (item-proof number option [field-options (list "inbox" "inprogress" "done123")])
   (format (string-append "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
                          "\"project\":{\"id\":\"PVT_project\"},"
                          "\"content\":{\"number\":~a,"
                          "\"repository\":{\"nameWithOwner\":\"coinerd/q\"}},"
                          "\"fieldValueByName\":{\"optionId\":\"~a\","
-                         "\"field\":{\"id\":\"PVTSSF_status\"}}}}}")
+                         "\"field\":{\"id\":\"PVTSSF_status\",~a}}}}}")
           number
-          option))
+          option
+          (field-options-json field-options)))
 
 (test-case "board update checks issue/project identity before mutation and option afterward"
   (define calls '())
@@ -119,3 +124,32 @@
   (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
   (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
   (check-equal? calls 3))
+
+(test-case "a stale option id is refused before any board mutation"
+  (define calls '())
+  (define (runner args)
+    (set! calls (append calls (list args)))
+    (if (equal? (take args 2) '("api" "graphql"))
+        (values 0 (item-proof 9763 "inbox" (list "inbox" "inprogress")) "")
+        (values 0 "{\"id\":\"PVTI_item\"}" "")))
+  (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+  (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
+  ;; Exactly the authenticated read ran: the option list of the bound field
+  ;; is checked on it, and the mutation itself never happens.
+  (check-equal? (length calls) 1)
+  (check-equal? (take (first calls) 2) '("api" "graphql"))
+  (check-true (string-contains? (list-ref (first calls) 3) "options{id}")))
+
+(test-case "a readback without the field's option list cannot authorize a mutation"
+  (define calls '())
+  (define (runner args)
+    (set! calls (append calls (list args)))
+    (values 0
+            (string-replace (item-proof 9763 "inbox")
+                            (string-append ","
+                                           (field-options-json (list "inbox" "inprogress" "done123")))
+                            "")
+            ""))
+  (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+  (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
+  (check-equal? (length calls) 1))

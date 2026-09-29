@@ -43,16 +43,31 @@
 ;; Resolve the item through GitHub's GraphQL API rather than trusting the
 ;; operator-supplied opaque ID alone. This is a READ before any write and a
 ;; second read after the edit, bound to the exact issue, project, field and
-;; selected option. `gh` credentials stay in its own credential store.
+;; selected option. The same read also returns the bound field's option
+;; list, so a stale or mistyped single-select option id can be refused
+;; before any mutation. `gh` credentials stay in its own credential store.
 (define item-query
   (string-append "query($id:ID!){node(id:$id){... on ProjectV2Item{"
                  "id project{id} content{... on Issue{number repository{nameWithOwner}}}"
                  " fieldValueByName(name:\"Status\"){... on ProjectV2ItemFieldSingleSelectValue{"
-                 "optionId field{... on ProjectV2SingleSelectField{id}}}}}}}"))
+                 "optionId field{... on ProjectV2SingleSelectField{id options{id}}}}}}}"))
 (define (nested-ref h keys)
   (for/fold ([value h]) ([key (in-list keys)])
     (and (hash? value) (hash-ref value key #f))))
-(define (verify-item! runner item project field repo issue [expected-option #f])
+;; The option ids carried by the bound Status single-select field in a
+;; readback, or #f when the response does not expose them.
+(define (field-option-ids result)
+  (define options (nested-ref result '(data node fieldValueByName field options)))
+  (and (list? options)
+       (for/list ([option (in-list options)]
+                  #:when (hash? option))
+         (hash-ref option 'id #f))))
+;; A readback proves the item, project, repository, issue number and field
+;; identity. `expected-option` additionally proves the *resulting* option
+;; after a mutation; `required-option` proves that the operator-supplied
+;; option id is a member of the field's option list *before* any mutation,
+;; failing closed (including when the option list cannot be read).
+(define (verify-item! runner item project field repo issue [expected-option #f] [required-option #f])
   (define result
     (json-response (checked-call runner
                                  (list "api"
@@ -71,7 +86,12 @@
                (or (not expected-option)
                    (equal? (nested-ref result '(data node fieldValueByName optionId))
                            expected-option)))
-    (error 'gh-cli-tracker-adapter "project item identity/status readback not verified")))
+    (error 'gh-cli-tracker-adapter "project item identity/status readback not verified"))
+  (when required-option
+    (define option-ids (field-option-ids result))
+    (unless (and option-ids (member required-option option-ids))
+      (error 'gh-cli-tracker-adapter
+             "configured option-id is not a member of the bound field's option list"))))
 
 (define (make-gh-cli-tracker-adapter #:live? [live? #f]
                                      #:repository repository
@@ -118,7 +138,9 @@
      (unless (and (equal? (hash-ref params 'field #f) "Status")
                   (equal? (hash-ref params 'value #f) "Done"))
        (error 'gh-cli-tracker-adapter "only Status=Done is supported"))
-     (verify-item! runner item project field repository (hash-ref params 'issue-number))
+     ;; The option id is proven to belong to the bound field on this same
+     ;; read, so a stale or mistyped id is refused before any write.
+     (verify-item! runner item project field repository (hash-ref params 'issue-number) #f option)
      (define response
        (json-response (checked-call runner
                                     (list "project"
