@@ -52,7 +52,9 @@
                   delivery-outcome?
                   delivery-outcome-kind
                   delivery-outcome-message)
-         (only-in "campaign-result.rkt" campaign-result))
+         (only-in "campaign-result.rkt" campaign-result)
+         (only-in "delivery-handoff.rkt" delivery-readback)
+         (only-in "reconciliation-checkpoint.rkt" run-tracker-reconciliation!))
 
 (provide record-attempt-delivery-provenance!
          finalize-delivered-wave!
@@ -213,9 +215,21 @@
                                    merge-sha
                                    completed
                                    #:release-check [release-check #f]
-                                   #:on-delivered [on-delivered (lambda () #f)])
+                                   #:on-delivered [on-delivered (lambda () #f)]
+                                   #:tracker-reconciler [tracker-reconciler #f]
+                                   #:delivery-reader [delivery-reader delivery-readback])
   (case (finalize-checkpoint-decision base-dir rec wave-idx merge-sha release-check)
-    [(done) (on-delivered)]
+    [(done)
+     ;; v1.00.33 W0 (BUG-0074): the wave is provably `done` NOW, so the
+     ;; tracker may be reconciled from its receipt. Deliberately BEFORE
+     ;; on-delivered and deliberately non-fatal: reconciliation is an output
+     ;; of delivery, so its refusal can never move this wave off `done`.
+     (run-tracker-reconciliation! base-dir
+                                  plan-id
+                                  wave-idx
+                                  tracker-reconciler
+                                  #:delivery-reader delivery-reader)
+     (on-delivered)]
     [(stale)
      (campaign-result 'wave-cancelled (reverse completed) "stale delivery completion ignored")]
     [(failed) (campaign-result 'wave-failed (reverse completed) "release verification failed")]

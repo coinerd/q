@@ -208,6 +208,16 @@
                                "delivery-verifier"
                                "delivery-coordinator"
                                "campaign-result"))
+   ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
+   ;; receipt-authoritative pass is attempted and swallows its failures into a
+   ;; typed result, so a tracker outage can never move a delivered wave off
+   ;; `done`. Holds no credentials, no adapter and no subprocess: the only way
+   ;; a tracker effect can happen is a reconciler a caller injected explicitly.
+   (make-entry "reconciliation-checkpoint.rkt"
+               'transition-logic
+               '()
+               '()
+               '("racket/base" "racket/format" "delivery-handoff" "tracker-reconciliation"))
    ;; BUG-0074: receipt-authoritative tracker reconciliation after durable
    ;; delivery. Reads durable campaign/handoff/journal state locally and
    ;; mirrors issue/board status through the injected GitHub effect port;
