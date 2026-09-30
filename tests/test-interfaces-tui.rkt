@@ -897,8 +897,18 @@
     (define state2 (add-transcript-entry state (make-entry 'user "first line" 0 (hash))))
     (define state3 (add-transcript-entry state2 (make-entry 'assistant "second line" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
-    ;; Content is bottom-aligned: pad-count=19, first content at row 20
-    (define content-row (+ 1 (- 21 2))) ; trans-y + (trans-height - content-count)
+    ;; Content is bottom-aligned: derive geometry from the live screen
+    ;; size instead of hard-coding 80x24 (pattern used by the resize
+    ;; tests below). The first content row is trans-y + pad-count,
+    ;; where pad-count fills the region below the rendered lines.
+    (define-values (cols rows) (tui-screen-size))
+    (define layout (compute-layout rows cols))
+    (define region (layout-transcript layout))
+    (define ty (layout-region-y region))
+    (define th (layout-region-height region))
+    (define-values (all-lines _s) (render-transcript state3 th cols))
+    (define pad (max 0 (- th (length all-lines))))
+    (define content-row (+ ty pad)) ; first content row
     (define state-sel (set-selection-anchor state3 0 content-row))
     (define state-sel2 (set-selection-end state-sel 5 content-row))
     (define text (selection-text ctx state-sel2))
