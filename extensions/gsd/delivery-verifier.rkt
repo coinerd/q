@@ -71,7 +71,12 @@
          check-verify-command
          ;; BUG-0068 secondary 2: pure criteria-decoration normalizer,
          ;; provided for the TDD suite (see tests/test-gsd-delivery-verifier.rkt)
-         normalize-declared-verify)
+          normalize-declared-verify
+          ;; D2/D3 (§17.3): exported additively for the receipt wrapper's
+          ;; expected-branch resolution check — same verified git path and
+          ;; injectable current-gsd-git-runner as the isolated gate.
+          run-git
+          git-exit-ok?)
 
 ;; ============================================================
 ;; Structured verification result
