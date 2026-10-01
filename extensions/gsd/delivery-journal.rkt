@@ -11,6 +11,8 @@
          record-delivery-receipt!
          update-delivery-journal!
          valid-delivery-receipt?
+         valid-verification-context?
+         record-verification-context!
          delivery-stages
          remote-pending-path
          load-remote-pending
@@ -43,6 +45,22 @@
        (hex? (hash-ref r 'head #f) 40)
        (hex? (hash-ref r 'tree #f) 40)
        (exact-nonnegative-integer? (hash-ref r 'verified-at #f))))
+;; Verification context (v1.00.33 audit, directive item 2): the durable slot
+;; for the context the verifier actually ran under — repo-root, base, and the
+;; snapshot refs (merge-sha / PR head / binding branch). Without it a journal
+;; binds only branch/head, and a later ref mismatch is forensics instead of
+;; arithmetic. Optional at load (older journals lack it); malformed slots fail
+;; closed; written once via record-verification-context!.
+(define (valid-verification-context? vc)
+  (and (hash? vc)
+       (hex? (hash-ref vc 'base #f) 40)
+       (hex? (hash-ref vc 'merge-sha #f) 40)
+       (hex? (hash-ref vc 'pr-head #f) 40)
+       (text? (hash-ref vc 'branch #f))
+       (text? (hash-ref vc 'repo-root #f))
+       (exact-nonnegative-integer? (hash-ref vc 'verified-at #f))
+       (let ([refs (hash-ref vc 'snapshot-refs #f)])
+         (and (list? refs) (pair? refs) (andmap text? refs)))))
 (define (delivery-journal-path root plan wave)
   (unless (and (hex? plan 64) (exact-nonnegative-integer? wave))
     (error 'delivery-journal "invalid campaign/wave identity"))
@@ -74,8 +92,10 @@
                       (equal? (hash-ref data 'plan-id #f) plan)
                       (equal? (hash-ref data 'wave #f) wave)
                       (member (hash-ref data 'stage #f) delivery-stages)
-                      (valid-delivery-receipt? (hash-ref data 'receipt #f)))
-           (error 'delivery-journal "invalid journal; refusing to overwrite"))
+                       (valid-delivery-receipt? (hash-ref data 'receipt #f))
+                       (let ([vc (hash-ref data 'verification-context #f)])
+                         (or (not vc) (valid-verification-context? vc))))
+            (error 'delivery-journal "invalid journal; refusing to overwrite"))
          data)))
 (define (save! root plan wave data)
   (define path (delivery-journal-path root plan wave))
@@ -125,11 +145,30 @@
   (define old (load-delivery-journal root plan wave))
   (unless old
     (error 'delivery-journal "missing verified provenance"))
-  (save! root
-         plan
-         wave
-         (for/fold ([data old]) ([(k v) (in-hash fields)])
-           (hash-set data k v))))
+   (save! root
+          plan
+          wave
+          (for/fold ([data old]) ([(k v) (in-hash fields)])
+            (hash-set data k v))))
+
+;; Write-once verification context. Requires an existing verified journal
+;; (the context only means something against a recorded receipt); identical
+;; re-records are idempotent; a differing value is a reconciliation event,
+;; never a silent overwrite — same rule as the receipt itself.
+(define (record-verification-context! root plan wave vc)
+  (unless (valid-verification-context? vc)
+    (error 'delivery-journal "invalid verification context"))
+  (define old (load-delivery-journal root plan wave))
+  (unless old
+    (error 'delivery-journal "missing verified provenance"))
+  (define prior (hash-ref old 'verification-context #f))
+  (cond
+    [(not prior)
+     (save! root plan wave (hash-set old 'verification-context vc))]
+    [(equal? prior vc) old]
+    [else
+     (error 'delivery-journal
+            "verification context changed; explicit reconciliation required")]))
 
 ;; ============================================================
 ;; Remote-backing marker (v1.00.31 W3, register F5)
