@@ -38,19 +38,58 @@
   (dynamic-wind void (lambda () (f root)) (lambda () (delete-directory/files root))))
 (module+ test
   (test-case "receipt-path success returns (branch . head) — not void (D1 regression)"
-    (with-root
-     (lambda (root)
-       (record-delivery-receipt! root plan 2 receipt)
-       (define result (record-attempt-delivery-provenance! root plan 2 "attempt-9" 3))
-       (check-true (pair? result) "documented contract: (branch . head) pair")
-       (check-equal? result (cons "campaign/w2" head)))))
+    (with-root (lambda (root)
+                 (record-delivery-receipt! root plan 2 receipt)
+                 (define result (record-attempt-delivery-provenance! root plan 2 "attempt-9" 3))
+                 (check-true (pair? result) "documented contract: (branch . head) pair")
+                 (check-equal? result (cons "campaign/w2" head)))))
   (test-case "refusal: receipt identity mismatch (attempt-id, fence) returns #f"
+    (with-root (lambda (root)
+                 (record-delivery-receipt! root plan 2 receipt)
+                 (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-8" 3))
+                 (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-9" 4)))))
+  (test-case "refusal: no journal / no provenance at all returns #f"
+    (with-root (lambda (root)
+                 (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-9" 3)))))
+  (define vc
+    (hasheq 'base
+            (make-string 40 #\d)
+            'merge-sha
+            (make-string 40 #\e)
+            'pr-head
+            (make-string 40 #\f)
+            'branch
+            "binding/plan-w2"
+            'repo-root
+            "/repo/q"
+            'verified-at
+            1
+            'snapshot-refs
+            (list "origin/main" "origin/pr/9768")))
+  (test-case "success with verification context: exact (branch . head) return, context persisted"
     (with-root
      (lambda (root)
        (record-delivery-receipt! root plan 2 receipt)
-       (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-8" 3))
-       (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-9" 4)))))
-  (test-case "refusal: no journal / no provenance at all returns #f"
+       (define result
+         (record-attempt-delivery-provenance! root plan 2 "attempt-9" 3 #:verification-context vc))
+       (check-equal? result (cons "campaign/w2" head))
+       (check-equal? (hash-ref (load-delivery-journal root plan 2) 'verification-context #f) vc))))
+  (test-case "refusal with verification context: #f return, context still persisted"
     (with-root
      (lambda (root)
-       (check-false (record-attempt-delivery-provenance! root plan 2 "attempt-9" 3))))))
+       (record-delivery-receipt! root plan 2 receipt)
+       (check-false
+        (record-attempt-delivery-provenance! root plan 2 "attempt-8" 3 #:verification-context vc))
+       (check-equal? (hash-ref (load-delivery-journal root plan 2) 'verification-context #f) vc))))
+  (test-case "context persistence without provenance raises separately (no return value)"
+    (with-root (lambda (root)
+                 (check-exn (lambda (e)
+                              (and (exn:fail? e)
+                                   (regexp-match? #rx"missing verified provenance" (exn-message e))))
+                            (lambda ()
+                              (record-attempt-delivery-provenance! root
+                                                                   plan
+                                                                   2
+                                                                   "attempt-9"
+                                                                   3
+                                                                   #:verification-context vc)))))))
