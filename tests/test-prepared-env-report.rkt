@@ -4,6 +4,9 @@
 ;; @suite testing
 ;; @isolation process
 ;; @boundary integration
+;; @timeout 300 — measured 126s locally (2026-09-30); the suite spawns a
+;; subprocess per fixture and outgrew the 120s default budget, producing
+;; false TIMEOUT verdicts in the fast suite.
 
 ;; W5 (current milestone): prepared-environment restore evidence report tooling.
 ;;

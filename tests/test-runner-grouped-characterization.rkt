@@ -1,5 +1,10 @@
 #lang racket/base
 
+;; @timeout 600 — measured 253s locally (2026-09-30); the suite
+;; characterizes every grouped-mode fixture in a subprocess and outgrew
+;; the 120s default budget, producing false TIMEOUT verdicts in the fast
+;; suite.
+;;
 ;; tests/test-runner-grouped-characterization.rkt — W7
 ;;
 ;; Grouped-mode equivalence characterization: every eligible grouped-mode

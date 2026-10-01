@@ -24,9 +24,18 @@
                   delivery-stages
                   load-delivery-journal
                   record-delivery-receipt!
+                  reconcile-repair-tail-receipt!
                   update-delivery-journal!)
          "../extensions/gsd/delivery-coordinator.rkt"
          (only-in (file "../util/version.rkt") q-version))
+;; Red-first (repo convention): the v1.00.33 W0 generation-aware binding
+;; helpers are required dynamically until the coordinator module provides
+;; them.
+(define-runtime-path coordinator-module "../extensions/gsd/delivery-coordinator.rkt")
+(define binding-generation (dynamic-require coordinator-module 'binding-generation))
+(define default-binding-branch (dynamic-require coordinator-module 'default-binding-branch))
+(define default-binding-staging-path
+  (dynamic-require coordinator-module 'default-binding-staging-path))
 
 (define (receipt-head)
   (hasheq 'repo
@@ -498,6 +507,10 @@
   ;; action ever running — fabricated progress.
   (define head (make-string 40 #\a))
   (define plan (make-string 64 #\b))
+  ;; v1.00.33 W0: dispatch is generation-aware and requires the campaign
+  ;; base-dir explicitly (never guesses the binding branch). These cases use
+  ;; an empty root (no journal -> generation 0 -> unsuffixed names).
+  (define no-journal-root (make-temporary-file "binding-dispatch-~a" 'directory))
   (define (resolved-identity status)
     (delivery-effect-result 'ok (hasheq 'status status 'pr 77 'head head)))
   ;; resolved + valid identity -> the stage action runs with the exact
@@ -508,7 +521,13 @@
       (if (equal? action "binding-resolve-pr")
           (resolved-identity "resolved")
           (delivery-effect-result 'ok (hasheq 'status "green"))))
-    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-ci"
+                                     plan
+                                     3
+                                     "binding-ci"
+                                     #:base-dir no-journal-root))
     (check-eq? (delivery-effect-result-kind r) 'ok)
     (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "green")
     (check-equal? (length calls) 2)
@@ -532,7 +551,13 @@
       (if (equal? action "binding-resolve-pr")
           (resolved-identity "resolved")
           (delivery-effect-result 'ok (hasheq 'status "merged"))))
-    (define r (binding-dispatch-stage-action fake-run "binding-merged" plan 3 "binding-merge"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-merged"
+                                     plan
+                                     3
+                                     "binding-merge"
+                                     #:base-dir no-journal-root))
     (check-eq? (delivery-effect-result-kind r) 'ok)
     (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "merged")
     (check-equal? (length calls) 2)
@@ -551,7 +576,13 @@
     (define (fake-run action . args)
       (set! calls (cons (cons action args) calls))
       resolve-result)
-    (define r (binding-dispatch-stage-action fake-run "binding-merged" plan 3 "binding-merge"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-merged"
+                                     plan
+                                     3
+                                     "binding-merge"
+                                     #:base-dir no-journal-root))
     (check-eq? r resolve-result)
     (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "already-merged")
     (check-equal? (length calls) 1))
@@ -561,7 +592,13 @@
     (define (fake-run action . args)
       (set! calls (cons (cons action args) calls))
       (delivery-effect-result 'ok (hasheq 'status "resolved" 'pr "not-a-number" 'head head)))
-    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-ci"
+                                     plan
+                                     3
+                                     "binding-ci"
+                                     #:base-dir no-journal-root))
     (check-eq? (delivery-effect-result-kind r) 'blocked)
     (check-true (string-contains? (hash-ref (delivery-effect-result-data r) 'reason)
                                   "no usable binding PR identity"))
@@ -572,7 +609,13 @@
     (define (fake-run action . args)
       (set! calls (cons (cons action args) calls))
       (delivery-effect-result 'ok (hasheq 'status 'resolved 'pr 77 'head head)))
-    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-ci"
+                                     plan
+                                     3
+                                     "binding-ci"
+                                     #:base-dir no-journal-root))
     (check-eq? (delivery-effect-result-kind r) 'ok)
     (check-equal? (length calls) 1)
     (check-eq? (delivery-effect-result-kind
@@ -583,6 +626,66 @@
     (define (fake-run action . args)
       (set! calls (cons (cons action args) calls))
       (delivery-effect-result 'ok (hasheq 'status "none" 'branch "binding/bbbbbbbbbbbb-w3")))
-    (define r (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci"))
+    (define r
+      (binding-dispatch-stage-action fake-run
+                                     "binding-ci"
+                                     plan
+                                     3
+                                     "binding-ci"
+                                     #:base-dir no-journal-root))
     (check-equal? (hash-ref (delivery-effect-result-data r) 'status #f) "none")
     (check-equal? (length calls) 1)))
+
+(test-case "binding republication is generation-aware after a repair tail"
+  ;; v1.00.33 W0 (audit §21.4): a reconciled journal (one prior receipt)
+  ;; MUST direct binding dispatch at the -r1 branch, and the staging path
+  ;; must mirror it — governance admits exactly one merged PR per binding
+  ;; branch, so reusing the generation-0 name would resolve the EXHAUSTED
+  ;; branch and report already-merged (fabricated progress).
+  (define plan (make-string 64 #\b))
+  (define root (make-temporary-file "binding-gen-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define (receipt head)
+       (hasheq 'repo
+               "/repo"
+               'branch
+               "campaign/w3"
+               'head
+               head
+               'tree
+               (make-string 40 #\c)
+               'origin
+               "https://github.com/example/q.git"
+               'verified-at
+               1
+               'evidence
+               "verify"
+               'attempt-id
+               "attempt-1"
+               'attempt-fence
+               2))
+     (record-delivery-receipt! root plan 3 (receipt (make-string 40 #\a)))
+     (define gen0 (binding-generation root plan 3))
+     (check-equal? gen0 0)
+     (reconcile-repair-tail-receipt! root
+                                     plan
+                                     3
+                                     (receipt (make-string 40 #\d))
+                                     #:expected-attempt-id "attempt-1"
+                                     #:expected-fence 2
+                                     #:head-ancestor? (lambda (_old _new) #t))
+     (check-equal? (binding-generation root plan 3) 1)
+     (check-equal? (default-binding-branch plan 3 #:base-dir root) "binding/bbbbbbbbbbbb-w3-r1")
+     (check-equal? (default-binding-staging-path root plan 3)
+                   (path->string (build-path root ".planning" "campaigns" plan "binding-w3-r1")))
+     ;; dispatch with the reconciled journal resolves the -r1 branch
+     (let ([calls '()])
+       (define (fake-run action . args)
+         (set! calls (cons (cons action args) calls))
+         (delivery-effect-result 'ok (hasheq 'status "none")))
+       (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci" #:base-dir root)
+       (check-equal? (cdr (car (reverse calls)))
+                     (list "--expected-branch" "binding/bbbbbbbbbbbb-w3-r1"))))
+   (lambda () (delete-directory/files root #:must-exist? #f))))

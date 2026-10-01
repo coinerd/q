@@ -11,6 +11,9 @@
          record-delivery-receipt!
          update-delivery-journal!
          valid-delivery-receipt?
+         valid-receipt-history?
+         reconcile-repair-tail-receipt!
+         repair-tail-allowed-stages
          valid-verification-context?
          record-verification-context!
          delivery-stages
@@ -45,6 +48,12 @@
        (hex? (hash-ref r 'head #f) 40)
        (hex? (hash-ref r 'tree #f) 40)
        (exact-nonnegative-integer? (hash-ref r 'verified-at #f))))
+;; v1.00.33 W0 repair-tail protocol (audit §21.2): the append-only history
+;; of PRIOR immutable receipts preserved by reconcile-repair-tail-receipt!.
+;; Malformed history never loads — a journal that cannot prove its own past
+;; is refused, not repaired.
+(define (valid-receipt-history? h)
+  (and (list? h) (andmap valid-delivery-receipt? h)))
 ;; Verification context (v1.00.33 audit, directive item 2): the durable slot
 ;; for the context the verifier actually ran under — repo-root, base, and the
 ;; snapshot refs (merge-sha / PR head / binding branch). Without it a journal
@@ -92,10 +101,12 @@
                       (equal? (hash-ref data 'plan-id #f) plan)
                       (equal? (hash-ref data 'wave #f) wave)
                       (member (hash-ref data 'stage #f) delivery-stages)
-                       (valid-delivery-receipt? (hash-ref data 'receipt #f))
-                       (let ([vc (hash-ref data 'verification-context #f)])
-                         (or (not vc) (valid-verification-context? vc))))
-            (error 'delivery-journal "invalid journal; refusing to overwrite"))
+                      (valid-delivery-receipt? (hash-ref data 'receipt #f))
+                      (let ([h (hash-ref data 'receipt-history #f)])
+                        (or (not h) (valid-receipt-history? h)))
+                      (let ([vc (hash-ref data 'verification-context #f)])
+                        (or (not vc) (valid-verification-context? vc))))
+           (error 'delivery-journal "invalid journal; refusing to overwrite"))
          data)))
 (define (save! root plan wave data)
   (define path (delivery-journal-path root plan wave))
@@ -137,19 +148,103 @@
                     'usage-missing
                     #f))]))
 (define (update-delivery-journal! root plan wave fields)
-  (unless (and
-           (hash? fields)
-           (not (ormap (lambda (k) (hash-has-key? fields k)) '(receipt plan-id wave schema-version)))
-           (or (not (hash-has-key? fields 'stage)) (member (hash-ref fields 'stage) delivery-stages)))
+  (unless (and (hash? fields)
+               (not (ormap (lambda (k) (hash-has-key? fields k))
+                           '(receipt plan-id wave schema-version receipt-history)))
+               (or (not (hash-has-key? fields 'stage))
+                   (member (hash-ref fields 'stage) delivery-stages)))
     (error 'delivery-journal "invalid journal update"))
   (define old (load-delivery-journal root plan wave))
   (unless old
     (error 'delivery-journal "missing verified provenance"))
-   (save! root
-          plan
-          wave
-          (for/fold ([data old]) ([(k v) (in-hash fields)])
-            (hash-set data k v))))
+  (save! root
+         plan
+         wave
+         (for/fold ([data old]) ([(k v) (in-hash fields)])
+           (hash-set data k v))))
+
+;; v1.00.33 W0 repair-tail protocol (audit §21.2): the explicit, atomic,
+;; fenced SAME-ATTEMPT receipt reconciliation transition.
+;;
+;; A parked attempt whose delivery branch gained repair commits past the
+;; recorded receipt head needs a SUPPORTED path to a new receipt — but never
+;; a silent overwrite and never a marker clear on a mismatched receipt. The
+;; transition requires, and records atomically in ONE save:
+;;   * the SAME plan/wave (journal identity);
+;;   * the SAME attempt-id and fence on the old receipt, the new receipt and
+;;     the caller's expected binding (the live attempt resolved by the
+;;     production wrapper — never inferred);
+;;   * the SAME non-protected delivery branch;
+;;   * a strictly-DESCENDANT new head (a repair tail, proven by the
+;;     caller-supplied ancestry predicate — real git in production);
+;;   * a journal stage strictly BEFORE implementation-merged (the merge
+;;     provenance is not yet anchored).
+;; Effect: the prior receipt is appended to the immutable `receipt-history`
+;; (load-validated, update-refused) and the new receipt becomes the current
+;; one. `save!` is atomic, so a crash leaves either the old or the new
+;; journal, never a mixture; a retry at the already-reconciled head is the
+;; caller's same-head idempotent path, and a repeat of this primitive at an
+;; equal head refuses (not a repair tail).
+(define repair-tail-allowed-stages
+  '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
+
+(define (reconcile-repair-tail-receipt! root
+                                        plan
+                                        wave
+                                        new-receipt
+                                        #:expected-attempt-id attempt-id
+                                        #:expected-fence fence
+                                        #:head-ancestor? head-ancestor?
+                                        #:allowed-stages [allowed repair-tail-allowed-stages])
+  (define (refuse! reason)
+    (error 'delivery-journal (format "repair-tail reconciliation refused: ~a" reason)))
+  (unless (valid-delivery-receipt? new-receipt)
+    (refuse! "new receipt is invalid"))
+  (unless (and (string? attempt-id) (positive? (string-length attempt-id)))
+    (refuse! "expected attempt identity is missing"))
+  (unless (exact-nonnegative-integer? fence)
+    (refuse! "expected fence is invalid"))
+  (unless (and (procedure? head-ancestor?) (procedure-arity-includes? head-ancestor? 2))
+    (refuse! "ancestry predicate is missing"))
+  (define old (load-delivery-journal root plan wave))
+  (define old-receipt (and old (hash-ref old 'receipt #f)))
+  (unless old
+    (refuse! "no durable journal to reconcile"))
+  (unless (hash? old-receipt)
+    (refuse! "journal carries no receipt"))
+  (unless (equal? (hash-ref old-receipt 'attempt-id #f) attempt-id)
+    (refuse! "attempt identity changed"))
+  (unless (equal? (hash-ref old-receipt 'attempt-fence #f) fence)
+    (refuse! "attempt fence changed"))
+  (unless (equal? (hash-ref new-receipt 'attempt-id #f) attempt-id)
+    (refuse! "new receipt is bound to a different attempt"))
+  (unless (equal? (hash-ref new-receipt 'attempt-fence #f) fence)
+    (refuse! "new receipt carries a different fence"))
+  (define old-branch (hash-ref old-receipt 'branch #f))
+  (define new-branch (hash-ref new-receipt 'branch #f))
+  (unless (and (string? old-branch)
+               (equal? old-branch new-branch)
+               (not (member new-branch '("main" "master"))))
+    (refuse! "delivery branch identity changed"))
+  (define old-head-sha (hash-ref old-receipt 'head #f))
+  (define new-head-sha (hash-ref new-receipt 'head #f))
+  (unless (and (hex? old-head-sha 40) (hex? new-head-sha 40))
+    (refuse! "receipt heads are malformed"))
+  (when (string=? old-head-sha new-head-sha)
+    (refuse! "heads are equal; not a repair tail"))
+  (define stage (hash-ref old 'stage #f))
+  (unless (member stage allowed)
+    (refuse! (format "stage ~a is terminal for repair-tail reconciliation" stage)))
+  (unless (head-ancestor? old-head-sha new-head-sha)
+    (refuse! "new head is not a descendant of the receipt head"))
+  (define history (hash-ref old 'receipt-history '()))
+  (unless (valid-receipt-history? history)
+    (refuse! "existing receipt history is malformed"))
+  (save! root
+         plan
+         wave
+         (hash-set* old 'receipt new-receipt 'receipt-history (append history (list old-receipt))))
+  new-receipt)
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical
@@ -163,12 +258,10 @@
     (error 'delivery-journal "missing verified provenance"))
   (define prior (hash-ref old 'verification-context #f))
   (cond
-    [(not prior)
-     (save! root plan wave (hash-set old 'verification-context vc))]
+    [(not prior) (save! root plan wave (hash-set old 'verification-context vc))]
     [(equal? prior vc) old]
     [else
-     (error 'delivery-journal
-            "verification context changed; explicit reconciliation required")]))
+     (error 'delivery-journal "verification context changed; explicit reconciliation required")]))
 
 ;; ============================================================
 ;; Remote-backing marker (v1.00.31 W3, register F5)

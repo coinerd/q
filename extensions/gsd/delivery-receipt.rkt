@@ -8,7 +8,6 @@
          "delivery-verifier.rkt"
          "campaign-state.rkt"
          (only-in "plan-context-builder.rkt" find-git-root-dir)
-         "verification-diagnostics.rkt"
          "../../sandbox/subprocess.rkt"
          (only-in "../../util/credential-redaction.rkt" redact-credential-data))
 (provide committed-delivery-snapshot
@@ -93,163 +92,125 @@
                 (not (member branch '("main" "master")))
                 (sha? head)
                 (identity root branch head))))))
-(define (verify-with-delivery-receipt base
-                                      plan
-                                      wave
-                                      cwd
-                                      thunk
-                                      #:approved? approved?
-                                      #:evidence evidence
-                                      #:snapshot [snapshot committed-delivery-snapshot]
-                                      #:attempt [attempt #f]
-                                      #:context [diagnostic-context (current-gsd-delivery-branch-context)]
-                                      #:remote-published
-                                      [remote-published (current-gsd-remote-published)])
-  ;; Contain diagnostic-origin non-exception raised values too, but do not
-  ;; suppress a break/cancellation signal.
-  (define (diagnostic-failure? v) (not (exn:break? v)))
-  ;; §17.3 diagnostics — additive instrumentation at this single owned
-  ;; boundary. Identity-before / outcome-after; every diagnostic failure is
-  ;; contained; the wrapped result/error is never altered by diagnostics.
-  (define diag-started-at (current-seconds))
-  (define diag-before (box #f))
-  (define diag-after (box #f))
-  (define diag-base (box #f))
-  (define diag-base? (box #f))
-  (define diag-expected (box ""))
-  (define diag-resolved (box ""))
-  (define diag-resolved? (box #f))
-  (define diag-decision (box "none"))
-  (define diag-reason (box ""))
-  ;; Explicit context is passed by the campaign seam; do not attempt to
-  ;; observe a parameterization that exists only inside the user thunk.
-  (define (capture-branch-identity!)
-    (with-handlers ([diagnostic-failure? (lambda (_) (void))])
-      (when diagnostic-context
-        (define b (branch-delivery-context-ref diagnostic-context 'base-commit))
-        (set-box! diag-base b)
-        (set-box! diag-base? (and (string? b) (sha? b)))
-        (define expected (branch-delivery-context-ref diagnostic-context 'branch))
-        (when (string? expected) (set-box! diag-expected expected)))
-      ;; The actual committed snapshot branch is distinct from resolving an
-      ;; expected ref. Detached/missing snapshots stay explicitly unresolved.
-      (define actual (and (hash? (unbox diag-before))
-                          (hash-ref (unbox diag-before) 'branch #f)))
-      (when (and (string? actual) (not (string=? actual "")))
-        (set-box! diag-resolved actual)
-        (set-box! diag-resolved? #t))))
-  (define (safe-diagnostic-log message)
-    (with-handlers ([diagnostic-failure? (lambda (_) (void))])
-      ((current-gsd-diagnostic-logger) (redact-credential-data message))))
-  (define (publish-diagnostic! outcome before-snap after-snap decision reason exception)
-    ;; Fully contained: field extraction, record construction and publication
-    ;; all run inside this handler scope, so no diagnostic problem can ever
-    ;; alter the wrapped verifier result or replace its exception.
-    (with-handlers
-        ([diagnostic-failure?
-          (lambda (e)
-            (safe-diagnostic-log (if (exn? e) (exn-message e) "non-exception diagnostic failure")))])
-      (define (snap-field s k sha-only?)
-        (and (hash? s)
-             (let ([v (hash-ref s k #f)])
-               (and (string? v) (or (not sha-only?) (sha? v)) v))))
-      (define diag-git-root
-        (with-handlers ([diagnostic-failure? (lambda (_) #f)])
-          (find-git-root-dir cwd)))
-      (define exception-text
-        (format "~a" (redact-credential-data
-                       (if (exn? exception) (exn-message exception) exception))))
-      (define rec
-        (make-verification-diagnostic
-         plan wave
-         (and attempt (campaign-attempt-id attempt))
-         (and attempt (campaign-attempt-fence-token attempt))
-         (and attempt (campaign-attempt-fence-token attempt) #t)
-         (unbox diag-base)
-         (unbox diag-base?)
-         (unbox diag-expected)
-         (unbox diag-resolved)
-         (unbox diag-resolved?)
-         (path->string (path->complete-path cwd))
-         (or (and diag-git-root (path->string diag-git-root)) "")
-         (snap-field before-snap 'head #t)
-         (or (snap-field before-snap 'tree #t) "")
-         (or (snap-field after-snap 'tree #t) "")
-         diag-started-at (current-seconds)
-         outcome
-         (and (hash? before-snap) #t)
-         (and (hash? before-snap) (hash? after-snap)
-              (equal? before-snap after-snap))
-         decision reason exception-text))
-      (define detailed-rec
-        (hash-set* rec
-                   'snapshot-before (if (hash? before-snap)
-                                        (redact-credential-data before-snap) #f)
-                   'snapshot-after (if (hash? after-snap)
-                                       (redact-credential-data after-snap) #f)))
-      (define out (publish-verification-diagnostic! base plan detailed-rec))
-      (when (eq? (car out) 'contained)
-        (safe-diagnostic-log (cdr out)))))
-  (capture-branch-identity!)
-  (define before
-    (with-handlers ([diagnostic-failure? (lambda (e)
-                               (publish-diagnostic! "error" #f #f "snapshot-error" "" e)
-                               (raise e))])
-      (snapshot cwd)))
-  (set-box! diag-before before)
-  (define result
-    (with-handlers
-        ([diagnostic-failure?
-          (lambda (e)
-            (publish-diagnostic! "error" (unbox diag-before) #f "error" ""
-                                 e)
-            (raise e))])
-      (capture-branch-identity!)
-      (define r (thunk))
-      (define after (snapshot cwd))
-      (set-box! diag-after after)
-      r))
-  (define after (unbox diag-after))
-  ;; Verdict predicate is invoked exactly once, as in the pre-diagnostic
-  ;; wrapper; every diagnostic use reads this binding.
-  (define diag-ok?
-    (with-handlers ([diagnostic-failure? (lambda (e)
-                               (publish-diagnostic! "error" before after "verdict-error" "" e)
-                               (raise e))])
-      (and (approved? result) #t)))
-  (when (and diag-ok? before (equal? before after))
+;; v1.00.33 W0 (audit §21.2): the REAL repair-tail ancestry predicate — the
+;; recorded receipt head must be a strict ancestor of the verified head in
+;; the snapshot's own repository. Any git/timeout failure is a refusal
+;; (fail-closed), never an assumed ancestry.
+(define (default-repair-tail-ancestor? repo old-head new-head)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and (string? repo)
+         (sha? old-head)
+         (sha? new-head)
+         (not (string=? old-head new-head))
+         (and (git repo "merge-base" "--is-ancestor" old-head new-head) #t))))
+
+(define (verify-with-delivery-receipt
+         base
+         plan
+         wave
+         cwd
+         thunk
+         #:approved? approved?
+         #:evidence evidence
+         #:snapshot [snapshot committed-delivery-snapshot]
+         #:attempt [attempt #f]
+         #:remote-published [remote-published (current-gsd-remote-published)]
+         ;; v1.00.33 W0 repair-tail protocol (audit
+         ;; §21.2): injectable repair-tail ancestry
+         ;; predicate. The default is the REAL git
+         ;; ancestry check (merge-base
+         ;; --is-ancestor) in the snapshot's
+         ;; repository; tests inject a pure predicate.
+         #:repair-tail-ancestor? [repair-tail-ancestor? default-repair-tail-ancestor?])
+  (define before (snapshot cwd))
+  (define result (thunk))
+  (define after (snapshot cwd))
+  (when (and (approved? result) before (equal? before after))
     (with-handlers
         ([exn:fail?
           (lambda (_)
-            (when (string=? (unbox diag-decision) "none")
-              (set-box! diag-decision "receipt-effect-failed"))
-            (set-box! diag-reason "receipt effect failed; reconciliation required")
             (log-warning
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
+      (define old-receipt (and old (hash-ref old 'receipt #f)))
+      (define (new-receipt-for-head!)
+        (define text (format "~a" (redact-credential-data (evidence result))))
+        (hash-set* (if attempt
+                       (hash-set* before
+                                  'attempt-id
+                                  (campaign-attempt-id attempt)
+                                  'attempt-fence
+                                  (campaign-attempt-fence-token attempt))
+                       before)
+                   'verified-at
+                   (current-seconds)
+                   'evidence
+                   (substring text 0 (min 8192 (string-length text)))))
       (cond
-        ;; A durable receipt resolves any stale marker (idempotent re-verify).
-        [old (clear-remote-pending! base plan wave)
-             (set-box! diag-decision "stale-marker-cleared")]
+        ;; v1.00.33 W0 (audit §20 blocker 2): a durable receipt resolves any
+        ;; stale marker ONLY at the SAME head+branch (idempotent re-verify).
+        ;; A receipt at ANY other head never does — the demonstrated defect
+        ;; was exactly this idempotence being unconditional.
+        [(and old
+              (hash? old-receipt)
+              (equal? (hash-ref old-receipt 'head #f) (hash-ref before 'head #f))
+              (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f)))
+         (clear-remote-pending! base plan wave)]
+        ;; v1.00.33 W0: the supported same-attempt repair-tail transition. The
+        ;; delivery branch advanced past the recorded receipt head while the
+        ;; SAME attempt is live: reconcile through the explicit atomic fenced
+        ;; transition (old receipt preserved as history), never a silent
+        ;; overwrite, and clear the marker only AFTER the new receipt for the
+        ;; verified head is durable.
+        [(and old
+              attempt
+              (hash? old-receipt)
+              (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f))
+              (equal? (hash-ref old-receipt 'attempt-id #f) (campaign-attempt-id attempt))
+              (equal? (hash-ref old-receipt 'attempt-fence #f) (campaign-attempt-fence-token attempt))
+              (repair-tail-ancestor? (hash-ref before 'repo #f)
+                                     (hash-ref old-receipt 'head #f)
+                                     (hash-ref before 'head #f)))
+         (cond
+           [(remote-published (hash-ref before 'repo)
+                              (hash-ref before 'branch)
+                              (hash-ref before 'head))
+            (reconcile-repair-tail-receipt!
+             base
+             plan
+             wave
+             (new-receipt-for-head!)
+             #:expected-attempt-id (campaign-attempt-id attempt)
+             #:expected-fence (campaign-attempt-fence-token attempt)
+             #:head-ancestor? (lambda (old-head new-head)
+                                (repair-tail-ancestor? (hash-ref before 'repo #f) old-head new-head)))
+            (clear-remote-pending! base plan wave)
+            (log-info "repair-tail receipt reconciled to head ~a" (hash-ref before 'head))]
+           [else
+            (define reason
+              (format
+               "repair-tail head ~a is not published on origin; receipt not reconciled; push the verified head first, then re-verify"
+               (hash-ref before 'head)))
+            (record-remote-pending! base
+                                    plan
+                                    wave
+                                    (hash-ref before 'branch)
+                                    (hash-ref before 'head)
+                                    reason)
+            (log-warning "delivery receipt withheld: ~a" reason)])]
+        ;; Any OTHER existing receipt (head mismatch without same-attempt
+        ;; repair-tail eligibility) fails closed: the old receipt stays
+        ;; untouched, the marker is NEVER cleared by a mismatched receipt,
+        ;; and the typed reason demands explicit reconciliation.
+        [old
+         (log-warning
+          "delivery receipt head mismatch; reconciliation required: old ~a new ~a on branch ~a"
+          (hash-ref old-receipt 'head #f)
+          (hash-ref before 'head #f)
+          (hash-ref before 'branch #f))]
         [(remote-published (hash-ref before 'repo) (hash-ref before 'branch) (hash-ref before 'head))
-         (define text (format "~a" (redact-credential-data (evidence result))))
-         (record-delivery-receipt! base
-                                   plan
-                                   wave
-                                   (hash-set* (if attempt
-                                                  (hash-set* before
-                                                             'attempt-id
-                                                             (campaign-attempt-id attempt)
-                                                             'attempt-fence
-                                                             (campaign-attempt-fence-token attempt))
-                                                  before)
-                                              'verified-at
-                                              (current-seconds)
-                                              'evidence
-                                              (substring text 0 (min 8192 (string-length text)))))
-         (set-box! diag-decision "receipt-recorded:marker-clear-pending")
-         (clear-remote-pending! base plan wave)
-         (set-box! diag-decision "receipt-recorded")]
+         (record-delivery-receipt! base plan wave (new-receipt-for-head!))
+         (clear-remote-pending! base plan wave)]
         ;; Register F5: an unpublished branch records the typed remote-pending
         ;; marker instead of a receipt. The state is NOT verified and blocks
         ;; ladder entry with 'branch-not-published naming branch and head.
@@ -265,27 +226,7 @@
                                  (hash-ref before 'branch)
                                  (hash-ref before 'head)
                                  reason)
-          (log-warning "delivery receipt withheld: ~a" reason)
-          (set-box! diag-decision "receipt-withheld")
-          (set-box! diag-reason reason)])))
-  ;; Truthful attribution for paths the receipt cond did not take (rejected,
-  ;; snapshot-missing, snapshot-drift). The default must never persist.
-  (when (string=? (unbox diag-decision) "none")
-    (cond
-      [(not (hash? (unbox diag-before)))
-       (set-box! diag-decision "receipt-skipped:snapshot-missing")]
-      [(not (equal? (unbox diag-before) (unbox diag-after)))
-       (set-box! diag-decision "receipt-skipped:snapshot-drift")]
-      [(not diag-ok?)
-       (set-box! diag-decision "rejected")]
-      [else (set-box! diag-decision "receipt-skipped:unknown")]))
-  (define diag-outcome (if diag-ok? "approved" "rejected"))
-  (publish-diagnostic! diag-outcome
-                       (unbox diag-before)
-                       (unbox diag-after)
-                       (unbox diag-decision)
-                       (unbox diag-reason)
-                       "")
+         (log-warning "delivery receipt withheld: ~a" reason)])))
   result)
 ;; Thin orchestration seam: context and verdict interpretation stay beside
 ;; receipt capture. `current-record` rejects stale attempts before persistence.
@@ -313,7 +254,6 @@
      (parameterize ([current-gsd-delivery-branch-context context])
        (verifier wave)))
    #:attempt attempt
-   #:context context
    #:remote-published remote-published
    #:approved? (lambda (v)
                  (define current (current-record))
