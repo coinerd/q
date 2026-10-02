@@ -867,8 +867,25 @@ def require_binding_output(output, campaign_root, plan, wave, generation=0):
 
 
 def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
+    # A staging directory may belong to ANY deterministic generation: the
+    # journal-derived generation names where a NEW draft would be staged,
+    # but a staging created before a repair tail (whose journal now carries
+    # receipt-history) remains valid at its own generation — the strict
+    # finalized-trio gates below do all the semantic work either way.
     generation = journal_generation(repo, plan, wave)
-    expected = require_binding_output(output, campaign_root, plan, wave, generation)
+    resolved = Path(output).resolve()
+    candidates = [generation] + ([0] if generation != 0 else [])
+    expected = None
+    for gen in candidates:
+        try:
+            if require_binding_output(output, campaign_root, plan, wave, gen) == resolved:
+                expected = require_binding_output(output, campaign_root, plan, wave, gen)
+                break
+        except Pending:
+            continue
+    require(expected is not None,
+            'binding output must be a deterministic campaign staging directory for '
+            'generation %d or the published generation 0' % generation)
     if not expected.exists():
         return {'status': 'awaiting-review', 'output': str(expected),
                 'branch': binding_branch(plan, wave, generation)}
@@ -1619,7 +1636,17 @@ def governance(repo, plan, wave, expected_branch):
     """Validate the merged binding publication and its protected-main governance run."""
     require(isinstance(expected_branch, str) and expected_branch.strip(),
             'governance requires --expected-branch')
-    require(expected_branch == binding_branch(plan, wave, journal_generation(repo, plan, wave)),
+    # The publication under validation may belong to ANY deterministic
+    # generation of the binding branch name (base or -r<n> republication):
+    # a repair tail does not invalidate an already-published binding for an
+    # unchanged implementation (the rebind refusal keeps that binding
+    # authoritative), so governance must accept the generation actually
+    # published while every downstream fact below is still validated in
+    # full (exactly one merged PR, fresh-main single-parent publication,
+    # trusted protected checks).
+    base = binding_branch(plan, wave)
+    require(expected_branch == base or
+            re.fullmatch(re.escape(base) + r'-r[1-9][0-9]*', expected_branch),
             'governance branch does not match the deterministic binding branch')
     slug = repository(repo)
     refresh(repo)
