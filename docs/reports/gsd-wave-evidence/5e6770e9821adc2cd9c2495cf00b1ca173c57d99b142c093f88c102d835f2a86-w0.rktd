@@ -2,7 +2,7 @@
         (branch . "binding/5e6770e9821a-w0")
         (content-digest
          .
-         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+         "3a2c7b743bf604745fb439b77e524a5d072bfddafbc4b7e7c0c64869fe708d83")
         (delivery-head-sha . "5e9560a07408b4ceede4168f00de6e753d42fd05")
         (delivery-pr . 9771)
         (delivery-scope
