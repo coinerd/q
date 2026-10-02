@@ -427,9 +427,21 @@
          (git-quiet! repo "worktree" "remove" "--force" (path->string wt)))))
     (define base-sha (make-string 40 #\1))
     (define receipt-sha (make-string 40 #\2))
-    (define (repair-tail-git-facts base-diff delta)
+    (define (repair-tail-git-facts base-diff
+                                   delta
+                                   #:base-blob [base-blob "blob-base"]
+                                   #:tip-blob [tip-blob "blob-base"])
       (lambda (_git-root args)
         (cond
+          [(and (pair? args)
+                (equal? (car args) "rev-parse")
+                (>= (length args) 2)
+                (string-contains? (list-ref args 1) ":"))
+           ;; blob lookups: which end of the range is being resolved
+           (list 0
+                 (string-append (if (string-contains? (list-ref args 1) base-sha) base-blob tip-blob)
+                                "\n")
+                 "")]
           [(and (pair? args) (equal? (car args) "rev-parse")) (list 0 "ok\n" "")]
           [(and (>= (length args) 3)
                 (equal? (car args) "diff")
@@ -440,15 +452,21 @@
                 (string-contains? (list-ref args 2) receipt-sha))
            (list 0 (string-append (string-join delta "\n") (if (null? delta) "" "\n")) "")]
           [else (list 1 "" "repair-tail-git-facts: unhandled")])))
-    (define (gate-result base-dir plan-struct base-diff delta)
-      (parameterize ([current-gsd-git-runner (repair-tail-git-facts base-diff delta)]
-                     [current-gsd-delivery-branch-context
-                      (make-branch-delivery-context #:repo-root
-                                                    (path->string (build-path base-dir "q"))
-                                                    #:branch "campaign/w2"
-                                                    #:base-commit base-sha
-                                                    #:worktree-path #f
-                                                    #:repair-tail-head receipt-sha)])
+    (define (gate-result base-dir
+                         plan-struct
+                         base-diff
+                         delta
+                         #:base-blob [base-blob "blob-base"]
+                         #:tip-blob [tip-blob "blob-base"])
+      (parameterize
+          ([current-gsd-git-runner
+            (repair-tail-git-facts base-diff delta #:base-blob base-blob #:tip-blob tip-blob)]
+           [current-gsd-delivery-branch-context
+            (make-branch-delivery-context #:repo-root (path->string (build-path base-dir "q"))
+                                          #:branch "campaign/w2"
+                                          #:base-commit base-sha
+                                          #:worktree-path #f
+                                          #:repair-tail-head receipt-sha)])
         (check-wave-files-changed base-dir 0 plan-struct)))
     (test-case "repair-tail files gate: intact targets + real delta approve"
       (define base (make-tmp-git-repo))
@@ -465,16 +483,37 @@
                       (check-true (string-contains? (cdr (cdr result)) "repair-tail")
                                   (format "detail must name the repair-tail mode: ~s" result)))
                     (lambda () (cleanup-tmp base))))
-    (test-case "repair-tail files gate: delivered target missing from the branch refuses"
+    (test-case "repair-tail files gate: base-identical intact targets approve (absorbed-merge topology)"
+      ;; The audit's own observation for this campaign: the W0 targets
+      ;; already reached the branch through main's squash, so base...tip
+      ;; shows ZERO target diffs — intactness must hold via identical blobs.
+      (define base (make-tmp-git-repo))
+      (dynamic-wind
+       void
+       (lambda ()
+         (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "exit 0")
+         (define plan-struct (load-plan** base '("q/ui-core/preferences.rkt") "exit 0"))
+         (define result
+           (gate-result base plan-struct '() '("repair.rkt") #:base-blob "same" #:tip-blob "same"))
+         (check-true (car (cdr result)) (format "expected approval, got ~s" result))
+         (check-true (string-contains? (cdr (cdr result)) "base-identical")
+                     (format "detail must name the base-identical form: ~s" result)))
+       (lambda () (cleanup-tmp base))))
+    (test-case "repair-tail files gate: target regressed from the verified base content refuses"
       (define base (make-tmp-git-repo))
       (dynamic-wind void
                     (lambda ()
                       (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "exit 0")
                       (define plan-struct (load-plan** base '("q/ui-core/preferences.rkt") "exit 0"))
                       (define result
-                        (gate-result base plan-struct '("unrelated.rkt") '("repair.rkt")))
-                      (check-false (car (cdr result)) "a target absent from the branch must refuse")
-                      (check-true (string-contains? (cdr (cdr result)) "target")))
+                        (gate-result base
+                                     plan-struct
+                                     '("unrelated.rkt")
+                                     '("repair.rkt")
+                                     #:base-blob "blob-a"
+                                     #:tip-blob "blob-b"))
+                      (check-false (car (cdr result)) "a diverged target blob must refuse")
+                      (check-true (string-contains? (cdr (cdr result)) "regressed")))
                     (lambda () (cleanup-tmp base))))
     (test-case "repair-tail files gate: empty repair delta refuses"
       (define base (make-tmp-git-repo))
