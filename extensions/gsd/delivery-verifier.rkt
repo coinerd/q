@@ -71,7 +71,12 @@
          check-verify-command
          ;; BUG-0068 secondary 2: pure criteria-decoration normalizer,
          ;; provided for the TDD suite (see tests/test-gsd-delivery-verifier.rkt)
-         normalize-declared-verify)
+         normalize-declared-verify
+         ;; D2/D3 (§17.3): exported additively for the receipt wrapper's
+         ;; expected-branch resolution check — same verified git path and
+         ;; injectable current-gsd-git-runner as the isolated gate.
+         run-git
+         git-exit-ok?)
 
 ;; ============================================================
 ;; Structured verification result
@@ -128,17 +133,34 @@
 ;; and pinned by test-gsd-executor-retry-characterization.rkt).
 ;;
 ;; Context keys:
-;;   repo-root     — git root holding the campaign branch (string/path)
-;;   branch        — wave branch name, "campaign/<hash8>/w<N>"
-;;   base-commit   — base commit SHA captured at attempt start
-;;   worktree-path — #f or the worktree checkout of the branch; the verify
-;;                   command runs with this as cwd so gates exercise the
-;;                   delivered (committed) tree
+;;   repo-root       — git root holding the campaign branch (string/path)
+;;   branch          — wave branch name, "campaign/<hash8>/w<N>"
+;;   base-commit     — base commit SHA captured at attempt start
+;;   worktree-path   — #f or the worktree checkout of the branch; the verify
+;;                     command runs with this as cwd so gates exercise the
+;;                     delivered (committed) tree
+;;   repair-tail-head — #f normally; the RECORDED receipt head when the
+;;                     attempt is a repair tail (v1.00.33 W0, audit §21.3).
+;;                     Presence switches the files gate into repair-tail
+;;                     mode: the wave's declared targets must be intact on
+;;                     the base...branch diff AND the receipt...branch tail
+;;                     must carry non-empty repair content that touches NO
+;;                     declared target.
 (define (make-branch-delivery-context #:repo-root repo-root
                                       #:branch branch
                                       #:base-commit base-commit
-                                      #:worktree-path [worktree-path #f])
-  (hasheq 'repo-root repo-root 'branch branch 'base-commit base-commit 'worktree-path worktree-path))
+                                      #:worktree-path [worktree-path #f]
+                                      #:repair-tail-head [repair-tail-head #f])
+  (hasheq 'repo-root
+          repo-root
+          'branch
+          branch
+          'base-commit
+          base-commit
+          'worktree-path
+          worktree-path
+          'repair-tail-head
+          repair-tail-head))
 
 (define (branch-delivery-context? v)
   (and (hash? v) (hash-ref v 'repo-root #f) (hash-ref v 'branch #f) (hash-ref v 'base-commit #f) #t))
@@ -448,6 +470,17 @@
        (string-prefix? c dir))]
     [else #f]))
 
+;; v1.00.33 W0 (audit §21.3): the repair-tail delta — files changed between
+;; the RECORDED receipt head and the branch tip. Fail closed: any git
+;; failure yields #f, so an unverifiable tail can never satisfy the
+;; repair-tail gate.
+(define (repair-tail-delta-files root tail-head branch)
+  (define result (run-git root (list "diff" "--name-only" (format "~a...~a" tail-head branch))))
+  (and (git-exit-ok? result)
+       (for/set ([p (in-list (string-split (git-stdout result) "\n"))]
+                 #:when (not (string=? (string-trim p) "")))
+         (string-trim p))))
+
 (define (check-wave-files-changed base-dir wave-idx plan [campaign-created-at #f])
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
@@ -469,31 +502,71 @@
      ;; COMMITTED branch diff ONLY — uncommitted worktree dirt (shared
      ;; checkout or wave worktree) never satisfies delivery. The failure
      ;; message is byte-identical to the legacy path.
-     (let* ([changed (if (current-gsd-delivery-branch-context)
+     ;;
+     ;; v1.00.33 W0 (audit §21.3): with a repair-tail-head in the context
+     ;; the gate switches to repair-tail mode: the wave's declared targets
+     ;; must be intact on the base...branch diff AND the receipt...branch
+     ;; tail must carry non-empty repair content touching NO declared
+     ;; target. The tail proves the repair; the base...branch diff proves
+     ;; the previously verified implementation survives at the tip.
+     (let* ([ctx (current-gsd-delivery-branch-context)]
+            [repair-tail-head (and ctx (branch-delivery-context-ref ctx 'repair-tail-head))]
+            [changed (if ctx
                          (committed-branch-changed-files)
                          (changed-files-set base-dir root campaign-created-at))]
-            [changed-wave-files
-             (for/list ([f (in-list files)]
-                        #:when
-                        (wave-file-changed? changed (wave-file->git-relative base-dir root f) f))
-               f)])
-       (cons "files"
-             (if (pair? changed-wave-files)
-                 (cons #t (format "changed: ~a" (string-join changed-wave-files ", ")))
-                 ;; BUG-0025 (v1.00.18 W1): show the computed git-relative
-                 ;; mapping per unmatched declared file so path mismatches
-                 ;; (e.g. annotation prose surviving into the declared path,
-                 ;; or a wrong path convention) are diagnosable from the
-                 ;; rejection message alone.
-                 (cons #f
-                       (format "no wave target files changed: ~a~a"
-                               (string-join files ", ")
-                               (string-append
-                                "\n"
-                                (string-join
-                                 (for/list ([f (in-list files)])
-                                   (format "  ~a -> ~a" f (wave-file->git-relative base-dir root f)))
-                                 "\n")))))))]))
+            [git-relatives (for/list ([f (in-list files)])
+                             (wave-file->git-relative base-dir root f))]
+            [delivered (for/list ([f (in-list files)]
+                                  [g (in-list git-relatives)]
+                                  #:when (wave-file-changed? changed g f))
+                         f)]
+            [delta (and repair-tail-head
+                        (repair-tail-delta-files root
+                                                 repair-tail-head
+                                                 (branch-delivery-context-ref ctx 'branch)))]
+            [altered-tail (for/list ([f (in-list files)]
+                                     [g (in-list git-relatives)]
+                                     #:when (and repair-tail-head delta (set-member? delta g)))
+                            f)])
+       (cond
+         [repair-tail-head
+          (cons
+           "files"
+           (cond
+             [(not delta) (cons #f "repair-tail: git failure inspecting the tail; failing closed")]
+             [(set-empty? delta)
+              (cons #f
+                    "repair-tail: no repair content (branch tip equals the recorded receipt head)")]
+             [(null? delivered)
+              (cons #f
+                    (format "repair-tail: declared target files are not intact on the branch: ~a"
+                            (string-join files ", ")))]
+             [(pair? altered-tail)
+              (cons #f
+                    (format "repair-tail: target file changed after the recorded receipt: ~a"
+                            (string-join altered-tail ", ")))]
+             [else
+              (cons #t
+                    (format "repair-tail: changed: ~a; repair delta: ~a"
+                            (string-join delivered ", ")
+                            (string-join (sort (set->list delta) string<?) ", ")))]))]
+         [else
+          (cons "files"
+                (if (pair? delivered)
+                    (cons #t (format "changed: ~a" (string-join delivered ", ")))
+                    ;; BUG-0025 (v1.00.18 W1): show the computed git-relative
+                    ;; mapping per unmatched declared file so path mismatches
+                    ;; (e.g. annotation prose surviving into the declared path,
+                    ;; or a wrong path convention) are diagnosable from the
+                    ;; rejection message alone.
+                    (cons #f
+                          (format "no wave target files changed: ~a~a"
+                                  (string-join files ", ")
+                                  (string-append "\n"
+                                                 (string-join (for/list ([f (in-list files)]
+                                                                         [g (in-list git-relatives)])
+                                                                (format "  ~a -> ~a" f g))
+                                                              "\n"))))))]))]))
 
 ;; ============================================================
 ;; Verify command (bounded)

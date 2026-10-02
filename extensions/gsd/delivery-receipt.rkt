@@ -92,17 +92,36 @@
                 (not (member branch '("main" "master")))
                 (sha? head)
                 (identity root branch head))))))
-(define (verify-with-delivery-receipt base
-                                      plan
-                                      wave
-                                      cwd
-                                      thunk
-                                      #:approved? approved?
-                                      #:evidence evidence
-                                      #:snapshot [snapshot committed-delivery-snapshot]
-                                      #:attempt [attempt #f]
-                                      #:remote-published
-                                      [remote-published (current-gsd-remote-published)])
+;; v1.00.33 W0 (audit §21.2): the REAL repair-tail ancestry predicate — the
+;; recorded receipt head must be a strict ancestor of the verified head in
+;; the snapshot's own repository. Any git/timeout failure is a refusal
+;; (fail-closed), never an assumed ancestry.
+(define (default-repair-tail-ancestor? repo old-head new-head)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and (string? repo)
+         (sha? old-head)
+         (sha? new-head)
+         (not (string=? old-head new-head))
+         (and (git repo "merge-base" "--is-ancestor" old-head new-head) #t))))
+
+(define (verify-with-delivery-receipt
+         base
+         plan
+         wave
+         cwd
+         thunk
+         #:approved? approved?
+         #:evidence evidence
+         #:snapshot [snapshot committed-delivery-snapshot]
+         #:attempt [attempt #f]
+         #:remote-published [remote-published (current-gsd-remote-published)]
+         ;; v1.00.33 W0 repair-tail protocol (audit
+         ;; §21.2): injectable repair-tail ancestry
+         ;; predicate. The default is the REAL git
+         ;; ancestry check (merge-base
+         ;; --is-ancestor) in the snapshot's
+         ;; repository; tests inject a pure predicate.
+         #:repair-tail-ancestor? [repair-tail-ancestor? default-repair-tail-ancestor?])
   (define before (snapshot cwd))
   (define result (thunk))
   (define after (snapshot cwd))
@@ -113,25 +132,84 @@
             (log-warning
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
+      (define old-receipt (and old (hash-ref old 'receipt #f)))
+      (define (new-receipt-for-head!)
+        (define text (format "~a" (redact-credential-data (evidence result))))
+        (hash-set* (if attempt
+                       (hash-set* before
+                                  'attempt-id
+                                  (campaign-attempt-id attempt)
+                                  'attempt-fence
+                                  (campaign-attempt-fence-token attempt))
+                       before)
+                   'verified-at
+                   (current-seconds)
+                   'evidence
+                   (substring text 0 (min 8192 (string-length text)))))
       (cond
-        ;; A durable receipt resolves any stale marker (idempotent re-verify).
-        [old (clear-remote-pending! base plan wave)]
+        ;; v1.00.33 W0 (audit §20 blocker 2): a durable receipt resolves any
+        ;; stale marker ONLY at the SAME head+branch (idempotent re-verify).
+        ;; A receipt at ANY other head never does — the demonstrated defect
+        ;; was exactly this idempotence being unconditional.
+        [(and old
+              (hash? old-receipt)
+              (equal? (hash-ref old-receipt 'head #f) (hash-ref before 'head #f))
+              (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f)))
+         (clear-remote-pending! base plan wave)]
+        ;; v1.00.33 W0: the supported same-attempt repair-tail transition. The
+        ;; delivery branch advanced past the recorded receipt head while the
+        ;; SAME attempt is live: reconcile through the explicit atomic fenced
+        ;; transition (old receipt preserved as history), never a silent
+        ;; overwrite, and clear the marker only AFTER the new receipt for the
+        ;; verified head is durable.
+        [(and old
+              attempt
+              (hash? old-receipt)
+              (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f))
+              (equal? (hash-ref old-receipt 'attempt-id #f) (campaign-attempt-id attempt))
+              (equal? (hash-ref old-receipt 'attempt-fence #f) (campaign-attempt-fence-token attempt))
+              (repair-tail-ancestor? (hash-ref before 'repo #f)
+                                     (hash-ref old-receipt 'head #f)
+                                     (hash-ref before 'head #f)))
+         (cond
+           [(remote-published (hash-ref before 'repo)
+                              (hash-ref before 'branch)
+                              (hash-ref before 'head))
+            (reconcile-repair-tail-receipt!
+             base
+             plan
+             wave
+             (new-receipt-for-head!)
+             #:expected-attempt-id (campaign-attempt-id attempt)
+             #:expected-fence (campaign-attempt-fence-token attempt)
+             #:head-ancestor? (lambda (old-head new-head)
+                                (repair-tail-ancestor? (hash-ref before 'repo #f) old-head new-head)))
+            (clear-remote-pending! base plan wave)
+            (log-info "repair-tail receipt reconciled to head ~a" (hash-ref before 'head))]
+           [else
+            (define reason
+              (format
+               "repair-tail head ~a is not published on origin; receipt not reconciled; push the verified head first, then re-verify"
+               (hash-ref before 'head)))
+            (record-remote-pending! base
+                                    plan
+                                    wave
+                                    (hash-ref before 'branch)
+                                    (hash-ref before 'head)
+                                    reason)
+            (log-warning "delivery receipt withheld: ~a" reason)])]
+        ;; Any OTHER existing receipt (head mismatch without same-attempt
+        ;; repair-tail eligibility) fails closed: the old receipt stays
+        ;; untouched, the marker is NEVER cleared by a mismatched receipt,
+        ;; and the typed reason demands explicit reconciliation.
+        [old
+         (log-warning
+          "delivery receipt head mismatch; reconciliation required: old ~a new ~a on branch ~a"
+          (hash-ref old-receipt 'head #f)
+          (hash-ref before 'head #f)
+          (hash-ref before 'branch #f))]
         [(remote-published (hash-ref before 'repo) (hash-ref before 'branch) (hash-ref before 'head))
-         (define text (format "~a" (redact-credential-data (evidence result))))
-         (record-delivery-receipt! base
-                                   plan
-                                   wave
-                                   (hash-set* (if attempt
-                                                  (hash-set* before
-                                                             'attempt-id
-                                                             (campaign-attempt-id attempt)
-                                                             'attempt-fence
-                                                             (campaign-attempt-fence-token attempt))
-                                                  before)
-                                              'verified-at
-                                              (current-seconds)
-                                              'evidence
-                                              (substring text 0 (min 8192 (string-length text)))))
+         (record-delivery-receipt! base plan wave (new-receipt-for-head!))
          (clear-remote-pending! base plan wave)]
         ;; Register F5: an unpublished branch records the typed remote-pending
         ;; marker instead of a receipt. The state is NOT verified and blocks

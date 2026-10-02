@@ -797,31 +797,67 @@ def draft_request(source, plan, wave, pr, branch, required_checks):
             'merged-at':pr['merged_at'], 'branch':branch,
             'required-pr-checks':list(required_checks)}
 
-def binding_branch(plan, wave):
+def binding_branch(plan, wave, generation=0):
     binding_path(plan, wave)
     require(type(wave) is int and wave >= 0, 'invalid wave index')
-    return 'binding/' + plan[:12] + f'-w{wave}'
+    require(type(generation) is int and generation >= 0,
+            'invalid binding generation')
+    base = 'binding/' + plan[:12] + f'-w{wave}'
+    # v1.00.33 W0 repair-tail protocol (audit §21.4): a republication for the
+    # same wave (after a reconciled repair-tail receipt) MUST NOT reuse the
+    # original binding branch — governance admits exactly one merged PR per
+    # binding branch — so generation n >= 1 publishes under an -r<n> branch.
+    return base if generation == 0 else base + f'-r{generation}'
 
 
-def binding_staging_path(campaign_root, plan, wave):
+def journal_generation(repo, plan, wave):
+    """Repair-tail republication generation for the wave: the number of PRIOR
+    immutable receipts (the append-only receipt-history length) in the live
+    coordinator journal. 0 = first publication. A missing journal or a
+    journal without history is generation 0; a malformed history fails
+    closed rather than guessing a branch that governance would later reject."""
+    require(isinstance(plan, str) and re.fullmatch('[0-9a-f]{64}', plan),
+            'invalid campaign id')
+    require(type(wave) is int and wave >= 0, 'invalid wave index')
+    path = Path(repo) / '.planning' / 'campaigns' / plan / f'coordinator-w{wave}.json'
+    if not path.exists():
+        return 0
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        require(False, 'journal generation cannot read the coordinator journal')
+    require(isinstance(data, dict),
+            'journal generation requires a journal object')
+    history = data.get('receipt-history', [])
+    require(isinstance(history, list),
+            'journal receipt-history must be a list')
+    require(all(isinstance(entry, dict) for entry in history),
+            'journal receipt-history entries must be receipts')
+    return len(history)
+
+
+def binding_staging_path(campaign_root, plan, wave, generation=0):
     binding_path(plan, wave)
+    require(type(generation) is int and generation >= 0,
+            'invalid binding generation')
     root = Path(campaign_root)
     require(root.is_dir() and not root.is_symlink(),
             'binding staging requires a real campaign root')
+    staging = f'binding-w{wave}' if generation == 0 else f'binding-w{wave}-r{generation}'
     # Reject a symlink or traversal in any existing parent component. The
     # resolved path is still compared below so a later symlink cannot redirect
     # the durable staging directory.
     current = root
-    for part in ('.planning', 'campaigns', plan, f'binding-w{wave}'):
+    for part in ('.planning', 'campaigns', plan, staging):
         current = current / part
         require(not current.is_symlink(), 'binding staging path contains a symlink')
     expected = (root.resolve() / '.planning' / 'campaigns' / plan /
-                f'binding-w{wave}').resolve()
+                staging).resolve()
     return expected
 
 
-def require_binding_output(output, campaign_root, plan, wave):
-    expected = binding_staging_path(campaign_root, plan, wave)
+def require_binding_output(output, campaign_root, plan, wave, generation=0):
+    expected = binding_staging_path(campaign_root, plan, wave, generation)
     raw = Path(output)
     require(not raw.is_symlink(), 'binding output path must not be a symlink')
     actual = raw.resolve()
@@ -831,10 +867,11 @@ def require_binding_output(output, campaign_root, plan, wave):
 
 
 def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
-    expected = require_binding_output(output, campaign_root, plan, wave)
+    generation = journal_generation(repo, plan, wave)
+    expected = require_binding_output(output, campaign_root, plan, wave, generation)
     if not expected.exists():
         return {'status': 'awaiting-review', 'output': str(expected),
-                'branch': binding_branch(plan, wave)}
+                'branch': binding_branch(plan, wave, generation)}
     require(expected.is_dir() and not expected.is_symlink(),
             'binding staging output is not a regular directory')
     evidence_path = expected / 'docs/reports/gsd-wave-evidence' / f'{plan}-w{wave}.rktd'
@@ -866,7 +903,7 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
             'staged binding has no implementation PR identity')
     require(isinstance(evidence.get('merged-at'), str) and evidence['merged-at'],
             'staged binding has no merge provenance')
-    branch = binding_branch(plan, wave)
+    branch = binding_branch(plan, wave, generation)
     require(evidence.get('branch') == branch,
             'staged binding branch identity mismatch')
     require(expected_branch is None or evidence.get('wave-branch') == expected_branch,
@@ -993,7 +1030,7 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
     refresh(repo)
     main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
     require(full_sha(main), 'malformed origin/main head')
-    branch = binding_branch(plan, wave)
+    branch = binding_branch(plan, wave, journal_generation(repo, plan, wave))
     remote_ref = 'refs/remotes/origin/' + branch
     refspec = 'refs/heads/' + branch
     # Validate an existing branch before considering it. A branch may be
@@ -1295,7 +1332,9 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
                 'origin/main already binds this wave to a different implementation; '
                 'refusing rebind')
     validate_trio(repo, head, relative, dig(pr, 'base', 'sha'))
-    request = draft_request(source, plan, wave, pr, 'binding/' + plan[:12] + f'-w{wave}', names)
+    request = draft_request(source, plan, wave, pr,
+                            binding_branch(plan, wave, journal_generation(repo, plan, wave)),
+                            names)
     output = Path(output).resolve()
     require(not output.exists(), 'output directory already exists; refusing to overwrite')
     output.mkdir(parents=True)
@@ -1580,7 +1619,7 @@ def governance(repo, plan, wave, expected_branch):
     """Validate the merged binding publication and its protected-main governance run."""
     require(isinstance(expected_branch, str) and expected_branch.strip(),
             'governance requires --expected-branch')
-    require(expected_branch == binding_branch(plan, wave),
+    require(expected_branch == binding_branch(plan, wave, journal_generation(repo, plan, wave)),
             'governance branch does not match the deterministic binding branch')
     slug = repository(repo)
     refresh(repo)
