@@ -579,4 +579,36 @@
            (define result (check-wave-files-changed base 0 plan-struct))
            (check-false (car (cdr result)) "unchanged targets must still refuse in normal mode")
            (check-true (string-contains? (cdr (cdr result)) "no wave target files changed"))))
-       (lambda () (cleanup-tmp base))))))
+       (lambda () (cleanup-tmp base))))
+    (test-case "worktree layout: q/-prefixed declarations map to unprefixed git names"
+      ;; v1.00.33 W0: a resumed campaign runs INSIDE its worktree (base-dir
+      ;; IS the git root), but wave docs were authored for the outer <base>/q
+      ;; layout ("q/extensions/..."). The mapping must strip the layout
+      ;; prefix — otherwise no target can ever match git's unprefixed names.
+      (define root (make-temporary-file "wt-layout-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (make-directory* (build-path root "extensions" "gsd"))
+         (display-to-file "x" (build-path root "extensions" "gsd" "adapter.rkt") #:exists 'truncate)
+         (define plan-struct (load-plan** root '("q/extensions/gsd/adapter.rkt") "exit 0"))
+         (define fake-sha (make-string 40 #\1))
+         (parameterize ([current-gsd-git-runner (lambda (_root args)
+                                                  (cond
+                                                    [(and (pair? args)
+                                                          (equal? (car args) "diff")
+                                                          (>= (length args) 3)
+                                                          (string-contains? (list-ref args 2)
+                                                                            fake-sha))
+                                                     (list 0 "extensions/gsd/adapter.rkt\n" "")]
+                                                    [else (list 0 "ok\n" "")]))]
+                        [current-gsd-delivery-branch-context
+                         (make-branch-delivery-context #:repo-root root
+                                                       #:branch "campaign/w9"
+                                                       #:base-commit fake-sha
+                                                       #:worktree-path #f)])
+           (define result (check-wave-files-changed root 0 plan-struct))
+           (check-true (car (cdr result))
+                       (format "expected approval via prefix strip, got ~s" result))
+           (check-true (string-contains? (cdr (cdr result)) "extensions/gsd/adapter.rkt"))))
+       (lambda () (delete-directory/files root #:must-exist? #f))))))

@@ -378,6 +378,17 @@
   (define abs (path->complete-path (build-path base-dir f)))
   (define rel (find-relative-path git-root abs))
   (define rel-str (path->string rel))
+  ;; v1.00.33 W0 (worktree campaign layout): when base-dir IS the git root
+  ;; (a resumed campaign runs inside its worktree), a repo-root-relative
+  ;; declaration ("q/extensions/…", authored for the outer <base>/q layout)
+  ;; keeps its "q/" prefix and can never match git's unprefixed names.
+  ;; When the prefixed path does not exist on disk but the un-prefixed one
+  ;; does, the declaration was authored for the outer layout — strip the
+  ;; prefix. A genuine q/ subdirectory keeps its prefix (abs exists).
+  (when (and (string-prefix? rel-str "q/") (not (file-exists? abs)))
+    (define stripped-abs (path->complete-path (build-path git-root (substring rel-str 2))))
+    (when (file-exists? stripped-abs)
+      (set! rel-str (substring rel-str 2))))
   ;; The repo-root mapping escapes the git root ("../...") when the wave
   ;; file was declared git-root-relative. Detect the escape by prefix —
   ;; string-prefix? is clearer than a char-class regexp here.
