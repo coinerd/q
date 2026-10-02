@@ -481,6 +481,25 @@
                  #:when (not (string=? (string-trim p) "")))
          (string-trim p))))
 
+;; v1.00.33 W0 (audit §21.3): the blob of a declared target at a commit.
+;; Absent paths (and any git failure) yield #f so callers fail closed.
+(define (git-blob root sha path)
+  (define result (run-git root (list "rev-parse" (string-append sha ":" path))))
+  (and (git-exit-ok? result)
+       (let ([blob (string-trim (git-stdout result))]) (and (positive? (string-length blob)) blob))))
+
+;; True when the target's content at the branch tip is byte-identical to its
+;; verified content at the attempt base commit — the absorbed-merge shape
+;; where the implementation already reached the branch through main's squash
+;; and base...tip legitimately shows no target diff.
+(define (blob-intact? root ctx git-relative)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define base (branch-delivery-context-ref ctx 'base-commit))
+    (define tip (branch-delivery-context-ref ctx 'branch))
+    (define at-base (and base (git-blob root base git-relative)))
+    (define at-tip (and tip (git-blob root tip git-relative)))
+    (and at-base at-tip (string=? at-base at-tip))))
+
 (define (check-wave-files-changed base-dir wave-idx plan [campaign-created-at #f])
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
@@ -504,11 +523,15 @@
      ;; message is byte-identical to the legacy path.
      ;;
      ;; v1.00.33 W0 (audit §21.3): with a repair-tail-head in the context
-     ;; the gate switches to repair-tail mode: the wave's declared targets
-     ;; must be intact on the base...branch diff AND the receipt...branch
-     ;; tail must carry non-empty repair content touching NO declared
-     ;; target. The tail proves the repair; the base...branch diff proves
-     ;; the previously verified implementation survives at the tip.
+     ;; the gate switches to repair-tail mode: every declared target must be
+     ;; INTACT at the tip — either delivered within the base...branch diff
+     ;; OR byte-identical (same blob) to the verified base content (the
+     ;; absorbed-merge topology: the W0 implementation already reached the
+     ;; branch through main's squash, so base...tip legitimately shows zero
+     ;; target diffs — the audit's own observation for this campaign) — AND
+     ;; the receipt...branch tail must carry non-empty repair content
+     ;; touching NO declared target. A target whose tip blob differs from
+     ;; base without being in the changed set has REGRESSED and refuses.
      (let* ([ctx (current-gsd-delivery-branch-context)]
             [repair-tail-head (and ctx (branch-delivery-context-ref ctx 'repair-tail-head))]
             [changed (if ctx
@@ -527,7 +550,13 @@
             [altered-tail (for/list ([f (in-list files)]
                                      [g (in-list git-relatives)]
                                      #:when (and repair-tail-head delta (set-member? delta g)))
-                            f)])
+                            f)]
+            [regressed (and repair-tail-head
+                            (for/list ([f (in-list files)]
+                                       [g (in-list git-relatives)]
+                                       #:when (and (not (member f delivered))
+                                                   (not (blob-intact? root ctx g))))
+                              f))])
        (cond
          [repair-tail-head
           (cons
@@ -537,19 +566,30 @@
              [(set-empty? delta)
               (cons #f
                     "repair-tail: no repair content (branch tip equals the recorded receipt head)")]
-             [(null? delivered)
+             [(pair? regressed)
               (cons #f
-                    (format "repair-tail: declared target files are not intact on the branch: ~a"
-                            (string-join files ", ")))]
+                    (format
+                     "repair-tail: declared target files regressed from the verified base content: ~a"
+                     (string-join regressed ", ")))]
              [(pair? altered-tail)
               (cons #f
                     (format "repair-tail: target file changed after the recorded receipt: ~a"
                             (string-join altered-tail ", ")))]
              [else
               (cons #t
-                    (format "repair-tail: changed: ~a; repair delta: ~a"
-                            (string-join delivered ", ")
-                            (string-join (sort (set->list delta) string<?) ", ")))]))]
+                    (format
+                     "repair-tail: targets intact (changed: ~a; base-identical: ~a); repair delta: ~a"
+                     (string-join (if (pair? delivered)
+                                      delivered
+                                      '("-"))
+                                  ", ")
+                     (string-join (for/list ([f (in-list files)]
+                                             [g (in-list git-relatives)]
+                                             #:when (and (not (member f delivered))
+                                                         (blob-intact? root ctx g)))
+                                    f)
+                                  ", ")
+                     (string-join (sort (set->list delta) string<?) ", ")))]))]
          [else
           (cons "files"
                 (if (pair? delivered)
