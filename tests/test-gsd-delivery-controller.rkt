@@ -2,13 +2,15 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @covers scripts/gsd-delivery.py
-;; @timeout 300
-;; The wrapper runs the FULL Python delivery-controller contract suite (121
+;; @timeout 960
+;; The wrapper runs the FULL Python delivery-controller contract suite (133
 ;; real-git tests) in one subprocess. CI runners are ~2x slower than the
-;; local machine and the suite outgrew the default 120s per-file fast-suite
-;; budget (test (2) timeout on PR #9720), so the runner budget is explicitly
-;; widened here; the inner subprocess timeout stays below it so the wrapper
-;; reports the failure itself rather than being killed.
+;; local machine and the suite has outgrown its earlier budgets: after
+;; #9735/#9744/#9754 it measures 391s locally (129 tests), past the 280s
+;; inner budget that once fit 121 tests, producing false timeout failures;
+;; the v1.00.33 W0 repair-tail regressions add four more (133). The campaign
+;; line settled on a 900s inner budget (654e96e0); this branch adopts the
+;; same numbers with the measured rationale above.
 (require rackunit
          racket/runtime-path
          racket/system
@@ -22,7 +24,7 @@
       (define result
         (run-subprocess (path->string python)
                         #:args (list (path->string python-tests))
-                        #:timeout 280))
+                        #:timeout 900))
       (check-false (subprocess-result-timed-out? result))
       (check-equal? (subprocess-result-exit-code result)
                     0

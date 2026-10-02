@@ -5,6 +5,7 @@
 (require rackunit
          racket/file
          racket/list
+         json
          "../extensions/gsd/delivery-journal.rkt")
 (define plan (make-string 64 #\a))
 (define receipt
@@ -64,4 +65,70 @@
                  (check-exn exn:fail? (lambda () (load-delivery-journal root plan 2)))
                  (delete-file path)
                  (make-file-or-directory-link (build-path root "outside") path)
-                 (check-exn exn:fail? (lambda () (record-delivery-receipt! root plan 2 receipt)))))))
+                 (check-exn exn:fail? (lambda () (record-delivery-receipt! root plan 2 receipt))))))
+  (test-case "verification context is optional at load, durable, and write-once"
+    (with-root
+     (lambda (root)
+       (define vc
+         (hasheq 'base (make-string 40 #\2)
+                 'merge-sha (make-string 40 #\b)
+                 'pr-head (make-string 40 #\4)
+                 'branch "binding/5e6770e9-w0"
+                 'repo-root "/repo/q"
+                 'verified-at 1790744745
+                 'snapshot-refs (list "origin/campaign/x/w0")))
+       (check-false (hash-ref (record-delivery-receipt! root plan 2 receipt)
+                              'verification-context
+                              #f))
+       (record-verification-context! root plan 2 vc)
+       (check-equal? (hash-ref (load-delivery-journal root plan 2) 'verification-context) vc)
+       (check-equal? (record-verification-context! root plan 2 vc)
+                     (load-delivery-journal root plan 2))
+       (check-exn
+        exn:fail?
+        (lambda ()
+          (record-verification-context!
+           root plan 2 (hash-set vc 'merge-sha (make-string 40 #\e))))))))
+  (test-case "malformed verification context fails closed at write and at load"
+    (with-root
+     (lambda (root)
+       (define path (delivery-journal-path root plan 2))
+       (record-delivery-receipt! root plan 2 receipt)
+       (for ([bad (list (hasheq 'base "abc"
+                                'merge-sha (make-string 40 #\b)
+                                'pr-head (make-string 40 #\4)
+                                'branch "b/w0"
+                                'repo-root "/repo/q"
+                                'verified-at 1
+                                'snapshot-refs (list "r"))
+                        (hasheq 'base (make-string 40 #\2)
+                                'merge-sha (make-string 40 #\b)
+                                'pr-head (make-string 40 #\4)
+                                'branch "b/w0"
+                                'repo-root "/repo/q"
+                                'verified-at 1
+                                'snapshot-refs (list)))])
+         (check-exn exn:fail? (lambda () (record-verification-context! root plan 2 bad))))
+       ;; a hand-edited journal carrying a malformed slot cannot load at all
+       (let ([data (hash-set (load-delivery-journal root plan 2)
+                             'verification-context
+                             (hasheq 'base "short"))])
+         (call-with-output-file path
+                                #:exists 'replace
+                                (lambda (out) (write-json data)))
+         (check-exn exn:fail? (lambda () (load-delivery-journal root plan 2)))))))
+  (test-case "verification context requires existing verified provenance"
+    (with-root
+     (lambda (root)
+       (check-exn
+        exn:fail?
+        (lambda ()
+          (record-verification-context!
+           root plan 2
+           (hasheq 'base (make-string 40 #\2)
+                   'merge-sha (make-string 40 #\b)
+                   'pr-head (make-string 40 #\4)
+                   'branch "b/w0"
+                   'repo-root "/repo/q"
+                   'verified-at 1
+                   'snapshot-refs (list "r")))))))))

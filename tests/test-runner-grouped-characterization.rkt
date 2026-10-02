@@ -1,5 +1,10 @@
 #lang racket/base
 
+;; @timeout 600 — measured 253s locally (2026-09-30); the suite
+;; characterizes every grouped-mode fixture in a subprocess and outgrew
+;; the 120s default budget, producing false TIMEOUT verdicts in the fast
+;; suite.
+;;
 ;; tests/test-runner-grouped-characterization.rkt — W7
 ;;
 ;; Grouped-mode equivalence characterization: every eligible grouped-mode
@@ -12,6 +17,12 @@
 ;; Scope guard: this suite exercises ONLY tests/fixtures/grouped-mode/* —
 ;; it never changes production defaults, grouped eligibility, or queue
 ;; activation.
+;;
+;; @timeout 600 — this characterization spawns dozens of nested fixture
+;; subprocesses in both execution modes (255s wall clock observed on a quiet
+;; machine, and the 120s default was exceeded once under fast-suite load);
+;; 600s matches the repo's convention for heavy files (test-pre-commit)
+;; without touching production defaults.
 
 (require rackunit
          rackunit/text-ui

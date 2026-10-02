@@ -45,6 +45,9 @@
          delivery-outcome-message
          run-delivery-coordinator!
          default-delivery-controller
+         binding-generation
+         default-binding-branch
+         default-binding-staging-path
          binding-dispatch-stage-action
          default-delivery-coordinator
          default-delivery-controller-interpret
@@ -601,13 +604,25 @@
      ;; Resolve the exact binding PR by branch, then check its exact fetched
      ;; head. Binding commits are fresh-main publication commits, so the
      ;; implementation receipt ancestry check is intentionally not applied.
-     (binding-dispatch-stage-action run-controller target-stage plan wave "binding-ci")]
+     (binding-dispatch-stage-action run-controller
+                                    target-stage
+                                    plan
+                                    wave
+                                    "binding-ci"
+                                    #:base-dir base-dir)]
     [("binding-merged")
      ;; Reuse the protected merge workflow verbatim, with the binding path as
      ;; its evidence source and the exact resolved binding PR head as input.
-     (binding-dispatch-stage-action run-controller target-stage plan wave "binding-merge")]
+     (binding-dispatch-stage-action run-controller
+                                    target-stage
+                                    plan
+                                    wave
+                                    "binding-merge"
+                                    #:base-dir base-dir)]
     [("governance")
-     (run-controller "governance" "--expected-branch" (default-binding-branch plan wave))]
+     (run-controller "governance"
+                     "--expected-branch"
+                     (default-binding-branch plan wave #:base-dir base-dir))]
     [("sync")
      (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
     [else
@@ -714,11 +729,37 @@
 ;; Binding publication uses a deterministic branch and durable campaign-local
 ;; staging directory. These derivations mirror gsd-delivery.py and are never
 ;; taken from a mutable checkout HEAD.
-(define (default-binding-branch plan wave)
-  (string-append "binding/" (substring plan 0 (min 12 (string-length plan))) (format "-w~a" wave)))
+;; v1.00.33 W0 (audit §21.4): republication generation = the number of PRIOR
+;; immutable receipts in the wave's journal (each repair-tail reconciliation
+;; appends one). Generation n >= 1 publishes under an -r<n> branch/staging
+;; directory because governance admits exactly one merged PR per binding
+;; branch; load-delivery-journal refuses a malformed history, so a journal
+;; that cannot prove its past never reaches publication under a guessed name.
+(define (binding-generation base-dir plan wave)
+  (define journal (load-delivery-journal base-dir plan wave))
+  (if (not journal)
+      0
+      (length (hash-ref journal 'receipt-history '()))))
+
+(define (default-binding-branch plan wave #:base-dir [base-dir #f])
+  (define generation
+    (if base-dir
+        (binding-generation base-dir plan wave)
+        0))
+  (define base
+    (string-append "binding/" (substring plan 0 (min 12 (string-length plan))) (format "-w~a" wave)))
+  (if (= generation 0)
+      base
+      (format "~a-r~a" base generation)))
 
 (define (default-binding-staging-path base-dir plan wave)
-  (path->string (build-path base-dir ".planning" "campaigns" plan (format "binding-w~a" wave))))
+  (define generation (binding-generation base-dir plan wave))
+  (define suffix
+    (if (= generation 0)
+        ""
+        (format "-r~a" generation)))
+  (path->string
+   (build-path base-dir ".planning" "campaigns" plan (format "binding-w~a~a" wave suffix))))
 
 ;; Binding CI/merge dispatch: resolve the deterministic binding PR by branch,
 ;; then act on the typed status. `run` is the controller seam (injectable for
@@ -728,8 +769,8 @@
 ;; action (fabricated progress). "already-merged" returns the resolve result
 ;; verbatim (idempotent resume); a resolved identity without a usable number
 ;; or head fails closed as a typed blocked stop.
-(define (binding-dispatch-stage-action run target-stage plan wave action-name)
-  (define binding-branch (default-binding-branch plan wave))
+(define (binding-dispatch-stage-action run target-stage plan wave action-name #:base-dir base-dir)
+  (define binding-branch (default-binding-branch plan wave #:base-dir base-dir))
   ;; The run-controller seam appends --repo/--plan/--wave itself; per-action
   ;; flags must never duplicate them (argparse refuses unknown flags like
   ;; --plan-id and would turn every dispatch into a usage-error stop).

@@ -36,7 +36,7 @@
                   campaign-wave-attempt-context
                   set-campaign-wave-attempt-context!)
          (only-in "campaign-repository.rkt" load-campaign-record persist-campaign!)
-         (only-in "delivery-journal.rkt" load-delivery-journal)
+         (only-in "delivery-journal.rkt" load-delivery-journal record-verification-context!)
          (only-in "wave-completion.rkt"
                   try-complete-wave!
                   completion-result-status
@@ -88,8 +88,9 @@
                                              wave-idx
                                              attempt-id
                                              attempt-fence
-                                             #:worktree [worktree #f]
-                                             #:delivery-context [delivery-context #f])
+                                              #:worktree [worktree #f]
+                                              #:delivery-context [delivery-context #f]
+                                              #:verification-context [verification-context #f])
   (define journal
     (with-handlers ([exn:fail? (lambda (_) #f)])
       (load-delivery-journal base-dir plan-id wave-idx)))
@@ -97,27 +98,35 @@
   (define worktree-branch
     (and worktree delivery-context (branch-delivery-context-ref delivery-context 'branch)))
   (define worktree-head (and worktree (wave-worktree-head-sha worktree)))
-  (cond
-    [(and (hash? receipt)
-          (equal? (hash-ref receipt 'attempt-id #f) attempt-id)
-          (equal? (hash-ref receipt 'attempt-fence #f) attempt-fence)
-          (string? (hash-ref receipt 'branch #f))
-          (regexp-match? #px"^[0-9a-f]{40}$" (or (hash-ref receipt 'head #f) ""))
-          (not (member (hash-ref receipt 'branch) '("main" "master"))))
-     (record-wave-delivery! base-dir
-                            plan-id
-                            wave-idx
-                            (hash-ref receipt 'branch)
-                            (hash-ref receipt 'head))
-     (cons (hash-ref receipt 'branch) (hash-ref receipt 'head))]
-    [(and (string? worktree-branch)
-          (positive? (string-length worktree-branch))
-          (not (member worktree-branch '("main" "master")))
-          (string? worktree-head)
-          (regexp-match? #px"^[0-9a-f]{40}$" worktree-head))
-     (record-wave-delivery! base-dir plan-id wave-idx worktree-branch worktree-head)
-     (cons worktree-branch worktree-head)]
-    [else #f]))
+  (define provenance
+    (cond
+      [(and (hash? receipt)
+            (equal? (hash-ref receipt 'attempt-id #f) attempt-id)
+            (equal? (hash-ref receipt 'attempt-fence #f) attempt-fence)
+            (string? (hash-ref receipt 'branch #f))
+            (regexp-match? #px"^[0-9a-f]{40}$" (or (hash-ref receipt 'head #f) ""))
+            (not (member (hash-ref receipt 'branch) '("main" "master"))))
+       (record-wave-delivery! base-dir
+                              plan-id
+                              wave-idx
+                              (hash-ref receipt 'branch)
+                              (hash-ref receipt 'head))
+       (cons (hash-ref receipt 'branch) (hash-ref receipt 'head))]
+      [(and (string? worktree-branch)
+            (positive? (string-length worktree-branch))
+            (not (member worktree-branch '("main" "master")))
+            (string? worktree-head)
+            (regexp-match? #px"^[0-9a-f]{40}$" worktree-head))
+       (record-wave-delivery! base-dir plan-id wave-idx worktree-branch worktree-head)
+       (cons worktree-branch worktree-head)]
+      [else #f]))
+  ;; Directive item 2 (v1.00.33 audit): when the verify pipeline supplies the
+  ;; verification context, bind it durably beside the receipt it explains —
+  ;; the audited defect was exactly this context being propagated nowhere.
+  ;; Side effect only: the documented return contract above is preserved.
+  (when verification-context
+    (record-verification-context! base-dir plan-id wave-idx verification-context))
+  provenance)
 
 ;; ============================================================
 ;; Finalization

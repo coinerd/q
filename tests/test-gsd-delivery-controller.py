@@ -2700,6 +2700,76 @@ class DeliveryTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn('non-evidence paths', json.loads(stdout.getvalue())['reason'])
 
+    # ------------------------------------------------------------------
+    # v1.00.33 W0: repair-tail binding republication generation (audit §21.4)
+    # ------------------------------------------------------------------
+
+    def test_binding_branch_generation_suffix(self):
+        plan = 'a' * 64
+        self.assertEqual(m.binding_branch(plan, 0), 'binding/aaaaaaaaaaaa-w0')
+        self.assertEqual(m.binding_branch(plan, 1, 0), 'binding/aaaaaaaaaaaa-w1')
+        self.assertEqual(m.binding_branch(plan, 1, 1), 'binding/aaaaaaaaaaaa-w1-r1')
+        self.assertEqual(m.binding_branch(plan, 1, 2), 'binding/aaaaaaaaaaaa-w1-r2')
+        with self.assertRaises(m.Pending):
+            m.binding_branch(plan, 1, -1)
+        with self.assertRaises(m.Pending):
+            m.binding_branch(plan, 1, '1')
+
+    def test_journal_generation_counts_receipt_history(self):
+        plan = 'b' * 64
+        root = self.base / 'gen-journal'
+        jdir = root / '.planning' / 'campaigns' / plan
+        jdir.mkdir(parents=True)
+        journal = jdir / 'coordinator-w0.json'
+        # missing journal -> generation 0 (first publication)
+        self.assertEqual(m.journal_generation(root, plan, 0), 0)
+        # journal without history -> generation 0
+        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0, 'stage': 'context-ready'}))
+        self.assertEqual(m.journal_generation(root, plan, 0), 0)
+        # reconciled repair tail: prior receipts -> republication generation
+        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0,
+                                       'receipt-history': [{'head': 'c' * 40}]}))
+        self.assertEqual(m.journal_generation(root, plan, 0), 1)
+        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0,
+                                       'receipt-history': [{'head': 'c' * 40},
+                                                           {'head': 'd' * 40}]}))
+        self.assertEqual(m.journal_generation(root, plan, 0), 2)
+        # malformed history fails closed rather than guessing a branch
+        journal.write_text(json.dumps({'receipt-history': 'nope'}))
+        with self.assertRaises(m.Pending):
+            m.journal_generation(root, plan, 0)
+        journal.write_text(json.dumps({'receipt-history': ['nope']}))
+        with self.assertRaises(m.Pending):
+            m.journal_generation(root, plan, 0)
+
+    def test_binding_staging_path_generation_suffix(self):
+        plan = 'c' * 64
+        root = self.base / 'gen-staging'
+        root.mkdir()
+        base = m.binding_staging_path(root, plan, 2, 0)
+        gen1 = m.binding_staging_path(root, plan, 2, 1)
+        self.assertEqual(base.name, 'binding-w2')
+        self.assertEqual(gen1.name, 'binding-w2-r1')
+        self.assertNotEqual(base, gen1)
+        with self.assertRaises(m.Pending):
+            m.binding_staging_path(root, plan, 2, -2)
+
+    def test_awaiting_review_branch_reflects_journal_generation(self):
+        # A reconciled journal (two prior receipts) must direct the operator
+        # at the -r2 staging directory and binding branch, never at the
+        # exhausted generation-0 branch that governance would reject.
+        plan = 'd' * 64
+        root = self.base / 'gen-await'
+        campaign = root / '.planning' / 'campaigns' / plan
+        campaign.mkdir(parents=True)
+        (campaign / 'coordinator-w1.json').write_text(
+            json.dumps({'plan-id': plan, 'wave': 1,
+                        'receipt-history': [{'head': 'e' * 40}, {'head': 'f' * 40}]}))
+        staged = m.read_staged_trio(str(root), plan, 1,
+                                    str(campaign / 'binding-w1-r2'), str(root), None)
+        self.assertEqual(staged['status'], 'awaiting-review')
+        self.assertEqual(staged['branch'], 'binding/dddddddddddd-w1-r2')
+
 
 if __name__ == '__main__':
     unittest.main()
