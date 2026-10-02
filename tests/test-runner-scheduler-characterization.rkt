@@ -1,7 +1,10 @@
 #lang racket/base
 
 ;; @speed fast
-;; @timeout 180
+;; @timeout 480 — measured 180.2s under concurrent suite load (2026-10-02,
+;; driver verify run); the characterization drives the runner in-process and
+;; the 180s budget produced a false TIMEOUT verdict while every check
+;; passed when run focused.
 ;; @boundary unit
 ;; @isolation process
 ;; W7.1 grouped-mode reclassification: this file drives the runner's own
