@@ -2730,6 +2730,39 @@ class DeliveryTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(stdout.getvalue())['head'], w['head'])
 
+    def test_resolve_merged_implementation_uses_exact_receipt_head(self):
+        w = self.open_impl_world()
+        current = dict(self.open_pr_payload(w), state='closed', merged=True)
+        old = dict(current, number=w['pr'] - 1,
+                   head=dict(current['head'], sha=w['h1']))
+        routes = {
+            (SLUG, f'pulls?state=open&head=owner:{WAVE_BRANCH}', False): [],
+            (SLUG, f'pulls?state=all&head=owner:{WAVE_BRANCH}', False): [old, current],
+        }
+        with self.fake_api(routes):
+            result = m.resolve_pr(w['subject'], w['plan'], w['wave'], WAVE_BRANCH,
+                                  expected_head=w['head'])
+        self.assertEqual(result['pr'], w['pr'])
+        self.assertEqual(result['head'], w['head'])
+
+    def test_merged_resolution_keeps_no_head_and_duplicate_head_ambiguity_closed(self):
+        w = self.open_impl_world()
+        current = dict(self.open_pr_payload(w), state='closed', merged=True)
+        old = dict(current, number=w['pr'] - 1,
+                   head=dict(current['head'], sha=w['h1']))
+        route = (SLUG, f'pulls?state=all&head=owner:{WAVE_BRANCH}', False)
+        with self.fake_api({route: [old, current]}), self.assertRaisesRegex(m.Pending, 'multiple merged'):
+            m.resolve_merged_pr(SLUG, WAVE_BRANCH)
+        with self.fake_api({route: [old, current]}), self.assertRaisesRegex(m.Pending, 'multiple merged'):
+            m.resolve_merged_pr(SLUG, WAVE_BRANCH, 'e' * 40)
+        duplicate = dict(current, number=w['pr'] + 1)
+        with self.fake_api({route: [old, current, duplicate]}), self.assertRaisesRegex(m.Pending, 'multiple merged'):
+            m.resolve_merged_pr(SLUG, WAVE_BRANCH, w['head'])
+
+    def test_merged_resolution_rejects_malformed_expected_head(self):
+        with self.assertRaises(m.Pending):
+            m.resolve_merged_pr(SLUG, WAVE_BRANCH, 'not-a-sha')
+
     def test_open_pr_accepts_evidence_only_tip_after_receipt_head(self):
         w = self.open_impl_world()
         created = self.open_pr_payload(w)

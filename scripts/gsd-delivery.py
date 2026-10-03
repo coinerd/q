@@ -593,16 +593,25 @@ def resolve_existing_pr(slug, branch):
     return resolve_prs_for_branch(slug, branch, 'open')
 
 
-def resolve_merged_pr(slug, branch):
+def resolve_merged_pr(slug, branch, expected_head=None):
     """Find one closed, merged PR for a branch for idempotent resume.
 
     This is deliberately separate from open-PR resolution: a lost merge response
     must not make the next delivery attempt invent a new PR or stall forever."""
+    require(expected_head is None or full_sha(expected_head),
+            'merged resolution requires a full expected-head SHA')
     candidates = api(slug, f'pulls?state=all&head={branch_owner(slug)}:{branch}')
     require(isinstance(candidates, list), 'malformed pull-request response')
     merged = [pr for pr in candidates
               if isinstance(pr, dict) and pr.get('state') == 'closed'
               and pr_is_merged(pr) and dig(pr, 'head', 'ref') == branch]
+    if expected_head is not None:
+        exact = [pr for pr in merged if dig(pr, 'head', 'sha') == expected_head]
+        if exact:
+            merged = exact
+        # No exact candidate retains the previous fail-closed uniqueness
+        # and receipt ancestry/excluded-drift checks; never guess among
+        # historical PRs or weaken the single-PR resume contract.
     require(len(merged) <= 1,
             'multiple merged pull requests already target branch ' + branch)
     return merged[0] if merged else None
@@ -1493,7 +1502,7 @@ def resolve_pr(repo, plan, wave, branch, expected_head=None):
         # A squash merge may have completed while the response was lost. The
         # closed PR remains the durable identity; re-resolve it and let merge()
         # perform its normal already-merged proof rather than opening a new PR.
-        pr = resolve_merged_pr(slug, branch)
+        pr = resolve_merged_pr(slug, branch, expected_head)
         merged_resume = pr is not None
     if pr is None:
         return {'status': 'none', 'plan-id': plan, 'wave': wave, 'branch': branch}
