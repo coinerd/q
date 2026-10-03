@@ -7,12 +7,15 @@
          racket/file
          racket/format
          racket/path
+         racket/runtime-path
          racket/string
          (only-in "../extensions/gsd/plan-snapshot.rkt" make-plan-snapshot! snapshot-dir)
          "../scripts/gsd-binding-data.rkt")
 
 (define campaign-id (make-string 64 #\a))
 (define other-campaign-id (make-string 64 #\b))
+(define-runtime-path binding-data-module "../scripts/gsd-binding-data.rkt")
+(define active-paths (dynamic-require binding-data-module 'active-paths))
 
 (define (write-text! path text)
   (make-directory* (path-only path))
@@ -204,4 +207,48 @@
     (define declared (hash-ref (snapshot-facts dir campaign-id 1) 'declared))
     (check-equal? (length (hash-ref declared 'evidence)) 2)
     (check-equal? (hash-ref declared 'review) '())
-    (delete-directory/files dir)))
+    (delete-directory/files dir))
+
+  (test-case "active paths derive repair generations from frozen declarations without changing snapshot facts"
+    (define dir (plan-tree))
+    (bind-snapshot! dir)
+    (define before (snapshot-facts dir campaign-id 1))
+    (define gen0 (active-paths dir campaign-id 1 0))
+    (check-equal? (hash-ref gen0 'evidence) "q/docs/reports/gsd-wave-evidence/v9.9.9-w1.rktd")
+    (define gen2 (active-paths dir campaign-id 1 2))
+    (check-equal? (hash-ref gen2 'evidence) "q/docs/reports/gsd-wave-evidence/v9.9.9-w1-r2.rktd")
+    (check-equal? (hash-ref gen2 'review) "q/docs/reports/gsd-wave-reviews/v9.9.9-w1-r2.rktd")
+    (check-equal? (hash-ref gen2 'validation) "q/docs/reports/gsd-wave-validation/v9.9.9-w1-r2.rktd")
+    (check-equal? (hash-ref gen2 'generation) 2)
+    (check-equal? (hash-ref gen2 'declared-counts) (hasheq 'evidence 1 'review 1 'validation 1))
+    (check-equal? (snapshot-facts dir campaign-id 1) before)
+    (delete-directory/files dir))
+
+  (test-case "active paths fail closed for undeclared repair generations and ambiguous declarations"
+    (define none-dir (plan-tree #:wave-text "# W1: Fixture wave\n\nNo declared outputs.\n"))
+    (bind-snapshot! none-dir)
+    (define gen0 (active-paths none-dir campaign-id 1 0))
+    (check-equal? (hash-ref gen0 'evidence)
+                  (format "docs/reports/gsd-wave-evidence/~a-w1.rktd" campaign-id))
+    ;; Zero-declared waves keep ONE deterministic path family: the hash-named
+    ;; trio. A repair generation derives it by the same -rN suffix rule used
+    ;; for declared outputs — deterministic, never ambiguous, gen0 untouched.
+    (define gen1 (active-paths none-dir campaign-id 1 1))
+    (check-equal? (hash-ref gen1 'evidence)
+                  (format "docs/reports/gsd-wave-evidence/~a-w1-r1.rktd" campaign-id))
+    (check-equal? (hash-ref gen1 'review)
+                  (format "docs/reports/gsd-wave-reviews/~a-w1-r1.rktd" campaign-id))
+    (check-equal? (hash-ref gen1 'validation)
+                  (format "docs/reports/gsd-wave-validation/~a-w1-r1.rktd" campaign-id))
+    (delete-directory/files none-dir)
+    (define multi-dir
+      (plan-tree #:wave-text
+                 (string-append "# W1: Fixture wave\n\n## Files\n\n"
+                                "- File: `docs/reports/gsd-wave-evidence/a-w1.rktd`\n"
+                                "- File: `docs/reports/gsd-wave-evidence/b-w1.rktd`\n"
+                                "- File: `docs/reports/gsd-wave-reviews/a-w1.rktd`\n"
+                                "- File: `docs/reports/gsd-wave-validation/a-w1.rktd`\n")))
+    (bind-snapshot! multi-dir)
+    (check-exn (lambda (e) (regexp-match? #px"multiple/conflicting" (exn-message e)))
+               (lambda () (active-paths multi-dir campaign-id 1 1)))
+    (delete-directory/files multi-dir)))

@@ -720,6 +720,33 @@ def declared_outputs(facts, repo):
         result[kind] = artifact_path(path, DECLARED_DIRS[kind])
     return result
 
+
+def repair_generation_path(relative, generation):
+    require(type(generation) is int and generation >= 0, 'invalid binding generation')
+    if generation == 0:
+        return relative
+    path = PurePosixPath(relative)
+    require(path.suffix == '.rktd' and path.name.endswith('.rktd'),
+            'multiple/conflicting declared output path')
+    return str(path.with_name(path.name[:-5] + f'-r{generation}.rktd'))
+
+
+def active_declared_outputs(facts, repo, plan, wave, generation):
+    declared = declared_outputs(facts, repo)
+    if declared is None:
+        # Zero-declared waves keep ONE deterministic path family (the
+        # hash-named trio); a repair generation derives it by the same -rN
+        # rule used for declared outputs. Deterministic, never ambiguous,
+        # and gen0 paths are never reused for an active repair generation.
+        suffix = '' if generation == 0 else f'-r{generation}'
+        return {'evidence': binding_path(plan, wave, generation),
+                'review': f'docs/reports/gsd-wave-reviews/{plan}-w{wave}{suffix}.rktd',
+                'validation': f'docs/reports/gsd-wave-validation/{plan}-w{wave}{suffix}.rktd'}
+    if generation == 0:
+        return dict(declared)
+    return {kind: repair_generation_path(path, generation)
+            for kind, path in declared.items()}
+
 def preflight(repo, plan, wave, expected_head, expected_branch):
     """Register F5 read-only preflight at the handoff seam (v1.00.31 W3).
 
@@ -1362,10 +1389,16 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
     # wave, and the source trio must be exactly the wave's declared output.
     facts = snapshot_facts(campaign_root, plan, wave)
     declared = declared_outputs(facts, repo)
+    active = active_declared_outputs(facts, repo, plan, wave, generation)
     artifact_path(relative, 'gsd-wave-evidence')
     if declared is not None:
-        require(relative == declared['evidence'],
-                'source evidence is not the frozen wave output for this plan/wave')
+        if generation >= 1 and relative == declared['evidence']:
+            raise Pending('generation-0 source refused for active repair generation; use ' +
+                          active['evidence'])
+        require(relative == active['evidence'],
+                ('source evidence is not the frozen wave output for this plan/wave'
+                 if generation == 0 else
+                 'source evidence is not the active frozen wave output for this plan/wave'))
     else:
         require(relative == binding,
                 'wave declares no outputs; only the exact campaign-hash source is accepted')
@@ -1378,10 +1411,14 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
         require(source.get('plan-id') == plan,
                 'source trio explicitly names another campaign; refusing')
     if declared is not None:
-        require(source.get('review-artifact') == declared['review'],
-                'source review artifact is not the frozen wave output')
-        require(source.get('validation-artifact') == declared['validation'],
-                'source validation artifact is not the frozen wave output')
+        require(source.get('review-artifact') == active['review'],
+                ('source review artifact is not the frozen wave output'
+                 if generation == 0 else
+                 'source review artifact is not the active frozen wave output'))
+        require(source.get('validation-artifact') == active['validation'],
+                ('source validation artifact is not the frozen wave output'
+                 if generation == 0 else
+                 'source validation artifact is not the active frozen wave output'))
     if facts.get('issue'):
         require(source.get('issue') == facts['issue'],
                 'source issue differs from frozen plan metadata')
@@ -1637,7 +1674,7 @@ def pr_ci(repo, number, expected_branch, expected_head=None):
     return {'status': 'green', 'pr': number, 'branch': expected_branch, 'head': head}
 
 
-def review(repo, plan, wave, expected_head, expected_branch):
+def review(repo, plan, wave, expected_head, expected_branch, campaign_root=None, generation=None):
     """implementation-review: validate the durable independent review at the
     receipt identity. Pure git-object readback plus the unchanged strict
     gate — no PR, no network mutation, and deliberately no checkout HEAD
@@ -1655,7 +1692,17 @@ def review(repo, plan, wave, expected_head, expected_branch):
             'review requires --expected-head (the durable receipt head)')
     require(isinstance(expected_branch, str) and expected_branch.strip(),
             'review requires --expected-branch (the durable receipt branch)')
-    relative = binding_path(plan, wave)
+    if campaign_root is not None:
+        actual_generation = journal_generation(repo, plan, wave, campaign_root)
+        if generation is not None:
+            require(type(generation) is int and generation >= 0 and generation == actual_generation,
+                    'review binding generation does not match the authoritative journal')
+        facts = snapshot_facts(campaign_root, plan, wave)
+        relative = active_declared_outputs(facts, repo, plan, wave, actual_generation)['evidence']
+    else:
+        require(generation in (None, 0),
+                'review --generation requires --campaign-root for authoritative resolution')
+        relative = binding_path(plan, wave)
     refresh(repo)
     main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
     require(full_sha(main), 'malformed origin/main head')
@@ -1753,6 +1800,8 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--campaign-root', type=Path,
                         help='campaign working tree holding .planning/campaigns/<plan-id>/plan-snapshot')
+    parser.add_argument('--generation', type=int,
+                        help='authoritative binding generation expected by the coordinator')
     args = parser.parse_args()
     try:
         if args.action == 'sync':
@@ -1774,7 +1823,7 @@ def main():
             require(args.expected_head and args.expected_branch,
                     'review requires --expected-head and --expected-branch')
             result = review(args.repo, args.plan, args.wave, args.expected_head,
-                            args.expected_branch)
+                            args.expected_branch, args.campaign_root, args.generation)
         elif args.action == 'open-pr':
             require(args.expected_branch,
                     'open-pr requires --expected-branch')

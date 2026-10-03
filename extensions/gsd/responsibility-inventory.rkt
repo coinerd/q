@@ -190,6 +190,25 @@
                                  "delivery-journal"
                                  "delivery-handoff"
                                  "sandbox/subprocess"))
+   ;; v1.00.33 recovery continuation: supported same-attempt repair-tail
+   ;; recovery entry. Strict precheck + journal restore + independent clone
+   ;; candidate + production verify; effects are delegated to the trusted
+   ;; modules (delivery-journal reconcile, attempt-artifacts provenance,
+   ;; delivery-handoff persist) — the module's own markers are the git
+   ;; subprocess resolver, path operations and the origin-policy parameter.
+   (make-entry "delivery-recovery.rkt"
+               'campaign-state
+               '(git path-ops parameterize make-param fs-read fs-rename fs-delete mkdir dir-list)
+               '()
+               '("racket/path" "racket/string"
+                               "racket/system"
+                               "json"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "delivery-verifier"
+                               "delivery-handoff"
+                               "attempt-artifacts"))
    ;; BUG-0077: honest-completion state machine extracted from
    ;; go-orchestrator (attempt delivery provenance, park/finalize
    ;; checkpoint drivers, coordinator checkpoint decision). All durable
