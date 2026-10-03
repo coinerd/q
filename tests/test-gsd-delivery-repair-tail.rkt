@@ -37,9 +37,12 @@
                   cleanup-tmp)
          "../extensions/gsd/campaign-state.rkt"
          (only-in "../extensions/gsd/campaign-repository.rkt" load-campaign-record persist-campaign!)
+         (only-in "../extensions/gsd/plan-snapshot.rkt" make-plan-snapshot!)
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-receipt.rkt"
          (only-in "../extensions/gsd/delivery-finalize.rkt" record-attempt-delivery-provenance!)
+         (only-in "../extensions/gsd/delivery-coordinator.rkt" binding-generation)
+         (only-in "../scripts/gsd-binding-data.rkt" active-paths)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   make-branch-delivery-context
                   branch-delivery-context-ref
@@ -84,6 +87,19 @@
   (record-delivery-receipt! root plan 2 (receipt-for old-head))
   (unless (equal? stage "context-ready")
     (update-delivery-journal! root plan 2 (hasheq 'stage stage))))
+(define (seed-declared-active-path-snapshot! root)
+  (make-directory* (build-path root ".planning" "waves"))
+  (define plan-text "# Plan\n\n- [Inbox] W2: Repair → waves/W2-repair.md\n")
+  (define wave-text
+    (string-append "# W2: Repair\n\n## Files\n\n"
+                   "- File: `docs/reports/gsd-wave-evidence/v9.9.9-w2.rktd`\n"
+                   "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w2.rktd`\n"
+                   "- File: `docs/reports/gsd-wave-validation/v9.9.9-w2.rktd`\n"))
+  (display-to-file plan-text (build-path root ".planning" "PLAN.md") #:exists 'truncate)
+  (display-to-file wave-text
+                   (build-path root ".planning" "waves" "W2-repair.md")
+                   #:exists 'truncate)
+  (make-plan-snapshot! root plan plan-text #:plan-id plan))
 (define (always-descendant? _old _new)
   #t)
 (define (never-descendant? _old _new)
@@ -122,6 +138,40 @@
                                                  #:head-ancestor? always-descendant?)
                  (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt-history)
                                (list (receipt-for old-head) (receipt-for new-head))))))
+  (test-case "repair-tail reconciliation advances generation and leaves gen0 artifact bytes untouched"
+    (with-root
+     (lambda (root)
+       (seed-declared-active-path-snapshot! root)
+       (define gen0-artifact
+         (build-path root "docs" "reports" "gsd-wave-evidence" "v9.9.9-w2.rktd"))
+       (make-directory* (path-only gen0-artifact))
+       (define before #"immutable gen0 binding evidence\n")
+       (call-with-output-file gen0-artifact
+                              (lambda (out) (write-bytes before out))
+                              #:exists 'truncate)
+       (seed-journal! root)
+       (check-equal? (binding-generation root plan 2) 0)
+       (transition root)
+       (define journal (load-delivery-journal root plan 2))
+       (check-equal? (length (hash-ref journal 'receipt-history)) 1)
+       (check-equal? (binding-generation root plan 2) 1)
+       (check-equal? (file->bytes gen0-artifact) before))))
+  (test-case "journal generation and active source paths reflect gen1 after reconcile"
+    (with-root
+     (lambda (root)
+       (seed-declared-active-path-snapshot! root)
+       (seed-journal! root)
+       (transition root)
+       (define generation (binding-generation root plan 2))
+       (define paths (active-paths root plan 2 generation))
+       (check-equal? generation 1)
+       (check-equal? (hash-ref paths 'generation) 1)
+       (check-equal? (hash-ref paths 'evidence)
+                     "docs/reports/gsd-wave-evidence/v9.9.9-w2-r1.rktd")
+       (check-equal? (hash-ref paths 'review)
+                     "docs/reports/gsd-wave-reviews/v9.9.9-w2-r1.rktd")
+       (check-equal? (hash-ref paths 'validation)
+                     "docs/reports/gsd-wave-validation/v9.9.9-w2-r1.rktd"))))
   (test-case "transition refuses unsafe shapes"
     (with-root
      (lambda (root)

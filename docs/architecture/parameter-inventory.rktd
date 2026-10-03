@@ -80,6 +80,11 @@
                                           ;; whole boundary at once (W3 architecture review)
                                           (current-gsd-git-runner . SERVICE_HANDLE))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
+ ;; v1.00.33 recovery continuation: origin-policy DI seam for the recovery
+ ;; candidate resolver's independent-clone production check (tests relax
+ ;; ONLY the origin URL policy for file:// fixtures; snapshot/verification
+ ;; always run production code).
+ ("extensions/gsd/delivery-recovery.rkt" (current-gsd-recovery-github-origin? . SERVICE_HANDLE))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
  ;; test seam: overrides the version-freshness probe (running version vs
