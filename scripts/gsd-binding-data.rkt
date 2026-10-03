@@ -24,7 +24,8 @@
                   load-snapshot-manifest
                   plan-snapshot-manifest-files
                   snapshot-file-path
-                  snapshot-dir))
+                  snapshot-dir)
+         (only-in "../extensions/gsd/delivery-journal.rkt" load-delivery-journal))
 (provide read-hash-datum
          read-any-datum
          binding-draft
@@ -72,10 +73,16 @@
                (string? (hash-ref request 'merge-sha #f))
                (regexp-match? #px"^[0-9a-f]{40}$" (hash-ref request 'merge-sha)))
     (error 'delivery "invalid binding campaign/wave/merge identity"))
+  (define generation (hash-ref request 'binding-generation 0))
+  (unless (exact-nonnegative-integer? generation)
+    (error 'delivery "invalid binding generation"))
   (define stem
     (string-append (hash-ref request 'plan-id)
                    "-"
                    (string-downcase (hash-ref request 'wave))
+                   (if (zero? generation)
+                       ""
+                       (format "-r~a" generation))
                    ".rktd"))
   (define review (string-append "docs/reports/gsd-wave-reviews/" stem))
   (define validation (string-append "docs/reports/gsd-wave-validation/" stem))
@@ -223,10 +230,7 @@
                                             read-json)))
      (define evidence
        (string-append "docs/reports/gsd-wave-evidence/"
-                      (hash-ref e 'plan-id)
-                      "-"
-                      (string-downcase (hash-ref e 'wave))
-                      ".rktd"))
+                      (path->string (file-name-from-path (hash-ref e 'review-artifact)))))
      (for ([datum (in-list (list e r v))]
            [relative (in-list (list evidence
                                     (hash-ref e 'review-artifact)
@@ -234,6 +238,11 @@
        (define path (build-path root relative))
        (make-parent-directory* path)
        (call-with-output-file path (lambda (out) (pretty-write datum out)) #:exists 'error))]
+    [(journal)
+     (unless (= 4 (length args))
+       (error 'delivery "journal requires: <campaign-root> <plan-id> <wave-index>"))
+     (write-json (load-delivery-journal (second args) (third args) (string->number (fourth args))))
+     (newline)]
     [(snapshot)
      (unless (= 4 (length args))
        (error 'delivery "snapshot requires: <campaign-root> <plan-id> <wave-index>"))

@@ -17,7 +17,9 @@
 ;; dedup across processes).
 
 (require rackunit
-         (only-in "helpers/honest-delivery-fixture.rkt" call-with-delivery-rounds!)
+         (only-in "helpers/honest-delivery-fixture.rkt"
+                  call-with-delivery-rounds!
+                  test-delivered-reader)
          rackunit/text-ui
          racket/file
          racket/path
@@ -99,15 +101,7 @@
 ;; advances (a pending proof would stop the campaign before the
 ;; recovery/restart transitions under test).
 (define (make-delivered-reader)
-  (lambda (_base plan idx)
-    (hasheq 'status
-            "delivered"
-            'plan-id
-            plan
-            'wave
-            idx
-            'merge-sha
-            "0123456789abcdef0123456789abcdef01234567")))
+  (test-delivered-reader))
 
 ;; ============================================================
 ;; Recovery helper (mirrors run-campaign! startup + W2/W5 reconcile)

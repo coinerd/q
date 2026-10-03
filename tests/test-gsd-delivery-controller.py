@@ -63,6 +63,15 @@ def write_file(path, text):
     return path
 
 
+def journal_fixture(plan, wave, head='c' * 40, history=0, branch=WAVE_BRANCH):
+    receipt = {'repo': '/repo', 'origin': 'https://github.com/owner/repo.git',
+               'head': head, 'tree': 'd' * 40, 'verified-at': 1, 'evidence': 'Verify passed',
+               'branch': branch, 'attempt-id': 'attempt-5', 'attempt-fence': 2}
+    return {'schema-version': 1, 'plan-id': plan, 'wave': wave, 'stage': 'context-ready',
+            'receipt': receipt,
+            'receipt-history': [dict(receipt, head=('%040x' % (i + 1))) for i in range(history)]}
+
+
 def hexpairs(pairs):
     return '#hasheq(' + ' '.join(f'({k} . {v})' for k, v in pairs) + ')'
 
@@ -733,6 +742,90 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['merge-sha'], w['merge'])
         self.assertEqual(result['publication-sha'], w['publication'])
         self.assertEqual(result['plan-id'], w['plan'])
+
+    def test_receipt_bound_status_refuses_old_head_and_old_generation(self):
+        w = self.world()
+        root = self.base / 'authoritative'
+        path = root / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json"
+        data = journal_fixture(w['plan'], w['wave'])
+        write_file(path, json.dumps(data))
+        with self.fake_api(status_routes(w)), self.assertRaisesRegex(m.Pending, 'receipt head/branch'):
+            m.status(w['subject'], w['plan'], w['wave'], campaign_root=root)
+        data['receipt']['head'] = w['head']
+        data['receipt-history'] = [dict(data['receipt'], head='b' * 40)]
+        write_file(path, json.dumps(data))
+        with self.fake_api(status_routes(w)), self.assertRaisesRegex(m.Pending, 'binding is absent'):
+            m.status(w['subject'], w['plan'], w['wave'], campaign_root=root)
+
+    def test_new_generation_publication_authenticates_current_receipt_and_preserves_gen0(self):
+        w = self.world()
+        before = (w['subject'] / w['binding']).read_bytes()
+        label = f"{w['plan']}-w{w['wave']}-r1"
+        for relative, text in trio(label, w['wave'], impl_sha=w['merge'], digest=EMPTY_SHA,
+                                   plan_id=w['plan'], merge=w['merge'], head=w['head'], pr=w['pr'],
+                                   evidence_branch=m.binding_branch(w['plan'], w['wave'], 1),
+                                   wave_branch=WAVE_BRANCH).items():
+            write_file(w['work'] / relative, text)
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-m', 'P1 new immutable binding generation', cwd=w['work'])
+        w['publication'] = sh('git', 'rev-parse', 'HEAD', cwd=w['work']).strip()
+        sh('git', 'push', '-q', w['origin'], 'main:main', cwd=w['work'])
+        sh('git', 'pull', '--ff-only', cwd=w['subject'])
+        root = self.base / 'authoritative'
+        write_file(root / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json",
+                   json.dumps(journal_fixture(w['plan'], w['wave'], w['head'], 1)))
+        with self.fake_api(status_routes(w)):
+            result = m.status(w['subject'], w['plan'], w['wave'], campaign_root=root)
+        self.assertEqual(result['merge-sha'], w['merge'])
+        self.assertEqual(result['delivery-head-sha'], w['head'])
+        self.assertEqual(result['binding-generation'], 1)
+        self.assertEqual(result['attempt-id'], 'attempt-5')
+        self.assertEqual(result['attempt-fence'], 2)
+        self.assertEqual((w['subject'] / w['binding']).read_bytes(), before)
+
+    def test_receipt_bound_prepare_refuses_wrong_implementation_before_draft(self):
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        write_file(campaign / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json",
+                   json.dumps(journal_fixture(w['plan'], w['wave'], 'c' * 40, 1)))
+        output = m.binding_staging_path(campaign, w['plan'], w['wave'], 1)
+        with self.fake_api(self.prepare_routes(w)), self.assertRaisesRegex(m.Pending, 'current attempt-bound'):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'], w['source'], campaign, output)
+        self.assertFalse(output.exists())
+
+    def test_receipt_bound_staged_review_refuses_wrong_head_before_publish(self):
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        path = campaign / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json"
+        write_file(path, json.dumps(journal_fixture(w['plan'], w['wave'], w['head'], 1)))
+        output = m.binding_staging_path(campaign, w['plan'], w['wave'], 1)
+        with self.fake_api(self.prepare_routes(w)):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'], w['source'], campaign, output)
+        for bad in (journal_fixture(w['plan'], w['wave'], 'c' * 40, 1),
+                    journal_fixture(w['plan'], w['wave'], w['head'], 1, 'campaign/wrong')):
+            write_file(path, json.dumps(bad))
+            with self.fake_api(self.prepare_routes(w)), self.assertRaisesRegex(m.Pending, 'current attempt-bound'):
+                m.binding_publish(w['subject'], w['plan'], w['wave'], output, campaign)
+
+    def test_prepare_new_generation_preserves_published_binding(self):
+        w = self.world()
+        before = (w['subject'] / w['binding']).read_bytes()
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        write_file(campaign / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json",
+                   json.dumps(journal_fixture(w['plan'], w['wave'], w['head'], 1)))
+        output = m.binding_staging_path(campaign, w['plan'], w['wave'], 1)
+        with self.fake_api(self.prepare_routes(w)):
+            result = m.prepare(w['subject'], w['plan'], w['wave'], w['pr'], w['source'],
+                               campaign, output)
+        self.assertEqual(result['status'], 'pending-review')
+        binding = output / m.binding_path(w['plan'], w['wave'], 1)
+        self.assertTrue(binding.is_file())
+        self.assertEqual(m.read_datum(binding)['binding-generation'], 1)
+        self.assertEqual((w['subject'] / w['binding']).read_bytes(), before)
+        with self.fake_api(self.prepare_routes(w)):
+            reviewed = m.binding_review(w['subject'], w['plan'], w['wave'], output, campaign)
+        self.assertEqual(reviewed['status'], 'pending-review')
+        self.assertEqual(reviewed['binding'], m.binding_path(w['plan'], w['wave'], 1))
 
     def test_status_requires_implementation_sha_equal_to_merge_sha(self):
         w = self.world(pub_impl_sha='f' * 40)
@@ -2724,15 +2817,12 @@ class DeliveryTests(unittest.TestCase):
         # missing journal -> generation 0 (first publication)
         self.assertEqual(m.journal_generation(root, plan, 0), 0)
         # journal without history -> generation 0
-        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0, 'stage': 'context-ready'}))
+        journal.write_text(json.dumps(journal_fixture(plan, 0)))
         self.assertEqual(m.journal_generation(root, plan, 0), 0)
         # reconciled repair tail: prior receipts -> republication generation
-        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0,
-                                       'receipt-history': [{'head': 'c' * 40}]}))
+        journal.write_text(json.dumps(journal_fixture(plan, 0, history=1)))
         self.assertEqual(m.journal_generation(root, plan, 0), 1)
-        journal.write_text(json.dumps({'plan-id': plan, 'wave': 0,
-                                       'receipt-history': [{'head': 'c' * 40},
-                                                           {'head': 'd' * 40}]}))
+        journal.write_text(json.dumps(journal_fixture(plan, 0, history=2)))
         self.assertEqual(m.journal_generation(root, plan, 0), 2)
         # malformed history fails closed rather than guessing a branch
         journal.write_text(json.dumps({'receipt-history': 'nope'}))
@@ -2763,12 +2853,76 @@ class DeliveryTests(unittest.TestCase):
         campaign = root / '.planning' / 'campaigns' / plan
         campaign.mkdir(parents=True)
         (campaign / 'coordinator-w1.json').write_text(
-            json.dumps({'plan-id': plan, 'wave': 1,
-                        'receipt-history': [{'head': 'e' * 40}, {'head': 'f' * 40}]}))
+            json.dumps(journal_fixture(plan, 1, history=2)))
         staged = m.read_staged_trio(str(root), plan, 1,
                                     str(campaign / 'binding-w1-r2'), str(root), None)
         self.assertEqual(staged['status'], 'awaiting-review')
         self.assertEqual(staged['branch'], 'binding/dddddddddddd-w1-r2')
+
+
+class ReceiptGenerationProofTests(unittest.TestCase):
+    def test_generation_rejects_corrupt_or_symlinked_journal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = 'a' * 64
+            path = root / '.planning/campaigns' / plan / 'coordinator-w0.json'
+            write_file(path, json.dumps({'receipt-history': [{}]}))
+            with self.assertRaises(m.Pending):
+                m.journal_generation(root, plan, 0)
+            path.unlink()
+            external = write_file(root / 'external.json', json.dumps(journal_fixture(plan, 0)))
+            path.symlink_to(external)
+            with self.assertRaises(m.Pending):
+                m.journal_generation(root, plan, 0)
+
+    def test_generation_rejects_symlinked_authoritative_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            real = base / 'real'
+            plan = 'a' * 64
+            write_file(real / '.planning/campaigns' / plan / 'coordinator-w0.json',
+                       json.dumps(journal_fixture(plan, 0, history=1)))
+            alias = base / 'alias'
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaises(m.Pending):
+                m.journal_generation(real / 'q', plan, 0, alias)
+
+    def test_repair_binding_path_is_new_immutable_publication(self):
+        plan = 'a' * 64
+        self.assertEqual(m.binding_path(plan, 0),
+                         f'docs/reports/gsd-wave-evidence/{plan}-w0.rktd')
+        self.assertEqual(m.binding_path(plan, 0, 1),
+                         f'docs/reports/gsd-wave-evidence/{plan}-w0-r1.rktd')
+        for bad in (-1, True, '1'):
+            with self.assertRaises(m.Pending):
+                m.binding_path(plan, 0, bad)
+
+    def test_repo_child_uses_authoritative_outer_journal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'q').mkdir()
+            plan = 'a' * 64
+            path = root / '.planning/campaigns' / plan / 'coordinator-w0.json'
+            write_file(path, json.dumps(journal_fixture(plan, 0, history=1)))
+            self.assertEqual(m.journal_generation(root / 'q', plan, 0), 1)
+
+    def test_status_requires_receipt_and_selects_its_generation_before_network(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = 'a' * 64
+            with self.assertRaises(m.Pending):
+                m.status(root, plan, 0, campaign_root=root)
+            receipt = {'head': 'c' * 40, 'branch': 'campaign/test',
+                       'attempt-id': 'attempt-5', 'attempt-fence': 2}
+            path = root / '.planning/campaigns' / plan / 'coordinator-w0.json'
+            write_file(path, json.dumps(journal_fixture(plan, 0, receipt['head'], 1,
+                                                        receipt['branch'])))
+            with patch.object(m, 'repository', return_value=SLUG), \
+                    patch.object(m, 'refresh'), patch.object(m, 'git') as git:
+                git.side_effect = ['d' * 40, '']
+                with self.assertRaises(m.Pending):
+                    m.status(root, plan, 0, campaign_root=root)
+                self.assertEqual(git.call_args.args[-1], m.binding_path(plan, 0, 1))
 
 
 if __name__ == '__main__':

@@ -31,6 +31,7 @@
                   load-campaign-record
                   persist-campaign!)
          (only-in "../../extensions/gsd/delivery-journal.rkt"
+                  load-delivery-journal
                   record-delivery-receipt!
                   update-delivery-journal!)
          (only-in "../../extensions/gsd/delivery-handoff.rkt"
@@ -44,6 +45,7 @@
                   campaign-result-completed-waves))
 
 (provide awaiting-test-merge-sha
+         test-delivered-proof
          test-delivered-reader
          seed-awaiting-delivery!
          seed-all-awaiting!
@@ -54,10 +56,31 @@
 (define (awaiting-test-merge-sha)
   (make-string 40 #\c))
 
+;; Delivered-shaped proof for tests that inject the controller readback.
+;; If the wave has a Verify journal, bind the proof to the actual loaded
+;; receipt identity and receipt-history generation. If no journal exists,
+;; preserve the legacy generic delivered fixture shape.
+(define (test-delivered-proof base-dir plan idx #:merge-sha [merge-sha (awaiting-test-merge-sha)])
+  (define legacy (hasheq 'status "delivered" 'plan-id plan 'wave idx 'merge-sha merge-sha))
+  (define journal (load-delivery-journal base-dir plan idx))
+  (define receipt (and journal (hash-ref journal 'receipt #f)))
+  (if (hash? receipt)
+      (hash-set* legacy
+                 'delivery-head-sha
+                 (hash-ref receipt 'head #f)
+                 'delivery-branch
+                 (hash-ref receipt 'branch #f)
+                 'attempt-id
+                 (hash-ref receipt 'attempt-id #f)
+                 'attempt-fence
+                 (hash-ref receipt 'attempt-fence #f)
+                 'binding-generation
+                 (length (hash-ref journal 'receipt-history '())))
+      legacy))
+
 ;; Delivered-shaped reader for tests that inject the controller readback.
-(define (test-delivered-reader)
-  (lambda (_base plan idx)
-    (hasheq 'status "delivered" 'plan-id plan 'wave idx 'merge-sha (awaiting-test-merge-sha))))
+(define (test-delivered-reader #:merge-sha [merge-sha (awaiting-test-merge-sha)])
+  (lambda (base plan idx) (test-delivered-proof base plan idx #:merge-sha merge-sha)))
 
 ;; Complete the operator-side protected delivery for ONE wave: bind an
 ;; attempt-fenced Verify receipt, mirror the branch/head provenance into the
