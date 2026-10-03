@@ -52,7 +52,7 @@ artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `b7c1ac83a85c9962e1195aca1844896071fcb087`. This head names a
+Rehearsal head `32ecc7d7bad167a237fe945f0f53b72c341560b7`. This head names a
 **published** commit that carries the recorded content: the matrix itself is
 bound by `rehearsal-inputs-digest` over its inputs, and the head is the
 observation anchor. It must survive publication, because a pre-squash branch

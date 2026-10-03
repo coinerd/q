@@ -127,11 +127,11 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "b7c1ac83a85c9962e1195aca1844896071fcb087",
+ "rehearsal-head": "32ecc7d7bad167a237fe945f0f53b72c341560b7",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "16a1b69b34467a15daf58558c23dc5911e395510697843521cf17403fc9ec66f"
+   "sha256": "532c5fa7f758978169d727586e194748e5b9f48ff331a4c41a752ff85a313b72"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
@@ -166,7 +166,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "9bf67e7ce92619e36c7aa663467c00917f271f51a9002892d288ce55f3ccc2eb",
+ "rehearsal-inputs-digest": "edd51df17e4dcd1ca2cc7e47dcd2f9ba9589adad332b6314d9a93836504d2a72",
  "rows": [
   {
    "exit-code": 0,
