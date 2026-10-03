@@ -50,8 +50,23 @@
      (proc dir (migrate-campaign! dir)))
    (lambda () (delete-directory/files dir))))
 
-(define (delivered _ plan idx)
-  (hasheq 'status "delivered" 'plan-id plan 'wave idx 'merge-sha (make-string 40 #\a)))
+(define (delivered base plan idx)
+  (define journal (load-delivery-journal base plan idx))
+  (define receipt (and journal (hash-ref journal 'receipt #f)))
+  (define proof (hasheq 'status "delivered" 'plan-id plan 'wave idx 'merge-sha (make-string 40 #\a)))
+  (if receipt
+      (hash-set* proof
+                 'delivery-head-sha
+                 (hash-ref receipt 'head)
+                 'delivery-branch
+                 (hash-ref receipt 'branch)
+                 'attempt-id
+                 (hash-ref receipt 'attempt-id #f)
+                 'attempt-fence
+                 (hash-ref receipt 'attempt-fence #f)
+                 'binding-generation
+                 (length (hash-ref journal 'receipt-history '())))
+      proof))
 (define (pending _ _p _w)
   (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
 
@@ -82,7 +97,15 @@
                                     'tree
                                     (make-string 40 #\b)
                                     'verified-at
-                                    42))
+                                    42
+                                    'attempt-id
+                                    "attempt-1"
+                                    'attempt-fence
+                                    7))
+  (persist-delivery-handoff! dir
+                             (campaign-plan-id rec)
+                             (car (campaign-record-waves rec))
+                             "fixture: delivered implementation parked for readback")
   rec)
 
 (module+ test
@@ -289,7 +312,7 @@
                                                 (pending b p w)))
                         #:delivery-coordinator
                         (lambda (b p w)
-                          (update-delivery-journal! b p w (hasheq 'stage "implementation-review"))
+                          (update-delivery-journal! b p w (hasheq 'stage "delivered"))
                           (set! coordinated? #t)
                           (delivery-outcome 'ok "delivery advanced"))))
        (check-eq? (campaign-result-status result) 'campaign-complete)

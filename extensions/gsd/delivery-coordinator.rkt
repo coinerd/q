@@ -723,8 +723,17 @@
 ;; The frozen schema-2 evidence path is derivable from campaign+wave identity
 ;; (the same path gsd-delivery.py's binding_path computes) — never guessed
 ;; from a checkout.
-(define (default-delivery-evidence-path plan wave)
-  (format "docs/reports/gsd-wave-evidence/~a-w~a.rktd" plan wave))
+(define (default-delivery-evidence-path plan wave #:base-dir [base-dir #f])
+  (define generation
+    (if base-dir
+        (binding-generation base-dir plan wave)
+        0))
+  (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
+          plan
+          wave
+          (if (zero? generation)
+              ""
+              (format "-r~a" generation))))
 
 ;; Binding publication uses a deterministic branch and durable campaign-local
 ;; staging directory. These derivations mirror gsd-delivery.py and are never
@@ -805,7 +814,7 @@
                   "--expected-branch"
                   binding-branch
                   "--evidence"
-                  (default-delivery-evidence-path plan wave))))]
+                  (default-delivery-evidence-path plan wave #:base-dir base-dir))))]
     [(and (eq? (delivery-effect-result-kind binding-resolved) 'ok)
           (member binding-resolved-status '("resolved" "already-merged")))
      (delivery-effect-result

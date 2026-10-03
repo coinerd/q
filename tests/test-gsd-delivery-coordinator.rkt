@@ -32,6 +32,7 @@
 ;; helpers are required dynamically until the coordinator module provides
 ;; them.
 (define-runtime-path coordinator-module "../extensions/gsd/delivery-coordinator.rkt")
+(define-runtime-path handoff-module "../extensions/gsd/delivery-handoff.rkt")
 (define binding-generation (dynamic-require coordinator-module 'binding-generation))
 (define default-binding-branch (dynamic-require coordinator-module 'default-binding-branch))
 (define default-binding-staging-path
@@ -680,6 +681,13 @@
      (check-equal? (default-binding-branch plan 3 #:base-dir root) "binding/bbbbbbbbbbbb-w3-r1")
      (check-equal? (default-binding-staging-path root plan 3)
                    (path->string (build-path root ".planning" "campaigns" plan "binding-w3-r1")))
+     (define w (make-campaign-wave 3 "repair" 'awaiting-delivery 5 #f))
+     (set-campaign-wave-delivery-branch! w "campaign/w3")
+     (set-campaign-wave-delivery-head-sha! w (make-string 40 #\d))
+     (define handoff
+       ((dynamic-require handoff-module 'persist-delivery-handoff!) root plan w "repair pending"))
+     (check-equal? (hash-ref (call-with-input-file handoff read) 'binding)
+                   (format "docs/reports/gsd-wave-evidence/~a-w3-r1.rktd" plan))
      ;; dispatch with the reconciled journal resolves the -r1 branch
      (let ([calls '()])
        (define (fake-run action . args)
@@ -687,5 +695,17 @@
          (delivery-effect-result 'ok (hasheq 'status "none")))
        (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci" #:base-dir root)
        (check-equal? (cdr (car (reverse calls)))
-                     (list "--expected-branch" "binding/bbbbbbbbbbbb-w3-r1"))))
+                     (list "--expected-branch" "binding/bbbbbbbbbbbb-w3-r1")))
+     (let ([calls '()])
+       (define (fake-run action . args)
+         (set! calls (cons (cons action args) calls))
+         (delivery-effect-result 'ok (hasheq 'status "resolved" 'pr 77 'head (make-string 40 #\e))))
+       (binding-dispatch-stage-action fake-run
+                                      "binding-merged"
+                                      plan
+                                      3
+                                      "binding-merge"
+                                      #:base-dir root)
+       (check-not-false (member (format "docs/reports/gsd-wave-evidence/~a-w3-r1.rktd" plan)
+                                (cdr (car calls))))))
    (lambda () (delete-directory/files root #:must-exist? #f))))

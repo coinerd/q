@@ -93,6 +93,8 @@
       (run-subprocess "python3"
                       #:args (list (path->string controller)
                                    "status"
+                                   "--campaign-root"
+                                   (path->string (path->complete-path base-dir))
                                    "--repo"
                                    (path->string (path->complete-path repo))
                                    "--plan"
@@ -104,13 +106,17 @@
                       #:timeout 240
                       #:process-group? #t))
     (define data (string->jsexpr (subprocess-result-stdout result)))
-    (if (and (hash? data)
-             (not (subprocess-result-timed-out? result))
-             (not (subprocess-result-truncated? result))
-             (or (equal? (hash-ref data 'status #f) "delivery-pending")
-                 (and (zero? (subprocess-result-exit-code result))
-                      (equal? (hash-ref data 'plan-id #f) plan-id)
-                      (equal? (hash-ref data 'wave #f) wave-index))))
+    (if (and
+         (hash? data)
+         (not (subprocess-result-timed-out? result))
+         (not (subprocess-result-truncated? result))
+         (or
+          (equal? (hash-ref data 'status #f) "delivery-pending")
+          (and
+           (zero? (subprocess-result-exit-code result))
+           (equal? (hash-ref data 'plan-id #f) plan-id)
+           (equal? (hash-ref data 'wave #f) wave-index)
+           (receipt-bound-proof-merge-sha data base-dir plan-id wave-index #:require-journal? #t))))
         data
         (hasheq 'status "delivery-pending" 'reason "delivery controller failed or timed out"))))
 
@@ -133,6 +139,30 @@
        (string? sha)
        (regexp-match? FULL-MERGE-SHA-RX sha)
        sha))
+
+;; A receipt-bearing wave cannot inherit another implementation's delivery.
+;; Historical reader fixtures without a journal retain their generic proof
+;; seam; production readback always requires the authoritative journal.
+(define (receipt-bound-proof-merge-sha proof
+                                       base-dir
+                                       plan-id
+                                       wave-index
+                                       #:require-journal? [require-journal? #f])
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define sha (delivered-proof-merge-sha proof plan-id wave-index))
+    (define journal (load-delivery-journal base-dir plan-id wave-index))
+    (define receipt (and journal (hash-ref journal 'receipt #f)))
+    (and sha
+         (if journal
+             (and (hash? receipt)
+                  (equal? (hash-ref proof 'delivery-head-sha #f) (hash-ref receipt 'head #f))
+                  (equal? (hash-ref proof 'delivery-branch #f) (hash-ref receipt 'branch #f))
+                  (equal? (hash-ref proof 'attempt-id #f) (hash-ref receipt 'attempt-id #f))
+                  (equal? (hash-ref proof 'attempt-fence #f) (hash-ref receipt 'attempt-fence #f))
+                  (equal? (hash-ref proof 'binding-generation #f)
+                          (length (hash-ref journal 'receipt-history '())))
+                  sha)
+             (and (not require-journal?) sha)))))
 
 ;; Honest, redacted, operator-actionable reason for an undelivered proof.
 (define (undelivered-proof-reason proof)
@@ -170,12 +200,14 @@
     (define idx (campaign-wave-index w))
     (and (not (hash-ref verified idx #f))
          (let* ([proof (delivery-reader base-dir plan-id idx)]
-                [sha (delivered-proof-merge-sha proof plan-id idx)]
-                [awaiting? (eq? (campaign-wave-status w) 'awaiting-delivery)])
+                [sha (receipt-bound-proof-merge-sha proof base-dir plan-id idx)]
+                [awaiting? (eq? (campaign-wave-status w) 'awaiting-delivery)]
+                [receipt-bearing? (load-delivery-journal base-dir plan-id idx)])
            (cond
              [(and sha
-                   (or (not awaiting?) (awaiting-journal-valid? base-dir plan-id idx w))
-                   (or (not awaiting?) (reconcile-delivered-handoff! base-dir plan-id idx sha)))
+                   (or (and (not awaiting?) (not receipt-bearing?))
+                       (and (awaiting-journal-valid? base-dir plan-id idx w)
+                            (reconcile-delivered-handoff! base-dir plan-id idx sha))))
               (hash-set! verified idx sha)
               (unless awaiting?
                 (reconcile-delivered-handoff! base-dir plan-id idx sha))
@@ -191,7 +223,11 @@
 ;; ============================================================
 
 (define (verified-wave-merge-sha base-dir plan-id wave-index)
-  (delivered-proof-merge-sha (delivery-readback base-dir plan-id wave-index) plan-id wave-index))
+  (receipt-bound-proof-merge-sha (delivery-readback base-dir plan-id wave-index)
+                                 base-dir
+                                 plan-id
+                                 wave-index
+                                 #:require-journal? #t))
 
 ;; ============================================================
 ;; Durable handoff ledger (pending) + delivered reconcile
@@ -233,6 +269,11 @@
   (unless (regexp-match? #px"^[0-9a-f]{64}$" plan-id)
     (error 'delivery-handoff "invalid campaign identity"))
   (define idx (campaign-wave-index wave))
+  (define journal (load-delivery-journal base-dir plan-id idx))
+  (define generation
+    (if journal
+        (length (hash-ref journal 'receipt-history '()))
+        0))
   (define path (delivery-handoff-path base-dir plan-id idx))
   (define data
     (hasheq
@@ -251,7 +292,12 @@
      'delivery-head-sha
      (campaign-wave-delivery-head-sha wave)
      'binding
-     (format "docs/reports/gsd-wave-evidence/~a-w~a.rktd" plan-id idx)
+     (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
+             plan-id
+             idx
+             (if (zero? generation)
+                 ""
+                 (format "-r~a" generation)))
      'reason
      (redact-delivery-text reason)
      'next-steps
@@ -285,7 +331,13 @@
                                #f)])
     (define path (delivery-handoff-path base-dir plan-id wave-index))
     (define old (read-handoff path))
+    (define journal (load-delivery-journal base-dir plan-id wave-index))
+    (define receipt (and journal (hash-ref journal 'receipt #f)))
     (and (hash? old)
+         (or (not journal)
+             (and (hash? receipt)
+                  (equal? (hash-ref old 'delivery-head-sha #f) (hash-ref receipt 'head #f))
+                  (equal? (hash-ref old 'delivery-branch #f) (hash-ref receipt 'branch #f))))
          (equal? (hash-ref old 'plan-id #f) plan-id)
          (equal? (hash-ref old 'wave #f) wave-index)
          (string? merge-sha)
@@ -328,10 +380,11 @@
 ;; readback.
 (define (delivery-action-hint plan-id wave-index)
   (format
-   (string-append "hint: python3 scripts/gsd-delivery.py status --repo <repo> --plan ~a --wave ~a; "
-                  "after the protected merge run 'prepare' with --campaign-root <campaign-root> "
-                  "(gh credential storage via 'gh auth login' or a coordinator GH_TOKEN/GITHUB_TOKEN "
-                  "is required for authenticated readback)")
+   (string-append
+    "hint: python3 scripts/gsd-delivery.py status --campaign-root <campaign-root> --repo <repo> --plan ~a --wave ~a; "
+    "after the protected merge run 'prepare' with --campaign-root <campaign-root> "
+    "(gh credential storage via 'gh auth login' or a coordinator GH_TOKEN/GITHUB_TOKEN "
+    "is required for authenticated readback)")
    plan-id
    wave-index))
 
@@ -417,7 +470,7 @@
 (define (delivered-predecessor-resolver base-dir plan-id verified delivery-reader)
   (lambda (b p w)
     (or (hash-ref verified w #f)
-        (let ([sha (delivered-proof-merge-sha (delivery-reader b p w) p w)])
+        (let ([sha (receipt-bound-proof-merge-sha (delivery-reader b p w) b p w)])
           (and sha
                (begin
                  (hash-set! verified w sha)

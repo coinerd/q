@@ -43,6 +43,26 @@
                        (file->string (build-path dir ".planning" "PLAN.md"))
                        #:plan-id campaign-id))
 
+(module+ test
+  (test-case "repair generation drafts new immutable trio paths without replacing gen0"
+    (define request
+      (hasheq 'plan-id
+              campaign-id
+              'wave
+              "W0"
+              'merge-sha
+              (make-string 40 #\b)
+              'required-pr-checks
+              '("lint")
+              'binding-generation
+              1))
+    (define-values (e r v) (binding-draft request))
+    (check-equal? (hash-ref e 'review-artifact)
+                  (format "docs/reports/gsd-wave-reviews/~a-w0-r1.rktd" campaign-id))
+    (check-equal? (hash-ref e 'validation-artifact)
+                  (format "docs/reports/gsd-wave-validation/~a-w0-r1.rktd" campaign-id))
+    (check-exn exn:fail? (lambda () (binding-draft (hash-set request 'binding-generation -1))))))
+
 (define draft-request
   (hasheq 'plan-id
           campaign-id

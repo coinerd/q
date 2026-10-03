@@ -20,6 +20,7 @@
          rackunit/text-ui
          racket/file
          racket/list
+         (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/campaign-result.rkt"
@@ -130,8 +131,9 @@
                                     (campaign-attempt-id attempt)
                                     'attempt-fence
                                     (campaign-attempt-fence-token attempt)))
-  (update-delivery-journal! dir pid 0 (hasheq 'stage "delivered"))
+  (persist-delivery-handoff! dir pid wave "test precondition")
   (reconcile-delivered-handoff! dir pid 0 merge-sha)
+  (update-delivery-journal! dir pid 0 (hasheq 'stage "delivered"))
   (define fresh (load-campaign-record dir pid))
   (define fattempt (campaign-wave-current-attempt (car (campaign-record-waves fresh))))
   (define fin
@@ -193,8 +195,9 @@
                                     (campaign-attempt-id attempt)
                                     'attempt-fence
                                     (campaign-attempt-fence-token attempt)))
-  (update-delivery-journal! dir pid 0 (hasheq 'stage "delivered"))
+  (persist-delivery-handoff! dir pid wave "test precondition")
   (reconcile-delivered-handoff! dir pid 0 merge-sha)
+  (update-delivery-journal! dir pid 0 (hasheq 'stage "delivered"))
   (define parked (load-campaign-record dir pid))
   (check-equal? (campaign-wave-status (car (campaign-record-waves parked))) 'awaiting-delivery)
   (values dir pid merge-sha parked))
@@ -202,9 +205,8 @@
 ;; A delivered readback for this plan/wave. The production default stays the
 ;; real authenticated controller readback; a unit test must not call GitHub,
 ;; and stubbing the reader is exactly what the existing tracker suite does.
-(define (delivered-proof-for plan-id merge-sha)
-  (lambda (_base-dir _plan-id _wave-index)
-    (hasheq 'status "delivered" 'plan-id plan-id 'wave 0 'merge-sha merge-sha)))
+(define (delivered-proof-for _plan-id merge-sha)
+  (test-delivered-reader #:merge-sha merge-sha))
 
 ;; A github port that records every command it is asked to execute, so a test
 ;; can assert the ABSENCE of tracker writes, not just the absence of a status.

@@ -152,6 +152,8 @@
        (equal? (hash-ref handoff 'wave #f) wave-idx)
        (eq? (hash-ref handoff 'status #f) 'delivered)
        (equal? (hash-ref handoff 'merge-sha #f) delivered-merge-sha)
+       (equal? (hash-ref handoff 'delivery-head-sha #f) receipt-head)
+       (equal? (hash-ref handoff 'delivery-branch #f) receipt-branch)
        (hash? journal)
        (equal? (hash-ref journal 'stage #f) "delivered")
        (hash? receipt)
