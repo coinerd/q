@@ -13,6 +13,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import time
@@ -1098,6 +1099,55 @@ class DeliveryTests(unittest.TestCase):
                                   expected_branch=WAVE_BRANCH)
         self.assertEqual(result['status'], 'reviewed')
         self.assertEqual(result['branch'], binding_branch)
+
+    def test_binding_review_allows_prebinding_source_trio_on_main(self):
+        """Zero-declared repair topology: the implementation squash carries
+        the hash-named source trio to main AT the binding path, without
+        merge identity. That pre-binding source is not a publication and
+        must not constrain the staged draft; only a bound record carrying
+        full merge identity does (prepare already exempts it)."""
+        w = self.world(publish=False, source='hash')
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'],
+                                  declared=False)
+        output = binding_staging(self.base / 'campaign', w['plan'], w['wave'])
+        with self.fake_api(self.prepare_routes(w)):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                      w['binding'],
+                      campaign, output)
+        binding_branch = m.binding_branch(w['plan'], w['wave'])
+        files = trio(f"{w['plan']}-w{w['wave']}", w['wave'],
+                     impl_sha=w['merge'], digest=m.EMPTY_SHA,
+                     plan_id=w['plan'], merge=w['merge'], head=w['head'],
+                     pr=w['pr'], branch=binding_branch,
+                     evidence_branch=binding_branch, wave_branch=WAVE_BRANCH)
+        for relative, text in files.items():
+            target = output / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text)
+        # Main really carries the source trio at the binding path.
+        self.assertIsNotNone(
+            m.blob_or_none(w['subject'], 'refs/remotes/origin/main', w['binding']))
+        result = m.binding_review(w['subject'], w['plan'], w['wave'], output,
+                                  campaign_root=self.base / 'campaign',
+                                  expected_branch=WAVE_BRANCH)
+        self.assertEqual(result['status'], 'reviewed')
+        self.assertEqual(result['branch'], binding_branch)
+        # The exemption must not over-relax: a BOUND publication at the same
+        # path naming a different implementation still refuses rebind.
+        staged = output / 'docs/reports/gsd-wave-evidence' / f"{w['plan']}-w{w['wave']}.rktd"
+        bound_text = re.sub(r'\(merge-sha \. "[0-9a-f]{40}"\)',
+                            '(merge-sha . "' + 'f' * 40 + '")', staged.read_text())
+        self.assertNotEqual(bound_text, staged.read_text())
+        sh('git', 'checkout', '-q', 'main', cwd=w['work'])
+        write_file(w['work'] / w['binding'], bound_text)
+        sh('git', 'add', '-A', cwd=w['work'])
+        sh('git', 'commit', '-q', '-m', 'bound different implementation', cwd=w['work'])
+        sh('git', 'push', '-q', w['origin'], 'main:main', cwd=w['work'])
+        sh('git', 'pull', '--ff-only', '-q', cwd=w['subject'])
+        with self.assertRaisesRegex(m.Pending, 'different implementation'):
+            m.binding_review(w['subject'], w['plan'], w['wave'], output,
+                             campaign_root=self.base / 'campaign',
+                             expected_branch=WAVE_BRANCH)
 
     def test_binding_review_refuses_sentinel_reviewer_identity(self):
         """Register F12: a finalized review must carry a genuine reviewer."""

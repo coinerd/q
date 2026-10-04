@@ -1039,11 +1039,23 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
                 bound = read_datum(path)
             except Pending as error:
                 raise Pending('origin/main binding is malformed; refusing rebind') from error
-        require(isinstance(bound, dict) and full_sha(bound.get('merge-sha')),
+        # Zero-declared repair topology: the implementation squash carries the
+        # hash-named source trio to main AT the binding path without merge
+        # identity. That pre-binding source is not a publication (the same
+        # exemption prepare applies) and the finalized staged binding PR
+        # supersedes it; only a bound record with full merge identity
+        # constrains a republication.
+        is_publication = (isinstance(bound, dict) and
+                          all(bound.get(key) is not None for key in
+                              ('merge-sha', 'delivery-head-sha', 'delivery-pr',
+                               'implementation-sha')))
+        require(isinstance(bound, dict) and (not is_publication or
+                                             full_sha(bound.get('merge-sha'))),
                 'origin/main binding is malformed; refusing rebind')
-        require(bound.get('merge-sha') == merge and
-                bound.get('delivery-head-sha') == head and
-                bound.get('implementation-sha') == merge,
+        require(not is_publication or
+                (bound.get('merge-sha') == merge and
+                 bound.get('delivery-head-sha') == head and
+                 bound.get('implementation-sha') == merge),
                 'origin/main already binds this wave to a different implementation; refusing rebind')
 
     status = evidence.get('status')
