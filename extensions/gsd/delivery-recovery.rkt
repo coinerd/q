@@ -356,7 +356,14 @@
                                     (lambda (out _)
                                       (write-string (string-replace text orig copy) out))))))
 
-(define (verify-on-copy root plan wave candidate expected-base old-head restored-journal-bytes)
+(define (verify-on-copy root
+                        plan
+                        wave
+                        candidate
+                        expected-base
+                        old-head
+                        restored-journal-bytes
+                        #:repair-tail-head [repair-tail-head old-head])
   (define tmp (make-temporary-file "delivery-recovery-root-~a" 'directory))
   (dynamic-wind
    void
@@ -376,7 +383,7 @@
                                      #:branch branch
                                      #:base-commit expected-base
                                      #:worktree-path candidate
-                                     #:repair-tail-head old-head))
+                                     #:repair-tail-head repair-tail-head))
      (define verifier (lambda (idx) (run-delivery-verification candidate plan-struct idx)))
      (define result
        (verify-campaign-delivery tmp
@@ -415,7 +422,23 @@
                            #:expected-base expected-base
                            #:old-receipt-head [old-receipt-head #f]
                            #:superseded-journal [superseded-journal #f]
+                           #:verify-mode [verify-mode 'repair-tail]
                            #:apply? [apply? #f])
+  ;; verify-mode selects the declared verify's delivery-topology contract:
+  ;;  - 'repair-tail (default): the candidate may only carry evidence-only
+  ;;    content beyond the old receipt head (no declared-target changes).
+  ;;  - 'full: the declared verify runs in FULL delivery mode — the entire
+  ;;    delivered diff (base...tip) is re-validated by the complete suite.
+  ;;    For a same-attempt repair that lawfully absorbs protected-main
+  ;;    evolution of declared targets (the reanchor topology merge()
+  ;;    requires), the tail itself legitimately contains target changes,
+  ;;    which only a full re-verification can approve. The full declared
+  ;;    verify command runs identically in both modes.
+  (define full-verify?
+    (case verify-mode
+      [(full) #t]
+      [(repair-tail) #f]
+      [else (raise-argument-error 'recover-delivery! "(or/c 'full 'repair-tail)" verify-mode)]))
   (let/ec return
     (define (stop reason . details)
       (return (recovery-result 'refused reason '() details)))
@@ -492,7 +515,14 @@
           ;; until verification approves. A verify failure therefore leaves
           ;; NO active journal behind (no effect on refusal).
           (define-values (ok? message)
-            (verify-on-copy root plan wave candidate expected-base old-head restored-journal-bytes))
+            (verify-on-copy root
+                            plan
+                            wave
+                            candidate
+                            expected-base
+                            old-head
+                            restored-journal-bytes
+                            #:repair-tail-head (and (not full-verify?) old-head)))
           (unless ok?
             (stop 'verify-failed message))
           (cond

@@ -404,6 +404,52 @@
                                 "raco make wrote bytecode caches"))
                   (lambda () (delete-directory/files dir #:must-exist? #f))))
 
+  (test-case "reanchor topology: declared-target tail changes refuse repair-tail and pass full verify"
+    ;; The same-attempt repair that lawfully absorbs protected-main evolution
+    ;; of declared targets (the reanchor merge() requires via fresh-main PR
+    ;; base) legitimately carries target changes in its tail. Only a FULL
+    ;; declared verify can approve that topology; repair-tail (default)
+    ;; must keep refusing it.
+    (with-fixture
+     (lambda (root bare repo base old-head head)
+       (write-rkt (build-path repo "ui-core" "preferences.rkt") 3)
+       (git-quiet! repo "add" "-A")
+       (git-quiet! repo "commit" "-q" "-m" "absorb main evolution of declared target")
+       (define reanchored (git-out repo "rev-parse" "HEAD"))
+       (git-quiet! repo "push" "-q" "origin" branch)
+       (git-quiet! repo "fetch" "-q" "origin" (string-append branch ":refs/remotes/origin/" branch))
+       ;; Default repair-tail mode: target change after the receipt refuses.
+       (define refused (call-recover root bare base old-head reanchored #:expected-head* reanchored))
+       (check-eq? (recovery-result-status refused) 'refused)
+       (check-eq? (recovery-result-reason refused) 'verify-failed)
+       ;; Full verify mode: the entire delivered diff is re-validated and
+       ;; the same candidate approves (dry-run, zero effects).
+       (define approved
+         (with-git-rewrite bare
+                           (lambda ()
+                             (recover-delivery! #:root root
+                                                #:plan plan
+                                                #:wave 0
+                                                #:attempt-id attempt-id
+                                                #:fence fence
+                                                #:expected-head reanchored
+                                                #:expected-base base
+                                                #:old-receipt-head old-head
+                                                #:verify-mode 'full))))
+       (check-eq? (recovery-result-status approved) 'dry-run (format "~s" approved))
+       ;; An invalid mode is a usage error, never a silent default.
+       (check-exn exn:fail:contract?
+                  (lambda ()
+                    (recover-delivery! #:root root
+                                       #:plan plan
+                                       #:wave 0
+                                       #:attempt-id attempt-id
+                                       #:fence fence
+                                       #:expected-head reanchored
+                                       #:expected-base base
+                                       #:old-receipt-head old-head
+                                       #:verify-mode 'bogus))))))
+
   (test-case "CLI prints a successful dry-run as valid JSON with JSON-safe details"
     ;; RED (live dryrun5): the approved dry-run result carried the bare
     ;; symbol 'would-reconcile in its details and write-json crashed while
