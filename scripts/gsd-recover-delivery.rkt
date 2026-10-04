@@ -52,6 +52,7 @@
   (define expected-base #f)
   (define old-receipt-head #f)
   (define superseded-journal #f)
+  (define verify-mode "repair-tail")
   (define apply? #f)
   (parameterize ([current-command-line-arguments argv])
     (command-line
@@ -68,6 +69,10 @@
       v
       "Explicit .reconciled-superseded journal copy"
       (set! superseded-journal v)]
+     [("--verify-mode")
+      v
+      "Declared-verify topology: repair-tail (default) or full"
+      (set! verify-mode v)]
      [("--apply") "Apply effects; default is dry-run" (set! apply? #t)]))
   (for ([pair (in-list (list (cons '--root root)
                              (cons '--plan plan)
@@ -78,6 +83,12 @@
                              (cons '--expected-base expected-base)))])
     (unless (cdr pair)
       (error 'gsd-recover-delivery "missing required argument ~a" (car pair))))
+  (define mode-symbol
+    (cond
+      [(string=? verify-mode "repair-tail") 'repair-tail]
+      [(string=? verify-mode "full") 'full]
+      [else
+       (error 'gsd-recover-delivery "--verify-mode must be repair-tail or full: ~a" verify-mode)]))
   (define result
     (recover-delivery! #:root root
                        #:plan plan
@@ -88,6 +99,7 @@
                        #:expected-base expected-base
                        #:old-receipt-head old-receipt-head
                        #:superseded-journal superseded-journal
+                       #:verify-mode mode-symbol
                        #:apply? apply?))
   (write-json (result->hash result))
   (newline)
