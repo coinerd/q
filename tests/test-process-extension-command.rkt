@@ -9,7 +9,7 @@
 ;; tests/test-process-extension-command.rkt -- Tests for process-extension-command (N-10)
 
 (require rackunit
-         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
+         (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery! test-delivered-reader)
          "../tui/commands.rkt"
          "../tui/state-types.rkt"
          (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
@@ -119,16 +119,7 @@
                                 #t)
                               ;; v1.00.30: delivered-proof mock so the
                               ;; isolated-runner cycle reaches the W1 token.
-                              #:delivery-reader
-                              (lambda (_base plan idx)
-                                (hasheq 'status
-                                        "delivered"
-                                        'plan-id
-                                        plan
-                                        'wave
-                                        idx
-                                        'merge-sha
-                                        "0123456789abcdef0123456789abcdef01234567"))))
+                              #:delivery-reader (test-delivered-reader)))
      (define token (register-campaign-request! request))
      (define prompt-channel (make-channel))
      (define factory-count 0)

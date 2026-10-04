@@ -22,6 +22,7 @@
 ;; exact persisted stage without duplicating external effects.
 
 (require racket/base
+         racket/path
          racket/string
          "campaign-state.rkt"
          "campaign-repository.rkt"
@@ -51,7 +52,8 @@
          binding-dispatch-stage-action
          default-delivery-coordinator
          default-delivery-controller-interpret
-         parse-delivery-stop)
+         parse-delivery-stop
+         default-active-delivery-evidence-path)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -297,6 +299,7 @@
 ;; typed stops, never fabricated success.
 
 (require (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
+         (only-in "../../scripts/gsd-binding-data.rkt" active-paths)
          racket/runtime-path
          json
          (only-in "../../sandbox/subprocess.rkt"
@@ -459,7 +462,11 @@
                      "--expected-head"
                      (default-delivery-receipt-head base-dir plan wave)
                      "--expected-branch"
-                     (default-delivery-receipt-branch base-dir plan wave))]
+                     (default-delivery-receipt-branch base-dir plan wave)
+                     "--campaign-root"
+                     (path->string base-dir)
+                     "--generation"
+                     (number->string (binding-generation base-dir plan wave)))]
     [("implementation-pr")
      ;; Resolve the durable branch identity first. A missing open PR is the
      ;; only blocked result that may proceed to deterministic creation; API,
@@ -535,7 +542,7 @@
      ;; merge then enforces its exact-head contract at that actual PR tip.
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
      (define receipt-head (default-delivery-receipt-head base-dir plan wave))
-     (define evidence (default-delivery-evidence-path plan wave))
+     (define evidence (default-active-delivery-evidence-path base-dir plan wave))
      (define resolve
        (run-controller "resolve-pr"
                        "--expected-branch"
@@ -575,7 +582,7 @@
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
      (run-controller "prepare"
                      "--evidence"
-                     (default-delivery-evidence-path plan wave)
+                     (default-active-delivery-evidence-path base-dir plan wave)
                      "--output"
                      (default-binding-staging-path base-dir plan wave)
                      "--campaign-root"
@@ -723,8 +730,37 @@
 ;; The frozen schema-2 evidence path is derivable from campaign+wave identity
 ;; (the same path gsd-delivery.py's binding_path computes) — never guessed
 ;; from a checkout.
-(define (default-delivery-evidence-path plan wave)
-  (format "docs/reports/gsd-wave-evidence/~a-w~a.rktd" plan wave))
+(define (default-delivery-evidence-path plan wave #:base-dir [base-dir #f])
+  (define generation
+    (if base-dir
+        (binding-generation base-dir plan wave)
+        0))
+  (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
+          plan
+          wave
+          (if (zero? generation)
+              ""
+              (format "-r~a" generation))))
+
+(define (q-prefixed-path->repo-relative base-dir path)
+  (if (and (string? path)
+           (string-prefix? path "q/")
+           (or (directory-exists? (build-path base-dir "q"))
+               (equal? (path->string (file-name-from-path (path->complete-path base-dir))) "q")))
+      (substring path 2)
+      path))
+
+(define (default-active-delivery-evidence-path base-dir plan wave)
+  ;; Active source paths come from the immutable campaign snapshot when it is
+  ;; available. If a local synthetic test fixture has no snapshot yet, leave
+  ;; the final typed refusal to gsd-delivery.py by falling back to the
+  ;; deterministic hash path rather than fabricating a coordinator-level stop.
+  (with-handlers ([exn:fail? (lambda (_e)
+                               (default-delivery-evidence-path plan wave #:base-dir base-dir))])
+    (define generation (binding-generation base-dir plan wave))
+    (q-prefixed-path->repo-relative
+     base-dir
+     (hash-ref (active-paths base-dir plan wave generation) 'evidence))))
 
 ;; Binding publication uses a deterministic branch and durable campaign-local
 ;; staging directory. These derivations mirror gsd-delivery.py and are never
@@ -805,7 +841,7 @@
                   "--expected-branch"
                   binding-branch
                   "--evidence"
-                  (default-delivery-evidence-path plan wave))))]
+                  (default-delivery-evidence-path plan wave #:base-dir base-dir))))]
     [(and (eq? (delivery-effect-result-kind binding-resolved) 'ok)
           (member binding-resolved-status '("resolved" "already-merged")))
      (delivery-effect-result

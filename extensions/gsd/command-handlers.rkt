@@ -75,10 +75,7 @@
          "go-orchestrator.rkt"
          "delivery-verifier.rkt"
          (only-in "delivery-coordinator.rkt" default-delivery-coordinator)
-         (only-in "delivery-handoff.rkt"
-                  delivery-pending-wave
-                  delivery-readback
-                  delivered-proof-merge-sha)
+         (only-in "delivery-handoff.rkt" delivery-readback delivered-proof-merge-sha)
          (only-in "delivery-journal.rkt" load-delivery-journal)
          (only-in "../../runtime/settings-core.rkt" load-global-settings)
          (only-in "policy.rkt"
@@ -688,14 +685,16 @@
     ;; runs. The request carries the delivery coordinator (wired below), so
     ;; the run-campaign! checkpoint drives one journal stage per loop
     ;; iteration and only reports campaign-complete after authenticated proof.
+    ;; Dispatch has a short hook deadline; controller readback can take
+    ;; 240 seconds and may reconcile a handoff. Do neither in this hook.
+    ;; Local status only schedules a delivery check, never proves delivery.
+    ;; The leased campaign checkpoint performs fresh authenticated readback
+    ;; and re-reads durable state before any completion or coordinator action.
     (define delivery-pending
-      (with-handlers ([exn:fail? (lambda (_) #f)])
-        (and (not next-wave)
-             (delivery-pending-wave base-dir
-                                    (campaign-plan-id rec)
-                                    (campaign-record-waves rec)
-                                    delivery-readback
-                                    (make-hash)))))
+      (and (not next-wave)
+           (for/first ([w (in-list (campaign-record-waves rec))]
+                       #:when (memq (campaign-wave-status w) '(done awaiting-delivery)))
+             w)))
     (cond
       [(and (not next-wave) (not delivery-pending))
        (hook-amend (hasheq 'text "Campaign has no actionable waves."))]

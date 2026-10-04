@@ -287,8 +287,11 @@
       ;; (extensions/gsd/delivery-receipt.rkt, OTHER_REVIEWED): the
       ;; origin ls-remote remote-backing probe seam for offline
       ;; fixtures; the production default performs the real check.
+      ;; +1 — v1.00.33 recovery continuation: current-gsd-recovery-github-origin?
+      ;; (extensions/gsd/delivery-recovery.rkt, SERVICE_HANDLE): origin-policy
+      ;; DI seam for the recovery candidate resolver's independent-clone check.
       (check-equal? (length inventory-entries)
-                    236
+                    237
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

@@ -798,8 +798,14 @@
                                     (campaign-attempt-id attempt)
                                     'attempt-fence
                                     (campaign-attempt-fence-token attempt)))
-  (update-delivery-journal! dir pid idx (hasheq 'stage "delivered"))
+  ;; The first approval parked an awaiting-delivery handoff before the fixture
+  ;; had branch/head provenance. Re-issue that pending handoff after mirroring
+  ;; the receipt identity into the durable wave, then reconcile it to the exact
+  ;; delivered merge SHA. This matches the honest delivery fixture: receipt,
+  ;; wave branch/head, handoff branch/head and terminal journal must all agree.
+  (persist-delivery-handoff! dir pid wave "test delivered fixture precondition")
   (reconcile-delivered-handoff! dir pid idx merge-sha)
+  (update-delivery-journal! dir pid idx (hasheq 'stage "delivered"))
   merge-sha)
 
 (define (honest-complete! dir rec)

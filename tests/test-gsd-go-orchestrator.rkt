@@ -93,6 +93,7 @@
                   delivered-proof-merge-sha
                   undelivered-proof-reason
                   delivery-handoff-path
+                  persist-delivery-handoff!
                   reconcile-delivered-handoff!)
          (only-in "../extensions/gsd/notify.rkt"
                   current-gsd-notify-sinks
@@ -108,7 +109,8 @@
                   current-gsd-wave-failure-context
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay
-                  current-gsd-campaign-infra-patience))
+                  current-gsd-campaign-infra-patience)
+         (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader))
 
 ;; ============================================================
 ;; Helpers
@@ -159,12 +161,9 @@
 
 (define BUG-0064-FAKE-SHA "0123456789abcdef0123456789abcdef01234567")
 
-(define (delivered-proof plan-id wave-idx)
-  (hasheq 'status "delivered" 'plan-id plan-id 'wave wave-idx 'merge-sha BUG-0064-FAKE-SHA))
-
 ;; Delivered-proof reader for every wave (resume/complete fixtures).
 (define (make-delivered-reader)
-  (lambda (_base plan idx) (delivered-proof plan idx)))
+  (test-delivered-reader))
 
 ;; Predecessor-proof resolver equivalent to a verified delivered proof.
 (define (delivered-predecessor-resolver)
@@ -223,6 +222,9 @@
            (set-campaign-wave-delivery-branch! w TEST-DELIVERY-BRANCH)
            (set-campaign-wave-delivery-head-sha! w TEST-DELIVERY-HEAD))
          (persist-campaign! dir rec)
+         (for ([w (in-list (campaign-record-waves rec))]
+               #:when (member (campaign-wave-index w) indices))
+           (persist-delivery-handoff! dir plan-id w "test precondition"))
          (for ([idx (in-list indices)])
            (update-delivery-journal! dir plan-id idx (hasheq 'stage "delivered")))
          #t)))

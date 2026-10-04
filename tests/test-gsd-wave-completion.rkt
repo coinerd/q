@@ -49,6 +49,8 @@
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/delivery-handoff.rkt"
                   persist-delivery-handoff!
+                  delivery-pending-wave
+                  delivery-handoff-path
                   reconcile-delivered-handoff!)
          (only-in "../extensions/gsd/delivery-journal.rkt"
                   record-delivery-receipt!
@@ -151,6 +153,7 @@
                                     (campaign-attempt-id attempt)
                                     'attempt-fence
                                     (campaign-attempt-fence-token attempt)))
+  (persist-delivery-handoff! dir pid w "fixture: current verified identity")
   (update-delivery-journal! dir pid idx (hasheq 'stage "delivered"))
   (reconcile-delivered-handoff! dir pid idx merge-sha)
   merge-sha)
@@ -596,6 +599,128 @@
       (define done (finalize-current! dir rec 0 merge-sha))
       (check-eq? (completion-result-status done) 'done)
       (cleanup-tmp dir))
+
+    (test-case "repair receipt cannot finalize a different delivered handoff head or branch"
+      (for ([field '(delivery-head-sha delivery-branch)]
+            [wrong (list (make-string 40 #\d) "campaign/wrong")])
+        (define dir (make-tmp-campaign-dir 1))
+        (dynamic-wind
+         void
+         (lambda ()
+           (define rec (load-or-migrate dir))
+           (set-campaign-fence-token! rec 1)
+           (begin-attempt! rec 0 1)
+           (set-campaign-wave-status! (wave* rec 0) 'verifying)
+           (persist-campaign! dir rec)
+           (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+           (try-complete-wave! dir
+                               rec
+                               0
+                               #:verifier-approve? #t
+                               #:expected-attempt-id (campaign-attempt-id attempt)
+                               #:expected-fence-token (campaign-attempt-fence-token attempt))
+           (define merge-sha (seed-delivered-proof! dir rec 0))
+           (define path (delivery-handoff-path dir (campaign-plan-id rec) 0))
+           (define handoff (call-with-input-file path read))
+           (call-with-output-file path
+                                  (lambda (out) (write (hash-set handoff field wrong) out))
+                                  #:exists 'truncate)
+           (check-false (reconcile-delivered-handoff! dir (campaign-plan-id rec) 0 merge-sha))
+           (check-eq? (completion-result-status (finalize-current! dir rec 0 merge-sha))
+                      'delivery-pending-cannot-complete)
+           (check-eq? (wave-status* (load-campaign-record dir (campaign-plan-id rec)) 0)
+                      'awaiting-delivery)
+           ;; A disputed DONE projection must not bypass the same journal/handoff gate.
+           (set-campaign-wave-status! (wave* rec 0) 'done)
+           (persist-campaign! dir rec)
+           (check-not-false (delivery-pending-wave dir
+                                                   (campaign-plan-id rec)
+                                                   (campaign-record-waves rec)
+                                                   (lambda (_b _p _w)
+                                                     (hasheq 'status
+                                                             "delivered"
+                                                             'plan-id
+                                                             (campaign-plan-id rec)
+                                                             'wave
+                                                             0
+                                                             'merge-sha
+                                                             merge-sha
+                                                             'delivery-head-sha
+                                                             (make-string 40 #\b)
+                                                             'delivery-branch
+                                                             "campaign/w0"
+                                                             'attempt-id
+                                                             (campaign-attempt-id attempt)
+                                                             'attempt-fence
+                                                             1
+                                                             'binding-generation
+                                                             0))
+                                                   (make-hasheq))))
+         (lambda () (cleanup-tmp dir)))))
+
+    (test-case "authenticated old delivery proof cannot satisfy current receipt identity"
+      (define dir (make-tmp-campaign-dir 1))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define rec (load-or-migrate dir))
+         (set-campaign-fence-token! rec 1)
+         (begin-attempt! rec 0 1)
+         (set-campaign-wave-status! (wave* rec 0) 'verifying)
+         (persist-campaign! dir rec)
+         (define attempt (campaign-wave-current-attempt (wave* rec 0)))
+         (try-complete-wave! dir
+                             rec
+                             0
+                             #:verifier-approve? #t
+                             #:expected-attempt-id (campaign-attempt-id attempt)
+                             #:expected-fence-token (campaign-attempt-fence-token attempt))
+         (define merge-sha (seed-delivered-proof! dir rec 0))
+         (define proof
+           (hasheq 'status
+                   "delivered"
+                   'plan-id
+                   (campaign-plan-id rec)
+                   'wave
+                   0
+                   'merge-sha
+                   merge-sha
+                   'delivery-head-sha
+                   (make-string 40 #\b)
+                   'delivery-branch
+                   "campaign/w0"
+                   'attempt-id
+                   (campaign-attempt-id attempt)
+                   'attempt-fence
+                   1
+                   'binding-generation
+                   0))
+         (for ([key '(delivery-head-sha delivery-branch attempt-id attempt-fence binding-generation)]
+               [wrong (list (make-string 40 #\d) "campaign/old" "attempt-old" 2 1)])
+           (define verified (make-hasheq))
+           (check-not-false (delivery-pending-wave dir
+                                                   (campaign-plan-id rec)
+                                                   (campaign-record-waves rec)
+                                                   (lambda (_b _p _w) (hash-set proof key wrong))
+                                                   verified))
+           (check-equal? (hash-count verified) 0))
+         (define verified (make-hasheq))
+         (check-false (delivery-pending-wave dir
+                                             (campaign-plan-id rec)
+                                             (campaign-record-waves rec)
+                                             (lambda (_b _p _w) proof)
+                                             verified))
+         (check-equal? (hash-ref verified 0) merge-sha)
+         (set-campaign-wave-status! (wave* rec 0) 'done)
+         (persist-campaign! dir rec)
+         (define done-verified (make-hasheq))
+         (check-false (delivery-pending-wave dir
+                                             (campaign-plan-id rec)
+                                             (campaign-record-waves rec)
+                                             (lambda (_b _p _w) proof)
+                                             done-verified))
+         (check-equal? (hash-ref done-verified 0) merge-sha))
+       (lambda () (cleanup-tmp dir))))
 
     (test-case "BUG-0077: cancelled awaiting-delivery cannot finalize"
       (define dir (make-tmp-campaign-dir 1))

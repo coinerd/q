@@ -24,11 +24,14 @@
                   load-snapshot-manifest
                   plan-snapshot-manifest-files
                   snapshot-file-path
-                  snapshot-dir))
+                  snapshot-dir)
+         (only-in "../extensions/gsd/delivery-journal.rkt" load-delivery-journal))
 (provide read-hash-datum
          read-any-datum
          binding-draft
-         snapshot-facts)
+         snapshot-facts
+         active-source-path
+         active-paths)
 
 (define (read-single-datum path who)
   (call-with-input-file path
@@ -72,10 +75,16 @@
                (string? (hash-ref request 'merge-sha #f))
                (regexp-match? #px"^[0-9a-f]{40}$" (hash-ref request 'merge-sha)))
     (error 'delivery "invalid binding campaign/wave/merge identity"))
+  (define generation (hash-ref request 'binding-generation 0))
+  (unless (exact-nonnegative-integer? generation)
+    (error 'delivery "invalid binding generation"))
   (define stem
     (string-append (hash-ref request 'plan-id)
                    "-"
                    (string-downcase (hash-ref request 'wave))
+                   (if (zero? generation)
+                       ""
+                       (format "-r~a" generation))
                    ".rktd"))
   (define review (string-append "docs/reports/gsd-wave-reviews/" stem))
   (define validation (string-append "docs/reports/gsd-wave-validation/" stem))
@@ -152,6 +161,33 @@
                   line))
   (and match (car match)))
 
+(define (source-trio-path directory plan-id wave-index generation)
+  (string-append "docs/reports/gsd-wave-"
+                 directory
+                 "/"
+                 plan-id
+                 "-w"
+                 (number->string wave-index)
+                 (if (zero? generation)
+                     ""
+                     (format "-r~a" generation))
+                 ".rktd"))
+
+(define (repair-generation-path path generation)
+  (define match (regexp-match #px"^(.*/)?([^/]+)[.]rktd$" path))
+  (unless match
+    (error 'delivery "multiple/conflicting declared output path: ~a" path))
+  (string-append (or (cadr match) "") (caddr match) (format "-r~a.rktd" generation)))
+
+(define (active-source-path path generation)
+  (unless (and (string? path) (positive? (string-length path)))
+    (error 'delivery "multiple/conflicting declared output path"))
+  (unless (exact-nonnegative-integer? generation)
+    (error 'delivery "invalid binding generation"))
+  (if (zero? generation)
+      path
+      (repair-generation-path path generation)))
+
 (define (snapshot-facts campaign-root plan-id wave-index)
   (unless (and (string? plan-id) (regexp-match? #px"^[0-9a-f]{64}$" plan-id))
     (error 'delivery "invalid campaign id"))
@@ -207,6 +243,53 @@
                      (list 'milestone milestone)
                      null))))
 
+(define (active-paths campaign-root plan-id wave-index generation)
+  (unless (exact-nonnegative-integer? generation)
+    (error 'delivery "invalid binding generation"))
+  (define facts (snapshot-facts campaign-root plan-id wave-index))
+  (define declared (hash-ref facts 'declared #hasheq()))
+  (define (declared-list kind)
+    (define value (hash-ref declared kind '()))
+    (unless (list? value)
+      (error 'delivery "multiple/conflicting declared output for ~a" kind))
+    value)
+  (define evidence (declared-list 'evidence))
+  (define review (declared-list 'review))
+  (define validation (declared-list 'validation))
+  (define counts
+    (hasheq 'evidence (length evidence) 'review (length review) 'validation (length validation)))
+  (cond
+    [(and (zero? (length evidence)) (zero? (length review)) (zero? (length validation)))
+     ;; Zero-declared waves keep ONE deterministic path family (the
+     ;; hash-named trio); a repair generation derives it by the same -rN
+     ;; rule used for declared outputs — deterministic, never ambiguous,
+     ;; gen0 paths never reused for an active repair generation.
+     (hasheq 'evidence
+             (source-trio-path "evidence" plan-id wave-index generation)
+             'review
+             (source-trio-path "reviews" plan-id wave-index generation)
+             'validation
+             (source-trio-path "validation" plan-id wave-index generation)
+             'generation
+             generation
+             'declared-counts
+             counts)]
+    [(and (= 1 (length evidence)) (= 1 (length review)) (= 1 (length validation)))
+     (hasheq 'evidence
+             (active-source-path (car evidence) generation)
+             'review
+             (active-source-path (car review) generation)
+             'validation
+             (active-source-path (car validation) generation)
+             'generation
+             generation
+             'declared-counts
+             counts)]
+    [else
+     (error
+      'delivery
+      "multiple/conflicting declared outputs; exactly one evidence, review and validation required")]))
+
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
   (case (string->symbol (vector-ref (current-command-line-arguments) 0))
@@ -223,10 +306,7 @@
                                             read-json)))
      (define evidence
        (string-append "docs/reports/gsd-wave-evidence/"
-                      (hash-ref e 'plan-id)
-                      "-"
-                      (string-downcase (hash-ref e 'wave))
-                      ".rktd"))
+                      (path->string (file-name-from-path (hash-ref e 'review-artifact)))))
      (for ([datum (in-list (list e r v))]
            [relative (in-list (list evidence
                                     (hash-ref e 'review-artifact)
@@ -234,9 +314,22 @@
        (define path (build-path root relative))
        (make-parent-directory* path)
        (call-with-output-file path (lambda (out) (pretty-write datum out)) #:exists 'error))]
+    [(journal)
+     (unless (= 4 (length args))
+       (error 'delivery "journal requires: <campaign-root> <plan-id> <wave-index>"))
+     (write-json (load-delivery-journal (second args) (third args) (string->number (fourth args))))
+     (newline)]
     [(snapshot)
      (unless (= 4 (length args))
        (error 'delivery "snapshot requires: <campaign-root> <plan-id> <wave-index>"))
      (write-json (snapshot-facts (second args) (third args) (string->number (fourth args))))
      (newline)]
-    [else (error 'delivery "expected read, read-any, prepare or snapshot")]))
+    [(active-paths)
+     (unless (= 5 (length args))
+       (error 'delivery "active-paths requires: <campaign-root> <plan-id> <wave-index> <generation>"))
+     (write-json (active-paths (second args)
+                               (third args)
+                               (string->number (fourth args))
+                               (string->number (fifth args))))
+     (newline)]
+    [else (error 'delivery "expected read, read-any, prepare, journal, snapshot or active-paths")]))

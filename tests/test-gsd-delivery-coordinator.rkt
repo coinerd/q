@@ -20,6 +20,7 @@
          racket/string
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
+         (only-in "../extensions/gsd/plan-snapshot.rkt" make-plan-snapshot!)
          (only-in "../extensions/gsd/delivery-journal.rkt"
                   delivery-stages
                   load-delivery-journal
@@ -32,10 +33,13 @@
 ;; helpers are required dynamically until the coordinator module provides
 ;; them.
 (define-runtime-path coordinator-module "../extensions/gsd/delivery-coordinator.rkt")
+(define-runtime-path handoff-module "../extensions/gsd/delivery-handoff.rkt")
 (define binding-generation (dynamic-require coordinator-module 'binding-generation))
 (define default-binding-branch (dynamic-require coordinator-module 'default-binding-branch))
 (define default-binding-staging-path
   (dynamic-require coordinator-module 'default-binding-staging-path))
+(define default-active-delivery-evidence-path
+  (dynamic-require coordinator-module 'default-active-delivery-evidence-path))
 
 (define (receipt-head)
   (hasheq 'repo
@@ -680,6 +684,13 @@
      (check-equal? (default-binding-branch plan 3 #:base-dir root) "binding/bbbbbbbbbbbb-w3-r1")
      (check-equal? (default-binding-staging-path root plan 3)
                    (path->string (build-path root ".planning" "campaigns" plan "binding-w3-r1")))
+     (define w (make-campaign-wave 3 "repair" 'awaiting-delivery 5 #f))
+     (set-campaign-wave-delivery-branch! w "campaign/w3")
+     (set-campaign-wave-delivery-head-sha! w (make-string 40 #\d))
+     (define handoff
+       ((dynamic-require handoff-module 'persist-delivery-handoff!) root plan w "repair pending"))
+     (check-equal? (hash-ref (call-with-input-file handoff read) 'binding)
+                   (format "docs/reports/gsd-wave-evidence/~a-w3-r1.rktd" plan))
      ;; dispatch with the reconciled journal resolves the -r1 branch
      (let ([calls '()])
        (define (fake-run action . args)
@@ -687,5 +698,64 @@
          (delivery-effect-result 'ok (hasheq 'status "none")))
        (binding-dispatch-stage-action fake-run "binding-ci" plan 3 "binding-ci" #:base-dir root)
        (check-equal? (cdr (car (reverse calls)))
-                     (list "--expected-branch" "binding/bbbbbbbbbbbb-w3-r1"))))
+                     (list "--expected-branch" "binding/bbbbbbbbbbbb-w3-r1")))
+     (let ([calls '()])
+       (define (fake-run action . args)
+         (set! calls (cons (cons action args) calls))
+         (delivery-effect-result 'ok (hasheq 'status "resolved" 'pr 77 'head (make-string 40 #\e))))
+       (binding-dispatch-stage-action fake-run
+                                      "binding-merged"
+                                      plan
+                                      3
+                                      "binding-merge"
+                                      #:base-dir root)
+       (check-not-false (member (format "docs/reports/gsd-wave-evidence/~a-w3-r1.rktd" plan)
+                                (cdr (car calls))))))
+   (lambda () (delete-directory/files root #:must-exist? #f))))
+
+(test-case "active implementation source path is derived from frozen declarations and generation"
+  (define plan (make-string 64 #\c))
+  (define root (make-temporary-file "active-source-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (make-directory* (build-path root ".planning" "waves"))
+     (define plan-text "# Plan\n\n- [Inbox] W3: Repair → waves/W3-repair.md\n")
+     (define wave-text
+       (string-append "# W3: Repair\n\n## Files\n\n"
+                      "- File: `docs/reports/gsd-wave-evidence/v9.9.9-w3.rktd`\n"
+                      "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w3.rktd`\n"
+                      "- File: `docs/reports/gsd-wave-validation/v9.9.9-w3.rktd`\n"))
+     (display-to-file plan-text (build-path root ".planning" "PLAN.md"))
+     (display-to-file wave-text (build-path root ".planning" "waves" "W3-repair.md"))
+     (make-plan-snapshot! root plan plan-text #:plan-id plan)
+     (define (receipt head)
+       (hasheq 'repo
+               "/repo"
+               'branch
+               "campaign/w3"
+               'head
+               head
+               'tree
+               (make-string 40 #\c)
+               'origin
+               "https://github.com/example/q.git"
+               'verified-at
+               1
+               'evidence
+               "verify"
+               'attempt-id
+               "attempt-1"
+               'attempt-fence
+               2))
+     (record-delivery-receipt! root plan 3 (receipt (make-string 40 #\a)))
+     (reconcile-repair-tail-receipt! root
+                                     plan
+                                     3
+                                     (receipt (make-string 40 #\d))
+                                     #:expected-attempt-id "attempt-1"
+                                     #:expected-fence 2
+                                     #:head-ancestor? (lambda (_old _new) #t))
+     (check-equal? (default-active-delivery-evidence-path root plan 3)
+                   "docs/reports/gsd-wave-evidence/v9.9.9-w3-r1.rktd"))
    (lambda () (delete-directory/files root #:must-exist? #f))))
