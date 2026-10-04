@@ -8,6 +8,7 @@
 
 (require json
          racket/file
+         racket/future
          racket/list
          racket/os
          racket/path
@@ -46,7 +47,8 @@
 
 (provide (struct-out recovery-result)
          current-gsd-recovery-github-origin?
-         recover-delivery!)
+         recover-delivery!
+         warm-candidate-bytecode!)
 
 (struct recovery-result (status reason actions details) #:transparent)
 
@@ -217,6 +219,57 @@
              args)))
   (values code (string-trim (get-output-string out)) (string-trim (get-output-string err))))
 
+;; Bytecode warm-up for the fresh candidate clone — mirrors CI's prepared
+;; compiled-root restore. The declared Verify's per-file suite budgets
+;; (120s by default) assume warm `compiled/` caches: the suite's subprocess
+;; mode never WRITES bytecode caches, so a fresh clone recompiles every
+;; dependency closure at load and compile-heavy files deterministically
+;; blow the budget (observed live: test-approval-correlation 2m7s cold vs
+;; 5s warm on byte-identical trees). Best-effort by design: a warm-up
+;; failure is logged and never bypasses the declared verify, which stays
+;; the sole verdict.
+(define (racket-files-under dir)
+  (for/list ([p (in-directory dir)]
+             #:when (and (file-exists? p)
+                         (let ([s (path->string p)])
+                           (and (regexp-match? #px"\\.rkt$" s)
+                                (not (regexp-match? #px"/compiled/" s))))))
+    p))
+
+(define (warm-candidate-bytecode! candidate)
+  (define raco (find-executable-path "raco"))
+  (define jobs (number->string (max 1 (processor-count))))
+  (define dirs
+    (filter (lambda (d) (directory-exists? (build-path candidate d)))
+            '("extensions" "runtime" "ui-core" "scripts" "tools" "tests" "tui" "sidecars")))
+  ;; raco make requires explicit MODULE files (a bare directory is treated
+  ;; as a module path and refuses), so enumerate .rkt files per directory
+  ;; and compile them in bounded batches.
+  (define files
+    (append* (for/list ([dir (in-list dirs)])
+               (racket-files-under (build-path candidate dir)))))
+  (let loop ([batch files])
+    (unless (null? batch)
+      (define chunk (take batch (min 400 (length batch))))
+      (define out (open-output-string))
+      (define err (open-output-string))
+      (define code
+        (parameterize ([current-output-port out]
+                       [current-error-port err])
+          (apply system*/exit-code
+                 raco
+                 "make"
+                 "-j"
+                 jobs
+                 (map (lambda (p) (path->string (path->complete-path p))) chunk))))
+      (unless (zero? code)
+        (define message (string-append (get-output-string out) (get-output-string err)))
+        (log-warning "gsd: recovery candidate bytecode warm-up failed (exit ~a): ~a"
+                     code
+                     (substring message 0 (min 200 (string-length message)))))
+      (loop (drop batch (min 400 (length batch))))))
+  (void))
+
 (define (git-out repo . args)
   (define-values (code out _err) (apply run-git repo args))
   (and (zero? code) out))
@@ -282,12 +335,34 @@
       (delivery-verification-message v)
       (format "~a" v)))
 
+;; Copy-fidelity translation for verification copies: a durable campaign
+;; record may bind its immutable plan snapshot by ABSOLUTE path into the
+;; authoritative root (the shape seed-and-bind-plan-snapshot! produces and
+;; the live campaigns carry). The verification copy is a byte-faithful
+;; replica of that root, so every absolute self-reference to the ORIGINAL
+;; root inside the COPIED record is rewritten to the copy's identical
+;; location before any validation loads it (loading would otherwise run the
+;; snapshot-binding check against the copy first and refuse). The recorded
+;; digest still validates the manifest content; the LIVE record is never
+;; touched. Records carrying no original-root references are untouched.
+(define (translate-record-root-references! root tmp plan)
+  (define record-path (build-path tmp ".planning" "campaigns" (string-append plan ".rktd")))
+  (when (file-exists? record-path)
+    (define text (file->string record-path))
+    (define orig (path->string (simplify-path (path->complete-path root))))
+    (define copy (path->string (simplify-path (path->complete-path tmp))))
+    (when (and (string-contains? text orig) (not (equal? orig copy)))
+      (call-with-atomic-output-file record-path
+                                    (lambda (out _)
+                                      (write-string (string-replace text orig copy) out))))))
+
 (define (verify-on-copy root plan wave candidate expected-base old-head restored-journal-bytes)
   (define tmp (make-temporary-file "delivery-recovery-root-~a" 'directory))
   (dynamic-wind
    void
    (lambda ()
      (copy-directory/files* root tmp)
+     (translate-record-root-references! root tmp plan)
      (when restored-journal-bytes
        (define restored-active (delivery-journal-path tmp plan wave))
        (make-parent-directory* restored-active)
@@ -408,6 +483,10 @@
             (stop candidate-reason))
           (unless (ancestor? candidate expected-base old-head)
             (stop 'stale-base))
+          ;; Warm the fresh clone's bytecode caches (mirrors CI's prepared
+          ;; compiled-root) BEFORE the declared verify runs its suite, so
+          ;; per-file budgets measure test execution, not cold compilation.
+          (warm-candidate-bytecode! candidate)
           ;; Verification always runs against a COPY that carries exactly the
           ;; journal state apply would produce; the root tree stays untouched
           ;; until verification approves. A verify failure therefore leaves
