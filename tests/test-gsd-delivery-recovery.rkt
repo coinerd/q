@@ -14,6 +14,7 @@
          racket/system
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
          (only-in "helpers/delivery-fixtures.rkt" write-plan! write-wave-doc! write-state!)
+         (only-in "../extensions/gsd/plan-snapshot.rkt" seed-and-bind-plan-snapshot!)
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/delivery-handoff.rkt"
@@ -367,6 +368,41 @@
        (define result (call-recover root bare base old-head head))
        (check-eq? (recovery-result-status result) 'dry-run (format "~s" result))
        (check-equal? (file->bytes active) before))))
+
+  (test-case "absolute snapshot bindings translate into the verification copy"
+    ;; Live campaigns bind their plan snapshot by ABSOLUTE path into the
+    ;; authoritative root. The verification copy is a byte-faithful replica
+    ;; of that root, so the copy-fidelity translation re-points the COPIED
+    ;; record's binding at the copy's identical snapshot (digest still
+    ;; validates the manifest); the live record is never touched.
+    (with-fixture (lambda (root bare repo base old-head head)
+                    (define-values (bound-path bound-digest) (seed-and-bind-plan-snapshot! root plan))
+                    (check-true (absolute-path? (string->path bound-path)))
+                    (define rec (load-campaign-record root plan))
+                    (set-campaign-record-plan-snapshot-path! rec bound-path)
+                    (set-campaign-record-plan-snapshot-digest! rec bound-digest)
+                    (persist-campaign! root rec)
+                    (define result (call-recover root bare base old-head head))
+                    (check-eq? (recovery-result-status result) 'dry-run (format "~s" result))
+                    (define after (load-campaign-record root plan))
+                    (check-equal? (campaign-record-plan-snapshot-path after)
+                                  bound-path
+                                  "live record binding untouched")
+                    (check-equal? (campaign-record-plan-snapshot-digest after) bound-digest))))
+
+  (test-case "bytecode warm-up populates compiled caches and never fails the flow"
+    ;; A fresh clone has zero compiled/ caches (the suite's subprocess mode
+    ;; never writes them); compile-heavy files then deterministically blow
+    ;; per-file budgets. The warmer mirrors CI's prepared compiled-root.
+    (define dir (make-temporary-file "recovery-warm-~a" 'directory))
+    (dynamic-wind void
+                  (lambda ()
+                    (make-directory (build-path dir "tests"))
+                    (write-rkt (build-path dir "tests" "warm-me.rkt") 1)
+                    (warm-candidate-bytecode! dir)
+                    (check-true (directory-exists? (build-path dir "tests" "compiled"))
+                                "raco make wrote bytecode caches"))
+                  (lambda () (delete-directory/files dir #:must-exist? #f))))
 
   (test-case "CLI rejects missing, invalid, and unsupported arguments without root effects"
     (define root (make-root))
