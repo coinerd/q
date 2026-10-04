@@ -404,6 +404,39 @@
                                 "raco make wrote bytecode caches"))
                   (lambda () (delete-directory/files dir #:must-exist? #f))))
 
+  (test-case "CLI prints a successful dry-run as valid JSON with JSON-safe details"
+    ;; RED (live dryrun5): the approved dry-run result carried the bare
+    ;; symbol 'would-reconcile in its details and write-json crashed while
+    ;; printing the verdict. Details are diagnostics and must serialize.
+    (with-fixture (lambda (root bare repo base old-head head)
+                    (define-values (code out err)
+                      (with-git-rewrite bare
+                                        (lambda ()
+                                          (run-recovery-cli (list "--root"
+                                                                  (path->string root)
+                                                                  "--plan"
+                                                                  plan
+                                                                  "--wave"
+                                                                  "0"
+                                                                  "--attempt-id"
+                                                                  attempt-id
+                                                                  "--fence"
+                                                                  (number->string fence)
+                                                                  "--expected-head"
+                                                                  head
+                                                                  "--expected-base"
+                                                                  base
+                                                                  "--old-receipt-head"
+                                                                  old-head)))))
+                    (check-eq? code 0 (string-append out err))
+                    (define parsed
+                      (with-handlers ([exn:fail? (lambda (_) #f)])
+                        (string->jsexpr out)))
+                    (check-true (hash? parsed) "stdout parses as JSON")
+                    (check-equal? (hash-ref parsed 'status) "dry-run")
+                    (check-true (regexp-match? #rx"\"would-reconcile\"" out)
+                                "the would-reconcile diagnostic survives as a JSON string"))))
+
   (test-case "CLI rejects missing, invalid, and unsupported arguments without root effects"
     (define root (make-root))
     (dynamic-wind void

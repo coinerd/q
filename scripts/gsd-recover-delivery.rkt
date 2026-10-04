@@ -14,11 +14,33 @@
     (error 'gsd-recover-delivery "~a must be a non-negative integer: ~a" who text))
   n)
 
+;; Details are diagnostics, not contracts: they may carry symbols, nested
+;; lists or verbatim verify text. Everything is JSON-ified losslessly for
+;; the operator (symbols become their names), so a successful dry-run can
+;; never crash printing its own verdict.
+(define (jsonable v)
+  (cond
+    [(symbol? v) (symbol->string v)]
+    [(list? v) (map jsonable v)]
+    [(hash? v)
+     (for/hasheq ([(k val) (in-hash v)])
+       (values (if (symbol? k)
+                   (symbol->string k)
+                   k)
+               (jsonable val)))]
+    [(pair? v) (list (jsonable (car v)) (jsonable (cdr v)))]
+    [(or (string? v) (boolean? v) (exact-integer? v) (real? v) (null? v)) v]
+    [else (format "~a" v)]))
+
 (define (result->hash r)
-  (hasheq 'status (symbol->string (recovery-result-status r))
-          'reason (let ([v (recovery-result-reason r)]) (and v (symbol->string v)))
-          'actions (map symbol->string (recovery-result-actions r))
-          'details (recovery-result-details r)))
+  (hasheq 'status
+          (symbol->string (recovery-result-status r))
+          'reason
+          (let ([v (recovery-result-reason r)]) (and v (symbol->string v)))
+          'actions
+          (map symbol->string (recovery-result-actions r))
+          'details
+          (map jsonable (recovery-result-details r))))
 
 (define (main [argv (current-command-line-arguments)])
   (define root #f)
@@ -34,8 +56,7 @@
   (parameterize ([current-command-line-arguments argv])
     (command-line
      #:program "gsd-recover-delivery"
-     #:once-each
-     [("--root") v "Campaign root" (set! root v)]
+     #:once-each [("--root") v "Campaign root" (set! root v)]
      [("--plan") v "64-hex campaign plan id" (set! plan v)]
      [("--wave") v "Wave index" (set! wave (parse-nat '--wave v))]
      [("--attempt-id") v "Expected live attempt id" (set! attempt-id v)]
@@ -43,7 +64,10 @@
      [("--expected-head") v "Expected repaired branch head" (set! expected-head v)]
      [("--expected-base") v "Expected attempt base commit" (set! expected-base v)]
      [("--old-receipt-head") v "Expected old receipt head" (set! old-receipt-head v)]
-     [("--superseded-journal") v "Explicit .reconciled-superseded journal copy" (set! superseded-journal v)]
+     [("--superseded-journal")
+      v
+      "Explicit .reconciled-superseded journal copy"
+      (set! superseded-journal v)]
      [("--apply") "Apply effects; default is dry-run" (set! apply? #t)]))
   (for ([pair (in-list (list (cons '--root root)
                              (cons '--plan plan)
