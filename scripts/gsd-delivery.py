@@ -1162,6 +1162,16 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
         remote_tip = None
     if remote_tip is not None:
         require(full_sha(remote_tip), 'malformed existing binding branch tip')
+        # Already-published resume: the binding PR for this branch is merged —
+        # the publication completed. Idempotent return with the merge
+        # identity; no republish and no fresh-main-base demand (that governs
+        # REUSE of an unpublished branch, not a completed publication whose
+        # protected main has lawfully advanced since).
+        merged_publication = resolve_merged_pr(slug, branch)
+        if merged_publication is not None:
+            return {'status': 'already-published', 'pr': merged_publication.get('number'),
+                    'branch': branch, 'head': remote_tip,
+                    'merge-sha': dig(merged_publication, 'merge_commit_sha')}
         parents = git(repo, 'rev-list', '--parents', '-n', '1', remote_tip).split()
         require(len(parents) == 2 and parents[1] == main,
                 'existing binding branch is not based on fresh origin/main')
