@@ -1355,7 +1355,12 @@ def binding_merge(repo, plan, wave, number, expected_head, expected_branch, sour
 binding_pr = binding_publish
 
 
-def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_branch=None):
+def prepare(repo, plan, wave, number, relative, campaign_root, output,
+            expected_branch=None, expected_head=None):
+    """expected_head (the durable receipt head) disambiguates self-resolution
+    when the delivery branch carries MULTIPLE merged PRs (lawful for repair
+    generations: each republication squashes its own PR); resolve_merged_pr
+    then picks the PR whose head IS the receipt head instead of refusing."""
     generation = journal_generation(repo, plan, wave, campaign_root)
     binding = binding_path(plan, wave, generation)
     slug = repository(repo)
@@ -1365,7 +1370,7 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
     if number is None:
         require(isinstance(expected_branch, str) and expected_branch.strip(),
                 'prepare --pr requires --expected-branch for durable PR self-resolution')
-        pr = resolve_merged_pr(slug, expected_branch)
+        pr = resolve_merged_pr(slug, expected_branch, expected_head)
         require(isinstance(pr, dict),
                 'prepare cannot self-resolve exactly one merged implementation PR for branch ' + expected_branch)
         number = pr.get('number')
@@ -1520,7 +1525,11 @@ def sync(repo, expected_branch):
         current = git(repo, 'symbolic-ref', '--quiet', '--short', 'HEAD').strip()
     except Pending:
         raise Pending('detached HEAD; refusing synchronization')
-    require(current == expected_branch,
+    # The shared main checkout (the controller's own repo context) may
+    # carry the published bytes too: accept the main checkout alongside the
+    # wave branch itself. Anything else is an unrelated branch and refuses;
+    # the fast-forward below never switches branches.
+    require(current == expected_branch or current == 'main',
             'synchronization refused: HEAD is %r, expected %r (unrelated branch changes not accepted)'
             % (current, expected_branch))
     require(not scratch_exempt_porcelain(repo).strip(), 'dirty checkout; refusing synchronization')
@@ -1670,9 +1679,17 @@ def pr_ci(repo, number, expected_branch, expected_head=None):
     require(full_sha(main), 'malformed origin/main head')
     pr = api(slug, 'pulls/%s' % number, _refresh=True)
     require(isinstance(pr, dict), 'malformed pull-request response')
-    require(pr.get('state') == 'open', 'pull request is not open')
-    validate_pr_identity(pr, slug)
     head = dig(pr, 'head', 'sha')
+    # Merged-resume (resolve_pr's idempotent path): a closed MERGED PR at the
+    # exact durable receipt head keeps its trusted required checks at that
+    # head, so a resumed campaign can still evaluate its CI stage without
+    # opening a redundant PR. Everything else closed is refused: the open-PR
+    # contract is only ever loosened by an explicit receipt-bound identity.
+    merged_resume = (expected_head is not None and pr.get('state') == 'closed'
+                     and pr_is_merged(pr) and head == expected_head)
+    require(pr.get('state') == 'open' or merged_resume,
+            'pull request is not open')
+    validate_pr_identity(pr, slug)
     require(full_sha(head), 'pull request has no full head SHA')
     require(dig(pr, 'head', 'ref') == expected_branch,
             'pull request branch does not match expected branch')
@@ -1889,7 +1906,8 @@ def main():
                 require(args.expected_branch,
                         'prepare without --pr requires --expected-branch')
             result = prepare(args.repo, args.plan, args.wave, args.pr, args.evidence,
-                             args.campaign_root, args.output, args.expected_branch)
+                             args.campaign_root, args.output, args.expected_branch,
+                             args.expected_head)
         print(json.dumps(result))
         return 0
     except (Pending, ValueError, KeyError, TypeError, OSError, AttributeError) as error:

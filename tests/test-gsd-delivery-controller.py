@@ -1054,6 +1054,33 @@ class DeliveryTests(unittest.TestCase):
         self.assertTrue(binding.is_file())
         self.assertEqual(m.read_datum(binding)['merge-sha'], w['merge'])
 
+    def test_prepare_self_resolve_disambiguates_multiple_merged_prs_by_receipt_head(self):
+        """Repair generations lawfully leave MULTIPLE merged PRs on one
+        delivery branch (each republication squashes its own PR); without
+        the receipt head, self-resolution must stay ambiguous-refusing, and
+        WITH it resolve the PR whose head IS the receipt head."""
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        output = binding_staging(self.base / 'campaign', w['plan'], w['wave'])
+        older = dict(pr_payload(w, head='b' * 40, number=w['pr'] + 7, base=w['c0']),
+                     state='closed')
+        current = dict(pr_payload(w), state='closed')
+        routes = self.prepare_routes(w)
+        routes[(SLUG, f'pulls?state=all&head=owner:{WAVE_BRANCH}', False)] = [older, current]
+        with self.fake_api(routes), self.assertRaisesRegex(m.Pending, 'multiple merged'):
+            m.prepare(w['subject'], w['plan'], w['wave'], None,
+                      f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                      campaign, output, expected_branch=WAVE_BRANCH)
+        self.assertFalse(output.exists())
+        with self.fake_api(routes):
+            result = m.prepare(w['subject'], w['plan'], w['wave'], None,
+                               f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                               campaign, output, expected_branch=WAVE_BRANCH,
+                               expected_head=w['head'])
+        self.assertEqual(result['status'], 'pending-review')
+        binding = output / 'docs/reports/gsd-wave-evidence' / f"{w['plan']}-w{w['wave']}.rktd"
+        self.assertEqual(m.read_datum(binding)['merge-sha'], w['merge'])
+
     def test_prepare_self_resolve_requires_receipt_branch(self):
         w = self.world(publish=False)
         campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
@@ -1936,10 +1963,14 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('detached', str(caught.exception))
 
     def test_sync_requires_explicit_expected_branch_match(self):
+        # The shared main checkout is the delivery-synced context for ANY
+        # wave branch (the coordinator shells from it): it synchronizes.
+        # A checkout on any OTHER branch than the expected one or main is an
+        # unrelated branch and refuses — sync never switches branches.
         w = self.world()
-        with self.assertRaises(m.Pending) as caught:
-            m.sync(w['subject'], 'some-other-branch')
-        self.assertIn('expected', str(caught.exception))
+        result = m.sync(w['subject'], 'some-other-branch')
+        self.assertEqual(result['status'], 'synchronized')
+        self.assertEqual(result['branch'], 'main')
         subject = w['subject']
         sh('git', 'checkout', '-q', '-b', 'unrelated-work', cwd=subject)
         with self.assertRaises(m.Pending) as caught:
@@ -2845,6 +2876,59 @@ class DeliveryTests(unittest.TestCase):
                     m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
             self.assertIn('missing check: ' + POLICY_NAMES[0], str(caught.exception))
 
+    def test_pr_ci_accepts_merged_resume_pr_at_exact_receipt_head(self):
+        """Resumed campaigns (resolve_pr's merged-resume path) hand pr_ci the
+        closed merged PR at the exact durable receipt head; the trusted
+        required checks at that head persist and must be evaluated. Closed
+        without a merge, a merge at the wrong head, or no expected head at
+        all still refuse: merged-resume is an explicit receipt-bound path,
+        never a loosened open-PR contract."""
+        w = self.open_impl_world(merged=True)
+        merged_payload = dict(self.open_pr_payload(w))
+        merged_payload.update({'state': 'closed', 'merged': True,
+                               'merge_commit_sha': w['merge']})
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): merged_payload}):
+            result = m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                             expected_head=w['head'])
+        self.assertEqual(result, {'status': 'green', 'pr': w['pr'],
+                                  'branch': WAVE_BRANCH, 'head': w['head']})
+
+    def test_pr_ci_merged_resume_refuses_unmerged_wrong_head_or_no_receipt(self):
+        w = self.open_impl_world(merged=True)
+        base = dict(self.open_pr_payload(w))
+        base.update({'state': 'closed', 'merged': True,
+                     'merge_commit_sha': w['merge']})
+        # Closed but NOT merged.
+        unmerged = dict(base, merged=False, merge_commit_sha=None)
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): unmerged}):
+            with self.assertRaises(m.Pending) as caught:
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                        expected_head=w['head'])
+            self.assertIn('pull request is not open', str(caught.exception))
+        # Merged but a DIFFERENT head than the receipt.
+        wrong_head = dict(base, head={'sha': w['h1'], 'ref': WAVE_BRANCH,
+                                      'repo': {'full_name': SLUG}})
+        m._CHECKS_CACHE.clear()
+        with self.assertRaises(m.Pending) as caught:
+            with self.fake_api({**self.ci_routes(w, names=[],
+                                                 protection_names=[]),
+                                (SLUG, f'pulls/{w["pr"]}', False): wrong_head}):
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                        expected_head=w['head'])
+        self.assertIn('pull request is not open', str(caught.exception))
+        # Merged at the right head but no expected head supplied: the open-PR
+        # contract applies with no receipt to bind the merged identity.
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): base}):
+            with self.assertRaises(m.Pending) as caught:
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+            self.assertIn('pull request is not open', str(caught.exception))
+
     def test_pr_ci_refuses_wrong_branch_or_foreign_repository(self):
         w = self.open_impl_world()
         wrong_branch = dict(self.open_pr_payload(w),
@@ -2861,6 +2945,28 @@ class DeliveryTests(unittest.TestCase):
                             (SLUG, f'pulls/{w["pr"]}', False): foreign}):
             with self.assertRaises(m.Pending):
                 m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+
+    def test_sync_accepts_shared_main_checkout_and_refuses_unrelated_branch(self):
+        """The controller's own repo context (the shared checkout the
+        coordinator shells from) sits on main and carries the published
+        bytes; sync fast-forwards it to origin/main. An unrelated branch
+        still refuses — sync never switches branches."""
+        w = self.world(publish=False)
+        # The subject clone sits on main at the published tip (the squash M).
+        with self.fake_api({}):
+            result = m.sync(w['subject'], WAVE_BRANCH)
+        self.assertEqual(result['status'], 'synchronized')
+        self.assertEqual(result['branch'], 'main')
+        self.assertEqual(result['head'], w['merge'])
+        # An unrelated local branch never synchronizes the delivery.
+        (w['subject'] / 'unrelated.txt').write_text('x\n')
+        sh('git', 'add', '-A', cwd=w['subject'])
+        sh('git', 'config', 'user.email', 't@example.com', cwd=w['subject'])
+        sh('git', 'config', 'user.name', 't', cwd=w['subject'])
+        sh('git', 'commit', '-q', '-m', 'local other', cwd=w['subject'])
+        sh('git', 'checkout', '-q', '-b', 'side/other', cwd=w['subject'])
+        with self.assertRaisesRegex(m.Pending, 'unrelated branch'):
+            m.sync(w['subject'], WAVE_BRANCH)
 
     def test_cli_open_pr_requires_branch_and_dispatches_create_action(self):
         w = self.open_impl_world()
