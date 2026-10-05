@@ -1081,6 +1081,38 @@ class DeliveryTests(unittest.TestCase):
         binding = output / 'docs/reports/gsd-wave-evidence' / f"{w['plan']}-w{w['wave']}.rktd"
         self.assertEqual(m.read_datum(binding)['merge-sha'], w['merge'])
 
+    def test_prepare_is_idempotent_when_staging_binds_same_identity(self):
+        """A resumed campaign re-runs binding-prepared; the staging directory
+        already holds the binding draft for THIS delivery (same merge, PR
+        head+number, binding branch) — already-staged, never overwritten. A
+        staged draft for a different identity still refuses."""
+        w = self.world(publish=False)
+        campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
+        output = binding_staging(self.base / 'campaign', w['plan'], w['wave'])
+        with self.fake_api(self.prepare_routes(w)):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                      f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                      campaign, output, expected_branch=WAVE_BRANCH)
+        before = (output / 'docs/reports/gsd-wave-evidence' /
+                  f"{w['plan']}-w{w['wave']}.rktd").read_bytes()
+        with self.fake_api(self.prepare_routes(w)):
+            result = m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                               f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                               campaign, output, expected_branch=WAVE_BRANCH)
+        self.assertEqual(result['status'], 'already-staged')
+        self.assertEqual(result['merge-sha'], w['merge'])
+        self.assertEqual((output / 'docs/reports/gsd-wave-evidence' /
+                          f"{w['plan']}-w{w['wave']}.rktd").read_bytes(), before)
+        # A staging that binds a different delivery identity refuses reuse.
+        staged_path = output / 'docs/reports/gsd-wave-evidence' / f"{w['plan']}-w{w['wave']}.rktd"
+        staged_path.write_text(staged_path.read_text().replace(
+            f'(merge-sha . "{w["merge"]}")', '(merge-sha . "' + 'f' * 40 + '")'))
+        with self.fake_api(self.prepare_routes(w)), \
+                self.assertRaisesRegex(m.Pending, 'different delivery identity'):
+            m.prepare(w['subject'], w['plan'], w['wave'], w['pr'],
+                      f"docs/reports/gsd-wave-evidence/{w['label']}.rktd",
+                      campaign, output, expected_branch=WAVE_BRANCH)
+
     def test_prepare_self_resolve_requires_receipt_branch(self):
         w = self.world(publish=False)
         campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
@@ -1839,6 +1871,9 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['status'], 'pending-review')
 
     def test_prepare_never_overwrites_existing_output(self):
+        # An existing staging WITHOUT this delivery's binding draft refuses;
+        # staging is never overwritten (the same-identity case is the
+        # already-staged idempotent resume).
         w = self.world(publish=False)
         campaign = build_campaign(self.base / 'camp', w['plan'], w['wave'])
         output = self.base / 'draft-exists'
@@ -1846,7 +1881,7 @@ class DeliveryTests(unittest.TestCase):
         with self.fake_api(self.prepare_routes(w)), self.assertRaises(m.Pending) as caught:
             m.prepare(w['subject'], w['plan'], w['wave'], w['pr'], w['source'],
                       campaign, output)
-        self.assertIn('refusing to overwrite', str(caught.exception))
+        self.assertIn('staged binding draft', str(caught.exception))
 
     def test_prepare_requires_merged_independently_reviewed_pr(self):
         w = self.world(publish=False)

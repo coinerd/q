@@ -672,6 +672,7 @@
     [(equal? status "opened") (delivery-effect-result 'ok data)]
     [(equal? status "exists") (delivery-effect-result 'ok data)]
     [(equal? status "already-published") (delivery-effect-result 'ok data)]
+    [(equal? status "already-staged") (delivery-effect-result 'ok data)]
     [(equal? status "green") (delivery-effect-result 'ok data)]
     [(equal? status "pending-review") (delivery-effect-result 'ok data)]
     [(equal? status "governed") (delivery-effect-result 'ok data)]
