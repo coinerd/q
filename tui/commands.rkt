@@ -226,39 +226,41 @@
       (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
   (if factory
       (let ([campaign-owner (gensym 'gsd-campaign)])
-        (thread (lambda ()
-                  (call-with-gsd-campaign-ownership
-                   campaign-owner
-                   (lambda ()
-                     (dynamic-wind
-                      void
-                      (lambda ()
-                        (with-handlers ([exn:fail? (lambda (e)
-                                                     (append-campaign-message!
-                                                      cctx
-                                                      (format "[ERROR] /go campaign failed: ~a"
-                                                              (exn-message e))))])
-                          (define result
-                            (execute-campaign-token!
-                             campaign-token
-                             run-in-fresh-wave-session
-                             ;; D4 (#9351): name the lease after the
-                             ;; orchestrating TUI session.
-                             #:lease-owner (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
-                          (unless (eq? (campaign-result-status result) 'campaign-complete)
-                            ;; BUG-0017: include the campaign-result-message so a
-                            ;; wave-budget timeout is distinguishable from a
-                            ;; cancellation/stale stop at a glance.
-                            (let ([stop-msg (campaign-result-message result)])
-                              (append-campaign-message!
-                               cctx
-                               (if (and stop-msg (not (string=? stop-msg "")))
-                                   (format "[ERROR] /go campaign stopped: ~a (~a)"
-                                           (campaign-result-status result)
-                                           stop-msg)
-                                   (format "[ERROR] /go campaign stopped: ~a"
-                                           (campaign-result-status result))))))))
-                      restore-pre-campaign-session!))))))
+        (thread
+         (lambda ()
+           (call-with-gsd-campaign-ownership
+            campaign-owner
+            (lambda ()
+              (dynamic-wind
+               void
+               (lambda ()
+                 (with-handlers ([exn:fail? (lambda (e)
+                                              (append-campaign-message!
+                                               cctx
+                                               (format "[ERROR] /go campaign failed: ~a"
+                                                       (exn-message e))))])
+                   (define result
+                     (execute-campaign-token! campaign-token
+                                              run-in-fresh-wave-session
+                                              ;; D4 (#9351): name the lease after the
+                                              ;; orchestrating TUI session.
+                                              #:lease-owner
+                                              (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
+                   (when (eq? (campaign-result-status result) 'campaign-complete)
+                     (append-campaign-message! cctx "/go campaign complete."))
+                   (unless (eq? (campaign-result-status result) 'campaign-complete)
+                     ;; BUG-0017: include the campaign-result-message so a
+                     ;; wave-budget timeout is distinguishable from a
+                     ;; cancellation/stale stop at a glance.
+                     (let ([stop-msg (campaign-result-message result)])
+                       (append-campaign-message! cctx
+                                                 (if (and stop-msg (not (string=? stop-msg "")))
+                                                     (format "[ERROR] /go campaign stopped: ~a (~a)"
+                                                             (campaign-result-status result)
+                                                             stop-msg)
+                                                     (format "[ERROR] /go campaign stopped: ~a"
+                                                             (campaign-result-status result))))))))
+               restore-pre-campaign-session!))))))
       (begin
         (append-campaign-message! cctx "[ERROR] No fresh session factory available for /go campaign.")
         (restore-pre-campaign-session!))))

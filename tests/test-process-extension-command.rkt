@@ -139,7 +139,17 @@
       (hasheq 'campaign-token token 'new-session "legacy-all-plan" 'text "starting"))
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W0")
      (check-equal? (sync/timeout 2 prompt-channel) "isolated-W1")
-     (check-equal? factory-count 2))
+     (check-equal? factory-count 2)
+     ;; Successful completion must replace the misleading last visible
+     ;; "Executing..." line even when no model turn produces output.
+     (define (completed-message?)
+       (for/or ([e (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))])
+         (string-contains? (transcript-entry-text e) "/go campaign complete")))
+     (let loop ([n 0])
+       (unless (or (completed-message?) (>= n 200))
+         (sync (alarm-evt (+ (current-inexact-milliseconds) 20)))
+         (loop (add1 n))))
+     (check-true (completed-message?) "successful /go must visibly report completion"))
    (lambda () (delete-directory/files dir #:must-exist? #f))))
 
 (test-case "BUG-0017: /go stop line includes the campaign-result-message"
