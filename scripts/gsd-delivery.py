@@ -1473,7 +1473,30 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output,
                             binding_branch(plan, wave, generation),
                             names, generation)
     output = Path(output).resolve()
-    require(not output.exists(), 'output directory already exists; refusing to overwrite')
+    if output.exists():
+        # Idempotent resume: a staging directory that already holds the
+        # binding draft for THIS exact identity (same merge, PR head and
+        # number, binding branch and generation) is already-prepared — the
+        # ladder may proceed to binding-review on it. A staged draft for any
+        # OTHER identity is still refused: staging is never overwritten and
+        # never silently accepted across identities.
+        staged = output / binding
+        require(staged.is_file() and not staged.is_symlink(),
+                'binding staging output exists without the staged binding draft')
+        existing = read_datum(staged)
+        require(isinstance(existing, dict),
+                'existing staged binding draft is malformed')
+        require(existing.get('merge-sha') == merge and
+                existing.get('delivery-head-sha') == head and
+                existing.get('delivery-pr') == number and
+                existing.get('branch') == binding_branch(plan, wave, generation) and
+                existing.get('wave-branch') == dig(pr, 'head', 'ref'),
+                'existing binding staging binds a different delivery identity; '
+                'refusing to reuse it for this preparation')
+        return {'status': 'already-staged', 'output': str(output),
+                'binding': binding, 'branch': binding_branch(plan, wave, generation),
+                'merge-sha': merge, 'delivery-head-sha': head,
+                'implementation-sha': merge}
     output.mkdir(parents=True)
     payload = output / 'request.json'
     payload.write_text(json.dumps(request))
