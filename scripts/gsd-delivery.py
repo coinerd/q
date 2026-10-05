@@ -1670,9 +1670,17 @@ def pr_ci(repo, number, expected_branch, expected_head=None):
     require(full_sha(main), 'malformed origin/main head')
     pr = api(slug, 'pulls/%s' % number, _refresh=True)
     require(isinstance(pr, dict), 'malformed pull-request response')
-    require(pr.get('state') == 'open', 'pull request is not open')
-    validate_pr_identity(pr, slug)
     head = dig(pr, 'head', 'sha')
+    # Merged-resume (resolve_pr's idempotent path): a closed MERGED PR at the
+    # exact durable receipt head keeps its trusted required checks at that
+    # head, so a resumed campaign can still evaluate its CI stage without
+    # opening a redundant PR. Everything else closed is refused: the open-PR
+    # contract is only ever loosened by an explicit receipt-bound identity.
+    merged_resume = (expected_head is not None and pr.get('state') == 'closed'
+                     and pr_is_merged(pr) and head == expected_head)
+    require(pr.get('state') == 'open' or merged_resume,
+            'pull request is not open')
+    validate_pr_identity(pr, slug)
     require(full_sha(head), 'pull request has no full head SHA')
     require(dig(pr, 'head', 'ref') == expected_branch,
             'pull request branch does not match expected branch')

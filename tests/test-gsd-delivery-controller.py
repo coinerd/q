@@ -2845,6 +2845,59 @@ class DeliveryTests(unittest.TestCase):
                     m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
             self.assertIn('missing check: ' + POLICY_NAMES[0], str(caught.exception))
 
+    def test_pr_ci_accepts_merged_resume_pr_at_exact_receipt_head(self):
+        """Resumed campaigns (resolve_pr's merged-resume path) hand pr_ci the
+        closed merged PR at the exact durable receipt head; the trusted
+        required checks at that head persist and must be evaluated. Closed
+        without a merge, a merge at the wrong head, or no expected head at
+        all still refuse: merged-resume is an explicit receipt-bound path,
+        never a loosened open-PR contract."""
+        w = self.open_impl_world(merged=True)
+        merged_payload = dict(self.open_pr_payload(w))
+        merged_payload.update({'state': 'closed', 'merged': True,
+                               'merge_commit_sha': w['merge']})
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): merged_payload}):
+            result = m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                             expected_head=w['head'])
+        self.assertEqual(result, {'status': 'green', 'pr': w['pr'],
+                                  'branch': WAVE_BRANCH, 'head': w['head']})
+
+    def test_pr_ci_merged_resume_refuses_unmerged_wrong_head_or_no_receipt(self):
+        w = self.open_impl_world(merged=True)
+        base = dict(self.open_pr_payload(w))
+        base.update({'state': 'closed', 'merged': True,
+                     'merge_commit_sha': w['merge']})
+        # Closed but NOT merged.
+        unmerged = dict(base, merged=False, merge_commit_sha=None)
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): unmerged}):
+            with self.assertRaises(m.Pending) as caught:
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                        expected_head=w['head'])
+            self.assertIn('pull request is not open', str(caught.exception))
+        # Merged but a DIFFERENT head than the receipt.
+        wrong_head = dict(base, head={'sha': w['h1'], 'ref': WAVE_BRANCH,
+                                      'repo': {'full_name': SLUG}})
+        m._CHECKS_CACHE.clear()
+        with self.assertRaises(m.Pending) as caught:
+            with self.fake_api({**self.ci_routes(w, names=[],
+                                                 protection_names=[]),
+                                (SLUG, f'pulls/{w["pr"]}', False): wrong_head}):
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH,
+                        expected_head=w['head'])
+        self.assertIn('pull request is not open', str(caught.exception))
+        # Merged at the right head but no expected head supplied: the open-PR
+        # contract applies with no receipt to bind the merged identity.
+        m._CHECKS_CACHE.clear()
+        with self.fake_api({**self.ci_routes(w),
+                            (SLUG, f'pulls/{w["pr"]}', False): base}):
+            with self.assertRaises(m.Pending) as caught:
+                m.pr_ci(w['subject'], w['pr'], WAVE_BRANCH)
+            self.assertIn('pull request is not open', str(caught.exception))
+
     def test_pr_ci_refuses_wrong_branch_or_foreign_repository(self):
         w = self.open_impl_world()
         wrong_branch = dict(self.open_pr_payload(w),
