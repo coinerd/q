@@ -1355,7 +1355,12 @@ def binding_merge(repo, plan, wave, number, expected_head, expected_branch, sour
 binding_pr = binding_publish
 
 
-def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_branch=None):
+def prepare(repo, plan, wave, number, relative, campaign_root, output,
+            expected_branch=None, expected_head=None):
+    """expected_head (the durable receipt head) disambiguates self-resolution
+    when the delivery branch carries MULTIPLE merged PRs (lawful for repair
+    generations: each republication squashes its own PR); resolve_merged_pr
+    then picks the PR whose head IS the receipt head instead of refusing."""
     generation = journal_generation(repo, plan, wave, campaign_root)
     binding = binding_path(plan, wave, generation)
     slug = repository(repo)
@@ -1365,7 +1370,7 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output, expected_
     if number is None:
         require(isinstance(expected_branch, str) and expected_branch.strip(),
                 'prepare --pr requires --expected-branch for durable PR self-resolution')
-        pr = resolve_merged_pr(slug, expected_branch)
+        pr = resolve_merged_pr(slug, expected_branch, expected_head)
         require(isinstance(pr, dict),
                 'prepare cannot self-resolve exactly one merged implementation PR for branch ' + expected_branch)
         number = pr.get('number')
@@ -1520,7 +1525,11 @@ def sync(repo, expected_branch):
         current = git(repo, 'symbolic-ref', '--quiet', '--short', 'HEAD').strip()
     except Pending:
         raise Pending('detached HEAD; refusing synchronization')
-    require(current == expected_branch,
+    # The shared main checkout (the controller's own repo context) may
+    # carry the published bytes too: accept the main checkout alongside the
+    # wave branch itself. Anything else is an unrelated branch and refuses;
+    # the fast-forward below never switches branches.
+    require(current == expected_branch or current == 'main',
             'synchronization refused: HEAD is %r, expected %r (unrelated branch changes not accepted)'
             % (current, expected_branch))
     require(not scratch_exempt_porcelain(repo).strip(), 'dirty checkout; refusing synchronization')
@@ -1897,7 +1906,8 @@ def main():
                 require(args.expected_branch,
                         'prepare without --pr requires --expected-branch')
             result = prepare(args.repo, args.plan, args.wave, args.pr, args.evidence,
-                             args.campaign_root, args.output, args.expected_branch)
+                             args.campaign_root, args.output, args.expected_branch,
+                             args.expected_head)
         print(json.dumps(result))
         return 0
     except (Pending, ValueError, KeyError, TypeError, OSError, AttributeError) as error:

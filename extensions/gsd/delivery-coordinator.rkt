@@ -578,7 +578,9 @@
     [("binding-prepared")
      ;; Prepare the durable, hash-named binding staging output from the
      ;; implementation receipt. The Python action self-resolves the merged
-     ;; implementation PR from the receipt branch when --pr is omitted.
+     ;; implementation PR from the receipt branch when --pr is omitted; the
+     ;; receipt head disambiguates branches carrying multiple merged PRs
+     ;; (lawful across repair generations).
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
      (run-controller "prepare"
                      "--evidence"
@@ -588,7 +590,9 @@
                      "--campaign-root"
                      (path->string base-dir)
                      "--expected-branch"
-                     receipt-branch)]
+                     receipt-branch
+                     "--expected-head"
+                     (default-delivery-receipt-head base-dir plan wave))]
     [("binding-review")
      ;; Validate the staged draft and its rebind guard. This is evidence
      ;; validation only; it never manufactures an approval.
@@ -631,7 +635,17 @@
                      "--expected-branch"
                      (default-binding-branch plan wave #:base-dir base-dir))]
     [("sync")
+     ;; The campaign working checkout synchronizes with the published bytes
+     ;; (fast-forward-only, never switching branches): either the wave
+     ;; branch itself or the shared main checkout the controller runs from.
      (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
+    ;; Terminal stage: the authenticated delivered readback (controller
+    ;; `status`) is the ONLY effect that completes the ladder — the same
+    ;; receipt-bound proof the full-loop checkpoint finalizes DONE from.
+    ;; default-delivery-controller-interpret already maps its "delivered"
+    ;; status to an ok effect; this wiring makes the terminal stage
+    ;; reachable instead of an unimplemented stop.
+    [("delivered") (run-controller "status" "--campaign-root" (path->string base-dir))]
     [else
      ;; Stages the controller shell cannot yet act on deterministically are
      ;; typed stops with an actionable reason — never fabricated progress.
@@ -758,9 +772,9 @@
   (with-handlers ([exn:fail? (lambda (_e)
                                (default-delivery-evidence-path plan wave #:base-dir base-dir))])
     (define generation (binding-generation base-dir plan wave))
-    (q-prefixed-path->repo-relative
-     base-dir
-     (hash-ref (active-paths base-dir plan wave generation) 'evidence))))
+    (q-prefixed-path->repo-relative base-dir
+                                    (hash-ref (active-paths base-dir plan wave generation)
+                                              'evidence))))
 
 ;; Binding publication uses a deterministic branch and durable campaign-local
 ;; staging directory. These derivations mirror gsd-delivery.py and are never

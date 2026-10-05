@@ -273,6 +273,38 @@
                             (run-delivery-coordinator! dir plan 0 #:controller controller))
                           (check-eq? (delivery-outcome-kind outcome) 'delivered)
                           (check-equal? calls 0))))
+  (test-case "full ladder walks through sync to the delivered stage"
+    ;; Regression for the resume gap observed live (2026-10-05): a campaign
+    ;; whose delivery is already merged and published resumes from
+    ;; context-ready and must be able to reach the terminal delivered stage.
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (done-record dir))
+       (define plan (campaign-plan-id ready))
+       (define calls '())
+       (define (controller b p w target)
+         (set! calls (cons target calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (for ([expected (in-list '("implementation-review" "implementation-pr"
+                                                          "implementation-ci"
+                                                          "implementation-merged"
+                                                          "binding-prepared"
+                                                          "binding-review"
+                                                          "binding-pr"
+                                                          "binding-ci"
+                                                          "binding-merged"
+                                                          "governance"
+                                                          "sync"
+                                                          "delivered"))])
+         (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+         (check-eq? (delivery-outcome-kind outcome) 'ok expected)
+         (check-equal? (stage-count dir plan) expected))
+       ;; The next invocation short-circuits at the terminal stage.
+       (define after (run-delivery-coordinator! dir plan 0 #:controller controller))
+       (check-eq? (delivery-outcome-kind after) 'delivered)
+       (check-equal? (stage-count dir plan) "delivered"))))
+
   (test-case "awaiting-review stops immediately and never advances the journal"
     (call-with-campaign
      1
@@ -716,46 +748,45 @@
 (test-case "active implementation source path is derived from frozen declarations and generation"
   (define plan (make-string 64 #\c))
   (define root (make-temporary-file "active-source-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (make-directory* (build-path root ".planning" "waves"))
-     (define plan-text "# Plan\n\n- [Inbox] W3: Repair → waves/W3-repair.md\n")
-     (define wave-text
-       (string-append "# W3: Repair\n\n## Files\n\n"
-                      "- File: `docs/reports/gsd-wave-evidence/v9.9.9-w3.rktd`\n"
-                      "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w3.rktd`\n"
-                      "- File: `docs/reports/gsd-wave-validation/v9.9.9-w3.rktd`\n"))
-     (display-to-file plan-text (build-path root ".planning" "PLAN.md"))
-     (display-to-file wave-text (build-path root ".planning" "waves" "W3-repair.md"))
-     (make-plan-snapshot! root plan plan-text #:plan-id plan)
-     (define (receipt head)
-       (hasheq 'repo
-               "/repo"
-               'branch
-               "campaign/w3"
-               'head
-               head
-               'tree
-               (make-string 40 #\c)
-               'origin
-               "https://github.com/example/q.git"
-               'verified-at
-               1
-               'evidence
-               "verify"
-               'attempt-id
-               "attempt-1"
-               'attempt-fence
-               2))
-     (record-delivery-receipt! root plan 3 (receipt (make-string 40 #\a)))
-     (reconcile-repair-tail-receipt! root
-                                     plan
-                                     3
-                                     (receipt (make-string 40 #\d))
-                                     #:expected-attempt-id "attempt-1"
-                                     #:expected-fence 2
-                                     #:head-ancestor? (lambda (_old _new) #t))
-     (check-equal? (default-active-delivery-evidence-path root plan 3)
-                   "docs/reports/gsd-wave-evidence/v9.9.9-w3-r1.rktd"))
-   (lambda () (delete-directory/files root #:must-exist? #f))))
+  (dynamic-wind void
+                (lambda ()
+                  (make-directory* (build-path root ".planning" "waves"))
+                  (define plan-text "# Plan\n\n- [Inbox] W3: Repair → waves/W3-repair.md\n")
+                  (define wave-text
+                    (string-append "# W3: Repair\n\n## Files\n\n"
+                                   "- File: `docs/reports/gsd-wave-evidence/v9.9.9-w3.rktd`\n"
+                                   "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w3.rktd`\n"
+                                   "- File: `docs/reports/gsd-wave-validation/v9.9.9-w3.rktd`\n"))
+                  (display-to-file plan-text (build-path root ".planning" "PLAN.md"))
+                  (display-to-file wave-text (build-path root ".planning" "waves" "W3-repair.md"))
+                  (make-plan-snapshot! root plan plan-text #:plan-id plan)
+                  (define (receipt head)
+                    (hasheq 'repo
+                            "/repo"
+                            'branch
+                            "campaign/w3"
+                            'head
+                            head
+                            'tree
+                            (make-string 40 #\c)
+                            'origin
+                            "https://github.com/example/q.git"
+                            'verified-at
+                            1
+                            'evidence
+                            "verify"
+                            'attempt-id
+                            "attempt-1"
+                            'attempt-fence
+                            2))
+                  (record-delivery-receipt! root plan 3 (receipt (make-string 40 #\a)))
+                  (reconcile-repair-tail-receipt! root
+                                                  plan
+                                                  3
+                                                  (receipt (make-string 40 #\d))
+                                                  #:expected-attempt-id "attempt-1"
+                                                  #:expected-fence 2
+                                                  #:head-ancestor? (lambda (_old _new) #t))
+                  (check-equal? (default-active-delivery-evidence-path root plan 3)
+                                "docs/reports/gsd-wave-evidence/v9.9.9-w3-r1.rktd"))
+                (lambda () (delete-directory/files root #:must-exist? #f))))
