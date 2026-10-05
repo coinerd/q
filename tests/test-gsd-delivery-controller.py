@@ -1409,6 +1409,37 @@ class DeliveryTests(unittest.TestCase):
         self.assertTrue(sh('git', 'show-ref', '--verify',
                            f'refs/remotes/origin/{branch}', cwd=w['subject']).strip())
 
+    def test_binding_publish_already_merged_publication_is_idempotent(self):
+        """A resumed campaign re-runs binding-pr after its binding PR already
+        merged and protected main moved on. The merged publication is
+        already-published — idempotent return with the merge identity, no
+        republish, and no fresh-main-base demand (that governs REUSE of an
+        unpublished branch, not a completed publication)."""
+        merged = self.binding_pr_world(merged=True)
+        campaign = build_campaign(self.base / 'campaign', merged['plan'], merged['wave'])
+        output = binding_staging(self.base / 'campaign', merged['plan'], merged['wave'])
+        with self.fake_api(self.prepare_routes(merged)):
+            m.prepare(merged['subject'], merged['plan'], merged['wave'], merged['pr'],
+                      f"docs/reports/gsd-wave-evidence/{merged['label']}.rktd",
+                      campaign, output)
+        finalize_binding(self.base / 'campaign', merged, output)
+        # Protected main advances past the publication base (post-merge
+        # history), exactly like the live resumed campaign.
+        sh('git', 'checkout', '-q', 'main', cwd=merged['work'])
+        write_file(merged['work'] / 'src/file.txt', 'later\n')
+        sh('git', 'add', '-A', cwd=merged['work'])
+        sh('git', 'commit', '-q', '-m', 'main advanced', cwd=merged['work'])
+        sh('git', 'push', '-q', merged['origin'], 'main:main', cwd=merged['work'])
+        sh('git', 'pull', '--ff-only', '-q', cwd=merged['subject'])
+        routes = self.binding_resolve_routes(merged, merged=True)
+        with self.fake_api(routes):
+            result = m.binding_publish(merged['subject'], merged['plan'], merged['wave'],
+                                       output, campaign_root=self.base / 'campaign')
+        self.assertEqual(result['status'], 'already-published')
+        self.assertEqual(result['pr'], merged['bpr'])
+        self.assertEqual(result['head'], merged['bhead'])
+        self.assertEqual(result['merge-sha'], merged['merge'])
+
     def test_binding_publish_rejects_divergent_existing_branch(self):
         w = self.world(publish=False)
         campaign = build_campaign(self.base / 'campaign', w['plan'], w['wave'])
