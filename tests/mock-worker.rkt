@@ -11,6 +11,9 @@
 ;;   crash   — exit immediately after reading first line
 ;;   stderr  — write to stderr then respond
 ;;   slow    — respond slowly (0.5s per request)
+;;   hold    — queue requests with tool-name "hold" and answer nothing
+;;             until a "release" request arrives (deterministic timeout
+;;             trigger for C2: no wall-clock race on worker spawn/load)
 ;;   real    — M6: use real tool dispatch (bash) for faithful responses
 
 (require json
@@ -63,6 +66,9 @@
   (close-input-port err-port)
   output)
 
+;; Hold-mode queue: request-ids awaiting release (mock "hold" mode only).
+(define held (box '()))
+
 (define (process-line line)
   (with-handlers ([exn:fail? (lambda (e)
                                (write-string (make-err-response "error" (exn-message e)))
@@ -75,6 +81,25 @@
        (displayln "error: something went wrong on stderr" (current-error-port))
        (write-string (make-ok-response req-id "responded-with-stderr"))
        (newline)]
+      [(string=? mode "hold")
+       ;; Deterministic hold mode: tool-name "hold" requests are queued
+       ;; and never answered until a tool-name "release" request flushes
+       ;; them (original ids) plus the release itself. Everything else
+       ;; gets the normal echo. The client-side timeout therefore always
+       ;; fires first, independent of machine load or spawn latency.
+       (define tool (hash-ref req 'tool-name "unknown"))
+       (cond
+         [(equal? tool "hold") (set-box! held (append (unbox held) (list req-id)))]
+         [(equal? tool "release")
+          (for ([hid (in-list (unbox held))])
+            (write-string (make-ok-response hid "released-response"))
+            (newline))
+          (set-box! held '())
+          (write-string (make-ok-response req-id "released"))
+          (newline)]
+         [else
+          (write-string (make-ok-response req-id tool args))
+          (newline)])]
       [(string-prefix? mode "delay:")
        (define secs (string->number (substring mode 6)))
        (sleep secs)

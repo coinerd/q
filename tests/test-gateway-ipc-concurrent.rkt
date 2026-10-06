@@ -41,17 +41,33 @@
       (check-equal? (length (remove-duplicates (unbox ids))) 1000))
 
     ;; C2: Drain thread survives timeout
+    ;; Deterministic variant (2026-10-02 W0 repair): the mock runs in
+    ;; "hold" mode and simply never answers the first request, so the
+    ;; client-side 200ms budget always expires first — the original
+    ;; delay:2 race (a fresh worker spawn + drain matching against
+    ;; 200ms/5s wall-clock budgets) failed under CPU starvation on
+    ;; loaded boxes.
     ;; @suite default
     ;; @boundary unit
     (test-case "C2: timeout doesn't block drain thread"
       (define gw #f)
-      (dynamic-wind (lambda () (set! gw (start-mock "delay:2")))
+      (dynamic-wind (lambda () (set! gw (start-mock "hold")))
                     (lambda ()
                       (sleep 0.2)
-                      (define resp1 (send-request! gw (mk-req "timeout-req") 200))
+                      ;; Readiness roundtrip: absorb worker spawn latency
+                      ;; in a generous budget before exercising timeouts.
+                      (define probe (send-request! gw (mk-req "probe-req" "probe") 10000))
+                      (check-equal? (ipc-response-status probe) 'ok)
+                      (check-equal? (ipc-response-request-id probe) "probe-req")
+                      ;; The worker holds this request forever (no release
+                      ;; is sent), so 'timeout is deterministic.
+                      (define resp1 (send-request! gw (mk-req "timeout-req" "hold") 200))
                       (check-equal? (ipc-response-status resp1) 'timeout)
-                      (define resp2 (send-request! gw (mk-req "second-req") 5000))
-                      (check-equal? (ipc-response-status resp2) 'ok))
+                      ;; The drain thread must still match a fresh response
+                      ;; while the timed-out request remains unanswered.
+                      (define resp2 (send-request! gw (mk-req "second-req" "probe") 10000))
+                      (check-equal? (ipc-response-status resp2) 'ok)
+                      (check-equal? (ipc-response-request-id resp2) "second-req"))
                     (lambda ()
                       (when (and gw (gateway-alive? gw))
                         (gateway-shutdown! gw)))))
