@@ -4,7 +4,7 @@
 ;; @suite testing
 ;; @isolation process
 ;; @timeout 480 — measured >120s warm standalone (2026-10-02, W0 repair
-;; probe); the file drives nested runner subprocesses and exceeded the
+;; probe); the file drives nested runner child processes and exceeded the
 ;; default 120s budget on a fully warm compile cache.
 ;; @boundary integration  ;; @mutates fs
 
