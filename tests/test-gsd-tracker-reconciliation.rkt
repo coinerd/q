@@ -261,6 +261,58 @@
        (check-equal? (map cadr (gh-log-state-calls state-a))
                      (map cadr (gh-log-state-calls state-b))))))
 
+  (test-case "exactly one close for a delivered wave; a repeat pass causes no second close"
+    ;; BUG-0074 wiring idempotence criterion: the fully proven pass closes
+    ;; once, and a restart mid-pass re-runs into an already-closed issue
+    ;; without producing a second close effect — the pass converges.
+    (with-temp-dir
+     (lambda (dir)
+       (seed-authoritative-delivery! dir)
+       ;; Stateful fake tracker: the issue starts open and can only close
+       ;; once. Every command is answered with success, so a redundant
+       ;; command is only observable when it changes tracker state — exactly
+       ;; the observable the idempotence criterion talks about.
+       (define issue-open? (box #t))
+       (define close-transitions (box 0))
+       (define port
+         (gsd-github-port (lambda (cmd)
+                            (when (and (eq? (gsd-github-command-kind cmd) 'issue-close)
+                                       (unbox issue-open?))
+                              (set-box! issue-open? #f)
+                              (set-box! close-transitions (add1 (unbox close-transitions))))
+                            (gsd-github-command-result (gsd-github-command-correlation-id cmd)
+                                                       (gsd-github-command-kind cmd)
+                                                       #f
+                                                       #f
+                                                       #f
+                                                       "ok"))
+                          (lambda () #f)
+                          (lambda () '())))
+       (define binding
+         (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done"))
+       (define first-pass
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
+                                            #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status first-pass) 'reconciled)
+       (check-equal? (unbox close-transitions) 1 "exactly one close for the fully proven wave")
+       (check-false (unbox issue-open?) "the fake tracker's issue is closed by the first pass")
+       (define second-pass
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
+                                            #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status second-pass) 'reconciled)
+       (check-equal? (unbox close-transitions)
+                     1
+                     "a repeat pass must not close the already-closed issue again")
+       (check-false (unbox issue-open?) "tracker state converged and stayed converged"))))
+
   (test-case "no action on pending proof, missing/stale binding, non-DONE wave, receipt mismatch, or handoff mismatch"
     (for ([scenario
            (in-list
