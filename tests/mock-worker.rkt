@@ -87,9 +87,10 @@
        ;; them (original ids) plus the release itself. Everything else
        ;; gets the normal echo. The client-side timeout therefore always
        ;; fires first, independent of machine load or spawn latency.
-       (define tool (hash-ref req 'tool-name "unknown"))
-       (cond
-         [(equal? tool "hold") (set-box! held (append (unbox held) (list req-id)))]
+        (define tool (hash-ref req 'tool-name "unknown"))
+        (define args (hash-ref req 'arguments (hasheq)))
+        (cond
+          [(equal? tool "hold") (set-box! held (append (unbox held) (list req-id)))]
          [(equal? tool "release")
           (for ([hid (in-list (unbox held))])
             (write-string (make-ok-response hid "released-response"))
