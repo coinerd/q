@@ -4,6 +4,8 @@
 ;; v0.99.3 W0: Concurrent regression tests for C1-C4 fixes.
 
 ;; @speed fast
+;; @suite default
+;; @boundary unit
 (require rackunit
          rackunit/text-ui
          racket/async-channel
