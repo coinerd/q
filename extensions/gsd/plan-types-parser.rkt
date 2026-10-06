@@ -100,6 +100,61 @@
          [else (go (cdr chars) depth (cons c seg) acc)])]))
   (map string-trim (go (string->list s) 0 '() '())))
 
+;; Fenced shell declarations are authoritative: surrounding Verify prose is
+;; documentation, not executable input. Preserve legacy unfenced declarations
+;; only when no fence occurs. An unclosed fence fails closed (no command).
+(define (verify-section-lines lines)
+  (let loop ([remaining lines]
+             [fence #f]
+             [shell? #f]
+             [saw-fence? #f]
+             [commands '()]
+             [legacy '()])
+    (cond
+      [(or (null? remaining)
+           (and (not fence) (regexp-match? #rx"^## " (string-trim (car remaining)))))
+       (cond
+         [fence '()]
+         ;; Keep shell newlines: semicolon joining breaks comments, continuations,
+         ;; heredocs and compound commands inside fenced scripts.
+         [saw-fence? (list (string-join (reverse commands) "\n"))]
+         [else (reverse legacy)])]
+      [else
+       (define line (string-trim (car remaining)))
+       (define marker (regexp-match #px"^(`{3,}|~{3,})(.*)$" line))
+       (cond
+         [fence
+          (define closes?
+            (and marker
+                 (char=? (string-ref (cadr marker) 0) (string-ref fence 0))
+                 (>= (string-length (cadr marker)) (string-length fence))
+                 (string=? (string-trim (caddr marker)) "")))
+          (loop (cdr remaining)
+                (and (not closes?) fence)
+                shell?
+                saw-fence?
+                (if (and (not closes?) shell?)
+                    (cons (car remaining) commands)
+                    commands)
+                legacy)]
+         [marker
+          (loop (cdr remaining)
+                (cadr marker)
+                (and (member (string-downcase (string-trim (caddr marker))) '("" "sh" "bash" "shell"))
+                     #t)
+                #t
+                commands
+                legacy)]
+         [else
+          (loop (cdr remaining)
+                #f
+                #f
+                saw-fence?
+                commands
+                (if (string=? line "")
+                    legacy
+                    (cons line legacy)))])])))
+
 ;; Parse structured fields from wave document content.
 (define (parse-wave-content content)
   (define lines (string-split content "\n"))
@@ -108,20 +163,14 @@
   (define verify-cmd "")
   (define done-criteria '())
   (define in-files-section #f)
-  ;; BUG-0070: a Verify section is structural Markdown, not an arbitrary
-  ;; four-line lookahead window. Capture every nonblank, non-fence line up
-  ;; to the next level-2 heading so executable declarations late in a list
-  ;; cannot be silently truncated.
+  ;; BUG-0070: scan the complete section, not a four-line lookahead.
+  ;; When fenced, execute only shell blocks, never surrounding prose.
   (define heading-verify-lines
     (let find-heading ([remaining lines])
       (cond
         [(null? remaining) '()]
         [(string-prefix? (string-trim (car remaining)) "## Verify")
-         (for/list ([candidate (in-list (cdr remaining))]
-                    #:break (regexp-match? #rx"^## " (string-trim candidate))
-                    #:when (and (not (string=? (string-trim candidate) ""))
-                                (not (string-contains? candidate "```"))))
-           (string-trim candidate))]
+         (verify-section-lines (cdr remaining))]
         [else (find-heading (cdr remaining))])))
   (for ([line lines])
     (define trimmed (string-trim line))
