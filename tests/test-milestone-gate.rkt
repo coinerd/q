@@ -2,6 +2,9 @@
 
 ;; @suite ci
 ;; @speed fast
+;; @timeout 480 — measured >120s warm standalone (2026-10-02, W0 repair
+;; probe); the gate suite compiles-heavy fixtures and exceeded the default
+;; 120s budget on a fully warm compile cache.
 ;; @boundary unit
 ;; tests/test-milestone-gate.rkt
 ;; W5 (#8522): Tests for milestone-gate.rkt release truth verification.
