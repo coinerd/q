@@ -11,6 +11,7 @@
 ;;   crash   — exit immediately after reading first line
 ;;   stderr  — write to stderr then respond
 ;;   slow    — respond slowly (0.5s per request)
+;;   controlled-timeout — hold timeout-req until out-of-band release; no sleeps
 ;;   real    — M6: use real tool dispatch (bash) for faithful responses
 
 (require json
@@ -23,6 +24,9 @@
     (vector-ref (current-command-line-arguments) 0)))
 
 (flush-output (current-output-port))
+
+;; Controlled C2 fixture state, never used by other worker modes.
+(define held-request-id #f)
 
 (define (make-ok-response req-id content [details (hasheq)])
   (jsexpr->string (hasheq 'request-id
@@ -70,6 +74,16 @@
     (define req (string->jsexpr line))
     (define req-id (hash-ref req 'request-id "unknown"))
     (cond
+      [(and (string=? mode "controlled-timeout") (string=? req-id "timeout-req"))
+       (set! held-request-id req-id)
+       ;; Ack receipt separately so the test knows the request was dispatched.
+       (write-string (make-ok-response "held-ready" "held"))
+       (newline)]
+      [(and (string=? mode "controlled-timeout") (string=? req-id "release"))
+       (when held-request-id
+         (write-string (make-ok-response held-request-id "late-response"))
+         (newline)
+         (set! held-request-id #f))]
       [(string=? mode "crash") (exit 1)]
       [(string=? mode "stderr")
        (displayln "error: something went wrong on stderr" (current-error-port))

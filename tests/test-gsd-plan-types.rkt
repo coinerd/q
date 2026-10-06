@@ -245,6 +245,40 @@
   (check-equal? (hash-ref result 'verify) "raco test q/tests/foo.rkt")
   (check-equal? (hash-ref result 'done) '("tests pass")))
 
+(test-case "Verify shell fence excludes surrounding milestone prose"
+  (define content
+    (string-append "## Verify\nRun from the `q/` directory, in this order:\n\n```sh\n"
+                   "raco make extensions/gsd/go-orchestrator.rkt\n"
+                   "racket scripts/lint-all.rkt\n"
+                   "racket scripts/run-tests.rkt --suite fast\n```\n\n"
+                   "Every command must pass. A red tree is never shipped; the fast gate is the\n"
+                   "merge precondition, not a follow-up.\n\n## Done\n- delivered\n"))
+  (check-equal? (hash-ref (parse-wave-content content) 'verify)
+                (string-append "raco make extensions/gsd/go-orchestrator.rkt\n"
+                               "racket scripts/lint-all.rkt\n"
+                               "racket scripts/run-tests.rkt --suite fast")))
+
+(test-case "Verify collects shell fences but not other-language examples"
+  (check-equal?
+   (hash-ref
+    (parse-wave-content
+     "## Verify\nFirst:\n```bash\nraco make x.rkt\n```\n```json\n{}\n```\nThen:\n~~~sh\nraco test x.rkt\n~~~\n## Done\nfinished\n")
+    'verify)
+   "raco make x.rkt\nraco test x.rkt"))
+
+(test-case "Verify preserves fenced shell comments, continuations and heredocs"
+  (define script "# compile\nraco make \\\n  x.rkt\ncat <<'EOF'\n\n## literal, not a heading\nEOF")
+  (check-equal? (hash-ref (parse-wave-content
+                           (string-append "## Verify\n```sh\n" script "\n```\n## Done\nfinished\n"))
+                          'verify)
+                script))
+
+(test-case "Verify malformed or non-executable fences never fall back to prose"
+  (for ([content (in-list (list "## Verify\nRun this:\n```sh\nraco test x.rkt\n"
+                                "## Verify\nRun this:\n```json\n{}\n```\n## Done\nfinished\n"
+                                "## Verify\nRun this:\n```sh\nraco test x.rkt\n~~~\n"))])
+    (check-equal? (hash-ref (parse-wave-content content) 'verify) "")))
+
 (test-case "W2: parse-wave-content extracts heading-style ## Verify"
   (define content "## Verify\nbash test.sh\n")
   (define result (parse-wave-content content))

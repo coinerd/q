@@ -6,6 +6,7 @@
 ;; @speed fast
 (require rackunit
          rackunit/text-ui
+         json
          racket/async-channel
          racket/runtime-path
          (only-in racket/list remove-duplicates)
@@ -45,16 +46,31 @@
     ;; @boundary unit
     (test-case "C2: timeout doesn't block drain thread"
       (define gw #f)
-      (dynamic-wind (lambda () (set! gw (start-mock "delay:2")))
-                    (lambda ()
-                      (sleep 0.2)
-                      (define resp1 (send-request! gw (mk-req "timeout-req") 200))
-                      (check-equal? (ipc-response-status resp1) 'timeout)
-                      (define resp2 (send-request! gw (mk-req "second-req") 5000))
-                      (check-equal? (ipc-response-status resp2) 'ok))
-                    (lambda ()
-                      (when (and gw (gateway-alive? gw))
-                        (gateway-shutdown! gw)))))
+      (dynamic-wind
+       (lambda () (set! gw (start-mock "controlled-timeout")))
+       (lambda ()
+         ;; Prove startup completed; do not guess with a sleep.
+         (check-equal? (ipc-response-status (send-request! gw (mk-req "ready") 5000)) 'ok)
+         (define held (make-async-channel))
+         (register-pending-request! gw "held-ready" held)
+         (define resp1 (send-request! gw (mk-req "timeout-req") 200))
+         (check-equal? (ipc-response-status resp1) 'timeout)
+         (check-not-false (sync/timeout 5 held) "worker must have received the timed-out request")
+         ;; Out-of-band fixture control releases the late response.
+         ;; Normal requests remain on the real FIFO dispatcher.
+         (call-with-semaphore (gateway-worker-stdin-write-lock gw)
+                              (lambda ()
+                                (write-json (ipc-request->jsexpr (mk-req "release"))
+                                            (gateway-worker-stdin gw))
+                                (newline (gateway-worker-stdin gw))
+                                (flush-output (gateway-worker-stdin gw))))
+         (define resp2 (send-request! gw (mk-req "second-req") 5000))
+         (check-equal? (ipc-response-status resp2) 'ok)
+         (check-equal? (ipc-response-request-id resp2) "second-req")
+         (check-equal? (ipc-response-content resp2) "echo"))
+       (lambda ()
+         (when (and gw (gateway-alive? gw))
+           (gateway-shutdown! gw)))))
 
     ;; C3: Concurrent writes don't corrupt
     (test-case "C3: 20 concurrent requests all correct"
