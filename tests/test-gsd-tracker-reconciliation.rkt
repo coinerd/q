@@ -15,7 +15,8 @@
          "../runtime/settings.rkt"
          "../extensions/gsd/gh-cli-tracker-adapter.rkt"
          "../extensions/gsd/tracker-production-wiring.rkt"
-         "../extensions/gsd/tracker-reconciliation.rkt")
+         "../extensions/gsd/tracker-reconciliation.rkt"
+         "helpers/gsd-port-fakes.rkt")
 
 (define MANIFEST
   (make-campaign-manifest 1
@@ -260,6 +261,66 @@
                                           #:delivery-reader (lambda _ (delivered-proof)))
        (check-equal? (map cadr (gh-log-state-calls state-a))
                      (map cadr (gh-log-state-calls state-b))))))
+
+  (test-case "a repeat pass on an already-reconciled wave performs no new external writes"
+    (with-temp-dir
+     (lambda (dir)
+       (seed-authoritative-delivery! dir)
+       (define-values (adapter state) (make-fake-github-adapter))
+       ;; A real port with journal replay: same correlation-id -> recorded
+       ;; result, never a second external call.
+       (define port (make-github-port adapter #:dry-run? #f))
+       (define binding
+         (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done"))
+       (define first-pass
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
+                                            #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status first-pass) 'reconciled)
+       (check-equal? (fake-github-call-count state 'issue-close) 1)
+       (check-equal? (fake-github-call-count state 'set-board-field!) 1)
+       (define second-pass
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
+                                            #:delivery-reader (lambda _ (delivered-proof))))
+       ;; Idempotent: the deterministic correlation ids replay from the port
+       ;; journal, so the repeat pass converges to the same state and causes
+       ;; exactly no second close and no second board write.
+       (check-equal? (tracker-reconciliation-result-status second-pass) 'reconciled)
+       (check-equal? (fake-github-call-count state 'issue-close) 1)
+       (check-equal? (fake-github-call-count state 'set-board-field!) 1)
+       (check-true (andmap gsd-github-command-result-already-done?
+                           (tracker-reconciliation-result-actions second-pass))))))
+
+  (test-case "pre-existing historical already-done wave is skipped, untouched"
+    (with-temp-dir
+     (lambda (dir)
+       ;; Historical: the durable wave is done from before this campaign's
+       ;; reconciliation existed — no receipt, no delivery journal, no
+       ;; delivered handoff. The pass must skip it (refuse without guessing,
+       ;; zero tracker effects) and never flip it back open.
+       (persist-campaign! dir (make-record 'done BRANCH HEAD))
+       (define-values (port state) (make-logging-github-port))
+       (define binding
+         (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done"))
+       (define result
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
+                                            #:delivery-reader (lambda _ (delivered-proof))))
+       (check-equal? (tracker-reconciliation-result-status result) 'blocked)
+       (check-equal? (tracker-reconciliation-result-actions result) '())
+       (check-equal? (gh-log-state-calls state) '())
+       (define rec (load-campaign-record dir PLAN-ID))
+       (check-equal? (campaign-wave-status (car (campaign-record-waves rec))) 'done))))
 
   (test-case "no action on pending proof, missing/stale binding, non-DONE wave, receipt mismatch, or handoff mismatch"
     (for ([scenario
