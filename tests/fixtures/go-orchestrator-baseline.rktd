@@ -33,10 +33,18 @@
 ;; campaign-result struct, re-provided by the orchestrator). The
 ;; orchestrator keeps the thin call sites. 1699 -> 1696 lines, defines
 ;; unchanged at 20, below the 1700 target.
+;;
+;; Re-recorded for BUG-0079 (approved-head publication): the spare-branch
+;; computation for per-wave and campaign-start reclaim moved OUT of the
+;; orchestrator into ONE helper (durable-spare-branches) exported from
+;; extensions/gsd/delivery-publication.rkt (combining record-delivered-
+;; branches + approved-publication-branches); the retention log line and
+;; a duplicated Provide comment banner were trimmed. 1696 -> 1695 lines,
+;; defines unchanged at 20, below the 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "BUG-0077 honest-completion extraction to delivery-finalize.rkt + campaign-result.rkt: 1698 lines / 20 defines; below the 1700 target")
- (line-count . 1696)
+  "BUG-0079 approved-head publication: spare-branch reclaim computation extracted to delivery-publication.rkt durable-spare-branches: 1695 lines / 20 defines; below the 1700 target")
+ (line-count . 1695)
  (top-level-define-count . 20)
  (w7-target-max-lines . 1700))

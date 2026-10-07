@@ -747,6 +747,91 @@ def active_declared_outputs(facts, repo, plan, wave, generation):
     return {kind: repair_generation_path(path, generation)
             for kind, path in declared.items()}
 
+def publish_head(repo, expected_branch, expected_head, expected_origin=None, expected_tree=None,
+                 plan=None, wave=None):
+    """Publish the exact approved implementation head with authenticated readback.
+
+    This is the only implementation-head publication producer used by /go:
+    non-force push of <expected-head>:refs/heads/<expected-branch>, followed by
+    an exact parsed ls-remote readback. Existing exact publication is
+    idempotent; an ancestor remote tip may fast-forward; divergence, malformed
+    or ambiguous readback, protected branches, and missing local objects refuse.
+    """
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'publish-head requires --expected-branch')
+    require(expected_branch not in ('main', 'master'),
+            'publish-head refuses protected branch ' + expected_branch)
+    # Branch names are path components under refs/heads, never raw refs, tags,
+    # main/master aliases, or shell-ish shorthand.  Production calls bind them
+    # to campaign/<plan8>/w<wave>; unit fixtures may omit plan/wave for legacy
+    # direct helper coverage.
+    normalized_branch = git(repo, 'check-ref-format', '--branch', expected_branch).strip()
+    require(normalized_branch == expected_branch and not expected_branch.startswith('refs/'),
+            'publish-head refuses malformed branch ' + expected_branch)
+    if plan is not None or wave is not None:
+        require(isinstance(plan, str) and re.fullmatch('[0-9a-f]{64}', plan or '') is not None,
+                'publish-head requires exact campaign plan id')
+        require(type(wave) is int and wave >= 0, 'publish-head requires exact wave index')
+        require(expected_branch == 'campaign/%s/w%d' % (plan[:8], wave),
+                'publish-head branch is not bound to campaign/wave')
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'publish-head requires --expected-head')
+    origin = git(repo, 'config', '--get', 'remote.origin.url').strip()
+    require(origin, 'publish-head requires configured origin')
+    if expected_origin is not None:
+        require(origin == expected_origin, 'origin drifted before publication')
+    local = git(repo, 'rev-parse', expected_head + '^{commit}').strip()
+    require(local == expected_head, 'approved head object is missing or ambiguous')
+    local_ref = git(repo, 'rev-parse', 'refs/heads/' + expected_branch).strip()
+    require(local_ref == expected_head, 'local branch ref drifted before publication')
+    tree = git(repo, 'rev-parse', expected_head + '^{tree}').strip()
+    if expected_tree is not None:
+        require(tree == expected_tree, 'approved tree drifted before publication')
+    remote_ref = 'refs/heads/' + expected_branch
+
+    def read_remote():
+        out = git(repo, 'ls-remote', '--heads', 'origin', remote_ref)
+        lines = [line.strip() for line in out.splitlines() if line.strip()]
+        require(len(lines) <= 1, 'ambiguous remote readback for ' + remote_ref)
+        if not lines:
+            return None
+        parts = lines[0].split()
+        require(len(parts) == 2 and parts[1] == remote_ref and full_sha(parts[0]),
+                'malformed remote readback for ' + remote_ref)
+        return parts[0]
+
+    def verify_local_unchanged(when):
+        # BUG-0079 REVIEW-2 item 6: the ls-remote readback is itself an
+        # external-effect window. The origin/local-ref/tree guards run again
+        # before ANY return — including the already-published idempotent
+        # path — and again AFTER the final readback, not merely between the
+        # push and the readback.
+        require(git(repo, 'config', '--get', 'remote.origin.url').strip() == origin,
+                'origin drifted ' + when)
+        require(git(repo, 'rev-parse', 'refs/heads/' + expected_branch).strip() == expected_head,
+                'local branch ref drifted ' + when)
+        if expected_tree is not None:
+            require(git(repo, 'rev-parse', expected_head + '^{tree}').strip() == tree,
+                    'approved tree drifted ' + when)
+
+    before = read_remote()
+    if before == expected_head:
+        verify_local_unchanged('during the already-published readback')
+        return {'status': 'already-published', 'branch': expected_branch, 'head': expected_head}
+    if before is not None:
+        try:
+            git(repo, 'merge-base', '--is-ancestor', before, expected_head)
+        except Pending as error:
+            raise Pending('remote branch diverged from approved head; refusing publication') from error
+    git(repo, 'push', '--no-tags', 'origin', expected_head + ':' + remote_ref)
+    verify_local_unchanged('during publication')
+    after = read_remote()
+    require(after == expected_head,
+            'remote readback did not confirm exact approved head after publication')
+    verify_local_unchanged('after the final readback')
+    return {'status': 'published', 'branch': expected_branch, 'head': expected_head}
+
+
 def preflight(repo, plan, wave, expected_head, expected_branch):
     """Register F5 read-only preflight at the handoff seam (v1.00.31 W3).
 
@@ -1849,7 +1934,7 @@ def main():
     parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review',
                                            'open-pr','pr-ci','binding-review','binding-publish',
                                            'binding-resolve-pr','binding-pr','binding-ci','binding-merge',
-                                           'governance','preflight'])
+                                           'governance','preflight','publish-head'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -1859,6 +1944,10 @@ def main():
                         help='PR head branch / sync branch; never switches branches')
     parser.add_argument('--expected-head',
                         help='exact verified implementation head (from the durable receipt)')
+    parser.add_argument('--expected-origin',
+                        help='exact configured origin URL captured in the approved receipt')
+    parser.add_argument('--expected-tree',
+                        help='exact commit tree captured in the approved receipt')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--campaign-root', type=Path,
                         help='campaign working tree holding .planning/campaigns/<plan-id>/plan-snapshot')
@@ -1929,6 +2018,11 @@ def main():
                     'preflight requires --expected-head and --expected-branch')
             result = preflight(args.repo, args.plan, args.wave,
                                args.expected_head, args.expected_branch)
+        elif args.action == 'publish-head':
+            require(args.expected_head and args.expected_branch and args.expected_origin and args.expected_tree,
+                    'publish-head requires --expected-head, --expected-branch, --expected-origin and --expected-tree')
+            result = publish_head(args.repo, args.expected_branch, args.expected_head,
+                                  args.expected_origin, args.expected_tree, args.plan, args.wave)
         elif args.action == 'governance':
             require(args.expected_branch, 'governance requires --expected-branch')
             result = governance(args.repo, args.plan, args.wave, args.expected_branch)

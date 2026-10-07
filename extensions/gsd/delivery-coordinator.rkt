@@ -27,6 +27,7 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "delivery-receipt.rkt"
+         (only-in "delivery-publication.rkt" replay-approved-publication! load-approved-publication)
          (only-in "delivery-journal.rkt"
                   delivery-stages
                   load-delivery-journal
@@ -118,14 +119,15 @@
   (define idx (indexof linear-delivery-stages current))
   (and idx (list-ref linear-delivery-stages (add1 idx))))
 
-;; Durable eligibility re-check against an EXPLICIT expected fence. The fence
-;; is captured once at step start: a takeover (fence bump) or cancellation
+;; Pure durable eligibility re-check against an EXPLICIT expected fence. The
+;; fence is captured once at step start: a takeover (fence bump) or cancellation
 ;; that lands while the controller runs must reject the continuation. The
 ;; receipt's attempt-fence is intentionally historical and never used here.
+;; BUG-0079 REVIEW-2 item 4: this is a PURE prerequisite again — the
+;; side-effectful publication-only replay moved to ONE explicit initial
+;; run-delivery-coordinator! transition (publication-replay-blocked!) and is
+;; never re-run by these per-effect eligibility checks.
 (define (durable-blocker dir plan wave expected-fence)
-  ;; Register F5: an existing remote-pending marker (the Verify receipt was
-  ;; withheld because the branch was never pushed) refuses before anything
-  ;; else, with the typed reason naming branch and head.
   (or (remote-pending-blocker dir plan wave)
       (with-handlers ([exn:fail? (lambda (_) 'invalid-journal)])
         (define journal (load-delivery-journal dir plan wave))
@@ -133,16 +135,67 @@
         (and (not (and record (campaign-record-cancellation record)))
              (delivery-receipt-blocker journal record plan wave expected-fence)))))
 
+;; BUG-0079 REVIEW-2 item 4: the ONE explicit initial publication-only replay
+;; transition. It runs only when publication is GENUINELY pending — a typed
+;; remote-pending marker, or a missing journal receipt together with a durable
+;; approved publication intent (the crash window between a confirmed
+;; publication readback and receipt certification) — and never after the
+;; journal reached the delivered stage. A failed replay surfaces as the
+;; branch-not-published blocker; it is never swallowed into ladder admission.
+;; Returns #f when the ladder may proceed, or the operator-facing blocked
+;; message string.
+(define (publication-replay-blocked! dir plan wave expected-fence)
+  (define (read-current)
+    (define rec (load-campaign-record dir plan))
+    (and rec (equal? (campaign-fence-token rec) expected-fence) rec))
+  (define journal
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (load-delivery-journal dir plan wave)))
+  (define delivered? (and journal (equal? (hash-ref journal 'stage #f) "delivered")))
+  (define pending?
+    (and (not delivered?)
+         (or (load-remote-pending dir plan wave)
+             ;; missing receipt + a loadable bound intent. A publication file
+             ;; that cannot even load also counts as pending so the replay
+             ;; surfaces its typed refusal instead of a silent pass-through.
+             (and (not (and journal (hash-ref journal 'receipt #f)))
+                  (with-handlers ([exn:fail? (lambda (_) #t)])
+                    (and (load-approved-publication dir plan wave) #t))))))
+  (and
+   pending?
+   (let ()
+     (define failure
+       (with-handlers ([exn:fail? (lambda (e) e)])
+         (replay-approved-publication! dir plan wave read-current)
+         #f))
+     (cond
+       [(exn? failure)
+        (format "delivery blocked: branch-not-published: approved-head publication replay failed: ~a"
+                (exn-message failure))]
+       [(load-remote-pending dir plan wave)
+        =>
+        (lambda (marker)
+          (format
+           "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
+           (hash-ref marker 'branch "?")
+           (hash-ref marker 'head "?")))]
+       [else #f]))))
+
 ;; The operator-facing blocked message; enriched with the marker's branch and
 ;; head whenever the typed branch-not-published reason fired.
 (define (blocked-message dir plan wave reason)
-  (define marker (and (eq? reason 'branch-not-published) (load-remote-pending dir plan wave)))
-  (if marker
-      (format
-       "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
-       (hash-ref marker 'branch "?")
-       (hash-ref marker 'head "?"))
-      (format "delivery blocked: ~a" reason)))
+  (cond
+    [(and (eq? reason 'branch-not-published) (load-remote-pending dir plan wave))
+     =>
+     (lambda (marker)
+       (format
+        "delivery blocked: branch-not-published: branch ~a head ~a is not published on origin; push the verified head and re-verify"
+        (hash-ref marker 'branch "?")
+        (hash-ref marker 'head "?")))]
+    ;; A pre-composed operator-facing message (publication replay refusal)
+    ;; passes through verbatim.
+    [(string? reason) reason]
+    [else (format "delivery blocked: ~a" reason)]))
 
 ;; Stamp separate delivery usage onto the journal, additive-only. The
 ;; forbidden update fields (receipt plan-id wave schema-version) are never
@@ -183,7 +236,12 @@
             (equal? (campaign-plan-id now) plan)
             (equal? (campaign-fence-token now) start-fence)
             (not (campaign-record-cancellation now))))
-     (define block-reason (durable-blocker dir plan wave start-fence))
+     ;; BUG-0079 REVIEW-2 item 4: ONE explicit initial publication-only replay
+     ;; transition, evaluated exactly once per invocation BEFORE any ladder
+     ;; effect and before the pure eligibility blocker. Its message (if any)
+     ;; becomes the blocked outcome verbatim.
+     (define publication-message (publication-replay-blocked! dir plan wave start-fence))
+     (define block-reason (or publication-message (durable-blocker dir plan wave start-fence)))
      (cond
        [block-reason (blocked (blocked-message dir plan wave block-reason))]
        [else

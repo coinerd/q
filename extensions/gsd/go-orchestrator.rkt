@@ -34,6 +34,7 @@
          "wave-completion.rkt"
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
+         (only-in "delivery-publication.rkt" publish-approved-head! durable-spare-branches)
          (only-in "tracker-resume.rkt" resume-tracker-reconciliation!)
          (only-in "delivery-finalize.rkt"
                   record-attempt-delivery-provenance!
@@ -754,7 +755,8 @@
                         #f)])
                   (make-wave-worktree! base-dir
                                        #:campaign-id (campaign-plan-id active)
-                                       #:wave-index wave-idx)))
+                                       #:wave-index wave-idx
+                                       #:spare-branches (durable-spare-branches base-dir active))))
               (lambda (wt)
                 (record-attempt-artifact! base-dir (campaign-plan-id active) wave-idx expected-id wt))
               run-thunk)))
@@ -859,7 +861,8 @@
                                (lambda ()
                                  (define current (observe))
                                  (and (current-wave-for-attempt current wave-idx fence expected-id)
-                                      current))))]
+                                      current))
+                               #:publish-approved-head publish-approved-head!))]
                            [approved? (cond
                                         [(delivery-verification? verifier-result)
                                          (delivery-verification-approved? verifier-result)]
@@ -1323,7 +1326,7 @@
                                                       wave-idx
                                                       (exn-message e)))])
               (if (unbox keep-branch-box)
-                  (release-wave-worktree! wt)
+                  (log-info "wave ~a: retained ~a" wave-idx (wave-worktree-path wt))
                   (cleanup-wave-worktree! wt)))))))]))
 
 (require (only-in "../../runtime/settings.rkt" load-settings)
@@ -1435,7 +1438,8 @@
          (when isolate?
            (define wt-repo (find-repo-root base-dir))
            (when wt-repo
-             (reclaim-orphaned-worktrees! wt-repo #:campaign-id plan-id)))
+             (define spares (durable-spare-branches base-dir authoritative))
+             (reclaim-orphaned-worktrees! wt-repo #:campaign-id plan-id #:spare-branches spares)))
          ;; v1.00.30 (delivery runtime): verified-delivered proofs are
          ;; memoized only until execution can mutate the checkout. Every new
          ;; loop iteration revalidates publication AND synchronized bytes;
@@ -1581,11 +1585,6 @@
 ;; Git Root Resolution (F-7) — extracted to plan-context-builder
 ;; (B2b); go-orchestrator re-provides the names below for existing
 ;; importers, keeping the historical public API unchanged.
-;; ============================================================
-;; ============================================================
-;; Provide
-;; ============================================================
-;; Provide
 ;; ============================================================
 
 (provide campaign-lease
