@@ -262,7 +262,7 @@
        (check-equal? (map cadr (gh-log-state-calls state-a))
                      (map cadr (gh-log-state-calls state-b))))))
 
-  (test-case "a repeat pass on an already-reconciled wave performs no new external writes"
+  (test-case "a repeat pass on an already-reconciled wave creates no new external writes"
     (with-temp-dir
      (lambda (dir)
        (seed-authoritative-delivery! dir)
@@ -280,7 +280,7 @@
                                             port
                                             #:delivery-reader (lambda _ (delivered-proof))))
        (check-equal? (tracker-reconciliation-result-status first-pass) 'reconciled)
-       (check-equal? (fake-github-call-count state 'issue-close) 1)
+       (check-equal? (fake-github-call-count state 'close-issue!) 1)
        (check-equal? (fake-github-call-count state 'set-board-field!) 1)
        (define second-pass
          (reconcile-tracker-after-delivery! dir
@@ -293,7 +293,7 @@
        ;; journal, so the repeat pass converges to the same state and causes
        ;; exactly no second close and no second board write.
        (check-equal? (tracker-reconciliation-result-status second-pass) 'reconciled)
-       (check-equal? (fake-github-call-count state 'issue-close) 1)
+       (check-equal? (fake-github-call-count state 'close-issue!) 1)
        (check-equal? (fake-github-call-count state 'set-board-field!) 1)
        (check-true (andmap gsd-github-command-result-already-done?
                            (tracker-reconciliation-result-actions second-pass))))))
