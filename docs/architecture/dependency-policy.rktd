@@ -324,6 +324,11 @@
         .
         "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
        (owner . "extensions"))
+      ("extensions/gsd/wave-docs.rkt"
+       (risk
+        .
+        "Wave document I/O and PLAN.md index management: parsing, dual-write status transitions, consistency and lint surfaces; crossed the block threshold with declared-arrow-path identity (BUG-0081)")
+       (owner . "extensions"))
       ("tui/commands.rkt"
        (risk . "TUI command dispatch with slash command routing and mode-specific handling")
        (owner . "tui"))

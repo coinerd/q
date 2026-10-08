@@ -1,0 +1,1 @@
+#(struct:delivery-verification #t (("git" #t . "git repository reachable") ("branch" #t . "branch=campaign/79a69b42/w0 expected=campaign/79a69b42/w0 (isolated)") ("files" #t . "changed: q/tests/test-gsd-tracker-reconciliation.rkt") ("verify" #t . "cmd=raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt exit=0")) "delivery verified")

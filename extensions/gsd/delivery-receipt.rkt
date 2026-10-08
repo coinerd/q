@@ -9,6 +9,7 @@
          "campaign-state.rkt"
          (only-in "plan-context-builder.rkt" find-git-root-dir)
          "../../sandbox/subprocess.rkt"
+         (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "../../util/credential-redaction.rkt" redact-credential-data))
 (provide committed-delivery-snapshot
          current-gsd-remote-published
@@ -17,6 +18,7 @@
          default-remote-published?
          verify-with-delivery-receipt
          verify-campaign-delivery
+         certify-publication-receipt!
          recover-legacy-delivery-receipt!
          delivery-receipt-blocker)
 ;; Register F5 (v1.00.31 W3): a Verify verdict does not publish a receipt
@@ -104,6 +106,84 @@
          (not (string=? old-head new-head))
          (and (git repo "merge-base" "--is-ancestor" old-head new-head) #t))))
 
+;; BUG-0079 REVIEW-2 item 7: the IMMUTABLE binding identity of a publication
+;; receipt — repo/branch/head/tree/origin/attempt-id/attempt-fence plus the
+;; evidence DIGEST. verified-at timestamps and evidence formatting are
+;; deliberately excluded: an identical replay under a fresh timestamp is
+;; idempotent and preserves the durable receipt verbatim, while any
+;; differing immutable binding refuses.
+(define receipt-immutable-binding-keys '(repo branch head tree origin attempt-id attempt-fence))
+
+(define (same-immutable-receipt-binding? a b)
+  (and (hash? a)
+       (hash? b)
+       (for/and ([key (in-list receipt-immutable-binding-keys)])
+         (equal? (hash-ref a key #f) (hash-ref b key #f)))
+       (equal? (sha256-string (format "~a" (hash-ref a 'evidence #f)))
+               (sha256-string (format "~a" (hash-ref b 'evidence #f))))))
+
+;; Certify a receipt from a previously approved publication intent.  This is
+;; intentionally narrower than Verify: it never invokes a verifier or fabricates
+;; evidence, and it reuses the same journal/repair-tail guards as the normal
+;; receipt path against the exact persisted receipt candidate.
+;; BUG-0079 REVIEW-2 item 2: the MANDATORY guard callback runs immediately
+;; before every durable write and marker clear, so the caller's stable
+;; active-fence+digest capture is re-verified at the exact write boundary.
+(define (certify-publication-receipt! base
+                                      plan
+                                      wave
+                                      receipt
+                                      #:expected-attempt-id attempt-id
+                                      #:expected-fence fence
+                                      #:guard guard
+                                      #:repair-tail-ancestor?
+                                      [repair-tail-ancestor? default-repair-tail-ancestor?])
+  (unless (and (procedure? guard) (procedure-arity-includes? guard 0))
+    (error 'delivery-receipt "publication certification requires a transition guard"))
+  (unless (valid-delivery-receipt? receipt)
+    (error 'delivery-receipt "publication receipt candidate is invalid"))
+  (unless (and (equal? (hash-ref receipt 'attempt-id #f) attempt-id)
+               (equal? (hash-ref receipt 'attempt-fence #f) fence))
+    (error 'delivery-receipt "publication receipt identity changed"))
+  (define old (load-delivery-journal base plan wave))
+  (define old-receipt (and old (hash-ref old 'receipt #f)))
+  (cond
+    [(and old (hash? old-receipt) (same-immutable-receipt-binding? old-receipt receipt))
+     ;; Identical immutable binding: the existing durable receipt/journal is
+     ;; preserved verbatim (no timestamp-driven overwrite); only the typed
+     ;; marker clear remains, guarded.
+     (guard)
+     (clear-remote-pending! base plan wave)
+     old]
+    [(and old
+          (hash? old-receipt)
+          (equal? (hash-ref old-receipt 'branch #f) (hash-ref receipt 'branch #f))
+          (equal? (hash-ref old-receipt 'attempt-id #f) attempt-id)
+          (equal? (hash-ref old-receipt 'attempt-fence #f) fence)
+          (repair-tail-ancestor? (hash-ref receipt 'repo #f)
+                                 (hash-ref old-receipt 'head #f)
+                                 (hash-ref receipt 'head #f)))
+     (guard)
+     (reconcile-repair-tail-receipt!
+      base
+      plan
+      wave
+      receipt
+      #:expected-attempt-id attempt-id
+      #:expected-fence fence
+      #:head-ancestor? (lambda (old-head new-head)
+                         (repair-tail-ancestor? (hash-ref receipt 'repo #f) old-head new-head)))
+     (guard)
+     (clear-remote-pending! base plan wave)
+     (load-delivery-journal base plan wave)]
+    [old (error 'delivery-receipt "publication receipt does not match durable journal identity")]
+    [else
+     (guard)
+     (record-delivery-receipt! base plan wave receipt)
+     (guard)
+     (clear-remote-pending! base plan wave)
+     (load-delivery-journal base plan wave)]))
+
 (define (verify-with-delivery-receipt
          base
          plan
@@ -114,7 +194,10 @@
          #:evidence evidence
          #:snapshot [snapshot committed-delivery-snapshot]
          #:attempt [attempt #f]
+         #:current-record [current-record #f]
          #:remote-published [remote-published (current-gsd-remote-published)]
+         #:coordinator-fence [coordinator-fence #f]
+         #:publish-approved-head [publish-approved-head #f]
          ;; v1.00.33 W0 repair-tail protocol (audit
          ;; §21.2): injectable repair-tail ancestry
          ;; predicate. The default is the REAL git
@@ -133,6 +216,108 @@
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
       (define old-receipt (and old (hash-ref old 'receipt #f)))
+      ;; BUG-0079 REVIEW-2 item 8: publication requires GENUINE non-empty
+      ;; successful Verify evidence. A bare boolean, empty list, or blank
+      ;; text approval is bool-only and can never trigger the publication
+      ;; side effect — it records the typed marker instead.
+      (define (genuine-delivery-evidence? v)
+        (cond
+          [(pair? v) #t]
+          [(string? v) (positive? (string-length (string-trim v)))]
+          [else #f]))
+      ;; BUG-0079 REVIEW-2 item 2: the publisher is an external effect; the
+      ;; approval verdict, the delivery snapshot, and the current campaign
+      ;; record guard are REPEATED after it returns, immediately before the
+      ;; durable receipt write (not only at module return).
+      (define (post-publication-guard-ok?)
+        (and (approved? result)
+             (equal? before (snapshot cwd))
+             (or (not (procedure? current-record))
+                 (let ([rec (current-record)])
+                   (and (campaign-record? rec)
+                        (equal? (campaign-plan-id rec) plan)
+                        (not (campaign-record-cancellation rec)))))))
+      (define (record-post-publication-pending! reason)
+        (record-remote-pending! base
+                                plan
+                                wave
+                                (hash-ref before 'branch)
+                                (hash-ref before 'head)
+                                reason)
+        #f)
+      (define (publish-approved-head-or-record-pending! reason-prefix)
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (define reason
+                             (format "~a; publication refused: ~a" reason-prefix (exn-message e)))
+                           (record-remote-pending! base
+                                                   plan
+                                                   wave
+                                                   (hash-ref before 'branch)
+                                                   (hash-ref before 'head)
+                                                   reason)
+                           #f)])
+          (cond
+            [attempt
+             (cond
+               [(and (procedure? publish-approved-head)
+                     (delivery-verification? result)
+                     (delivery-verification-approved? result)
+                     (genuine-delivery-evidence? (delivery-verification-evidence result))
+                     (procedure? current-record))
+                (publish-approved-head
+                 base
+                 plan
+                 wave
+                 before
+                 (campaign-attempt-id attempt)
+                 (campaign-attempt-fence-token attempt)
+                 coordinator-fence
+                 (format "~a" (redact-credential-data (delivery-verification-evidence result)))
+                 current-record)]
+               [(and (procedure? publish-approved-head) (not (delivery-verification? result)))
+                (record-remote-pending!
+                 base
+                 plan
+                 wave
+                 (hash-ref before 'branch)
+                 (hash-ref before 'head)
+                 (format
+                  "~a; publication refused: approved-head publication requires genuine delivery-verification evidence"
+                  reason-prefix))
+                #f]
+               [(and (procedure? publish-approved-head)
+                     (delivery-verification? result)
+                     (not (genuine-delivery-evidence? (delivery-verification-evidence result))))
+                (record-remote-pending!
+                 base
+                 plan
+                 wave
+                 (hash-ref before 'branch)
+                 (hash-ref before 'head)
+                 (format
+                  "~a; publication refused: approved-head publication requires non-empty successful Verify evidence"
+                  reason-prefix))
+                #f]
+               [else
+                (record-remote-pending!
+                 base
+                 plan
+                 wave
+                 (hash-ref before 'branch)
+                 (hash-ref before 'head)
+                 (format "~a; publication refused: approved-head publisher unavailable"
+                         reason-prefix))
+                #f])]
+            [else
+             (record-remote-pending!
+              base
+              plan
+              wave
+              (hash-ref before 'branch)
+              (hash-ref before 'head)
+              (format "~a; publication refused: approved Verify is not attempt-bound" reason-prefix))
+             #f])))
       (define (new-receipt-for-head!)
         (define text (format "~a" (redact-credential-data (evidence result))))
         (hash-set* (if attempt
@@ -188,16 +373,31 @@
             (log-info "repair-tail receipt reconciled to head ~a" (hash-ref before 'head))]
            [else
             (define reason
-              (format
-               "repair-tail head ~a is not published on origin; receipt not reconciled; push the verified head first, then re-verify"
-               (hash-ref before 'head)))
-            (record-remote-pending! base
-                                    plan
-                                    wave
-                                    (hash-ref before 'branch)
-                                    (hash-ref before 'head)
-                                    reason)
-            (log-warning "delivery receipt withheld: ~a" reason)])]
+              (format "repair-tail head ~a is not published on origin; receipt not reconciled"
+                      (hash-ref before 'head)))
+            (define published? (publish-approved-head-or-record-pending! reason))
+            (cond
+              [(and published? (not (post-publication-guard-ok?)))
+               (record-post-publication-pending!
+                (string-append
+                 reason
+                 "; publication guard refused: approval, snapshot or campaign record drifted after the publisher effect"))
+               (log-warning "repair-tail receipt withheld: post-publication guard refused")]
+              [published?
+               (reconcile-repair-tail-receipt!
+                base
+                plan
+                wave
+                (new-receipt-for-head!)
+                #:expected-attempt-id (campaign-attempt-id attempt)
+                #:expected-fence (campaign-attempt-fence-token attempt)
+                #:head-ancestor?
+                (lambda (old-head new-head)
+                  (repair-tail-ancestor? (hash-ref before 'repo #f) old-head new-head)))
+               (clear-remote-pending! base plan wave)
+               (log-info "repair-tail receipt reconciled after publishing head ~a"
+                         (hash-ref before 'head))]
+              [else (log-warning "delivery receipt withheld: ~a; publication refused" reason)])])]
         ;; Any OTHER existing receipt (head mismatch without same-attempt
         ;; repair-tail eligibility) fails closed: the old receipt stays
         ;; untouched, the marker is NEVER cleared by a mismatched receipt,
@@ -216,17 +416,23 @@
         ;; ladder entry with 'branch-not-published naming branch and head.
         [else
          (define reason
-           (format
-            "branch ~a head ~a is not published on origin; receipt not verified; push the verified head first, then re-verify"
-            (hash-ref before 'branch)
-            (hash-ref before 'head)))
-         (record-remote-pending! base
-                                 plan
-                                 wave
-                                 (hash-ref before 'branch)
-                                 (hash-ref before 'head)
-                                 reason)
-         (log-warning "delivery receipt withheld: ~a" reason)])))
+           (format "branch ~a head ~a is not published on origin; receipt not verified"
+                   (hash-ref before 'branch)
+                   (hash-ref before 'head)))
+         (define published? (publish-approved-head-or-record-pending! reason))
+         (cond
+           [(and published? (not (post-publication-guard-ok?)))
+            (record-post-publication-pending!
+             (string-append
+              reason
+              "; publication guard refused: approval, snapshot or campaign record drifted after the publisher effect"))
+            (log-warning "delivery receipt withheld: post-publication guard refused")]
+           [published?
+            (record-delivery-receipt! base plan wave (new-receipt-for-head!))
+            (clear-remote-pending! base plan wave)
+            (log-info "delivery receipt recorded after publishing approved head ~a"
+                      (hash-ref before 'head))]
+           [else (log-warning "delivery receipt withheld: ~a; publication refused" reason)])])))
   result)
 ;; Thin orchestration seam: context and verdict interpretation stay beside
 ;; receipt capture. `current-record` rejects stale attempts before persistence.
@@ -237,8 +443,8 @@
                                   context
                                   verifier
                                   current-record
-                                  #:remote-published
-                                  [remote-published (current-gsd-remote-published)])
+                                  #:remote-published [remote-published (current-gsd-remote-published)]
+                                  #:publish-approved-head [publish-approved-head #f])
   (define initial (current-record))
   (define attempt
     (and initial
@@ -255,6 +461,9 @@
        (verifier wave)))
    #:attempt attempt
    #:remote-published remote-published
+   #:coordinator-fence (and initial (campaign-fence-token initial))
+   #:current-record current-record
+   #:publish-approved-head publish-approved-head
    #:approved? (lambda (v)
                  (define current (current-record))
                  (and current

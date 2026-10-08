@@ -38,7 +38,8 @@
                   wave-index-entry-idx
                   wave-index-entry-title
                   wave-index-entry-slug
-                  wave-index-entry-status)
+                  wave-index-entry-status
+                  wave-index-entry-ref-path)
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "plan-snapshot.rkt"
                   seed-and-bind-plan-snapshot!
@@ -927,19 +928,24 @@
     (define m (regexp-match state-row-rx line))
     (cons (string->number (cadr m)) (string-trim (list-ref m 2)))))
 
-(define (wave-doc-content-hash base-dir idx slug)
-  (define p (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
+;; BUG-0081: hash the wave doc at an explicit .planning-relative path — the
+;; plan's declared arrow target may be another wave's W-numbered carrier
+;; doc, so identity cannot be derived from the wave's own index. Same
+;; BUG-0052 fail-closed semantics: absence is a hard migration failure,
+;; never the empty-content hash.
+(define (wave-doc-hash-at base-dir rel-path)
+  (define p (build-path base-dir ".planning" rel-path))
   (if (file-exists? p)
       (sha256-string (normalize-wave-doc-content (call-with-input-file p port->string)))
-      ;; BUG-0052: a missing wave document is a hard migration failure.
-      ;; The empty-content SHA-256 must never stand in for absence.
       (raise
        (exn:fail:campaign-migration
         (format
-         "wave doc missing: .planning/waves/W~a-~a.md is referenced by the plan index but does not exist; campaign creation refused"
-         idx
-         slug)
+         "wave doc missing: .planning/~a is referenced by the plan index but does not exist; campaign creation refused"
+         rel-path)
         (current-continuation-marks)))))
+
+(define (wave-doc-content-hash base-dir idx slug)
+  (wave-doc-hash-at base-dir (format "waves/W~a-~a.md" idx slug)))
 
 ;; v0.99.90 W5 (#9236): plan identity must remain stable across mutable
 ;; status/failure projections. plan-snapshot.rkt owns the shared normalization
@@ -949,11 +955,16 @@
   (define title (or (extract-plan-title plan-text) "Plan"))
   (define descriptors
     (for/list ([e entries])
-      (make-campaign-wave-descriptor
-       (wave-index-entry-idx e)
-       (wave-index-entry-title e)
-       (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e))
-       (wave-doc-content-hash base-dir (wave-index-entry-idx e) (wave-index-entry-slug e)))))
+      ;; BUG-0081: the descriptor's doc path is the plan index's DECLARED
+      ;; arrow path when the row carries one; the W<idx>-<slug>.md synthesis
+      ;; is the fallback. The content hash covers that same file.
+      (define doc-path
+        (or (wave-index-entry-ref-path e)
+            (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e))))
+      (make-campaign-wave-descriptor (wave-index-entry-idx e)
+                                     (wave-index-entry-title e)
+                                     doc-path
+                                     (wave-doc-hash-at base-dir doc-path))))
   (define waves
     (for/list ([e entries])
       (make-campaign-wave (wave-index-entry-idx e)
