@@ -1,0 +1,114 @@
+{
+ "artifact": "wave-delivery-integrity",
+ "campaign-id": "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e",
+ "campaign-title": "v1.00.33 \u2014 Honest Completion & Autonomous Delivery",
+ "component": "tracker-reconciliation wiring delivery integrity record (BUG-0080)",
+ "delivery": {
+  "attempt": "attempt-9",
+  "branch": "campaign/79a69b42/w0",
+  "fence": 3,
+  "method": "history-preserving merge of the first-approved head with the diverged origin head (trees identical); non-force exact-refspec push; authenticated ls-remote readback; supported-API receipt and provenance recording",
+  "published-at-epoch": 1791407513,
+  "readback-head": "a553e45784351468781c1aa6494116ec96486c22",
+  "receipt-head": "a553e45784351468781c1aa6494116ec96486c22",
+  "status": "published-and-verified",
+  "verified-head": "a553e45784351468781c1aa6494116ec96486c22"
+ },
+ "gates": [
+  {
+   "command": "raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-1.rktd",
+    "sha256": "9c8345c1884d72d3e952d230a72f937bd77f753509f5806389e76509bd55ebf1"
+   },
+   "exit": 0,
+   "index": 1,
+   "status": "pass"
+  },
+  {
+   "command": "raco make extensions/gsd/go-orchestrator.rkt",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-2.rktd",
+    "sha256": "cd4dc13ed261f7d0f38af451cbaf8cc03f26d3239737768db8946e70619bceea"
+   },
+   "exit": 0,
+   "index": 2,
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/run-tests.rkt tests/test-gsd-tracker-reconciliation.rkt tests/test-gsd-go-orchestrator.rkt",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-3.rktd",
+    "sha256": "18c419566624b832e91b43ae2f2b069daa0d8d6c1e598451a44f298c91182d43"
+   },
+   "exit": 0,
+   "index": 3,
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/run-tests.rkt tests/test-release-workflow-contract.rkt tests/test-gsd-responsibility-inventory.rkt tests/test-milestone-gate.rkt",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-4.rktd",
+    "sha256": "e471cba39705e62324092b01c99f8a0692a4f8a75c918d153279880189fe3bf0"
+   },
+   "exit": 0,
+   "index": 4,
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/lint-all.rkt",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-5.rktd",
+    "sha256": "1e848b01fce7b72d1277415a18ba402ecac6a9a801ad5e05486b82267ee95d41"
+   },
+   "exit": 0,
+   "index": 5,
+   "status": "pass"
+  },
+  {
+   "command": "racket scripts/run-tests.rkt --suite fast",
+   "evidence": {
+    "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/gate-6.rktd",
+    "sha256": "42194664ae7fd19e31bf1ccd4dcc7b53ebe8361a97b856f5009da7f5fe7110c0"
+   },
+   "exit": 0,
+   "index": 6,
+   "status": "pass"
+  }
+ ],
+ "heads": {
+  "diverged-origin-head": "6f71fb9010e330c2cfb0aefd08a496381a9a019a",
+  "first-approved-head": "4098978e8d15871df7c7e40e2dfff3ddea44c619",
+  "implementation-commit": "9c5ac0950ba85003a581196c4d69e4b9f6b3c22d",
+  "main-base-commit": "3a1c4aa996ae425fe91e57dea016bfdf8b15e318",
+  "merge-base-commit": "2847d40d610db70b3915b7ede271c954e339c00f"
+ },
+ "history": {
+  "divergence": {
+   "local-only": 4,
+   "merge-base-commit": "2847d40d610db70b3915b7ede271c954e339c00f",
+   "remote-only": 9
+  },
+  "first-verify-at-epoch": 1791396803,
+  "last-verify-at-epoch": 1791407502,
+  "recovery": "coordinator manual-w0-history-recovery session: fresh per-gate verify of the merge head through the production owned verifier (current-gsd-delivery-verify-command), one command per gate; the earlier load-contended attempt with three gate-6 timeouts was retained and superseded by this serialized quiet run",
+  "run-1-gate-6": "retained failure: exit=2, 3 load-timeouts (test-approval-channel-teardown, test-approval-correlation, test-ci-package-compile-boundary), 0 test failures; evidence preserved in the recovery session, never reclassified"
+ },
+ "raw-evidence": [
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/status.json",
+   "sha256": "f33f676fbc8abc184be086d4fef03bc8a7ff96d51e7d1be024dc135dba1b29eb"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/worker.log",
+   "sha256": "b0698d52a30bd9c428bdb8fc9207bfb1a9d317ccba3bbb84139e82709473923a"
+  },
+  {
+   "path": "artifacts/wave-delivery-integrity/v1.00.33-w0/raw/reconcile-driver.rkt.txt",
+   "sha256": "fc91a4b64c643d66376a3bd49a1a70eb8f61a1bcd98ed14270e6242fd26bcd16"
+  }
+ ],
+ "schema": 1,
+ "wave": 0,
+ "wave-title": "Tracker reconciliation wiring"
+}

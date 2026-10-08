@@ -163,7 +163,7 @@
                '("json" "racket/file" "racket/list" "racket/path"))
    (make-entry "delivery-receipt.rkt"
                'campaign-state
-               '(git subprocess path-ops parameterize make-param)
+               '(git subprocess path-ops parameterize make-param sha256)
                '()
                '("racket/path" "racket/string"
                                "delivery-journal"
@@ -172,6 +172,27 @@
                                "plan-context-builder"
                                "sandbox/subprocess"
                                "util/credential-redaction"))
+   ;; BUG-0079: coordinator-owned approved-head publication. Durable
+   ;; approval-bound publication intent/confirmation (atomic sibling records,
+   ;; fail-closed loader), strict-descendant repair-tail generations,
+   ;; publication-only replay, and the durable-spare-branches union. The only
+   ;; external effect is the trusted gsd-delivery.py publish-head action
+   ;; through the single controller-environment credential boundary.
+   (make-entry "delivery-publication.rkt"
+               'campaign-state
+               '(fs-read dir-list sha256 git subprocess make-param path-ops)
+               '()
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/string"
+                        "racket/runtime-path"
+                        "campaign-state"
+                        "attempt-artifacts"
+                        "delivery-handoff"
+                        "delivery-receipt"
+                        "sandbox/subprocess"
+                        "util/json/checksum"))
    ;; B2a (coordinator-delivery-execution-gap): deterministic journal-driven
    ;; delivery stage machine. Pure decision kernel: reloads journal + durable
    ;; record, re-runs delivery-receipt-blocker per effect, rejects

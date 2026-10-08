@@ -50,6 +50,10 @@
          wave-index-entry-title
          wave-index-entry-slug
          wave-index-entry-status
+         ;; BUG-0081: declared arrow path (exact waves/….md target; #f absent)
+         wave-index-entry-ref-path
+         wave-ref-path-from-target
+         wave-entry-doc-path
          ;; BUG-0034 (W2): one dual-source status divergence
          status-divergence
          status-divergence?
@@ -252,7 +256,24 @@
 ;; PLAN.md index parsing
 ;; ============================================================
 
-(struct wave-index-entry (idx title slug status) #:transparent)
+(struct wave-index-entry (idx title slug status ref-path) #:transparent)
+;; ref-path: the exact declared `waves/….md` arrow target for the entry
+;; (#f when the index line carries no arrow). BUG-0081: identity is the
+;; declared path, not the entry's own W number — a plan may deliberately
+;; route a wave through another campaign's W-numbered carrier doc.
+
+;; Extract the full declared doc path from an arrow target (or #f).
+(define (wave-ref-path-from-target target)
+  (and target
+       (let ([m (regexp-match #rx"waves/[A-Za-z0-9][A-Za-z0-9._/-]*\\.md" target)]) (and m (car m)))))
+
+;; The wave's document path: the declared arrow path when present, else the
+;; classic W<idx>-<slug>.md synthesis; #f when the wave is not in the index.
+(define (wave-entry-doc-path entries idx)
+  (define e (findf (lambda (e) (= (wave-index-entry-idx e) idx)) entries))
+  (and e
+       (or (wave-index-entry-ref-path e)
+           (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)))))
 
 (define (parse-plan-index md-text)
   (define lines (string-split md-text "\n"))
@@ -266,7 +287,8 @@
                [title (string-trim (cadddr m))]
                [target (and (list? m) (> (length m) 4) (list-ref m 4))]
                [slug (or (and target (extract-slug-from-target target)) (slugify title))])
-          (append entries (list (wave-index-entry idx title slug status))))
+          (append entries
+                  (list (wave-index-entry idx title slug status (wave-ref-path-from-target target)))))
         ;; Try relaxed format: - W0: Title (without status bracket)
         (let ([rm (regexp-match relaxed-index-line-rx line)])
           (if rm
@@ -274,7 +296,10 @@
                      [title (string-trim (caddr rm))]
                      [target (and (list? rm) (> (length rm) 3) (list-ref rm 3))]
                      [slug (or (and target (extract-slug-from-target target)) (slugify title))])
-                (append entries (list (wave-index-entry idx title slug STATUS-INBOX))))
+                (append
+                 entries
+                 (list
+                  (wave-index-entry idx title slug STATUS-INBOX (wave-ref-path-from-target target)))))
               entries)))))
 ;; BUG-0023 (W2): a target that does not follow the W<n>-<slug>.md
 ;; convention yields NO slug, so the caller falls back to slugify(title).

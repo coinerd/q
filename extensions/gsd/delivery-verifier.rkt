@@ -293,23 +293,29 @@
   ;; this index: stale rows left by a previous campaign (whose wave docs were
   ;; replaced) must not be misread as issue mappings. When the campaign has no
   ;; issues at all, the branch check degrades to "no expected branch" (pass).
+  ;; BUG-0081: the expected doc is the plan index's DECLARED arrow path when
+  ;; the row carries one (a plan may route a wave through another campaign's
+  ;; W-numbered carrier doc); the W<idx>-<slug>.md synthesis is only the
+  ;; fallback.
   (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define declared-doc
+    (and (file-exists? plan-path)
+         (wave-entry-doc-path (parse-plan-index (call-with-input-file plan-path port->string))
+                              wave-idx)))
   (define current-slug (wave-slug base-dir wave-idx))
-  (define expected-doc (and current-slug (format "waves/W~a-~a.md" wave-idx current-slug)))
+  (define expected-doc
+    (or declared-doc (and current-slug (format "waves/W~a-~a.md" wave-idx current-slug))))
   (cond
     [(or (not (file-exists? state-path)) (not expected-doc)) #f]
     [else
      (define text (call-with-input-file state-path port->string))
      (for/first ([line (in-list (string-split text "\n"))]
-                 #:when
-                 (let ([m (regexp-match wave-table-rx line)])
-                   (and
-                    m
-                    (= (string->number (cadr m)) wave-idx)
-                    ;; The row must link the current plan's wave doc.
-                    (string-contains?
-                     line
-                     (string-append "waves/W" (number->string wave-idx) "-" current-slug ".md")))))
+                 #:when (let ([m (regexp-match wave-table-rx line)])
+                          (and m
+                               (= (string->number (cadr m)) wave-idx)
+                               ;; The row must link the current plan's wave doc.
+                               (string-contains? line expected-doc))))
        (define m (regexp-match wave-table-rx line))
        (cadr (cdr m)))]))
 

@@ -289,4 +289,65 @@
                                                  #:remote-published (lambda (_repo _branch _head) #t)
                                                  #:snapshot (lambda (_) identity)))
                  (check-eq? result 'approved)
-                 (check-equal? (durable-receipt-head root plan 2) (hash-ref identity 'head))))))
+                 (check-equal? (durable-receipt-head root plan 2) (hash-ref identity 'head)))))
+
+  ;; REVIEW-2 item 7: certify-publication-receipt! idempotency must compare
+  ;; the IMMUTABLE binding identity (branch/head/tree/repo/origin/attempt +
+  ;; evidence digest), never verified-at timestamps or evidence formatting.
+  ;; Identical replay preserves the durable receipt verbatim; a differing
+  ;; immutable binding refuses. The mandatory guard callback runs immediately
+  ;; before every durable write and marker clear.
+  (test-case "certify-publication-receipt! idempotency compares immutable binding, not timestamps"
+    (with-root (lambda (root)
+                 (define persisted
+                   (hash-set* identity
+                              'attempt-id
+                              "attempt-1"
+                              'attempt-fence
+                              7
+                              'verified-at
+                              100
+                              'evidence
+                              "full Verify passed"))
+                 (record-delivery-receipt! root plan 2 persisted)
+                 (record-remote-pending! root plan 2 "campaign/w2" (make-string 40 #\b) "pending")
+                 (define guard-calls 0)
+                 (define (counting-guard!)
+                   (set! guard-calls (add1 guard-calls)))
+                 ;; the replayed candidate carries a FRESH timestamp: same immutable
+                 ;; binding (including the evidence digest) -> idempotent preserve
+                 (define fresh-candidate (hash-set persisted 'verified-at 999))
+                 (define journal
+                   (certify-publication-receipt! root
+                                                 plan
+                                                 2
+                                                 fresh-candidate
+                                                 #:expected-attempt-id "attempt-1"
+                                                 #:expected-fence 7
+                                                 #:guard counting-guard!))
+                 (check-equal? (hash-ref (hash-ref journal 'receipt) 'verified-at)
+                               100
+                               "the existing durable receipt is preserved verbatim")
+                 (check-equal? (hash-ref (hash-ref journal 'receipt) 'evidence) "full Verify passed")
+                 (check-false (load-remote-pending root plan 2))
+                 (check-true (positive? guard-calls) "the guard runs before marker clearing")
+                 ;; a differing IMMUTABLE binding refuses, never silently overwrites
+                 (check-exn exn:fail?
+                            (lambda ()
+                              (certify-publication-receipt!
+                               root
+                               plan
+                               2
+                               (hash-set fresh-candidate 'head (make-string 40 #\e))
+                               #:expected-attempt-id "attempt-1"
+                               #:expected-fence 7
+                               #:guard counting-guard!)))
+                 ;; the guard callback is mandatory: certification without one refuses
+                 (check-exn exn:fail?
+                            (lambda ()
+                              (certify-publication-receipt! root
+                                                            plan
+                                                            2
+                                                            fresh-candidate
+                                                            #:expected-attempt-id "attempt-1"
+                                                            #:expected-fence 7)))))))

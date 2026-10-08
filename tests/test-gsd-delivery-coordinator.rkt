@@ -790,3 +790,136 @@
                   (check-equal? (default-active-delivery-evidence-path root plan 3)
                                 "docs/reports/gsd-wave-evidence/v9.9.9-w3-r1.rktd"))
                 (lambda () (delete-directory/files root #:must-exist? #f))))
+
+(module+ test
+  ;; REVIEW-2 item 4 (BUG-0079): publication-only replay is ONE explicit
+  ;; initial run-delivery-coordinator! transition — never inside the pure
+  ;; durable-blocker re-evaluated before/after every ladder effect, and never
+  ;; after the journal reached the delivered stage. A failed replay surfaces
+  ;; as the branch-not-published blocker instead of being swallowed into
+  ;; ladder admission.
+  (define-runtime-path publication-module "../extensions/gsd/delivery-publication.rkt")
+  (define publication-publisher
+    (dynamic-require publication-module 'current-gsd-approved-head-publisher))
+  (define publication-publish! (dynamic-require publication-module 'publish-approved-head!))
+  (define load-remote-pending* (dynamic-require journal-module 'load-remote-pending))
+
+  ;; Approved-but-unpublished setup: a done wave bound to the approved
+  ;; identity, a durable confirmed publication intent, and NO journal
+  ;; receipt — the crash window between a successful publication readback
+  ;; and receipt certification.
+  (define (approved-unpublished-campaign! dir)
+    (define rec (migrate-campaign! dir))
+    (set-campaign-wave-status! (car (campaign-record-waves rec)) 'done)
+    (set-campaign-wave-current-attempt! (car (campaign-record-waves rec))
+                                        (campaign-attempt "attempt-1" 7 0))
+    (set-campaign-fence-token! rec 7)
+    (set-campaign-wave-delivery-branch! (car (campaign-record-waves rec)) "campaign/test")
+    (set-campaign-wave-delivery-head-sha! (car (campaign-record-waves rec)) (make-string 40 #\a))
+    (persist-campaign! dir rec)
+    rec)
+
+  (test-case "publication-only replay is one initial transition, never re-run by post-effect checks"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (approved-unpublished-campaign! dir))
+       (define plan (campaign-plan-id ready))
+       (define publisher-calls 0)
+       (define (controller b p w target)
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (parameterize ([publication-publisher
+                       (lambda (_base _plan _wave snapshot _aid _af _fence _evidence)
+                         (set! publisher-calls (add1 publisher-calls))
+                         (hasheq 'status
+                                 (if (= publisher-calls 1) "published" "already-published")
+                                 'branch
+                                 (hash-ref snapshot 'branch)
+                                 'head
+                                 (hash-ref snapshot 'head)))])
+         (publication-publish! dir
+                               plan
+                               0
+                               (receipt-head)
+                               "attempt-1"
+                               7
+                               7
+                               "approved evidence"
+                               (lambda () (load-campaign-record dir plan)))
+         (check-equal? publisher-calls 1)
+         (check-false (load-delivery-journal dir plan 0))
+         (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+         (check-eq? (delivery-outcome-kind outcome) 'ok)
+         (check-equal? publisher-calls
+                       2
+                       "replay runs exactly once as the initial transition, never again post-effect")
+         (define journal (load-delivery-journal dir plan 0))
+         (check-equal? (hash-ref (hash-ref journal 'receipt) 'head) (make-string 40 #\a))
+         (check-false (load-remote-pending* dir plan 0))))))
+
+  (test-case "delivered journal short-circuits before any publication replay"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (approved-unpublished-campaign! dir))
+       (define plan (campaign-plan-id ready))
+       (record-delivery-receipt! dir plan 0 (receipt-head))
+       (update-delivery-journal! dir plan 0 (hasheq 'stage "delivered"))
+       (define publisher-calls 0)
+       (define (controller b p w target)
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (parameterize ([publication-publisher
+                       (lambda (_base _plan _wave snapshot _aid _af _fence _evidence)
+                         (set! publisher-calls (add1 publisher-calls))
+                         (hasheq 'status
+                                 "published"
+                                 'branch
+                                 (hash-ref snapshot 'branch)
+                                 'head
+                                 (hash-ref snapshot 'head)))])
+         (publication-publish! dir
+                               plan
+                               0
+                               (receipt-head)
+                               "attempt-1"
+                               7
+                               7
+                               "approved evidence"
+                               (lambda () (load-campaign-record dir plan)))
+         (check-equal? publisher-calls 1)
+         (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+         (check-eq? (delivery-outcome-kind outcome) 'delivered)
+         (check-equal? publisher-calls 1 "no publication replay after the delivered stage")))))
+
+  (test-case "failed publication replay surfaces as the branch-not-published blocker"
+    (call-with-campaign
+     1
+     (lambda (dir rec)
+       (define ready (approved-unpublished-campaign! dir))
+       (define plan (campaign-plan-id ready))
+       (define controller-calls 0)
+       (define (controller b p w target)
+         (set! controller-calls (add1 controller-calls))
+         (delivery-effect-result 'ok (hasheq 'stage target)))
+       (parameterize ([publication-publisher (lambda args
+                                               (hasheq 'status "blocked" 'reason "remote diverged"))])
+         ;; The intent is durable but the readback now refuses: replay fails.
+         (with-handlers ([exn:fail? void])
+           (publication-publish! dir
+                                 plan
+                                 0
+                                 (receipt-head)
+                                 "attempt-1"
+                                 7
+                                 7
+                                 "approved evidence"
+                                 (lambda () (load-campaign-record dir plan))))
+         (check-true
+          (file-exists?
+           (build-path dir ".planning" "campaigns" plan "coordinator-w0.publication.json")))
+         (define outcome (run-delivery-coordinator! dir plan 0 #:controller controller))
+         (check-eq? (delivery-outcome-kind outcome) 'blocked)
+         (check-true (string-contains? (delivery-outcome-message outcome) "branch-not-published"))
+         (check-true (string-contains? (delivery-outcome-message outcome) "remote diverged"))
+         (check-equal? controller-calls 0 "a failed replay never admits the ladder")
+         (check-false (load-delivery-journal dir plan 0)))))))

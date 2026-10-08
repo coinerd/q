@@ -27,6 +27,7 @@
          racket/format
          racket/list
          racket/path
+         racket/runtime-path
          racket/string
          rackunit
          rackunit/text-ui
@@ -52,6 +53,12 @@
 (define CID (apply string (build-list 64 (lambda (i) (string-ref "0123456789abcdef" (modulo i 16))))))
 (define CID-OTHER
   (apply string (build-list 64 (lambda (i) (string-ref "fedcba9876543210" (modulo i 16))))))
+
+;; BUG-0079 REVIEW-2 item 9: the durable approved-publication branch list
+;; consulted by the campaign-start reclaim spare set.
+(define-runtime-path publication-module "../extensions/gsd/delivery-publication.rkt")
+(define approved-publication-branches
+  (dynamic-require publication-module 'approved-publication-branches))
 
 ;; ============================================================
 ;; Layer 2 helpers — real git sandbox (module-level: defines are not
@@ -277,6 +284,96 @@
             ;; raise-argument-error signals exn:fail:contract (NOT filesystem)
             (check-exn exn:fail:contract?
                        (lambda () (make-wave-worktree! proj #:campaign-id "short" #:wave-index 1)))
+            (delete-directory/files proj #:must-exist? #f))))
+
+    ;; BUG-0079 REVIEW-2 item 9: a retained approved checkout (kept by the
+    ;; run-once dynamic-wind for publication-only resume) must survive a
+    ;; campaign restart reclaim across BOTH the worktree sweep (pass 1) and
+    ;; the orphaned-branch sweep (pass 2) — even when the durable publication
+    ;; record itself is unloadable (corrupt/inconsistent), fail-closed to
+    ;; protecting its branch instead of treating it as absent.
+    (test-case "retained approved checkout survives a campaign restart reclaim"
+      (if (not GIT)
+          (log-warning "test-gsd-wave-worktree: git unavailable; skipping")
+          (let ()
+            (define-values (proj repo) (make-sandbox))
+            (define wt (make-wave-worktree! proj #:campaign-id CID #:wave-index 3))
+            (define dir (wave-worktree-path wt))
+            (define branch "campaign/01234567/w3")
+            (call-with-output-file* (build-path dir "approved.txt")
+                                    (lambda (p) (display "approved\n" p)))
+            (git! dir "add" "-A")
+            (git! dir "commit" "-qm" "approved head")
+            (define approved-head (git-out repo "rev-parse" (string-append "refs/heads/" branch)))
+            ;; Durable publication record that a strict loader must refuse
+            ;; (identity fields missing) while its branch remains named:
+            ;; the crash/corruption window after the intent was written.
+            (define campaigns-dir (build-path proj ".planning" "campaigns" CID))
+            (make-directory* campaigns-dir)
+            (call-with-output-file*
+             (build-path campaigns-dir "coordinator-w3.publication.json")
+             (lambda (out)
+               (fprintf
+                out
+                "{\"schema-version\":1,\"plan-id\":\"~a\",\"wave\":3,\"status\":\"intent\",\"branch\":\"~a\",\"head\":\"~a\"}"
+                CID
+                branch
+                approved-head)))
+            ;; Production campaign-start reclaim shape: spare branches come
+            ;; from the delivered record entries plus the approved
+            ;; publication intents.
+            (reclaim-orphaned-worktrees! repo
+                                         #:campaign-id CID
+                                         #:spare-branches (approved-publication-branches proj CID))
+            (check-true (directory-exists? dir)
+                        "pass 1 (worktree sweep) must spare the approved checkout")
+            (check-equal? (git-out repo "rev-parse" (string-append "refs/heads/" branch))
+                          approved-head
+                          "the approved branch head survives the worktree sweep")
+            ;; Pass 2: the worktree directory was removed out-of-band (crash,
+            ;; rm -rf); the campaign branch alone must still be spared.
+            (git! repo "worktree" "remove" "--force" (path->string dir))
+            (git! repo "worktree" "prune")
+            (reclaim-orphaned-worktrees! repo
+                                         #:campaign-id CID
+                                         #:spare-branches (approved-publication-branches proj CID))
+            (check-equal? (git-out repo "rev-parse" (string-append "refs/heads/" branch))
+                          approved-head
+                          "pass 2 (branch sweep) must spare the approved branch")
+            (delete-directory/files proj #:must-exist? #f))))
+
+    ;; BUG-0079 REVIEW-2 item 9 (same window, next-attempt path): the
+    ;; per-wave crash-recovery reclaim inside make-wave-worktree! must honor
+    ;; spare branches too — a repair attempt for the same wave may never
+    ;; destroy the retained approved checkout while reclaiming around it.
+    (test-case "make-wave-worktree! forwards spare branches to its internal reclaim"
+      (if (not GIT)
+          (log-warning "test-gsd-wave-worktree: git unavailable; skipping")
+          (let ()
+            (define-values (proj repo) (make-sandbox))
+            (define wt (make-wave-worktree! proj #:campaign-id CID #:wave-index 4))
+            (define dir (wave-worktree-path wt))
+            (define branch "campaign/01234567/w4")
+            (call-with-output-file* (build-path dir "approved.txt")
+                                    (lambda (p) (display "approved\n" p)))
+            (git! dir "add" "-A")
+            (git! dir "commit" "-qm" "approved head")
+            (define approved-head (git-out repo "rev-parse" (string-append "refs/heads/" branch)))
+            ;; The retained approved checkout occupies the deterministic
+            ;; worktree path: reclaiming around it leaves creation to fail
+            ;; loudly (the caller falls back to the shared checkout) instead
+            ;; of deleting durable approved evidence.
+            (check-exn #rx"worktree add failed"
+                       (lambda ()
+                         (make-wave-worktree! proj
+                                              #:campaign-id CID
+                                              #:wave-index 4
+                                              #:spare-branches (list branch))))
+            (check-true (directory-exists? dir) "the approved checkout survived the per-wave reclaim")
+            (check-equal? (git-out repo "rev-parse" (string-append "refs/heads/" branch))
+                          approved-head
+                          "the approved branch head survived the per-wave reclaim")
+            (git! repo "worktree" "remove" "--force" (path->string dir))
             (delete-directory/files proj #:must-exist? #f))))))
 
 (exit (run-tests w6-suite))

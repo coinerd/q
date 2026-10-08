@@ -290,8 +290,11 @@
       ;; +1 — v1.00.33 recovery continuation: current-gsd-recovery-github-origin?
       ;; (extensions/gsd/delivery-recovery.rkt, SERVICE_HANDLE): origin-policy
       ;; DI seam for the recovery candidate resolver's independent-clone check.
+      ;; +1 — BUG-0079: current-gsd-approved-head-publisher
+      ;; (extensions/gsd/delivery-publication.rkt, OTHER_REVIEWED): publisher
+      ;; DI seam mirroring current-gsd-remote-published.
       (check-equal? (length inventory-entries)
-                    237
+                    238
                     "parameter inventory should contain audited parameters"))))
 
 ;; ============================================================

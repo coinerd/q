@@ -215,6 +215,34 @@
       (define rec2 (migrate-campaign! dir))
       (check-equal? (campaign-plan-id rec2) id-before "status-header rewrite preserves plan-id"))
 
+    (test-case "BUG-0081: seed-record binds the declared arrow path, not the synthesized W-number path"
+      ;; A plan may route a wave through another campaign's W-numbered
+      ;; carrier doc; the record's descriptor must keep the declared path
+      ;; (and hash the declared file), never waves/W<idx>-<slug>.md.
+      (define dir (make-temporary-file "campaign-0081-~a" 'directory))
+      (make-directory (build-path dir ".planning"))
+      (make-directory (build-path dir ".planning" "waves"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (display "# Plan: Carrier\n\n## Waves\n" out)
+                               (display "- [Inbox] W0: Own zero → waves/W0-own-zero.md\n" out)
+                               (display "- [Inbox] W2: Carrier wave → waves/W0-carrier.md\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-own-zero.md")
+                             (lambda (out) (display "# Wave 0\nStatus: Inbox\n\nBody zero.\n" out))
+                             #:exists 'truncate)
+      (call-with-output-file (build-path dir ".planning" "waves" "W0-carrier.md")
+                             (lambda (out) (display "# Wave 0\nStatus: Inbox\n\nBody carrier.\n" out))
+                             #:exists 'truncate)
+      (define rec (migrate-campaign! dir))
+      (define descriptors (campaign-manifest-waves (campaign-record-manifest rec)))
+      (define w2 (findf (lambda (d) (= (campaign-wave-descriptor-index d) 2)) descriptors))
+      (check-equal? (campaign-wave-descriptor-doc-path w2) "waves/W0-carrier.md")
+      ;; The content hash covers the declared carrier file (normalized body).
+      (define w0 (findf (lambda (d) (= (campaign-wave-descriptor-index d) 0)) descriptors))
+      (check-equal? (campaign-wave-descriptor-doc-path w0) "waves/W0-own-zero.md")
+      (delete-directory/files dir))
+
     (test-case "global constraints hash participates in identity"
       (define m1
         (make-campaign-manifest 1

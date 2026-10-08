@@ -338,6 +338,40 @@
                   "stale issue row referencing a different wave doc must be ignored")
       (cleanup-tmp base))
 
+    (test-case "BUG-0081: STATE.md issue row resolves through the declared arrow carrier doc"
+      ;; The plan routes W2 through a W0-numbered carrier doc and STATE.md
+      ;; links that declared path. The issue mapping must resolve through the
+      ;; DECLARED path (expected feature/issue-7-wave branch), never the
+      ;; synthesized waves/W2-<slug>.md (which would misread the campaign as
+      ;; issue-less and skip the branch expectation entirely).
+      (define base (make-synthetic-repo))
+      (call-with-output-file
+       (build-path base ".planning" "PLAN.md")
+       (lambda (out)
+         (display (string-append "# Plan: Carrier\n\n## Waves\n\n"
+                                 "- [Inbox] W0: Zero → waves/W0-zero.md\n"
+                                 "- [Inbox] W2: Carrier wave → waves/W0-carrier.md\n")
+                  out))
+       #:exists 'truncate)
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "exit 0")
+      (write-wave-doc! base 0 "carrier" '("q/ui-core/preferences.rkt") "exit 0")
+      (call-with-output-file
+       (build-path base ".planning" "STATE.md")
+       (lambda (out)
+         (display "| W2 | #7 | PENDING | [waves/W0-carrier.md](waves/W0-carrier.md) |\n" out))
+       #:exists 'truncate)
+      (define plan (load-plan* base))
+      (define result
+        (parameterize ([current-gsd-git-runner (fake-git-facts #:branch "main")]
+                       [current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 2)))
+      (define branch-entry (assoc "branch" (delivery-verification-evidence result)))
+      (check-false (cadr branch-entry)
+                   "branch check must fail on main against the expected issue branch")
+      (check-true (string-contains? (cddr branch-entry) "expected=feature/issue-7-wave")
+                  "expected branch resolves through the declared carrier path")
+      (cleanup-tmp base))
+
     (test-case "approves git-root-relative wave files (no q/ prefix)"
       ;; regression (W-campaign): wave docs may declare CI/workflow paths
       ;; git-root-relative (".github/workflows/ci.yml", "scripts/run-tests/...")
