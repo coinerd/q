@@ -20,6 +20,7 @@
          racket/path
          racket/pretty
          racket/string
+         racket/system
          (only-in "../extensions/gsd/plan-snapshot.rkt"
                   load-snapshot-manifest
                   plan-snapshot-manifest-files
@@ -29,7 +30,9 @@
                   parse-plan-index
                   wave-index-entry-idx
                   wave-index-entry-ref-path)
-         (only-in "../extensions/gsd/delivery-journal.rkt" load-delivery-journal))
+         (only-in "../extensions/gsd/delivery-journal.rkt"
+                  load-delivery-journal
+                  reconcile-merged-tip-receipt!))
 (provide read-hash-datum
          read-any-datum
          binding-draft
@@ -339,6 +342,80 @@
        (define path (build-path root relative))
        (make-parent-directory* path)
        (call-with-output-file path (lambda (out) (pretty-write datum out)) #:exists 'error))]
+    [(reconcile-merged-tip)
+     ;; BUG-0082: reconcile the SAME-ATTEMPT delivery receipt to a post-merge
+     ;; branch tip (the merged PR head or a later republication head) over a
+     ;; provably evidence-only tail, at journal stage implementation-merged.
+     ;; argv: <repo> <campaign-root> <plan-id> <wave-index> <attempt-id>
+     ;;       <fence> <new-head>
+     (unless (= 8 (length args))
+       (error
+        'delivery
+        "reconcile-merged-tip requires: <repo> <campaign-root> <plan-id> <wave-index> <attempt-id> <fence> <new-head>"))
+     (define repo (second args))
+     (define croot (third args))
+     (define plan-id (fourth args))
+     (define wave-idx (string->number (fifth args)))
+     (define attempt-id (sixth args))
+     (define fence-num (string->number (seventh args)))
+     (define new-head (eighth args))
+     (define (git . git-args)
+       (define out (open-output-string))
+       (define err (open-output-string))
+       (define code
+         (parameterize ([current-output-port out]
+                        [current-error-port err])
+           (apply system*/exit-code (find-executable-path "git") "-C" repo git-args)))
+       (values code (string-trim (get-output-string out)) (string-trim (get-output-string err))))
+     (define excludes
+       '("--" "."
+              ":(exclude)docs/reports/gsd-wave-evidence/**"
+              ":(exclude)docs/reports/gsd-wave-reviews/**"
+              ":(exclude)docs/reports/gsd-wave-validation/**"))
+     (define journal (load-delivery-journal croot plan-id wave-idx))
+     (unless (hash? journal)
+       (error 'delivery "no durable journal to reconcile"))
+     (define old-receipt (hash-ref journal 'receipt #f))
+     (unless (hash? old-receipt)
+       (error 'delivery "journal carries no receipt"))
+     (define old-head (hash-ref old-receipt 'head #f))
+     (define-values (anc-code _anc-out anc-err) (git "merge-base" "--is-ancestor" old-head new-head))
+     (unless (eqv? anc-code 0)
+       (error 'delivery (format "new head is not a descendant of the receipt head: ~a" anc-err)))
+     (define-values (diff-code diff-out diff-err)
+       (apply git "diff" "--name-only" old-head new-head excludes))
+     (unless (eqv? diff-code 0)
+       (error 'delivery (format "evidence-only tail probe failed: ~a" diff-err)))
+     (unless (string=? diff-out "")
+       (error 'delivery (format "tail over the receipt head is not evidence-only: ~a" diff-out)))
+     (define-values (tree-code tree-out tree-err)
+       (git "rev-parse" (string-append new-head "^{tree}")))
+     (unless (eqv? tree-code 0)
+       (error 'delivery (format "cannot resolve new head tree: ~a" tree-err)))
+     (define reconciled
+       (reconcile-merged-tip-receipt!
+        croot
+        plan-id
+        wave-idx
+        (make-immutable-hash
+         (append
+          (hash->list old-receipt)
+          (list (cons 'head new-head)
+                (cons 'tree tree-out)
+                (cons 'verified-at (current-seconds))
+                (cons 'evidence
+                      "post-merge merged-tip reconciliation over an evidence-only tail (BUG-0082)"))))
+        #:expected-attempt-id attempt-id
+        #:expected-fence fence-num
+        #:head-ancestor? (lambda (old new)
+                           (define-values (code _out _err) (git "merge-base" "--is-ancestor" old new))
+                           (eqv? code 0))
+        #:tail-evidence-only?
+        (lambda (old new)
+          (define-values (code out _err) (apply git "diff" "--name-only" old new excludes))
+          (and (eqv? code 0) (string=? out "")))))
+     (write-json reconciled)
+     (newline)]
     [(journal)
      (unless (= 4 (length args))
        (error 'delivery "journal requires: <campaign-root> <plan-id> <wave-index>"))
