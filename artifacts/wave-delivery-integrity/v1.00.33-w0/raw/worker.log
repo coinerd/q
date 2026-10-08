@@ -1,0 +1,46 @@
+Plan index has 3 wave entries but 1 wave doc is missing on disk: .planning/waves/W2-canary-seven-link-delivery.md
+Expected filename convention: waves/W<idx>-<slug>.md (e.g. .planning/waves/W0-title-slug.md). Create the missing file(s) or fix the index target path.
+New merge head: a553e45784351468781c1aa6494116ec96486c22; preserved tree and both parents.
+Gate 1/6: raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt
+Gate 2/6: raco make extensions/gsd/go-orchestrator.rkt
+Gate 3/6: racket scripts/run-tests.rkt tests/test-gsd-tracker-reconciliation.rkt tests/test-gsd-go-orchestrator.rkt
+Gate 4/6: racket scripts/run-tests.rkt tests/test-release-workflow-contract.rkt tests/test-gsd-responsibility-inventory.rkt tests/test-milestone-gate.rkt
+Gate 5/6: racket scripts/lint-all.rkt
+Gate 6/6: racket scripts/run-tests.rkt --suite fast
+recovery: gate 6 rejected: delivery verification failed:
+verify: cmd=racket scripts/run-tests.rkt --suite fast exit=2 state=failed log=/var/tmp/gsd-verification-vj-6-1791378951600.5173.log
+failed-output-summary:
+;; run-tests: suite=fast files=1218 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 13 mutation-sensitive files before parallel batches
+.............
+..................................TT.......................................................................................................T.........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1218 total, 1215 passed, 0 failed, 3 timeouts
+  Tests:     18078 total, 18078 passed, 0 failed
+  Category:  PASS=1215, TIMEOUT=3
+  Elapsed:   3h 21m 53.241s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ⏱ INCOMPLETE (3 timeouts)
+═══════════════════════════════════════════════════════════
+
+TIMEOUTS (distinct status — never counted as passes):
+  ⏱ tests/test-approval-channel-teardown.rkt [TIMEOUT] (exit=2, 2m 0.201s)
+  ⏱ tests/test-approval-correlation.rkt [TIMEOUT] (exit=2, 2m 0.223s)
+  ⏱ tests/test-ci-package-compile-boundary.rkt [TIMEOUT] (exit=2, 2m 0.186s)
+RUN-SUMMARY runner-version=1.00.31 suite=fast profile=local shard=none execution-mode=subprocess file-count=1218 pass=1215 fail=0 timeout=3 skip=0 wall-clock-seconds=12113.241 metadata-completeness=explicit:1189/heuristic:0/missing:29
+New merge head: a553e45784351468781c1aa6494116ec96486c22; preserved tree and both parents.
+Gate 1/6: raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt
+open-output-file: file exists
+  path: /tmp/q-w0-reconcile-evidence/gate-1.rktd
+New merge head: a553e45784351468781c1aa6494116ec96486c22; preserved tree and both parents.
+Gate 1/6: raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt
+Gate 2/6: raco make extensions/gsd/go-orchestrator.rkt
+Gate 3/6: racket scripts/run-tests.rkt tests/test-gsd-tracker-reconciliation.rkt tests/test-gsd-go-orchestrator.rkt
+Gate 4/6: racket scripts/run-tests.rkt tests/test-release-workflow-contract.rkt tests/test-gsd-responsibility-inventory.rkt tests/test-milestone-gate.rkt
+Gate 5/6: racket scripts/lint-all.rkt
+Gate 6/6: racket scripts/run-tests.rkt --suite fast
+Exact approved head published; supported APIs recorded receipt/provenance. W0 remains awaiting-delivery; /go not started.

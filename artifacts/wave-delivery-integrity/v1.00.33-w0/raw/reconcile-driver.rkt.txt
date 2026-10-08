@@ -1,0 +1,181 @@
+#lang racket/base
+(require racket/file
+         racket/list
+         racket/string
+         json
+         (file "/home/user/src/q-agent/q/extensions/gsd/go-orchestrator.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/campaign-repository.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/campaign-state.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/delivery-receipt.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/delivery-verifier.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/delivery-finalize.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/wave-executor.rkt")
+         (file "/home/user/src/q-agent/q/extensions/gsd/plan-types.rkt")
+         (file "/home/user/src/q-agent/q/sandbox/subprocess.rkt"))
+(define root "/home/user/src/q-agent")
+(define wt "/home/user/src/q-agent/wt-campaign-79a69b42-w0")
+(define plan "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e")
+(define branch "campaign/79a69b42/w0")
+(define old "4098978e8d15871df7c7e40e2dfff3ddea44c619")
+(define remote "6f71fb9010e330c2cfb0aefd08a496381a9a019a")
+(define base "3a1c4aa996ae425fe91e57dea016bfdf8b15e318")
+(define ev "/tmp/q-w0-reconcile-evidence")
+(make-directory* ev)
+(define (status state detail)
+  (call-with-atomic-output-file
+   (build-path ev "status.json")
+   (lambda (out _) (write-json (hasheq 'status state 'detail detail 'at (current-seconds)) out))))
+(define (git . args)
+  (define r (run-subprocess "git" #:args (append (list "-C" wt) args) #:directory wt #:timeout 120))
+  (unless (and (not (subprocess-result-timed-out? r)) (equal? (subprocess-result-exit-code r) 0))
+    (error 'git "~a: ~a" args (subprocess-result-stderr r)))
+  (string-trim (subprocess-result-stdout r)))
+(define (current)
+  (define r (load-campaign-record root plan))
+  (unless (and r (not (campaign-record-cancellation r)))
+    (error 'recovery "missing/cancelled campaign"))
+  (define w (current-wave-for-attempt r 0 3 "attempt-9"))
+  (unless (and w (eq? (campaign-wave-status w) 'awaiting-delivery))
+    (error 'recovery "attempt/fence/status changed"))
+  r)
+(define lease #f)
+(with-handlers ([exn? (lambda (e)
+                        (status "blocked" (exn-message e))
+                        (eprintf "~a\n" (exn-message e))
+                        (exit 1))])
+  (set! lease (acquire-lease root plan #:session-id "manual-w0-history-recovery"))
+  (unless lease
+    (error 'recovery "campaign lease busy; no effects performed"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (current)
+     (when (equal? (git "rev-parse" "HEAD") old)
+       (unless (and (equal? (git "rev-parse" "MERGE_HEAD") remote)
+                    (equal? (git "write-tree") (git "rev-parse" (string-append old "^{tree}"))))
+         (error 'recovery "merge candidate identity changed"))
+       (git "commit"
+            "-m"
+            "recovery: preserve published W0 ancestry without reverting approved repairs"))
+     (define head (git "rev-parse" "HEAD"))
+     (unless (and (equal? (git "rev-parse" (string-append head "^1")) old)
+                  (equal? (git "rev-parse" (string-append head "^2")) remote)
+                  (equal? (git "rev-parse" (string-append head "^{tree}"))
+                          (git "rev-parse" (string-append old "^{tree}"))))
+       (error 'recovery "unexpected merge topology/tree"))
+     (define snap (build-path root ".planning" "campaigns" plan "plan-snapshot"))
+     (define local-plan (build-path wt ".planning"))
+     (unless (directory-exists? local-plan)
+       (copy-directory/files snap local-plan))
+     ;; Recover W0 from its exact frozen document. The general index loader
+     ;; derives a missing W2 filename; do not alter any campaign or snapshot
+     ;; to repair that separate problem, nor seed a replacement campaign.
+     (define doc-rel "waves/W0-tracker-reconciliation-wiring.md")
+     (unless (and (equal? (file->bytes (build-path snap "PLAN.md"))
+                          (file->bytes (build-path local-plan "PLAN.md")))
+                  (equal? (file->bytes (build-path snap doc-rel))
+                          (file->bytes (build-path local-plan doc-rel))))
+       (error 'recovery "local frozen plan/document bytes drifted"))
+     (define content (file->string (build-path snap doc-rel)))
+     (define fields (parse-wave-content content))
+     (define declaration (hash-ref fields 'verify))
+     (define parsed
+       (gsd-plan (list (gsd-wave 0
+                                 "Tracker reconciliation wiring"
+                                 'pending
+                                 content
+                                 (hash-ref fields 'files)
+                                 '()
+                                 declaration
+                                 '()))
+                 #f
+                 '()
+                 '()))
+     (define commands
+       (filter (lambda (s) (not (string=? s ""))) (map string-trim (string-split declaration "\n"))))
+     (define expected
+       '("raco fmt -i extensions/gsd/go-orchestrator.rkt extensions/gsd/tracker-reconciliation.rkt"
+         "raco make extensions/gsd/go-orchestrator.rkt"
+         "racket scripts/run-tests.rkt tests/test-gsd-tracker-reconciliation.rkt tests/test-gsd-go-orchestrator.rkt"
+         "racket scripts/run-tests.rkt tests/test-release-workflow-contract.rkt tests/test-gsd-responsibility-inventory.rkt tests/test-milestone-gate.rkt"
+         "racket scripts/lint-all.rkt"
+         "racket scripts/run-tests.rkt --suite fast"))
+     (unless (equal? commands expected)
+       (error 'recovery "frozen Verify chain mismatch: ~a" commands))
+     (define ctx
+       (make-branch-delivery-context #:repo-root wt
+                                     #:branch branch
+                                     #:base-commit base
+                                     #:worktree-path wt))
+     (define (guard)
+       (current)
+       (unless (and (equal? (git "symbolic-ref" "--short" "HEAD") branch)
+                    (equal? (git "rev-parse" "HEAD") head)
+                    (equal? (git "status" "--porcelain=v1" "--untracked-files=all") ""))
+         (error 'recovery "head/branch/clean-tree identity changed")))
+     (guard)
+     (status "verifying" head)
+     (printf "New merge head: ~a; preserved tree and both parents.\n" head)
+     (flush-output)
+     (define verdict
+       (verify-campaign-delivery
+        root
+        plan
+        0
+        wt
+        ctx
+        (lambda (idx)
+          ;; Each exact frozen command runs via the production owned verifier,
+          ;; in order. This prevents newline shell execution masking early red.
+          ;; No old green verdict, skipped gates, or relaxed deadlines.
+          (define results
+            (for/list ([command (in-list commands)]
+                       [n (in-naturals 1)])
+              (guard)
+              (printf "Gate ~a/6: ~a\n" n command)
+              (flush-output)
+              (define result
+                (parameterize ([current-gsd-delivery-verify-command command])
+                  (run-delivery-verification wt parsed idx)))
+              (call-with-output-file (build-path ev (format "gate-~a.rktd" n))
+                                     (lambda (out)
+                                       (write result out)
+                                       (newline out))
+                                     #:exists 'error)
+              (unless (delivery-verification-approved? result)
+                (error 'recovery "gate ~a rejected: ~a" n (delivery-verification-message result)))
+              (guard)
+              result))
+          (guard)
+          (git "fetch" "--no-tags" "origin" (string-append "refs/heads/" branch))
+          (git "merge-base" "--is-ancestor" "FETCH_HEAD" head)
+          (guard)
+          (status "publishing" head)
+          (git "push" "--no-tags" "origin" (string-append head ":refs/heads/" branch))
+          (unless (equal?
+                   (string-trim (git "ls-remote" "origin" (string-append "refs/heads/" branch)))
+                   (string-append head "\trefs/heads/" branch))
+            (error 'recovery "authenticated remote exact-head readback mismatch"))
+          (guard)
+          (delivery-verification
+           #t
+           (append-map delivery-verification-evidence results)
+           "all six frozen gates approved; exact merge head published and read back"))
+        current))
+     (unless (delivery-verification-approved? verdict)
+       (error 'recovery "receipt wrapper rejected"))
+     (guard)
+     (unless (equal? (durable-receipt-head root plan 0) head)
+       (error 'recovery "exact verified receipt not persisted"))
+     (define provenance
+       (record-attempt-delivery-provenance! root plan 0 "attempt-9" 3 #:delivery-context ctx))
+     (unless (equal? provenance (cons branch head))
+       (error 'recovery "provenance did not converge"))
+     (define w (current-wave-for-attempt (current) 0 3 "attempt-9"))
+     (unless (equal? (campaign-wave-delivery-head-sha w) head)
+       (error 'recovery "durable head did not converge"))
+     (status "published-and-verified" head)
+     (printf
+      "Exact approved head published; supported APIs recorded receipt/provenance. W0 remains awaiting-delivery; /go not started.\n")
+     (flush-output))
+   (lambda () (release-lease! lease))))
