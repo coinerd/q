@@ -175,6 +175,37 @@
   (define entries (parse-plan-index "# Just a doc\nNo waves here\n"))
   (check-equal? entries '()))
 
+;; BUG-0081: a wave entry may deliberately route through another campaign's
+;; W-numbered carrier doc; the declared arrow path is identity, not the
+;; entry's own W number.
+(test-case "parse-plan-index: declared arrow path is captured verbatim (BUG-0081)"
+  (define plan
+    (string-append
+     "- [Inbox] W0: Tracker reconciliation → waves/W0-tracker-reconciliation-wiring.md\n"
+     "- [Inbox] W2: Canary seven-link delivery → waves/W0-canary-seven-link-delivery.md\n"))
+  (define entries (parse-plan-index plan))
+  (check-equal? (wave-index-entry-ref-path (list-ref entries 0))
+                "waves/W0-tracker-reconciliation-wiring.md")
+  ;; Foreign numbering preserved: the carrier doc keeps its own W0 number.
+  (check-equal? (wave-index-entry-ref-path (list-ref entries 1))
+                "waves/W0-canary-seven-link-delivery.md")
+  ;; The slug still follows the target so synthesized fallbacks agree.
+  (check-equal? (wave-index-entry-slug (list-ref entries 1)) "canary-seven-link-delivery"))
+
+(test-case "parse-plan-index: no arrow means no declared ref-path"
+  (define entries (parse-plan-index "- [Inbox] W0: No arrow here\n"))
+  (check-false (wave-index-entry-ref-path (car entries))))
+
+(test-case "wave-entry-doc-path: declared path wins; synthesis is the fallback (BUG-0081)"
+  (define entries
+    (parse-plan-index (string-append "- [Inbox] W0: Tracker → waves/W0-tracker.md\n"
+                                     "- [Inbox] W2: Carrier → waves/W0-carrier.md\n"
+                                     "- [Inbox] W3: Arrowless wave\n")))
+  (check-equal? (wave-entry-doc-path entries 0) "waves/W0-tracker.md")
+  (check-equal? (wave-entry-doc-path entries 2) "waves/W0-carrier.md")
+  (check-equal? (wave-entry-doc-path entries 3) "waves/W3-arrowless-wave.md")
+  (check-false (wave-entry-doc-path entries 9)))
+
 (test-case "parse-plan-index: slug from target path"
   (define entries (parse-plan-index "- [Inbox] W0: Title → waves/W0-my-slug.md\n"))
   (check-equal? (length entries) 1)

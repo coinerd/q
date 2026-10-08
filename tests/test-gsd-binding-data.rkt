@@ -183,6 +183,26 @@
     (check-exn exn:fail? (lambda () (snapshot-facts dir campaign-id -1)))
     (delete-directory/files dir))
 
+  (test-case "snapshot facts select the declared arrow doc under numbering collision (BUG-0081)"
+    ;; A plan may deliberately route a wave through another campaign's
+    ;; W-numbered carrier doc, so the frozen manifest holds TWO W0-prefixed
+    ;; docs. Selection must follow the frozen PLAN.md's declared arrow path
+    ;; per wave — never the W<n>- filename prefix.
+    (define dir (make-temporary-file "binding-0081-~a" 'directory))
+    (write-text! (build-path dir ".planning" "PLAN.md")
+                 (string-append "# Plan\n\n"
+                                "- [Inbox] W0: Tracker wiring → waves/W0-tracker-wiring.md\n"
+                                "- [Inbox] W2: Carrier → waves/W0-carrier.md\n"))
+    (write-text! (build-path dir ".planning" "waves" "W0-tracker-wiring.md")
+                 "# W0: Tracker wiring\n\nbody\n")
+    (write-text! (build-path dir ".planning" "waves" "W0-carrier.md") "# W2: Carrier\n\nbody\n")
+    (bind-snapshot! dir)
+    (define w0 (snapshot-facts dir campaign-id 0))
+    (check-equal? (hash-ref w0 'wave-doc) "waves/W0-tracker-wiring.md")
+    (define w2 (snapshot-facts dir campaign-id 2))
+    (check-equal? (hash-ref w2 'wave-doc) "waves/W0-carrier.md")
+    (delete-directory/files dir))
+
   (test-case "undeclared waves report no outputs (caller allows only exact hash source)"
     (define dir (plan-tree #:wave-text "# W1: Fixture wave\n\nNo declared outputs.\n"))
     (bind-snapshot! dir)
