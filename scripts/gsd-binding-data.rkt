@@ -25,6 +25,10 @@
                   plan-snapshot-manifest-files
                   snapshot-file-path
                   snapshot-dir)
+         (only-in "../extensions/gsd/wave-docs.rkt"
+                  parse-plan-index
+                  wave-index-entry-idx
+                  wave-index-entry-ref-path)
          (only-in "../extensions/gsd/delivery-journal.rkt" load-delivery-journal))
 (provide read-hash-datum
          read-any-datum
@@ -198,14 +202,35 @@
   (define manifest (load-snapshot-manifest campaign-root plan-id))
   (unless manifest
     (error 'delivery "immutable campaign snapshot is absent"))
-  (define prefix (format "W~a-" wave-index))
+  ;; BUG-0081: wave-doc identity is the declared arrow path of the FROZEN
+  ;; plan's index row for this wave — a plan may deliberately route a wave
+  ;; through another campaign's W-numbered carrier doc, so a W<n>- filename
+  ;; prefix alone cannot select the document. The frozen PLAN.md is read
+  ;; from the verified snapshot directory (never live planning files); the
+  ;; unique-prefix scan remains the fallback for rows/snapshots without a
+  ;; declared arrow path.
+  (define frozen-plan-path (build-path (snapshot-dir campaign-root plan-id) "PLAN.md"))
+  (define declared-path
+    (and (file-exists? frozen-plan-path)
+         (for/first ([e (in-list (parse-plan-index (file->string frozen-plan-path)))]
+                     #:when (= (wave-index-entry-idx e) wave-index))
+           (wave-index-entry-ref-path e))))
   (define docs
-    (filter (lambda (f)
-              (define rel (snapshot-file-path f))
-              (and (string-prefix? rel "waves/") (string-prefix? (substring rel 6) prefix)))
-            (plan-snapshot-manifest-files manifest)))
+    (if declared-path
+        (filter (lambda (f) (string=? (snapshot-file-path f) declared-path))
+                (plan-snapshot-manifest-files manifest))
+        (let ([prefix (format "W~a-" wave-index)])
+          (filter (lambda (f)
+                    (define rel (snapshot-file-path f))
+                    (and (string-prefix? rel "waves/") (string-prefix? (substring rel 6) prefix)))
+                  (plan-snapshot-manifest-files manifest)))))
   (unless (= 1 (length docs))
-    (error 'delivery "snapshot does not freeze exactly one wave document for W~a" wave-index))
+    (if declared-path
+        (error 'delivery
+               "snapshot does not freeze the declared wave document ~a for W~a"
+               declared-path
+               wave-index)
+        (error 'delivery "snapshot does not freeze exactly one wave document for W~a" wave-index)))
   (define rel (snapshot-file-path (car docs)))
   ;; Read the frozen content from the verified snapshot, never from live files.
   (define text (file->string (build-path (snapshot-dir campaign-root plan-id) rel)))
