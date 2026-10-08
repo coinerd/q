@@ -343,7 +343,7 @@
        (make-parent-directory* path)
        (call-with-output-file path (lambda (out) (pretty-write datum out)) #:exists 'error))]
     [(reconcile-merged-tip)
-     ;; BUG-0082: reconcile the SAME-ATTEMPT delivery receipt to a post-merge
+     ;; BUG-0083: reconcile the SAME-ATTEMPT delivery receipt to a post-merge
      ;; branch tip (the merged PR head or a later republication head) over a
      ;; provably evidence-only tail, at journal stage implementation-merged.
      ;; argv: <repo> <campaign-root> <plan-id> <wave-index> <attempt-id>
@@ -404,7 +404,7 @@
                 (cons 'tree tree-out)
                 (cons 'verified-at (current-seconds))
                 (cons 'evidence
-                      "post-merge merged-tip reconciliation over an evidence-only tail (BUG-0082)"))))
+                      "post-merge merged-tip reconciliation over an evidence-only tail (BUG-0083)"))))
         #:expected-attempt-id attempt-id
         #:expected-fence fence-num
         #:head-ancestor? (lambda (old new)

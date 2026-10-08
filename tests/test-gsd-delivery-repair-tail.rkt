@@ -114,7 +114,7 @@
                                   #:expected-attempt-id attempt-id
                                   #:expected-fence fence
                                   #:head-ancestor? ancestor?))
-;; Red-first (BUG-0082): the post-merge receipt transition is required
+;; Red-first (BUG-0083): the post-merge receipt transition is required
 ;; dynamically until the journal module provides it.
 (define reconcile-merged-tip-receipt!
   (dynamic-require (string->path "../extensions/gsd/delivery-journal.rkt")
@@ -137,7 +137,7 @@
   (seed-journal! root #:stage "implementation-merged"))
 
 (module+ test
-  (test-case "BUG-0082: merged-tip transition reconciles at implementation-merged with an evidence-only tail"
+  (test-case "BUG-0083: merged-tip transition reconciles at implementation-merged with an evidence-only tail"
     (with-root (lambda (root)
                  (seed-merged-journal! root)
                  (define recorded (merged-tip-transition root))
@@ -150,7 +150,7 @@
                  (check-equal? (binding-generation root plan 2)
                                1
                                "merged-tip reconciliation advances the republication generation"))))
-  (test-case "BUG-0082: merged-tip transition refuses every other stage"
+  (test-case "BUG-0083: merged-tip transition refuses every other stage"
     (for ([stage '("context-ready" "implementation-review"
                                    "implementation-pr"
                                    "implementation-ci"
@@ -167,7 +167,7 @@
                    (check-exn exn:fail?
                               (lambda () (merged-tip-transition root))
                               (format "stage ~a must refuse merged-tip reconciliation" stage))))))
-  (test-case "BUG-0082: merged-tip transition refuses a tail that is not evidence-only"
+  (test-case "BUG-0083: merged-tip transition refuses a tail that is not evidence-only"
     (with-root (lambda (root)
                  (seed-merged-journal! root)
                  (check-exn exn:fail?
@@ -176,7 +176,7 @@
                  (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt)
                                (receipt-for old-head)
                                "refused transition leaves the journal untouched"))))
-  (test-case "BUG-0082: merged-tip transition refuses unsafe identity shapes"
+  (test-case "BUG-0083: merged-tip transition refuses unsafe identity shapes"
     (with-root
      (lambda (root)
        (check-exn exn:fail? (lambda () (merged-tip-transition root)))

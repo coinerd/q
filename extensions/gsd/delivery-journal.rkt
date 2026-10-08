@@ -190,7 +190,7 @@
 (define repair-tail-allowed-stages
   '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
 
-;; BUG-0082: the post-merge analogue. A delivery branch whose implementation
+;; BUG-0083: the post-merge analogue. A delivery branch whose implementation
 ;; PR was lawfully merged at an evidence-only drift tip PAST the recorded
 ;; receipt head (the resolve/merge drift tolerance — production shape of
 ;; campaign 79a69b42 W0) needs the receipt to advance to that tip (or a later
