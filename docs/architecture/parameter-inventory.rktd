@@ -85,6 +85,10 @@
  ;; ONLY the origin URL policy for file:// fixtures; snapshot/verification
  ;; always run production code).
  ("extensions/gsd/delivery-recovery.rkt" (current-gsd-recovery-github-origin? . SERVICE_HANDLE))
+ ;; BUG-0079: test/embedding seam overriding the approved-head publisher
+ ;; (default shells the trusted gsd-delivery.py controller through the ONE
+ ;; controller-environment credential boundary); never set in prod.
+ ("extensions/gsd/delivery-publication.rkt" (current-gsd-approved-head-publisher . OTHER_REVIEWED))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
  ;; test seam: overrides the version-freshness probe (running version vs

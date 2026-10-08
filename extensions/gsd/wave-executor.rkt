@@ -1187,6 +1187,7 @@
                              #:wave-index wave-index
                              #:repo-root [repo-root-in #f]
                              #:base-ref [base-ref "origin/main"]
+                             #:spare-branches [spare-branches '()]
                              #:run-git [run-git default-run-git])
   (define base (->path base-dir))
   (define repo (or (and repo-root-in (->path repo-root-in)) (find-repo-root base)))
@@ -1204,9 +1205,15 @@
   ;; leftover from a crashed attempt of the same (campaign, wave) can never
   ;; wedge creation. Scoped to this wave-index only — sibling waves of the
   ;; same campaign that are still live stay untouched.
+  ;; BUG-0079 REVIEW-2 item 9: #:spare-branches is forwarded so a retained
+  ;; approved checkout (publication-only resume) of this same wave is
+  ;; reclaimed AROUND, never through — its branch is durable approved
+  ;; evidence. Creation then fails loudly when the spared checkout occupies
+  ;; the deterministic path and the caller falls back to the shared checkout.
   (reclaim-orphaned-worktrees! repo
                                #:campaign-id campaign-id
                                #:wave-index wave-index
+                               #:spare-branches spare-branches
                                #:run-git run-git)
   (define dir (wave-worktree-dir repo campaign-id wave-index))
   (define branch (wave-worktree-branch-name campaign-id wave-index))

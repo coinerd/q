@@ -3399,5 +3399,161 @@ class ReceiptGenerationProofTests(unittest.TestCase):
                 self.assertEqual(git.call_args.args[-1], m.binding_path(plan, 0, 1))
 
 
+class ApprovedHeadPublicationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name)
+        self.origin = self.base / 'origin.git'
+        self.repo = init_repo(self.base / 'repo')
+        sh('git', 'init', '--bare', self.origin)
+        sh('git', 'remote', 'add', 'origin', self.origin, cwd=self.repo)
+        write_file(self.repo / 'README.md', 'base\n')
+        sh('git', 'add', 'README.md', cwd=self.repo)
+        sh('git', 'commit', '-m', 'base', cwd=self.repo)
+        sh('git', 'push', 'origin', 'main', cwd=self.repo)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def commit_on_branch(self, branch, name, text):
+        sh('git', 'checkout', '-B', branch, 'main', cwd=self.repo)
+        write_file(self.repo / name, text)
+        sh('git', 'add', name, cwd=self.repo)
+        sh('git', 'commit', '-m', name, cwd=self.repo)
+        return sh('git', 'rev-parse', 'HEAD', cwd=self.repo).strip()
+
+    def remote_tip(self, branch):
+        out = sh('git', 'ls-remote', '--heads', self.origin, 'refs/heads/' + branch)
+        return out.split()[0] if out.strip() else None
+
+    def test_publish_head_pushes_exact_unpublished_head_and_replays_idempotently(self):
+        plan = 'a' * 64
+        branch = 'campaign/aaaaaaaa/w1'
+        head = self.commit_on_branch(branch, 'wave.txt', 'approved\n')
+        tree = sh('git', 'rev-parse', head + '^{tree}', cwd=self.repo).strip()
+        result = m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+        self.assertEqual(result['status'], 'published')
+        self.assertEqual(result['head'], head)
+        self.assertEqual(self.remote_tip(branch), head)
+        again = m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+        self.assertEqual(again['status'], 'already-published')
+        self.assertEqual(self.remote_tip(branch), head)
+
+    def test_publish_head_fast_forwards_ancestor_but_refuses_divergence_and_protected(self):
+        first = self.commit_on_branch('campaign/repair', 'one.txt', 'one\n')
+        sh('git', 'push', 'origin', first + ':refs/heads/campaign/repair', cwd=self.repo)
+        write_file(self.repo / 'two.txt', 'two\n')
+        sh('git', 'add', 'two.txt', cwd=self.repo)
+        sh('git', 'commit', '-m', 'two', cwd=self.repo)
+        second = sh('git', 'rev-parse', 'HEAD', cwd=self.repo).strip()
+        self.assertEqual(m.publish_head(self.repo, 'campaign/repair', second)['status'], 'published')
+        self.assertEqual(self.remote_tip('campaign/repair'), second)
+
+        diverged = self.commit_on_branch('campaign/diverge', 'left.txt', 'left\n')
+        sh('git', 'push', 'origin', diverged + ':refs/heads/campaign/diverge', cwd=self.repo)
+        replacement = self.commit_on_branch('campaign/diverge', 'right.txt', 'right\n')
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, 'campaign/diverge', replacement)
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, 'main', second)
+
+    def test_publish_head_refuses_origin_tree_local_ref_and_campaign_binding_drift(self):
+        plan = 'b' * 64
+        branch = 'campaign/bbbbbbbb/w2'
+        head = self.commit_on_branch(branch, 'wave.txt', 'approved\n')
+        tree = sh('git', 'rev-parse', head + '^{tree}', cwd=self.repo).strip()
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, branch, head, str(self.origin) + '-other', tree, plan, 2)
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, branch, head, str(self.origin), 'c' * 40, plan, 2)
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 3)
+        replacement = self.commit_on_branch(branch, 'replacement.txt', 'replacement\n')
+        with self.assertRaises(m.Pending):
+            m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 2)
+        self.assertEqual(self.remote_tip(branch), None)
+        self.assertNotEqual(replacement, head)
+
+    def test_publish_head_reverifies_guards_during_already_published_readback(self):
+        # BUG-0079 REVIEW-2 item 6: the ls-remote readback is itself an
+        # external-effect window. Local-ref drift that lands DURING the
+        # already-published readback must refuse instead of returning
+        # idempotent success with a stale local branch.
+        plan = 'a' * 64
+        branch = 'campaign/aaaaaaaa/w1'
+        head = self.commit_on_branch(branch, 'wave.txt', 'approved\n')
+        tree = sh('git', 'rev-parse', head + '^{tree}', cwd=self.repo).strip()
+        self.assertEqual(
+            m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)['status'],
+            'published')
+        real_git = m.git
+        state = {'readback': False}
+
+        def drifting_local_ref(repo, *args):
+            if args[:2] == ('ls-remote', '--heads'):
+                state['readback'] = True
+                return real_git(repo, *args)
+            if (state['readback'] and args[:1] == ('rev-parse',)
+                    and len(args) > 1 and args[1] == 'refs/heads/' + branch):
+                return 'f' * 40 + '\n'
+            return real_git(repo, *args)
+
+        with patch.object(m, 'git', side_effect=drifting_local_ref):
+            with self.assertRaises(m.Pending):
+                m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+
+    def test_publish_head_reverifies_guards_after_final_readback(self):
+        # BUG-0079 REVIEW-2 item 6: origin drift that lands during the final
+        # post-push ls-remote readback must refuse — the guard set runs again
+        # AFTER the readback, not only between push and readback.
+        plan = 'a' * 64
+        branch = 'campaign/aaaaaaaa/w1'
+        head = self.commit_on_branch(branch, 'wave.txt', 'approved\n')
+        tree = sh('git', 'rev-parse', head + '^{tree}', cwd=self.repo).strip()
+        m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+        # Force the push path: retract the remote branch so the before-read
+        # is not already-published.
+        sh('git', 'push', 'origin', '--delete', 'refs/heads/' + branch, cwd=self.repo)
+        real_git = m.git
+        state = {'configs': 0}
+
+        def drifting_origin(repo, *args):
+            if args[:2] == ('config', '--get'):
+                state['configs'] += 1
+                # 1: initial origin read, 2: post-push guard, 3+: the
+                # after-final-readback re-verification -> drifted
+                if state['configs'] >= 3:
+                    return str(self.origin) + '-drifted\n'
+            return real_git(repo, *args)
+
+        with patch.object(m, 'git', side_effect=drifting_origin):
+            with self.assertRaises(m.Pending):
+                m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+
+    def test_publish_head_refuses_tree_drift_during_already_published_readback(self):
+        # BUG-0079 REVIEW-2 item 6 (second guard): tree drift during the
+        # already-published readback window refuses as well.
+        plan = 'a' * 64
+        branch = 'campaign/aaaaaaaa/w1'
+        head = self.commit_on_branch(branch, 'wave.txt', 'approved\n')
+        tree = sh('git', 'rev-parse', head + '^{tree}', cwd=self.repo).strip()
+        m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+        real_git = m.git
+        state = {'readback': False}
+
+        def drifting_tree(repo, *args):
+            if args[:2] == ('ls-remote', '--heads'):
+                state['readback'] = True
+                return real_git(repo, *args)
+            if (state['readback'] and args[:1] == ('rev-parse',)
+                    and len(args) > 1 and args[1] == head + '^{tree}'):
+                return 'e' * 40 + '\n'
+            return real_git(repo, *args)
+
+        with patch.object(m, 'git', side_effect=drifting_tree):
+            with self.assertRaises(m.Pending):
+                m.publish_head(self.repo, branch, head, str(self.origin), tree, plan, 1)
+
+
 if __name__ == '__main__':
     unittest.main()
