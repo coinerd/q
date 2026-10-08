@@ -109,10 +109,9 @@
       ;; +1 W0 checkpoint; +3 W1 adapter, wiring and resume retry;
       ;; +1 v1.00.33 recovery continuation (delivery-recovery);
       ;; +1 BUG-0079 approved-head publication (delivery-publication).
-      (check-equal?
-       (length inventory)
-       59
-       "GSD module count is stable at 59 (BUG-0077 completion +3; W0 checkpoint +1; W1 adapter, wiring and resume +3; recovery continuation +1; BUG-0079 publication +1)"))
+      (check-equal? (length inventory)
+                    59
+                    "GSD module count is stable at 59 (58 + BUG-0079 publication +1)"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])
