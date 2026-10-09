@@ -76,6 +76,11 @@
           [broker-cert-dir (-> q-settings? string?)]
           [broker-capability-secret (-> q-settings? (or/c string? #f))]
           [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]
+          ;; v1.00.33 W1 (BUG-0074 canary): single wiring point for the
+          ;; gsd.tracker live binding; consumed by wave-executor's start
+          ;; diagnostic and extensions/gsd/tracker-production-wiring.rkt.
+          [gsd-tracker-live-binding
+           (-> (or/c q-settings? #f) (or/c hash? #f))]
           [gsd-stall-soft-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
