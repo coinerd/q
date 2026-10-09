@@ -14,6 +14,8 @@
          valid-receipt-history?
          reconcile-repair-tail-receipt!
          repair-tail-allowed-stages
+         reconcile-merged-tip-receipt!
+         merged-tip-allowed-stages
          valid-verification-context?
          record-verification-context!
          delivery-stages
@@ -188,35 +190,57 @@
 (define repair-tail-allowed-stages
   '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
 
-(define (reconcile-repair-tail-receipt! root
-                                        plan
-                                        wave
-                                        new-receipt
-                                        #:expected-attempt-id attempt-id
-                                        #:expected-fence fence
-                                        #:head-ancestor? head-ancestor?
-                                        #:allowed-stages [allowed repair-tail-allowed-stages])
+;; BUG-0083: the post-merge analogue. A delivery branch whose implementation
+;; PR was lawfully merged at an evidence-only drift tip PAST the recorded
+;; receipt head (the resolve/merge drift tolerance — production shape of
+;; campaign 79a69b42 W0) needs the receipt to advance to that tip (or a later
+;; republication head) before the binding chain can authenticate it; the
+;; binding contract requires receipt head == merged PR head. This transition
+;; runs ONLY at stage implementation-merged (the merge identity is anchored;
+;; pre-merge stages keep using the repair-tail transition; binding/delivered
+;; stages stay terminal), reuses every identity/descendant/history guarantee,
+;; and additionally demands a caller-supplied evidence-only tail predicate —
+;; post-merge the tail over the receipt must be provably evidence-only
+;; (real git in the CLI boundary), never asserted on trust.
+(define merged-tip-allowed-stages '("implementation-merged"))
+
+;; Shared fail-closed core of the two same-attempt receipt reconciliations.
+;; LABEL names the transition in refusals; TAIL-EVIDENCE-ONLY? is an
+;; additional mandatory predicate over (old-head new-head) — the repair-tail
+;; wrapper passes a trivially-true one to preserve its historical contract.
+(define (reconcile-receipt-tail! root
+                                 plan
+                                 wave
+                                 new-receipt
+                                 expected-attempt-id
+                                 fence
+                                 head-ancestor?
+                                 tail-evidence-only?
+                                 allowed
+                                 label)
   (define (refuse! reason)
-    (error 'delivery-journal (format "repair-tail reconciliation refused: ~a" reason)))
+    (error 'delivery-journal (format "~a reconciliation refused: ~a" label reason)))
   (unless (valid-delivery-receipt? new-receipt)
     (refuse! "new receipt is invalid"))
-  (unless (and (string? attempt-id) (positive? (string-length attempt-id)))
+  (unless (and (string? expected-attempt-id) (positive? (string-length expected-attempt-id)))
     (refuse! "expected attempt identity is missing"))
   (unless (exact-nonnegative-integer? fence)
     (refuse! "expected fence is invalid"))
   (unless (and (procedure? head-ancestor?) (procedure-arity-includes? head-ancestor? 2))
     (refuse! "ancestry predicate is missing"))
+  (unless (and (procedure? tail-evidence-only?) (procedure-arity-includes? tail-evidence-only? 2))
+    (refuse! "evidence-only tail predicate is missing"))
   (define old (load-delivery-journal root plan wave))
   (define old-receipt (and old (hash-ref old 'receipt #f)))
   (unless old
     (refuse! "no durable journal to reconcile"))
   (unless (hash? old-receipt)
     (refuse! "journal carries no receipt"))
-  (unless (equal? (hash-ref old-receipt 'attempt-id #f) attempt-id)
+  (unless (equal? (hash-ref old-receipt 'attempt-id #f) expected-attempt-id)
     (refuse! "attempt identity changed"))
   (unless (equal? (hash-ref old-receipt 'attempt-fence #f) fence)
     (refuse! "attempt fence changed"))
-  (unless (equal? (hash-ref new-receipt 'attempt-id #f) attempt-id)
+  (unless (equal? (hash-ref new-receipt 'attempt-id #f) expected-attempt-id)
     (refuse! "new receipt is bound to a different attempt"))
   (unless (equal? (hash-ref new-receipt 'attempt-fence #f) fence)
     (refuse! "new receipt carries a different fence"))
@@ -234,9 +258,11 @@
     (refuse! "heads are equal; not a repair tail"))
   (define stage (hash-ref old 'stage #f))
   (unless (member stage allowed)
-    (refuse! (format "stage ~a is terminal for repair-tail reconciliation" stage)))
+    (refuse! (format "stage ~a is terminal for ~a reconciliation" stage label)))
   (unless (head-ancestor? old-head-sha new-head-sha)
     (refuse! "new head is not a descendant of the receipt head"))
+  (unless (tail-evidence-only? old-head-sha new-head-sha)
+    (refuse! "tail over the receipt head is not evidence-only"))
   (define history (hash-ref old 'receipt-history '()))
   (unless (valid-receipt-history? history)
     (refuse! "existing receipt history is malformed"))
@@ -245,6 +271,45 @@
          wave
          (hash-set* old 'receipt new-receipt 'receipt-history (append history (list old-receipt))))
   new-receipt)
+
+(define (reconcile-repair-tail-receipt! root
+                                        plan
+                                        wave
+                                        new-receipt
+                                        #:expected-attempt-id attempt-id
+                                        #:expected-fence fence
+                                        #:head-ancestor? head-ancestor?
+                                        #:allowed-stages [allowed repair-tail-allowed-stages])
+  (reconcile-receipt-tail! root
+                           plan
+                           wave
+                           new-receipt
+                           attempt-id
+                           fence
+                           head-ancestor?
+                           (lambda (_old _new) #t)
+                           allowed
+                           'repair-tail))
+
+(define (reconcile-merged-tip-receipt! root
+                                       plan
+                                       wave
+                                       new-receipt
+                                       #:expected-attempt-id attempt-id
+                                       #:expected-fence fence
+                                       #:head-ancestor? head-ancestor?
+                                       #:tail-evidence-only? tail-evidence-only?
+                                       #:allowed-stages [allowed merged-tip-allowed-stages])
+  (reconcile-receipt-tail! root
+                           plan
+                           wave
+                           new-receipt
+                           attempt-id
+                           fence
+                           head-ancestor?
+                           tail-evidence-only?
+                           allowed
+                           'merged-tip))
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical
