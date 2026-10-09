@@ -342,8 +342,10 @@
                   worktree-isolation-enabled?
                   resolve-worktree-isolation
                   apply-worktree-isolation-setting!
-                  worktree-isolation-banner)
-         (only-in "../runtime/settings-core.rkt" q-settings))
+                  worktree-isolation-banner
+                  tracker-arming-line)
+         (only-in "../runtime/settings-core.rkt" q-settings)
+         (only-in "../runtime/settings-query.rkt" gsd-tracker-live-binding))
 
 (define settings-wiring-suite
   (test-suite "BUG-0028: gsd.worktree-isolation settings wiring"
@@ -397,12 +399,211 @@
       (check-true (string-contains? banner "/tmp/wt-demo/.planning")
                   (format "banner must enumerate resolved roots: ~a" banner)))))
 
+;; ============================================================
+;; v1.00.33 W1 (BUG-0074 canary): strict gsd.tracker live binding
+;; normalization + tracker-arming-line start diagnostic, per recovery
+;; conclusion c1791527095625.0994 (A)/(B)/(C).
+;;
+;; Fail-closed: absent key, #f settings, live not exactly #t, or ANY
+;; malformed field ⇒ #f (disarmed), never a partial binding. Strict
+;; shape: repository "owner/repo", plan-id exactly 64 LOWERCASE hex
+;; chars, nonnegative wave, positive issue-number, board-field
+;; "Status", board-value "Done", four non-whitespace board IDs
+;; (project-item-id project-id field-id option-id). The normalized
+;; binding RETAINS repository (the live adapter wiring needs it) plus
+;; the tracker-production-wiring.rkt required-binding keys.
+;; The one-liner diagnostic is logged only when isolation is effective.
+;; ============================================================
+
+;; The campaign's real plan-id: 64 lowercase hex characters.
+(define PLAN-ID-64 "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e")
+
+(define (live-tracker-settings [overrides '()])
+  (define base
+    (hash 'live
+          #t
+          'plan-id
+          PLAN-ID-64
+          'wave
+          1
+          'issue-number
+          9807
+          'repository
+          "coinerd/q"
+          'board-field
+          "Status"
+          'board-value
+          "Done"
+          'project-item-id
+          "PVTI_item"
+          'project-id
+          "PVT_proj"
+          'field-id
+          "PVTF_field"
+          'option-id
+          "opt-done"))
+  (define tracker
+    (for/fold ([t base]) ([kv (in-list overrides)])
+      (hash-set t (car kv) (cdr kv))))
+  (q-settings (hash) (hash) (hash 'gsd (hash 'tracker tracker))))
+
+;; Run proc under a child logger and return (list outcome info-lines),
+;; so the gated executor-start diagnostic is observable from tests.
+(define (with-arming-logs proc)
+  (define logger (make-logger #f (current-logger)))
+  (define receiver (make-log-receiver logger 'info))
+  (define outcome
+    (parameterize ([current-logger logger])
+      (proc)))
+  (define log-lines
+    (let drain ([acc '()])
+      (define v (sync/timeout 0.1 receiver))
+      (if v
+          (drain (cons (format "~a" (vector-ref v 1)) acc))
+          (reverse acc))))
+  (list outcome log-lines))
+
+(define (apply-quietly! settings #:isolate? (override 'auto))
+  (parameterize ([current-gsd-worktree-isolation #f])
+    (apply-worktree-isolation-setting! settings #:isolate? override)))
+
+(define tracker-binding-suite
+  (test-suite "v1.00.33 W1: gsd.tracker live binding (strict, fail-closed)"
+
+    (test-case "settings #f → #f (nothing could be loaded)"
+      (check-false (gsd-tracker-live-binding #f)))
+
+    (test-case "key absent → #f (disarmed)"
+      (check-false (gsd-tracker-live-binding (q-settings (hash) (hash) (hash)))))
+
+    (test-case "live not exactly #t → #f (explicit opt-in required)"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((live . #f)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((live . "true"))))))
+
+    (test-case "valid live binding → normalized hash retaining repository + contract keys"
+      (define binding (gsd-tracker-live-binding (live-tracker-settings)))
+      (check-true (hash? binding))
+      (check-equal? (hash-count binding)
+                    10
+                    "repository + plan/wave/issue/field/value + four IDs only")
+      (check-equal? (hash-ref binding 'repository)
+                    "coinerd/q"
+                    "repository must be retained for the live adapter wiring")
+      (check-equal? (hash-ref binding 'plan-id) PLAN-ID-64)
+      (check-equal? (hash-ref binding 'wave) 1)
+      (check-equal? (hash-ref binding 'issue-number) 9807)
+      (check-equal? (hash-ref binding 'board-field) "Status")
+      (check-equal? (hash-ref binding 'board-value) "Done")
+      (check-equal? (hash-ref binding 'project-item-id) "PVTI_item")
+      (check-equal? (hash-ref binding 'project-id) "PVT_proj")
+      (check-equal? (hash-ref binding 'field-id) "PVTF_field")
+      (check-equal? (hash-ref binding 'option-id) "opt-done"))
+
+    (test-case "repository must be canonical owner/repo — malformed → #f"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((repository . #f)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((repository . "coinerd")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((repository . "a/b/c")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((repository .
+                                                                                  "owner/../repo")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((repository . 42))))))
+
+    (test-case "plan-id must be exactly 64 lowercase hex chars — otherwise #f"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((plan-id . "79a69b42")))))
+      (check-false (gsd-tracker-live-binding
+                    (live-tracker-settings `((plan-id . ,(substring PLAN-ID-64 0 63))))))
+      (check-false (gsd-tracker-live-binding
+                    (live-tracker-settings `((plan-id . ,(string-append PLAN-ID-64 "a"))))))
+      (check-false (gsd-tracker-live-binding
+                    (live-tracker-settings `((plan-id . ,(make-string 64 #\g))))))
+      (check-false (gsd-tracker-live-binding
+                    (live-tracker-settings `((plan-id . ,(make-string 64 #\A)))))))
+
+    (test-case "board IDs must be non-whitespace — whitespace-only or embedded → #f"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((project-item-id . " ")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((project-id . "   ")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((field-id . "PVTF field")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((option-id . "\topt-done")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((option-id . "")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((project-id . 42))))))
+
+    (test-case "wave/issue must be well-formed integers — otherwise #f"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((wave . -1)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((wave . "1")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((wave . 1.5)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((issue-number . 0)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((issue-number . -5)))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((issue-number . "9807"))))))
+
+    (test-case "board-field/board-value must be the exact Status/Done pair"
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((board-field . "State")))))
+      (check-false (gsd-tracker-live-binding (live-tracker-settings '((board-value . "Closed"))))))
+
+    (test-case "tracker-arming-line names the armed binding incl. repository"
+      (define line (tracker-arming-line (live-tracker-settings)))
+      (check-true (string-contains? line "ARMED") (format "line must state ARMED: ~a" line))
+      (check-true (string-contains? line PLAN-ID-64) (format "line must name the plan-id: ~a" line))
+      (check-true (string-contains? line "coinerd/q")
+                  (format "line must name the repository: ~a" line))
+      (check-true (string-contains? line "9807") (format "line must name the issue: ~a" line)))
+
+    (test-case "tracker-arming-line states OFF when absent or malformed (fail-closed)"
+      (check-true (string-contains? (tracker-arming-line (q-settings (hash) (hash) (hash))) "OFF"))
+      (check-true
+       (string-contains? (tracker-arming-line (live-tracker-settings '((plan-id . "short")))) "OFF")))
+
+    (test-case "arming diagnostic is logged ONLY when isolation is effective"
+      (define tracker-hash
+        (hash 'live
+              #t
+              'plan-id
+              PLAN-ID-64
+              'wave
+              1
+              'issue-number
+              9807
+              'repository
+              "coinerd/q"
+              'board-field
+              "Status"
+              'board-value
+              "Done"
+              'project-item-id
+              "PVTI_item"
+              'project-id
+              "PVT_proj"
+              'field-id
+              "PVTF_field"
+              'option-id
+              "opt-done"))
+      (define isolated-settings
+        (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #t 'tracker tracker-hash))))
+      (define shared-settings
+        (q-settings (hash) (hash) (hash 'gsd (hash 'worktree-isolation #f 'tracker tracker-hash))))
+      (define (tracker-lines settings #:isolate? (override 'auto))
+        (define result (with-arming-logs (lambda () (apply-quietly! settings #:isolate? override))))
+        (filter (lambda (l) (string-contains? l "tracker live binding")) (cadr result)))
+      ;; Key #t ⇒ effective ⇒ the arming line is emitted exactly once.
+      (define armed (tracker-lines isolated-settings))
+      (check-equal? (length armed) 1 "effective isolation ⇒ arming line logged once")
+      (check-true (string-contains? (car armed) "ARMED"))
+      ;; Key #f ⇒ not effective ⇒ silent.
+      (check-equal? (tracker-lines shared-settings)
+                    '()
+                    "isolation not effective ⇒ arming line NOT logged")
+      ;; Explicit #:isolate? #f overrides key #t ⇒ not effective ⇒ silent.
+      (check-equal? (tracker-lines isolated-settings #:isolate? #f)
+                    '()
+                    "override to shared checkout ⇒ arming line NOT logged")
+      ;; The gated log must not change the returned flag.
+      (check-true (car (with-arming-logs (lambda () (apply-quietly! isolated-settings))))))))
+
 (define all-suites
   (test-suite "wave executor isolation"
     exactly-once-suite
     timeout-suite
     pending-cancel-suite
     compat-suite
-    settings-wiring-suite))
+    settings-wiring-suite
+    tracker-binding-suite))
 
 (exit (if (zero? (run-tests all-suites)) 0 1))

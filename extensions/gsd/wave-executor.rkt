@@ -51,6 +51,9 @@
                   inline-format-rejection-diagnostic)
          (only-in "../../runtime/settings-query.rkt"
                   gsd-worktree-isolation-enabled?
+                  ;; v1.00.33 W1 (BUG-0074 canary): strict normalized
+                  ;; gsd.tracker live binding for the start diagnostic.
+                  gsd-tracker-live-binding
                   ;; v1.00.21 W1 (BUG-0044): canonical stall thresholds
                   ;; live in settings-query.rkt; re-exported here so
                   ;; existing STALL-*-DEFAULT importers keep working.
@@ -213,6 +216,8 @@
          resolve-worktree-isolation
          apply-worktree-isolation-setting!
          worktree-isolation-banner
+         ;; v1.00.33 W1 (BUG-0074 canary): tracker arming diagnostic
+         tracker-arming-line
          worktree-hash8
          wave-worktree-dirname
          wave-worktree-dir
@@ -1080,7 +1085,34 @@
 (define (apply-worktree-isolation-setting! settings #:isolate? (override 'auto))
   (define effective (resolve-worktree-isolation settings #:isolate? override))
   (current-gsd-worktree-isolation effective)
+  ;; v1.00.33 W1 (BUG-0074 canary), recovery conclusion c1791527095625.0994
+  ;; step (B): executor-start diagnostic — one line on the tracker
+  ;; binding's arming state, logged ONLY when isolation is effective
+  ;; (mirrors the gated worktree-isolation-banner), so a disarmed or
+  ;; malformed binding is visible immediately instead of via a missing
+  ;; receipt-authoritative board move after delivery.
+  (when effective
+    (log-info (tracker-arming-line settings)))
   effective)
+
+;; v1.00.33 W1 (BUG-0074 canary): /doctor-style one-liner naming the
+;; armed tracker binding (repository, campaign plan-id, wave, issue,
+;; board mapping) or stating that no valid live binding is armed. The
+;; binding itself is normalized strictly and fail-closed by
+;; settings-query's gsd-tracker-live-binding — single wiring point.
+;; Pure; callers log it (only when isolation is effective).
+(define (tracker-arming-line settings)
+  (define binding (gsd-tracker-live-binding settings))
+  (if binding
+      (format
+       "gsd tracker live binding ARMED — repository: ~a; plan-id: ~a; wave: ~a; issue: ~a; board: ~a=~a"
+       (hash-ref binding 'repository)
+       (hash-ref binding 'plan-id)
+       (hash-ref binding 'wave)
+       (hash-ref binding 'issue-number)
+       (hash-ref binding 'board-field)
+       (hash-ref binding 'board-value))
+      "gsd tracker live binding OFF — no valid gsd.tracker live binding in settings"))
 
 ;; BUG-0028 S2 (v1.00.19 W2): /doctor-style one-liner emitted at executor
 ;; start when isolation is ON — active worktree + resolved allowed roots, so

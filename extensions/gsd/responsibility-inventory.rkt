@@ -396,7 +396,11 @@
                                  "wave-docs"
                                  "shared"
                                  "state-machine"
-                                 "campaign-state"))
+                                 "campaign-state"
+                                 ;; v1.00.33 W1 (BUG-0074 canary): strict
+                                 ;; gsd.tracker live binding reader for the
+                                 ;; executor-start arming diagnostic.
+                                 "runtime/settings-query"))
    ;; UI/extension glue (3)
    (make-entry "core.rkt"
                'ui-glue

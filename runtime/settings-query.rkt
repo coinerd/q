@@ -76,11 +76,10 @@
           [broker-cert-dir (-> q-settings? string?)]
           [broker-capability-secret (-> q-settings? (or/c string? #f))]
           [gsd-worktree-isolation-enabled? (-> q-settings? boolean?)]
-          ;; v1.00.33 W1 (BUG-0074 canary): single wiring point for the
-          ;; gsd.tracker live binding; consumed by wave-executor's start
-          ;; diagnostic and extensions/gsd/tracker-production-wiring.rkt.
-          [gsd-tracker-live-binding
-           (-> (or/c q-settings? #f) (or/c hash? #f))]
+          ;; v1.00.33 W1 (BUG-0074 canary): normalized gsd.tracker
+          ;; binding for wave-executor's advisory start diagnostic.
+          ;; Production wiring independently validates the raw binding.
+          [gsd-tracker-live-binding (-> (or/c q-settings? #f) (or/c hash? #f))]
           [gsd-stall-soft-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-hard-limit (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
           [gsd-stall-window (-> (or/c q-settings? #f) (or/c exact-positive-integer? #f))]
@@ -185,6 +184,88 @@
 ;; Defaults to #f (no warning).
 (define (warn-on-destructive? settings)
   (setting-ref settings 'warn-on-destructive #f))
+
+;; ============================================================
+;; GSD tracker live binding (v1.00.33 W1 — BUG-0074 canary)
+;; Config key: gsd.tracker (project or global config.json).
+;;
+;; Strict, fail-closed normalization of the receipt-authoritative
+;; tracker binding (recovery conclusion c1791527095625.0994 step A).
+;; Validated shape — the binding contract enforced by
+;; extensions/gsd/tracker-production-wiring.rkt (required-binding)
+;; plus the repository the live adapter wiring needs:
+;;   live exactly #t; repository a canonical "owner/repo" (same shape
+;;   as repo-rx in gh-cli-tracker-adapter.rkt — runtime must not
+;;   require extensions, keep the two in sync); plan-id exactly 64
+;;   LOWERCASE hex chars; exact-nonnegative wave index; exact-positive
+;;   issue-number; board-field "Status"; board-value "Done"; and the
+;;   four board IDs (project-item-id project-id field-id option-id)
+;;   as non-whitespace, non-empty strings.
+;; Absent key / #f settings / live not #t → #f (binding disarmed).
+;; A malformed live binding resolves to #f with a warning: a typo'd
+;; settings file must NEVER arm a partial binding or crash a campaign.
+;; The normalized hasheq RETAINS repository plus the required-binding
+;; keys. Consumed by wave-executor's advisory start diagnostic;
+;; production wiring independently validates the raw binding.
+;; ============================================================
+
+(define GSD-TRACKER-BINDING-ID-KEYS '(project-item-id project-id field-id option-id))
+
+;; "owner/repo" without ".." traversal — mirrors repo-rx in
+;; extensions/gsd/gh-cli-tracker-adapter.rkt.
+(define gsd-tracker-repository-rx #px"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+;; Campaign plan ids are exactly 64 lowercase hex characters.
+(define gsd-tracker-plan-id-rx #px"^[0-9a-f]{64}$")
+
+;; A board ID is a non-empty string containing no whitespace at all.
+(define (tracker-binding-id? v)
+  (and (string? v) (positive? (string-length v)) (not (regexp-match? #px"\\s" v))))
+
+(define (gsd-tracker-live-binding settings)
+  (cond
+    [(not settings) #f]
+    [else
+     (define tracker (setting-ref* settings '(gsd tracker) #f))
+     (cond
+       [(not (hash? tracker)) #f]
+       [(not (eq? (hash-ref tracker 'live #f) #t)) #f]
+       [else
+        (define repository (hash-ref tracker 'repository #f))
+        (define plan-id (hash-ref tracker 'plan-id #f))
+        (define wave (hash-ref tracker 'wave #f))
+        (define issue-number (hash-ref tracker 'issue-number #f))
+        (define (valid?)
+          (and (string? repository)
+               (regexp-match? gsd-tracker-repository-rx repository)
+               (not (regexp-match? #px"\\.\\." repository))
+               (string? plan-id)
+               (regexp-match? gsd-tracker-plan-id-rx plan-id)
+               (exact-nonnegative-integer? wave)
+               (exact-positive-integer? issue-number)
+               (equal? (hash-ref tracker 'board-field #f) "Status")
+               (equal? (hash-ref tracker 'board-value #f) "Done")
+               (for/and ([key (in-list GSD-TRACKER-BINDING-ID-KEYS)])
+                 (tracker-binding-id? (hash-ref tracker key #f)))))
+        (cond
+          [(valid?)
+           (for/fold ([binding (hasheq 'repository
+                                       repository
+                                       'plan-id
+                                       plan-id
+                                       'wave
+                                       wave
+                                       'issue-number
+                                       issue-number
+                                       'board-field
+                                       "Status"
+                                       'board-value
+                                       "Done")])
+                     ([key (in-list GSD-TRACKER-BINDING-ID-KEYS)])
+             (hash-set binding key (hash-ref tracker key)))]
+          [else
+           (log-warning "gsd.tracker: live binding is malformed — treating as disarmed")
+           #f])])]))
 
 ;; ============================================================
 ;; GSD worktree isolation (v1.00.19 W2 — BUG-0028 S1)
