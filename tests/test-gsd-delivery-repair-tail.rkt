@@ -96,9 +96,7 @@
                    "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w2.rktd`\n"
                    "- File: `docs/reports/gsd-wave-validation/v9.9.9-w2.rktd`\n"))
   (display-to-file plan-text (build-path root ".planning" "PLAN.md") #:exists 'truncate)
-  (display-to-file wave-text
-                   (build-path root ".planning" "waves" "W2-repair.md")
-                   #:exists 'truncate)
+  (display-to-file wave-text (build-path root ".planning" "waves" "W2-repair.md") #:exists 'truncate)
   (make-plan-snapshot! root plan plan-text #:plan-id plan))
 (define (always-descendant? _old _new)
   #t)
@@ -116,6 +114,93 @@
                                   #:expected-attempt-id attempt-id
                                   #:expected-fence fence
                                   #:head-ancestor? ancestor?))
+;; Red-first (BUG-0083): the post-merge receipt transition is required
+;; dynamically until the journal module provides it.
+(define reconcile-merged-tip-receipt!
+  (dynamic-require (string->path "../extensions/gsd/delivery-journal.rkt")
+                   'reconcile-merged-tip-receipt!))
+(define (merged-tip-transition root
+                               #:new-receipt [new (receipt-for new-head)]
+                               #:attempt-id [attempt-id "attempt-5"]
+                               #:fence [fence 2]
+                               #:ancestor? [ancestor? always-descendant?]
+                               #:evidence-only? [evidence-only? (lambda (_old _new) #t)])
+  (reconcile-merged-tip-receipt! root
+                                 plan
+                                 2
+                                 new
+                                 #:expected-attempt-id attempt-id
+                                 #:expected-fence fence
+                                 #:head-ancestor? ancestor?
+                                 #:tail-evidence-only? evidence-only?))
+(define (seed-merged-journal! root)
+  (seed-journal! root #:stage "implementation-merged"))
+
+(module+ test
+  (test-case "BUG-0083: merged-tip transition reconciles at implementation-merged with an evidence-only tail"
+    (with-root (lambda (root)
+                 (seed-merged-journal! root)
+                 (define recorded (merged-tip-transition root))
+                 (check-equal? recorded (receipt-for new-head))
+                 (define journal (load-delivery-journal root plan 2))
+                 (check-equal? (hash-ref (hash-ref journal 'receipt) 'head) new-head)
+                 (check-equal? (hash-ref journal 'receipt-history)
+                               (list (receipt-for old-head))
+                               "prior receipt is preserved verbatim as append-only history")
+                 (check-equal? (binding-generation root plan 2)
+                               1
+                               "merged-tip reconciliation advances the republication generation"))))
+  (test-case "BUG-0083: merged-tip transition refuses every other stage"
+    (for ([stage '("context-ready" "implementation-review"
+                                   "implementation-pr"
+                                   "implementation-ci"
+                                   "binding-prepared"
+                                   "binding-review"
+                                   "binding-pr"
+                                   "binding-ci"
+                                   "binding-merged"
+                                   "governance"
+                                   "sync"
+                                   "delivered")])
+      (with-root (lambda (root)
+                   (seed-journal! root #:stage stage)
+                   (check-exn exn:fail?
+                              (lambda () (merged-tip-transition root))
+                              (format "stage ~a must refuse merged-tip reconciliation" stage))))))
+  (test-case "BUG-0083: merged-tip transition refuses a tail that is not evidence-only"
+    (with-root (lambda (root)
+                 (seed-merged-journal! root)
+                 (check-exn exn:fail?
+                            (lambda ()
+                              (merged-tip-transition root #:evidence-only? (lambda (_old _new) #f))))
+                 (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt)
+                               (receipt-for old-head)
+                               "refused transition leaves the journal untouched"))))
+  (test-case "BUG-0083: merged-tip transition refuses unsafe identity shapes"
+    (with-root
+     (lambda (root)
+       (check-exn exn:fail? (lambda () (merged-tip-transition root)))
+       (seed-merged-journal! root)
+       (check-exn exn:fail? (lambda () (merged-tip-transition root #:attempt-id "attempt-6")))
+       (check-exn exn:fail? (lambda () (merged-tip-transition root #:fence 3)))
+       (check-exn
+        exn:fail?
+        (lambda ()
+          (merged-tip-transition root #:new-receipt (receipt-for new-head #:attempt-id "attempt-6"))))
+       (check-exn exn:fail?
+                  (lambda ()
+                    (merged-tip-transition root #:new-receipt (receipt-for new-head #:fence 9))))
+       (check-exn exn:fail?
+                  (lambda ()
+                    (merged-tip-transition
+                     root
+                     #:new-receipt (hash-set (receipt-for new-head) 'branch "campaign/other"))))
+       (check-exn exn:fail? (lambda () (merged-tip-transition root #:ancestor? never-descendant?)))
+       (check-exn exn:fail?
+                  (lambda () (merged-tip-transition root #:new-receipt (receipt-for old-head))))
+       (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt)
+                     (receipt-for old-head))))))
+
 (module+ test
   (test-case "transition records the new receipt and preserves the old as history"
     (with-root (lambda (root)
@@ -139,23 +224,22 @@
                  (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt-history)
                                (list (receipt-for old-head) (receipt-for new-head))))))
   (test-case "repair-tail reconciliation advances generation and leaves gen0 artifact bytes untouched"
-    (with-root
-     (lambda (root)
-       (seed-declared-active-path-snapshot! root)
-       (define gen0-artifact
-         (build-path root "docs" "reports" "gsd-wave-evidence" "v9.9.9-w2.rktd"))
-       (make-directory* (path-only gen0-artifact))
-       (define before #"immutable gen0 binding evidence\n")
-       (call-with-output-file gen0-artifact
-                              (lambda (out) (write-bytes before out))
-                              #:exists 'truncate)
-       (seed-journal! root)
-       (check-equal? (binding-generation root plan 2) 0)
-       (transition root)
-       (define journal (load-delivery-journal root plan 2))
-       (check-equal? (length (hash-ref journal 'receipt-history)) 1)
-       (check-equal? (binding-generation root plan 2) 1)
-       (check-equal? (file->bytes gen0-artifact) before))))
+    (with-root (lambda (root)
+                 (seed-declared-active-path-snapshot! root)
+                 (define gen0-artifact
+                   (build-path root "docs" "reports" "gsd-wave-evidence" "v9.9.9-w2.rktd"))
+                 (make-directory* (path-only gen0-artifact))
+                 (define before #"immutable gen0 binding evidence\n")
+                 (call-with-output-file gen0-artifact
+                                        (lambda (out) (write-bytes before out))
+                                        #:exists 'truncate)
+                 (seed-journal! root)
+                 (check-equal? (binding-generation root plan 2) 0)
+                 (transition root)
+                 (define journal (load-delivery-journal root plan 2))
+                 (check-equal? (length (hash-ref journal 'receipt-history)) 1)
+                 (check-equal? (binding-generation root plan 2) 1)
+                 (check-equal? (file->bytes gen0-artifact) before))))
   (test-case "journal generation and active source paths reflect gen1 after reconcile"
     (with-root
      (lambda (root)
@@ -166,10 +250,8 @@
        (define paths (active-paths root plan 2 generation))
        (check-equal? generation 1)
        (check-equal? (hash-ref paths 'generation) 1)
-       (check-equal? (hash-ref paths 'evidence)
-                     "docs/reports/gsd-wave-evidence/v9.9.9-w2-r1.rktd")
-       (check-equal? (hash-ref paths 'review)
-                     "docs/reports/gsd-wave-reviews/v9.9.9-w2-r1.rktd")
+       (check-equal? (hash-ref paths 'evidence) "docs/reports/gsd-wave-evidence/v9.9.9-w2-r1.rktd")
+       (check-equal? (hash-ref paths 'review) "docs/reports/gsd-wave-reviews/v9.9.9-w2-r1.rktd")
        (check-equal? (hash-ref paths 'validation)
                      "docs/reports/gsd-wave-validation/v9.9.9-w2-r1.rktd"))))
   (test-case "transition refuses unsafe shapes"
