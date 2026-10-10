@@ -54,7 +54,8 @@
          default-delivery-coordinator
          default-delivery-controller-interpret
          parse-delivery-stop
-         default-active-delivery-evidence-path)
+         default-active-delivery-evidence-path
+         default-artifact-provenance-root)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -372,6 +373,94 @@
 (define-runtime-path artifact-provenance-lint-script
                      "../../scripts/ci/verify-artifact-provenance.rkt")
 
+;; v1.00.33 W1 (BUG: scoped artifact checkout root). The git seam every
+;; receipt-bound checkout selection runs through.
+;; LAW: (repo-dir args) -> (values exit-code stdout-string) where repo-dir is
+;; the directory git runs with -C in. The production default shells the same
+;; `git` binary through the same credential boundary as the delivery seam;
+;; tests script deterministic replies through it. A git that cannot even run
+;; (missing binary, spawn failure) reports a nonzero exit, never a success.
+(define (shell-git repo-dir args)
+  (with-handlers ([exn:fail? (lambda (_) (values 1 ""))])
+    (define result
+      (run-subprocess "git"
+                      #:args (append (list "-C"
+                                           (if (string? repo-dir)
+                                               repo-dir
+                                               (path->string repo-dir)))
+                                     args)
+                      #:environment (controller-environment)
+                      #:timeout 120
+                      #:process-group? #t))
+    (values (subprocess-result-exit-code result) (subprocess-result-stdout result))))
+
+;; Parse `git worktree list --porcelain` into (list path-string head-string
+;; branch-string-or-#f) records. A "detached" worktree carries #f for its
+;; branch; unrecognized lines are skipped, never guessed. The base checkout
+;; is the first record git prints; linked worktrees follow.
+(define (parse-worktree-porcelain text)
+  (define (emit path head branch acc)
+    (if (and path head)
+        (cons (list path head branch) acc)
+        acc))
+  (let loop ([lines (string-split text "\n")]
+             [path #f]
+             [head #f]
+             [branch #f]
+             [acc '()])
+    (cond
+      [(null? lines) (reverse (emit path head branch acc))]
+      [else
+       (define line (string-trim (car lines) "\r"))
+       (cond
+         [(string-prefix? line "worktree ")
+          (loop (cdr lines)
+                (substring line (string-length "worktree "))
+                #f
+                #f
+                (emit path head branch acc))]
+         [(string-prefix? line "HEAD ")
+          (loop (cdr lines) path (substring line (string-length "HEAD ")) branch acc)]
+         [(string-prefix? line "branch refs/heads/")
+          (loop (cdr lines) path head (substring line (string-length "branch refs/heads/")) acc)]
+         [(string-prefix? line "detached") (loop (cdr lines) path head #f acc)]
+         [else (loop (cdr lines) path head branch acc)])])))
+
+;; v1.00.33 W1 (BUG: scoped artifact checkout root): select the checkout the
+;; artifact provenance gate is allowed to inspect, or #f (fail closed).
+;; LAW: only a checkout that is EXACTLY the durable delivery receipt
+;; qualifies — a worktree whose checked-out branch IS the receipt branch,
+;; whose HEAD IS the verified 40-hex receipt head, and whose
+;; `status --porcelain` is empty (no tracked modification, no planted
+;; untracked artifact). The idle base checkout on main, a stale head, a
+;; wrong branch, a detached HEAD, or a dirty/untracked worktree never
+;; qualifies: artifact bytes that merely exist somewhere are never accepted.
+;; Only marker-less synthetic fixtures/plain source trees keep the legacy
+;; root on Git enumeration failure. A Git marker with an unavailable or
+;; corrupt repository MUST fail closed rather than inspecting idle main.
+(define (default-artifact-provenance-root base-dir plan wave #:run-git [run-git shell-git])
+  (define repo
+    (if (or (directory-exists? (build-path base-dir ".git"))
+            (file-exists? (build-path base-dir ".git")))
+        base-dir
+        (build-path base-dir "q")))
+  (define-values (code listing) (run-git repo '("worktree" "list" "--porcelain")))
+  (if (not (zero? code))
+      (and (not (or (directory-exists? (build-path repo ".git"))
+                    (file-exists? (build-path repo ".git"))))
+           repo)
+      (let ()
+        (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
+        (define receipt-head (default-delivery-receipt-head base-dir plan wave))
+        (define (clean-exact-receipt-checkout? entry)
+          (and (equal? (list-ref entry 2) receipt-branch)
+               (equal? (list-ref entry 1) receipt-head)
+               (let-values ([(scode out) (run-git (list-ref entry 0) '("status" "--porcelain"))])
+                 (and (zero? scode) (equal? (string-trim out) "")))))
+        (for/first ([entry (in-list (parse-worktree-porcelain listing))]
+                    #:when (clean-exact-receipt-checkout? entry))
+          (string->path (list-ref entry 0))))))
+
 ;; Register F7 (v1.00.31 W5): the artifact provenance gate. Declared wave
 ;; artifacts must be bound (SHA256SUMS), canonical, and internally consistent;
 ;; recorded heads must descend from the verified wave tip. Drift is a typed
@@ -382,6 +471,10 @@
 ;; ("v1.00.31 ..."), which is independent of the branch naming convention —
 ;; the executor's own branches are campaign/<hash8>/w<N>, so relying on the
 ;; branch alone silently degraded the gate to historical (advisory) mode.
+;; v1.00.33 W1: the lint runs ONLY on the root selected by
+;; default-artifact-provenance-root — the clean worktree exactly bound to
+;; the durable receipt — and refuses (typed blocked stop, journal stays
+;; put) when no such checkout exists, never falling back to the idle base.
 (define (plan-title-version-tag base-dir plan)
   (with-handlers ([exn:fail? (lambda (_e) #f)])
     (define rec (load-campaign-record base-dir plan))
@@ -397,42 +490,49 @@
            'blocked
            (hasheq 'stage "delivery-preflight" 'reason (redact-delivery-text (exn-message e)))))])
     (define branch (default-delivery-receipt-branch base-dir plan wave))
+    (define head (default-delivery-receipt-head base-dir plan wave))
     (define version-tag
       (or (let ([m (regexp-match #px"v[0-9]+\\.[0-9]+\\.[0-9]+" branch)]) (and m (car m)))
           (plan-title-version-tag base-dir plan)))
-    (define repo
-      (if (or (directory-exists? (build-path base-dir ".git"))
-              (file-exists? (build-path base-dir ".git")))
-          base-dir
-          (build-path base-dir "q")))
-    (define args
-      (list (path->string artifact-provenance-lint-script)
-            "--root"
-            (path->string (path->complete-path repo))))
-    (define args*
-      (if version-tag
-          (append args
-                  (list "--current-wave"
-                        (format "~a-w~a" version-tag wave)
-                        "--wave-tip"
-                        (default-delivery-receipt-head base-dir plan wave)))
-          args))
-    (define result
-      (run-subprocess "racket"
-                      #:args args*
-                      #:directory base-dir
-                      #:environment (controller-environment)
-                      #:timeout 240
-                      #:process-group? #t))
-    (if (zero? (subprocess-result-exit-code result))
-        (delivery-effect-result 'ok (hasheq 'stage "delivery-preflight"))
-        (delivery-effect-result 'blocked
-                                (hasheq 'stage
-                                        "delivery-preflight"
-                                        'reason
-                                        (format "artifact provenance gate: ~a"
-                                                (redact-delivery-text (subprocess-result-stdout
-                                                                       result))))))))
+    (define root (default-artifact-provenance-root base-dir plan wave))
+    (cond
+      [(not root)
+       (delivery-effect-result
+        'blocked
+        (hasheq
+         'stage
+         "delivery-preflight"
+         'reason
+         (format
+          "no clean receipt-bound checkout: no worktree on branch ~a at the verified head ~a is clean; refusing to lint any other checkout"
+          branch
+          head)))]
+      [else
+       (define lint-args
+         (list (path->string artifact-provenance-lint-script)
+               "--root"
+               (path->string (path->complete-path root))))
+       (define args*
+         (if version-tag
+             (append lint-args
+                     (list "--current-wave" (format "~a-w~a" version-tag wave) "--wave-tip" head))
+             lint-args))
+       (define result
+         (run-subprocess "racket"
+                         #:args args*
+                         #:directory base-dir
+                         #:environment (controller-environment)
+                         #:timeout 240
+                         #:process-group? #t))
+       (if (zero? (subprocess-result-exit-code result))
+           (delivery-effect-result 'ok (hasheq 'stage "delivery-preflight"))
+           (delivery-effect-result 'blocked
+                                   (hasheq 'stage
+                                           "delivery-preflight"
+                                           'reason
+                                           (format "artifact provenance gate: ~a"
+                                                   (redact-delivery-text (subprocess-result-stdout
+                                                                          result))))))])))
 
 ;; Typed-stop reason preservation: gsd-delivery.py reports typed stops as
 ;; exit 2 with {"status":"delivery-pending","reason":…} on STDOUT while

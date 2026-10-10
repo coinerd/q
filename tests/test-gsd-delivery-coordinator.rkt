@@ -923,3 +923,296 @@
          (check-true (string-contains? (delivery-outcome-message outcome) "remote diverged"))
          (check-equal? controller-calls 0 "a failed replay never admits the ladder")
          (check-false (load-delivery-journal dir plan 0)))))))
+
+(module+ test
+  ;; v1.00.33 W1 (BUG: scoped artifact checkout root). The F7 artifact
+  ;; provenance gate must inspect the checkout BOUND TO THE DURABLE RECEIPT
+  ;; — a clean worktree on the receipt branch at the exact verified head —
+  ;; never the idle base checkout (which under worktree isolation sits on
+  ;; main and either misses the genuine wave artifacts or could carry
+  ;; untracked fake ones). Selection is fail-closed: wrong branch, stale
+  ;; head, dirty/untracked worktree, or a missing receipt checkout all
+  ;; refuse; only a non-git base (synthetic fixture) keeps the legacy
+  ;; unscoped root.
+  (require racket/system
+           racket/port
+           (only-in (file "../scripts/run-tests/sha256.rkt") sha256 bytes->hex-string))
+
+  (define (receipt-for branch head)
+    (hash-set (hash-set (receipt-head) 'branch branch) 'head head))
+
+  ;; ---- Real-git behavior fixtures (isolated receipt worktree vs idle base)
+  (define GIT-PATH (find-executable-path "git"))
+  (define (git-check! dir . args)
+    (define ok
+      (apply system*
+             GIT-PATH
+             "-C"
+             (path->string dir)
+             "-c"
+             "user.name=GSD Test"
+             "-c"
+             "user.email=gsd-test@example.invalid"
+             args))
+    (check-true ok (format "git ~a" (string-join args " "))))
+  (define (git-value dir . args)
+    (define out (open-output-string))
+    (define ok
+      (parameterize ([current-output-port out])
+        (apply system* GIT-PATH "-C" (path->string dir) args)))
+    (check-true ok (format "git ~a" (string-join args " ")))
+    (string-trim (get-output-string out)))
+
+  (define provenance-branch "campaign/v9.9.9-w0")
+  (define (write-valid-artifact! repo base-sha)
+    (define adir (build-path repo "artifacts" "probe" "v9.9.9-w0"))
+    (make-directory* adir)
+    (define matrix (format "{\n \"recorded-head\": \"~a\"\n}\n" base-sha))
+    (display-to-file matrix (build-path adir "matrix.json"))
+    (define digest
+      (bytes->hex-string (sha256 (call-with-input-file (build-path adir "matrix.json") port->bytes))))
+    (display-to-file (format "~a  artifacts/probe/v9.9.9-w0/matrix.json\n" digest)
+                     (build-path adir "SHA256SUMS")))
+
+  (define (setup-provenance-campaign! proj branch head)
+    (make-directory* (build-path proj ".planning/waves"))
+    (call-with-output-file
+     (build-path proj ".planning/PLAN.md")
+     (lambda (out)
+       (display "# Plan: provenance root test\n\n## Waves\n\n- [Inbox] W0: Test → waves/W0-test.md\n"
+                out)))
+    (display-to-file "# Test\n\nGoal: test\n\n## Verify\n\nraco test .\n"
+                     (build-path proj ".planning/waves" "W0-test.md"))
+    (define rec (migrate-campaign! proj))
+    (set-campaign-wave-status! (car (campaign-record-waves rec)) 'done)
+    (set-campaign-wave-current-attempt! (car (campaign-record-waves rec))
+                                        (campaign-attempt "attempt-1" 7 0))
+    (set-campaign-fence-token! rec 7)
+    (set-campaign-wave-delivery-branch! (car (campaign-record-waves rec)) branch)
+    (set-campaign-wave-delivery-head-sha! (car (campaign-record-waves rec)) head)
+    (persist-campaign! proj rec)
+    (record-delivery-receipt! proj (campaign-plan-id rec) 0 (receipt-for branch head))
+    rec)
+
+  ;; artifact-location: 'branch (genuine committed wave artifacts on the
+  ;; receipt branch) or 'main (artifact bytes committed only on idle main —
+  ;; the wrong checkout).
+  (define (build-provenance-sandbox artifact-location)
+    (define tmp (make-temporary-file "provenance-root-~a" 'directory))
+    (define proj (build-path tmp "proj"))
+    (define repo (build-path proj "q"))
+    (make-directory* repo)
+    (git-check! repo "init" "-b" "main")
+    (display-to-file "base\n" (build-path repo "README.md"))
+    (git-check! repo "add" "-A")
+    (git-check! repo "commit" "-m" "base")
+    (define base-sha (git-value repo "rev-parse" "HEAD"))
+    (git-check! repo "branch" provenance-branch)
+    (when (eq? artifact-location 'main)
+      (write-valid-artifact! repo base-sha)
+      (git-check! repo "add" "-A")
+      (git-check! repo "commit" "-m" "main artifacts"))
+    (when (eq? artifact-location 'branch)
+      (git-check! repo "checkout" provenance-branch)
+      (write-valid-artifact! repo base-sha)
+      (git-check! repo "add" "-A")
+      (git-check! repo "commit" "-m" "wave artifacts")
+      (git-check! repo "checkout" "main"))
+    (define branch-tip (git-value repo "rev-parse" provenance-branch))
+    (define wt (build-path tmp "wt-receipt"))
+    (git-check! repo "worktree" "add" (path->string wt) provenance-branch)
+    (define rec (setup-provenance-campaign! proj provenance-branch branch-tip))
+    (values tmp proj wt rec))
+
+  (when GIT-PATH
+    (test-case "provenance gate inspects the isolated receipt worktree, not the idle base checkout"
+      ;; RED: the base checkout (idle main) lacks the wave artifact directory;
+      ;; the genuine committed artifacts live in the receipt worktree. The
+      ;; gate must select the receipt worktree and PASS; before the fix it
+      ;; linted the idle base and blocked with a missing current-wave
+      ;; directory.
+      (define-values (tmp proj wt rec) (build-provenance-sandbox 'branch))
+      (dynamic-wind void
+                    (lambda ()
+                      (define plan (campaign-plan-id rec))
+                      (define calls '())
+                      (define (controller b p w target)
+                        (set! calls (cons target calls))
+                        (delivery-effect-result 'ok (hasheq 'stage target)))
+                      (define outcome (run-delivery-coordinator! proj plan 0 #:controller controller))
+                      (check-eq? (delivery-outcome-kind outcome)
+                                 'ok
+                                 (format "gate must clear on the receipt worktree, got: ~a"
+                                         (delivery-outcome-message outcome)))
+                      (check-equal? (stage-count proj plan) "implementation-review")
+                      (check-equal? (reverse calls) '("delivery-preflight" "implementation-review")))
+                    (lambda () (delete-directory/files tmp #:must-exist? #f))))
+    (test-case "provenance gate rejects a dirty receipt worktree (no uncommitted byte inspection)"
+      (define-values (tmp proj wt rec) (build-provenance-sandbox 'branch))
+      (dynamic-wind void
+                    (lambda ()
+                      ;; Planted uncommitted byte: the worktree is no longer a faithful
+                      ;; receipt-head checkout, so the gate must refuse to inspect it.
+                      (display-to-file "planted\n" (build-path wt "scratch.txt"))
+                      (define plan (campaign-plan-id rec))
+                      (define calls '())
+                      (define (controller b p w target)
+                        (set! calls (cons target calls))
+                        (delivery-effect-result 'ok (hasheq 'stage target)))
+                      (define outcome (run-delivery-coordinator! proj plan 0 #:controller controller))
+                      (check-eq? (delivery-outcome-kind outcome) 'blocked)
+                      (check-true (string-contains? (delivery-outcome-message outcome)
+                                                    "no clean receipt-bound checkout"))
+                      (check-equal? calls '() "no ladder action ran past the refused gate")
+                      (check-equal? (stage-count proj plan) "context-ready"))
+                    (lambda () (delete-directory/files tmp #:must-exist? #f))))
+    (test-case "provenance gate never accepts artifact bytes from the wrong checkout"
+      ;; Artifact bytes committed only on idle main (never on the receipt
+      ;; branch). Before the fix the gate linted the idle base and ACCEPTED
+      ;; them; fail-closed selection must inspect the receipt worktree and
+      ;; block on the missing current-wave directory instead.
+      (define-values (tmp proj wt rec) (build-provenance-sandbox 'main))
+      (dynamic-wind void
+                    (lambda ()
+                      (define plan (campaign-plan-id rec))
+                      (define (controller b p w target)
+                        (delivery-effect-result 'ok (hasheq 'stage target)))
+                      (define outcome (run-delivery-coordinator! proj plan 0 #:controller controller))
+                      (check-eq? (delivery-outcome-kind outcome) 'blocked)
+                      (check-true (string-contains? (delivery-outcome-message outcome)
+                                                    "artifact-provenance"))
+                      (check-true (string-contains? (delivery-outcome-message outcome)
+                                                    "no artifact version directory"))
+                      (check-equal? (stage-count proj plan) "context-ready"))
+                    (lambda () (delete-directory/files tmp #:must-exist? #f))))))
+
+(module+ test
+  ;; v1.00.33 W1: unit matrix for the fail-closed checkout-root selection,
+  ;; driven through the production git seam ((repo-dir args) -> (values
+  ;; exit-code stdout-string)) with scripted worktree-list/status replies.
+  ;; Red-first (repo convention): required dynamically until the coordinator
+  ;; module provides the selector.
+  (define artifact-root-selector
+    (dynamic-require coordinator-module 'default-artifact-provenance-root))
+
+  (define receipt-branch-unit "campaign/test")
+  (define receipt-head-unit (make-string 40 #\a))
+  (define main-head-unit (make-string 40 #\f))
+  ;; Fixture-derived checkout path-strings (no hardcoded absolute paths):
+  ;; the scripted worktree listings and status keys are plain strings, so
+  ;; the unit seam only needs paths derived from a temp fixture root.
+  (define fixture-root (make-temporary-file "provenance-unit-~a" 'directory))
+  (define q-dir (path->string (build-path fixture-root "proj" "q")))
+  (define wt-receipt-dir (path->string (build-path fixture-root "wt-receipt")))
+  (define wt-stale-dir (path->string (build-path fixture-root "wt-stale")))
+  (define wt-detached-dir (path->string (build-path fixture-root "wt-detached")))
+  (define (porcelain-text entries)
+    (string-join (for/list ([e (in-list entries)])
+                   (string-append "worktree "
+                                  (list-ref e 0)
+                                  "\nHEAD "
+                                  (list-ref e 1)
+                                  "\n"
+                                  (if (list-ref e 2)
+                                      (string-append "branch refs/heads/" (list-ref e 2) "\n")
+                                      "detached\n")))
+                 "\n"))
+  (define (fake-git worktree-listing statuses)
+    (lambda (repo-dir args)
+      (cond
+        [(equal? args (list "worktree" "list" "--porcelain")) (values 0 worktree-listing)]
+        [(equal? args (list "status" "--porcelain"))
+         (values 0
+                 (hash-ref statuses
+                           (if (path? repo-dir)
+                               (path->string repo-dir)
+                               repo-dir)
+                           ""))]
+        [else (values 1 "")])))
+
+  (dynamic-wind
+   void
+   (lambda ()
+     (test-case "provenance checkout root: clean exact receipt worktree is selected over the idle base"
+       (call-with-campaign
+        1
+        (lambda (dir rec)
+          (define ready (done-record dir))
+          (define plan (campaign-plan-id ready))
+          (define listing
+            (porcelain-text (list (list q-dir main-head-unit "main")
+                                  (list wt-receipt-dir receipt-head-unit receipt-branch-unit))))
+          (define selected
+            (artifact-root-selector dir plan 0 #:run-git (fake-git listing (hash wt-receipt-dir ""))))
+          (check-equal? (and selected (path->string selected)) wt-receipt-dir))))
+     (test-case "provenance checkout root: nonisolated lawful base checkout still qualifies (legacy preserved)"
+       (call-with-campaign
+        1
+        (lambda (dir rec)
+          (define ready (done-record dir))
+          (define plan (campaign-plan-id ready))
+          ;; No linked worktrees: the base checkout itself is receipt-bound and clean.
+          (define listing (porcelain-text (list (list q-dir receipt-head-unit receipt-branch-unit))))
+          (define selected
+            (artifact-root-selector dir plan 0 #:run-git (fake-git listing (hash q-dir ""))))
+          (check-equal? (and selected (path->string selected)) q-dir))))
+     (test-case "provenance checkout root: dirty or untracked receipt worktree is rejected (fail closed)"
+       (call-with-campaign
+        1
+        (lambda (dir rec)
+          (define ready (done-record dir))
+          (define plan (campaign-plan-id ready))
+          (define listing
+            (porcelain-text (list (list q-dir main-head-unit "main")
+                                  (list wt-receipt-dir receipt-head-unit receipt-branch-unit))))
+          (check-false (artifact-root-selector
+                        dir
+                        plan
+                        0
+                        #:run-git
+                        (fake-git listing (hash wt-receipt-dir " M artifacts/probe/m.json\n")))
+                       "tracked modification rejects the worktree")
+          (check-false (artifact-root-selector
+                        dir
+                        plan
+                        0
+                        #:run-git
+                        (fake-git listing (hash wt-receipt-dir "?? artifacts/probe/fake.json\n")))
+                       "untracked (planted) artifact rejects the worktree"))))
+     (test-case "provenance checkout root: stale head, wrong branch, and detached worktrees never qualify"
+       (call-with-campaign
+        1
+        (lambda (dir rec)
+          (define ready (done-record dir))
+          (define plan (campaign-plan-id ready))
+          ;; Receipt branch checked out at a stale head.
+          (define stale
+            (porcelain-text (list (list q-dir main-head-unit "main")
+                                  (list wt-stale-dir (make-string 40 #\b) receipt-branch-unit))))
+          (check-false (artifact-root-selector dir plan 0 #:run-git (fake-git stale (hash))))
+          ;; Only a wrong branch exists (the idle base): must NOT be accepted
+          ;; even if it happens to hold artifact bytes.
+          (define wrong-branch (porcelain-text (list (list q-dir main-head-unit "main"))))
+          (check-false (artifact-root-selector dir plan 0 #:run-git (fake-git wrong-branch (hash))))
+          ;; A detached worktree at the exact head still lacks the receipt branch.
+          (define detached
+            (porcelain-text (list (list q-dir main-head-unit "main")
+                                  (list wt-detached-dir receipt-head-unit #f))))
+          (check-false (artifact-root-selector dir plan 0 #:run-git (fake-git detached (hash)))))))
+     (test-case "provenance checkout root: non-git bases keep the legacy unscoped root"
+       (call-with-campaign 1
+                           (lambda (dir rec)
+                             (define ready (done-record dir))
+                             (define plan (campaign-plan-id ready))
+                             (define no-git (lambda (_dir _args) (values 128 "")))
+                             ;; No .git marker in base-dir: legacy child q/ root.
+                             (check-equal? (artifact-root-selector dir plan 0 #:run-git no-git)
+                                           (build-path dir "q"))
+                             ;; A Git marker means enumeration failure must never fall back.
+                             (make-directory (build-path dir "q"))
+                             (display-to-file "gitdir: missing" (build-path dir "q" ".git"))
+                             (check-false (artifact-root-selector dir plan 0 #:run-git no-git))
+                             (delete-file (build-path dir "q" ".git"))
+                             (make-directory (build-path dir ".git"))
+                             (check-false (artifact-root-selector dir plan 0 #:run-git no-git))))))
+   (lambda () (delete-directory/files fixture-root #:must-exist? #f))))
