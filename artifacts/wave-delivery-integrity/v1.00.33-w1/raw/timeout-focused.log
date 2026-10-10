@@ -1,0 +1,15 @@
+;; run-tests: suite=all files=3 jobs=1 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+...
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     3 total, 3 passed, 0 failed, 0 timeouts
+  Tests:     22 total, 22 passed, 0 failed
+  Category:  PASS=3
+  Elapsed:   58.562s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=3 pass=3 fail=0 timeout=0 skip=0 wall-clock-seconds=58.562 metadata-completeness=explicit:3/heuristic:0/missing:0

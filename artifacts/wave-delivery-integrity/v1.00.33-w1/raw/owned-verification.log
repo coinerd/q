@@ -1,0 +1,61 @@
+;; run-tests: suite=all files=3 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+...
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     3 total, 3 passed, 0 failed, 0 timeouts
+  Tests:     54 total, 54 passed, 0 failed
+  Category:  PASS=3
+  Elapsed:   32.011s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=all profile=local shard=none execution-mode=subprocess file-count=3 pass=3 fail=0 timeout=0 skip=0 wall-clock-seconds=32.011 metadata-completeness=explicit:2/heuristic:0/missing:1
+;; run-tests: suite=fast files=1219 jobs=2 sequential=#f repeat=1 mode=subprocess profile=local scheduler=batch ordering=fifo
+
+;; run-tests: serializing 13 mutation-sensitive files before parallel batches
+.............
+......................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     1219 total, 1219 passed, 0 failed, 0 timeouts
+  Tests:     18146 total, 18146 passed, 0 failed
+  Category:  PASS=1219
+  Elapsed:   3h 17m 18.814s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.31 suite=fast profile=local shard=none execution-mode=subprocess file-count=1219 pass=1219 fail=0 timeout=0 skip=0 wall-clock-seconds=11838.814 metadata-completeness=explicit:1190/heuristic:0/missing:29
+
+── q CI Lint (25 checks) ──
+  [PASS] format
+  [PASS] version-sync
+  [PASS] version-validate
+  [PASS] version-cross
+  [PASS] version-expectations
+  [PASS] protocols
+  [PASS] imports
+  [PASS] deps
+  [PASS] metrics-sync
+  [PASS] metrics-lint
+  [PASS] prose
+  [PASS] readme-status
+  [PASS] changelog-dates
+  [PASS] audit
+  [PASS] tests
+  [PASS] deprecation
+  [PASS] ci-readiness
+  [WARN] arch (non-blocking)
+  [PASS] ivg
+  [WARN] release-readiness (non-blocking)
+  [PASS] release-notes
+  [PASS] doc-freshness
+  [PASS] widened-ledger
+  [PASS] contract-changes
+  [PASS] hotspot
+
+── Summary: 23 passed, 2 warnings ──

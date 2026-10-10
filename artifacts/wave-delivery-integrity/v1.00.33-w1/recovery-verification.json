@@ -1,0 +1,63 @@
+{
+ "attempt": {
+  "fence": 4,
+  "id": "attempt-1"
+ },
+ "evidence": [
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/initial-incomplete.log",
+   "sha256": "7702c25beb5fc2cdb19168fcb251ee9519997841997913d168a245c56010c3f1"
+  },
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/owned-receipt.exit",
+   "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/owned-receipt.log",
+   "sha256": "4c9cc70909498863bfa14b790d1702b01c1cf78d52365a5816f49513b1312c92"
+  },
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/owned-verification.log",
+   "sha256": "1398931b259f4438baccece2f3a1b98bafee527ce8a9f11118902b91313dd2b7"
+  },
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/timeout-focused.exit",
+   "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+   "file": "artifacts/wave-delivery-integrity/v1.00.33-w1/raw/timeout-focused.log",
+   "sha256": "6654c767c8bebe0ec42c0984977cd56a9f482d1483a8f5a7bf2769a11489879b"
+  }
+ ],
+ "fast": {
+  "execution-mode": "subprocess",
+  "fail": "0",
+  "file-count": "1219",
+  "metadata-completeness": "explicit:1190/heuristic:0/missing:29",
+  "pass": "1219",
+  "profile": "local",
+  "runner-version": "1.00.31",
+  "shard": "none",
+  "skip": "0",
+  "suite": "fast",
+  "timeout": "0",
+  "wall-clock-seconds": "11838.814"
+ },
+ "history": "Initial full gate was incomplete (three timeouts). Three isolated cases passed; full two-worker retry passed under unchanged per-file deadlines. Failed gate preserved and never counted as approval.",
+ "lint": {
+  "failures": 0,
+  "passed": 23,
+  "warnings": 2
+ },
+ "outcome": {
+  "canary": "not-proven",
+  "configuration": "unchanged",
+  "delivery": "pending",
+  "implementation-verification": "passed"
+ },
+ "plan-id": "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e",
+ "recorded-head": "4c7d023f93f9c241f3977b5887c1927eb94887d2",
+ "schema-version": 1,
+ "scope": "Actual recovery verification of the pre-bundle implementation checkpoint; pinned ancestor evidence, not a claim that this artifact commit was verified.",
+ "wave": "v1.00.33-w1"
+}

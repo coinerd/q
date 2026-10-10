@@ -1,0 +1,8 @@
+Frozen W1 commands (fail-fast wrapper only):
+raco fmt -i runtime/settings-query.rkt extensions/gsd/wave-executor.rkt
+raco make runtime/settings-query.rkt extensions/gsd/wave-executor.rkt
+racket scripts/run-tests.rkt tests/test-gsd-wave-executor-isolation.rkt tests/test-gsd-wave-worktree.rkt tests/test-arch-parameters.rkt
+racket scripts/run-tests.rkt --suite fast
+racket scripts/lint-all.rkt
+Verification: #(struct:delivery-verification #t (("git" #t . "git repository reachable") ("branch" #t . "branch=campaign/79a69b42/w1 expected=campaign/79a69b42/w1 (isolated)") ("files" #t . "changed: q/runtime/settings-query.rkt, q/extensions/gsd/wave-executor.rkt, q/tests/test-gsd-wave-executor-isolation.rkt, q/extensions/gsd/responsibility-inventory.rkt") ("verify" #t . "cmd=set -e\nraco fmt -i runtime/settings-query.rkt extensions/gsd/wave-executor.rkt\nraco make runtime/settings-query.rkt extensions/gsd/wave-executor.rkt\nracket scripts/run-tests.rkt tests/test-gsd-wave-executor-isolation.rkt tests/test-gsd-wave-worktree.rkt tests/test-arch-parameters.rkt\nracket scripts/run-tests.rkt --suite fast --jobs 2\nracket scripts/lint-all.rkt exit=0")) "delivery verified")
+Owned receipt and provenance recorded: ("campaign/79a69b42/w1" . "4c7d023f93f9c241f3977b5887c1927eb94887d2"); W1 remains awaiting-delivery.
