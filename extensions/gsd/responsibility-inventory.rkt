@@ -197,11 +197,11 @@
    ;; delivery stage machine. Pure decision kernel: reloads journal + durable
    ;; record, re-runs delivery-receipt-blocker per effect, rejects
    ;; cancellation/fence/takeover, records separate delivery usage, advances
-   ;; one journal stage per success. No git/fs effect markers beyond the
-   ;; journal (the injected controller seam owns external effects).
+   ;; one journal stage per success. Receipt-bound artifact preflight uses
+   ;; read-only Git worktree/status queries through the controller boundary.
    (make-entry "delivery-coordinator.rkt"
                'campaign-state
-               '(subprocess path-ops)
+               '(subprocess path-ops git)
                '()
                '("racket/string" "racket/runtime-path"
                                  "json"
