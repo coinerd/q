@@ -3,11 +3,22 @@
 Production `/go` requests carry a reviewer runner consumed by the shared TUI/SDK
 campaign executor. `extensions/gsd/review-session.rkt` owns the session adapter
 and composes runtime and tool APIs from the extension layer. The runner creates
-a fresh agent session using
-`zai-coding-plan/glm-5.3`, with only `read` and `bash`, no extensions or memory,
-and a runtime-owned `q-session:<id>` identity. Missing provider credentials are
-infrastructure failure, never mock approval. An injected/manual request without
-this runner retains the existing manual-review behavior.
+a fresh agent session requesting exact `zai-coding-plan/glm-5.3`, with only
+`read` and `bash`, no extensions or memory, and a runtime-owned `q-session:<id>`
+identity. The harness label is not assumed to be a q registry alias: the default
+builder reads merged q settings and selects the uniquely configured `glm-5.3`
+registration (or a literally registered `zai-coding-plan/glm-5.3` alias). It always
+constructs the OpenAI-compatible transport with API model ID `glm-5.3`, never the
+literal harness prefix. Supported configured provider names are `glm-5.3`,
+`zai-coding-plan`, and `openai-compatible`, authenticated through q's normal
+credential lookup. The endpoint must be HTTPS `api.z.ai` at
+`/api/coding/paas/v4` (optional explicit port 443 and trailing slash only).
+Wrong host/path/transport, HTTP, userinfo/query/fragment, Flash/other models,
+missing credentials, or multiple exact registrations fail closed, even if a q
+default would otherwise resolve one. There is no mock or alternate-model fallback.
+Injected provider builders remain available for deterministic fixtures. An
+injected/manual request without this runner retains the existing manual-review
+behavior.
 
 The reviewer uses an **existing clean worktree on the exact receipt branch**.
 Only receipt-descendant evidence-only commits under the controller's three
@@ -68,5 +79,13 @@ and enters exactly one ordinary fenced retry and fresh generation review. Only
 model transport responses are deterministic; controller statuses are not mocked.
 The real-Git strict controller suite is registered by
 `tests/test-gsd-delivery-auto-review.rkt`. These are not live GitHub delivery or
-independent model acceptance: final glm review remains quota-blocked pending the
-next-day reset; preliminary Codex findings are not an acceptance substitute.
+independent model acceptance: preliminary Codex findings are not an acceptance
+substitute. `tests/test-gsd-review-runtime.rkt` additionally exercises the actual
+default provider builder with real temporary q settings/auth files, a fresh empty
+`PLTUSERHOME`, and a network-denying guard; deterministic HTTP-boundary capture
+checks the exact API model and Coding Plan path. A safe actual-config construction
+probe verified provider availability without network or credential output. This
+is not a live reviewer response or canary. The provider-selector patch still
+requires independent exact GLM-5.3 diff review and all protected full CI gates on
+the new source head before merge/build/restart/resume. Prior-head approval or
+pending checks must not authorize installing that head.

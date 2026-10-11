@@ -11,6 +11,9 @@
          "../../runtime/agent-session.rkt"
          "../../runtime/settings.rkt"
          "../../runtime/provider/provider-factory.rkt"
+         "../../runtime/provider/model-registry.rkt"
+         "../../runtime/auth/auth-store.rkt"
+         "../../util/hash-helpers.rkt"
          "../../util/event/event-bus.rkt"
          "../../util/cancellation.rkt"
          "../../util/loop-result.rkt"
@@ -51,12 +54,46 @@
   (unless (hash? data)
     (error 'review-session "final reviewer JSON is not an object"))
   (hash-set data 'reviewer (string-append "q-session:" session-identity)))
+;; The harness label is not necessarily a q registry name. Do not use the
+;; registry's first-match/default resolution: duplicates must fail closed.
+(define (resolve-review-model config)
+  (define candidates
+    (filter (lambda (entry)
+              (member (model-entry-name entry) (list "glm-5.3" review-model)))
+            (available-models (make-model-registry-from-config config))))
+  (unless (= (length candidates) 1)
+    (error 'review-session "exact GLM-5.3 registration missing or ambiguous; no fallback review"))
+  (define entry (car candidates))
+  (define name (model-entry-provider-name entry))
+  (define cfg (model-entry-provider-config entry))
+  (define url (flex-ref cfg 'base-url #f))
+  ;; Only OpenAI-compatible Coding Plan transports, never another vendor's
+  ;; adapter or the general ZAI endpoint. Reject credentials/query in URLs too.
+  (unless (and (member name '("glm-5.3" "zai-coding-plan" "openai-compatible"))
+               (string? url)
+               (regexp-match? #px"^https://api\\.z\\.ai(?::443)?/api/coding/paas/v4/?$" url))
+    (error 'review-session "GLM-5.3 provider/official HTTPS Coding Plan endpoint mismatch"))
+  ;; A literally registered harness alias is allowed, but never sent on wire.
+  (model-resolution "glm-5.3" name url cfg))
 (define (build-review-provider cwd)
-  (define p (build-provider (hasheq 'project-dir cwd 'model review-model) (load-settings cwd)))
+  (define resolution (resolve-review-model (q-settings-merged (load-settings cwd))))
+  (define name (model-resolution-provider-name resolution))
+  (define cfg (model-resolution-provider-config resolution))
+  (define cred (lookup-credential name cfg #:project-dir cwd))
+  (unless cred
+    (error 'review-session "requested GLM-5.3 credentials unavailable; no fallback review"))
+  (define p
+    (create-provider-for-name name
+                              (model-resolution-base-url resolution)
+                              (credential-api-key cred)
+                              (model-resolution-model-name resolution)
+                              (flex-ref cfg 'max-tokens #f)))
   (when (provider-is-mock? p)
-    (error 'review-session
-           "requested zai-coding-plan/glm-5.3 provider/credentials unavailable; no fallback review"))
+    (error 'review-session "requested GLM-5.3 provider unavailable; no fallback review"))
   p)
+;; Private test/probe interface, not part of the extension's public runner API.
+(module+ test-support
+  (provide resolve-review-model build-review-provider))
 (define (run-review-session session prompt)
   (define-values (_updated result) (run-prompt! session prompt #:max-iterations 80))
   result)
