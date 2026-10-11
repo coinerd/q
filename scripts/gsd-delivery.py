@@ -682,6 +682,42 @@ def snapshot_facts(campaign_root, plan, wave):
             'campaign snapshot does not verify for this plan/wave')
     return facts
 
+def review_tracker_facts(repo, campaign_root, plan, wave):
+    """Resolve only a missing milestone from the exact verified frozen issue.
+
+    Fully numeric snapshot metadata keeps its existing behavior. Legacy facts
+    need the unique verified PLAN title and an authenticated same-repo issue;
+    prose numbers, mutable plans and global tracker defaults are not inputs.
+    """
+    facts = snapshot_facts(campaign_root, plan, wave)
+    issue = facts.get('issue')
+    require(type(issue) is int and issue > 0,
+            'the frozen wave facts carry no positive issue for the review trio')
+    if 'milestone' in facts:
+        milestone = facts['milestone']
+        require(type(milestone) is int and milestone > 0,
+                'the frozen wave facts carry no positive milestone for the review trio')
+        return facts
+    title = facts.get('frozen-plan-title')
+    require(isinstance(title, str) and title and title == title.strip(),
+            'missing unique verified frozen PLAN title for milestone resolution')
+    slug = repository(repo)
+    data = api(slug, f'issues/{issue}')
+    require(isinstance(data, dict) and 'pull_request' not in data and
+            type(data.get('number')) is int and data['number'] == issue and
+            data.get('html_url') == f'https://github.com/{slug}/issues/{issue}',
+            'authenticated tracker response is not the exact frozen same-repo issue')
+    milestone = data.get('milestone')
+    require(isinstance(milestone, dict) and
+            type(milestone.get('number')) is int and milestone['number'] > 0,
+            'the authenticated frozen issue has no positive milestone')
+    number = milestone['number']
+    require(milestone.get('url') == f'https://api.github.com/repos/{slug}/milestones/{number}' and
+            milestone.get('title') == title,
+            'authenticated milestone repository/number/title differs from the verified frozen PLAN')
+    return dict(facts, milestone=number)
+
+
 DECLARED_DIRS = {'evidence': 'gsd-wave-evidence',
                  'review': 'gsd-wave-reviews',
                  'validation': 'gsd-wave-validation'}
@@ -2167,12 +2203,8 @@ def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
     if stage == 'binding-review':
         return _prepare_binding(repo, plan, wave, expected_head, expected_branch,
                                 campaign_root, generation, staging_root)
-    facts = snapshot_facts(campaign_root, plan, wave)
-    milestone, issue = facts.get('milestone'), facts.get('issue')
-    require(isinstance(milestone, int) and milestone > 0 and
-            isinstance(issue, int) and issue > 0,
-            'the frozen wave facts carry no positive milestone/issue for the review trio')
-    facts = dict(facts, milestone=milestone, issue=issue)
+    facts = review_tracker_facts(repo, campaign_root, plan, wave)
+    milestone, issue = facts['milestone'], facts['issue']
     actual_generation = journal_generation(repo, plan, wave, campaign_root)
     require(generation == actual_generation,
             'the review binding generation does not match the authoritative journal')
@@ -2415,11 +2447,11 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
     require(all(request.get(key) == receipt.get(key)
                 for key in ('head', 'branch', 'attempt-id', 'attempt-fence')),
             'the dispatch identity does not match the exact durable receipt; rerun prepare')
-    facts = snapshot_facts(campaign_root, plan, wave)
-    milestone, issue = facts.get('milestone'), facts.get('issue')
-    require(isinstance(milestone, int) and milestone > 0 and
-            isinstance(issue, int) and issue > 0,
-            'the frozen wave facts carry no positive milestone/issue for the review trio')
+    facts = review_tracker_facts(repo, campaign_root, plan, wave)
+    milestone, issue = facts['milestone'], facts['issue']
+    require(all(type(request.get(key)) is int and request[key] == facts[key]
+                for key in ('milestone', 'issue')),
+            'the tracker binding changed after review dispatch; rerun prepare')
     paths = active_declared_outputs(facts, repo, plan, wave, generation)
     refresh(repo)
     main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
