@@ -130,7 +130,9 @@
                                  "util/loop-result"
                                  "system-adapters"
                                  "sandbox/gateway-bridge"
-                                 "plan-context-builder"))
+                                 "plan-context-builder"
+                                 "review-dispatch"
+                                 "review-worktree"))
    ;; v1.00.30 (delivery runtime): the coordinator-owned authenticated
    ;; delivery handoff — loop decision, delivered-proof validation,
    ;; pending→delivered ledger, and the predecessor resolver. Factored
@@ -161,6 +163,86 @@
                '(fs-read fs-delete)
                '()
                '("json" "racket/file" "racket/list" "racket/path"))
+   ;; Automatic independent review slice A state port: guarded durable
+   ;; review-rejection authorization (recorded through delivery-journal's
+   ;; declared atomic writes), superseded-attempt marking and the ordinary
+   ;; failed retry transition on the in-memory campaign record. Pure with
+   ;; respect to effects — every durable write is delegated to
+   ;; delivery-journal; the caller persists the record.
+   (make-entry "review-dispatch.rkt"
+               'campaign-state
+               '(fs-write subprocess make-param path-ops)
+               '(current-gsd-auto-review-runner)
+               '("json" "racket/file"
+                        "racket/format"
+                        "racket/list"
+                        "racket/path"
+                        "racket/runtime-path"
+                        "racket/string"
+                        "delivery-handoff"
+                        "delivery-journal"
+                        "sandbox/subprocess"))
+   (make-entry "review-checkpoint.rkt"
+               'campaign-state
+               '()
+               '()
+               '("json" "racket/string"
+                        "campaign-state"
+                        "campaign-repository"
+                        "delivery-journal"
+                        "review-rejection"))
+   (make-entry "review-worktree.rkt"
+               'campaign-state
+               '(git subprocess path-ops)
+               '()
+               '("racket/path" "racket/string"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "review-rejection"
+                               "delivery-handoff"
+                               "wave-executor"
+                               "sandbox/subprocess"))
+   ;; Creates isolated runtime sessions; the extension owns runtime/tools
+   ;; composition, never an upward dependency from runtime into GSD.
+   (make-entry "review-session.rkt"
+               'external-ports
+               '(mkdir subprocess parameterize)
+               '()
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/string"
+                        "racket/set"
+                        "runtime/agent-session"
+                        "runtime/settings"
+                        "runtime/provider/provider-factory"
+                        "util/event/event-bus"
+                        "util/cancellation"
+                        "util/loop-result"
+                        "util/message/message"
+                        "util/content/content-parts"
+                        "tools/tool"
+                        "tools/registry-defaults"
+                        "tools/permission-gate"
+                        "sandbox/subprocess"
+                        "sandbox/gateway-bridge"
+                        "campaign-state"
+                        "campaign-repository"
+                        "campaign-budgets"
+                        "delivery-journal"
+                        "review-usage"
+                        "review-worktree"))
+   (make-entry "review-usage.rkt"
+               'campaign-state
+               '()
+               '()
+               '("campaign-state" "campaign-repository" "campaign-budgets"))
+   (make-entry "review-rejection.rkt"
+               'campaign-state
+               '()
+               '()
+               '("racket/format" "racket/string" "campaign-state" "delivery-journal" "policy"))
    (make-entry "delivery-receipt.rkt"
                'campaign-state
                '(git subprocess path-ops parameterize make-param sha256)
@@ -250,7 +332,8 @@
                                "delivery-coordinator"
                                "campaign-result"
                                "reconciliation-checkpoint"
-                               "tracker-production-wiring"))
+                               "tracker-production-wiring"
+                               "review-checkpoint"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -471,7 +554,8 @@
                                    "verifier-core"
                                    "racket/file"
                                    "campaign-state"
-                                   "go-orchestrator"))
+                                   "go-orchestrator"
+                                   "review-session"))
    ;; persistence (2)
    (make-entry "archive.rkt"
                'persistence

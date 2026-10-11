@@ -41,10 +41,15 @@
 ;; branches + approved-publication-branches); the retention log line and
 ;; a duplicated Provide comment banner were trimmed. 1696 -> 1695 lines,
 ;; defines unchanged at 20, below the 1700 target.
+;; Re-recorded for automatic independent review: the campaign-facing
+;; coordinator-checkpoint-result wrapper moved into delivery-finalize.rkt,
+;; alongside the checkpoint driver; the orchestrator injects its continuation.
+;; Automatic-review routing adds bounded call sites. 1695 -> 1691 lines,
+;; 20 -> 19 defines, with the unchanged 1700-line ceiling.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "BUG-0079 approved-head publication: spare-branch reclaim computation extracted to delivery-publication.rkt durable-spare-branches: 1695 lines / 20 defines; below the 1700 target")
- (line-count . 1695)
- (top-level-define-count . 20)
+  "Automatic independent review: coordinator-checkpoint-result extracted to delivery-finalize.rkt: 1691 lines / 19 defines; below the unchanged 1700 target")
+ (line-count . 1691)
+ (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

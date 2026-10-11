@@ -29,6 +29,10 @@ During planning:
 ### `/go [wave number]`
 
 Begin executing the plan. The agent follows the plan's waves sequentially.
+Production TUI/SDK requests automatically dispatch a fresh independent receipt-pinned
+reviewer before delivery; explicit rejection allows one durable implementation retry
+by default. Review does not replace operator merge authorization. See the
+[automatic review contract and limits](automatic-review.md).
 
 ```
 /go          # Start from first pending wave

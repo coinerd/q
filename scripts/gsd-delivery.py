@@ -1892,6 +1892,706 @@ def review(repo, plan, wave, expected_head, expected_branch, campaign_root=None,
     return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
             'reviewed-sha': reviewed, 'review-artifact': review_rel}
 
+
+# =====================================================================
+# Automatic independent review dispatch (BUG_PLAN automatic-review slice B)
+# =====================================================================
+#
+# The auto-review port pairs the coordinator's fresh-reviewer hook with the
+# trusted controller. `prepare` decides — through the UNCHANGED validation
+# paths above — whether a genuine independent review is MISSING (dispatchable)
+# or the state is already valid/irreparably refused; when dispatchable it
+# stages a deliberately gate-red template trio plus a typed request.
+# `finalize` re-validates the pinned identity, structurally validates the
+# reviewer's TYPED output, binds every digest itself (reviewer prose is
+# never authority), and publishes through an evidence-only commit + pinned
+# non-force push + exact readback. Only the unchanged strict gates can turn
+# an approval into `reviewed`; an explicit head-bound REQUEST_CHANGES
+# persists its findings through a trusted artifact commit and surfaces as
+# `review-rejected` (post-merge binding rejections are typed separately for
+# artifact repair). Malformed output, transport failures and divergence are
+# `review-infra` — never a rejection and never an approval.
+
+class _ReviewInfra(Exception):
+    """Typed reviewer-infrastructure failure: never a rejection or approval."""
+
+
+MIN_REVIEW_NARRATIVE = 64
+MIN_RED_FIRST_FAILURE = 32
+MAX_REVIEW_FINDINGS = 50
+MAX_FINDING_CHARS = 2000
+AUTO_REVIEW_STAGES = ('implementation-review', 'binding-review')
+
+
+def _iso_now():
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+
+def write_rktd(datum, path):
+    """Serialize one JSON-shaped hash datum as a .rktd artifact through the
+    trusted binding-data module (never string-built Racket syntax here)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(prefix='q-datum-', suffix='.json', delete=False) as handle:
+        handle.write(json.dumps(datum).encode())
+        payload = Path(handle.name)
+    try:
+        command(['racket', str(HERE / 'gsd-binding-data.rkt'), 'write-datum',
+                 str(payload), str(path)], timeout=60)
+    finally:
+        try:
+            payload.unlink()
+        except OSError:
+            pass
+    return path
+
+
+def _reviewer_identity(value):
+    require(isinstance(value, str) and value.strip() and
+            not SENTINEL_TEXT.fullmatch(value.strip()) and
+            not SENTINEL_COMPOUND.search(value.strip()),
+            'the reviewer output carries no genuine reviewer identity')
+    return value.strip()
+
+
+def _reviewer_narrative(value, label, minimum):
+    require(isinstance(value, str) and value.strip() and
+            not SENTINEL_TEXT.fullmatch(value.strip()),
+            'the reviewer output %s is missing or a placeholder' % label)
+    require(len(value.strip()) >= minimum,
+            'the reviewer output %s carries fewer than %d characters of content'
+            % (label, minimum))
+    return value.strip()
+
+
+def validate_reviewer_output(output):
+    """Structural validation of the reviewer's TYPED result (the coordinator
+    pre-checks the same shape; this is the trusted boundary). Trusts the
+    ROLE, never prose: verdicts, digests and head bindings are stamped by the
+    controller below, never taken from this output. Every malformed shape is
+    a typed reviewer-infrastructure failure — NEVER a rejection and NEVER an
+    approval."""
+    def infra(reason):
+        raise _ReviewInfra(reason)
+    if not isinstance(output, dict):
+        infra('the reviewer output is not an object')
+    kind = output.get('kind')
+    if kind not in ('approved', 'request-changes', 'review-failed'):
+        infra('the reviewer output kind is unknown')
+    if kind == 'review-failed':
+        reason = output.get('reason')
+        if not (isinstance(reason, str) and reason.strip()):
+            infra('the reviewer session failure carries no reason')
+        raise _ReviewInfra('the reviewer session failed: %s' % reason.strip()[:300])
+    if not (isinstance(output.get('reviewer'), str) and output['reviewer'].strip() and
+            not SENTINEL_TEXT.fullmatch(output['reviewer'].strip()) and
+            not SENTINEL_COMPOUND.search(output['reviewer'].strip())):
+        infra('the reviewer output carries no genuine reviewer identity')
+    result = {'kind': kind, 'reviewer': output['reviewer'].strip()}
+    for label, key in (('review scope', 'scope'), ('review report', 'report')):
+        value = output.get(key)
+        if not (isinstance(value, str) and value.strip() and
+                not SENTINEL_TEXT.fullmatch(value.strip())):
+            infra('the reviewer output %s is missing or a placeholder' % label)
+        if len(value.strip()) < MIN_REVIEW_NARRATIVE:
+            infra('the reviewer output %s carries fewer than %d characters of content'
+                  % (label, MIN_REVIEW_NARRATIVE))
+        result[key] = value.strip()
+    if kind == 'request-changes':
+        findings = output.get('findings')
+        if not (isinstance(findings, list) and 1 <= len(findings) <= MAX_REVIEW_FINDINGS and
+                all(isinstance(item, str) and item.strip() and
+                    len(item) <= MAX_FINDING_CHARS for item in findings)):
+            infra('the REQUEST_CHANGES findings are missing or malformed')
+        result['findings'] = list(findings)
+        return result
+    validation = output.get('validation')
+    if not isinstance(validation, dict):
+        infra('the approved review carries no validation gate facts')
+    red = validation.get('red-first')
+    if not isinstance(red, dict):
+        infra('the red-first gate evidence is incomplete')
+    command = red.get('command')
+    if not (isinstance(command, str) and command.strip() and
+            not SENTINEL_TEXT.fullmatch(command.strip())):
+        infra('the red-first command fact is missing or a placeholder')
+    failure = red.get('failure')
+    if not (isinstance(failure, str) and failure.strip() and
+            not SENTINEL_TEXT.fullmatch(failure.strip())):
+        infra('the red-first observed failure is missing or a placeholder')
+    if len(failure.strip()) < MIN_RED_FIRST_FAILURE:
+        infra('the red-first observed failure carries fewer than %d characters of content'
+              % MIN_RED_FIRST_FAILURE)
+    gates = {'red-first': {'command': command.strip(), 'failure': failure.strip()}}
+    for gate in ('focused-tests', 'format-compile', 'lint', 'fast'):
+        facts = validation.get(gate)
+        if not (isinstance(facts, dict) and facts.get('result') == 'passed' and
+                isinstance(facts.get('command'), str) and facts['command'].strip()):
+            infra('the %s gate facts are missing or not passed' % gate)
+        gates[gate] = {'result': 'passed', 'command': facts['command'].strip()}
+    remaining = validation.get('remaining-items', [])
+    if not isinstance(remaining, list):
+        infra('remaining-items must be a list')
+    gates['remaining-items'] = remaining
+    if validation.get('planning-sync') != 'current':
+        infra('the reviewer planning-sync fact is not current')
+    result['validation'] = gates
+    return result
+
+
+def load_reviewer_output(path):
+    path = Path(path)
+    if not (path.is_file() and not path.is_symlink()):
+        raise _ReviewInfra('the reviewer output is absent at %s' % path)
+    try:
+        output = json.loads(path.read_text())
+    except ValueError as error:
+        raise _ReviewInfra('the reviewer output is not valid JSON: %s' % error) from error
+    return validate_reviewer_output(output)
+
+
+def implementation_review_staging(campaign_root, plan, wave, generation, staging_root):
+    """The deterministic campaign-local, generation-scoped implementation
+    review staging directory (never another generation's staging)."""
+    root = Path(campaign_root).resolve()
+    staging = Path(staging_root).resolve()
+    expected = root / '.planning' / 'campaigns' / plan / f'review-w{wave}-g{generation}'
+    require(staging == expected,
+            'the review dispatch staging must be the deterministic campaign directory %s'
+            % expected)
+    current = root
+    for part in ('.planning', 'campaigns', plan):
+        current = current / part
+        require(not current.is_symlink(), 'the review staging path contains a symlink')
+    return staging
+
+
+def _stage_template(staging, relative, datum):
+    """Write one gate-red template artifact idempotently: an existing file
+    must be byte-identical (a different dispatch already staged here and is
+    never silently overwritten; old generations are separate directories)."""
+    target = staging / relative
+    with tempfile.TemporaryDirectory(prefix='q-template-') as temp:
+        candidate = Path(temp) / 'template.rktd'
+        write_rktd(datum, candidate)
+        payload = candidate.read_bytes()
+    if target.exists():
+        require(target.is_file() and not target.is_symlink() and target.read_bytes() == payload,
+                'the review staging already holds a different dispatch for ' + relative)
+    else:
+        write_rktd(datum, target)
+
+
+def _stage_request(staging, request):
+    """The controller-owned dispatch request; rewritten on every prepare so
+    it always reflects the CURRENT pinned identity and controller context."""
+    require(isinstance(staging, Path) and staging.is_dir(),
+            'the review staging directory is missing')
+    payload = staging / 'request.json'
+    payload.write_text(json.dumps(request, sort_keys=True))
+    return payload
+
+
+def _implementation_templates(plan, wave, facts, names, head, branch, paths):
+    """Deliberately gate-red trio: honest PENDING placeholders, no verdict,
+    no acceptance, no fabricated digest (the finalize phase stamps those)."""
+    artifact = {'schema-version': 2, 'plan-id': plan, 'wave': f'W{wave}',
+                'milestone': facts['milestone'], 'issue': facts['issue'],
+                'status': 'pending-review', 'implementation-sha': head,
+                'content-digest': 'PENDING', 'branch': branch,
+                'required-checks': list(names), 'required-pr-checks': list(names),
+                'review-artifact': paths['review'],
+                'validation-artifact': paths['validation'],
+                'review-stage': 'fresh-independent-review-required'}
+    review = {'reviewer': 'PENDING', 'verdict': 'PENDING', 'timestamp': 'PENDING',
+              'reviewed-sha': head, 'content-digest': 'PENDING',
+              'scope': 'PENDING', 'report': 'PENDING'}
+    validation = {'status': 'pending', 'planning-sync': 'pending',
+                  'milestone': facts['milestone'], 'wave': f'W{wave}',
+                  'issue': facts['issue'], 'branch': branch,
+                  'implementation-sha': head, 'content-digest': 'PENDING',
+                  'red-first': {'command': 'PENDING', 'failure': 'PENDING'},
+                  'focused-tests': {'result': 'PENDING', 'command': 'PENDING'},
+                  'format-compile': {'result': 'PENDING', 'command': 'PENDING'},
+                  'lint': {'result': 'PENDING', 'command': 'PENDING'},
+                  'fast': {'result': 'PENDING', 'command': 'PENDING'},
+                  'review-artifact': paths['review'],
+                  'remaining-items': [
+                      {'classification': 'deferred-noncritical', 'owner': 'PENDING',
+                       'rationale': 'PENDING: a genuine independent non-author review is '
+                                    'required before finalization'}]}
+    return artifact, review, validation
+
+
+def _review_prompt(stage, plan, wave, head, branch, paths, staging, digest_value, names):
+    if stage == 'implementation-review':
+        return ('Fresh independent non-author review of campaign %s wave W%d at the pinned '
+                'receipt head %s on branch %s.\n'
+                'A genuinely gate-red template trio (honest PENDING placeholders, no verdict) '
+                'is staged at %s (evidence %s, review %s, validation %s).\n'
+                'The controller-computed excluded-diff content digest is %s; the required '
+                'checks are: %s.\n'
+                'Run the genuine gates (red-first reproduction, focused tests, format, lint, '
+                'fast) and return the typed result: kind "approved" with validation gate '
+                'facts, or "request-changes" with explicit findings bound to this head. '
+                'Never claim approval through prose.'
+                % (plan, wave, head, branch, staging, paths['evidence'], paths['review'],
+                   paths['validation'], digest_value, ', '.join(names)))
+    return ('Fresh independent non-author finalization of the staged post-merge binding trio '
+            'for campaign %s wave W%d (implementation receipt head %s, branch %s).\n'
+            'The staged draft is pending-review (honest placeholders; no approval inferred). '
+            'Staging: %s (evidence %s, review %s, validation %s). The publication commit '
+            'changes only excluded evidence directories, so the finalized digest is the '
+            'empty-diff digest %s.\n'
+            'Run the genuine gates and return the typed result: kind "approved" with '
+            'validation gate facts, or "request-changes" with explicit findings. '
+            'Never claim approval through prose.'
+            % (plan, wave, head, branch, staging, paths['evidence'], paths['review'],
+               paths['validation'], EMPTY_SHA))
+
+
+def _receipt_for_review(repo, plan, wave, campaign_root, expected_head, expected_branch):
+    journal = campaign_journal(repo, plan, wave, campaign_root)
+    receipt = journal['receipt'] if isinstance(journal, dict) else None
+    require(isinstance(receipt, dict) and receipt.get('head') == expected_head and
+            receipt.get('branch') == expected_branch and
+            isinstance(receipt.get('attempt-id'), str) and receipt['attempt-id'] and
+            type(receipt.get('attempt-fence')) is int,
+            'the dispatch identity does not match the durable receipt; rerun prepare')
+    return receipt
+
+
+def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
+                         campaign_root, generation, staging_root):
+    require(stage in AUTO_REVIEW_STAGES, 'unknown auto-review stage ' + str(stage))
+    if stage == 'binding-review':
+        return _prepare_binding(repo, plan, wave, expected_head, expected_branch,
+                                campaign_root, generation, staging_root)
+    facts = snapshot_facts(campaign_root, plan, wave)
+    milestone, issue = facts.get('milestone'), facts.get('issue')
+    require(isinstance(milestone, int) and milestone > 0 and
+            isinstance(issue, int) and issue > 0,
+            'the frozen wave facts carry no positive milestone/issue for the review trio')
+    facts = dict(facts, milestone=milestone, issue=issue)
+    actual_generation = journal_generation(repo, plan, wave, campaign_root)
+    require(generation == actual_generation,
+            'the review binding generation does not match the authoritative journal')
+    paths = active_declared_outputs(facts, repo, plan, wave, actual_generation)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + expected_branch)
+    tip = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
+    require(full_sha(tip), 'malformed fetched receipt branch tip')
+    require_receipt_tip(repo, expected_head, tip, 'review')
+    _require_review_evidence_tail(repo, expected_head, tip)
+    receipt = _receipt_for_review(repo, plan, wave, campaign_root,
+                                  expected_head, expected_branch)
+    # Publication can precede the journal checkpoint. Recover committed,
+    # receipt-bound rejection evidence BEFORE deciding whether to dispatch.
+    rejected = _recover_rejected_artifact(repo, tip, paths['review'], plan, wave,
+                                          actual_generation, receipt)
+    if rejected is not None:
+        return rejected
+    # Dispatchable ONLY when the trio or its review artifact is genuinely
+    # missing. An existing-but-invalid trio is a REAL refusal (Pending), and
+    # an already-valid one passes through the unchanged review path.
+    if blob_or_none(repo, tip, paths['evidence']) is not None:
+        result = review(repo, plan, wave, expected_head, expected_branch,
+                        campaign_root, generation)
+        if result['status'] == 'reviewed':
+            return result
+    receipt = _receipt_for_review(repo, plan, wave, campaign_root,
+                                  expected_head, expected_branch)
+    names = policy_names(repo, main)
+    digest_value = digest(repo, main, tip)
+    staging = implementation_review_staging(campaign_root, plan, wave,
+                                            actual_generation, staging_root)
+    staging.mkdir(parents=True, exist_ok=True)
+    artifact, review_datum, validation = _implementation_templates(
+        plan, wave, facts, names, expected_head, expected_branch, paths)
+    _stage_template(staging, paths['evidence'], artifact)
+    _stage_template(staging, paths['review'], review_datum)
+    _stage_template(staging, paths['validation'], validation)
+    request = {'kind': 'implementation-review', 'plan-id': plan, 'wave': wave,
+               'generation': actual_generation, 'head': expected_head,
+               'branch': expected_branch, 'tip': tip,
+               'tree': git(repo, 'rev-parse', tip + '^{tree}').strip(),
+               'attempt-id': receipt['attempt-id'],
+               'attempt-fence': receipt['attempt-fence'],
+               'evidence': paths['evidence'], 'review': paths['review'],
+               'validation': paths['validation'], 'content-digest': digest_value,
+               'required-checks': list(names), 'milestone': milestone, 'issue': issue,
+               'staging': str(staging),
+               'reviewer-output': str(staging / 'reviewer-output.json'),
+               'fresh-session-required': True, 'non-author-review-required': True,
+               'prompt': _review_prompt(stage, plan, wave, expected_head, expected_branch,
+                                        paths, str(staging), digest_value, names)}
+    _stage_request(staging, request)
+    return {'status': 'awaiting-review', 'stage': 'implementation-review',
+            'request': request}
+
+
+def _prepare_binding(repo, plan, wave, expected_head, expected_branch,
+                     campaign_root, generation, staging_root):
+    staging = require_binding_output(staging_root, campaign_root, plan, wave, generation)
+    staged = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
+    if staged['status'] == 'reviewed':
+        return staged
+    require(staged['status'] == 'pending-review',
+            'the binding staging is %s; only a pending-review draft may dispatch a fresh '
+            'reviewer (run binding-prepared first)' % staged['status'])
+    receipt = _receipt_for_review(repo, plan, wave, campaign_root,
+                                  expected_head, expected_branch)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    names = policy_names(repo, main)
+    artifact = Path(staged['binding']).name
+    paths = {'evidence': staged['binding'],
+             'review': f'docs/reports/gsd-wave-reviews/{artifact}',
+             'validation': f'docs/reports/gsd-wave-validation/{artifact}'}
+    request = {'kind': 'binding-review', 'plan-id': plan, 'wave': wave,
+               'generation': generation, 'head': expected_head,
+               'branch': expected_branch, 'merge-sha': staged['merge-sha'],
+               'delivery-head-sha': staged['delivery-head-sha'],
+               'binding-branch': staged['branch'],
+               'attempt-id': receipt['attempt-id'],
+               'attempt-fence': receipt['attempt-fence'],
+               'evidence': paths['evidence'], 'review': paths['review'],
+               'validation': paths['validation'], 'content-digest': EMPTY_SHA,
+               'required-checks': list(names), 'staging': str(staging),
+               'reviewer-output': str(staging / 'reviewer-output.json'),
+               'fresh-session-required': True, 'non-author-review-required': True,
+               'prompt': _review_prompt('binding-review', plan, wave, expected_head,
+                                        expected_branch, paths, str(staging),
+                                        EMPTY_SHA, names)}
+    _stage_request(staging, request)
+    return {'status': 'awaiting-review', 'stage': 'binding-review', 'request': request}
+
+
+def _load_dispatch_request(staging, plan, wave, generation, expected_head,
+                           expected_branch, stage):
+    path = Path(staging) / 'request.json'
+    require(path.is_file() and not path.is_symlink(),
+            'no review dispatch request at %s; run prepare first' % path)
+    try:
+        request = json.loads(path.read_text())
+    except ValueError as error:
+        raise Pending('the review dispatch request is malformed: %s' % error) from error
+    require(isinstance(request, dict) and
+            request.get('kind') == stage and
+            request.get('plan-id') == plan and
+            request.get('wave') == wave and
+            request.get('generation') == generation and
+            request.get('head') == expected_head and
+            request.get('branch') == expected_branch,
+            'the dispatch identity does not match the durable receipt; rerun prepare')
+    return request
+
+
+def _commit_candidate(repo, base_tip, datums, message):
+    """Create a local evidence-only candidate; NEVER change remote refs."""
+    require(isinstance(datums, dict) and datums, 'the review publication has no artifacts')
+    for relative in datums:
+        require(isinstance(relative, str) and relative.startswith(EXCLUDED_PREFIXES),
+                'the review publication may only touch excluded evidence paths: ' + relative)
+    with tempfile.TemporaryDirectory(prefix='q-auto-review-') as temp:
+        worktree = Path(temp) / 'wt'
+        git(repo, 'worktree', 'add', '--detach', str(worktree), base_tip)
+        try:
+            for relative, datum in datums.items():
+                target = worktree / relative
+                require(not target.is_symlink(), 'the candidate artifact is a symlink')
+                if target.exists():
+                    require(target.is_file(), 'the candidate artifact is not a file')
+                    target.unlink()
+                write_rktd(datum, target)
+            git(worktree, 'add', '--', *sorted(datums))
+            git(worktree, '-c', 'user.name=gsd-delivery-controller',
+                '-c', 'user.email=gsd-delivery@invalid',
+                'commit', '--no-gpg-sign', '-m', message)
+            commit = git(worktree, 'rev-parse', 'HEAD').strip()
+        finally:
+            try:
+                git(repo, 'worktree', 'remove', '--force', str(worktree))
+            except Pending:
+                pass
+    return commit
+
+
+def _publish_candidate(repo, branch, base_tip, commit):
+    """Publish an already validated candidate with pinned non-force readback."""
+    git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + branch)
+    remote = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
+    if remote != base_tip:
+        raise _ReviewInfra(
+            'the remote branch diverged from the prepared review tip during review '
+            '(%s != %s); the dispatch is stale and was not published'
+            % (remote[:12], base_tip[:12]))
+    try:
+        git(repo, 'push', '--no-tags', 'origin', f'{commit}:refs/heads/{branch}')
+        git(repo, 'fetch', '--no-tags', 'origin',
+            f'refs/heads/{branch}:refs/remotes/origin/{branch}')
+        readback = git(repo, 'rev-parse', 'refs/remotes/origin/' + branch).strip()
+    except Pending as error:
+        raise _ReviewInfra('publishing the reviewed artifacts failed: %s' % error) from error
+    require(readback == commit,
+            'the reviewed publication readback does not match the published commit')
+    return commit
+
+
+def _require_review_evidence_tail(repo, head, tip):
+    """Every tail commit must be evidence-only, not just its aggregate diff."""
+    require_receipt_tip(repo, head, tip, 'review')
+    for commit in git(repo, 'rev-list', head + '..' + tip).splitlines():
+        changed = git(repo, 'diff-tree', '-m', '--no-commit-id', '--name-only',
+                      '--no-renames', '-r', commit).splitlines()
+        require(all(path.startswith(EXCLUDED_PREFIXES) for path in changed),
+                'the review ancestry contains non-evidence paths')
+
+
+def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, receipt):
+    blob = blob_or_none(repo, tip, relative)
+    if blob is None:
+        return None
+    with tempfile.TemporaryDirectory(prefix='q-rejected-') as temp:
+        path = Path(temp) / 'rejected.rktd'
+        path.write_bytes(blob)
+        datum = read_datum(path)
+    require(isinstance(datum, dict), 'the committed review is malformed')
+    if datum.get('verdict') == 'APPROVED':
+        return None  # Only the unchanged strict trio gate can approve.
+    require(datum.get('verdict') == 'REQUEST_CHANGES',
+            'the committed review has an invalid verdict')
+    require(tip != receipt['head'] and
+            blob != blob_or_none(repo, receipt['head'], relative),
+            'the rejected review is not a published evidence tail')
+    identity = {'stage': 'implementation-review', 'plan-id': plan,
+                'wave': f'W{wave}', 'generation': generation,
+                'head': receipt['head'], 'reviewed-sha': receipt['head'],
+                'branch': receipt['branch'], 'attempt-id': receipt['attempt-id'],
+                'attempt-fence': receipt['attempt-fence']}
+    require(all(datum.get(key) == value and type(datum.get(key)) is type(value)
+                for key, value in identity.items()),
+            'the committed rejection does not match the exact receipt/generation')
+    require(isinstance(datum.get('timestamp'), str) and
+            re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', datum['timestamp']),
+            'the committed rejection timestamp is malformed')
+    try:
+        output = validate_reviewer_output(dict(datum, kind='request-changes'))
+    except _ReviewInfra as error:
+        raise Pending('the committed rejection is malformed: %s' % error) from error
+    return {'status': 'review-rejected', 'stage': 'implementation-review',
+            'plan-id': plan, 'wave': wave, 'generation': generation,
+            'head': receipt['head'], 'branch': receipt['branch'],
+            'attempt-id': receipt['attempt-id'], 'attempt-fence': receipt['attempt-fence'],
+            'postmerge': False, 'findings': output['findings'], 'tip': tip}
+
+
+def _verify_rejected_artifact(repo, tip, relative, expected_head, findings):
+    """SEPARATE structural rejection validation (the strict APPROVED gate is
+    never weakened to carry a rejection verdict through)."""
+    blob = blob_or_none(repo, tip, relative)
+    require(blob is not None, 'the rejected review artifact is absent at the published tip')
+    with tempfile.TemporaryDirectory(prefix='q-rejected-') as temp:
+        path = Path(temp) / 'rejected.rktd'
+        path.write_bytes(blob)
+        datum = read_datum(path)
+    require(isinstance(datum, dict) and datum.get('verdict') == 'REQUEST_CHANGES' and
+            datum.get('reviewed-sha') == expected_head and
+            datum.get('head') == expected_head and datum.get('findings') == findings,
+            'the committed rejection failed its structural validation')
+
+
+def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
+                             campaign_root, generation, staging_root, reviewer_output):
+    staging = implementation_review_staging(campaign_root, plan, wave, generation,
+                                            staging_root)
+    request = _load_dispatch_request(staging, plan, wave, generation, expected_head,
+                                     expected_branch, 'implementation-review')
+    receipt = _receipt_for_review(repo, plan, wave, campaign_root,
+                                  expected_head, expected_branch)
+    require(all(request.get(key) == receipt.get(key)
+                for key in ('head', 'branch', 'attempt-id', 'attempt-fence')),
+            'the dispatch identity does not match the exact durable receipt; rerun prepare')
+    facts = snapshot_facts(campaign_root, plan, wave)
+    milestone, issue = facts.get('milestone'), facts.get('issue')
+    require(isinstance(milestone, int) and milestone > 0 and
+            isinstance(issue, int) and issue > 0,
+            'the frozen wave facts carry no positive milestone/issue for the review trio')
+    paths = active_declared_outputs(facts, repo, plan, wave, generation)
+    refresh(repo)
+    main = git(repo, 'rev-parse', 'refs/remotes/origin/main').strip()
+    require(full_sha(main), 'malformed origin/main head')
+    git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + expected_branch)
+    tip = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
+    require(full_sha(tip), 'malformed fetched receipt branch tip')
+    require_receipt_tip(repo, expected_head, tip, 'review')
+    if tip != request.get('tip'):
+        raise _ReviewInfra('the receipt branch moved after the review dispatch was '
+                           'prepared; rerun prepare')
+    output = load_reviewer_output(reviewer_output)
+    if output['kind'] == 'request-changes':
+        rejected = {'stage': 'implementation-review', 'plan-id': plan, 'wave': f'W{wave}',
+                    'verdict': 'REQUEST_CHANGES', 'reviewer': output['reviewer'],
+                    'timestamp': _iso_now(), 'reviewed-sha': expected_head,
+                    'head': expected_head, 'branch': expected_branch,
+                    'attempt-id': receipt['attempt-id'],
+                    'attempt-fence': receipt['attempt-fence'], 'generation': generation,
+                    'findings': output['findings'], 'scope': output['scope'],
+                    'report': output['report']}
+        candidate = _commit_candidate(repo, tip, {paths['review']: rejected},
+                                      f'W{wave} review rejected: {plan}-w{wave}')
+        _require_review_evidence_tail(repo, expected_head, candidate)
+        _verify_rejected_artifact(repo, candidate, paths['review'], expected_head,
+                                  output['findings'])
+        _recover_rejected_artifact(repo, candidate, paths['review'], plan, wave,
+                                   generation, receipt)
+        tip_now = _publish_candidate(repo, expected_branch, tip, candidate)
+        return _recover_rejected_artifact(repo, tip_now, paths['review'], plan, wave,
+                                          generation, receipt)
+    # approved: the controller binds every digest and head; the reviewer's
+    # prose never becomes authority. Only the strict gate below can produce
+    # the reviewed verdict.
+    content = digest(repo, main, tip)
+    names = policy_names(repo, main)
+    evidence = {'schema-version': 2, 'plan-id': plan, 'wave': f'W{wave}',
+                'milestone': milestone, 'issue': issue, 'status': 'ready-for-merge',
+                'implementation-sha': expected_head, 'content-digest': content,
+                'branch': expected_branch, 'required-checks': list(names),
+                'required-pr-checks': list(names), 'review-artifact': paths['review'],
+                'validation-artifact': paths['validation']}
+    review_datum = {'reviewer': output['reviewer'], 'verdict': 'APPROVED',
+                    'timestamp': _iso_now(), 'reviewed-sha': expected_head,
+                    'content-digest': content, 'scope': output['scope'],
+                    'report': output['report']}
+    gates = output['validation']
+    validation = {'status': 'current', 'planning-sync': 'current',
+                  'milestone': milestone, 'wave': f'W{wave}', 'issue': issue,
+                  'branch': expected_branch, 'implementation-sha': expected_head,
+                  'content-digest': content, 'red-first': gates['red-first'],
+                  'focused-tests': gates['focused-tests'],
+                  'format-compile': gates['format-compile'], 'lint': gates['lint'],
+                  'fast': gates['fast'], 'review-artifact': paths['review'],
+                  'remaining-items': gates['remaining-items']}
+    candidate = _commit_candidate(repo, tip,
+                                   {paths['evidence']: evidence,
+                                    paths['review']: review_datum,
+                                    paths['validation']: validation},
+                                   f'W{wave} independent review: {plan}-w{wave}')
+    try:
+        _require_review_evidence_tail(repo, expected_head, candidate)
+        validate_trio(repo, candidate, paths['evidence'], main)
+    except Pending as error:
+        raise _ReviewInfra('the local candidate failed the unchanged strict gate: %s'
+                           % error) from error
+    new_tip = _publish_candidate(repo, expected_branch, tip, candidate)
+    _require_review_evidence_tail(repo, expected_head, new_tip)
+    validate_trio(repo, new_tip, paths['evidence'], main)
+    return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
+            'reviewed-sha': expected_head, 'review-artifact': paths['review'],
+            'tip': new_tip}
+
+
+def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
+                      campaign_root, generation, staging_root, reviewer_output):
+    staging = require_binding_output(staging_root, campaign_root, plan, wave, generation)
+    staged = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
+    if staged['status'] == 'reviewed':
+        return dict(staged, stage='binding-review', head=expected_head,
+                    branch=expected_branch, postmerge=True)
+    require(staged['status'] == 'pending-review',
+            'the binding staging is %s; only a pending-review draft can be finalized'
+            % staged['status'])
+    request = _load_dispatch_request(staging, plan, wave, generation, expected_head,
+                                     expected_branch, 'binding-review')
+    receipt = _receipt_for_review(repo, plan, wave, campaign_root,
+                                  expected_head, expected_branch)
+    output = load_reviewer_output(reviewer_output)
+    artifact = Path(staged['binding']).name
+    review_rel = f'docs/reports/gsd-wave-reviews/{artifact}'
+    evidence_path = staging / 'docs/reports/gsd-wave-evidence' / artifact
+    review_path = staging / 'docs/reports/gsd-wave-reviews' / artifact
+    validation_path = staging / 'docs/reports/gsd-wave-validation' / artifact
+    evidence = read_datum(evidence_path)
+    if output['kind'] == 'request-changes':
+        rejected = {'stage': 'binding-review', 'plan-id': plan, 'wave': f'W{wave}',
+                    'verdict': 'REQUEST_CHANGES', 'reviewer': output['reviewer'],
+                    'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
+                    'head': expected_head, 'branch': staged['branch'],
+                    'findings': output['findings'], 'scope': output['scope'],
+                    'report': output['report']}
+        write_rktd(rejected, staging / 'review-rejected.rktd')
+        return {'status': 'review-rejected', 'stage': 'binding-review',
+                'plan-id': plan, 'wave': wave, 'head': expected_head,
+                'branch': expected_branch, 'attempt-id': receipt['attempt-id'],
+                'attempt-fence': receipt['attempt-fence'], 'postmerge': True,
+                'findings': output['findings']}
+    gates = output['validation']
+    evidence = dict(evidence, status='ready-for-merge', **{'content-digest': EMPTY_SHA})
+    review_datum = {'reviewer': output['reviewer'], 'verdict': 'APPROVED',
+                    'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
+                    'content-digest': EMPTY_SHA, 'scope': output['scope'],
+                    'report': output['report']}
+    validation = {'status': 'current', 'planning-sync': 'current',
+                  'milestone': evidence['milestone'], 'wave': evidence['wave'],
+                  'issue': evidence['issue'], 'branch': staged['branch'],
+                  'implementation-sha': staged['merge-sha'],
+                  'content-digest': EMPTY_SHA, 'red-first': gates['red-first'],
+                  'focused-tests': gates['focused-tests'],
+                  'format-compile': gates['format-compile'], 'lint': gates['lint'],
+                  'fast': gates['fast'], 'review-artifact': review_rel,
+                  'remaining-items': gates['remaining-items']}
+    for path, datum in ((evidence_path, evidence), (review_path, review_datum),
+                        (validation_path, validation)):
+        path.unlink()
+        write_rktd(datum, path)
+    result = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
+    require(result['status'] == 'reviewed',
+            'the finalized staged trio failed the strict binding gate: %s'
+            % result.get('status'))
+    return dict(result, stage='binding-review', head=expected_head,
+                branch=expected_branch, postmerge=True)
+
+
+def auto_review(repo, plan, wave, phase, stage, expected_head, expected_branch,
+                campaign_root, generation, staging_root, reviewer_output=None):
+    """The auto-review port (see the block comment above). `prepare` decides
+    dispatchability through the unchanged validation paths; `finalize` binds
+    digests, publishes evidence-only with a pinned non-force push and lets
+    only the strict gates produce a reviewed verdict."""
+    require(isinstance(plan, str) and re.fullmatch('[0-9a-f]{64}', plan),
+            'invalid campaign id')
+    require(type(wave) is int and wave >= 0, 'invalid wave index')
+    require(phase in ('prepare', 'finalize'), 'invalid auto-review phase')
+    require(stage in AUTO_REVIEW_STAGES, 'invalid auto-review stage')
+    require(isinstance(expected_head, str) and full_sha(expected_head),
+            'auto-review requires the durable receipt head')
+    require(isinstance(expected_branch, str) and expected_branch.strip(),
+            'auto-review requires the durable receipt branch')
+    require(campaign_root is not None, 'auto-review requires --campaign-root')
+    require(type(generation) is int and generation >= 0, 'invalid binding generation')
+    require(staging_root is not None, 'auto-review requires --staging-root')
+    require(generation == journal_generation(repo, plan, wave, campaign_root),
+            'the review binding generation does not match the authoritative journal')
+    try:
+        if phase == 'prepare':
+            return auto_review_prepare(repo, plan, wave, stage, expected_head,
+                                       expected_branch, campaign_root, generation,
+                                       staging_root)
+        require(reviewer_output is not None, 'finalize requires --reviewer-output')
+        if stage == 'binding-review':
+            return _finalize_binding(repo, plan, wave, expected_head, expected_branch,
+                                     campaign_root, generation, staging_root,
+                                     reviewer_output)
+        return _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
+                                        campaign_root, generation, staging_root,
+                                        reviewer_output)
+    except _ReviewInfra as error:
+        return {'status': 'review-infra', 'reason': str(error)}
+
+
 def governance(repo, plan, wave, expected_branch):
     """Validate the merged binding publication and its protected-main governance run."""
     require(isinstance(expected_branch, str) and expected_branch.strip(),
@@ -1934,7 +2634,7 @@ def main():
     parser.add_argument('action', choices=['status','prepare','sync','merge','resolve-pr','review',
                                            'open-pr','pr-ci','binding-review','binding-publish',
                                            'binding-resolve-pr','binding-pr','binding-ci','binding-merge',
-                                           'governance','preflight','publish-head'])
+                                           'governance','preflight','publish-head','auto-review'])
     parser.add_argument('--repo', type=Path, required=True)
     parser.add_argument('--plan')
     parser.add_argument('--wave', type=int)
@@ -1953,6 +2653,16 @@ def main():
                         help='campaign working tree holding .planning/campaigns/<plan-id>/plan-snapshot')
     parser.add_argument('--generation', type=int,
                         help='authoritative binding generation expected by the coordinator')
+    parser.add_argument('--phase', choices=['prepare','finalize'],
+                        help='auto-review phase: prepare the gate-red template and typed '
+                             'request, or finalize a fresh reviewer result through the '
+                             'unchanged strict gates')
+    parser.add_argument('--stage', choices=['implementation-review','binding-review'],
+                        help='the delivery stage the auto-review dispatch serves')
+    parser.add_argument('--staging-root', type=Path,
+                        help='deterministic campaign-local review staging directory')
+    parser.add_argument('--reviewer-output', type=Path,
+                        help='the fresh reviewer session typed result (coordinator-written)')
     args = parser.parse_args()
     try:
         if args.action == 'sync':
@@ -2023,6 +2733,16 @@ def main():
                     'publish-head requires --expected-head, --expected-branch, --expected-origin and --expected-tree')
             result = publish_head(args.repo, args.expected_branch, args.expected_head,
                                   args.expected_origin, args.expected_tree, args.plan, args.wave)
+        elif args.action == 'auto-review':
+            require(args.phase and args.stage and args.expected_head and args.expected_branch and
+                    args.campaign_root is not None and args.generation is not None and
+                    args.staging_root is not None,
+                    'auto-review requires --phase, --stage, --expected-head, --expected-branch, '
+                    '--campaign-root, --generation and --staging-root')
+            result = auto_review(args.repo, args.plan, args.wave, args.phase, args.stage,
+                                 args.expected_head, args.expected_branch,
+                                 args.campaign_root, args.generation, args.staging_root,
+                                 args.reviewer_output)
         elif args.action == 'governance':
             require(args.expected_branch, 'governance requires --expected-branch')
             result = governance(args.repo, args.plan, args.wave, args.expected_branch)

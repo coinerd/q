@@ -351,3 +351,108 @@
                                                             fresh-candidate
                                                             #:expected-attempt-id "attempt-1"
                                                             #:expected-fence 7)))))))
+
+;; Automatic-review slice A: the REAL cross-attempt supersession path. A
+;; rejected attempt-1 receipt (durable review-rejection marker recorded by
+;; resolve-review-rejection!) authorizes the retry attempt's approved
+;; Verify to supersede the old receipt: old receipt + trio preserved as
+;; immutable history (generation +1 exactly once), stage reset to
+;; context-ready, new receipt bound to the live attempt. Without the
+;; durable marker the same cross-attempt verify still fails closed.
+(test-case "authorized cross-attempt Verify supersedes a rejected receipt once"
+  (with-root (lambda (root)
+               (define record-review-rejection!
+                 (dynamic-require journal-module 'record-review-rejection!))
+               (define old-receipt
+                 (hash-set* identity
+                            'verified-at
+                            1
+                            'evidence
+                            "Verify passed"
+                            'attempt-id
+                            "attempt-1"
+                            'attempt-fence
+                            7))
+               (record-delivery-receipt! root plan 2 old-receipt)
+               (record-review-rejection! root
+                                         plan
+                                         2
+                                         #:findings '("w1-r1 evidence trio missing")
+                                         #:expected-attempt-id "attempt-1"
+                                         #:expected-fence 7
+                                         #:max-rejection-retries 1)
+               ;; the retry attempt is live on the same wave branch at a fresh head
+               (define rec (done-record))
+               (define w (car (campaign-record-waves rec)))
+               (set-campaign-wave-status! w 'verifying)
+               (set-campaign-wave-current-attempt! w (campaign-attempt "attempt-2" 7 0))
+               (define new-head (make-string 40 #\d))
+               (define fresh-snapshot (hash-set identity 'head new-head))
+               (define result
+                 (verify-with-delivery-receipt root
+                                               plan
+                                               2
+                                               root
+                                               (lambda () 'approved)
+                                               #:approved? (lambda (v) (eq? v 'approved))
+                                               #:evidence (lambda (_) "full Verify log")
+                                               #:remote-published (lambda (_repo _branch _head) #t)
+                                               #:snapshot (lambda (_) fresh-snapshot)
+                                               #:attempt (campaign-attempt "attempt-2" 7 0)
+                                               #:current-record (lambda () rec)))
+               (check-eq? result 'approved)
+               (define journal (load-delivery-journal root plan 2))
+               (check-equal? (hash-ref (hash-ref journal 'receipt) 'attempt-id) "attempt-2")
+               (check-equal? (hash-ref (hash-ref journal 'receipt) 'head) new-head)
+               (check-equal? (hash-ref journal 'receipt-history)
+                             (list old-receipt)
+                             "the rejected receipt is preserved immutably (generation 1)")
+               (check-equal? (hash-ref journal 'stage) "context-ready")
+               ;; replay at the superseded head is the ordinary idempotent path
+               (verify-with-delivery-receipt root
+                                             plan
+                                             2
+                                             root
+                                             (lambda () 'approved)
+                                             #:approved? (lambda (v) (eq? v 'approved))
+                                             #:evidence (lambda (_) "full Verify log")
+                                             #:remote-published (lambda (_repo _branch _head) #t)
+                                             #:snapshot (lambda (_) fresh-snapshot)
+                                             #:attempt (campaign-attempt "attempt-2" 7 0)
+                                             #:current-record (lambda () rec))
+               (check-equal? (hash-ref (load-delivery-journal root plan 2) 'receipt-history)
+                             (list old-receipt)
+                             "generation advances exactly once"))))
+
+(test-case "unmarked cross-attempt Verify still fails closed"
+  (with-root (lambda (root)
+               (define old-receipt
+                 (hash-set* identity
+                            'verified-at
+                            1
+                            'evidence
+                            "Verify passed"
+                            'attempt-id
+                            "attempt-1"
+                            'attempt-fence
+                            7))
+               (record-delivery-receipt! root plan 2 old-receipt)
+               (define rec (done-record))
+               (define w (car (campaign-record-waves rec)))
+               (set-campaign-wave-status! w 'verifying)
+               (set-campaign-wave-current-attempt! w (campaign-attempt "attempt-2" 7 0))
+               (define fresh-snapshot (hash-set identity 'head (make-string 40 #\d)))
+               (verify-with-delivery-receipt root
+                                             plan
+                                             2
+                                             root
+                                             (lambda () 'approved)
+                                             #:approved? (lambda (v) (eq? v 'approved))
+                                             #:evidence (lambda (_) "full Verify log")
+                                             #:remote-published (lambda (_repo _branch _head) #t)
+                                             #:snapshot (lambda (_) fresh-snapshot)
+                                             #:attempt (campaign-attempt "attempt-2" 7 0)
+                                             #:current-record (lambda () rec))
+               (define journal (load-delivery-journal root plan 2))
+               (check-equal? (hash-ref (hash-ref journal 'receipt) 'attempt-id) "attempt-1")
+               (check-equal? (hash-ref journal 'receipt-history '()) '()))))

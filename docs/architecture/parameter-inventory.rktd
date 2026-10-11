@@ -91,6 +91,9 @@
  ("extensions/gsd/delivery-publication.rkt" (current-gsd-approved-head-publisher . OTHER_REVIEWED))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
+ ;; Request-scoped fresh reviewer port, carried by production /go requests
+ ;; across the TUI thread and SDK boundary; #f preserves manual fixtures.
+ ("extensions/gsd/review-dispatch.rkt" (current-gsd-auto-review-runner . SERVICE_HANDLE))
  ;; test seam: overrides the version-freshness probe (running version vs
  ;; checkout) so tests can simulate a stale build; never set in prod
  ("extensions/gsd/freshness.rkt" (current-gsd-freshness-check . OTHER_REVIEWED))
@@ -101,6 +104,11 @@
  ("extensions/gsd/policy.rkt" (current-gsd-wave-max-iterations . CONFIGURATION)
                               (current-gsd-wave-no-change-retries . CONFIGURATION)
                               (current-gsd-wave-verification-repair-retries . CONFIGURATION)
+                              ;; Automatic independent review slice A: the
+                              ;; bounded persistent rejection-retry ceiling
+                              ;; (default 1); consumed count is durable in
+                              ;; the delivery journal, never in this param.
+                              (current-gsd-wave-review-rejection-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retries . CONFIGURATION)
                               (current-gsd-campaign-infra-retry-delay . TURN_LOCAL)
                               ;; BUG-0067: slow-lane patience/backoff knobs —

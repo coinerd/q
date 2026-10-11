@@ -75,6 +75,7 @@
          "go-orchestrator.rkt"
          "delivery-verifier.rkt"
          (only-in "delivery-coordinator.rkt" default-delivery-coordinator)
+         (only-in "review-session.rkt" make-auto-review-runner)
          (only-in "delivery-handoff.rkt" delivery-readback delivered-proof-merge-sha)
          (only-in "delivery-journal.rkt" load-delivery-journal)
          (only-in "../../runtime/settings-core.rkt" load-global-settings)
@@ -766,6 +767,9 @@
                ;; gsd-delivery.py through the credential boundary). No
                ;; implementation wave is rerun to repair delivery.
                #:delivery-coordinator default-delivery-coordinator
+               ;; Carried on the request across the TUI campaign thread and
+               ;; SDK boundary; never reuse the implementation prompt runner.
+               #:auto-review-runner (make-auto-review-runner base-dir (campaign-plan-id rec))
                ;; v1.00.19 W3 (BUG-0031): the trailing `allow-stale` token
                ;; parsed out of /go <args> by command-parser.rkt flows onto
                ;; the request; execute-campaign-request! then bypasses the

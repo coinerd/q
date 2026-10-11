@@ -57,56 +57,56 @@
  ;; Permanent waivers remain tracked by exception-count and boundary-drift gates.
  (known-exceptions
   (runtime
-   .
-   ((layer-adapters.rkt
-     (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
-     (owner . "runtime")
-     (permanent-waiver . #t)
-      (waiver-justification
-       . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
-    (permission/permission-gate.rkt
-     (rationale . "BUG-0055 facade: spawn-approval (tools/builtins) consumes the resolved permission policy through this re-export plus the spawn auto-grant rule; dated so the rule relocates next to its canonical config after the W3 series")
-     (owner . "runtime")
-     (revisit-by . "2026-12-31"))
-))
+   . ((layer-adapters.rkt
+       (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
+       (owner . "runtime")
+       (permanent-waiver . #t)
+       (waiver-justification
+        . "The adapter is the intentional composition boundary that contains all runtime-to-tool and runtime-to-extension wiring; removing it would spread forbidden imports across runtime consumers."))
+      (permission/permission-gate.rkt
+       (rationale
+        . "BUG-0055 facade: spawn-approval (tools/builtins) consumes the resolved permission policy through this re-export plus the spawn auto-grant rule; dated so the rule relocates next to its canonical config after the W3 series")
+       (owner . "runtime")
+       (revisit-by . "2026-12-31"))))
   (agent . ())
   (extensions
-   .
-   ((dialog-api.rkt
-    (rationale . "UI dialog primitives bridge to shared ui-core protocol layer (TUI-adjacent, not tui/)")
-    (owner . "tui")
-    (permanent-waiver . #t)
-    (waiver-justification
-     . "Intentional UI bridge (v0.99.88 W4): extension dialog primitives (ctx-notify/ctx-confirm/ctx-select, #721-724) integrate via the shared ui-core/ui-state-protocol layer (F3 extraction) that re-exports ui-state from tui/state-types. dialog-api is extension-framework infrastructure (runtime/extension-catalog.rkt infra list) and documented in docs/api-stability.md. No neutral ui-state protocol exists outside TUI; building one would be an abstract UI framework, which the roadmap prohibits. Consumers: extension framework + tests/test-dialog-api.rkt.")
-    (boundary . ui)
-    (destinations . ("ui-core/ui-state-protocol.rkt")))
-   (ui-surface.rkt
-    (rationale . "UI surface interface callbacks bridge to shared ui-core actions (TUI-adjacent, not tui/)")
-    (owner . "tui")
-    (permanent-waiver . #t)
-    (waiver-justification
-     . "Intentional UI bridge (v0.99.88 W4): extensions call UI callbacks via the parameter registry instead of importing TUI internals (ARCH-02 break); ui-core/ui-actions.rkt is the shared action protocol layer (F4). Static production consumers install callbacks: tui/tui-init.rkt and gui/main.rkt; extensions/widget-api.rkt and extensions/custom-ui-api.rkt depend on it. ui-core/ui-actions re-exports event types and runtime/settings-query.rkt; no neutral location exists without building an abstract UI framework.")
-    (boundary . ui)
-    (destinations . ("ui-core/ui-actions.rkt")))
-   (widget-lifecycle.rkt
-    (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
-    (owner . "extensions")
-    (permanent-waiver . #t)
-    (waiver-justification
-     . "Intentional TUI component-model bridge (v0.99.88 W4): lifecycle widgets convert to q-components via widget->component using make-q-component/q-component? from tui/component.rkt; the q-component protocol lives in the TUI component model with no neutral equivalent (building one would be an abstract UI framework, which the roadmap prohibits). Shipped extension feature (#5253/#5254) listed as an available extension (non-infra; /activate); consumers: extension authors + tests/test-widget-lifecycle.rkt.")
-    (boundary . tui)
-    (destinations . ("tui/component.rkt")))
-   ;; v0.99.88 W2: context.rkt exception REMOVED — the provider-registry
-   ;; service is injected as a neutral host capability; the concrete registry
-   ;; import lives only in runtime/extension-host-adapter.rkt (pinned by
-   ;; H3 in tests/test-arch-fitness.rkt).
-   ;; v0.99.88 W3: ext-package-manager.rkt exception REMOVED — the package
-   ;; lifecycle capability is injected as a neutral package-host-service; the
-   ;; concrete runtime/package.rkt import lives only in
-   ;; runtime/extension-host-adapter.rkt (pinned by H5 in
-   ;; tests/test-arch-fitness.rkt). MA-04 closed. Zero runtime-boundary
-   ;; extension exceptions remain.
-   )))
+   . ((dialog-api.rkt
+       (rationale
+        . "UI dialog primitives bridge to shared ui-core protocol layer (TUI-adjacent, not tui/)")
+       (owner . "tui")
+       (permanent-waiver . #t)
+       (waiver-justification
+        . "Intentional UI bridge (v0.99.88 W4): extension dialog primitives (ctx-notify/ctx-confirm/ctx-select, #721-724) integrate via the shared ui-core/ui-state-protocol layer (F3 extraction) that re-exports ui-state from tui/state-types. dialog-api is extension-framework infrastructure (runtime/extension-catalog.rkt infra list) and documented in docs/api-stability.md. No neutral ui-state protocol exists outside TUI; building one would be an abstract UI framework, which the roadmap prohibits. Consumers: extension framework + tests/test-dialog-api.rkt.")
+       (boundary . ui)
+       (destinations . ("ui-core/ui-state-protocol.rkt")))
+      (ui-surface.rkt
+       (rationale
+        . "UI surface interface callbacks bridge to shared ui-core actions (TUI-adjacent, not tui/)")
+       (owner . "tui")
+       (permanent-waiver . #t)
+       (waiver-justification
+        . "Intentional UI bridge (v0.99.88 W4): extensions call UI callbacks via the parameter registry instead of importing TUI internals (ARCH-02 break); ui-core/ui-actions.rkt is the shared action protocol layer (F4). Static production consumers install callbacks: tui/tui-init.rkt and gui/main.rkt; extensions/widget-api.rkt and extensions/custom-ui-api.rkt depend on it. ui-core/ui-actions re-exports event types and runtime/settings-query.rkt; no neutral location exists without building an abstract UI framework.")
+       (boundary . ui)
+       (destinations . ("ui-core/ui-actions.rkt")))
+      (widget-lifecycle.rkt
+       (rationale . "Imports tui/component.rkt for q-component? type and make-q-component bridge")
+       (owner . "extensions")
+       (permanent-waiver . #t)
+       (waiver-justification
+        . "Intentional TUI component-model bridge (v0.99.88 W4): lifecycle widgets convert to q-components via widget->component using make-q-component/q-component? from tui/component.rkt; the q-component protocol lives in the TUI component model with no neutral equivalent (building one would be an abstract UI framework, which the roadmap prohibits). Shipped extension feature (#5253/#5254) listed as an available extension (non-infra; /activate); consumers: extension authors + tests/test-widget-lifecycle.rkt.")
+       (boundary . tui)
+       (destinations . ("tui/component.rkt")))
+      ;; v0.99.88 W2: context.rkt exception REMOVED — the provider-registry
+      ;; service is injected as a neutral host capability; the concrete registry
+      ;; import lives only in runtime/extension-host-adapter.rkt (pinned by
+      ;; H3 in tests/test-arch-fitness.rkt).
+      ;; v0.99.88 W3: ext-package-manager.rkt exception REMOVED — the package
+      ;; lifecycle capability is injected as a neutral package-host-service; the
+      ;; concrete runtime/package.rkt import lives only in
+      ;; runtime/extension-host-adapter.rkt (pinned by H5 in
+      ;; tests/test-arch-fitness.rkt). MA-04 closed. Zero runtime-boundary
+      ;; extension exceptions remain.
+      )))
  ;; Agent iteration boundary (v0.99.87+)
  ;; agent/iteration/ MUST NOT require runtime/ except the documented
  ;; exceptions below. Shared iteration protocols and type predicates belong
@@ -129,9 +129,8 @@
  ;;   - tool-turn-bridge.rkt: dead update-working-set-after-tools! removed;
  ;;     detect-read-spiral moved to runtime/iteration/step-executor.rkt
  ;;     (Runtime-owned). No runtime/ imports remain.
- (agent-iteration-boundary
-  (rule . "agent/iteration/ MUST NOT require runtime/ (zero exceptions)")
-  (exceptions . ()))
+ (agent-iteration-boundary (rule . "agent/iteration/ MUST NOT require runtime/ (zero exceptions)")
+                           (exceptions . ()))
  ;; Module size configuration
  (module-size (max-lines . 900) (known-large . ()))
  ;; Complexity budgets (informational in v0.22.8, enforced in v0.23.0)
@@ -260,10 +259,8 @@
  (pure-modules (decision . ("runtime/iteration/decision.rkt" . ()))
                (event-payloads . ("util/event-payloads.rkt" . ()))
                (event-codec . ("util/event-codec.rkt" . ()))
-               (prompt-preparation
-                . ("runtime/session/session-prompt-preparation.rkt" . ()))
-               (context-boundary
-                . ("runtime/session/session-context-boundary.rkt" . ())))
+               (prompt-preparation . ("runtime/session/session-prompt-preparation.rkt" . ()))
+               (context-boundary . ("runtime/session/session-context-boundary.rkt" . ())))
  ;; R-19: Parser modules — must not require I/O modules
  ;; Format: (module-path ...)
  (parser-modules ("extensions/gsd/command-parser.rkt" "tui/command-parse.rkt" "cli/args.rkt"))
@@ -308,7 +305,8 @@
        (owner . "tui"))
       ("tui/tui-init.rkt"
        (risk
-        . "TUI composition root with session startup, extension wiring, and campaign command integration")
+        .
+        "TUI composition root with session startup, extension wiring, and campaign command integration")
        (owner . "tui"))
       ("tui/state-events/core-handlers.rkt"
        (risk
@@ -326,8 +324,7 @@
        (owner . "extensions"))
       ("extensions/gsd/wave-docs.rkt"
        (risk
-        .
-        "Wave document I/O and PLAN.md index management: parsing, dual-write status transitions, consistency and lint surfaces; crossed the block threshold with declared-arrow-path identity (BUG-0081)")
+        . "Wave document I/O and PLAN.md index management: parsing, dual-write status transitions, consistency and lint surfaces; crossed the block threshold with declared-arrow-path identity (BUG-0081)")
        (owner . "extensions"))
       ("tui/commands.rkt"
        (risk . "TUI command dispatch with slash command routing and mode-specific handling")
@@ -357,8 +354,7 @@
        (owner . "runtime"))
       ("runtime/tool-coordinator.rkt"
        (risk
-        .
-        "Tool execution coordinator with parallel dispatch, timeout, error classification, and retry; high complexity score 21408")
+        . "Tool execution coordinator with parallel dispatch, timeout, error classification, and retry; high complexity score 21408")
        (owner . "runtime"))
       ("llm/stream.rkt"
        (risk
@@ -415,6 +411,10 @@
       ("extensions/gsd/go-orchestrator.rkt"
        (risk
         . "GSD /go campaign orchestrator: wave sequencing, failure-context steering and auto-retry wiring (#9513/#9515), role re-anchoring (#9514), worktree isolation toggling (#9512); v1.00.17 executor hardening; score 24400")
+       (owner . "extensions"))
+      ("extensions/gsd/responsibility-inventory.rkt"
+       (risk
+        . "Canonical GSD effect/dependency inventory: automatic review adds fresh-session, checkpoint, usage and receipt-worktree classifications; score 20490. Keep behavior in bounded modules; inventory drift gates cover every registered module.")
        (owner . "extensions"))
       ("extensions/gsd/wave-executor.rkt"
        (risk

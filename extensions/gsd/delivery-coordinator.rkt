@@ -35,7 +35,16 @@
                   load-remote-pending
                   record-remote-pending!
                   clear-remote-pending!
-                  remote-pending-blocker))
+                  remote-pending-blocker)
+         ;; BUG_PLAN automatic-review slice B: the automatic independent
+         ;; review dispatch port. Imported for the stage wiring ONLY — the
+         ;; hook itself (current-gsd-auto-review-runner) stays a plain
+         ;; review-dispatch export so the runtime (slice C) wires the real
+         ;; fresh-session factory without any runtime import reaching core.
+         (only-in "review-dispatch.rkt"
+                  current-gsd-auto-review-runner
+                  review-runner-installed?
+                  auto-review-dispatch!))
 
 (provide delivery-effect-result
          delivery-effect-result?
@@ -55,7 +64,8 @@
          default-delivery-controller-interpret
          parse-delivery-stop
          default-active-delivery-evidence-path
-         default-artifact-provenance-root)
+         default-artifact-provenance-root
+         review-rejected-message)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -76,14 +86,19 @@
         "delivered"))
 
 ;; A controller effect result: (cons kind data) where kind ∈
-;; 'ok | 'awaiting-review | 'retryable | 'blocked. data is a hash carrying
-;; 'stage (the requested target) plus optional 'reason and delivery usage
-;; fields ('model-calls 'tokens 'cost).
+;; 'ok | 'awaiting-review | 'retryable | 'blocked | 'review-rejected |
+;; 'review-infra. data is a hash carrying 'stage (the requested target) plus
+;; optional 'reason and delivery usage fields ('model-calls 'tokens 'cost).
+;; 'review-rejected (BUG_PLAN automatic-review slice B) is ONLY ever produced
+;; by an explicit head-bound REQUEST_CHANGES from the fresh reviewer port —
+;; carrying the exact receipt head/branch/attempt/fence + findings — and
+;; 'review-infra covers reviewer transport/timeout/stale/malformed output;
+;; neither can masquerade as the other, and neither advances the journal.
 (define (delivery-effect-result kind [data #hasheq()])
   (cons kind data))
 
 (define (delivery-effect-result? v)
-  (and (pair? v) (memq (car v) '(ok awaiting-review retryable blocked))))
+  (and (pair? v) (memq (car v) '(ok awaiting-review retryable blocked review-rejected review-infra))))
 
 (define (delivery-effect-result-kind r)
   (car r))
@@ -103,6 +118,15 @@
   (car o))
 (define (delivery-outcome-message o)
   (cdr o))
+
+;; Operator-facing message for a typed review rejection: the exact receipt
+;; identity plus every finding, so a blocked wave surfaces the genuine
+;; review verdict (never an opaque strict-gate failure) and the runtime
+;; integration (slice C) can checkpoint on it.
+(define (review-rejected-message data)
+  ;; Lossless checkpoint envelope: findings may themselves contain delimiters
+  ;; or newlines. Never parse operator prose into retry authorization.
+  (string-append "review-rejected: " (jsexpr->string data)))
 
 (define (indexof lst v)
   (let loop ([i 0]
@@ -295,6 +319,11 @@
                           (delivery-outcome
                            'awaiting-review
                            (hash-ref data 'reason "awaiting genuine independent review"))]
+                         [(review-rejected)
+                          (delivery-outcome 'review-rejected (review-rejected-message data))]
+                         [(review-infra)
+                          (delivery-outcome 'review-infra
+                                            (hash-ref data 'reason "review infrastructure failure"))]
                          [(retryable)
                           (delivery-outcome 'retryable
                                             (hash-ref data 'reason "retryable delivery failure"))]
@@ -310,6 +339,11 @@
                     (case (delivery-effect-result-kind preflight)
                       [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
                       [(retryable) (delivery-outcome 'retryable reason)]
+                      [(review-rejected)
+                       (delivery-outcome 'review-rejected
+                                         (review-rejected-message (delivery-effect-result-data
+                                                                   preflight)))]
+                      [(review-infra) (delivery-outcome 'review-infra reason)]
                       [else (blocked (format "delivery preflight: ~a" reason))])])])]
              [else
               (define result (controller dir plan wave target))
@@ -335,6 +369,11 @@
                    [(awaiting-review)
                     (delivery-outcome 'awaiting-review
                                       (hash-ref data 'reason "awaiting genuine independent review"))]
+                   [(review-rejected)
+                    (delivery-outcome 'review-rejected (review-rejected-message data))]
+                   [(review-infra)
+                    (delivery-outcome 'review-infra
+                                      (hash-ref data 'reason "review infrastructure failure"))]
                    [(retryable)
                     (delivery-outcome 'retryable
                                       (hash-ref data 'reason "retryable delivery failure"))]
@@ -435,9 +474,40 @@
 ;; untracked artifact). The idle base checkout on main, a stale head, a
 ;; wrong branch, a detached HEAD, or a dirty/untracked worktree never
 ;; qualifies: artifact bytes that merely exist somewhere are never accepted.
+;; Automatic-review slice B amendment: the automatic reviewer's evidence
+;; trio is committed AFTER the receipt head (evidence-only, same law as the
+;; controller's require_receipt_tip), so a checkout that is a CLEAN
+;; receipt-branch descendant whose receipt-head..HEAD diff touches only
+;; excluded evidence directories ALSO qualifies. Non-evidence drift after
+;; the receipt is still refused outright (no source drift tolerated).
 ;; Only marker-less synthetic fixtures/plain source trees keep the legacy
 ;; root on Git enumeration failure. A Git marker with an unavailable or
 ;; corrupt repository MUST fail closed rather than inspecting idle main.
+(define excluded-evidence-prefixes
+  (list "docs/reports/gsd-wave-evidence/"
+        "docs/reports/gsd-wave-reviews/"
+        "docs/reports/gsd-wave-validation/"))
+
+;; The receipt-tip law for a checkout HEAD: exactly the receipt head, or a
+;; descendant over a strictly evidence-only tail (same ancestry +
+;; excluded-diff rule the trusted controller enforces on the branch tip).
+(define (receipt-lawful-checkout-head? run-git worktree receipt-head head)
+  (or (equal? head receipt-head)
+      (and (string? head)
+           (full-sha-string? head)
+           (let-values ([(anc-code _out)
+                         (run-git worktree (list "merge-base" "--is-ancestor" receipt-head head))])
+             (and (zero? anc-code)
+                  (let-values ([(dcode dout) (run-git worktree
+                                                      (list "diff" "--name-only" receipt-head head))])
+                    (and (zero? dcode)
+                         (andmap (lambda (line)
+                                   (define path (string-trim line))
+                                   (or (zero? (string-length path))
+                                       (ormap (lambda (prefix) (string-prefix? path prefix))
+                                              excluded-evidence-prefixes)))
+                                 (string-split dout "\n")))))))))
+
 (define (default-artifact-provenance-root base-dir plan wave #:run-git [run-git shell-git])
   (define repo
     (if (or (directory-exists? (build-path base-dir ".git"))
@@ -453,10 +523,11 @@
         (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
         (define receipt-head (default-delivery-receipt-head base-dir plan wave))
         (define (clean-exact-receipt-checkout? entry)
-          (and (equal? (list-ref entry 2) receipt-branch)
-               (equal? (list-ref entry 1) receipt-head)
-               (let-values ([(scode out) (run-git (list-ref entry 0) '("status" "--porcelain"))])
-                 (and (zero? scode) (equal? (string-trim out) "")))))
+          (and
+           (equal? (list-ref entry 2) receipt-branch)
+           (receipt-lawful-checkout-head? run-git (list-ref entry 0) receipt-head (list-ref entry 1))
+           (let-values ([(scode out) (run-git (list-ref entry 0) '("status" "--porcelain"))])
+             (and (zero? scode) (equal? (string-trim out) "")))))
         (for/first ([entry (in-list (parse-worktree-porcelain listing))]
                     #:when (clean-exact-receipt-checkout? entry))
           (string->path (list-ref entry 0))))))
@@ -610,21 +681,24 @@
                      "--expected-branch"
                      (default-delivery-receipt-branch base-dir plan wave))]
     [("implementation-review")
-     ;; Durable review validation at the receipt identity: the frozen
-     ;; binding-named evidence trio plus the schema-2 review artifact are
-     ;; validated by the unchanged strict gate at the receipt head (never
-     ;; the working tree). The review itself is produced by a genuine
-     ;; independent non-author reviewer outside the controller; its absence
-     ;; is a typed awaiting-review, never fabricated progress.
-     (run-controller "review"
-                     "--expected-head"
-                     (default-delivery-receipt-head base-dir plan wave)
-                     "--expected-branch"
-                     (default-delivery-receipt-branch base-dir plan wave)
-                     "--campaign-root"
-                     (path->string base-dir)
-                     "--generation"
-                     (number->string (binding-generation base-dir plan wave)))]
+     ;; Installed production runner: prepare -> fresh independent review ->
+     ;; trusted strict validation/publication. Absent ports retain manual
+     ;; validation; a typed dispatch refusal never falls back to approval.
+     (or (and (review-runner-installed?)
+              (auto-review-dispatch! base-dir
+                                     plan
+                                     wave
+                                     "implementation-review"
+                                     #:generation (binding-generation base-dir plan wave)))
+         (run-controller "review"
+                         "--expected-head"
+                         (default-delivery-receipt-head base-dir plan wave)
+                         "--expected-branch"
+                         (default-delivery-receipt-branch base-dir plan wave)
+                         "--campaign-root"
+                         (path->string base-dir)
+                         "--generation"
+                         (number->string (binding-generation base-dir plan wave))))]
     [("implementation-pr")
      ;; Resolve the durable branch identity first. A missing open PR is the
      ;; only blocked result that may proceed to deterministic creation; API,
@@ -752,15 +826,24 @@
                      "--expected-head"
                      (default-delivery-receipt-head base-dir plan wave))]
     [("binding-review")
-     ;; Validate the staged draft and its rebind guard. This is evidence
-     ;; validation only; it never manufactures an approval.
-     (run-controller "binding-review"
-                     "--output"
-                     (default-binding-staging-path base-dir plan wave)
-                     "--campaign-root"
-                     (path->string base-dir)
-                     "--expected-branch"
-                     (default-delivery-receipt-branch base-dir plan wave))]
+     ;; Post-merge staged binding review: validation only, plus (slice B)
+     ;; automatic finalization of a still-pending staged trio through the
+     ;; fresh reviewer port. The controller never manufactures an approval.
+     (or (and (review-runner-installed?)
+              (auto-review-dispatch! base-dir
+                                     plan
+                                     wave
+                                     "binding-review"
+                                     #:generation (binding-generation base-dir plan wave)
+                                     #:staging-root
+                                     (default-binding-staging-path base-dir plan wave)))
+         (run-controller "binding-review"
+                         "--output"
+                         (default-binding-staging-path base-dir plan wave)
+                         "--campaign-root"
+                         (path->string base-dir)
+                         "--expected-branch"
+                         (default-delivery-receipt-branch base-dir plan wave)))]
     [("binding-pr")
      ;; Publish the validated staging trio on the deterministic fresh-main
      ;; binding branch, resolving an existing PR before creating a new one.
@@ -843,6 +926,12 @@
                                      target-stage
                                      'reason
                                      (hash-ref data 'reason "awaiting genuine independent review")))]
+    ;; Automatic independent review (slice B): an explicit head-bound
+    ;; REQUEST_CHANGES surfaces as its own typed effect (the runtime
+    ;; integration checkpoints a fresh attempt from it); reviewer
+    ;; infrastructure failures never masquerade as a rejection or approval.
+    [(equal? status "review-rejected") (delivery-effect-result 'review-rejected data)]
+    [(equal? status "review-infra") (delivery-effect-result 'review-infra data)]
     [(equal? status "synchronized") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "delivered") (delivery-effect-result 'ok (hasheq 'stage target-stage))]
     [(equal? status "none")

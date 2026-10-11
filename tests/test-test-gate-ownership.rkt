@@ -21,14 +21,15 @@
          (prefix-in inv: (file "../scripts/run-tests/inventory.rkt")))
 
 ;; ---------------------------------------------------------------
-;; Frozen candidate behavior table (W0 freeze + W4/W5/W6 rows)
+;; Candidate behavior table (W0 freeze + W4/W5/W6 + automatic-review bucket)
 ;; ---------------------------------------------------------------
 
-(test-case "behavior table freezes exactly the nineteen mandated candidate IDs"
+(test-case "behavior table pins the nineteen mandated IDs plus the automatic-review bucket"
   (define ids (map (lambda (r) (hash-ref r 'behavior-id)) inv:v124-behavior-table))
-  (check-equal? (length ids) 19)
+  (check-equal? (length ids) 20)
   (check-equal? (sort ids string<?)
-                (sort (list "RETRY-LOGICAL-SEMANTICS-FAST"
+                (sort (list "GSD-AUTOMATIC-INDEPENDENT-REVIEW"
+                            "RETRY-LOGICAL-SEMANTICS-FAST"
                             "RETRY-REAL-TIMER-CANARY"
                             "CWD-INVOCATION-AUDIT-CANARY"
                             "PARTIAL-RESULT-AGENT-SESSION-RETRY-CHAIN"
@@ -48,6 +49,23 @@
                             "GSD-WAVE-WORKTREE-PRIVATE-TEMPLATE"
                             "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE")
                       string<?)))
+
+(test-case "automatic-review bucket owns exactly seven fast integration families"
+  (define row
+    (findf (lambda (r) (equal? (hash-ref r 'behavior-id) "GSD-AUTOMATIC-INDEPENDENT-REVIEW"))
+           inv:v124-behavior-table))
+  (check-not-false row)
+  (check-equal? (hash-ref row 'owner) "gsd-delivery")
+  (check-equal? (hash-ref row 'source-gate) "fast")
+  (check-equal? (hash-ref row 'destination-gate) "fast")
+  (check-equal? (sort (hash-ref row 'members) string<?)
+                '("tests/test-gsd-auto-review-integration.rkt"
+                  "tests/test-gsd-auto-review-loop.rkt"
+                  "tests/test-gsd-auto-review-production.rkt"
+                  "tests/test-gsd-delivery-auto-review.rkt"
+                  "tests/test-gsd-review-dispatch.rkt"
+                  "tests/test-gsd-review-rejection.rkt"
+                  "tests/test-gsd-review-runtime.rkt")))
 
 (test-case "every behavior row carries complete frozen ownership data"
   (for ([row (in-list inv:v124-behavior-table)])

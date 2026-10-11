@@ -1,0 +1,72 @@
+# Automatic independent `/go` review
+
+Production `/go` requests carry a reviewer runner consumed by the shared TUI/SDK
+campaign executor. `extensions/gsd/review-session.rkt` owns the session adapter
+and composes runtime and tool APIs from the extension layer. The runner creates
+a fresh agent session using
+`zai-coding-plan/glm-5.3`, with only `read` and `bash`, no extensions or memory,
+and a runtime-owned `q-session:<id>` identity. Missing provider credentials are
+infrastructure failure, never mock approval. An injected/manual request without
+this runner retains the existing manual-review behavior.
+
+The reviewer uses an **existing clean worktree on the exact receipt branch**.
+Only receipt-descendant evidence-only commits under the controller's three
+`docs/reports/gsd-wave-{evidence,reviews,validation}` directories are permitted.
+Git identity and tracked bytes are checked before and after review. Final JSON
+must come from a normally completed final assistant message. The controller,
+not the model, owns digest/head binding and strict evidence validation.
+
+Reviewer tool environments scrub credentials, remove credential-agent and shell
+startup variables, use an empty private HOME/config directory, and disable the
+execution plane. This is not an OS filesystem sandbox: `read` and `bash` still
+have the initiating account's filesystem permissions. Deployment requiring
+protection against a hostile reviewer reading absolute credential paths needs
+an external restricted filesystem/process boundary.
+
+Review timeout defaults to 600 seconds; cancellation, durable fence/receipt
+changes, campaign budgets and abnormal termination stop review. Available
+review usage is charged to cumulative campaign spend without replacing author
+attempt usage. Usage accounting is not a crash-exactly-once per-review ledger.
+
+Explicit premerge REQUEST_CHANGES crosses a lossless JSON checkpoint into the
+existing durable rejection resolver. The default persistent rejection allowance
+is one. Journal-first crash recovery replays the same rejection idempotently.
+If publication succeeded before the checkpoint wrote its marker, prepare fetches
+and structurally authenticates the committed REQUEST_CHANGES against the exact
+receipt head/branch/attempt/fence and active generation before any reviewer
+launch. Every ancestry-tail commit must touch only excluded evidence paths;
+malformed or stale rejection evidence refuses dispatch, not a hidden retry.
+The ordinary retry creates a new implementation session/attempt/fence, carries
+findings into the prompt, and reuses the rejected source checkout. It fetches
+and fast-forwards only a receipt-descendant evidence-only rejection tail before
+implementation. Fresh full Verify supersedes the old receipt, preserves receipt
+history, advances the evidence generation, and requires another fresh review.
+Rejected source is not destroyed if that retry fails.
+
+Malformed output, infrastructure failure, cancellation, stale identities,
+budget pause or exhausted rejection allowance stop without another rejection
+retry. Postmerge REQUEST_CHANGES currently stops explicitly with an unsupported
+artifact-repair reason; it never rewinds or reruns already merged source.
+
+F11 is unchanged. Merge still requires recorded operator authorization bound to
+the exact wave and implementation receipt, with operator/action/source and
+matching content digest. `/go`, the reviewer, and this integration do not invent
+that authorization. No trustworthy automatic authorization source was identified
+in this slice; an otherwise reviewed campaign may legitimately stop at this
+gate rather than claim DONE.
+
+Approval candidates are committed locally and must pass the unchanged strict
+trio gate before pinned non-force publication/readback. Malformed remaining
+items fail as infrastructure errors without changing the remote; no gate facts
+or remaining items are silently discarded.
+
+Focused proof now exercises the default production coordinator and real Python
+controller against a local Git remote (`tests/test-gsd-auto-review-production.rkt`).
+The actual isolated `/go` loop (`tests/test-gsd-auto-review-loop.rkt`) publishes
+rejection, loses the checkpoint outcome/marker, resumes from committed evidence,
+and enters exactly one ordinary fenced retry and fresh generation review. Only
+model transport responses are deterministic; controller statuses are not mocked.
+The real-Git strict controller suite is registered by
+`tests/test-gsd-delivery-auto-review.rkt`. These are not live GitHub delivery or
+independent model acceptance: final glm review remains quota-blocked pending the
+next-day reset; preliminary Codex findings are not an acceptance substitute.

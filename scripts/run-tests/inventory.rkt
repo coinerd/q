@@ -718,11 +718,40 @@
           "slow/L4"
           (collect-test-files 'slow)))
 
-;; Frozen v1.00.24 W0 candidate behavior table. Members are real test
-;; files at freeze time; `--check` re-derives gate membership and
-;; reports drift instead of silently accepting moves.
+;; v1.00.24 W0 candidate behavior table plus declared maintenance rows.
+;; Original freeze membership is preserved; automatic review adds one current
+;; bug-delivery bucket. `--check` re-derives gate membership and reports drift
+;; instead of silently accepting moves.
 (define v124-behavior-table
   (list
+   (hasheq
+    'behavior-id
+    "GSD-AUTOMATIC-INDEPENDENT-REVIEW"
+    'source-gate
+    "fast"
+    'destination-gate
+    "fast"
+    'members
+    '("tests/test-gsd-auto-review-integration.rkt" "tests/test-gsd-auto-review-loop.rkt"
+                                                   "tests/test-gsd-auto-review-production.rkt"
+                                                   "tests/test-gsd-delivery-auto-review.rkt"
+                                                   "tests/test-gsd-review-dispatch.rkt"
+                                                   "tests/test-gsd-review-rejection.rkt"
+                                                   "tests/test-gsd-review-runtime.rkt")
+    'owner
+    "gsd-delivery"
+    'status
+    "retained-in-place"
+    'wave
+    "W0"
+    'rationale
+    (string-append
+     "Automatic-review bug-delivery bucket: fresh read/bash-only sessions, receipt/fence-bound dispatch, "
+     "durable rejection and ordinary retry, real local-Git controller approval/publication and recovery. "
+     "All seven families are fast-classified extension integration tests, not unit-fast: they compose "
+     "sessions, durable temporary campaign journals, or subprocess/Git sandboxes. The two real sleeps "
+     "in the session family are cancellation guards whose workers are reaped by tiny existing deadlines; "
+     "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed."))
    (hasheq
     'behavior-id
     "RETRY-LOGICAL-SEMANTICS-FAST"

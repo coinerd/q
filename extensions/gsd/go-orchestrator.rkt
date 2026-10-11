@@ -34,6 +34,8 @@
          "wave-completion.rkt"
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
+         (only-in "review-dispatch.rkt" current-gsd-auto-review-runner)
+         (only-in "review-worktree.rkt" review-retry-pending? retained-review-retry-worktree)
          (only-in "delivery-publication.rkt" publish-approved-head! durable-spare-branches)
          (only-in "tracker-resume.rkt" resume-tracker-reconciliation!)
          (only-in "delivery-finalize.rkt"
@@ -45,7 +47,7 @@
                   delivery-journal-advanced?
                   delivery-journal-snapshot
                   run-delivery-finalization
-                  run-coordinator-checkpoint
+                  coordinator-checkpoint-result
                   park-approved-attempt-result!)
          (only-in "delivery-coordinator.rkt"
                   delivery-outcome
@@ -244,9 +246,10 @@
                   timeout-sec
                   allow-stale?
                   delivery-reader
-                  delivery-coordinator)
+                  delivery-coordinator
+                  auto-review-runner)
   #:transparent
-  #:constructor-name make-campaign-request/8)
+  #:constructor-name make-campaign-request/internal)
 
 (define (make-campaign-request base-dir
                                record
@@ -255,15 +258,17 @@
                                #:timeout-sec [timeout-sec #f]
                                #:allow-stale? [allow-stale? #f]
                                #:delivery-reader [delivery-reader delivery-readback]
-                               #:delivery-coordinator [delivery-coordinator #f])
-  (make-campaign-request/8 base-dir
-                           record
-                           prompt-for-wave
-                           verifier
-                           timeout-sec
-                           allow-stale?
-                           delivery-reader
-                           delivery-coordinator))
+                               #:delivery-coordinator [delivery-coordinator #f]
+                               #:auto-review-runner [auto-review-runner #f])
+  (make-campaign-request/internal base-dir
+                                  record
+                                  prompt-for-wave
+                                  verifier
+                                  timeout-sec
+                                  allow-stale?
+                                  delivery-reader
+                                  delivery-coordinator
+                                  auto-review-runner))
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -335,7 +340,9 @@
   ;; 30+ tool-call minutes of progress. Scale the interactive retry knobs to
   ;; wave budget: more retries, more consecutive-stall tolerance, and a
   ;; cumulative ceiling proportional to the wave timeout (capped at 900 s).
-  (parameterize ([current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)]
+  (parameterize ([current-gsd-auto-review-runner (or (campaign-request-auto-review-runner request)
+                                                     (current-gsd-auto-review-runner))]
+                 [current-max-consecutive-tool-calls (current-gsd-max-consecutive-tool-calls)]
                  [current-provider-retry-max-retries 5]
                  [current-provider-retry-stall-max-consecutive 4]
                  [current-provider-retry-ceiling-secs
@@ -740,7 +747,8 @@
        ;; Design record:
        ;; q/docs/reports/GSD-WORKTREE-ISOLATION-v1.00.17.md
        (define (run-isolated run-thunk)
-         (if (not (worktree-isolation-enabled? #:isolate? isolate?))
+         (if (and (not (worktree-isolation-enabled? #:isolate? isolate?))
+                  (not (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)))
              (run-thunk)
              (call-with-retained-wave-worktree!
               wt-box
@@ -748,15 +756,19 @@
                 (with-handlers
                     ([exn:fail?
                       (lambda (e)
+                        (when (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)
+                          (raise e)) ; never abandon rejected source for the shared checkout
                         (log-warning
                          "wave ~a: worktree isolation unavailable (~a); running in shared checkout"
                          wave-idx
                          (exn-message e))
                         #f)])
-                  (make-wave-worktree! base-dir
-                                       #:campaign-id (campaign-plan-id active)
-                                       #:wave-index wave-idx
-                                       #:spare-branches (durable-spare-branches base-dir active))))
+                  (or (retained-review-retry-worktree base-dir active wave-idx)
+                      (make-wave-worktree! base-dir
+                                           #:campaign-id (campaign-plan-id active)
+                                           #:wave-index wave-idx
+                                           #:spare-branches
+                                           (durable-spare-branches base-dir active)))))
               (lambda (wt)
                 (record-attempt-artifact! base-dir (campaign-plan-id active) wave-idx expected-id wt))
               run-thunk)))
@@ -764,10 +776,9 @@
        ;; carries the delivery evidence through verification and the
        ;; completion decision. run-once* therefore receives the boxes
        ;; from run-campaign-wave, which owns the release dynamic-wind
-       ;; (below): the worktree directory is removed on EVERY exit path;
-       ;; the branch is kept only when delivery was approved
-       ;; (release-wave-worktree!), deleted otherwise
-       ;; (cleanup-wave-worktree!). The previous attempt released here —
+       ;; (below): approved delivery retains both checkout and branch for
+       ;; receipt-pinned review. Pending rejection retries also retain source;
+       ;; ordinary failed attempts use cleanup-wave-worktree!. The previous attempt released here —
        ;; before verification — which made wt always #f at the delivery
        ;; check and silently disabled branch-based verification.
        (define run-result (run-isolated (lambda () (run-with-timeout-retry timeout-retries))))
@@ -1291,10 +1302,9 @@
      ;; the run (its branch carries delivery evidence through verification
      ;; and the completion decision). This dynamic-wind owns the terminal
      ;; release on EVERY exit path — normal return, cancellation, or
-     ;; exception: the worktree directory is always removed; the branch is
-     ;; KEPT only when delivery was approved (release-wave-worktree! keeps
-     ;; it as durable merge evidence), deleted otherwise
-     ;; (cleanup-wave-worktree!). The no-change retry inside run-once*
+     ;; exception. Approved delivery and pending rejection retry retain the
+     ;; exact checkout and branch; ordinary unapproved worktrees are deleted
+     ;; with cleanup-wave-worktree!. The no-change retry inside run-once*
      ;; already releases its own rejected worktree and resets wt-box, so
      ;; this fires exactly once for the final attempt's worktree (or never,
      ;; when isolation is off / creation fell back to the shared checkout).
@@ -1325,7 +1335,8 @@
                                          (log-warning "wave ~a: worktree release failed: ~a"
                                                       wave-idx
                                                       (exn-message e)))])
-              (if (unbox keep-branch-box)
+              (if (or (unbox keep-branch-box)
+                      (review-retry-pending? base-dir (campaign-plan-id active) wave-idx))
                   (log-info "wave ~a: retained ~a" wave-idx (wave-worktree-path wt))
                   (cleanup-wave-worktree! wt)))))))]))
 
@@ -1350,22 +1361,6 @@
 ;; Full campaign execution (loop one wave at a time)
 ;; ============================================================
 
-(define (coordinator-checkpoint-result dir
-                                       plan-id
-                                       extra
-                                       completed
-                                       message
-                                       delivery-coordinator
-                                       loop-again)
-  (run-coordinator-checkpoint
-   dir
-   plan-id
-   extra
-   message
-   delivery-coordinator
-   #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
-   #:on-advance loop-again
-   #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
 (define (run-campaign! base-dir
                        rec
                        #:runner [runner default-runner]
@@ -1616,6 +1611,7 @@
          campaign-request-verifier
          campaign-request-delivery-reader
          campaign-request-delivery-coordinator
+         campaign-request-auto-review-runner
          campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!
