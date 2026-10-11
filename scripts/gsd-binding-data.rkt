@@ -327,6 +327,23 @@
     [(read-any)
      (write-json (read-any-datum (vector-ref (current-command-line-arguments) 1)))
      (newline)]
+    [(write-datum)
+     ;; Automatic independent review (BUG_PLAN slice B): serialize one
+     ;; JSON-shaped hash datum as a .rktd artifact. The trusted controller
+     ;; (gsd-delivery.py auto-review) owns ALL semantic validation; this
+     ;; boundary only guarantees the committed bytes are a single well-formed
+     ;; Racket hash datum (never string-built Racket syntax, never evaluated).
+     ;; argv: <in.json> <out.rktd>
+     (unless (= 3 (length args))
+       (error 'delivery "write-datum requires: <in.json> <out.rktd>"))
+     (define out-path (vector-ref (current-command-line-arguments) 2))
+     (make-parent-directory* out-path)
+     (call-with-output-file
+      out-path
+      (lambda (out)
+        (pretty-write (call-with-input-file (vector-ref (current-command-line-arguments) 1) read-json)
+                      out))
+      #:exists 'error)]
     [(prepare)
      (define root (vector-ref (current-command-line-arguments) 2))
      (define-values (e r v)
@@ -434,4 +451,6 @@
                                (string->number (fourth args))
                                (string->number (fifth args))))
      (newline)]
-    [else (error 'delivery "expected read, read-any, prepare, journal, snapshot or active-paths")]))
+    [else
+     (error 'delivery
+            "expected read, read-any, write-datum, prepare, journal, snapshot or active-paths")]))

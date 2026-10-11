@@ -7,6 +7,7 @@
          "delivery-journal.rkt"
          "delivery-verifier.rkt"
          "campaign-state.rkt"
+         (only-in "review-rejection.rkt" review-rejection-live-authorized?)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
          "../../sandbox/subprocess.rkt"
          (only-in "../../util/json/checksum.rkt" sha256-string)
@@ -216,6 +217,10 @@
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
       (define old-receipt (and old (hash-ref old 'receipt #f)))
+      ;; Automatic independent review (slice A): the durable review-rejection
+      ;; marker for THIS receipt, if any. It authorizes the cross-attempt
+      ;; supersession below; it never weakens any same-attempt path.
+      (define old-rejection (and old (hash? old-receipt) (journal-review-rejection old)))
       ;; BUG-0079 REVIEW-2 item 8: publication requires GENUINE non-empty
       ;; successful Verify evidence. A bare boolean, empty list, or blank
       ;; text approval is bool-only and can never trigger the publication
@@ -332,6 +337,71 @@
                    'evidence
                    (substring text 0 (min 8192 (string-length text)))))
       (cond
+        ;; Automatic independent review (slice A): the SUPPORTED cross-attempt
+        ;; receipt supersession. The journal holds the receipt of an attempt
+        ;; that an independent reviewer explicitly rejected (durable marker
+        ;; naming that exact receipt), and the LIVE attempt is a DIFFERENT
+        ;; fenced attempt on the same delivery branch whose genuine approved
+        ;; Verify produced this snapshot. The transition itself runs in the
+        ;; journal (reconcile-review-rejected-receipt!) and re-runs the live
+        ;; record guard at the write boundary; the old receipt and its frozen
+        ;; evidence trio are preserved as immutable history (generation +1
+        ;; exactly once) and the stage resets to context-ready so preflight →
+        ;; review re-run on the new receipt. Without the marker this entire
+        ;; clause is inert and the fail-closed branch below applies unchanged.
+        [(and old
+              attempt
+              (hash? old-receipt)
+              old-rejection
+              (review-rejection-matches-receipt? old-rejection old-receipt)
+              (not (hash-ref old-rejection 'superseded-by-attempt #f))
+              (not (equal? (hash-ref old-receipt 'attempt-id #f) (campaign-attempt-id attempt)))
+              (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f)))
+         (define (live-supersession-guard-ok?)
+           (and (procedure? current-record)
+                (approved? result)
+                (equal? before (snapshot cwd))
+                (review-rejection-live-authorized? (current-record)
+                                                   plan
+                                                   wave
+                                                   (campaign-attempt-id attempt)
+                                                   (campaign-attempt-fence-token attempt))))
+         (define (supersede-rejected!)
+           (reconcile-review-rejected-receipt! base
+                                               plan
+                                               wave
+                                               (new-receipt-for-head!)
+                                               #:guard live-supersession-guard-ok?)
+           (clear-remote-pending! base plan wave)
+           (log-info "review-rejected receipt superseded by attempt ~a at head ~a"
+                     (campaign-attempt-id attempt)
+                     (hash-ref before 'head)))
+         (cond
+           [(remote-published (hash-ref before 'repo)
+                              (hash-ref before 'branch)
+                              (hash-ref before 'head))
+            (supersede-rejected!)]
+           [else
+            (define reason
+              (format "cross-attempt head ~a is not published on origin; receipt not superseded"
+                      (hash-ref before 'head)))
+            (define published? (publish-approved-head-or-record-pending! reason))
+            (cond
+              [(and published? (post-publication-guard-ok?))
+               (with-handlers ([exn:fail?
+                                (lambda (e)
+                                  (record-post-publication-pending!
+                                   (format "~a; supersession refused: ~a" reason (exn-message e)))
+                                  (log-warning "review-rejected supersession refused: ~a"
+                                               (exn-message e)))])
+                 (supersede-rejected!))]
+              [published?
+               (record-post-publication-pending!
+                (string-append
+                 reason
+                 "; supersession guard refused: approval, snapshot or campaign record drifted after the publisher effect"))
+               (log-warning "review-rejected supersession withheld: guard refused")]
+              [else (log-warning "delivery receipt withheld: ~a; publication refused" reason)])])]
         ;; v1.00.33 W0 (audit §20 blocker 2): a durable receipt resolves any
         ;; stale marker ONLY at the SAME head+branch (idempotent re-verify).
         ;; A receipt at ANY other head never does — the demonstrated defect

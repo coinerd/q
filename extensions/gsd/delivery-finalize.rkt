@@ -24,6 +24,7 @@
 
 (require racket/list
          racket/string
+         (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-message)
          (only-in "campaign-state.rkt"
                   campaign-plan-id
                   campaign-record-waves
@@ -73,6 +74,7 @@
          coordinator-checkpoint-decision
          run-delivery-finalization
          run-coordinator-checkpoint
+         coordinator-checkpoint-result
          park-approved-attempt-result!)
 
 ;; ============================================================
@@ -88,9 +90,9 @@
                                              wave-idx
                                              attempt-id
                                              attempt-fence
-                                              #:worktree [worktree #f]
-                                              #:delivery-context [delivery-context #f]
-                                              #:verification-context [verification-context #f])
+                                             #:worktree [worktree #f]
+                                             #:delivery-context [delivery-context #f]
+                                             #:verification-context [verification-context #f])
   (define journal
     (with-handlers ([exn:fail? (lambda (_) #f)])
       (load-delivery-journal base-dir plan-id wave-idx)))
@@ -279,7 +281,10 @@
       (on-cancel message)
       (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
              [before (and idx (delivery-journal-snapshot dir plan-id idx))]
-             [outcome (delivery-coordinator dir plan-id idx)]
+             [replay (pending-review-rejection-message before)]
+             [outcome (if replay
+                          (cons 'review-rejected replay)
+                          (delivery-coordinator dir plan-id idx))]
              [after (and idx (delivery-journal-snapshot dir plan-id idx))]
              [kind (and outcome (delivery-outcome-kind outcome))]
              [decision (coordinator-checkpoint-decision
@@ -292,14 +297,39 @@
           [(cancelled) (on-cancel "campaign cancellation requested")]
           [(advance) (on-advance)]
           [else
-           (on-blocked
-            (cond
-              [(eq? kind 'delivered)
-               "terminal stage lacks authenticated readback; no delivery proof advanced"]
-              [(and outcome (delivery-outcome? outcome)) (delivery-outcome-message outcome)]
-              [(and before (not after))
-               "coordinator reported progress without a durable delivery transition"]
-              [else message]))]))))
+           (define resolved
+             (and (eq? kind 'review-rejected)
+                  idx
+                  (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome))))
+           (if (eq? resolved #t)
+               (on-advance)
+               (on-blocked
+                (cond
+                  [(eq? kind 'delivered)
+                   "terminal stage lacks authenticated readback; no delivery proof advanced"]
+                  [resolved resolved]
+                  [(and outcome (delivery-outcome? outcome)) (delivery-outcome-message outcome)]
+                  [(and before (not after))
+                   "coordinator reported progress without a durable delivery transition"]
+                  [else message])))]))))
+
+;; Campaign-facing result wrapper; continuation remains owned by the caller.
+(define (coordinator-checkpoint-result dir
+                                       plan-id
+                                       extra
+                                       completed
+                                       message
+                                       delivery-coordinator
+                                       loop-again)
+  (run-coordinator-checkpoint
+   dir
+   plan-id
+   extra
+   message
+   delivery-coordinator
+   #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
+   #:on-advance loop-again
+   #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
 
 ;; Park a verifier-approved attempt whose protected delivery is still pending
 ;; (BUG-0077). Verify approval is durable, but it is NOT delivery: the SAME

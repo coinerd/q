@@ -10,6 +10,9 @@
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../util/hook-types.rkt"
+         (only-in "../extensions/gsd/go-orchestrator.rkt"
+                  lookup-campaign-request
+                  campaign-request-auto-review-runner)
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!))
 (define-runtime-path source "../extensions/gsd/command-handlers.rkt")
 (define (call-with-parked status proc)
@@ -51,6 +54,10 @@
          (define payload (hook-result-payload result))
          (check-eq? (hook-result-action result) 'amend)
          (check-true (hash-has-key? payload 'campaign-token))
+         ;; The request, not a thread-local /go-hook parameterization, owns
+         ;; the production fresh reviewer for BOTH the TUI and SDK consumers.
+         (check-true (procedure? (campaign-request-auto-review-runner
+                                  (lookup-campaign-request (hash-ref payload 'campaign-token)))))
          (check-true (string-contains? (hash-ref payload 'text) "Executing final delivery"))
          (define live (load-campaign-record dir (campaign-plan-id rec)))
          (check-eq? (campaign-wave-status (car (campaign-record-waves live))) status)

@@ -108,10 +108,12 @@
       ;; tracker-reconciliation), on top of journal/receipt/coordinator +3;
       ;; +1 W0 checkpoint; +3 W1 adapter, wiring and resume retry;
       ;; +1 v1.00.33 recovery continuation (delivery-recovery);
-      ;; +1 BUG-0079 approved-head publication (delivery-publication).
+      ;; +1 BUG-0079 approved-head publication (delivery-publication);
+      ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
+      ;; worktree and the extension-owned runtime session adapter).
       (check-equal? (length inventory)
-                    59
-                    "GSD module count is stable at 59 (58 + BUG-0079 publication +1)"))
+                    65
+                    "GSD module count includes the six bounded automatic-review modules"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

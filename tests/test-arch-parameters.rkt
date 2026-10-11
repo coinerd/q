@@ -293,9 +293,18 @@
       ;; +1 — BUG-0079: current-gsd-approved-head-publisher
       ;; (extensions/gsd/delivery-publication.rkt, OTHER_REVIEWED): publisher
       ;; DI seam mirroring current-gsd-remote-published.
+      ;; +1 — automatic independent review slice A:
+      ;; current-gsd-wave-review-rejection-retries
+      ;; (extensions/gsd/policy.rkt, CONFIGURATION): the bounded persistent
+      ;; rejection-retry ceiling (default 1); consumed count is durable in
+      ;; the delivery journal, never in this parameter.
+      (define discovered
+        (append* (for/list ([f (in-list (all-production-rkt-files))]
+                            #:when (has-make-parameter? f))
+                   (discover-parameters f))))
       (check-equal? (length inventory-entries)
-                    238
-                    "parameter inventory should contain audited parameters"))))
+                    (length discovered)
+                    "parameter inventory count must match current production declarations"))))
 
 ;; ============================================================
 ;; Agent iteration → Runtime boundary tests

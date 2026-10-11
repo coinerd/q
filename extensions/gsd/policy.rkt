@@ -22,6 +22,7 @@
          current-gsd-wave-timeout-retries
          current-gsd-wave-no-change-retries
          current-gsd-wave-verification-repair-retries
+         current-gsd-wave-review-rejection-retries
          current-gsd-wave-failure-context
          current-gsd-campaign-infra-retries
          current-gsd-campaign-infra-retry-delay
@@ -118,6 +119,21 @@
 ;; automatically. Zero disables repair; unchanged committed heads still stop.
 (define current-gsd-wave-verification-repair-retries
   (make-parameter 3 (nonnegative-integer-guard 'current-gsd-wave-verification-repair-retries)))
+
+;; Automatic independent review (BUG_PLAN automatic-review slice A): the
+;; bounded, PERSISTENT retry budget for implementation retries consumed by
+;; an explicit independent-review REQUEST_CHANGES rejection. The count of
+;; consumed rejection retries is durable in the delivery journal
+;; (review-rejection-count), so it survives restarts and cannot be reset by
+;; re-running /go; resolve-review-rejection! refuses when the count reaches
+;; this ceiling. Default 1: exactly one rejection-driven implementation
+;; retry per wave, mirroring current-gsd-wave-no-change-retries. Zero
+;; disables rejection-driven retries entirely (the rejection becomes a
+;; typed stop for the operator). Each retry is a truthful fresh fenced
+;; campaign attempt created by the ordinary retry machinery — never a
+;; manually generated attempt id or fence.
+(define current-gsd-wave-review-rejection-retries
+  (make-parameter 1 (nonnegative-integer-guard 'current-gsd-wave-review-rejection-retries)))
 
 ;; v1.00.18 W? (BUG-0024): campaign-level infra-failure retry ceiling. When a
 ;; wave run classifies as 'infra-failed (D8 #9357: provider/network/SSE

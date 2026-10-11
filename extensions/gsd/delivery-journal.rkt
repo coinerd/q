@@ -16,6 +16,14 @@
          repair-tail-allowed-stages
          reconcile-merged-tip-receipt!
          merged-tip-allowed-stages
+         valid-review-rejection?
+         valid-review-rejection-history?
+         review-rejection-allowed-stages
+         review-rejection-matches-receipt?
+         journal-review-rejection
+         journal-review-rejection-count
+         record-review-rejection!
+         reconcile-review-rejected-receipt!
          valid-verification-context?
          record-verification-context!
          delivery-stages
@@ -56,6 +64,52 @@
 ;; is refused, not repaired.
 (define (valid-receipt-history? h)
   (and (list? h) (andmap valid-delivery-receipt? h)))
+;; Automatic independent review (BUG_PLAN automatic-review slice A): the
+;; durable review-rejection marker. A genuine independent REQUEST_CHANGES
+;; verdict against a PRE-MERGE receipt is recorded exactly once per
+;; rejected attempt; the marker names the exact rejected receipt identity
+;; (attempt-id, attempt-fence, branch, head), the findings, the journal
+;; stage at rejection, and — after a successful cross-attempt supersession
+;; — the attempt that superseded it. The marker is the ONLY authorization
+;; for reconcile-review-rejected-receipt!; it can never be written through
+;; update-delivery-journal! and a malformed marker refuses at load.
+(define review-rejection-allowed-stages
+  '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
+(define (valid-review-findings? v)
+  (and (list? v) (pair? v) (andmap (lambda (f) (and (string? f) (positive? (string-length f)))) v)))
+(define (valid-review-rejection? m)
+  (and (hash? m)
+       (text? (hash-ref m 'attempt-id #f))
+       (exact-nonnegative-integer? (hash-ref m 'attempt-fence #f))
+       (text? (hash-ref m 'branch #f))
+       (hex? (hash-ref m 'head #f) 40)
+       (valid-review-findings? (hash-ref m 'findings #f))
+       (member (hash-ref m 'stage #f) review-rejection-allowed-stages)
+       (exact-nonnegative-integer? (hash-ref m 'recorded-at #f))
+       (let ([by (hash-ref m 'superseded-by-attempt #f)]
+             [at (hash-ref m 'superseded-at #f)])
+         (or (and (not by) (not at)) (and (text? by) (exact-nonnegative-integer? at))))))
+(define (valid-review-rejection-history? h)
+  (and (list? h) (andmap valid-review-rejection? h)))
+;; The current marker, or #f (absent or — impossibly, given load
+;; validation — malformed).
+(define (journal-review-rejection journal)
+  (define m (and (hash? journal) (hash-ref journal 'review-rejection #f)))
+  (and (valid-review-rejection? m) m))
+;; The persistent rejection-retry accounting consumed so far (0 default).
+(define (journal-review-rejection-count journal)
+  (define n (and (hash? journal) (hash-ref journal 'review-rejection-count #f)))
+  (if (exact-nonnegative-integer? n) n 0))
+;; EXACT authorization test: the marker must name the given receipt's
+;; attempt-id, attempt-fence, branch and head verbatim. Anything less would
+;; let a stale marker authorize supersession of a different receipt.
+(define (review-rejection-matches-receipt? m r)
+  (and (valid-review-rejection? m)
+       (hash? r)
+       (equal? (hash-ref m 'attempt-id #f) (hash-ref r 'attempt-id #f))
+       (equal? (hash-ref m 'attempt-fence #f) (hash-ref r 'attempt-fence #f))
+       (equal? (hash-ref m 'branch #f) (hash-ref r 'branch #f))
+       (equal? (hash-ref m 'head #f) (hash-ref r 'head #f))))
 ;; Verification context (v1.00.33 audit, directive item 2): the durable slot
 ;; for the context the verifier actually ran under — repo-root, base, and the
 ;; snapshot refs (merge-sha / PR head / binding branch). Without it a journal
@@ -106,6 +160,12 @@
                       (valid-delivery-receipt? (hash-ref data 'receipt #f))
                       (let ([h (hash-ref data 'receipt-history #f)])
                         (or (not h) (valid-receipt-history? h)))
+                      (let ([m (hash-ref data 'review-rejection #f)])
+                        (or (not m) (valid-review-rejection? m)))
+                      (let ([rh (hash-ref data 'review-rejection-history #f)])
+                        (or (not rh) (valid-review-rejection-history? rh)))
+                      (let ([rc (hash-ref data 'review-rejection-count #f)])
+                        (or (not rc) (exact-nonnegative-integer? rc)))
                       (let ([vc (hash-ref data 'verification-context #f)])
                         (or (not vc) (valid-verification-context? vc))))
            (error 'delivery-journal "invalid journal; refusing to overwrite"))
@@ -152,7 +212,13 @@
 (define (update-delivery-journal! root plan wave fields)
   (unless (and (hash? fields)
                (not (ormap (lambda (k) (hash-has-key? fields k))
-                           '(receipt plan-id wave schema-version receipt-history)))
+                           '(receipt plan-id
+                                     wave
+                                     schema-version
+                                     receipt-history
+                                     review-rejection
+                                     review-rejection-history
+                                     review-rejection-count)))
                (or (not (hash-has-key? fields 'stage))
                    (member (hash-ref fields 'stage) delivery-stages)))
     (error 'delivery-journal "invalid journal update"))
@@ -310,6 +376,202 @@
                            tail-evidence-only?
                            allowed
                            'merged-tip))
+
+;; Automatic independent review (slice A) part 1: record the durable
+;; explicit rejection authorization for the CURRENT pre-merge receipt.
+;; Requires, and records atomically in ONE save:
+;;   * an existing journal whose receipt is bound to the EXACT expected
+;;     attempt-id and fence (the live rejected attempt — never inferred);
+;;   * a journal stage strictly BEFORE implementation-merged (postmerge
+;;     rejections repair evidence review instead — fail closed here);
+;;   * genuine structured findings (non-empty list of non-empty strings;
+;;     missing-output/infra failures are NOT rejections and never reach here).
+;; Effects, in the same atomic save:
+;;   * the `review-rejection` marker naming the exact rejected receipt
+;;     identity + findings + stage (the only key that can later authorize a
+;;     cross-attempt supersession);
+;;   * `review-rejection-count` incremented by exactly one (the persistent
+;;     bounded retry accounting — default ceiling 1, enforced BEFORE the
+;;     write; exhausted budgets refuse with zero effects);
+;;   * a prior superseded marker is demoted into the append-only
+;;     `review-rejection-history` (immutable, load-validated).
+;; Idempotency/restart law: replaying the IDENTICAL rejection (same receipt
+;; identity + same findings) returns the journal unchanged — the budget is
+;; never double-consumed across restarts. A DIFFERENT rejection against the
+;; same receipt is a reconciliation event and refuses.
+(define (record-review-rejection! root
+                                  plan
+                                  wave
+                                  #:findings findings
+                                  #:expected-attempt-id attempt-id
+                                  #:expected-fence fence
+                                  #:max-rejection-retries max-rejection-retries)
+  (define (refuse! reason)
+    (error 'delivery-journal (format "review rejection refused: ~a" reason)))
+  (unless (valid-review-findings? findings)
+    (refuse! "findings are missing or malformed"))
+  (unless (and (string? attempt-id) (positive? (string-length attempt-id)))
+    (refuse! "expected attempt identity is missing"))
+  (unless (exact-nonnegative-integer? fence)
+    (refuse! "expected fence is invalid"))
+  (unless (exact-nonnegative-integer? max-rejection-retries)
+    (refuse! "retry budget is invalid"))
+  (define old (load-delivery-journal root plan wave))
+  (define old-receipt (and old (hash-ref old 'receipt #f)))
+  (unless old
+    (refuse! "no durable journal to record the rejection against"))
+  (unless (hash? old-receipt)
+    (refuse! "journal carries no receipt"))
+  (unless (equal? (hash-ref old-receipt 'attempt-id #f) attempt-id)
+    (refuse! "attempt identity changed"))
+  (unless (equal? (hash-ref old-receipt 'attempt-fence #f) fence)
+    (refuse! "attempt fence changed"))
+  (define stage (hash-ref old 'stage #f))
+  (unless (member stage review-rejection-allowed-stages)
+    (refuse! (format "stage ~a is terminal for review rejection" stage)))
+  (define prior (hash-ref old 'review-rejection #f))
+  (cond
+    [(and (valid-review-rejection? prior)
+          (review-rejection-matches-receipt? prior old-receipt)
+          (not (hash-ref prior 'superseded-by-attempt #f))
+          (equal? (hash-ref prior 'findings #f) findings))
+     ;; identical replay (restart): nothing written, budget not re-consumed
+     old]
+    [(and (valid-review-rejection? prior) (not (hash-ref prior 'superseded-by-attempt #f)))
+     (refuse! "a different rejection is already recorded for this receipt")]
+    [else
+     (define count (journal-review-rejection-count old))
+     (when (>= count max-rejection-retries)
+       (refuse!
+        (format "review-rejection retry budget exhausted (~a/~a)" count max-rejection-retries)))
+     (define history (hash-ref old 'review-rejection-history '()))
+     (unless (valid-review-rejection-history? history)
+       (refuse! "existing rejection history is malformed"))
+     (save! root
+            plan
+            wave
+            (hash-set* old
+                       'review-rejection
+                       (hasheq 'schema-version
+                               1
+                               'attempt-id
+                               attempt-id
+                               'attempt-fence
+                               fence
+                               'branch
+                               (hash-ref old-receipt 'branch)
+                               'head
+                               (hash-ref old-receipt 'head)
+                               'findings
+                               findings
+                               'stage
+                               stage
+                               'recorded-at
+                               (current-seconds))
+                       'review-rejection-history
+                       (if (valid-review-rejection? prior)
+                           (append history (list prior))
+                           history)
+                       'review-rejection-count
+                       (add1 count)))
+     (load-delivery-journal root plan wave)]))
+
+;; Automatic independent review (slice A) part 2: the EXPLICIT cross-attempt
+;; receipt supersession. Authorized ONLY by a prior EXACT durable rejection
+;; marker (the marker must name the current receipt's attempt-id, fence,
+;; branch and head verbatim — never a stale or different receipt) plus a
+;; caller-supplied LIVE record guard (procedure of no arguments, re-run
+;; immediately before the write; in production it proves the campaign record
+;; is uncancelled, within budget and its CURRENT attempt is exactly the new
+;; receipt's attempt — see review-rejection.rkt). Additional fail-closed
+;; guards:
+;;   * the journal stage is strictly BEFORE implementation-merged (a merged
+;;     implementation cannot be undone; postmerge transitions refuse);
+;;   * the new receipt is attempt-bound to a DIFFERENT attempt (same-attempt
+;;     drift stays on the repair-tail protocol);
+;;   * the new receipt keeps the SAME non-protected delivery branch
+;;     (stale/different branch identities refuse);
+;;   * the existing receipt history is well-formed.
+;; Effect (ONE atomic save): the rejected receipt is appended to the
+;; immutable `receipt-history` (generation +1 exactly once), the new VERIFIED
+;; receipt becomes current, the stage RESETS to context-ready (the ladder
+;; re-runs preflight → review on the new receipt) and the marker records
+;; `superseded-by-attempt`/`superseded-at`. The old receipt and its frozen
+;; evidence trio are never deleted or rewritten. Replaying the transition at
+;; the already-superseded identity is idempotent (no second history append,
+;; no stage churn); any other replay refuses.
+(define (reconcile-review-rejected-receipt! root
+                                            plan
+                                            wave
+                                            new-receipt
+                                            #:guard guard
+                                            #:allowed-stages
+                                            [allowed review-rejection-allowed-stages])
+  (define (refuse! reason)
+    (error 'delivery-journal (format "review-rejected receipt supersession refused: ~a" reason)))
+  (unless (valid-delivery-receipt? new-receipt)
+    (refuse! "new receipt is invalid"))
+  (unless (text? (hash-ref new-receipt 'attempt-id #f))
+    (refuse! "new receipt is not attempt-bound"))
+  (unless (exact-nonnegative-integer? (hash-ref new-receipt 'attempt-fence #f))
+    (refuse! "new receipt fence is invalid"))
+  (unless (and (procedure? guard) (procedure-arity-includes? guard 0))
+    (refuse! "live record guard is missing"))
+  (define old (load-delivery-journal root plan wave))
+  (define old-receipt (and old (hash-ref old 'receipt #f)))
+  (unless old
+    (refuse! "no durable journal to reconcile"))
+  (unless (hash? old-receipt)
+    (refuse! "journal carries no receipt"))
+  (define marker (hash-ref old 'review-rejection #f))
+  (unless (valid-review-rejection? marker)
+    (refuse! "no durable review rejection authorizes the current receipt"))
+  (cond
+    [(and (equal? (hash-ref old-receipt 'attempt-id #f) (hash-ref new-receipt 'attempt-id #f))
+          (equal? (hash-ref old-receipt 'attempt-fence #f) (hash-ref new-receipt 'attempt-fence #f))
+          (equal? (hash-ref old-receipt 'head #f) (hash-ref new-receipt 'head #f))
+          (equal? (hash-ref old-receipt 'branch #f) (hash-ref new-receipt 'branch #f))
+          (equal? (hash-ref marker 'superseded-by-attempt #f) (hash-ref new-receipt 'attempt-id #f)))
+     ;; already superseded by exactly this attempt: idempotent no-op
+     old]
+    [(hash-ref marker 'superseded-by-attempt #f)
+     (refuse! "the recorded rejection is already superseded")]
+    [else
+     (unless (review-rejection-matches-receipt? marker old-receipt)
+       (refuse! "no durable review rejection authorizes the current receipt"))
+     (when (equal? (hash-ref old-receipt 'attempt-id #f) (hash-ref new-receipt 'attempt-id #f))
+       (refuse! "same-attempt drift belongs to the repair-tail reconciliation"))
+     (define old-branch (hash-ref old-receipt 'branch #f))
+     (define new-branch (hash-ref new-receipt 'branch #f))
+     (unless (and (string? old-branch)
+                  (equal? old-branch new-branch)
+                  (not (member new-branch '("main" "master"))))
+       (refuse! "delivery branch identity changed"))
+     (define stage (hash-ref old 'stage #f))
+     (unless (member stage allowed)
+       (refuse! (format "stage ~a is terminal for supersession" stage)))
+     (define history (hash-ref old 'receipt-history '()))
+     (unless (valid-receipt-history? history)
+       (refuse! "existing receipt history is malformed"))
+     (unless (guard)
+       (refuse! "live record guard refused"))
+     (save! root
+            plan
+            wave
+            (hash-set* old
+                       'receipt
+                       new-receipt
+                       'receipt-history
+                       (append history (list old-receipt))
+                       'stage
+                       "context-ready"
+                       'review-rejection
+                       (hash-set* marker
+                                  'superseded-by-attempt
+                                  (hash-ref new-receipt 'attempt-id)
+                                  'superseded-at
+                                  (current-seconds))))
+     (load-delivery-journal root plan wave)]))
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical
