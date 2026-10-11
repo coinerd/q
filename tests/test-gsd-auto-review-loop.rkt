@@ -11,6 +11,7 @@
 (require rackunit
          racket/file
          racket/format
+         racket/path
          racket/string
          json
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
@@ -143,6 +144,10 @@
            (execute-campaign-request!
             request
             (lambda (prompt)
+              ;; Abort before any write/commit if isolation ever regresses.
+              (define relative-cwd (find-relative-path root (current-directory)))
+              (unless (and (relative-path? relative-cwd) (not (memq 'up (explode-path relative-cwd))))
+                (error 'review-fixture "refusing implementation writes outside temporary fixture"))
               (set! implementations (add1 implementations))
               (when (= implementations 2)
                 (check-true (string-contains? prompt "Add the second acceptance check"))
