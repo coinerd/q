@@ -155,9 +155,39 @@
 ;; Frozen campaign snapshot provenance (trusted module, full hash validation)
 ;; ---------------------------------------------------------------------------
 
-(define (first-group-number rx line)
-  (define match (regexp-match rx line))
-  (and match (string->number (cadr match))))
+(define (unique-branch-number rx line)
+  (define matches (regexp-match* rx line #:match-select cadr))
+  (cond
+    [(null? matches) #f]
+    [else
+     (unless (= 1 (length matches))
+       (error 'delivery "ambiguous canonical Branch tracker metadata"))
+     (define match (regexp-match #px"^([1-9][0-9]*)(?:\\))?(?:[.])?$" (car matches)))
+     (unless match
+       (error 'delivery "malformed canonical Branch tracker metadata"))
+     (string->number (cadr match))]))
+
+(define (explicit-wave-issue text wave-index)
+  ;; Only the literal same-wave association is authority, not prose issue
+  ;; numbers, canary rows, links, or mappings belonging to another wave.
+  (define rx (pregexp (format "(?:^|[\\s(,;])W~a\\s*=\\s*([^\\s,;)]*)" wave-index)))
+  (define matches (regexp-match* rx text #:match-select cadr))
+  (cond
+    [(null? matches) #f]
+    [else
+     (unless (= 1 (length matches))
+       (error 'delivery "duplicate/conflicting explicit same-wave issue association"))
+     (define match (regexp-match #px"^#([1-9][0-9]*)(?:[.])?$" (car matches)))
+     (unless match
+       (error 'delivery "malformed explicit same-wave issue association"))
+     (string->number (cadr match))]))
+
+(define (verified-plan-title text)
+  (define headings
+    (filter (lambda (line) (regexp-match? #px"^# Plan(?:[:\\s]|$)" line)) (string-split text "\n")))
+  (and (= 1 (length headings))
+       (let ([match (regexp-match #px"^# Plan: (\\S(?:.*\\S)?)$" (car headings))])
+         (and match (cadr match)))))
 
 (define (declared-output-line? line)
   (regexp-match? #px"^\\s*[-*]\\s+File:" line))
@@ -213,9 +243,11 @@
   ;; unique-prefix scan remains the fallback for rows/snapshots without a
   ;; declared arrow path.
   (define frozen-plan-path (build-path (snapshot-dir campaign-root plan-id) "PLAN.md"))
+  (define frozen-plan-text (file->string frozen-plan-path))
+  (define plan-title (verified-plan-title frozen-plan-text))
   (define declared-path
     (and (file-exists? frozen-plan-path)
-         (for/first ([e (in-list (parse-plan-index (file->string frozen-plan-path)))]
+         (for/first ([e (in-list (parse-plan-index frozen-plan-text))]
                      #:when (= (wave-index-entry-idx e) wave-index))
            (wave-index-entry-ref-path e))))
   (define docs
@@ -239,10 +271,15 @@
   (define text (file->string (build-path (snapshot-dir campaign-root plan-id) rel)))
   (define lines (string-split text "\n"))
   (define branch-lines (filter (lambda (l) (string-prefix? (string-trim l) "Branch:")) lines))
-  (define (exactly-one proc)
-    (and (= 1 (length branch-lines)) (proc (car branch-lines))))
-  (define issue (exactly-one (lambda (l) (first-group-number #px"issues/([0-9]+)" l))))
-  (define milestone (exactly-one (lambda (l) (first-group-number #px"milestone\\s*#?([0-9]+)" l))))
+  (unless (<= (length branch-lines) 1)
+    (error 'delivery "multiple canonical Branch tracker lines"))
+  (define branch (and (pair? branch-lines) (car branch-lines)))
+  (define branch-issue (and branch (unique-branch-number #px"issues/([^\\s,;]+)" branch)))
+  (define milestone (and branch (unique-branch-number #px"milestone\\s*#?([^\\s,;]+)" branch)))
+  (define explicit-issue (explicit-wave-issue text wave-index))
+  (when (and branch explicit-issue (not (equal? branch-issue explicit-issue)))
+    (error 'delivery "canonical Branch conflicts with explicit same-wave issue association"))
+  (define issue (if branch branch-issue explicit-issue))
   (define file-lines (filter declared-output-line? lines))
   (define (declared kind)
     (filter values
@@ -269,6 +306,9 @@
                      null)
                  (if milestone
                      (list 'milestone milestone)
+                     null)
+                 (if plan-title
+                     (list 'frozen-plan-title plan-title)
                      null))))
 
 (define (active-paths campaign-root plan-id wave-index generation)

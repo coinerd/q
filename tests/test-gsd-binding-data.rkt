@@ -21,10 +21,11 @@
   (make-directory* (path-only path))
   (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
 
-(define (plan-tree #:wave-text [wave-text #f])
+(define (plan-tree #:wave-text [wave-text #f] #:heading [heading "# Plan"])
   (define dir (make-temporary-file "binding-data-~a" 'directory))
   (write-text! (build-path dir ".planning" "PLAN.md")
-               (string-append "# Plan\n\n"
+               (string-append heading
+                              "\n\n"
                               "- [Inbox] W1: Fixture -> waves/W1-fixture.md\n"
                               "- [Inbox] W2: Later -> waves/W2-later.md\n"))
   (write-text! (build-path dir ".planning" "waves" "W1-fixture.md")
@@ -161,6 +162,76 @@
     (check-equal? (hash-ref (hash-ref still 'declared) 'evidence)
                   '("q/docs/reports/gsd-wave-evidence/v9.9.9-w1.rktd"))
     (delete-directory/files dir))
+
+  (test-case "legacy same-wave association and title come only from verified frozen docs"
+    (define dir
+      (plan-tree #:heading "# Plan: v9.9.9 — Fixture delivery"
+                 #:wave-text "# W1: Legacy\n\nTracker (W1 = #9686, canary row = #12345).\n"))
+    (bind-snapshot! dir)
+    (write-text! (build-path dir ".planning" "PLAN.md") "# Plan: Wrong live title\n")
+    (write-text! (build-path dir ".planning" "waves" "W1-fixture.md") "W1 = #12345\n")
+    (define facts (snapshot-facts dir campaign-id 1))
+    (check-equal? (hash-ref facts 'issue #f) 9686)
+    (check-equal? (hash-ref facts 'frozen-plan-title #f) "v9.9.9 — Fixture delivery")
+    (check-false (hash-ref facts 'milestone #f))
+    (check-equal? (hash-ref (active-paths dir campaign-id 1 1) 'generation) 1)
+    (delete-directory/files dir))
+
+  (test-case "no issue inference from prose, canary, wrong wave or noncanonical mapping"
+    (for ([text '("canary row = #12345" "Issue #12345"
+                                        "https://github.com/owner/repo/issues/12345"
+                                        "W2 = #12345"
+                                        "NOTW1 = #12345"
+                                        "W01 = #12345")])
+      (define dir (plan-tree #:wave-text (string-append "# W1: Legacy\n\n" text "\n")))
+      (bind-snapshot! dir)
+      (check-false (hash-ref (snapshot-facts dir campaign-id 1) 'issue #f) text)
+      (delete-directory/files dir)))
+
+  (test-case "malformed, duplicate and canonical Branch-conflicting mappings fail closed"
+    (for ([text
+           '("W1 = #0"
+             "W1 = #t"
+             "W1 = #01"
+             "W1 = #12345placeholder"
+             "W1 = 9686"
+             "W1 = #-1"
+             "W1 = #9686/other"
+             "W1 = #9686, W1 = #9687"
+             "W1 = #9686, W1 = #9686"
+             "Branch: issue https://github.com/owner/repo/issues/9686, milestone #895.\nW1 = #9687"
+             "Branch: issue https://github.com/owner/repo/issues/9686, milestone #895.\nW1 = #0"
+             "Branch: issue https://github.com/owner/repo/issues/9686\nBranch: issue https://github.com/owner/repo/issues/9687"
+             "Branch: issue https://github.com/owner/repo/issues/0, milestone #895."
+             "Branch: issue https://github.com/owner/repo/issues/9686, milestone #0."
+             "Branch: issue https://github.com/owner/repo/issues/9686 and https://github.com/owner/repo/issues/9687")])
+      (define dir (plan-tree #:wave-text (string-append "# W1: Legacy\n\n" text "\n")))
+      (bind-snapshot! dir)
+      (check-exn exn:fail? (lambda () (snapshot-facts dir campaign-id 1)) text)
+      (delete-directory/files dir)))
+
+  (test-case "canonical numeric Branch is preserved and must agree with explicit mapping"
+    (define dir
+      (plan-tree
+       #:wave-text
+       "# W1: Modern\nBranch: issue https://github.com/owner/repo/issues/9686, milestone #895.\nW1 = #9686\n"))
+    (bind-snapshot! dir)
+    (define facts (snapshot-facts dir campaign-id 1))
+    (check-equal? (hash-ref facts 'issue) 9686)
+    (check-equal? (hash-ref facts 'milestone) 895)
+    (check-false (hash-ref facts 'frozen-plan-title #f))
+    (delete-directory/files dir))
+
+  (test-case "only a unique exact PLAN title heading is exported"
+    (for ([heading '("# Plan" "## Plan: Not top level"
+                              "# Plan: "
+                              "# Plan: First\n# Plan: Second"
+                              "# Plan: First\n# Plan: First"
+                              "# Plan: First\n# Plan")])
+      (define dir (plan-tree #:heading heading))
+      (bind-snapshot! dir)
+      (check-false (hash-ref (snapshot-facts dir campaign-id 1) 'frozen-plan-title #f))
+      (delete-directory/files dir)))
 
   (test-case "tampered snapshot content never verifies (trusted module)"
     (define dir (plan-tree))

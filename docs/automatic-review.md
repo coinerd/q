@@ -20,6 +20,20 @@ Injected provider builders remain available for deterministic fixtures. An
 injected/manual request without this runner retains the existing manual-review
 behavior.
 
+Tracker facts come only from the hash-verified frozen campaign snapshot.
+Numeric `Branch:` issue/milestone metadata remains authoritative. Without a
+`Branch:` line, a strict explicit same-wave `W<n> = #<positive issue>` association
+may supply the issue; prose links, canary rows, live plans and global tracker
+configuration cannot. Duplicate, malformed or Branch-conflicting associations
+fail closed. When the numeric milestone is missing, prepare and finalization
+share an authenticated cached lookup of that exact frozen issue. The response
+must be a non-PR issue with the exact number and canonical same-repository URL,
+and its milestone must have a positive integer number, canonical same-repository
+API URL and title exactly matching the unique verified `# Plan: <title>` heading.
+Missing facts, API errors, null milestones and mismatches stop review. Finalization
+also refuses a tracker binding that changed since dispatch; no approval or
+publication guard is bypassed by this resolution.
+
 The reviewer uses an **existing clean worktree on the exact receipt branch**.
 Only receipt-descendant evidence-only commits under the controller's three
 `docs/reports/gsd-wave-{evidence,reviews,validation}` directories are permitted.

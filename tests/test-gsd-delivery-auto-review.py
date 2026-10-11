@@ -42,6 +42,7 @@ spec.loader.exec_module(m)
 POLICY_NAMES = ['lint', 'test (0)', 'workflows (0)']
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 SLUG = 'owner/repo'
+FROZEN_TITLE = 'v9.9.9 — Fixture delivery'
 BRANCH = 'campaign/v9.9.9-w1'
 WAVE_BRANCH = 'campaign/v9.9.9-w1'
 
@@ -79,10 +80,12 @@ def journal_fixture(plan, wave, head, history=0, branch=WAVE_BRANCH,
             'receipt-history': [dict(receipt, head=('%040x' % (i + 1))) for i in range(history)]}
 
 
-def build_campaign(base, plan, wave, *, declared=True, issue=9686, milestone=895):
+def build_campaign(base, plan, wave, *, declared=True, issue=9686, milestone=895,
+                   legacy=False, heading=None, wave_override=None):
     root = Path(base) / 'campaign'
     planning = root / '.planning'
-    plan_text = '# Fixture plan\n\nSingle wave: waves/W%d-fixture.md owns the delivery.\n' % wave
+    heading = heading if heading is not None else ('# Plan: ' + FROZEN_TITLE if legacy else '# Fixture plan')
+    plan_text = heading + '\n\nSingle wave: waves/W%d-fixture.md owns the delivery.\n' % wave
     file_lines = ''
     if declared:
         label = f'v9.9.9-w{wave}'
@@ -93,6 +96,10 @@ def build_campaign(base, plan, wave, *, declared=True, issue=9686, milestone=895
     wave_text = ('# W%d: Fixture wave\n\nBranch: `%s`; GitHub issue '
                  '[#%d](https://github.com/owner/repo/issues/%d), milestone #%d.%s'
                  % (wave, BRANCH, issue, issue, milestone, file_lines))
+    if legacy:
+        wave_text = f'# W{wave}: Legacy wave\n\nTracker (W{wave} = #{issue}, canary row = #12345).\n' + file_lines
+    if wave_override is not None:
+        wave_text = wave_override
     write_file(planning / 'PLAN.md', plan_text)
     write_file(planning / f'waves/W{wave}-fixture.md', wave_text)
     snapshot = planning / 'campaigns' / plan / 'plan-snapshot'
@@ -221,9 +228,9 @@ class AutoReviewTests(unittest.TestCase):
         self.worlds += 1
         return build_world(self.base / f'world-{self.worlds}', **kwargs)
 
-    def campaign(self, w, *, history=0, declared=True, head=None, stage='context-ready'):
+    def campaign(self, w, *, history=0, declared=True, head=None, stage='context-ready', **tracker):
         root = build_campaign(self.base / f'campaign-{self.worlds}', w['plan'], w['wave'],
-                              declared=declared)
+                              declared=declared, **tracker)
         journal = journal_fixture(w['plan'], w['wave'], head or w['head'], history)
         journal['stage'] = stage
         write_file(root / '.planning/campaigns' / w['plan'] / f"coordinator-w{w['wave']}.json",
@@ -257,6 +264,156 @@ class AutoReviewTests(unittest.TestCase):
     # ------------------------------------------------------------------
     # prepare: honest gate-red template, typed passthrough, real refusals
     # ------------------------------------------------------------------
+
+    def cache_tracker_issue(self, *, issue=9686, milestone=895):
+        data = {'number': issue, 'html_url': f'https://github.com/{SLUG}/issues/{issue}',
+                'milestone': {'number': milestone, 'title': FROZEN_TITLE,
+                              'url': f'https://api.github.com/repos/{SLUG}/milestones/{milestone}'}}
+        m._API_CACHE[(SLUG, f'issues/{issue}', False)] = data
+        return data
+
+    def test_legacy_frozen_facts_prepare_and_finalize_use_authenticated_cached_issue(self):
+        w = self.world()
+        campaign = self.campaign(w, legacy=True, history=1, issue=824, milestone=72)
+        facts = m.snapshot_facts(campaign, w['plan'], w['wave'])
+        self.assertEqual(facts['issue'], 824)
+        self.assertEqual(facts['frozen-plan-title'], FROZEN_TITLE)
+        self.assertNotIn('milestone', facts)
+        self.cache_tracker_issue(issue=824, milestone=72)
+        # Live files cannot substitute a canary binding or a different title.
+        write_file(campaign / '.planning/PLAN.md', '# Plan: Wrong live title\n')
+        write_file(campaign / '.planning/waves/W1-fixture.md', 'W1 = #12345\n')
+        prepared = self.prepare(w, campaign, 1)
+        self.assertEqual(prepared['status'], 'awaiting-review')
+        self.assertEqual(prepared['request']['milestone'], 72)
+        self.assertEqual(prepared['request']['issue'], 824)
+        self.assertEqual(prepared['request']['generation'], 1)
+        staging = self.impl_staging(campaign, w['plan'], w['wave'], 1)
+        output = self.write_reviewer(staging, reviewer_output())
+        # A restarted controller must resolve again, not borrow positive request metadata.
+        m._API_CACHE.clear()
+        self.cache_tracker_issue(issue=824, milestone=72)
+        finalized = self.finalize(w, campaign, 1, output)
+        self.assertEqual(finalized['status'], 'reviewed')
+        committed = sh('git', 'show', f"{finalized['tip']}:{prepared['request']['evidence']}", cwd=w['subject'])
+        self.assertIn('(milestone . 72)', committed)
+        self.assertIn('(issue . 824)', committed)
+        self.assertIn('ready-for-merge', committed)
+        self.assertEqual(m.review(w['subject'], w['plan'], w['wave'], w['head'], WAVE_BRANCH,
+                                  campaign_root=campaign)['status'], 'reviewed')
+        self.assertFalse(self.impl_staging(campaign, w['plan'], w['wave'], 0).exists())
+
+    def test_legacy_tracker_api_negatives_stop_both_prepare_and_finalize_without_publication(self):
+        w = self.world()
+        campaign = self.campaign(w, legacy=True)
+        self.cache_tracker_issue()
+        self.prepare(w, campaign, 0)
+        staging = self.impl_staging(campaign, w['plan'], w['wave'], 0)
+        output = self.write_reviewer(staging, reviewer_output())
+        before = {str(p): p.read_bytes() for p in staging.rglob('*') if p.is_file()}
+        bad_issues = [None, [], {}, {'number': True}, {'pull_request': {}}]
+        good = self.cache_tracker_issue()
+        for key, values in (
+                ('number', [True, 0, '9686', 9687]),
+                ('html_url', [None, 'https://github.com/other/repo/issues/9686',
+                              'https://github.com/owner/repo/issues/9687',
+                              'https://github.com/owner/repo/issues/9686?x=1',
+                              'https://user@github.com/owner/repo/issues/9686',
+                              'https://github.com/owner/repo/issues/09686',
+                              'https://github.com/owner/repo/issues/9686#x']),
+                ('pull_request', [None, {'url': 'a-pr'}]),
+                ('milestone', [None, [], {}])):
+            bad_issues.extend(dict(good, **{key: value}) for value in values)
+        for key, values in (
+                ('number', [True, 0, -1, '895', None]),
+                ('title', [None, 'Wrong title', FROZEN_TITLE + ' ', FROZEN_TITLE.lower()]),
+                ('url', [None, 'https://api.github.com/repos/other/repo/milestones/895',
+                         'https://api.github.com/repos/owner/repo/milestones/896',
+                         'https://api.github.com/repos/owner/repo/milestones/0895',
+                         'https://api.github.com/repos/owner/repo/milestones/895?x=1',
+                         'https://user@api.github.com/repos/owner/repo/milestones/895',
+                         'https://api.github.com/repos/owner/repo/milestones/895#x',
+                         'http://api.github.com/repos/owner/repo/milestones/895'])):
+            bad_issues.extend(dict(good, milestone=dict(good['milestone'], **{key: value}))
+                              for value in values)
+        from unittest.mock import patch
+        verified_facts = m.snapshot_facts(campaign, w['plan'], w['wave'])
+        # Exhaustive resolver checks use facts obtained from the real verified
+        # snapshot, avoiding redundant Racket startup for every URL variation.
+        # Representative failures also cross both complete production ports.
+        with patch.object(m, 'snapshot_facts', return_value=verified_facts):
+            for data in bad_issues:
+                with self.subTest(data=data):
+                    m._API_CACHE[(SLUG, 'issues/9686', False)] = data
+                    with self.assertRaises(m.Pending):
+                        m.review_tracker_facts(w['subject'], campaign, w['plan'], w['wave'])
+        integration_cases = [None, dict(good, number=9687),
+                             dict(good, html_url='https://github.com/other/repo/issues/9686'),
+                             dict(good, pull_request={}), dict(good, milestone=None)]
+        integration_cases.extend(dict(good, milestone=dict(good['milestone'], **change))
+                                 for change in ({'number': True}, {'title': 'Wrong title'},
+                                                {'url': 'https://api.github.com/repos/other/repo/milestones/895'}))
+        for data in integration_cases:
+            with self.subTest(integration_data=data):
+                m._API_CACHE[(SLUG, 'issues/9686', False)] = data
+                with self.assertRaises(m.Pending):
+                    self.prepare(w, campaign, 0)
+                with self.assertRaises(m.Pending):
+                    self.finalize(w, campaign, 0, output)
+        # An actual authenticated API transport error is also a stop.
+        m._API_CACHE.clear()
+        original_command = m.command
+        def fail_issue_api(args, **kwargs):
+            if args[0] == 'gh':
+                self.assertEqual(args, ['gh', 'api', '--hostname', 'github.com',
+                                        'repos/owner/repo/issues/9686'])
+                raise m.Pending('authenticated issue lookup failed')
+            return original_command(args, **kwargs)
+        with patch.object(m, 'command', side_effect=fail_issue_api):
+            with self.assertRaises(m.Pending):
+                self.prepare(w, campaign, 0)
+            with self.assertRaises(m.Pending):
+                self.finalize(w, campaign, 0, output)
+        self.assertEqual(before, {str(p): p.read_bytes() for p in staging.rglob('*') if p.is_file()})
+        self.assertEqual(self.remote_tip(w), w['head'])
+
+    def test_finalize_legacy_tracker_binding_drift_refuses_publication(self):
+        w = self.world()
+        campaign = self.campaign(w, legacy=True)
+        self.cache_tracker_issue()
+        self.prepare(w, campaign, 0)
+        staging = self.impl_staging(campaign, w['plan'], w['wave'], 0)
+        output = self.write_reviewer(staging, reviewer_output())
+        m._API_CACHE.clear()
+        self.cache_tracker_issue(milestone=896)
+        with self.assertRaises(m.Pending) as caught:
+            self.finalize(w, campaign, 0, output)
+        self.assertIn('tracker binding changed', str(caught.exception))
+        self.assertEqual(self.remote_tip(w), w['head'])
+
+    def test_numeric_metadata_requires_integer_not_bool_without_api_fallback(self):
+        from unittest.mock import patch
+        for key in ('issue', 'milestone'):
+            for value in (True, False, 0, -1, '895', None):
+                with self.subTest(key=key, value=value):
+                    facts = {'issue': 9686, 'milestone': 895, key: value}
+                    with patch.object(m, 'snapshot_facts', return_value=facts), patch.object(m, 'api') as api:
+                        with self.assertRaises(m.Pending):
+                            m.review_tracker_facts(None, None, 'a' * 64, 1)
+                        api.assert_not_called()
+
+    def test_legacy_missing_verified_title_or_explicit_issue_never_dispatches(self):
+        for tracker in ({'heading': '# Fixture plan'},
+                        {'heading': '# Plan: First\n# Plan: Second'},
+                        {'wave_override': '# W1: Legacy\ncanary row = #12345\n'},
+                        {'wave_override': '# W1: Legacy\nW2 = #9686\n'}):
+            with self.subTest(tracker=tracker):
+                w = self.world()
+                campaign = self.campaign(w, legacy=True, **tracker)
+                with self.assertRaises(m.Pending):
+                    self.prepare(w, campaign, 0)
+                self.assertFalse(self.impl_staging(campaign, w['plan'], w['wave'], 0).exists())
+                self.assertFalse(m._API_CACHE)
 
     def test_prepare_missing_trio_is_dispatchable_with_gate_red_template(self):
         w = self.world()
