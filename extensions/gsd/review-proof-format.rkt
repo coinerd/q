@@ -73,19 +73,43 @@
      (regexp-match?
       #px"^--suite(?:=|[[:space:]]+)fast(?:[[:space:]]+--jobs[[:space:]]+[1-9][0-9]*)?[[:space:]]*$"
       match))))
+;; A suite-runner stage is eligible only in its two whole forms: the full
+;; fast suite (`fast` positional, `--suite fast` or `--suite=fast`, plus the
+;; trusted operational `--jobs N`) or the focused whole-file form (only
+;; positional tests/*.rkt files, no flags at all). ANY other operand shape —
+;; files mixed with the suite flag, shard/profile/selection flags before or
+;; after the flag, unknown options — is a partial execution and is refused
+;; at the retention layer, not merely masked by later chain grammar.
+(define (suite-runner-stage-eligible? stage)
+  (define trimmed (string-trim stage))
+  (and
+   (regexp-match? #px"^(?:racket[[:space:]]+)?scripts/run-tests[.]rkt(?:[[:space:]]|$)" trimmed)
+   (let ([operands (cdr (regexp-match
+                         #px"^(?:racket[[:space:]]+)?scripts/run-tests[.]rkt(?:[[:space:]]+(.*))?$"
+                         trimmed))])
+     (define rest
+       (if (pair? operands)
+           (or (car operands) "")
+           ""))
+     (or
+      ;; whole fast suite form, optionally with trusted --jobs N
+      (regexp-match?
+       #px"^(?:(?:--suite[[:space:]]+fast|--suite=fast|fast)(?:[[:space:]]+--jobs[[:space:]]+[1-9][0-9]*)?)?$"
+       rest)
+      ;; focused whole-file form: only positional tests/*.rkt, no flags
+      (and (non-empty-string? (string-trim rest))
+           (for/and ([token (in-list (string-split rest))])
+             (regexp-match? #px"^tests/[^ ;&|]+[.]rkt$" token)))))))
 ;; A declared chain can be retained without certifying a partial/dry-run fast
 ;; profile as broad green. Jobs is operational, not a profile substitution.
 (define (proof-verify-command-eligible? command)
-  (and
-   (text? command)
-   (not (regexp-match? verify-scope-flag-rx command))
-   (suite-selection-whole-fast? command)
-   (not
-    (and
-     (regexp-match? #px"(?:test|run-tests)[.]rkt[[:space:]]+fast(?:[[:space:]]|$)" command)
-     (regexp-match?
-      #px"(?:test|run-tests)[.]rkt[[:space:]]+fast[^;&|\n]*[[:space:]][^[:space:];&|]+[.]rkt(?:[[:space:];&|]|$)"
-      command)))))
+  (and (text? command)
+       (not (regexp-match? verify-scope-flag-rx command))
+       (suite-selection-whole-fast? command)
+       (for/and ([stage (in-list (or (owned-chain-stages command) '()))])
+         (or (not (regexp-match? #px"(?:^|[[:space:]])scripts/run-tests[.]rkt(?:[[:space:]]|$)"
+                                 stage))
+             (suite-runner-stage-eligible? stage)))))
 (define (proof-logical-repository origin)
   (and
    (string? origin)

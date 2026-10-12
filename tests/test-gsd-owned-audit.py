@@ -540,6 +540,48 @@ class LinkedRedApprovalTests(_OwnedWorldTests):
                  '--owned-proof-authority', str(payload)],
                 capture_output=True, text=True, timeout=120)
             self.assertEqual(gate.returncode, 0, gate.stdout + gate.stderr)
+        # The publication COMMITTED the authority payload inside the excluded
+        # bundle directory, and push CI (no explicit payload argument)
+        # validates the same trio through gate discovery of that payload.
+        committed = subprocess.run(
+            ['git', '-C', str(fixture['world']['subject']), 'show',
+             f"{tip}:{authority['bundle']}/authority.json"],
+            capture_output=True, check=True).stdout
+        self.assertEqual(json.loads(committed), authority)
+        with tempfile.TemporaryDirectory(prefix='q-discovered-') as temp:
+            root = Path(temp)
+            for rel in (request['evidence'], request['review'], request['validation'],
+                        'scripts/required-pr-checks.policy'):
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(subprocess.run(
+                    ['git', '-C', str(fixture['world']['subject']), 'show', f'{tip}:{rel}'],
+                    capture_output=True, check=True).stdout)
+            bundle_root = root / authority['bundle']
+            bundle_root.mkdir(parents=True)
+            bundle_root.joinpath('authority.json').write_bytes(committed)
+            for ref in (authority['reference'], authority['log-reference'],
+                        authority['red']['reference'], authority['red']['log-reference']):
+                bundle_root.joinpath(ref['path']).write_bytes(subprocess.run(
+                    ['git', '-C', str(fixture['world']['subject']), 'show',
+                     f"{tip}:{authority['bundle']}/{ref['path']}"],
+                    capture_output=True, check=True).stdout)
+            gate = subprocess.run(
+                ['racket', str(ROOT / 'scripts/gsd-wave-gate.rkt'),
+                 str(root / request['evidence']),
+                 '--content-digest', request['content-digest'], '--root', str(root),
+                 '--policy', str(root / 'scripts/required-pr-checks.policy')],
+                capture_output=True, text=True, timeout=120)
+            self.assertEqual(gate.returncode, 0, gate.stdout + gate.stderr)
+            # Without any discoverable payload the audit trio fails closed.
+            bundle_root.joinpath('authority.json').unlink()
+            gate = subprocess.run(
+                ['racket', str(ROOT / 'scripts/gsd-wave-gate.rkt'),
+                 str(root / request['evidence']),
+                 '--content-digest', request['content-digest'], '--root', str(root),
+                 '--policy', str(root / 'scripts/required-pr-checks.policy')],
+                capture_output=True, text=True, timeout=120)
+            self.assertNotEqual(gate.returncode, 0, gate.stdout + gate.stderr)
         # F11 stays a separate operator gate: approval never manufactures it.
         review_blob = subprocess.run(
             ['git', '-C', str(fixture['world']['subject']), 'show',
@@ -555,6 +597,77 @@ class LinkedRedApprovalTests(_OwnedWorldTests):
         fresh = m._owned_authority(fixture['campaign'], fixture['plan'], 1, fixture['staging'])
         self.assertEqual(fresh['reference'], authority['reference'])
         self.assertEqual(fresh['red']['reference'], authority['red']['reference'])
+
+
+class OwnedBindingTests(_OwnedWorldTests):
+    """Production postmerge binding finalization keeps audit provenance:
+    the binding trio is published with mode/proof/binding/ack and validated
+    through the SAME discovered staging-bundle law (merge == execution head
+    under the FF guard; squash merges stay the typed unsupported relation)."""
+    SPECS = (('positive', 'd' * 64, True),)
+
+    def test_binding_finalize_publishes_audit_provenance_and_validates(self):
+        fixture = self.fixtures['positive']
+        w = fixture['world']
+        plan = fixture['plan']
+        campaign = fixture['campaign']
+        head = fixture['head2']
+        q = campaign / 'q'
+        # Fast-forward origin/main to the verified implementation head: the
+        # only merged relation the audit law supports (merge == head).
+        f.sh('git', 'push', '-q', w['origin'], f'{head}:refs/heads/main', cwd=q)
+        staging = m.binding_staging_path(campaign, plan, 1, 0)
+        staging.mkdir(parents=True, exist_ok=True)
+        pr_payload = {'number': w['pr'], 'merged': True, 'merge_commit_sha': head,
+                      'merged_at': '2026-09-14T16:23:06Z',
+                      'head': {'sha': head, 'ref': f.WAVE_BRANCH,
+                               'repo': {'full_name': f.SLUG}},
+                      'base': {'ref': 'main', 'sha': w['c0'],
+                               'repo': {'full_name': f.SLUG}}}
+        request = m.draft_request({'wave': 'W1', 'milestone': 895, 'issue': 9686},
+                                  plan, 1, pr_payload,
+                                  m.binding_branch(plan, 1, 0), f.POLICY_NAMES, 0)
+        payload = staging / 'request.json'
+        payload.write_text(json.dumps(request))
+        m.command(['racket', str(m.HERE / 'gsd-binding-data.rkt'), 'prepare',
+                   str(payload), str(staging)])
+        payload.unlink()
+        prepared = m.auto_review(w['subject'], plan, 1, 'prepare', 'binding-review',
+                                 head, f.WAVE_BRANCH, campaign, 0, staging)
+        self.assertEqual(prepared['status'], 'awaiting-review', prepared)
+        binding_request = prepared['request']
+        authority = binding_request['owned-authority']
+        self.assertEqual(binding_request['content-digest'], m.EMPTY_SHA)
+        out = f.reviewer_output(kind='approved')
+        out.pop('validation', None)
+        out['report'] = ('Audited the merged binding at the fast-forwarded implementation '
+                         'head, the owned manifest and the actual raw outputs including the '
+                         'linked RED failure output; I reran and executed no gate.')
+        out['audit-ack'] = {'mode': m.OWNED_AUDIT_MODE, 'verification-origin': 'audited-owned',
+                            'source-read': True, 'raw-output-read': True,
+                            'binding': m._audit_binding(binding_request),
+                            'red-ack': {'proof-sha256': authority['red']['reference']['sha256'],
+                                        'raw-output-read': True}}
+        reviewer = staging / 'reviewer-output.json'
+        reviewer.write_text(json.dumps(out))
+        result = m.auto_review(w['subject'], plan, 1, 'finalize', 'binding-review',
+                               head, f.WAVE_BRANCH, campaign, 0, staging, reviewer)
+        self.assertEqual(result['status'], 'reviewed', result)
+        artifact = f"{plan}-w1.rktd"
+        evidence = m.read_datum(staging / 'docs/reports/gsd-wave-evidence' / artifact)
+        review = m.read_datum(staging / 'docs/reports/gsd-wave-reviews' / artifact)
+        validation = m.read_datum(staging / 'docs/reports/gsd-wave-validation' / artifact)
+        for datum in (evidence, review, validation):
+            self.assertEqual(datum['review-mode'], m.OWNED_AUDIT_MODE)
+            self.assertEqual(datum['owned-proof'], authority['reference'])
+            self.assertEqual(datum['audit-binding'], m._audit_binding(binding_request))
+        self.assertEqual(review['audit-ack'], out['audit-ack'])
+        # The staged strict gate validated the trio through the DISCOVERED
+        # bundle law (mirrored from this staging directory).
+        bundle = staging / authority['bundle']
+        self.assertTrue((bundle / 'authority.json').is_file())
+        self.assertEqual(m.binding_review(w['subject'], plan, 1, staging,
+                                          campaign, f.WAVE_BRANCH)['status'], 'reviewed')
 
 
 if __name__ == '__main__':

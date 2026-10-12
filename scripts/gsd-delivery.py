@@ -1251,6 +1251,17 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
             target = gate_root / 'docs/reports' / ('gsd-wave-' + kind) / artifact
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(source.read_bytes())
+        # An audit-mode staged trio validates through the SAME discovered
+        # bundle law as a committed one: mirror the controller-exported
+        # owned-proofs directory from the staging output into the gate root.
+        proofs_src = expected / 'docs/reports/gsd-wave-validation/owned-proofs'
+        if proofs_src.is_dir() and not proofs_src.is_symlink():
+            for payload in sorted(proofs_src.rglob('*')):
+                if payload.is_file() and not payload.is_symlink():
+                    relative = payload.relative_to(proofs_src)
+                    target = gate_root / 'docs/reports/gsd-wave-validation/owned-proofs' / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(payload.read_bytes())
         policy = blob_or_none(repo, main, str(POLICY_PATH))
         require(policy is not None, 'binding gate policy is unavailable')
         policy_path = gate_root / 'scripts/required-pr-checks.policy'
@@ -2482,8 +2493,18 @@ def _owned_publication_files(staging, authority):
     red = authority.get('red')
     if isinstance(red, dict):
         refs += [red['reference'], red['log-reference']]
-    return {bundle + '/' + ref['path']: Path(staging) / bundle / ref['path']
-            for ref in refs}
+    files = {bundle + '/' + ref['path']: Path(staging) / bundle / ref['path']
+             for ref in refs}
+    # The committed authority payload lets push CI (and the staged binding
+    # gate) validate the audit trio with the exact trusted authority the
+    # controller used: same excluded directory, same trust level as the
+    # trio itself. Written from the FINAL reauthenticated authority, so the
+    # committed bytes match the publication exactly.
+    payload = Path(staging) / bundle / 'authority.json'
+    payload.parent.mkdir(parents=True, exist_ok=True)
+    payload.write_text(json.dumps(authority, sort_keys=True))
+    files[bundle + '/authority.json'] = payload
+    return files
 
 
 def _commit_candidate(repo, base_tip, datums, message, raw_files=None):
@@ -2804,24 +2825,41 @@ def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
                 'attempt-fence': receipt['attempt-fence'], 'postmerge': True,
                 'findings': output['findings']}
     gates = _owned_approval_gates(output.get('validation'), authority)
-    evidence = dict(evidence, status='ready-for-merge', **{'content-digest': EMPTY_SHA})
-    review_datum = {'reviewer': output['reviewer'], 'verdict': 'APPROVED',
-                    'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
-                    'content-digest': EMPTY_SHA, 'scope': output['scope'],
-                    'report': output['report']}
-    validation = {'status': 'current', 'planning-sync': 'current',
-                  'milestone': evidence['milestone'], 'wave': evidence['wave'],
-                  'issue': evidence['issue'], 'branch': staged['branch'],
-                  'implementation-sha': staged['merge-sha'],
-                  'content-digest': EMPTY_SHA, 'red-first': gates['red-first'],
-                  'focused-tests': gates['focused-tests'],
-                  'format-compile': gates['format-compile'], 'lint': gates['lint'],
-                  'fast': gates['fast'], 'review-artifact': review_rel,
-                  'remaining-items': gates['remaining-items']}
+    common = {}
+    if authority is not None:
+        # Postmerge binding approval keeps the SAME audit provenance as the
+        # implementation review: mode, proof reference, binding and ack are
+        # published and revalidated by the strict audit gate (the staged
+        # trio is validated with the discovered staging bundle below), so a
+        # binding trio can never look legacy while an owned proof exists.
+        common = {'review-mode': OWNED_AUDIT_MODE,
+                  'owned-proof': authority['reference'],
+                  'audit-binding': authority['audit-binding']}
+        if isinstance(authority.get('red'), dict):
+            common['owned-red'] = authority['red']['reference']
+    evidence = dict(evidence, status='ready-for-merge', **common,
+                    **{'content-digest': EMPTY_SHA})
+    review_datum = dict(common, **{'reviewer': output['reviewer'], 'verdict': 'APPROVED',
+                                   'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
+                                   'content-digest': EMPTY_SHA, 'scope': output['scope'],
+                                   'report': output['report']})
+    if authority is not None:
+        review_datum['audit-ack'] = output['audit-ack']
+    validation = dict(common, **{'status': 'current', 'planning-sync': 'current',
+                                 'milestone': evidence['milestone'], 'wave': evidence['wave'],
+                                 'issue': evidence['issue'], 'branch': staged['branch'],
+                                 'implementation-sha': staged['merge-sha'],
+                                 'content-digest': EMPTY_SHA, 'red-first': gates['red-first'],
+                                 'focused-tests': gates['focused-tests'],
+                                 'format-compile': gates['format-compile'], 'lint': gates['lint'],
+                                 'fast': gates['fast'], 'review-artifact': review_rel,
+                                 'remaining-items': gates['remaining-items']})
     for path, datum in ((evidence_path, evidence), (review_path, review_datum),
                         (validation_path, validation)):
         path.unlink()
         write_rktd(datum, path)
+    if authority is not None:
+        _owned_publication_files(staging, authority)
     result = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
     require(result['status'] == 'reviewed',
             'the finalized staged trio failed the strict binding gate: %s'

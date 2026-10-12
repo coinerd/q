@@ -37,7 +37,17 @@
                    flag))
     (check-false
      (proof-verify-command-eligible?
-      "racket scripts/run-tests.rkt --suite fast && racket scripts/run-tests.rkt fast x.rkt")))
+      "racket scripts/run-tests.rkt --suite fast && racket scripts/run-tests.rkt fast x.rkt"))
+    ;; Partial selections are refused at the RETENTION layer regardless of
+    ;; operand order: files before the suite flag, shard flags before it,
+    ;; or focused files carrying any flag at all.
+    (for ([command (list "racket scripts/run-tests.rkt tests/a.rkt --suite fast"
+                         "racket scripts/run-tests.rkt --shard-index 0 --shard-total 2 --suite fast"
+                         "racket scripts/run-tests.rkt --suite fast --jobs 2 tests/a.rkt"
+                         "racket scripts/run-tests.rkt tests/a.rkt --jobs 2")])
+      (check-false (proof-verify-command-eligible? command) command))
+    (check-true (proof-verify-command-eligible? "racket scripts/run-tests.rkt fast"))
+    (check-true (proof-verify-command-eligible? "racket scripts/run-tests.rkt tests/a.rkt")))
   (test-case "owned chain stages and focused RED command grammar"
     (define chain
       (string-append "cd <project-base>/q && raco fmt -i a.rkt b.rkt && raco make a.rkt"

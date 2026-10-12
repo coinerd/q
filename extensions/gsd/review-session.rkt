@@ -196,7 +196,9 @@
          " Do not edit source, evidence, refs, or publish. Credentials are unavailable."
          " AUDIT owned gates; do not rerun full fast/focused/format/compile/lint or RED."
          " Never claim you executed inherited gates. Missing proof remains review-failed, not approval."
-         " You have at most 600 seconds including tool inspection; avoid long replay jobs."
+         " You have at most "
+         (number->string timeout)
+         " seconds including tool inspection; avoid long replay jobs."
          " Return ONLY one JSON object as your final assistant text, in the requested result schema."
          " The runtime supplies reviewer identity; do not invent one.\n"
          (if audit?

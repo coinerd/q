@@ -92,11 +92,19 @@
           (error 'owned-audit "missing-or-mismatched-owned-red-provenance")))
       (unless (or red-manifest (not (hash-has-key? datum 'owned-red)))
         (error 'owned-audit "unlinked-red-cannot-be-claimed")))
+    ;; A postmerge binding trio (draft marker `merge-sha`) publishes on the
+    ;; BINDING branch while the audited execution identity stays the wave
+    ;; branch: check `wave-branch` there instead of the publication branch.
+    ;; The FF law (implementation-sha == execution head) is unchanged.
+    (define evidence-branch
+      (if (hash-has-key? evidence 'merge-sha)
+          (hash-ref evidence 'wave-branch #f)
+          (hash-ref evidence 'branch #f)))
     (unless (and (equal? (hash-ref evidence 'implementation-sha #f) (hash-ref expected 'head))
                  (equal? (hash-ref evidence 'content-digest #f) (hash-ref binding 'content-digest #f))
                  (equal? (hash-ref evidence 'plan-id #f) (hash-ref expected 'plan-id))
                  (equal? (hash-ref evidence 'wave #f) (format "W~a" (hash-ref expected 'wave)))
-                 (equal? (hash-ref evidence 'branch #f) (hash-ref expected 'branch))
+                 (equal? evidence-branch (hash-ref expected 'branch))
                  (valid-audit-ack? (hash-ref review 'audit-ack #f) binding))
       (error 'owned-audit "invalid-audit-ack-or-source-binding"))
     ;; The peer must meaningfully acknowledge the linked behavioral RED —
