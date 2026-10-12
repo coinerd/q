@@ -14,6 +14,7 @@ review-infra and is never consumed as a rejection or approval.
 import copy
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -220,6 +221,25 @@ class OwnedAuditTests(unittest.TestCase):
         no_red = {k: v for k, v in request.items() if k != 'owned-authority'}
         with self.assertRaises(m._ReviewInfra):
             m.validate_reviewer_output(out, no_red)
+
+
+    def test_binding_bundle_collector_is_safe_and_posix_relative(self):
+        with tempfile.TemporaryDirectory(prefix='q-bundle-collect-') as temp:
+            staging = Path(temp)
+            proofs = staging / 'docs/reports/gsd-wave-validation/owned-proofs'
+            sha = 'a' * 64
+            (proofs / sha).mkdir(parents=True)
+            (proofs / sha / f'{sha}.json').write_text('{}')
+            (proofs / sha / f'{sha}.log').write_text('raw')
+            (proofs / sha / 'authority.json').write_text('{"mode": 1}')
+            files = m._binding_bundle_files(staging)
+            self.assertEqual(sorted(files),
+                             [f'docs/reports/gsd-wave-validation/owned-proofs/{sha}/{name}'
+                              for name in (f'{sha}.json', f'{sha}.log', 'authority.json')])
+            os.symlink('/etc', proofs / sha / 'escape')
+            files = m._binding_bundle_files(staging)
+            self.assertNotIn(f'docs/reports/gsd-wave-validation/owned-proofs/{sha}/escape', files)
+            self.assertEqual(m._binding_bundle_files(staging / 'missing'), {})
 
 
 class _OwnedWorldTests(unittest.TestCase):

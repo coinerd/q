@@ -2,7 +2,7 @@
 ;; @speed slow
 ;; @suite extensions
 ;; @boundary integration
-;; @isolation subprocess
+;; @isolation process-tree
 ;; @mutates repo
 ;; @timeout 960
 ;; @covers scripts/gsd-delivery.py scripts/gsd-binding-data.rkt extensions/gsd/review-proof.rkt

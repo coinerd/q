@@ -294,7 +294,7 @@ def validate_trio(repo, ref, relative, base, owned_proof_authority=None):
                 str(root / 'scripts/required-pr-checks.policy')]
         if owned_proof_authority is not None:
             payload = root / 'owned-proof-authority.json'
-            payload.write_text(json.dumps(owned_proof_authority))
+            payload.write_text(json.dumps(owned_proof_authority), encoding='utf-8')
             gate += ['--owned-proof-authority', str(payload)]
         command(gate, timeout=60)
         return evidence, read_datum(root / review), [relative, review, validation]
@@ -1322,6 +1322,7 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
         require(len(parents) == 2 and parents[1] == main,
                 'existing binding branch is not based on fresh origin/main')
         binding = binding_path(plan, wave, generation)
+        bundle_files = _binding_bundle_files(output)
         with tempfile.TemporaryDirectory(prefix='q-delivery-existing-binding-') as temp:
             for kind in ('evidence', 'reviews', 'validation'):
                 artifact = Path(binding_path(plan, wave, generation)).name
@@ -1334,6 +1335,14 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
                 staged_path = output / 'docs/reports' / ('gsd-wave-' + kind) / artifact
                 require(remote_datum == read_datum(staged_path),
                         'existing binding branch does not match the staged trio')
+            # An audit binding publication carries its owned-proof bundle:
+            # reuse demands byte-identical bundle files on the branch.
+            for relative, source in bundle_files.items():
+                blob = blob_or_none(repo, remote_tip, relative)
+                require(blob is not None,
+                        'existing binding branch is missing the audit bundle: ' + relative)
+                require(blob == source.read_bytes(),
+                        'existing binding branch audit bundle differs from staging: ' + relative)
         commit = remote_tip
     else:
         with tempfile.TemporaryDirectory(prefix='q-delivery-binding-') as temp:
@@ -1348,6 +1357,14 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
                     (worktree / 'docs/reports' / ('gsd-wave-' + kind)).mkdir(
                         parents=True, exist_ok=True)
                     target = worktree / 'docs/reports' / ('gsd-wave-' + kind) / artifact
+                    target.write_bytes(source.read_bytes())
+                # Mirror the staged owned-proof bundle (manifest, raw log,
+                # authority payload) so the binding PR validates offline.
+                for relative, source in _binding_bundle_files(output).items():
+                    target = worktree / Path(relative)
+                    require(not target.is_symlink(),
+                            'staged audit bundle path is unsafe: ' + relative)
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(source.read_bytes())
                 git(worktree, 'add', '-A')
                 git(worktree, 'commit', '--no-gpg-sign', '-m',
@@ -2502,8 +2519,26 @@ def _owned_publication_files(staging, authority):
     # committed bytes match the publication exactly.
     payload = Path(staging) / bundle / 'authority.json'
     payload.parent.mkdir(parents=True, exist_ok=True)
-    payload.write_text(json.dumps(authority, sort_keys=True))
+    payload.write_text(json.dumps(authority, sort_keys=True), encoding='utf-8')
     files[bundle + '/authority.json'] = payload
+    return files
+
+
+def _binding_bundle_files(staging):
+    """Controller-authored owned-proof bundle files staged beside an audit
+    binding trio. They are mirrored into the binding publication so the
+    binding PR's governance gate can validate the audit trio through the
+    discovered committed authority even when the implementation review was
+    manual-compatibility and the bundle never reached main through it."""
+    proofs = Path(staging) / 'docs/reports/gsd-wave-validation/owned-proofs'
+    files = {}
+    if proofs.is_dir() and not proofs.is_symlink():
+        for payload in sorted(proofs.rglob('*')):
+            if payload.is_file() and not payload.is_symlink():
+                relative = payload.relative_to(proofs.parent)
+                require(not relative.is_absolute() and '..' not in relative.parts,
+                        'unsafe staged owned-proof bundle path: ' + str(payload))
+                files['docs/reports/gsd-wave-validation/' + relative.as_posix()] = payload
     return files
 
 
