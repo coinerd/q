@@ -140,6 +140,14 @@
   (check-true (wave-evidence-result-passed? result)
               (string-join (wave-evidence-result-reasons result) "; ")))
 
+(test-case "audit mode cannot borrow legacy manual approval without independently pinned owner authority"
+  (define evidence (hash-set (read-single-datum-file (build-path baseline-root "evidence/w2.rktd"))
+                             'review-mode "owned-proof-audit-v1"))
+  (define result (validate-wave-evidence evidence #:root baseline-root #:actual-content-digest digest-sha))
+  (check-false (wave-evidence-result-passed? result))
+  (check-true (ormap (lambda (r) (string-contains? r "unknown-proof-authority"))
+                      (wave-evidence-result-reasons result))))
+
 (test-case "F3 head binding: evidence and review heads must equal the receipt head"
   (define control (validate-at-root baseline-root baseline #:receipt-head impl-sha))
   (check-true (wave-evidence-result-passed? control)

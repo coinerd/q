@@ -46,6 +46,7 @@
          "plan-types.rkt"
          "verification-job.rkt"
          "wave-docs.rkt"
+         (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir))
 
 (provide delivery-verification
@@ -58,6 +59,7 @@
          changed-files-set
          scratch-probe-path?
          current-gsd-delivery-verify-command
+         current-gsd-delivery-verify-jobs
          current-gsd-delivery-verify-timeout-sec
          current-gsd-delivery-branch-context
          current-gsd-git-runner
@@ -76,7 +78,24 @@
          ;; expected-branch resolution check — same verified git path and
          ;; injectable current-gsd-git-runner as the isolated gate.
          run-git
-         git-exit-ok?)
+         git-exit-ok?
+         expand-project-base
+         current-owned-verify-observer
+         owned-verify-observation?
+         owned-verify-observation-job
+         owned-verify-observation-command
+         owned-verify-observation-cwd
+         owned-verify-observation-before
+         owned-verify-observation-after
+         owned-verify-observation-base
+         owned-verify-observation-wave
+         owned-verify-observation-fresh?
+         owned-verify-observation-declared?
+         consume-owned-verify-observation!
+         ;; Owned behavioral RED capture (same trusted registry/snapshot
+         ;; authority; additive exports for review-proof.rkt).
+         execution-snapshot
+         checkout-key)
 
 ;; ============================================================
 ;; Structured verification result
@@ -88,6 +107,15 @@
 ;; ============================================================
 ;; Policy knobs
 ;; ============================================================
+
+;; Trusted operational parallelism only. Does not substitute gate scope or
+;; turn an explicit command override into frozen execution authority.
+(define current-gsd-delivery-verify-jobs
+  (make-parameter #f
+                  (lambda (v)
+                    (unless (member v '(#f 2))
+                      (raise-argument-error 'current-gsd-delivery-verify-jobs "(or/c #f 2)" v))
+                    v)))
 
 ;; Optional override for the verify command (tests: fail-forcing / pinning).
 ;; When #f, the wave's DECLARED verify command runs (see
@@ -680,6 +708,41 @@
 
 (define delivery-verify-suite "delivery-verify")
 
+;; Runtime capability: no exported constructor. The observer runs before the
+;; registry slot can be reused, with the closed/reaped terminal record.
+(struct owned-verify-observation (job command cwd before after base wave fresh? declared? active))
+(define current-owned-verify-observer (make-parameter void))
+(define (consume-owned-verify-observation! o)
+  (and (owned-verify-observation? o)
+       (eq? (unbox (owned-verify-observation-active o)) 'available)
+       (begin
+         (set-box! (owned-verify-observation-active o) 'consumed)
+         #t)))
+
+(define (execution-snapshot cwd)
+  (define (fact . args)
+    (define r (run-git* cwd args))
+    (and (git-exit-ok? r) (string-trim (cadr r))))
+  (define refs (fact "rev-parse" "--path-format=absolute" "--git-common-dir" "HEAD" "HEAD^{tree}"))
+  (define parts (and refs (string-split refs "\n")))
+  (define branch (fact "symbolic-ref" "--quiet" "--short" "HEAD"))
+  (define origin (fact "config" "--get" "remote.origin.url"))
+  (and parts
+       (= (length parts) 3)
+       branch
+       origin
+       (equal? (fact "status" "--porcelain=v1" "--untracked-files=all") "")
+       (hasheq 'repo
+               (path->string (simplify-path (path-only (car parts))))
+               'branch
+               branch
+               'head
+               (cadr parts)
+               'tree
+               (caddr parts)
+               'origin
+               origin)))
+
 (define (checkout-key p)
   ;; Stable string key for a checkout/base-dir path: the singleton identity
   ;; must be stable call-to-call (string vs path, relative vs complete).
@@ -714,7 +777,8 @@
   (parameterize ([current-directory run-cwd])
     (verification-start! reg identity "/bin/sh" (list "-c" command) #:timeout-ms timeout-ms)))
 
-(define (registry-run-verify command run-cwd timeout-sec base-dir wave-idx)
+(define (registry-run-verify command run-cwd timeout-sec base-dir wave-idx declared?)
+  (define before (and (not (eq? (current-owned-verify-observer) void)) (execution-snapshot run-cwd)))
   (define reg (current-gsd-verification-registry))
   (define timeout-ms (* 1.0 timeout-sec 1000.0))
   (define identity (delivery-verify-identity base-dir wave-idx run-cwd command))
@@ -746,7 +810,24 @@
       (verification-wait reg job-id timeout-ms)))
   (define state (verification-job-state waited))
   (define exit-code (verification-job-exit-code waited))
-  (define approved? (and (eq? state 'completed) (equal? exit-code 0)))
+  (define approved?
+    (and (eq? state 'completed) (equal? exit-code 0) (verification-job-reaped? waited)))
+  (unless (eq? (current-owned-verify-observer) void)
+    (define active (box 'available))
+    (define o
+      (owned-verify-observation waited
+                                command
+                                (checkout-key run-cwd)
+                                before
+                                (execution-snapshot run-cwd)
+                                (checkout-key base-dir)
+                                wave-idx
+                                (start-result-started? started)
+                                declared?
+                                active))
+    (dynamic-wind void
+                  (lambda () ((current-owned-verify-observer) o))
+                  (lambda () (set-box! active 'expired))))
   (emit-verification-progress!
    'gsd.verification.completed
    (hasheq 'wave
@@ -808,7 +889,8 @@
         worktree
         (build-path base-dir "q")))
   (define with-q (string-replace command "<project-base>/q" (shell-quote-path q-root)))
-  (string-replace with-q "<project-base>" (shell-quote-path base-dir)))
+  (apply-verify-jobs (string-replace with-q "<project-base>" (shell-quote-path base-dir))
+                     (current-gsd-delivery-verify-jobs)))
 
 ;; The wave's DECLARED verify command. The wave document is the authoritative
 ;; declaration — it is what the agent was instructed with and what
@@ -889,9 +971,9 @@
   ;; fallback gate run from the wave WORKTREE (the delivered tree as
   ;; committed), not the shared checkout.
   (define run-cwd (verify-command-cwd base-dir root))
-  (define (run-cmd command cwd note)
+  (define (run-cmd command cwd note [declared? #f])
     (define timeout-sec (current-gsd-delivery-verify-timeout-sec))
-    (define job (registry-run-verify command cwd timeout-sec base-dir wave-idx))
+    (define job (registry-run-verify command cwd timeout-sec base-dir wave-idx declared?))
     (define state (verification-job-state job))
     (define exit-code (verification-job-exit-code job))
     ;; BUG-0060: carry a bounded failed-test/assertion summary directly in
@@ -911,7 +993,7 @@
     ;; nonzero exit are failures — the registry's record, not a wrapper's
     ;; exit status, is authoritative (a wrapper exiting 0 after a
     ;; timeout-killed child can never hide here).
-    (define ok? (and (eq? state 'completed) (eqv? exit-code 0)))
+    (define ok? (and (eq? state 'completed) (eqv? exit-code 0) (verification-job-reaped? job)))
     (cons "verify"
           (cons ok?
                 (if ok?
@@ -939,7 +1021,8 @@
         (if (non-empty-string? normalized)
             (run-cmd (expand-project-base normalized base-dir)
                      (declared-verify-cwd base-dir normalized)
-                     "")
+                     ""
+                     #t)
             (cons
              "verify"
              (cons

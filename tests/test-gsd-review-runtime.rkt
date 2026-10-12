@@ -122,7 +122,8 @@
         (hasheq 'glm-5.3 (provider-config coding-url '("glm-5.3" "zai-coding-plan/glm-5.3")))
         (hasheq)))
 (define (review-request)
-  (hasheq 'wave 0 'head (make-string 40 #\b) 'branch "campaign/w0"
+  (hasheq 'review-mode "manual-compatibility"
+          'wave 0 'head (make-string 40 #\b) 'branch "campaign/w0"
           'attempt-id "author" 'attempt-fence 4 'prompt "Review"))
 (module+ test
   ;; Racket fixes home-dir at process startup (HOME alone cannot rebind it).
@@ -142,6 +143,19 @@
           (system* (find-executable-path "raco") "test" (path->string this-test)))))
      (lambda () (delete-directory/files home))))
   (when hermetic?
+  (test-case "production rejects missing owned proof before model launch, deadline ceiling is 600"
+    (fixture
+     (lambda (root)
+       (define make-runner (dynamic-require adapter 'make-auto-review-runner))
+       (check-exn exn:fail? (lambda () (make-runner root plan #:timeout-seconds 601)))
+       (define launched? #f)
+       (define runner
+         (make-runner root plan #:provider-builder (lambda (_) (set! launched? #t) (build-mock-provider))
+                      #:checkout-resolver (lambda (_) repo)))
+       (define request (hash-set (review-request) 'review-mode "owned-proof-audit-v1"))
+       (check-equal? (hash-ref (runner request) 'kind) "review-failed")
+       (check-false launched?)
+       (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0) 0))))
   (test-case "default builder resolves actual q glm-5.3 registry alias without network"
     (configured-fixture
      (hasheq 'glm-5.3 (hasheq 'base-url coding-url 'models '("glm-5.3")))
@@ -234,19 +248,7 @@
                                  (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7)
                                  "glm-5.3"
                                  'stop)))))
-       (define result
-         (runner (hasheq 'wave
-                         0
-                         'head
-                         (make-string 40 #\b)
-                         'branch
-                         "campaign/w0"
-                         'attempt-id
-                         "author"
-                         'attempt-fence
-                         4
-                         'prompt
-                         "Review")))
+       (define result (runner (review-request)))
        (check-equal? (hash-ref result 'kind) "request-changes")
        (check-regexp-match #rx"^q-session:" (hash-ref result 'reviewer)))))
   (test-case "real fresh sessions, read/bash only, final JSON and runtime-owned identity"
@@ -267,19 +269,7 @@
                                 (check-false (getenv "GH_TOKEN"))
                                 (check-regexp-match #rx"Return ONLY.*JSON" prompt)
                                 (response result-json))))
-               (define req
-                 (hasheq 'wave
-                         0
-                         'head
-                         (make-string 40 #\b)
-                         'branch
-                         "campaign/w0"
-                         'attempt-id
-                         "author"
-                         'attempt-fence
-                         4
-                         'prompt
-                         "Review the pinned diff"))
+               (define req (review-request))
                (parameterize ([current-environment-variables
                                (environment-variables-copy (current-environment-variables))])
                  (putenv "GH_TOKEN" "must-not-reach-reviewer")
@@ -305,20 +295,7 @@
                     (set-campaign-cancellation! rec (make-campaign-cancellation "stop review" 0))
                     (persist-campaign! root rec)
                     (response result-json))))
-               (check-equal? (hash-ref (runner (hasheq 'wave
-                                                       0
-                                                       'head
-                                                       (make-string 40 #\b)
-                                                       'branch
-                                                       "campaign/w0"
-                                                       'attempt-id
-                                                       "author"
-                                                       'attempt-fence
-                                                       4
-                                                       'prompt
-                                                       "Review"))
-                                       'kind)
-                             "review-failed")
+               (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed")
                (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0)
                              0))))
   (test-case "post-session checkout drift refuses JSON but still accounts reviewer usage"
@@ -335,20 +312,7 @@
                                           (error 'checkout "tracked source drift"))
                                         repo)
                   #:session-run (lambda (_session _prompt) (response result-json))))
-               (check-equal? (hash-ref (runner (hasheq 'wave
-                                                       0
-                                                       'head
-                                                       (make-string 40 #\b)
-                                                       'branch
-                                                       "campaign/w0"
-                                                       'attempt-id
-                                                       "author"
-                                                       'attempt-fence
-                                                       4
-                                                       'prompt
-                                                       "Review"))
-                                       'kind)
-                             "review-failed")
+               (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed")
                (check-equal? resolutions 2)
                (check-equal?
                 (usage-summary-input-tokens
@@ -366,20 +330,7 @@
                                        (sleep 10)
                                        (error 'test "must be cancelled"))
                   #:session-run (lambda (_session _prompt) (error 'test "must not reach reviewer"))))
-               (check-equal? (hash-ref (runner (hasheq 'wave
-                                                       0
-                                                       'head
-                                                       (make-string 40 #\b)
-                                                       'branch
-                                                       "campaign/w0"
-                                                       'attempt-id
-                                                       "author"
-                                                       'attempt-fence
-                                                       4
-                                                       'prompt
-                                                       "Review"))
-                                       'kind)
-                             "review-failed"))))
+               (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed"))))
   (test-case "malformed genuine final and bounded timeout are infrastructure, not rejection"
     (fixture (lambda (root)
                (define make-runner (dynamic-require adapter 'make-auto-review-runner))
@@ -394,17 +345,4 @@
                                                 (if (eq? mode 'timeout)
                                                     (sleep 5)
                                                     (response "not JSON")))))
-                 (check-equal? (hash-ref (runner (hasheq 'wave
-                                                         0
-                                                         'head
-                                                         (make-string 40 #\b)
-                                                         'branch
-                                                         "campaign/w0"
-                                                         'attempt-id
-                                                         "author"
-                                                         'attempt-fence
-                                                         4
-                                                         'prompt
-                                                         "review"))
-                                         'kind)
-                               "review-failed")))))))
+                 (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed")))))))

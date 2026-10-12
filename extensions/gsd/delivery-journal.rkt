@@ -5,13 +5,15 @@
 (require json
          racket/file
          racket/list
-         racket/path)
+         racket/path
+         "review-proof.rkt")
 (provide delivery-journal-path
          load-delivery-journal
          record-delivery-receipt!
          update-delivery-journal!
          valid-delivery-receipt?
          valid-receipt-history?
+         refresh-owned-proof-receipt!
          reconcile-repair-tail-receipt!
          repair-tail-allowed-stages
          reconcile-merged-tip-receipt!
@@ -57,7 +59,9 @@
        (andmap (lambda (k) (text? (hash-ref r k #f))) '(repo branch origin evidence))
        (hex? (hash-ref r 'head #f) 40)
        (hex? (hash-ref r 'tree #f) 40)
-       (exact-nonnegative-integer? (hash-ref r 'verified-at #f))))
+       (exact-nonnegative-integer? (hash-ref r 'verified-at #f))
+       (or (not (hash-has-key? r 'owned-proof))
+           (proof-reference-matches-receipt? (hash-ref r 'owned-proof) r))))
 ;; v1.00.33 W0 repair-tail protocol (audit §21.2): the append-only history
 ;; of PRIOR immutable receipts preserved by reconcile-repair-tail-receipt!.
 ;; Malformed history never loads — a journal that cannot prove its own past
@@ -181,6 +185,7 @@
 (define (record-delivery-receipt! root plan wave receipt)
   (unless (valid-delivery-receipt? receipt)
     (error 'delivery-journal "invalid Verify receipt"))
+  (validate-receipt-owned-proof! receipt root plan wave)
   (define old (load-delivery-journal root plan wave))
   (cond
     [old
@@ -256,6 +261,72 @@
 (define repair-tail-allowed-stages
   '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
 
+;; Explicit same-source proof upgrade. The opaque authorization can only be
+;; minted by a fresh owned terminal capture, never by reading a JSON file.
+;; Caller holds the campaign lease; guard must check live attempt/cancellation
+;; and source identity. Exact old receipt is a compare-and-swap precondition.
+(define proof-refresh-lock (make-semaphore 1))
+(define (refresh-owned-proof-receipt! root
+                                      plan
+                                      wave
+                                      new-receipt
+                                      #:old-receipt expected-old
+                                      #:authorization authorization
+                                      #:guard guard)
+  (call-with-semaphore proof-refresh-lock
+                       (lambda ()
+                         (refresh-owned-proof-receipt/core! root
+                                                            plan
+                                                            wave
+                                                            new-receipt
+                                                            expected-old
+                                                            authorization
+                                                            guard))))
+(define (refresh-owned-proof-receipt/core! root
+                                           plan
+                                           wave
+                                           new-receipt
+                                           expected-old
+                                           authorization
+                                           guard)
+  (unless (and (valid-delivery-receipt? new-receipt)
+               (procedure? guard)
+               (procedure-arity-includes? guard 0))
+    (error 'delivery-journal "invalid proof refresh/mandatory live guard"))
+  (define old (load-delivery-journal root plan wave))
+  (unless (and old
+               (equal? (hash-ref old 'receipt) expected-old)
+               (member (hash-ref old 'stage) repair-tail-allowed-stages)
+               (not (journal-review-rejection old)))
+    (error 'delivery-journal "stale, rejected or postmerge proof refresh"))
+  (unless (for/and ([k '(repo branch origin head tree attempt-id attempt-fence)])
+            (equal? (hash-ref expected-old k #f) (hash-ref new-receipt k #f)))
+    (error 'delivery-journal "proof refresh source/attempt changed"))
+  (validate-receipt-owned-proof! new-receipt root plan wave)
+  (define ref (hash-ref new-receipt 'owned-proof #f))
+  (unless (and (proof-reference-matches-receipt? ref new-receipt)
+               (equal? (hash-ref (hash-ref ref 'binding) 'plan-id) plan)
+               (equal? (hash-ref (hash-ref ref 'binding) 'wave) wave)
+               (guard))
+    (error 'delivery-journal "proof refresh lacks exact live owned proof"))
+  (cond
+    [(equal? ref (hash-ref expected-old 'owned-proof #f)) old]
+    [else
+     (unless (consume-owned-proof-refresh! authorization ref)
+       (error 'delivery-journal "proof refresh requires fresh owner authorization"))
+     (unless (and (equal? old (load-delivery-journal root plan wave)) (guard))
+       (error 'delivery-journal "proof refresh raced or live guard refused"))
+     (save! root
+            plan
+            wave
+            (hash-set* old
+                       'receipt
+                       new-receipt
+                       'receipt-history
+                       (append (hash-ref old 'receipt-history '()) (list expected-old))
+                       'stage
+                       "context-ready"))]))
+
 ;; BUG-0083: the post-merge analogue. A delivery branch whose implementation
 ;; PR was lawfully merged at an evidence-only drift tip PAST the recorded
 ;; receipt head (the resolve/merge drift tolerance — production shape of
@@ -288,6 +359,7 @@
     (error 'delivery-journal (format "~a reconciliation refused: ~a" label reason)))
   (unless (valid-delivery-receipt? new-receipt)
     (refuse! "new receipt is invalid"))
+  (validate-receipt-owned-proof! new-receipt root plan wave)
   (unless (and (string? expected-attempt-id) (positive? (string-length expected-attempt-id)))
     (refuse! "expected attempt identity is missing"))
   (unless (exact-nonnegative-integer? fence)
@@ -322,6 +394,11 @@
     (refuse! "receipt heads are malformed"))
   (when (string=? old-head-sha new-head-sha)
     (refuse! "heads are equal; not a repair tail"))
+  ;; An execution proof certifies its own tree, not a later merge/tail tree.
+  ;; A caller must supply a newly owned proof for the new head or omit it.
+  (when (and (hash-has-key? new-receipt 'owned-proof)
+             (equal? (hash-ref new-receipt 'owned-proof) (hash-ref old-receipt 'owned-proof #f)))
+    (refuse! "execution proof cannot be carried to another head"))
   (define stage (hash-ref old 'stage #f))
   (unless (member stage allowed)
     (refuse! (format "stage ~a is terminal for ~a reconciliation" stage label)))
@@ -511,6 +588,7 @@
     (error 'delivery-journal (format "review-rejected receipt supersession refused: ~a" reason)))
   (unless (valid-delivery-receipt? new-receipt)
     (refuse! "new receipt is invalid"))
+  (validate-receipt-owned-proof! new-receipt root plan wave)
   (unless (text? (hash-ref new-receipt 'attempt-id #f))
     (refuse! "new receipt is not attempt-bound"))
   (unless (exact-nonnegative-integer? (hash-ref new-receipt 'attempt-fence #f))

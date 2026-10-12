@@ -38,6 +38,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('delivery', ROOT / 'scripts/gsd-delivery.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
+# These injected gate/prose fixtures deliberately test legacy manual controls.
+# Production owned audit regressions are separate and do NOT install this port.
+_manual_auto_review = m.auto_review
+
+def manual_auto_review(*args, **kwargs):
+    return _manual_auto_review(*args, **kwargs, manual_compatibility=True)
+
+m.auto_review = manual_auto_review
 
 POLICY_NAMES = ['lint', 'test (0)', 'workflows (0)']
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
