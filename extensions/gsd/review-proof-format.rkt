@@ -2,6 +2,7 @@
 ;; Portable structural laws. No filesystem/process/model authority here.
 (require racket/list
          racket/string
+         "verify-command-format.rkt"
          (only-in "../../util/json/checksum.rkt" sha256-string))
 (provide proof-hex?
          valid-proof-file-reference?
@@ -47,7 +48,10 @@
     (if worktree?
         cwd
         (string-append (string-trim base "/" #:left? #f) "/q")))
-  (apply-verify-jobs (string-replace (string-replace normalized "<project-base>/q" (quote q-root))
+  (define canonical (canonical-verify-command normalized))
+  (unless (non-empty-string? canonical)
+    (error "ambiguous frozen Verify command"))
+  (apply-verify-jobs (string-replace (string-replace canonical "<project-base>/q" (quote q-root))
                                      "<project-base>"
                                      (quote base))
                      jobs))
@@ -106,7 +110,8 @@
   (and (text? command)
        (not (regexp-match? verify-scope-flag-rx command))
        (suite-selection-whole-fast? command)
-       (for/and ([stage (in-list (or (owned-chain-stages command) '()))])
+       (owned-chain-stages command)
+       (for/and ([stage (in-list (owned-chain-stages command))])
          (or (not (regexp-match? #px"(?:^|[[:space:]])scripts/run-tests[.]rkt(?:[[:space:]]|$)"
                                  stage))
              (suite-runner-stage-eligible? stage)))))
@@ -131,7 +136,7 @@
 ;; order; a zero exit therefore proves every preceding stage ran and passed,
 ;; never that only the last stage happened to succeed.
 (define (owned-chain-stages normalized)
-  (and (text? normalized) (map string-trim (string-split normalized " && "))))
+  (verify-command-stages normalized))
 ;; A focused behavioral runner selects whole test files positionally and
 ;; takes no flags: `raco test tests/a.rkt ...`, `racket tests/a.rkt ...` or
 ;; the real runner facade `racket scripts/run-tests.rkt tests/a.rkt ...`
@@ -245,7 +250,7 @@
        ;; green proof executes; it is not an arbitrary model-chosen command.
        (owned-red-focused-command? (hash-ref m 'focused-normalized-command #f))
        (member (hash-ref m 'focused-normalized-command #f)
-               (owned-chain-stages (hash-ref m 'frozen-normalized-command #f)))
+               (or (owned-chain-stages (hash-ref m 'frozen-normalized-command #f)) '()))
        (member (hash-ref m 'red-origin #f) '("preimplementation" "reproduction"))
        (boolean? (hash-ref m 'execution-worktree 'missing))
        (with-handlers ([exn:fail? (lambda (_) #f)])

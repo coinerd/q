@@ -48,12 +48,12 @@
 ;; through the real --suite CLI flag, and the fixture checkout's honest
 ;; whole-tree lint entrypoint. There is no shimmed or fictional CLI here.
 (define verify-chain
-  (string-append "cd <project-base>/q"
-                 " && raco fmt -i tests/acceptance-check.rkt"
-                 " && raco make tests/acceptance-check.rkt"
-                 " && racket scripts/run-tests.rkt tests/acceptance-check.rkt"
-                 " && racket scripts/run-tests.rkt --suite fast"
-                 " && racket scripts/lint-all.rkt"))
+  (string-append "```sh\ncd <project-base>/q"
+                 "\nraco fmt -i tests/acceptance-check.rkt"
+                 "\nraco make tests/acceptance-check.rkt"
+                 "\nracket scripts/run-tests.rkt tests/acceptance-check.rkt"
+                 "\nracket scripts/run-tests.rkt --suite fast"
+                 "\nracket scripts/lint-all.rkt\n```"))
 ;; Honest fixture gate runner for this fixture ONLY: runs the named focused
 ;; test files (or the full fixture fast suite) through the REAL `raco test`
 ;; runner, fail-fast, propagating the real exit code. NOT the repository's

@@ -52,6 +52,7 @@
                   cleanup-tmp)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   run-delivery-verification
+                  check-verify-command
                   make-delivery-verifier
                   delivery-verification?
                   delivery-verification-approved?
@@ -208,6 +209,33 @@
       (check-true (string-contains? msg "state=timed-out") msg)
       (check-true (string-contains? msg "log=") msg)
       (cleanup-tmp base))
+
+    (test-case "real declared multiline behavioral failure never runs later success sentinel"
+      (define base (setup-standard-campaign!))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define failing (build-path base "focused.rkt"))
+         (define later (build-path base "later.rkt"))
+         (define sentinel (build-path base "sentinel"))
+         (display-to-file "#lang racket\n(require rackunit)\n(check-equal? 1 2)\n"
+                          failing
+                          #:exists 'truncate)
+         (display-to-file (format "#lang racket\n(display-to-file \"ran\" ~s)\n"
+                                  (path->string sentinel))
+                          later
+                          #:exists 'truncate)
+         (write-wave-doc! base
+                          0
+                          "zero"
+                          '("q/ui-core/preferences.rkt")
+                          (format "```sh\nraco test ~a\nracket ~a\n```" failing later))
+         (define result
+           (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+             (check-verify-command base 0 (load-plan* base))))
+         ;; Check both laws even on RED, so the raw reproduction records the sentinel breach.
+         (check-equal? (list (cadr result) (file-exists? sentinel)) '(#f #f) (cddr result)))
+       (lambda () (cleanup-tmp base))))
 
     (test-case "declared verify failing nonzero is a failure with attributable state"
       (define base (setup-standard-campaign!))

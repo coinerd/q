@@ -45,6 +45,7 @@
          "events.rkt"
          "plan-types.rkt"
          "verification-job.rkt"
+         "verify-command-format.rkt"
          "wave-docs.rkt"
          (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir))
@@ -916,8 +917,9 @@
 ;; "- `racket tests/a.rkt`, `racket tests/b.rkt` green." — but the verifier
 ;; ran the raw section text as ONE shell command, bullets, backticks,
 ;; commas and prose included. Normalize before running:
-;;  - a declaration without Markdown bullets is passed through byte-for-byte
-;;    (the canonical single-shell-command contract);
+;;  - single-line declarations without Markdown bullets retain their legacy
+;;    shell contract; unambiguous multiline stages canonicalize to fail-fast
+;;    && before execution and frozen command binding (never snapshot edits);
 ;;  - otherwise only command-shaped inline-code spans are executable. Prose
 ;;    identifiers (`unknown`, `distinct_*`, filenames, examples) are ignored;
 ;;  - executable spans retain document order and join with &&. If none exist,
@@ -953,16 +955,17 @@
       [(string-prefix? span "scripts/metrics.rkt ") (string-append "racket " span)]
       [else span]))
   (define trimmed (string-trim declaration))
-  (if (not (decorated? trimmed))
-      trimmed
-      (string-join
-       (for/list ([raw (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))]
-                  #:do [(define span (string-trim raw))]
-                  #:when (or (executable-span? span)
-                             (string-prefix? span "metrics.rkt ")
-                             (string-prefix? span "scripts/metrics.rkt ")))
-         (canonicalize-span span))
-       " && ")))
+  (canonical-verify-command
+   (if (not (decorated? trimmed))
+       trimmed
+       (string-join
+        (for/list ([raw (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))]
+                   #:do [(define span (string-trim raw))]
+                   #:when (or (executable-span? span)
+                              (string-prefix? span "metrics.rkt ")
+                              (string-prefix? span "scripts/metrics.rkt ")))
+          (canonicalize-span span))
+        " && "))))
 
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
@@ -1027,7 +1030,7 @@
              "verify"
              (cons
               #f
-              "declared Verify section contains no executable command; refusing prose-as-shell")))]
+              "declared Verify section contains no executable command or is ambiguous; refusing prose-as-shell")))]
        ;; genuinely EMPTY verify declaration: the derived compile gate is a
        ;; separately described FALLBACK — never a silent substitute
        [else

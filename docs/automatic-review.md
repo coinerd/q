@@ -48,6 +48,28 @@ have the initiating account's filesystem permissions. Deployment requiring
 protection against a hostile reviewer reading absolute credential paths needs
 an external restricted filesystem/process boundary.
 
+### Frozen Verify execution binding
+
+The frozen document and snapshot digest remain immutable. Declared execution,
+owned-proof capture, offline audit and focused RED selection share the pure
+`verify-command-format.rkt` stage canonicalizer. Fenced multiline Verify commands
+are joined in document order with fail-fast ` && ` before expansion, jobs injection,
+identity hashing and execution. A terminal shell exit zero therefore cannot mask an
+earlier failed stage. Existing unambiguous single-line and `&&` declarations retain
+their command bytes. Legacy single-command shell contracts are not promoted to the
+strict five-gate audit grammar.
+
+Ambiguous chains (empty stages, dangling operators, continuations, quoted newlines
+or `&&`, shell control/substitution syntax) fail closed rather than being split as
+arbitrary shell programs. The strict audit still requires the supported format,
+compile, focused whole-file tests, full fast suite and lint shapes. Only the trusted
+operational jobs=2 option may be injected; scope flags and deadlines are unchanged.
+The manifest schema remains v1: validators bind the exact canonical expanded command
+and argv, not successful newline scripts or diagnostic log summaries. Previously
+retained newline executions cannot be retroactively certified by this normalization.
+Meaningful behavioral RED remains a separate failed registered focused execution,
+not an inference from green logs or a new approval.
+
 Review timeout defaults to 600 seconds; cancellation, durable fence/receipt
 changes, campaign budgets and abnormal termination stop review. Available
 review usage is charged to cumulative campaign spend without replacing author

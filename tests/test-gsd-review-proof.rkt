@@ -146,6 +146,21 @@
                                      "tests/a.rkt")])
       (check-false (proof-verify-command-eligible? (string-append "racket scripts/run-tests.rkt fast "
                                                                   flag)))))
+  (test-case "frozen fenced multiline receipt refresh binds canonical execution without snapshot mutation"
+    (define canonical "printf 'owned-output\\n' && printf 'second-stage\\n'")
+    (fixture (lambda (root repo wt rec)
+               (define frozen (frozen-verify-binding root plan-id 2))
+               (define old (seed-legacy! root wt))
+               (check-equal? (hash-ref frozen 'normalized-command) canonical)
+               (check-true (delivery-verification-approved? (verify! root wt rec #:refresh? #t)))
+               (define receipt (saved-receipt root))
+               (define manifest (read-proof receipt canonical))
+               (check-equal? (hash-ref manifest 'command) canonical)
+               (check-equal? (frozen-verify-binding root plan-id 2) frozen)
+               (check-equal? (hash-ref (load-delivery-journal root plan-id 2) 'receipt-history)
+                             (list old))
+               (check-false (receipt-owned-proof-blocker receipt root plan-id 2 #:command canonical)))
+             #:command "```sh\nprintf 'owned-output\\n'\nprintf 'second-stage\\n'\n```"))
   (test-case "coordinator verifying state retains authenticated owned proof"
     (fixture (lambda (root repo wt rec)
                (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
