@@ -112,8 +112,8 @@
       ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
       ;; worktree and the extension-owned runtime session adapter).
       (check-equal? (length inventory)
-                    68
-                    "GSD module count includes owned-proof retention and two pure format modules"))
+                    69
+                    "GSD module count includes owned-proof retention and three pure format modules"))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])
