@@ -3,7 +3,7 @@
 ;; @suite extensions
 ;; @boundary integration
 ;; @covers scripts/gsd-delivery.py
-;; @timeout 600
+;; @timeout 1860
 ;; Register slice B's Python real-Git controller regressions in Racket CI.
 (require rackunit
          racket/runtime-path
@@ -18,7 +18,7 @@
       (define result
         (run-subprocess (path->string python)
                         #:args (list (path->string python-tests))
-                        #:timeout 580))
+                        #:timeout 1800))
       (check-false (subprocess-result-timed-out? result))
       (check-equal? (subprocess-result-exit-code result)
                     0

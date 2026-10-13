@@ -30,6 +30,8 @@
                   parse-plan-index
                   wave-index-entry-idx
                   wave-index-entry-ref-path)
+         "../extensions/gsd/review-proof.rkt"
+         "../extensions/gsd/review-audit-format.rkt"
          (only-in "../extensions/gsd/delivery-journal.rkt"
                   load-delivery-journal
                   reconcile-merged-tip-receipt!))
@@ -38,7 +40,8 @@
          binding-draft
          snapshot-facts
          active-source-path
-         active-paths)
+         active-paths
+         owned-review-authority)
 
 (define (read-single-datum path who)
   (call-with-input-file path
@@ -358,9 +361,114 @@
       'delivery
       "multiple/conflicting declared outputs; exactly one evidence, review and validation required")]))
 
+;; Trusted receipt + frozen declaration, never model input. Host paths remain
+;; provenance; offline validation opens only the exported addressed files.
+(define (git-ancestor? where old new)
+  (and (string? where)
+       (directory-exists? (string->path where))
+       (eqv?
+        0
+        (parameterize ([current-directory (string->path where)])
+          (system*/exit-code (find-executable-path "git") "merge-base" "--is-ancestor" old new)))))
+(define (owned-review-authority base plan wave staging)
+  (define journal (load-delivery-journal base plan wave))
+  (define receipt (and journal (hash-ref journal 'receipt #f)))
+  (unless (and (hash? receipt) (hash-ref receipt 'owned-proof #f))
+    (error 'delivery "missing-owned-proof"))
+  (validate-receipt-owned-proof! receipt base plan wave)
+  (define ref (hash-ref receipt 'owned-proof))
+  (define frozen (frozen-verify-binding base plan wave))
+  (define normalized (hash-ref frozen 'normalized-command))
+  (define root (build-path (current-owned-proof-root) plan))
+  ;; This manifest has already been authenticated against the owner receipt.
+  (define manifest (call-with-input-file (build-path root (hash-ref ref 'path)) read-json))
+  (define command
+    (expand-frozen-command normalized
+                           (hash-ref manifest 'execution-base)
+                           (hash-ref manifest 'execution-cwd)
+                           (hash-ref manifest 'execution-worktree)
+                           #:jobs (hash-ref manifest 'operational-jobs #f)))
+  (define relative
+    (string-append "docs/reports/gsd-wave-validation/owned-proofs/" (hash-ref ref 'sha256)))
+  (export-owned-review-proof! root
+                              ref
+                              (hash-ref ref 'binding)
+                              (build-path staging relative)
+                              #:command command
+                              #:normalized-command normalized)
+  ;; The green receipt LINKS a separate authentic behavioral RED where one
+  ;; is retained: same plan/wave/live attempt/fence/spec, distinct source
+  ;; tree, honest declared chronology, and a provable ancestry relation
+  ;; between the red execution head and this green head on the trusted host.
+  ;; A missing or unrelatable red stays a typed gap, never a fabricated one.
+  (define green-head (hash-ref (hash-ref ref 'binding) 'head))
+  (define red-worktree (hash-ref manifest 'execution-cwd))
+  (define linked
+    (for/first ([pair (in-list (find-owned-red-proofs root manifest))]
+                #:when (git-ancestor? red-worktree
+                                      (hash-ref (hash-ref (second pair) 'binding) 'head)
+                                      green-head))
+      pair))
+  (define red-facts #f)
+  (when linked
+    (define red-ref (first linked))
+    (define red-manifest (second linked))
+    (export-owned-red-proof! root red-manifest red-ref (build-path staging relative))
+    (set! red-facts
+          (hasheq 'reference
+                  red-ref
+                  'log-reference
+                  (hash-ref red-manifest 'log)
+                  'command
+                  (hash-ref red-manifest 'command)
+                  'focused-normalized-command
+                  (hash-ref red-manifest 'focused-normalized-command)
+                  'failure-summary
+                  (owned-red-failure-summary root red-manifest)
+                  'owner-job-id
+                  (hash-ref (hash-ref red-manifest 'job) 'id)
+                  'origin
+                  (hash-ref red-manifest 'red-origin)
+                  'relation
+                  (if (equal? (hash-ref red-manifest 'red-origin) "preimplementation")
+                      "preimplementation-ancestor"
+                      "reproduction-ancestor")
+                  'red-head
+                  (hash-ref (hash-ref red-manifest 'binding) 'head)
+                  'red-tree
+                  (hash-ref (hash-ref red-manifest 'binding) 'tree))))
+  (hasheq 'mode
+          owned-audit-mode
+          'reference
+          ref
+          'expected
+          (hash-ref ref 'binding)
+          'command
+          command
+          'normalized-command
+          normalized
+          'bundle
+          relative
+          'generation
+          (length (hash-ref journal 'receipt-history '()))
+          'receipt
+          receipt
+          'log-reference
+          (hash-ref manifest 'log)
+          'red
+          red-facts
+          'green-gates
+          (owned-green-gates manifest)))
+
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
   (case (string->symbol (vector-ref (current-command-line-arguments) 0))
+    [(owned-review)
+     (unless (= 5 (length args))
+       (error 'delivery "owned-review requires: <base> <plan> <wave> <staging>"))
+     (write-json
+      (owned-review-authority (second args) (third args) (string->number (fourth args)) (fifth args)))
+     (newline)]
     [(read)
      (write-json (read-hash-datum (vector-ref (current-command-line-arguments) 1)))
      (newline)]

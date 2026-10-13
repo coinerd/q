@@ -6,6 +6,7 @@
          racket/string
          "delivery-journal.rkt"
          "delivery-verifier.rkt"
+         "review-proof.rkt"
          "campaign-state.rkt"
          (only-in "review-rejection.rkt" review-rejection-live-authorized?)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
@@ -62,9 +63,12 @@
 (define (sha? s)
   (and (string? s) (regexp-match? #px"^[0-9a-f]{40}$" s)))
 (define (identity root branch head)
-  (define tree (git root "rev-parse" (string-append head "^{tree}")))
-  (define origin (git root "config" "--get" "remote.origin.url"))
-  (define common (git root "rev-parse" "--path-format=absolute" "--git-common-dir"))
+  (identity/facts (git root "rev-parse" "--path-format=absolute" "--git-common-dir")
+                  branch
+                  head
+                  (git root "rev-parse" (string-append head "^{tree}"))
+                  (git root "config" "--get" "remote.origin.url")))
+(define (identity/facts common branch head tree origin)
   ;; Reject credential-bearing or rewritten arbitrary origins before persistence.
   (and
    (sha? head)
@@ -87,14 +91,22 @@
 (define (committed-delivery-snapshot cwd)
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (define root (find-git-root-dir cwd))
-    (and root
-         (equal? (git root "status" "--porcelain=v1" "--untracked-files=all") "")
-         (let ([branch (git root "symbolic-ref" "--quiet" "--short" "HEAD")]
-               [head (git root "rev-parse" "HEAD")])
-           (and branch
-                (not (member branch '("main" "master")))
-                (sha? head)
-                (identity root branch head))))))
+    (and
+     root
+     (equal? (git root "status" "--porcelain=v1" "--untracked-files=all") "")
+     (let* ([branch (git root "symbolic-ref" "--quiet" "--short" "HEAD")]
+            [refs
+             (git root "rev-parse" "--path-format=absolute" "--git-common-dir" "HEAD" "HEAD^{tree}")]
+            [parts (and refs (string-split refs "\n"))])
+       (and branch
+            (not (member branch '("main" "master")))
+            parts
+            (= (length parts) 3)
+            (identity/facts (car parts)
+                            branch
+                            (cadr parts)
+                            (caddr parts)
+                            (git root "config" "--get" "remote.origin.url")))))))
 ;; v1.00.33 W0 (audit §21.2): the REAL repair-tail ancestry predicate — the
 ;; recorded receipt head must be a strict ancestor of the verified head in
 ;; the snapshot's own repository. Any git/timeout failure is a refusal
@@ -113,7 +125,8 @@
 ;; deliberately excluded: an identical replay under a fresh timestamp is
 ;; idempotent and preserves the durable receipt verbatim, while any
 ;; differing immutable binding refuses.
-(define receipt-immutable-binding-keys '(repo branch head tree origin attempt-id attempt-fence))
+(define receipt-immutable-binding-keys
+  '(repo branch head tree origin attempt-id attempt-fence owned-proof))
 
 (define (same-immutable-receipt-binding? a b)
   (and (hash? a)
@@ -143,6 +156,7 @@
     (error 'delivery-receipt "publication certification requires a transition guard"))
   (unless (valid-delivery-receipt? receipt)
     (error 'delivery-receipt "publication receipt candidate is invalid"))
+  (validate-receipt-owned-proof! receipt base plan wave)
   (unless (and (equal? (hash-ref receipt 'attempt-id #f) attempt-id)
                (equal? (hash-ref receipt 'attempt-fence #f) fence))
     (error 'delivery-receipt "publication receipt identity changed"))
@@ -185,6 +199,14 @@
      (clear-remote-pending! base plan wave)
      (load-delivery-journal base plan wave)]))
 
+(define (proof-attempt-active? rec wave)
+  (define w
+    (for/first ([w (in-list (campaign-record-waves rec))]
+                #:when (= (campaign-wave-index w) wave))
+      w))
+  (and w
+       (memq (campaign-wave-status w) '(in-progress running verifying done awaiting-delivery))
+       (not (campaign-record-budget-pause rec))))
 (define (verify-with-delivery-receipt
          base
          plan
@@ -205,14 +227,47 @@
          ;; ancestry check (merge-base
          ;; --is-ancestor) in the snapshot's
          ;; repository; tests inject a pure predicate.
-         #:repair-tail-ancestor? [repair-tail-ancestor? default-repair-tail-ancestor?])
+         #:repair-tail-ancestor? [repair-tail-ancestor? default-repair-tail-ancestor?]
+         #:refresh-owned-proof? [refresh-owned-proof? #f])
   (define before (snapshot cwd))
-  (define result (thunk))
+  (define expected-old (and refresh-owned-proof? (load-delivery-journal base plan wave)))
+  (when refresh-owned-proof?
+    (unless (and expected-old
+                 before
+                 attempt
+                 (procedure? current-record)
+                 (member (hash-ref expected-old 'stage) repair-tail-allowed-stages)
+                 (let ([rec (current-record)])
+                   (and (campaign-record? rec)
+                        (equal? (campaign-plan-id rec) plan)
+                        (not (campaign-record-cancellation rec))
+                        (proof-attempt-active? rec wave)
+                        (current-wave-for-attempt rec
+                                                  wave
+                                                  (campaign-attempt-fence-token attempt)
+                                                  (campaign-attempt-id attempt)))))
+      (error 'delivery-receipt
+             "explicit proof refresh requires a live premerge attempt and old receipt")))
+  (define-values (result capture)
+    (call-with-owned-proof-capture base
+                                   plan
+                                   wave
+                                   before
+                                   (and attempt (campaign-attempt-id attempt))
+                                   (and attempt (campaign-attempt-fence-token attempt))
+                                   thunk
+                                   #:cwd cwd))
+  (define proof (and capture (owned-proof-capture-reference capture)))
   (define after (snapshot cwd))
+  (when (and refresh-owned-proof? (not (and proof (approved? result) before (equal? before after))))
+    (error 'delivery-receipt
+           "explicit proof refresh failed to obtain unchanged successful owned execution"))
   (when (and (approved? result) before (equal? before after))
     (with-handlers
         ([exn:fail?
-          (lambda (_)
+          (lambda (e)
+            (when refresh-owned-proof?
+              (raise e))
             (log-warning
              "delivery receipt could not be recorded; delivery will require provenance reconciliation"))])
       (define old (load-delivery-journal base plan wave))
@@ -323,20 +378,59 @@
               (hash-ref before 'head)
               (format "~a; publication refused: approved Verify is not attempt-bound" reason-prefix))
              #f])))
+      (define (live-proof-guard?)
+        (and proof
+             attempt
+             (procedure? current-record)
+             (approved? result)
+             (equal? before (committed-delivery-snapshot cwd))
+             (let ([rec (current-record)])
+               (and (campaign-record? rec)
+                    (equal? (campaign-plan-id rec) plan)
+                    (not (campaign-record-cancellation rec))
+                    (proof-attempt-active? rec wave)
+                    (current-wave-for-attempt rec
+                                              wave
+                                              (campaign-attempt-fence-token attempt)
+                                              (campaign-attempt-id attempt))))
+             (equal? (hash-ref (hash-ref proof 'binding) 'snapshot-sha256)
+                     (hash-ref (frozen-verify-binding base plan wave) 'snapshot-sha256))))
       (define (new-receipt-for-head!)
         (define text (format "~a" (redact-credential-data (evidence result))))
-        (hash-set* (if attempt
-                       (hash-set* before
-                                  'attempt-id
-                                  (campaign-attempt-id attempt)
-                                  'attempt-fence
-                                  (campaign-attempt-fence-token attempt))
-                       before)
-                   'verified-at
-                   (current-seconds)
-                   'evidence
-                   (substring text 0 (min 8192 (string-length text)))))
+        (define receipt
+          (hash-set* (if attempt
+                         (hash-set* before
+                                    'attempt-id
+                                    (campaign-attempt-id attempt)
+                                    'attempt-fence
+                                    (campaign-attempt-fence-token attempt))
+                         before)
+                     'verified-at
+                     (current-seconds)
+                     'evidence
+                     (substring text 0 (min 8192 (string-length text)))))
+        (if (and proof (live-proof-guard?))
+            (hash-set receipt 'owned-proof proof)
+            receipt))
       (cond
+        [refresh-owned-proof?
+         (unless (and expected-old
+                      old
+                      (equal? expected-old old)
+                      (live-proof-guard?)
+                      (remote-published (hash-ref before 'repo)
+                                        (hash-ref before 'branch)
+                                        (hash-ref before 'head)))
+           (error 'delivery-receipt
+                  "explicit proof refresh requires unchanged old journal and live owned Verify"))
+         (refresh-owned-proof-receipt! base
+                                       plan
+                                       wave
+                                       (new-receipt-for-head!)
+                                       #:old-receipt (hash-ref expected-old 'receipt)
+                                       #:authorization capture
+                                       #:guard live-proof-guard?)
+         (clear-remote-pending! base plan wave)]
         ;; Automatic independent review (slice A): the SUPPORTED cross-attempt
         ;; receipt supersession. The journal holds the receipt of an attempt
         ;; that an independent reviewer explicitly rejected (durable marker
@@ -514,7 +608,8 @@
                                   verifier
                                   current-record
                                   #:remote-published [remote-published (current-gsd-remote-published)]
-                                  #:publish-approved-head [publish-approved-head #f])
+                                  #:publish-approved-head [publish-approved-head #f]
+                                  #:refresh-owned-proof? [refresh-owned-proof? #f])
   (define initial (current-record))
   (define attempt
     (and initial
@@ -534,6 +629,7 @@
    #:coordinator-fence (and initial (campaign-fence-token initial))
    #:current-record current-record
    #:publish-approved-head publish-approved-head
+   #:refresh-owned-proof? refresh-owned-proof?
    #:approved? (lambda (v)
                  (define current (current-record))
                  (and current

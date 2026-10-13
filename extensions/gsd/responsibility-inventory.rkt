@@ -162,7 +162,35 @@
                'persistence
                '(fs-read fs-delete)
                '()
-               '("json" "racket/file" "racket/list" "racket/path"))
+               '("json" "racket/file" "racket/list" "racket/path" "review-proof"))
+   ;; Owned execution retention is effectful; formats stay pure.
+   (make-entry
+    "review-proof.rkt"
+    'persistence
+    '(fs-read fs-write fs-rename fs-delete mkdir dir-list path-ops make-param sha256 parameterize)
+    '(current-owned-proof-root)
+    '("json" "racket/file"
+             "racket/list"
+             "racket/path"
+             "racket/port"
+             "racket/string"
+             "review-proof-format"
+             "delivery-verifier"
+             "verification-job"
+             "plan-snapshot"
+             "plan-types"
+             "wave-docs"
+             "util/json/checksum"))
+   (make-entry "review-proof-format.rkt"
+               'transition-logic
+               '(sha256)
+               '()
+               '("racket/list" "racket/string" "util/json/checksum"))
+   (make-entry "review-audit-format.rkt"
+               'transition-logic
+               '()
+               '()
+               '("racket/list" "racket/string" "review-proof-format"))
    ;; Automatic independent review slice A state port: guarded durable
    ;; review-rejection authorization (recorded through delivery-journal's
    ;; declared atomic writes), superseded-attempt marking and the ordinary
@@ -232,6 +260,11 @@
                         "campaign-budgets"
                         "delivery-journal"
                         "review-usage"
+                        "review-proof"
+                        "review-audit-format"
+                        "runtime/provider/model-registry"
+                        "runtime/auth/auth-store"
+                        "util/hash-helpers"
                         "review-worktree"))
    (make-entry "review-usage.rkt"
                'campaign-state
@@ -250,6 +283,7 @@
                '("racket/path" "racket/string"
                                "delivery-journal"
                                "delivery-verifier"
+                               "review-proof"
                                "campaign-state"
                                "plan-context-builder"
                                "sandbox/subprocess"
@@ -412,7 +446,8 @@
    (make-entry "delivery-verifier.rkt"
                'campaign-state
                '(git fs-read make-param path-ops parameterize)
-               '(current-gsd-delivery-verify-command current-gsd-delivery-verify-timeout-sec)
+               '(current-gsd-delivery-verify-command current-gsd-delivery-verify-timeout-sec
+                                                     current-owned-verify-observer)
                '("racket/format" "racket/path"
                                  "racket/port"
                                  "racket/set"

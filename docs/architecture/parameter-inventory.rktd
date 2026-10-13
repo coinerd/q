@@ -78,13 +78,23 @@
                                           ;; boundary in production; a (git-root args) -> (exit out
                                           ;; err) procedure lets decision-logic tests substitute the
                                           ;; whole boundary at once (W3 architecture review)
-                                          (current-gsd-git-runner . SERVICE_HANDLE))
+                                          (current-gsd-git-runner . SERVICE_HANDLE)
+                                          ;; owned-proof slice: scoped terminal-completion
+                                          ;; observation seam (default void; only the
+                                          ;; registry completion callback observes) and the
+                                          ;; trusted operational --jobs knob for Verify
+                                          ;; (never a command/profile override).
+                                          (current-gsd-delivery-verify-jobs . CONFIGURATION)
+                                          (current-owned-verify-observer . ITERATION_LOCAL))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ;; v1.00.33 recovery continuation: origin-policy DI seam for the recovery
  ;; candidate resolver's independent-clone production check (tests relax
  ;; ONLY the origin URL policy for file:// fixtures; snapshot/verification
  ;; always run production code).
  ("extensions/gsd/delivery-recovery.rkt" (current-gsd-recovery-github-origin? . SERVICE_HANDLE))
+ ;; owned-proof slice: trusted host configuration locating the content-
+ ;; addressed retained proof store (never a model/command-supplied path).
+ ("extensions/gsd/review-proof.rkt" (current-owned-proof-root . CONFIGURATION))
  ;; BUG-0079: test/embedding seam overriding the approved-head publisher
  ;; (default shells the trusted gsd-delivery.py controller through the ONE
  ;; controller-environment credential boundary); never set in prod.

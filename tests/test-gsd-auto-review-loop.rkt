@@ -2,36 +2,158 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
+;; @timeout 1500
 ;; @covers extensions/gsd/go-orchestrator.rkt
 ;; @covers extensions/gsd/review-session.rkt
 ;; @covers extensions/gsd/review-dispatch.rkt
 ;; Actual /go loop, default production coordinator and Python controller.
 ;; Only the model transport is deterministic; Git remote/publication, fresh
-;; sessions, Verify, journal and rejection checkpoint are real.
+;; sessions, Verify, journal and rejection checkpoint are real. The campaign
+;; declares a REAL frozen Verify chain (raco fmt -i, raco make, the fixture
+;; checkout's honest scripts/run-tests.rkt and scripts/lint-all.rkt) and the
+;; production verifier runs it through the registry, so each attempt's
+;; review prepare authenticates a GENUINE retained owned proof (audit mode).
+;; The verify counter below wraps — never replaces — the real verifier.
+;; Measured runtime on the dev workstation: ~420s (two full owned Verify
+;; chain executions plus four controller/review subprocess rounds).
 (require rackunit
          racket/file
          racket/format
          racket/path
          racket/string
+         racket/system
          json
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-coordinator.rkt"
+         "../extensions/gsd/delivery-verifier.rkt"
          "../extensions/gsd/review-dispatch.rkt"
          "../extensions/gsd/delivery-receipt.rkt"
          "../extensions/gsd/go-orchestrator.rkt"
          "../extensions/gsd/review-session.rkt"
+         "../extensions/gsd/wave-executor.rkt"
          (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-failure-context)
          (only-in "../extensions/gsd/wave-executor.rkt" current-gsd-worktree-isolation)
-         (only-in "../extensions/gsd/delivery-verifier.rkt" current-gsd-delivery-branch-context)
+         (only-in "../extensions/gsd/review-proof.rkt" current-owned-proof-root)
          "../llm/model.rkt"
          "../llm/provider.rkt"
+         (only-in "../util/message/message.rkt" message-content)
+         (only-in "../util/content/content-parts.rkt" text-part? text-part-text)
          "../util/loop-result.rkt")
+;; The frozen Verify chain spells REAL repository commands only (the same
+;; approved grammar as the frozen W1 declaration): in-place canonical
+;; format, compile, the focused positional test stage, the full fast suite
+;; through the real --suite CLI flag, and the fixture checkout's honest
+;; whole-tree lint entrypoint. There is no shimmed or fictional CLI here.
+(define verify-chain
+  (string-append "cd <project-base>/q"
+                 " && raco fmt -i tests/acceptance-check.rkt"
+                 " && raco make tests/acceptance-check.rkt"
+                 " && racket scripts/run-tests.rkt tests/acceptance-check.rkt"
+                 " && racket scripts/run-tests.rkt --suite fast"
+                 " && racket scripts/lint-all.rkt"))
+;; Honest fixture gate runner for this fixture ONLY: runs the named focused
+;; test files (or the full fixture fast suite) through the REAL `raco test`
+;; runner, fail-fast, propagating the real exit code. NOT the repository's
+;; production test runner.
+(define fixture-run-tests
+  #<<RUNNER-EOF
+#lang racket/base
+;; Fixture gate runner for the auto-review loop fixture ONLY: runs the named
+;; focused test files (or the full fixture fast suite) through the REAL
+;; `raco test` runner, fail-fast, propagating the real exit code. This is NOT
+;; the repository's production test runner.
+(require racket/list racket/system)
+(define args (vector->list (current-command-line-arguments)))
+(define files
+  (cond
+    [(null? args) (error 'run-tests "fixture runner requires test files or --suite fast")]
+    [(equal? (car args) "--suite")
+     (unless (equal? (cdr args) '("fast"))
+       (error 'run-tests "fixture runner supports only --suite fast"))
+     (sort (for/list ([p (directory-list "tests")] #:when (regexp-match? #rx"[.]rkt$" p))
+             (build-path "tests" p))
+           path<?)]
+    [else (map string->path args)]))
+(for ([path (in-list files)])
+  (define code (system*/exit-code (find-executable-path "raco") "test" (path->string path)))
+  (unless (zero? code) (exit code)))
+RUNNER-EOF
+  )
+;; Fixture whole-checkout lint for this fixture ONLY: real checks (no tabs,
+;; no trailing whitespace, no line over 100 columns) over this fixture's own
+;; Racket sources. NOT the production linter.
+(define fixture-lint-all
+  #<<LINT-EOF
+#lang racket/base
+;; Fixture whole-checkout lint for the auto-review loop fixture ONLY: real
+;; checks (no tabs, no trailing whitespace, no line over 100 columns) over
+;; this fixture's own Racket sources. NOT the production linter.
+(require racket/file racket/list racket/string)
+(define files
+  (sort (for/list ([p (directory-list "tests")] #:when (regexp-match? #rx"[.]rkt$" p))
+          (build-path "tests" p))
+        path<?))
+(define (file-violations path)
+  (for/list ([line (in-list (file->lines path))]
+             [n (in-naturals 1)]
+             #:when (or (string-contains? line "\t")
+                        (regexp-match? #rx"[[:space:]]$" line)
+                        (> (string-length line) 100)))
+    (format "~a:~a" path n)))
+(define bad
+  (for*/fold ([acc '()]) ([path (in-list files)])
+    (append (file-violations path) acc)))
+(unless (null? bad)
+  (eprintf "fixture lint failures:\n~a\n" (string-join bad "\n"))
+  (exit 1))
+LINT-EOF
+  )
+;; Focused acceptance check: behaviorally verifies the committed acceptance
+;; file of this checkout and fails with real rackunit output when a required
+;; acceptance line is missing.
+(define fixture-acceptance-check
+  #<<TEST-EOF
+#lang racket/base
+;; Focused acceptance check for the auto-review loop fixture: reads the
+;; acceptance file at the checkout root and fails with real rackunit output
+;; when a required acceptance line is missing.
+(require rackunit racket/file racket/runtime-path racket/string)
+(define-runtime-path module-dir ".")
+(define acceptance-path (simplify-path (build-path module-dir 'up "acceptance")))
+(module+ test
+  (check-true (file-exists? acceptance-path)
+              "the committed acceptance file is missing from this checkout")
+  (define contents (file->string acceptance-path))
+  (check-true (string-contains? contents "first acceptance")
+              "the acceptance file must record the first acceptance check"))
+TEST-EOF
+  )
 (module+ test
   (test-case "production /go review rejection -> ordinary fenced retry -> real superset Verify -> r1 fresh review"
     (define root (make-temporary-file "auto-review-loop-~a" 'directory))
+    ;; The owned proof store is deliberately placed under a fixture-local
+    ;; HOME so BOTH sides agree on the trusted root: the in-process capture
+    ;; (current-owned-proof-root) and the controller's gsd-binding-data.rkt
+    ;; subprocesses, which resolve the same default from their HOME.
+    ;; The fixture-local HOME keeps the owned-proof store out of the real
+    ;; user home while the controller subprocesses resolve the same trusted
+    ;; root from their HOME. The real Racket user scope is linked in so the
+    ;; fixture toolchain (raco fmt) behaves exactly as on the dev host.
+    (define fake-home (build-path root "fake-home"))
+    (make-directory* fake-home)
+    (define real-racket-scope (build-path (find-system-path 'home-dir) ".racket"))
+    (when (directory-exists? real-racket-scope)
+      (with-handlers ([exn:fail? void])
+        (make-file-or-directory-link real-racket-scope (build-path fake-home ".racket"))))
+    (define fake-env (make-environment-variables))
+    (for ([name (in-list (environment-variables-names (current-environment-variables)))])
+      (environment-variables-set! fake-env
+                                  name
+                                  (environment-variables-ref (current-environment-variables) name)))
+    (environment-variables-set! fake-env #"HOME" (path->bytes fake-home))
     (dynamic-wind
      void
      (lambda ()
@@ -39,21 +161,40 @@
        (display-to-file "# Plan: Review test\n\n## Waves\n\n- [Inbox] W0: Test → waves/W0-test.md\n"
                         (build-path root ".planning/PLAN.md"))
        (display-to-file
-        (string-append "# Test\n\nGoal: test\n\nBranch: `campaign/review-test`; "
+        (string-append "# Wave 0: Test\n\nGoal: test\n\nBranch: `campaign/review-test`; "
                        "GitHub issue [#9686](https://github.com/example/q/issues/9686), "
-                       "milestone #895.\n\n## Verify\n\nraco test .\n")
+                       "milestone #895.\n\n## Files\n\n- File: `q/acceptance`\n\n## Verify\n\n"
+                       verify-chain
+                       "\n")
         (build-path root ".planning/waves/W0-test.md"))
        (define rec (migrate-campaign! root))
        (define plan (campaign-plan-id rec))
+       (define gsd-plan (load-plan-from-index root))
        (define repo (build-path root "q"))
-       (make-directory repo)
+       (make-directory* (build-path repo "scripts"))
+       (make-directory* (build-path repo "tests"))
+       (display-to-file "compiled/\n" (build-path repo ".gitignore"))
+       (display-to-file "(\"lint\" \"test (0)\" \"workflows (0)\")"
+                        (build-path repo "scripts/required-pr-checks.policy"))
+       (display-to-file fixture-run-tests (build-path repo "scripts/run-tests.rkt"))
+       (display-to-file fixture-lint-all (build-path repo "scripts/lint-all.rkt"))
+       (display-to-file fixture-acceptance-check (build-path repo "tests/acceptance-check.rkt"))
        (git-quiet! repo "init" "-q")
        (hermetic-identity! repo)
        (git-quiet! repo "checkout" "-b" "main")
-       (make-directory* (build-path repo "scripts"))
-       (display-to-file "(\"lint\" \"test (0)\" \"workflows (0)\")"
-                        (build-path repo "scripts/required-pr-checks.policy"))
-       (git-quiet! repo "add" "scripts/required-pr-checks.policy")
+       ;; Canonicalize formatting BEFORE committing so the frozen
+       ;; `raco fmt -i` stage genuinely runs as a no-op (clean before/after)
+       ;; and the owned proof capture sees an unchanged tree.
+       (let ([code (parameterize ([current-directory repo])
+                     (system*/exit-code (find-executable-path "raco")
+                                        "fmt"
+                                        "-i"
+                                        "tests/acceptance-check.rkt"
+                                        "scripts/run-tests.rkt"
+                                        "scripts/lint-all.rkt"))])
+         (unless (zero? code)
+           (error 'review-fixture "raco fmt -i failed: ~a" code)))
+       (git-quiet! repo "add" ".")
        (git-quiet! repo "commit" "-qm" "baseline")
        (define remote (build-path root "remote.git"))
        (git-quiet! root "init" "--bare" "-q" (path->string remote))
@@ -69,35 +210,104 @@
        (define reviews 0)
        (define attempts '())
        (define generations '())
+       ;; The wrapped verifier keeps the genuine production verifier: the
+       ;; declared frozen chain still runs through the registry (owned proof
+       ;; capture included); the wrapper only observes the committed
+       ;; implementation bytes at verify time, preserving the original
+       ;; acceptance-content obligations of the boolean seam it replaces.
+       (define real-verifier (make-delivery-verifier root gsd-plan (campaign-record-created-at rec)))
+       (define (verifying-runner wave-idx)
+         (set! verifies (add1 verifies))
+         (define context (current-gsd-delivery-branch-context))
+         (define worktree (hash-ref context 'worktree-path))
+         (define contents (file->string (build-path worktree "acceptance")))
+         (check-true (string-contains? contents "first acceptance"))
+         (when (= verifies 2)
+           (check-true (string-contains? contents "second acceptance")))
+         (define result (real-verifier wave-idx))
+         result)
+       (define (audit-rejection-text prompt)
+         ;; Honest audit acknowledgement: read the pinned binding and the
+         ;; retained manifest/raw-output bundle the controller exported,
+         ;; then echo the exact binding back. No gate facts, no fabrication.
+         (define (pinned-line prefix)
+           (for/or ([line (in-list (string-split prompt "\n"))])
+             (and (string-prefix? line prefix) (substring line (string-length prefix)))))
+         (define binding-json (pinned-line "Pinned audit binding: "))
+         (define bundle-line (pinned-line "Owned manifest/raw log bundle: "))
+         (unless (and binding-json bundle-line)
+           (error 'review-fixture "audit prompt does not pin the owned binding/bundle"))
+         (define binding (string->jsexpr binding-json))
+         (define bundle (string->path bundle-line))
+         (define manifest-path
+           (build-path bundle (string-append (hash-ref binding 'proof-sha256) ".json")))
+         (define manifest (string->jsexpr (file->string manifest-path)))
+         (define raw-output
+           (file->string (build-path bundle (hash-ref (hash-ref manifest 'log) 'path))))
+         (check-true (positive? (string-length raw-output)))
+         (jsexpr->string
+          (hasheq
+           'kind
+           "request-changes"
+           'scope
+           "audited the pinned implementation source and the retained owned proof bundle at the receipt head"
+           'report
+           "read the owned manifest and actual raw Verify output; the implementation misses a declared acceptance check"
+           'findings
+           '("Add the second acceptance check")
+           'audit-ack
+           (hasheq 'mode
+                   "owned-proof-audit-v1"
+                   'verification-origin
+                   "audited-owned"
+                   'source-read
+                   #t
+                   'raw-output-read
+                   #t
+                   'binding
+                   binding))))
+       (define (prompt-text request)
+         (string-join (for/list ([m (in-list (model-request-messages request))])
+                        (if (hash? m)
+                            (format "~a" (hash-ref m 'content ""))
+                            (string-join (for/list ([part (in-list (message-content m))]
+                                                    #:when (text-part? part))
+                                           (text-part-text part))
+                                         "\n")))
+                      "\n"))
        (define runner
          (make-auto-review-runner
           root
           plan
           #:provider-builder
-          (lambda (_cwd)
+          (lambda (cwd)
             (set! reviews (add1 reviews))
-            (make-mock-provider
-             (make-model-response
-              (list (hasheq 'type
-                            "text"
-                            'text
-                            (jsexpr->string
-                             (if (= reviews 1)
-                                 (hasheq 'kind
-                                         "request-changes"
-                                         'scope
-                                         (make-string 70 #\s)
-                                         'report
-                                         (make-string 70 #\r)
-                                         'findings
-                                         '("Add the second acceptance check"))
-                                 (hasheq 'kind
-                                         "review-failed"
-                                         'reason
-                                         "test ends at fresh r1 review; no approval fabricated")))))
-              (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7)
-              "glm-5.3"
-              'stop)))))
+            ;; The reviewer session runs in the clean receipt checkout; the
+            ;; acknowledgment's source-read is backed by actually reading it.
+            (define source (file->string (build-path cwd "acceptance")))
+            (check-true (string-contains? source "first acceptance"))
+            (define (response-text request)
+              (if (= reviews 1)
+                  (audit-rejection-text (prompt-text request))
+                  (jsexpr->string (hasheq 'kind
+                                          "review-failed"
+                                          'reason
+                                          "test ends at fresh r1 review; no approval fabricated"))))
+            (define (response-for request)
+              (make-model-response (list (hasheq 'type "text" 'text (response-text request)))
+                                   (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7)
+                                   "glm-5.3"
+                                   'stop))
+            (define (chunks-for request)
+              (define response (response-for request))
+              (append (for/list ([tp (in-list (model-response-content response))]
+                                 #:when (equal? (hash-ref tp 'type #f) "text"))
+                        (make-stream-chunk (hash-ref tp 'text "") #f #f #f))
+                      (list (make-stream-chunk #f #f (model-response-usage response) #t))))
+            (make-provider (lambda () "audit-mock")
+                           (lambda () (hasheq 'streaming #t 'token-counting #t))
+                           response-for
+                           chunks-for))))
        (define (recording-runner request)
          (set! generations (cons (hash-ref request 'generation) generations))
          (define receipt (hash-ref (load-delivery-journal root plan 0) 'receipt))
@@ -114,57 +324,53 @@
             (set! crashed? #t)
             (delivery-outcome 'review-infra "simulated publication-to-checkpoint crash")]
            [else outcome]))
-       (define (request-for rec)
+       (define (request-for live-rec)
          (make-campaign-request root
-                                rec
+                                live-rec
                                 (lambda (_)
                                   (string-append "Implement the acceptance checks"
                                                  (or (current-gsd-wave-failure-context) "")))
-                                (lambda (_)
-                                  (set! verifies (add1 verifies))
-                                  ;; Genuine Verify against current committed implementation bytes;
-                                  ;; the repair must preserve the original acceptance obligation.
-                                  (define context (current-gsd-delivery-branch-context))
-                                  (define worktree (hash-ref context 'worktree-path))
-                                  (define contents (file->string (build-path worktree "acceptance")))
-                                  (check-true (string-contains? contents "first acceptance"))
-                                  (when (= verifies 2)
-                                    (check-true (string-contains? contents "second acceptance")))
-                                  #t)
+                                verifying-runner
                                 #:auto-review-runner recording-runner
                                 #:delivery-coordinator crash-once-coordinator))
        (define (execute request)
-         (parameterize ([current-gsd-worktree-isolation #t]
-                        [current-gsd-remote-published
-                         (lambda (r b h)
-                           (git-quiet! r "push" "-q" "origin" (string-append h ":refs/heads/" b))
-                           #t)]
-                        [current-gsd-freshness-check (lambda (_)
-                                                       (campaign-freshness "test" "test" #f #f #f))])
+         (parameterize
+             ([current-gsd-worktree-isolation #t]
+              [current-owned-proof-root (build-path fake-home ".q" "agent" "owned-review-proofs")]
+              [current-environment-variables fake-env]
+              [current-gsd-remote-published
+               (lambda (r b h)
+                 (git-quiet! r "push" "-q" "origin" (string-append h ":refs/heads/" b))
+                 #t)]
+              [current-gsd-freshness-check (lambda (_) (campaign-freshness "test" "test" #f #f #f))])
            (execute-campaign-request!
             request
             (lambda (prompt)
-              ;; Abort before any write/commit if isolation ever regresses.
-              (define relative-cwd (find-relative-path root (current-directory)))
-              (unless (and (relative-path? relative-cwd) (not (memq 'up (explode-path relative-cwd))))
-                (error 'review-fixture "refusing implementation writes outside temporary fixture"))
-              (set! implementations (add1 implementations))
-              (when (= implementations 2)
-                (check-true (string-contains? prompt "Add the second acceptance check"))
-                (check-true (file-exists?
-                             (build-path (current-directory)
-                                         (format "docs/reports/gsd-wave-reviews/~a-w0.rktd" plan)))))
-              (define live (load-campaign-record root plan))
-              (define a (campaign-wave-current-attempt (car (campaign-record-waves live))))
-              (set! attempts
-                    (cons (cons (campaign-attempt-id a) (campaign-attempt-fence-token a)) attempts))
-              (display-to-file
-               (if (= implementations 1) "first acceptance\n" "first acceptance\nsecond acceptance\n")
-               (build-path (current-directory) "acceptance")
-               #:exists 'truncate)
-              (git-quiet! (current-directory) "add" "acceptance")
-              (git-quiet! (current-directory) "commit" "-qm" "implementation")
-              (make-loop-result '() 'completed (hasheq))))))
+              (let ()
+                ;; Abort before any write/commit if isolation ever regresses.
+                (define relative-cwd (find-relative-path root (current-directory)))
+                (unless (and (relative-path? relative-cwd)
+                             (not (memq 'up (explode-path relative-cwd))))
+                  (error 'review-fixture "refusing implementation writes outside temporary fixture"))
+                (set! implementations (add1 implementations))
+                (when (= implementations 2)
+                  (check-true (string-contains? prompt "Add the second acceptance check"))
+                  (check-true (file-exists?
+                               (build-path (current-directory)
+                                           (format "docs/reports/gsd-wave-reviews/~a-w0.rktd"
+                                                   plan)))))
+                (define live (load-campaign-record root plan))
+                (define a (campaign-wave-current-attempt (car (campaign-record-waves live))))
+                (set! attempts
+                      (cons (cons (campaign-attempt-id a) (campaign-attempt-fence-token a)) attempts))
+                (display-to-file (if (= implementations 1)
+                                     "first acceptance\n"
+                                     "first acceptance\nsecond acceptance\n")
+                                 (build-path (current-directory) "acceptance")
+                                 #:exists 'truncate)
+                (git-quiet! (current-directory) "add" "acceptance")
+                (git-quiet! (current-directory) "commit" "-qm" "implementation")
+                (make-loop-result '() 'completed (hasheq)))))))
        (define first-result (execute (request-for rec)))
        (check-equal? (campaign-result-status first-result) 'wave-blocked)
        (check-equal? implementations 1)

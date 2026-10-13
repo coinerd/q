@@ -265,7 +265,7 @@ def policy_names(repo, ref):
             len(set(names)) == len(names), 'malformed required-check policy at ' + ref)
     return names
 
-def validate_trio(repo, ref, relative, base):
+def validate_trio(repo, ref, relative, base, owned_proof_authority=None):
     """Run the existing, unchanged strict gate on committed blobs and real diff.
 
     Returns the evidence and review data so callers can enforce the amended
@@ -279,10 +279,24 @@ def validate_trio(repo, ref, relative, base):
         validation = artifact_path(evidence.get('validation-artifact'), 'gsd-wave-validation')
         for path in (review, validation, 'scripts/required-pr-checks.policy'):
             materialize(repo, ref, path, root)
+        if owned_proof_authority is not None:
+            bundle = owned_proof_authority['bundle']
+            refs = [owned_proof_authority['reference'],
+                    owned_proof_authority['log-reference']]
+            if isinstance(owned_proof_authority.get('red'), dict):
+                refs += [owned_proof_authority['red']['reference'],
+                         owned_proof_authority['red']['log-reference']]
+            for entry in refs:
+                materialize(repo, ref, bundle + '/' + entry['path'], root)
         actual = digest(repo, base, ref)
-        command(['racket', str(HERE / 'gsd-wave-gate.rkt'), str(root / relative),
-                 '--content-digest', actual, '--root', str(root), '--policy',
-                 str(root / 'scripts/required-pr-checks.policy')], timeout=60)
+        gate = ['racket', str(HERE / 'gsd-wave-gate.rkt'), str(root / relative),
+                '--content-digest', actual, '--root', str(root), '--policy',
+                str(root / 'scripts/required-pr-checks.policy')]
+        if owned_proof_authority is not None:
+            payload = root / 'owned-proof-authority.json'
+            payload.write_text(json.dumps(owned_proof_authority), encoding='utf-8')
+            gate += ['--owned-proof-authority', str(payload)]
+        command(gate, timeout=60)
         return evidence, read_datum(root / review), [relative, review, validation]
 
 def validate_merge(pr, commit, slug, merge, head):
@@ -1237,6 +1251,17 @@ def read_staged_trio(repo, plan, wave, output, campaign_root, expected_branch):
             target = gate_root / 'docs/reports' / ('gsd-wave-' + kind) / artifact
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(source.read_bytes())
+        # An audit-mode staged trio validates through the SAME discovered
+        # bundle law as a committed one: mirror the controller-exported
+        # owned-proofs directory from the staging output into the gate root.
+        proofs_src = expected / 'docs/reports/gsd-wave-validation/owned-proofs'
+        if proofs_src.is_dir() and not proofs_src.is_symlink():
+            for payload in sorted(proofs_src.rglob('*')):
+                if payload.is_file() and not payload.is_symlink():
+                    relative = payload.relative_to(proofs_src)
+                    target = gate_root / 'docs/reports/gsd-wave-validation/owned-proofs' / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(payload.read_bytes())
         policy = blob_or_none(repo, main, str(POLICY_PATH))
         require(policy is not None, 'binding gate policy is unavailable')
         policy_path = gate_root / 'scripts/required-pr-checks.policy'
@@ -1297,6 +1322,7 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
         require(len(parents) == 2 and parents[1] == main,
                 'existing binding branch is not based on fresh origin/main')
         binding = binding_path(plan, wave, generation)
+        bundle_files = _binding_bundle_files(output)
         with tempfile.TemporaryDirectory(prefix='q-delivery-existing-binding-') as temp:
             for kind in ('evidence', 'reviews', 'validation'):
                 artifact = Path(binding_path(plan, wave, generation)).name
@@ -1309,6 +1335,14 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
                 staged_path = output / 'docs/reports' / ('gsd-wave-' + kind) / artifact
                 require(remote_datum == read_datum(staged_path),
                         'existing binding branch does not match the staged trio')
+            # An audit binding publication carries its owned-proof bundle:
+            # reuse demands byte-identical bundle files on the branch.
+            for relative, source in bundle_files.items():
+                blob = blob_or_none(repo, remote_tip, relative)
+                require(blob is not None,
+                        'existing binding branch is missing the audit bundle: ' + relative)
+                require(blob == source.read_bytes(),
+                        'existing binding branch audit bundle differs from staging: ' + relative)
         commit = remote_tip
     else:
         with tempfile.TemporaryDirectory(prefix='q-delivery-binding-') as temp:
@@ -1323,6 +1357,14 @@ def binding_publish(repo, plan, wave, output, campaign_root=None):
                     (worktree / 'docs/reports' / ('gsd-wave-' + kind)).mkdir(
                         parents=True, exist_ok=True)
                     target = worktree / 'docs/reports' / ('gsd-wave-' + kind) / artifact
+                    target.write_bytes(source.read_bytes())
+                # Mirror the staged owned-proof bundle (manifest, raw log,
+                # authority payload) so the binding PR validates offline.
+                for relative, source in _binding_bundle_files(output).items():
+                    target = worktree / Path(relative)
+                    require(not target.is_symlink(),
+                            'staged audit bundle path is unsafe: ' + relative)
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(source.read_bytes())
                 git(worktree, 'add', '-A')
                 git(worktree, 'commit', '--no-gpg-sign', '-m',
@@ -2000,7 +2042,7 @@ def _reviewer_narrative(value, label, minimum):
     return value.strip()
 
 
-def validate_reviewer_output(output):
+def validate_reviewer_output(output, request=None):
     """Structural validation of the reviewer's TYPED result (the coordinator
     pre-checks the same shape; this is the trusted boundary). Trusts the
     ROLE, never prose: verdicts, digests and head bindings are stamped by the
@@ -2033,6 +2075,31 @@ def validate_reviewer_output(output):
             infra('the reviewer output %s carries fewer than %d characters of content'
                   % (label, MIN_REVIEW_NARRATIVE))
         result[key] = value.strip()
+    if request and request.get('review-mode') == OWNED_AUDIT_MODE:
+        ack = output.get('audit-ack')
+        if not (isinstance(ack, dict) and ack.get('mode') == OWNED_AUDIT_MODE and
+                ack.get('verification-origin') == 'audited-owned' and
+                ack.get('source-read') is True and ack.get('raw-output-read') is True and
+                _exact_audit_binding(ack.get('binding'), _audit_binding(request))):
+            infra('missing or stale owned-proof audit acknowledgement')
+        if 'validation' in output:
+            infra('model-authored gate facts are forbidden in owned-proof audit mode')
+        # The peer must meaningfully acknowledge a LINKED behavioral RED — the
+        # exact retained red identity plus its actual raw failure output — and
+        # can never acknowledge a red the owner has not linked.
+        authority = request.get('owned-authority') if isinstance(request, dict) else None
+        red = authority.get('red') if isinstance(authority, dict) else None
+        if isinstance(red, dict):
+            red_sha = (red.get('reference') or {}).get('sha256')
+            if not (isinstance(ack.get('red-ack'), dict) and
+                    ack['red-ack'].get('proof-sha256') == red_sha and
+                    ack['red-ack'].get('raw-output-read') is True):
+                infra('missing or stale owned behavioral RED acknowledgement')
+        elif 'red-ack' in ack:
+            infra('a behavioral RED was acknowledged without a linked owned red proof')
+        result['audit-ack'] = ack
+        if kind == 'approved':
+            return result
     if kind == 'request-changes':
         findings = output.get('findings')
         if not (isinstance(findings, list) and 1 <= len(findings) <= MAX_REVIEW_FINDINGS and
@@ -2075,7 +2142,7 @@ def validate_reviewer_output(output):
     return result
 
 
-def load_reviewer_output(path):
+def load_reviewer_output(path, request=None):
     path = Path(path)
     if not (path.is_file() and not path.is_symlink()):
         raise _ReviewInfra('the reviewer output is absent at %s' % path)
@@ -2083,7 +2150,7 @@ def load_reviewer_output(path):
         output = json.loads(path.read_text())
     except ValueError as error:
         raise _ReviewInfra('the reviewer output is not valid JSON: %s' % error) from error
-    return validate_reviewer_output(output)
+    return validate_reviewer_output(output, request)
 
 
 def implementation_review_staging(campaign_root, plan, wave, generation, staging_root):
@@ -2167,10 +2234,15 @@ def _review_prompt(stage, plan, wave, head, branch, paths, staging, digest_value
                 'is staged at %s (evidence %s, review %s, validation %s).\n'
                 'The controller-computed excluded-diff content digest is %s; the required '
                 'checks are: %s.\n'
-                'Run the genuine gates (red-first reproduction, focused tests, format, lint, '
-                'fast) and return the typed result: kind "approved" with validation gate '
-                'facts, or "request-changes" with explicit findings bound to this head. '
-                'Never claim approval through prose.'
+                'AUDIT the pinned implementation and authenticated owned manifest plus actual '
+                'raw outputs using read/bash. Do not rerun owned full fast, focused, format, '
+                'compile, lint or RED gates; never claim you executed them. When the pinned '
+                'owned authority links a behavioral RED proof, read its manifest and actual '
+                'raw failure output and acknowledge it with red-ack '
+                '{"proof-sha256": <linked red sha256>, "raw-output-read": true}. '
+                'Return an exact audit-ack and genuine verdict/findings, not gate facts. '
+                'Missing authenticated behavioral RED, canary or F11 stays unproven. '
+                'The review deadline is 600 seconds, including inspection; do not start long replay jobs.'
                 % (plan, wave, head, branch, staging, paths['evidence'], paths['review'],
                    paths['validation'], digest_value, ', '.join(names)))
     return ('Fresh independent non-author finalization of the staged post-merge binding trio '
@@ -2179,9 +2251,11 @@ def _review_prompt(stage, plan, wave, head, branch, paths, staging, digest_value
             'Staging: %s (evidence %s, review %s, validation %s). The publication commit '
             'changes only excluded evidence directories, so the finalized digest is the '
             'empty-diff digest %s.\n'
-            'Run the genuine gates and return the typed result: kind "approved" with '
-            'validation gate facts, or "request-changes" with explicit findings. '
-            'Never claim approval through prose.'
+            'AUDIT the original execution proof and implementation with read/bash. Do not rerun '
+            'owned full fast, focused, format, compile, lint or RED gates; never claim you ran them. '
+            'Return audit-ack and genuine findings/verdict, not gate facts. A merged implementation '
+            'is NOT an executed head: an unsupported execution/merge relation must stop. '
+            'The review deadline remains 600 seconds.'
             % (plan, wave, head, branch, staging, paths['evidence'], paths['review'],
                paths['validation'], EMPTY_SHA))
 
@@ -2198,11 +2272,11 @@ def _receipt_for_review(repo, plan, wave, campaign_root, expected_head, expected
 
 
 def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
-                         campaign_root, generation, staging_root):
+                         campaign_root, generation, staging_root, manual_compatibility=False):
     require(stage in AUTO_REVIEW_STAGES, 'unknown auto-review stage ' + str(stage))
     if stage == 'binding-review':
         return _prepare_binding(repo, plan, wave, expected_head, expected_branch,
-                                campaign_root, generation, staging_root)
+                                campaign_root, generation, staging_root, manual_compatibility)
     facts = review_tracker_facts(repo, campaign_root, plan, wave)
     milestone, issue = facts['milestone'], facts['issue']
     actual_generation = journal_generation(repo, plan, wave, campaign_root)
@@ -2232,6 +2306,8 @@ def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
         result = review(repo, plan, wave, expected_head, expected_branch,
                         campaign_root, generation)
         if result['status'] == 'reviewed':
+            if not manual_compatibility:
+                raise _ReviewInfra('legacy manual approval is not production owned-proof audit approval')
             return result
     receipt = _receipt_for_review(repo, plan, wave, campaign_root,
                                   expected_head, expected_branch)
@@ -2248,7 +2324,7 @@ def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
     request = {'kind': 'implementation-review', 'plan-id': plan, 'wave': wave,
                'generation': actual_generation, 'head': expected_head,
                'branch': expected_branch, 'tip': tip,
-               'tree': git(repo, 'rev-parse', tip + '^{tree}').strip(),
+               'tree': receipt['tree'],
                'attempt-id': receipt['attempt-id'],
                'attempt-fence': receipt['attempt-fence'],
                'evidence': paths['evidence'], 'review': paths['review'],
@@ -2259,16 +2335,19 @@ def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
                'fresh-session-required': True, 'non-author-review-required': True,
                'prompt': _review_prompt(stage, plan, wave, expected_head, expected_branch,
                                         paths, str(staging), digest_value, names)}
+    _bind_owned_request(request, campaign_root, plan, wave, staging, manual_compatibility)
     _stage_request(staging, request)
     return {'status': 'awaiting-review', 'stage': 'implementation-review',
             'request': request}
 
 
 def _prepare_binding(repo, plan, wave, expected_head, expected_branch,
-                     campaign_root, generation, staging_root):
+                     campaign_root, generation, staging_root, manual_compatibility=False):
     staging = require_binding_output(staging_root, campaign_root, plan, wave, generation)
     staged = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
     if staged['status'] == 'reviewed':
+        if not manual_compatibility:
+            raise _ReviewInfra('existing manual binding approval is not production audit approval')
         return staged
     require(staged['status'] == 'pending-review',
             'the binding staging is %s; only a pending-review draft may dispatch a fresh '
@@ -2287,7 +2366,7 @@ def _prepare_binding(repo, plan, wave, expected_head, expected_branch,
                'generation': generation, 'head': expected_head,
                'branch': expected_branch, 'merge-sha': staged['merge-sha'],
                'delivery-head-sha': staged['delivery-head-sha'],
-               'binding-branch': staged['branch'],
+               'binding-branch': staged['branch'], 'tree': receipt['tree'],
                'attempt-id': receipt['attempt-id'],
                'attempt-fence': receipt['attempt-fence'],
                'evidence': paths['evidence'], 'review': paths['review'],
@@ -2298,8 +2377,109 @@ def _prepare_binding(repo, plan, wave, expected_head, expected_branch,
                'prompt': _review_prompt('binding-review', plan, wave, expected_head,
                                         expected_branch, paths, str(staging),
                                         EMPTY_SHA, names)}
+    _bind_owned_request(request, campaign_root, plan, wave, staging, manual_compatibility)
+    if not manual_compatibility and staged['merge-sha'] != expected_head:
+        raise _ReviewInfra('unsupported-postmerge-owned-proof-relation: execution head is not merged head')
     _stage_request(staging, request)
     return {'status': 'awaiting-review', 'stage': 'binding-review', 'request': request}
+
+
+OWNED_AUDIT_MODE = 'owned-proof-audit-v1'
+AUDIT_KEYS = ('plan-id', 'wave', 'generation', 'head', 'tree', 'branch',
+              'attempt-id', 'attempt-fence', 'content-digest', 'proof-sha256')
+
+
+def _audit_binding(request):
+    return {key: request.get(key) for key in AUDIT_KEYS}
+
+
+def _exact_audit_binding(actual, expected):
+    return (isinstance(actual, dict) and actual.keys() == expected.keys() and
+            all(type(actual[key]) is type(value) and actual[key] == value
+                for key, value in expected.items()))
+
+
+def _owned_authority(campaign_root, plan, wave, staging):
+    try:
+        return json.loads(command(['racket', str(HERE / 'gsd-binding-data.rkt'),
+                                   'owned-review', str(campaign_root), plan, str(wave),
+                                   str(staging)], timeout=60))
+    except (Pending, ValueError) as error:
+        raise _ReviewInfra('missing or invalid authenticated owned proof: %s' % error) from error
+
+
+def _bind_owned_request(request, campaign_root, plan, wave, staging, manual=False):
+    if manual:
+        request['review-mode'] = 'manual-compatibility'
+        return
+    authority = _owned_authority(campaign_root, plan, wave, staging)
+    receipt = authority['receipt']
+    if (authority['generation'] != request['generation'] or
+            any(request.get(key) != receipt.get(key) for key in
+                ('head', 'tree', 'branch', 'attempt-id', 'attempt-fence'))):
+        raise _ReviewInfra('stale owned-proof receipt/generation')
+    request['review-mode'] = OWNED_AUDIT_MODE
+    request['proof-sha256'] = authority['reference']['sha256']
+    authority['audit-binding'] = _audit_binding(request)
+    request['owned-authority'] = authority
+    request['prompt'] += ('\nPinned audit binding: '
+                          + json.dumps(_audit_binding(request), sort_keys=True)
+                          + '\nOwned manifest/raw log bundle: ' + str(staging / authority['bundle'])
+                          + '\nRead the manifest AND actual raw outputs and source before acknowledging.')
+    if isinstance(authority.get('red'), dict):
+        request['prompt'] += ('\nLinked behavioral RED proof (separate authentic negative execution, '
+                              'same bundle directory): read its manifest and actual raw failure '
+                              'output, then acknowledge it with red-ack {"proof-sha256": '
+                              '"%s", "raw-output-read": true}. '
+                              % authority['red']['reference']['sha256'])
+    else:
+        request['prompt'] += ('\nNo behavioral RED proof is linked to this green execution: '
+                              'acknowledge none and report the gap honestly.')
+
+
+def _reauthenticate_owned_request(request, campaign_root, plan, wave, staging, manual):
+    if manual:
+        if request.get('review-mode') != 'manual-compatibility':
+            raise _ReviewInfra('manual compatibility cannot consume a production audit request')
+        return None
+    if request.get('review-mode') != OWNED_AUDIT_MODE:
+        raise _ReviewInfra('production review requires owned-proof audit mode')
+    fresh = _owned_authority(campaign_root, plan, wave, staging)
+    if (fresh['generation'] != request['generation'] or
+            any(request.get(key) != fresh['receipt'].get(key) for key in
+                ('head', 'tree', 'branch', 'attempt-id', 'attempt-fence'))):
+        raise _ReviewInfra('stale owned receipt/generation before publication')
+    fresh['audit-binding'] = _audit_binding(request)
+    if fresh != request.get('owned-authority'):
+        raise _ReviewInfra('owned proof or receipt drifted since prepare')
+    if request.get('proof-sha256') != fresh['reference']['sha256']:
+        raise _ReviewInfra('owned proof SHA drifted since prepare')
+    return fresh
+
+
+def _owned_approval_gates(model_gates, authority):
+    # Manual compatibility keeps the legacy injected fixtures. Production
+    # owned audit fills EVERY gate fact from the authenticated owner record:
+    # green execution facts plus, when linked, the separate authentic
+    # behavioral RED facts. There is deliberately no model-prose fallback;
+    # a missing linked RED is a typed stop, never approval or rejection.
+    if authority is None:
+        return model_gates
+    red = authority.get('red')
+    if not isinstance(red, dict):
+        raise _ReviewInfra('missing-meaningful-red-proof: authenticated behavioral RED unavailable; '
+                           'owned green and independent approval are not delivery approval')
+    green = authority['green-gates']
+    return {'red-first': {'command': red['command'],
+                          'failure': red['failure-summary'],
+                          'result': 'passed',
+                          'verification-origin': 'audited-owned',
+                          'owner-job-id': red['owner-job-id']},
+            'focused-tests': green['focused-tests'],
+            'format-compile': green['format-compile'],
+            'lint': green['lint'],
+            'fast': green['fast'],
+            'remaining-items': []}
 
 
 def _load_dispatch_request(staging, plan, wave, generation, expected_head,
@@ -2322,11 +2502,53 @@ def _load_dispatch_request(staging, plan, wave, generation, expected_head,
     return request
 
 
-def _commit_candidate(repo, base_tip, datums, message):
+def _owned_publication_files(staging, authority):
+    if authority is None:
+        return {}
+    bundle = authority['bundle']
+    refs = [authority['reference'], authority['log-reference']]
+    red = authority.get('red')
+    if isinstance(red, dict):
+        refs += [red['reference'], red['log-reference']]
+    files = {bundle + '/' + ref['path']: Path(staging) / bundle / ref['path']
+             for ref in refs}
+    # The committed authority payload lets push CI (and the staged binding
+    # gate) validate the audit trio with the exact trusted authority the
+    # controller used: same excluded directory, same trust level as the
+    # trio itself. Written from the FINAL reauthenticated authority, so the
+    # committed bytes match the publication exactly.
+    payload = Path(staging) / bundle / 'authority.json'
+    payload.parent.mkdir(parents=True, exist_ok=True)
+    payload.write_text(json.dumps(authority, sort_keys=True), encoding='utf-8')
+    files[bundle + '/authority.json'] = payload
+    return files
+
+
+def _binding_bundle_files(staging):
+    """Controller-authored owned-proof bundle files staged beside an audit
+    binding trio. They are mirrored into the binding publication so the
+    binding PR's governance gate can validate the audit trio through the
+    discovered committed authority even when the implementation review was
+    manual-compatibility and the bundle never reached main through it."""
+    proofs = Path(staging) / 'docs/reports/gsd-wave-validation/owned-proofs'
+    files = {}
+    if proofs.is_dir() and not proofs.is_symlink():
+        for payload in sorted(proofs.rglob('*')):
+            if payload.is_file() and not payload.is_symlink():
+                relative = payload.relative_to(proofs.parent)
+                require(not relative.is_absolute() and '..' not in relative.parts,
+                        'unsafe staged owned-proof bundle path: ' + str(payload))
+                files['docs/reports/gsd-wave-validation/' + relative.as_posix()] = payload
+    return files
+
+
+def _commit_candidate(repo, base_tip, datums, message, raw_files=None):
     """Create a local evidence-only candidate; NEVER change remote refs."""
     require(isinstance(datums, dict) and datums, 'the review publication has no artifacts')
-    for relative in datums:
-        require(isinstance(relative, str) and relative.startswith(EXCLUDED_PREFIXES),
+    raw_files = raw_files or {}
+    for relative in (*datums, *raw_files):
+        require(isinstance(relative, str) and relative.startswith(EXCLUDED_PREFIXES) and
+                '..' not in PurePosixPath(relative).parts,
                 'the review publication may only touch excluded evidence paths: ' + relative)
     with tempfile.TemporaryDirectory(prefix='q-auto-review-') as temp:
         worktree = Path(temp) / 'wt'
@@ -2339,7 +2561,21 @@ def _commit_candidate(repo, base_tip, datums, message):
                     require(target.is_file(), 'the candidate artifact is not a file')
                     target.unlink()
                 write_rktd(datum, target)
-            git(worktree, 'add', '--', *sorted(datums))
+            for relative, source in raw_files.items():
+                target = worktree / relative
+                require(source.is_file() and not source.is_symlink(), 'unsafe raw proof source')
+                for parent in target.parents:
+                    require(not parent.is_symlink(), 'symlinked candidate proof directory')
+                    if parent == worktree:
+                        break
+                target.parent.mkdir(parents=True, exist_ok=True)
+                require(not target.is_symlink(), 'candidate raw proof is a symlink')
+                data = source.read_bytes()
+                if target.exists():
+                    require(target.read_bytes() == data, 'published addressed proof differs')
+                else:
+                    target.write_bytes(data)
+            git(worktree, 'add', '--', *sorted((*datums, *raw_files)))
             git(worktree, '-c', 'user.name=gsd-delivery-controller',
                 '-c', 'user.email=gsd-delivery@invalid',
                 'commit', '--no-gpg-sign', '-m', message)
@@ -2352,7 +2588,7 @@ def _commit_candidate(repo, base_tip, datums, message):
     return commit
 
 
-def _publish_candidate(repo, branch, base_tip, commit):
+def _publish_candidate(repo, branch, base_tip, commit, guard=None):
     """Publish an already validated candidate with pinned non-force readback."""
     git(repo, 'fetch', '--no-tags', 'origin', 'refs/heads/' + branch)
     remote = git(repo, 'rev-parse', 'FETCH_HEAD').strip()
@@ -2361,6 +2597,8 @@ def _publish_candidate(repo, branch, base_tip, commit):
             'the remote branch diverged from the prepared review tip during review '
             '(%s != %s); the dispatch is stale and was not published'
             % (remote[:12], base_tip[:12]))
+    if guard is not None:
+        guard()  # proof bytes, receipt/generation and frozen authority AFTER fetch, BEFORE push
     try:
         git(repo, 'push', '--no-tags', 'origin', f'{commit}:refs/heads/{branch}')
         git(repo, 'fetch', '--no-tags', 'origin',
@@ -2410,8 +2648,24 @@ def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, rece
     require(isinstance(datum.get('timestamp'), str) and
             re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', datum['timestamp']),
             'the committed rejection timestamp is malformed')
+    request = None
+    if 'review-mode' in datum:
+        require(datum['review-mode'] == OWNED_AUDIT_MODE, 'unknown committed review mode')
+        ref = receipt.get('owned-proof')
+        require(isinstance(ref, dict) and datum.get('owned-proof') == ref,
+                'recovered rejection has stale owned execution proof')
+        request = dict(receipt, **{'plan-id': plan, 'wave': wave, 'generation': generation,
+                                  'proof-sha256': ref['sha256'], 'review-mode': OWNED_AUDIT_MODE,
+                                  'content-digest': digest(repo, 'refs/remotes/origin/main', receipt['head'])})
+        owned_red = datum.get('owned-red')
+        if isinstance(owned_red, dict):
+            # The published rejection named its linked RED; recovery validates
+            # the acknowledgement against exactly that retained identity.
+            request['owned-authority'] = {'red': {'reference': {'sha256': owned_red['sha256']}}}
+        require(_exact_audit_binding(datum.get('audit-binding'), _audit_binding(request)),
+                'recovered rejection has stale audit binding')
     try:
-        output = validate_reviewer_output(dict(datum, kind='request-changes'))
+        output = validate_reviewer_output(dict(datum, kind='request-changes'), request)
     except _ReviewInfra as error:
         raise Pending('the committed rejection is malformed: %s' % error) from error
     return {'status': 'review-rejected', 'stage': 'implementation-review',
@@ -2437,7 +2691,8 @@ def _verify_rejected_artifact(repo, tip, relative, expected_head, findings):
 
 
 def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
-                             campaign_root, generation, staging_root, reviewer_output):
+                             campaign_root, generation, staging_root, reviewer_output,
+                             manual_compatibility=False):
     staging = implementation_review_staging(campaign_root, plan, wave, generation,
                                             staging_root)
     request = _load_dispatch_request(staging, plan, wave, generation, expected_head,
@@ -2463,7 +2718,9 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
     if tip != request.get('tip'):
         raise _ReviewInfra('the receipt branch moved after the review dispatch was '
                            'prepared; rerun prepare')
-    output = load_reviewer_output(reviewer_output)
+    authority = _reauthenticate_owned_request(request, campaign_root, plan, wave, staging,
+                                              manual_compatibility)
+    output = load_reviewer_output(reviewer_output, request)
     if output['kind'] == 'request-changes':
         rejected = {'stage': 'implementation-review', 'plan-id': plan, 'wave': f'W{wave}',
                     'verdict': 'REQUEST_CHANGES', 'reviewer': output['reviewer'],
@@ -2473,14 +2730,28 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
                     'attempt-fence': receipt['attempt-fence'], 'generation': generation,
                     'findings': output['findings'], 'scope': output['scope'],
                     'report': output['report']}
+        if authority is not None:
+            rejected.update({'review-mode': OWNED_AUDIT_MODE,
+                             'owned-proof': authority['reference'],
+                             'audit-binding': _audit_binding(request), 'audit-ack': output['audit-ack']})
+            if isinstance(authority.get('red'), dict):
+                rejected['owned-red'] = authority['red']['reference']
         candidate = _commit_candidate(repo, tip, {paths['review']: rejected},
-                                      f'W{wave} review rejected: {plan}-w{wave}')
+                                      f'W{wave} review rejected: {plan}-w{wave}',
+                                      _owned_publication_files(staging, authority))
         _require_review_evidence_tail(repo, expected_head, candidate)
         _verify_rejected_artifact(repo, candidate, paths['review'], expected_head,
                                   output['findings'])
         _recover_rejected_artifact(repo, candidate, paths['review'], plan, wave,
                                    generation, receipt)
-        tip_now = _publish_candidate(repo, expected_branch, tip, candidate)
+        _reauthenticate_owned_request(request, campaign_root, plan, wave, staging,
+                                      manual_compatibility)
+        if authority is None:
+            tip_now = _publish_candidate(repo, expected_branch, tip, candidate)
+        else:
+            tip_now = _publish_candidate(
+                repo, expected_branch, tip, candidate,
+                lambda: _reauthenticate_owned_request(request, campaign_root, plan, wave, staging, False))
         return _recover_rejected_artifact(repo, tip_now, paths['review'], plan, wave,
                                           generation, receipt)
     # approved: the controller binds every digest and head; the reviewer's
@@ -2488,49 +2759,73 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
     # the reviewed verdict.
     content = digest(repo, main, tip)
     names = policy_names(repo, main)
-    evidence = {'schema-version': 2, 'plan-id': plan, 'wave': f'W{wave}',
-                'milestone': milestone, 'issue': issue, 'status': 'ready-for-merge',
-                'implementation-sha': expected_head, 'content-digest': content,
-                'branch': expected_branch, 'required-checks': list(names),
-                'required-pr-checks': list(names), 'review-artifact': paths['review'],
-                'validation-artifact': paths['validation']}
-    review_datum = {'reviewer': output['reviewer'], 'verdict': 'APPROVED',
-                    'timestamp': _iso_now(), 'reviewed-sha': expected_head,
-                    'content-digest': content, 'scope': output['scope'],
-                    'report': output['report']}
-    gates = output['validation']
-    validation = {'status': 'current', 'planning-sync': 'current',
-                  'milestone': milestone, 'wave': f'W{wave}', 'issue': issue,
-                  'branch': expected_branch, 'implementation-sha': expected_head,
-                  'content-digest': content, 'red-first': gates['red-first'],
-                  'focused-tests': gates['focused-tests'],
-                  'format-compile': gates['format-compile'], 'lint': gates['lint'],
-                  'fast': gates['fast'], 'review-artifact': paths['review'],
-                  'remaining-items': gates['remaining-items']}
+    common = {}
+    if authority is not None:
+        common = {'review-mode': OWNED_AUDIT_MODE,
+                  'owned-proof': authority['reference'],
+                  'audit-binding': _audit_binding(request)}
+        if isinstance(authority.get('red'), dict):
+            common['owned-red'] = authority['red']['reference']
+    evidence = dict(common, **{'schema-version': 2, 'plan-id': plan, 'wave': f'W{wave}',
+                               'milestone': milestone, 'issue': issue,
+                               'status': 'ready-for-merge',
+                               'implementation-sha': expected_head,
+                               'content-digest': content,
+                               'branch': expected_branch, 'required-checks': list(names),
+                               'required-pr-checks': list(names),
+                               'review-artifact': paths['review'],
+                               'validation-artifact': paths['validation']})
+    review_datum = dict(common, **{'reviewer': output['reviewer'], 'verdict': 'APPROVED',
+                                   'timestamp': _iso_now(), 'reviewed-sha': expected_head,
+                                   'content-digest': content, 'scope': output['scope'],
+                                   'report': output['report']})
+    if authority is not None:
+        review_datum['audit-ack'] = output['audit-ack']
+    gates = _owned_approval_gates(output.get('validation'), authority)
+    validation = dict(common, **{'status': 'current', 'planning-sync': 'current',
+                                 'milestone': milestone, 'wave': f'W{wave}', 'issue': issue,
+                                 'branch': expected_branch,
+                                 'implementation-sha': expected_head,
+                                 'content-digest': content, 'red-first': gates['red-first'],
+                                 'focused-tests': gates['focused-tests'],
+                                 'format-compile': gates['format-compile'],
+                                 'lint': gates['lint'],
+                                 'fast': gates['fast'],
+                                 'review-artifact': paths['review'],
+                                 'remaining-items': gates['remaining-items']})
     candidate = _commit_candidate(repo, tip,
                                    {paths['evidence']: evidence,
                                     paths['review']: review_datum,
                                     paths['validation']: validation},
-                                   f'W{wave} independent review: {plan}-w{wave}')
+                                   f'W{wave} independent review: {plan}-w{wave}',
+                                   _owned_publication_files(staging, authority))
     try:
         _require_review_evidence_tail(repo, expected_head, candidate)
-        validate_trio(repo, candidate, paths['evidence'], main)
+        validate_trio(repo, candidate, paths['evidence'], main,
+                      owned_proof_authority=authority)
     except Pending as error:
         raise _ReviewInfra('the local candidate failed the unchanged strict gate: %s'
                            % error) from error
-    new_tip = _publish_candidate(repo, expected_branch, tip, candidate)
+    new_tip = _publish_candidate(
+        repo, expected_branch, tip, candidate,
+        None if authority is None else
+        (lambda: _reauthenticate_owned_request(request, campaign_root, plan, wave,
+                                               staging, manual_compatibility)))
     _require_review_evidence_tail(repo, expected_head, new_tip)
-    validate_trio(repo, new_tip, paths['evidence'], main)
+    validate_trio(repo, new_tip, paths['evidence'], main, owned_proof_authority=authority)
     return {'status': 'reviewed', 'plan-id': plan, 'wave': wave, 'head': expected_head,
             'reviewed-sha': expected_head, 'review-artifact': paths['review'],
             'tip': new_tip}
 
 
 def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
-                      campaign_root, generation, staging_root, reviewer_output):
+                      campaign_root, generation, staging_root, reviewer_output,
+                      manual_compatibility=False):
     staging = require_binding_output(staging_root, campaign_root, plan, wave, generation)
     staged = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
     if staged['status'] == 'reviewed':
+        if not manual_compatibility:
+            raise _ReviewInfra('existing manual binding approval is not production audit approval')
         return dict(staged, stage='binding-review', head=expected_head,
                     branch=expected_branch, postmerge=True)
     require(staged['status'] == 'pending-review',
@@ -2540,7 +2835,11 @@ def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
                                      expected_branch, 'binding-review')
     receipt = _receipt_for_review(repo, plan, wave, campaign_root,
                                   expected_head, expected_branch)
-    output = load_reviewer_output(reviewer_output)
+    authority = _reauthenticate_owned_request(request, campaign_root, plan, wave, staging,
+                                              manual_compatibility)
+    output = load_reviewer_output(reviewer_output, request)
+    if authority is not None and staged['merge-sha'] != expected_head:
+        raise _ReviewInfra('unsupported-postmerge-owned-proof-relation')
     artifact = Path(staged['binding']).name
     review_rel = f'docs/reports/gsd-wave-reviews/{artifact}'
     evidence_path = staging / 'docs/reports/gsd-wave-evidence' / artifact
@@ -2560,25 +2859,42 @@ def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
                 'branch': expected_branch, 'attempt-id': receipt['attempt-id'],
                 'attempt-fence': receipt['attempt-fence'], 'postmerge': True,
                 'findings': output['findings']}
-    gates = output['validation']
-    evidence = dict(evidence, status='ready-for-merge', **{'content-digest': EMPTY_SHA})
-    review_datum = {'reviewer': output['reviewer'], 'verdict': 'APPROVED',
-                    'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
-                    'content-digest': EMPTY_SHA, 'scope': output['scope'],
-                    'report': output['report']}
-    validation = {'status': 'current', 'planning-sync': 'current',
-                  'milestone': evidence['milestone'], 'wave': evidence['wave'],
-                  'issue': evidence['issue'], 'branch': staged['branch'],
-                  'implementation-sha': staged['merge-sha'],
-                  'content-digest': EMPTY_SHA, 'red-first': gates['red-first'],
-                  'focused-tests': gates['focused-tests'],
-                  'format-compile': gates['format-compile'], 'lint': gates['lint'],
-                  'fast': gates['fast'], 'review-artifact': review_rel,
-                  'remaining-items': gates['remaining-items']}
+    gates = _owned_approval_gates(output.get('validation'), authority)
+    common = {}
+    if authority is not None:
+        # Postmerge binding approval keeps the SAME audit provenance as the
+        # implementation review: mode, proof reference, binding and ack are
+        # published and revalidated by the strict audit gate (the staged
+        # trio is validated with the discovered staging bundle below), so a
+        # binding trio can never look legacy while an owned proof exists.
+        common = {'review-mode': OWNED_AUDIT_MODE,
+                  'owned-proof': authority['reference'],
+                  'audit-binding': authority['audit-binding']}
+        if isinstance(authority.get('red'), dict):
+            common['owned-red'] = authority['red']['reference']
+    evidence = dict(evidence, status='ready-for-merge', **common,
+                    **{'content-digest': EMPTY_SHA})
+    review_datum = dict(common, **{'reviewer': output['reviewer'], 'verdict': 'APPROVED',
+                                   'timestamp': _iso_now(), 'reviewed-sha': staged['merge-sha'],
+                                   'content-digest': EMPTY_SHA, 'scope': output['scope'],
+                                   'report': output['report']})
+    if authority is not None:
+        review_datum['audit-ack'] = output['audit-ack']
+    validation = dict(common, **{'status': 'current', 'planning-sync': 'current',
+                                 'milestone': evidence['milestone'], 'wave': evidence['wave'],
+                                 'issue': evidence['issue'], 'branch': staged['branch'],
+                                 'implementation-sha': staged['merge-sha'],
+                                 'content-digest': EMPTY_SHA, 'red-first': gates['red-first'],
+                                 'focused-tests': gates['focused-tests'],
+                                 'format-compile': gates['format-compile'], 'lint': gates['lint'],
+                                 'fast': gates['fast'], 'review-artifact': review_rel,
+                                 'remaining-items': gates['remaining-items']})
     for path, datum in ((evidence_path, evidence), (review_path, review_datum),
                         (validation_path, validation)):
         path.unlink()
         write_rktd(datum, path)
+    if authority is not None:
+        _owned_publication_files(staging, authority)
     result = binding_review(repo, plan, wave, staging, campaign_root, expected_branch)
     require(result['status'] == 'reviewed',
             'the finalized staged trio failed the strict binding gate: %s'
@@ -2588,7 +2904,8 @@ def _finalize_binding(repo, plan, wave, expected_head, expected_branch,
 
 
 def auto_review(repo, plan, wave, phase, stage, expected_head, expected_branch,
-                campaign_root, generation, staging_root, reviewer_output=None):
+                campaign_root, generation, staging_root, reviewer_output=None,
+                *, manual_compatibility=False):
     """The auto-review port (see the block comment above). `prepare` decides
     dispatchability through the unchanged validation paths; `finalize` binds
     digests, publishes evidence-only with a pinned non-force push and lets
@@ -2611,15 +2928,15 @@ def auto_review(repo, plan, wave, phase, stage, expected_head, expected_branch,
         if phase == 'prepare':
             return auto_review_prepare(repo, plan, wave, stage, expected_head,
                                        expected_branch, campaign_root, generation,
-                                       staging_root)
+                                       staging_root, manual_compatibility)
         require(reviewer_output is not None, 'finalize requires --reviewer-output')
         if stage == 'binding-review':
             return _finalize_binding(repo, plan, wave, expected_head, expected_branch,
                                      campaign_root, generation, staging_root,
-                                     reviewer_output)
+                                     reviewer_output, manual_compatibility)
         return _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
                                         campaign_root, generation, staging_root,
-                                        reviewer_output)
+                                        reviewer_output, manual_compatibility)
     except _ReviewInfra as error:
         return {'status': 'review-infra', 'reason': str(error)}
 
@@ -2693,6 +3010,8 @@ def main():
                         help='the delivery stage the auto-review dispatch serves')
     parser.add_argument('--staging-root', type=Path,
                         help='deterministic campaign-local review staging directory')
+    parser.add_argument('--manual-review-compatibility', action='store_true',
+                        help='explicit legacy/manual fixtures only; never production audit fallback')
     parser.add_argument('--reviewer-output', type=Path,
                         help='the fresh reviewer session typed result (coordinator-written)')
     args = parser.parse_args()
@@ -2774,7 +3093,8 @@ def main():
             result = auto_review(args.repo, args.plan, args.wave, args.phase, args.stage,
                                  args.expected_head, args.expected_branch,
                                  args.campaign_root, args.generation, args.staging_root,
-                                 args.reviewer_output)
+                                 args.reviewer_output,
+                                 manual_compatibility=args.manual_review_compatibility)
         elif args.action == 'governance':
             require(args.expected_branch, 'governance requires --expected-branch')
             result = governance(args.repo, args.plan, args.wave, args.expected_branch)

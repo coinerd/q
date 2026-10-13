@@ -29,6 +29,8 @@
          "campaign-budgets.rkt"
          "delivery-journal.rkt"
          "review-usage.rkt"
+         "review-proof.rkt"
+         "review-audit-format.rkt"
          (only-in "review-worktree.rkt" resolve-review-checkout))
 (provide make-auto-review-runner
          resolve-review-checkout
@@ -58,8 +60,7 @@
 ;; registry's first-match/default resolution: duplicates must fail closed.
 (define (resolve-review-model config)
   (define candidates
-    (filter (lambda (entry)
-              (member (model-entry-name entry) (list "glm-5.3" review-model)))
+    (filter (lambda (entry) (member (model-entry-name entry) (list "glm-5.3" review-model)))
             (available-models (make-model-registry-from-config config))))
   (unless (= (length candidates) 1)
     (error 'review-session "exact GLM-5.3 registration missing or ambiguous; no fallback review"))
@@ -93,18 +94,29 @@
   p)
 ;; Private test/probe interface, not part of the extension's public runner API.
 (module+ test-support
-  (provide resolve-review-model build-review-provider))
+  (provide resolve-review-model
+           build-review-provider))
 (define (run-review-session session prompt)
   (define-values (_updated result) (run-prompt! session prompt #:max-iterations 80))
   result)
 (define (failed reason)
   (hasheq 'kind "review-failed" 'reason reason))
+;; The linked behavioral RED identity, when the trusted owned authority links
+;; one. A model can never introduce its own: the sha comes from the pinned
+;; owner-written authority inside the controller request.
+(define (request-red-sha request)
+  (define authority (hash-ref request 'owned-authority #f))
+  (define red (and (hash? authority) (hash-ref authority 'red #f)))
+  (define reference (and (hash? red) (hash-ref red 'reference #f)))
+  (and (hash? reference) (hash-ref reference 'sha256 #f)))
 (define (make-auto-review-runner root
                                  plan
                                  #:provider-builder [provider-builder build-review-provider]
                                  #:checkout-resolver [checkout-resolver resolve-review-checkout]
                                  #:session-run [session-run run-review-session]
                                  #:timeout-seconds [timeout 600])
+  (unless (and (real? timeout) (< 0 timeout) (<= timeout 600))
+    (raise-argument-error 'make-auto-review-runner "positive timeout <=600 seconds" timeout))
   (lambda (request)
     (with-handlers
         ([exn:fail?
@@ -114,6 +126,19 @@
       (define wave (hash-ref request 'wave))
       (define journal (load-delivery-journal root plan wave))
       (define receipt (and journal (hash-ref journal 'receipt #f)))
+      (define mode (hash-ref request 'review-mode #f))
+      (define audit? (equal? mode owned-audit-mode))
+      (unless (or audit? (equal? mode "manual-compatibility"))
+        (error 'review-session "production review requires owned-proof audit mode"))
+      (when audit?
+        (validate-receipt-owned-proof! receipt root plan wave)
+        (unless (and (hash? (hash-ref receipt 'owned-proof #f))
+                     (equal? (hash-ref request 'proof-sha256 #f)
+                             (hash-ref (hash-ref receipt 'owned-proof) 'sha256))
+                     (equal? (hash-ref request 'tree #f) (hash-ref receipt 'tree #f))
+                     (equal? (hash-ref request 'generation #f)
+                             (length (hash-ref journal 'receipt-history '()))))
+          (error 'review-session "stale owned-proof audit pin")))
       (define (live?)
         (define rec (load-campaign-record root plan))
         (define current (load-delivery-journal root plan wave))
@@ -122,6 +147,9 @@
              (not (campaign-record-budget-pause rec))
              (= (campaign-fence-token rec) (hash-ref receipt 'attempt-fence))
              (equal? receipt (and current (hash-ref current 'receipt #f)))
+             (or (not audit?)
+                 (equal? (hash-ref request 'generation #f)
+                         (length (hash-ref current 'receipt-history '()))))
              (for/or ([w (in-list (campaign-record-waves rec))])
                (define a (campaign-wave-current-attempt w))
                (and (= wave (campaign-wave-index w))
@@ -164,21 +192,46 @@
       (define prompt
         (string-append
          (hash-ref request 'prompt)
-         "\nYou are a FRESH independent non-author reviewer. Use only read/bash to inspect and test."
+         "\nYou are a FRESH independent non-author reviewer. Use only read/bash to inspect source and actual outputs."
          " Do not edit source, evidence, refs, or publish. Credentials are unavailable."
-         " Report only gates actually run; unavailable proof is review-failed, not approval."
+         " AUDIT owned gates; do not rerun full fast/focused/format/compile/lint or RED."
+         " Never claim you executed inherited gates. Missing proof remains review-failed, not approval."
+         " You have at most "
+         (number->string timeout)
+         " seconds including tool inspection; avoid long replay jobs."
          " Return ONLY one JSON object as your final assistant text, in the requested result schema."
          " The runtime supplies reviewer identity; do not invent one.\n"
-         "Result schema: {\"kind\":\"approved\"|\"request-changes\"|\"review-failed\","
-         "\"scope\":\"at least 64 characters\",\"report\":\"at least 64 characters\","
-         "\"findings\":[\"nonempty finding\"],\"reason\":\"infrastructure failure only\","
-         "\"validation\":{\"red-first\":{\"command\":\"actual command\",\"failure\":\"actual failure >=32 chars\"},"
-         "\"focused-tests\":{\"result\":\"passed\",\"command\":\"actual command\"},"
-         "\"format-compile\":{\"result\":\"passed\",\"command\":\"actual command\"},"
-         "\"lint\":{\"result\":\"passed\",\"command\":\"actual command\"},"
-         "\"fast\":{\"result\":\"passed\",\"command\":\"actual command\"},"
-         "\"remaining-items\":[],\"planning-sync\":\"current\"}}."
-         " Findings required only for rejection, validation only for approval, reason only for failure.\n"))
+         (if audit?
+             (string-append
+              "Result schema: {\"kind\":\"approved\"|\"request-changes\"|\"review-failed\","
+              "\"scope\":\"at least 64 characters\",\"report\":\"at least 64 characters\","
+              "\"findings\":[\"nonempty finding\"],\"reason\":\"infrastructure only\","
+              "\"audit-ack\":{\"mode\":\"owned-proof-audit-v1\","
+              "\"verification-origin\":\"audited-owned\",\"source-read\":true,\"raw-output-read\":true,"
+              (if (request-red-sha request)
+                  (string-append "\"red-ack\":{\"proof-sha256\":\""
+                                 (request-red-sha request)
+                                 "\",\"raw-output-read\":true},")
+                  "")
+              "\"binding\":"
+              (jsexpr->string (audit-binding request))
+              "}}."
+              " Echo binding exactly only AFTER reading source, manifest and actual raw outputs."
+              " When a red-ack is requested, read the linked RED manifest and its actual raw"
+              " failure output first; never acknowledge a red you have not read."
+              " No validation/gate execution facts in model output."
+              " An acknowledgement is an attestation, not runtime proof of which files were read.\n")
+             (string-append
+              "Explicit manual compatibility result schema: {\"kind\":\"approved\"|\"request-changes\"|\"review-failed\","
+              "\"scope\":\"at least 64 characters\",\"report\":\"at least 64 characters\","
+              "\"findings\":[\"nonempty finding\"],\"reason\":\"infrastructure failure only\","
+              "\"validation\":{\"red-first\":{\"command\":\"actual command\",\"failure\":\"actual failure >=32 chars\"},"
+              "\"focused-tests\":{\"result\":\"passed\",\"command\":\"actual command\"},"
+              "\"format-compile\":{\"result\":\"passed\",\"command\":\"actual command\"},"
+              "\"lint\":{\"result\":\"passed\",\"command\":\"actual command\"},"
+              "\"fast\":{\"result\":\"passed\",\"command\":\"actual command\"},"
+              "\"remaining-items\":[],\"planning-sync\":\"current\"}}."
+              " Findings required only for rejection, validation only for approval, reason only for failure.\n"))))
       (dynamic-wind
        void
        (lambda ()
@@ -248,7 +301,21 @@
             ;; tracked writes or implementation drift cannot earn approval.
             (unless (equal? cwd (checkout-resolver receipt))
               (error 'review-session "review checkout changed during session"))
-            (review-final-json result (session-id session))]))
+            (when audit?
+              (validate-receipt-owned-proof! receipt root plan wave))
+            (define final (review-final-json result (session-id session)))
+            (when (and audit? (member (hash-ref final 'kind #f) '("approved" "request-changes")))
+              (unless (and (not (hash-has-key? final 'validation))
+                           (valid-audit-ack? (hash-ref final 'audit-ack #f) (audit-binding request)))
+                (error 'review-session "invalid owned-proof audit acknowledgement"))
+              (define ack (hash-ref final 'audit-ack))
+              (cond
+                [(request-red-sha request)
+                 (unless (valid-audit-red-ack? (hash-ref ack 'red-ack #f) (request-red-sha request))
+                   (error 'review-session "invalid owned behavioral RED acknowledgement"))]
+                [(hash-has-key? ack 'red-ack)
+                 (error 'review-session "RED acknowledged without a linked owned red proof")]))
+            final]))
        (lambda ()
          (cancel-token! token)
          (custodian-shutdown-all cust))))))

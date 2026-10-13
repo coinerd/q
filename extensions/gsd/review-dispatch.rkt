@@ -128,7 +128,10 @@
        [(not (genuine-text? (hash-ref result 'report #f))) 'invalid]
        [(equal? kind "request-changes")
         (if (genuine-findings? (hash-ref result 'findings #f)) 'request-changes 'invalid)]
-       [else (if (hash? (hash-ref result 'validation #f)) 'approved 'invalid)])]))
+       [else
+        (if (or (hash? (hash-ref result 'validation #f)) (hash? (hash-ref result 'audit-ack #f)))
+            'approved
+            'invalid)])]))
 
 ;; Invoke the runner in its accepted shape. A runner that raises is a typed
 ;; reviewer-session failure, never a crash of the coordinator loop.
@@ -260,7 +263,10 @@
        (list (hash-ref receipt 'head #f)
              (hash-ref receipt 'branch #f)
              (hash-ref receipt 'attempt-id #f)
-             (hash-ref receipt 'attempt-fence #f))))
+             (hash-ref receipt 'attempt-fence #f)
+             (hash-ref receipt 'tree #f)
+             (hash-ref receipt 'owned-proof #f)
+             (length (hash-ref journal 'receipt-history '())))))
 
 (define (pin-holds? base-dir plan wave pin)
   (equal? (receipt-pin (load-delivery-journal base-dir plan wave)) pin))

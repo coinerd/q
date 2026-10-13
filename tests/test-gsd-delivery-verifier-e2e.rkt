@@ -80,7 +80,7 @@
       (check-true (delivery-verification-approved? result))
       (cleanup-tmp base))
 
-    (test-case "coordinator marks wave done when structured verifier approves"
+    (test-case "coordinator awaits delivery after structured Verify approves"
       (define base (setup-standard-campaign!))
       (define plan (load-plan* base))
       (define rec (migrate-campaign! base))
@@ -90,7 +90,9 @@
                            0
                            #:runner (lambda (_) 'ok)
                            #:verifier (make-delivery-verifier base plan)))
-      (check-eq? (campaign-result-status result) 'wave-done)
+      ;; The automatic-review baseline parks a verified wave until the
+      ;; independent delivery ladder finishes; Verify is not delivery DONE.
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
       (cleanup-tmp base))
 
     (test-case "coordinator marks wave failed when structured verifier rejects"

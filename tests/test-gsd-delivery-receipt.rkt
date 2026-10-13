@@ -11,7 +11,8 @@
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-receipt.rkt"
          racket/runtime-path
-         "../extensions/gsd/campaign-state.rkt")
+         "../extensions/gsd/campaign-state.rkt"
+         (only-in "../extensions/gsd/review-proof.rkt" receipt-owned-proof-blocker))
 (define-runtime-path journal-module "../extensions/gsd/delivery-journal.rkt")
 (define-runtime-path receipt-module "../extensions/gsd/delivery-receipt.rkt")
 (define plan (make-string 64 #\a))
@@ -56,6 +57,11 @@
              7))
 (define journal (hasheq 'schema-version 1 'plan-id plan 'wave 2 'receipt receipt))
 (module+ test
+  (test-case "legacy receipt stays readable but has no audit execution authority"
+    (check-true (valid-delivery-receipt? receipt))
+    (check-equal? (receipt-owned-proof-blocker receipt "." plan 2 #:command "true")
+                  'missing-owned-proof)
+    (check-false (valid-delivery-receipt? (hash-set receipt 'owned-proof #f))))
   (test-case "publication eligibility requires exact DONE attempt, not merely successful Verify"
     (define blocker (dynamic-require receipt-module 'delivery-receipt-blocker))
     (define rec (done-record))

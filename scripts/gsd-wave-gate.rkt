@@ -9,7 +9,9 @@
          racket/list
          racket/match
          racket/path
-         racket/string)
+         racket/string
+         json
+         "gsd-gates/owned-audit.rkt")
 
 (provide (struct-out wave-evidence-result)
          validate-wave-evidence
@@ -17,6 +19,28 @@
          main)
 
 (struct wave-evidence-result (passed? reasons evidence) #:transparent)
+
+;; Audit-mode trios committed by the trusted controller carry their proof
+;; bundle (manifest + raw log + authority payload) under the excluded
+;; validation directory next to the trio. When no explicit
+;; --owned-proof-authority was supplied (e.g. push CI), the same committed,
+;; controller-authored payload is discovered from the trio's own owned-proof
+;; reference: equal trust level (both are controller-committed artifacts),
+;; and every raw byte is still re-read and hash-checked by the loader. A
+;; trio claiming audit mode with no discoverable payload stays rejected.
+(define (discover-owned-proof-authority root-path evidence)
+  (define ref (and (hash? evidence) (hash-ref evidence 'owned-proof #f)))
+  (define sha (and (hash? ref) (hash-ref ref 'sha256 #f)))
+  (and sha
+       (regexp-match? digest-pattern sha)
+       (let ([payload (build-path root-path
+                                  "docs/reports/gsd-wave-validation/owned-proofs"
+                                  sha
+                                  "authority.json")])
+         (and (file-exists? payload)
+              (with-handlers ([exn:fail? (lambda (_) #f)])
+                (define datum (call-with-input-file payload read-json))
+                (and (hash? datum) datum))))))
 
 (define sha-pattern #px"^[0-9a-f]{40}$")
 (define digest-pattern #px"^[0-9a-f]{64}$")
@@ -135,6 +159,7 @@
                                 #:root [root (current-directory)]
                                 #:actual-content-digest [actual-content-digest #f]
                                 #:receipt-head [receipt-head #f]
+                                #:owned-proof-authority [owned-proof-authority #f]
                                 #:policy [policy-path
                                           (build-path root "scripts/required-pr-checks.policy")])
   (define reasons '())
@@ -305,6 +330,17 @@
      (define validation (read-artifact 'validation-artifact "validation artifact"))
      (unless (hash? validation)
        (reject! "validation artifact must contain a hash"))
+     ;; Mode presence requires strict provenance, never a legacy fallback.
+     (when (for/or ([datum (in-list (list evidence review validation))])
+             (and (hash? datum) (hash-has-key? datum 'review-mode)))
+       (for ([reason (in-list (validate-owned-audit root-path
+                                                    evidence
+                                                    review
+                                                    validation
+                                                    (or owned-proof-authority
+                                                        (discover-owned-proof-authority root-path
+                                                                                        evidence))))])
+         (reject! reason)))
      (when (hash? validation)
        (for ([key (in-list validation-required-fields)])
          (unless (hash-has-key? validation key)
@@ -360,6 +396,7 @@
                                      #:root [root (current-directory)]
                                      #:actual-content-digest [actual-content-digest #f]
                                      #:receipt-head [receipt-head #f]
+                                     #:owned-proof-authority [owned-proof-authority #f]
                                      #:policy [policy-path
                                                (build-path root "scripts/required-pr-checks.policy")])
   (with-handlers ([exn:fail? (lambda (error)
@@ -373,6 +410,7 @@
                             #:root root
                             #:actual-content-digest actual-content-digest
                             #:receipt-head receipt-head
+                            #:owned-proof-authority owned-proof-authority
                             #:policy policy-path)))
 
 (define (print-usage)
@@ -396,6 +434,8 @@
        (loop rest (hash-set acc '--content-digest value) positional)]
       [(list "--root" value rest ...) (loop rest (hash-set acc '--root value) positional)]
       [(list "--policy" value rest ...) (loop rest (hash-set acc '--policy value) positional)]
+      [(list "--owned-proof-authority" value rest ...)
+       (loop rest (hash-set acc '--owned-proof-authority value) positional)]
       [(list "--receipt-head" value rest ...)
        (loop rest (hash-set acc '--receipt-head value) positional)]
       [(list arg rest ...)
@@ -415,6 +455,9 @@
            #:root (hash-ref options '--root ".")
            #:actual-content-digest (hash-ref options '--content-digest)
            #:receipt-head (hash-ref options '--receipt-head #f)
+           #:owned-proof-authority
+           (and (hash-ref options '--owned-proof-authority #f)
+                (call-with-input-file (hash-ref options '--owned-proof-authority) read-json))
            #:policy (hash-ref options '--policy "scripts/required-pr-checks.policy")))
         (if (wave-evidence-result-passed? result)
             (begin
