@@ -9,6 +9,7 @@
 (require rackunit
          racket/file
          racket/runtime-path
+         racket/string
          json
          "../sandbox/subprocess.rkt"
          "../extensions/gsd/campaign-state.rkt"
@@ -17,7 +18,7 @@
          "../extensions/gsd/delivery-coordinator.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/review-dispatch.rkt")
-(define-runtime-path fixture-python "test-gsd-delivery-auto-review.py")
+(define-runtime-path fixture-python "helpers/production-owned-review-fixture.py")
 (module+ test
   (test-case "default production coordinator invokes installed independent runner at exact head/generation and replays remote rejection"
     (for ([generation '(0 1)])
@@ -30,16 +31,15 @@
          (define setup
            (run-subprocess "python3"
                            #:args (list (path->string fixture-python)
-                                        "--fixture"
                                         (path->string temp)
                                         plan
                                         "0"
                                         (number->string generation))
-                           #:timeout 60))
+                           #:timeout 180))
          (check-equal? (subprocess-result-exit-code setup) 0 (subprocess-result-stderr setup))
          (define world (string->jsexpr (subprocess-result-stdout setup)))
          (define root (string->path (hash-ref world 'root)))
-         (make-file-or-directory-link (hash-ref world 'repo) (build-path root "q"))
+         (check-true (directory-exists? (build-path root "q")))
          (define receipt (hash-ref world 'receipt))
          (define rec
            (make-campaign-record
@@ -66,6 +66,18 @@
            (define staged (build-path (hash-ref request 'staging) (hash-ref request 'review)))
            (check-true (file-exists? staged))
            (check-regexp-match (regexp (hash-ref receipt 'head)) (file->string staged))
+           (define authority (hash-ref request 'owned-authority))
+           (define bundle (build-path (hash-ref request 'staging) (hash-ref authority 'bundle)))
+           (define proof-file
+             (build-path bundle (string-append (hash-ref request 'proof-sha256) ".json")))
+           (define proof (call-with-input-file proof-file read-json))
+           (check-equal? (hash-ref (hash-ref proof 'binding) 'head) (hash-ref receipt 'head))
+           (check-true (positive? (string-length
+                                   (file->string
+                                    (build-path bundle (hash-ref (hash-ref proof 'log) 'path))))))
+           (check-true (string-contains? (file->string (build-path (hash-ref world 'repo)
+                                                                   "src/gsd-fixture-widget.rkt"))
+                                         "#lang"))
            (hasheq 'kind
                    "request-changes"
                    'reviewer
@@ -75,7 +87,27 @@
                    'report
                    (make-string 70 #\r)
                    'findings
-                   findings))
+                   findings
+                   'audit-ack
+                   (hasheq 'mode
+                           "owned-proof-audit-v1"
+                           'verification-origin
+                           "audited-owned"
+                           'source-read
+                           #t
+                           'raw-output-read
+                           #t
+                           'binding
+                           (for/hasheq ([key '(plan-id wave
+                                                       generation
+                                                       head
+                                                       tree
+                                                       branch
+                                                       attempt-id
+                                                       attempt-fence
+                                                       content-digest
+                                                       proof-sha256)])
+                             (values key (hash-ref request key))))))
          ;; Simulate publication -> checkpoint crash: do not consume this outcome.
          (define published
            (parameterize ([current-gsd-auto-review-runner runner])

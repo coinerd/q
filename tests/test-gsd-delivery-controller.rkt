@@ -2,7 +2,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @covers scripts/gsd-delivery.py
-;; @timeout 960
+;; @timeout 1560
 ;; The wrapper runs the FULL Python delivery-controller contract suite (133
 ;; real-git tests) in one subprocess. CI runners are ~2x slower than the
 ;; local machine and the suite has outgrown its earlier budgets: after
@@ -24,7 +24,7 @@
       (define result
         (run-subprocess (path->string python)
                         #:args (list (path->string python-tests))
-                        #:timeout 900))
+                        #:timeout 1500))
       (check-false (subprocess-result-timed-out? result))
       (check-equal? (subprocess-result-exit-code result)
                     0

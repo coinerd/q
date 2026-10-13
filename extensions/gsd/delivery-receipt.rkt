@@ -205,7 +205,7 @@
                 #:when (= (campaign-wave-index w) wave))
       w))
   (and w
-       (memq (campaign-wave-status w) '(in-progress running done awaiting-delivery))
+       (memq (campaign-wave-status w) '(in-progress running verifying done awaiting-delivery))
        (not (campaign-record-budget-pause rec))))
 (define (verify-with-delivery-receipt
          base

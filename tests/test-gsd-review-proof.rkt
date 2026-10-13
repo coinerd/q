@@ -146,6 +146,12 @@
                                      "tests/a.rkt")])
       (check-false (proof-verify-command-eligible? (string-append "racket scripts/run-tests.rkt fast "
                                                                   flag)))))
+  (test-case "coordinator verifying state retains authenticated owned proof"
+    (fixture (lambda (root repo wt rec)
+               (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
+               (check-true (delivery-verification-approved? (verify! root wt rec)))
+               (define receipt (hash-ref (load-delivery-journal root plan-id 2) 'receipt))
+               (check-true (hash? (hash-ref receipt 'owned-proof #f))))))
   (test-case "existing receipt API must retain owned terminal job rather than only cmd/exit prose"
     (fixture
      (lambda (root repo wt rec)
