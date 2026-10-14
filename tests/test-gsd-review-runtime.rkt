@@ -23,7 +23,15 @@
          "../util/content/content-parts.rkt"
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
-         "../extensions/gsd/delivery-journal.rkt")
+         "../extensions/gsd/delivery-journal.rkt"
+         "helpers/private-fixture-templates.rkt"
+         "helpers/delivery-fixtures.rkt"
+         "../extensions/gsd/review-proof.rkt"
+         "../extensions/gsd/composition-root.rkt"
+         "../extensions/gsd/verification-job.rkt"
+         "../extensions/gsd/delivery-verifier.rkt"
+         "../extensions/gsd/delivery-receipt.rkt"
+         "../extensions/gsd/plan-snapshot.rkt")
 (define-runtime-path adapter "../extensions/gsd/review-session.rkt")
 (define-runtime-path repo "..")
 (define-runtime-path this-test "test-gsd-review-runtime.rkt")
@@ -125,6 +133,116 @@
   (hasheq 'review-mode "manual-compatibility"
           'wave 0 'head (make-string 40 #\b) 'branch "campaign/w0"
           'attempt-id "author" 'attempt-fence 4 'prompt "Review"))
+;; Owned-proof audit fixture: a REAL receipt with a retained owned proof,
+;; built through the production delivery verifier against a local git repo
+;; (the same shape as tests/test-gsd-review-proof.rkt), so the runner's audit
+;; pin validation genuinely passes and the acknowledgement gates decide.
+(define audit-manifest (make-campaign-manifest 1 "proof" '() '() "constraints"))
+(define audit-plan-id (campaign-manifest-hash audit-manifest))
+(define audit-command "printf 'owned-output\\n' && printf 'second-stage\\n'")
+(define (audit-fixture f)
+  (define root (make-temporary-file "review-audit-~a" 'directory))
+  (define repo-dir (build-path root "q"))
+  (define wt (build-path root "worker"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (make-directory repo-dir)
+     (git-quiet! repo-dir "init" "-q")
+     (hermetic-identity! repo-dir)
+     (git-quiet! repo-dir "remote" "add" "origin" "https://github.com/example/q.git")
+     (git-quiet! repo-dir "commit" "--allow-empty" "-qm" "baseline")
+     (git-quiet! repo-dir "worktree" "add" "-qb" "campaign/w2" (path->string wt))
+     (make-directory* (build-path root ".planning" "waves"))
+     (write-plan! root 2 "Proof" "proof")
+     (write-wave-doc! root 2 "proof" '("q/proof.rkt") audit-command)
+     (make-plan-snapshot! root audit-plan-id (file->string (build-path root ".planning" "PLAN.md")))
+     (define rec
+       (make-campaign-record audit-plan-id
+                             audit-manifest
+                             (list (make-campaign-wave 2
+                                                         "proof"
+                                                         'awaiting-delivery
+                                                         1
+                                                         (campaign-attempt "attempt-1" 7 0)))
+                             #f
+                             7
+                             'test
+                             0
+                             0))
+     (persist-campaign! root rec)
+     (parameterize ([current-gsd-verification-registry (make-verification-registry)]
+                    [current-gsd-delivery-verify-timeout-sec 10]
+                    [current-owned-proof-root (build-path root "managed-proofs")])
+       (verify-campaign-delivery
+        root
+        audit-plan-id
+        2
+        wt
+        (make-branch-delivery-context #:repo-root (hash-ref (committed-delivery-snapshot wt) 'repo)
+                                      #:branch "campaign/w2"
+                                      #:base-commit (hash-ref (committed-delivery-snapshot wt) 'head)
+                                      #:worktree-path wt)
+        (lambda (_)
+          (define check (check-verify-command root 2 #f))
+          (delivery-verification (cadr check) (list check) "owned verification"))
+        (lambda () rec)
+        #:remote-published (lambda (_repo _branch _head) #t))
+       (f root wt)))
+   (lambda () (delete-directory/files root))))
+(define (audit-request root)
+  (define receipt (hash-ref (load-delivery-journal root audit-plan-id 2) 'receipt))
+  (hasheq 'review-mode
+          "owned-proof-audit-v1"
+          'wave
+          2
+          'plan-id
+          audit-plan-id
+          'generation
+          0
+          'head
+          (hash-ref receipt 'head)
+          'branch
+          (hash-ref receipt 'branch)
+          'tree
+          (hash-ref receipt 'tree)
+          'attempt-id
+          (hash-ref receipt 'attempt-id)
+          'attempt-fence
+          (hash-ref receipt 'attempt-fence)
+          'proof-sha256
+          (hash-ref (hash-ref receipt 'owned-proof) 'sha256)
+          'content-digest
+          "audit-fixture-content-digest"
+          'prompt
+          "Review"))
+(define audit-binding-keys
+  '(plan-id wave generation head tree branch attempt-id attempt-fence content-digest proof-sha256))
+(define (request-binding request)
+  (for/hasheq ([key (in-list audit-binding-keys)])
+    (values key (hash-ref request key #f))))
+(define (audit-ack request)
+  (hasheq 'mode
+          "owned-proof-audit-v1"
+          'verification-origin
+          "audited-owned"
+          'source-read
+          #t
+          'raw-output-read
+          #t
+          'binding
+          (request-binding request)))
+(define (fenced-json data)
+  (string-append "```json\n" (if (string? data) data (jsexpr->string data)) "\n```"))
+(define (audit-approval request ack)
+  (hasheq 'kind
+          "approved"
+          'scope
+          (make-string 70 #\s)
+          'report
+          (make-string 70 #\r)
+          'audit-ack
+          ack))
 (module+ test
   ;; Racket fixes home-dir at process startup (HOME alone cannot rebind it).
   ;; Reexec once with an empty PLTUSERHOME so neither settings nor auth can
@@ -345,4 +463,103 @@
                                                 (if (eq? mode 'timeout)
                                                     (sleep 5)
                                                     (response "not JSON")))))
-                 (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed")))))))
+                 (check-equal? (hash-ref (runner (review-request)) 'kind) "review-failed"))))
+  (test-case "sole whole-text fenced final JSON is accepted as the reviewer verdict"
+    (fixture (lambda (root)
+               (define runner
+                 ((dynamic-require adapter 'make-auto-review-runner)
+                  root
+                  plan
+                  #:provider-builder (lambda (_) (build-mock-provider))
+                  #:checkout-resolver (lambda (_) repo)
+                  #:session-run (lambda (_session _prompt) (response (fenced-json result-json)))))
+               (define result (runner (review-request)))
+               (check-equal? (hash-ref result 'kind) "request-changes")
+               (check-regexp-match #rx"^q-session:" (hash-ref result 'reviewer)))))
+  (test-case "legitimate fenced review-failed verdict preserves the factual reason"
+    (fixture (lambda (root)
+               (define reason-text
+                 "the retained raw Verify log recorded in the owned manifest is missing from the exported bundle")
+               (define runner
+                 ((dynamic-require adapter 'make-auto-review-runner)
+                  root
+                  plan
+                  #:provider-builder (lambda (_) (build-mock-provider))
+                  #:checkout-resolver (lambda (_) repo)
+                  #:session-run
+                  (lambda (_session _prompt)
+                    (response (fenced-json (hasheq 'kind "review-failed" 'reason reason-text))))))
+               (define result (runner (review-request)))
+               (check-equal? (hash-ref result 'kind) "review-failed")
+               (check-equal? (hash-ref result 'reason) reason-text))))
+  (test-case "hostile final-output forms fail closed with a precise factual reason"
+    (fixture (lambda (root)
+               (define hostile
+                 (list (string-append "Here is my verdict.\n" (fenced-json result-json))
+                       (string-append (fenced-json result-json) "\nDone.")
+                       (string-append (fenced-json result-json) "\n" (fenced-json result-json))
+                       (string-append result-json " trailing garbage")
+                       (string-append result-json " " result-json)
+                       (string-append "```json\n" result-json)
+                       (string-append "```javascript\n" result-json "\n```")
+                       "```json\n```"))
+               (for ([text (in-list hostile)])
+                 (define runner
+                   ((dynamic-require adapter 'make-auto-review-runner)
+                    root
+                    plan
+                    #:provider-builder (lambda (_) (build-mock-provider))
+                    #:checkout-resolver (lambda (_) repo)
+                    #:session-run (lambda (_session _prompt) (response text))))
+                 (define result (runner (review-request)))
+                 (check-equal? (hash-ref result 'kind) "review-failed")
+                 (check-regexp-match #rx"reviewer final output rejected"
+                                     (hash-ref result 'reason))
+                 (check-false (hash-has-key? result 'reviewer)))
+               (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0)
+                             0))))
+  (test-case "fenced approved audit verdict requires the exact owned acknowledgement"
+    (audit-fixture
+     (lambda (root wt)
+       (define request (audit-request root))
+       (define (run text)
+         (define runner
+           ((dynamic-require adapter 'make-auto-review-runner)
+            root
+            audit-plan-id
+            #:provider-builder (lambda (_) (build-mock-provider))
+            #:checkout-resolver (lambda (_) wt)
+            #:session-run (lambda (_session _prompt) (response text))))
+         (runner request))
+       (define approved (run (fenced-json (audit-approval request (audit-ack request)))))
+       (check-equal? (hash-ref approved 'kind) "approved")
+       (check-regexp-match #rx"^q-session:" (hash-ref approved 'reviewer))
+       ;; A wrong, tampered or missing acknowledgement fails closed.
+       (for ([bad-ack (in-list (list (hash-set (audit-ack request)
+                                              'binding
+                                              (hash-set (request-binding request)
+                                                        'head
+                                                        (make-string 40 #\d)))
+                                     (hash-remove (audit-ack request) 'binding)
+                                     (hash-set (audit-ack request) 'source-read #f)))])
+         (define result (run (fenced-json (audit-approval request bad-ack))))
+         (check-equal? (hash-ref result 'kind) "review-failed")
+         (check-regexp-match #rx"reviewer final output rejected"
+                             (hash-ref result 'reason)))
+       ;; Missing ack, a validation payload in audit mode, and an
+       ;; unsolicited RED acknowledgement all fail closed.
+       (define missing-ack
+         (hash-remove (audit-approval request (audit-ack request)) 'audit-ack))
+       (define with-validation
+         (hash-set (audit-approval request (audit-ack request)) 'validation (hasheq)))
+       (define unsolicited-red
+         (audit-approval request
+                         (hash-set (audit-ack request)
+                                   'red-ack
+                                   (hasheq 'proof-sha256 (make-string 64 #\e)
+                                           'raw-output-read #t))))
+       (for ([verdict (in-list (list missing-ack with-validation unsolicited-red))])
+         (define result (run (fenced-json verdict)))
+         (check-equal? (hash-ref result 'kind) "review-failed")
+         (check-regexp-match #rx"reviewer final output rejected"
+                             (hash-ref result 'reason)))))))))

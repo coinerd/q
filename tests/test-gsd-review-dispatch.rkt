@@ -319,12 +319,26 @@
             (hasheq 'kind "request-changes" 'reviewer "x" 'findings '())
             (hasheq 'kind "request-changes" 'reviewer "x" 'findings (list "") 'scope "s" 'report "r")
             (hasheq 'kind "approved" 'reviewer "PENDING" 'scope "s" 'report "r")
+            ;; A review-failed reason that merely copies schema placeholder
+            ;; text is malformed output, not a factual failure account.
+            (hasheq 'kind "review-failed" 'reason "infrastructure only")
+            (hasheq 'kind "review-failed" 'reason "Infrastructure failure only.")
+            (hasheq 'kind "review-failed" 'reason "factual failure detail")
+            (hasheq 'kind "review-failed" 'reason "placeholder")
+            (hasheq 'kind "review-failed" 'reason "N/A")
             "not even a hash"
             #f)])
       (check-eq? (runner-result-kind bad) 'invalid))
     (check-eq? (runner-result-kind approved-result) 'approved)
     (check-eq? (runner-result-kind rejected-result) 'request-changes)
     (check-eq? (runner-result-kind (hasheq 'kind "review-failed" 'reason "session crashed"))
+               'review-failed)
+    ;; Genuine factual reasons that merely mention infrastructure pass.
+    (check-eq? (runner-result-kind
+                (hasheq 'kind
+                        "review-failed"
+                        'reason
+                        "review session timeout or infrastructure failure; no rejection retry"))
                'review-failed)
     (call-with-campaign
      1
