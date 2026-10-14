@@ -90,8 +90,9 @@
 ;;     reviewer (genuine session identity label), scope, report (genuine
 ;;     narrative), findings (non-empty string list; request-changes only),
 ;;     validation (gate facts hash; approved only), reason (review-failed
-;;     only). Malformed output is a typed review-infra failure — NEVER a
-;;     rejection and NEVER an approval.
+;;     only; a factual account of the actual failure — copied schema
+;;     placeholder text is malformed output). Malformed output is a typed
+;;     review-infra failure — NEVER a rejection and NEVER an approval.
 (define current-gsd-auto-review-runner (make-parameter #f))
 
 (define (review-runner-installed?)
@@ -102,6 +103,19 @@
 (define reviewer-sentinel?
   (let ([pattern
          #px"(?i:^(?:pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/a)[:.;!,?]*$)"])
+    (lambda (value) (and (string? value) (regexp-match? pattern (string-trim value))))))
+;; A review-failed reason that merely copies schema placeholder text (the
+;; literal "infrastructure only" a schema example once showed) or an empty
+;; sentinel is not a factual account of an actual failure: classify it as
+;; malformed reviewer output (a typed review-infra stop, never a rejection).
+;; The match is anchored to the WHOLE trimmed reason, so genuine factual
+;; reasons that merely mention infrastructure are never rejected.
+(define placeholder-reason?
+  (let ([pattern
+         (pregexp
+          (string-append
+           "(?i:^(?:infrastructure(?: failure)? only|factual failure detail|"
+           "pending|todo|tbd|tbc|tba|placeholder|place-holder|fixme|xxx|n/a)[:.;!,?]*$)"))])
     (lambda (value) (and (string? value) (regexp-match? pattern (string-trim value))))))
 
 (define (genuine-text? value)
@@ -121,7 +135,10 @@
      (cond
        [(not (member kind '("approved" "request-changes" "review-failed"))) 'invalid]
        [(equal? kind "review-failed")
-        (if (genuine-text? (hash-ref result 'reason #f)) 'review-failed 'invalid)]
+        (define reason (hash-ref result 'reason #f))
+        (if (and (genuine-text? reason) (not (placeholder-reason? reason)))
+            'review-failed
+            'invalid)]
        [(not (genuine-text? (hash-ref result 'reviewer #f))) 'invalid]
        [(reviewer-sentinel? (hash-ref result 'reviewer #f)) 'invalid]
        [(not (genuine-text? (hash-ref result 'scope #f))) 'invalid]

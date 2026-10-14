@@ -38,8 +38,15 @@ The reviewer uses an **existing clean worktree on the exact receipt branch**.
 Only receipt-descendant evidence-only commits under the controller's three
 `docs/reports/gsd-wave-{evidence,reviews,validation}` directories are permitted.
 Git identity and tracked bytes are checked before and after review. Final JSON
-must come from a normally completed final assistant message. The controller,
-not the model, owns digest/head binding and strict evidence validation.
+must come from a normally completed final assistant message: exactly one JSON
+object, either bare or inside one whole-text Markdown fence with an optional
+`json` tag. Prose, multiple blocks, other language tags and trailing values or
+garbage fail closed with a specific final-output diagnostic. A `review-failed`
+reason must describe the actual failure, not literal schema placeholder text
+such as `infrastructure only`. Fence normalization does not relax owned-proof
+or RED acknowledgement binding, confer approval, or supply missing behavioral
+RED evidence. The controller, not the model, owns digest/head binding and strict
+evidence validation.
 
 Reviewer tool environments scrub credentials, remove credential-agent and shell
 startup variables, use an empty private HOME/config directory, and disable the
