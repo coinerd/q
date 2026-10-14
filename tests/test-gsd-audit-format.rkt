@@ -4,11 +4,13 @@
 ;; @boundary unit
 ;; @isolation temp-dir
 ;; @covers extensions/gsd/review-audit-format.rkt extensions/gsd/review-proof.rkt
+;; @covers extensions/gsd/verify-command-format.rkt
 (require rackunit
          racket/runtime-path
          "../extensions/gsd/review-audit-format.rkt"
          "../extensions/gsd/review-proof.rkt"
-         "../extensions/gsd/plan-snapshot.rkt")
+         "../extensions/gsd/plan-snapshot.rkt"
+         (only-in "../extensions/gsd/delivery-verifier.rkt" normalize-declared-verify))
 (module+ test
   (test-case "trusted jobs 2 expands real --suite fast and legacy positional form only"
     (define suite "cd <project-base>/q && racket scripts/run-tests.rkt --suite fast")
@@ -61,6 +63,30 @@
     (check-false (owned-red-focused-command? "racket scripts/run-tests.rkt --suite fast"))
     (check-false (owned-red-focused-command? "racket scripts/run-tests.rkt tests/a.rkt --jobs 2"))
     (check-false (owned-red-focused-command? "racket scripts/run-tests.rkt src/a.rkt")))
+  (test-case "multiline canonical fail-fast grammar refuses ambiguous shell boundaries"
+    (define declaration
+      (string-append "raco fmt -i a.rkt\nraco make a.rkt\n"
+                     "racket scripts/run-tests.rkt tests/a.rkt\n"
+                     "racket scripts/run-tests.rkt --suite fast\nracket scripts/lint-all.rkt"))
+    (define canonical (string-replace declaration "\n" " && "))
+    (check-equal? (normalize-declared-verify declaration) canonical)
+    (check-equal? (owned-chain-stages declaration) (owned-chain-stages canonical))
+    (check-equal? (expand-frozen-command declaration "/base" "/work" #t #:jobs 2)
+                  (string-replace canonical "--suite fast" "--suite fast --jobs 2"))
+    (for ([bad (list "raco make a.rkt &&\nracket tests/a.rkt"
+                     "raco make a.rkt\\\nracket tests/a.rkt"
+                     "raco make a.rkt;\nracket tests/a.rkt"
+                     "raco make a.rkt ||\nracket tests/a.rkt"
+                     "printf 'quoted && delimiter'\nracket tests/a.rkt"
+                     "printf 'quoted\nnewline'\nracket tests/a.rkt"
+                     "raco make a.rkt\n&& racket tests/a.rkt"
+                     "! raco make a.rkt\nracket tests/a.rkt"
+                     "printf \"$(echo hidden)\"\nracket tests/a.rkt"
+                     "raco make a.rkt && && racket tests/a.rkt")])
+      (check-equal? (normalize-declared-verify bad) "" bad)
+      (check-false (owned-chain-stages bad) bad)
+      (check-false (proof-verify-command-eligible? bad) bad)
+      (check-exn exn:fail? (lambda () (expand-frozen-command bad "/base" "/work" #t)) bad)))
   (test-case "exact audit binding and acknowledgement are not execution or approval"
     (define expected (audit-binding (hasheq 'head "source" 'tree "tree" 'generation 0)))
     (define ack

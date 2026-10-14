@@ -412,6 +412,10 @@
        (risk
         . "GSD /go campaign orchestrator: wave sequencing, failure-context steering and auto-retry wiring (#9513/#9515), role re-anchoring (#9514), worktree isolation toggling (#9512); v1.00.17 executor hardening; score 24400")
        (owner . "extensions"))
+      ("extensions/gsd/delivery-verifier.rkt"
+       (risk
+        . "Registered Verify execution and frozen-command expansion: owned-proof capture and fail-fast multiline integration raise score to 20311. Pure command grammar is extracted into verify-command-format; keep execution boundary narrow. Behavioral early-failure/sentinel and exact-proof binding regressions guard changes.")
+       (owner . "extensions"))
       ("extensions/gsd/responsibility-inventory.rkt"
        (risk
         . "Canonical GSD effect/dependency inventory: automatic review adds fresh-session, checkpoint, usage and receipt-worktree classifications; score 20490. Keep behavior in bounded modules; inventory drift gates cover every registered module.")

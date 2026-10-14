@@ -186,6 +186,7 @@
                '(sha256)
                '()
                '("racket/list" "racket/string" "util/json/checksum"))
+   (make-entry "verify-command-format.rkt" 'transition-logic '() '() '("racket/list" "racket/string"))
    (make-entry "review-audit-format.rkt"
                'transition-logic
                '()

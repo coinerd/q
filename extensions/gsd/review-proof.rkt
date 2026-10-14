@@ -472,7 +472,7 @@
   (define cwd-dir (path->string (simplify-path (path->complete-path cwd))))
   (define frozen (frozen-verify-binding base plan wave))
   (define normalized (hash-ref frozen 'normalized-command))
-  (unless (member focused-normalized (owned-chain-stages normalized))
+  (unless (member focused-normalized (or (owned-chain-stages normalized) '()))
     (refuse "RED command is not a declared focused stage of the frozen Verify"))
   (define before (execution-snapshot cwd-dir))
   (unless before

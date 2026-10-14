@@ -42,11 +42,12 @@
   (define stages (owned-chain-stages normalized))
   (define (refuse)
     (error 'owned-audit "unsupported-owned-gate-chain"))
-  (unless (and (valid-owned-proof-manifest? manifest)
-               stages
-               (not (regexp-match? #px"[;|\n`$()<>]"
-                                   (string-replace normalized "<project-base>" "BASE")))
-               (andmap (lambda (s) (regexp-match? #px"^(?:cd |racket |raco )[^&]+$" s)) stages))
+  (unless (and
+           (valid-owned-proof-manifest? manifest)
+           stages
+           (not (regexp-match? #px"[;|\n`$()<>]"
+                               (string-replace (string-join stages " && ") "<project-base>" "BASE")))
+           (andmap (lambda (s) (regexp-match? #px"^(?:cd |racket |raco )[^&]+$" s)) stages))
     (refuse))
   (define (find rx)
     (define matches (filter (lambda (s) (regexp-match? rx s)) stages))
