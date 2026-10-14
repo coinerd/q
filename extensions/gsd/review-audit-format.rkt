@@ -12,8 +12,19 @@
 (define audit-keys
   '(plan-id wave generation head tree branch attempt-id attempt-fence content-digest proof-sha256))
 (define (audit-binding request)
-  (for/hasheq ([key (in-list audit-keys)])
-    (values key (hash-ref request key #f))))
+  (define legacy
+    (for/hasheq ([key (in-list audit-keys)])
+      (values key (hash-ref request key #f))))
+  (define revision (hash-ref request 'evidence-revision 0))
+  (unless (exact-nonnegative-integer? revision)
+    (error 'audit-binding "invalid-evidence-revision"))
+  (if (zero? revision)
+      legacy
+      (let ([sha (hash-ref request 'evidence-registration-sha256 #f)])
+        (unless (and (string? sha) (regexp-match? #px"^[0-9a-f]{64}$" sha))
+          (error 'audit-binding "invalid-registration-digest"))
+        (hash-set (hash-set legacy 'evidence-revision revision)
+                  'evidence-registration-sha256 sha))))
 (define (valid-audit-ack? ack expected)
   (and (hash? ack)
        (equal? (hash-ref ack 'mode #f) owned-audit-mode)
