@@ -83,7 +83,12 @@
                           (check-equal? (wave-usage-total-tokens fw) 17)
                           (check-equal? (wave-usage-input-tokens fw) 12)
                           (check-equal? (wave-usage-output-tokens fw) 1)
-                          (check-false (wave-usage-cost-usd fw))
+                          ;; The durable wave total RETAINS the known $1 from
+                          ;; the retried attempt; unknown coverage lives in
+                          ;; 'prior-cost-unknown, so the summary reports cost
+                          ;; #f and ceilings cannot trip on unprovable spend.
+                          (check-equal? (wave-usage-cost-usd fw) 1)
+                          (check-eq? (wave-usage-source fw) 'prior-cost-unknown)
                           (check-false (usage-summary-cost-usd (campaign-usage-summary final)))
                           (check-false (budget-pause-violation? final 0.5 #f)))))
 
@@ -94,6 +99,36 @@
                           (define rec (load-campaign-record dir id))
                           (check-equal? (wave-usage-cost-usd (car (campaign-record-waves rec))) 0)
                           (check-= (usage-summary-cost-usd (campaign-usage-summary rec)) 0 0))))
+
+(test-case "cross-attempt unknown cost never discards prior known spend"
+  ;; Reviewer scenario: attempt1 costs $5; attempt2 reports unknown cost
+  ;; then $2. The wave must retain $7 (or honestly unknown), never $2 —
+  ;; a lost cumulative total could admit spend past a cost ceiling.
+  (with-durable-attempt
+   (lambda (dir id)
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 10 4 14 5 #f)))
+     (define rec (load-campaign-record dir id))
+     (define w (car (campaign-record-waves rec)))
+     (set-campaign-wave-status! w 'pending)
+     (begin-attempt! rec 0 2)
+     (persist-campaign! dir rec)
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 20 6 26 #f #f)))
+     (define mid (car (campaign-record-waves (load-campaign-record dir id))))
+     (check-equal? (wave-usage-cost-usd mid) 5 "prior attempt's $5 survives")
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 20 6 26 2 #f)))
+     (define final (load-campaign-record dir id))
+     (define fw (car (campaign-record-waves final)))
+     (check-equal? (wave-usage-cost-usd fw) 7)
+     (check-equal? (wave-usage-total-tokens fw) 40)
+     (check-eq? (wave-usage-source fw) 'prior-cost-unknown)
+     ;; Coverage stays honest: the unknown attempt keeps the summary cost
+     ;; unknown so a max-cost ceiling cannot trip on partial knowledge.
+     (check-false (usage-summary-cost-usd (campaign-usage-summary final)))
+     (check-false (budget-pause-violation? final 0.5 #f))
+     ;; Once every counted attempt's cost is known again the total is real.
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 20 6 26 2 #f)))
+     (check-equal? (wave-usage-cost-usd (car (campaign-record-waves (load-campaign-record dir id))))
+                   7))))
 
 (define (result usage)
   (make-loop-result '() 'done (hash 'usage usage)))
