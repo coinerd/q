@@ -16,8 +16,7 @@
 ;;   - evidence-author and review-retry lanes retain their exact prior
 ;;     checkouts; fresh attempts build a campaign worktree off the
 ;;     durable spare branches.
-(require racket/file
-         (only-in "campaign-state.rkt" campaign-plan-id)
+(require (only-in "campaign-state.rkt" campaign-plan-id)
          (only-in "wave-executor.rkt"
                   worktree-isolation-enabled?
                   make-wave-worktree!

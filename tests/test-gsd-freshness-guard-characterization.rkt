@@ -121,10 +121,12 @@
       ;; #(struct:campaign-record plan-id manifest waves cancellation
       ;;   fence-token provenance created-at updated-at build-version
       ;;   main-head-sha stale-override budget-pause snapshot-path
-      ;;   snapshot-digest) => 15 slots. BUG-0052 added the two immutable
-      ;;   plan-snapshot binding fields.
+      ;;   snapshot-digest execution-policy) => 16 slots. BUG-0052 added
+      ;;   the two immutable plan-snapshot binding fields; autonomous
+      ;;   evidence repair added the execution-policy metadata slot
+      ;;   (never part of canonical plan identity).
       (define rec (make-pin-record))
-      (check-equal? (vector-length (struct->vector rec)) 15)
+      (check-equal? (vector-length (struct->vector rec)) 16)
       ;; #:auto fields default to #f on the legacy 8-arg constructor.
       (check-false (campaign-record-build-version rec))
       (check-false (campaign-record-main-head-sha rec))
