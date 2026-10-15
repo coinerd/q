@@ -8,12 +8,13 @@
 (define version "1.00.31")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
-(define deps '("base" "gui-easy-lib"))
+;; Owned regression evidence authenticates structured RackUnit assertions at runtime.
+(define deps '("base" "gui-easy-lib" "rackunit-lib"))
 
 ;; The TUI uses native ANSI escape sequences.
 ;; GUI mode requires gui-easy-lib (optional — graceful fallback if absent).
 
-(define build-deps '("rackunit-lib" "quickcheck" "fmt"))
+(define build-deps '("quickcheck" "fmt"))
 
 ;; Frozen discovery-parity fixtures (tests/metadata-discovery/fixture) are
 ;; data files for tests/ci/metadata-discovery-test.rkt: deliberately without

@@ -28,6 +28,14 @@
                   campaign-attempt-id
                   campaign-attempt-fence-token)
          (only-in "delivery-receipt.rkt" certify-publication-receipt!)
+         (only-in "delivery-journal.rkt"
+                  load-delivery-journal
+                  journal-evidence-author-repair
+                  evidence-author-repair-pending?)
+         (only-in "review-proof.rkt"
+                  load-receipt-owned-proof
+                  valid-owned-proof-reference?
+                  proof-reference-matches-receipt?)
          (only-in "attempt-artifacts.rkt" record-delivered-branches)
          (only-in "../../sandbox/subprocess.rkt"
                   run-subprocess
@@ -42,6 +50,7 @@
          durable-spare-branches
          load-approved-publication
          replay-approved-publication!
+         strict-descendant?
          current-gsd-approved-head-publisher
          default-approved-head-publisher
          publish-approved-head!)
@@ -83,6 +92,9 @@
 (define (consistent-receipt-candidate? data)
   (define candidate (hash-ref data 'receipt-candidate #f))
   (and (valid-receipt-candidate? candidate)
+       (or (not (hash-has-key? candidate 'owned-proof))
+           (and (valid-owned-proof-reference? (hash-ref candidate 'owned-proof))
+                (proof-reference-matches-receipt? (hash-ref candidate 'owned-proof) candidate)))
        (for/and ([key (in-list '(repo origin branch head tree attempt-id attempt-fence))])
          (equal? (hash-ref candidate key #f) (hash-ref data key #f)))
        (equal? (sha256-string (hash-ref candidate 'evidence #f))
@@ -380,11 +392,29 @@
 (define (confirmed-record intent)
   (hash-set* intent 'status "confirmed" 'confirmed-at (current-seconds)))
 
+(define (author-publication? base plan wave prior intent)
+  (define journal (load-delivery-journal base plan wave))
+  (define marker (journal-evidence-author-repair journal))
+  (and marker
+       (evidence-author-repair-pending? journal)
+       (equal? (hash-ref marker 'state) "running")
+       (equal? (hash-ref prior 'status) "confirmed")
+       (same-keys? prior
+                   (hash-ref marker 'old-receipt)
+                   '(repo origin branch head tree attempt-id attempt-fence))
+       (same-keys? prior intent '(plan-id wave repo origin branch snapshot-digest))
+       (equal? (hash-ref intent 'snapshot-digest)
+               (hash-ref (hash-ref marker 'context) 'snapshot-sha256))
+       (equal? (hash-ref intent 'attempt-id) (hash-ref marker 'successor-attempt))
+       (equal? (hash-ref intent 'attempt-fence) (hash-ref marker 'successor-fence))
+       (load-receipt-owned-proof (hash-ref intent 'receipt-candidate) base plan wave)
+       (strict-descendant? (hash-ref intent 'repo) (hash-ref prior 'head) (hash-ref intent 'head))
+       #t))
 (define (save-intent-for-transition! base plan wave prior intent)
   (cond
     [(not prior) (save! base plan wave intent)]
     [(same-publication-identity? prior intent) prior]
-    [(repair-tail-publication? prior intent)
+    [(or (repair-tail-publication? prior intent) (author-publication? base plan wave prior intent))
      (save! base plan wave (with-publication-history intent prior))]
     [else (error 'delivery-publication "publication identity changed; refusing replay")]))
 
@@ -396,7 +426,8 @@
                                 attempt-fence
                                 coordinator-fence
                                 evidence
-                                [read-current #f])
+                                [read-current #f]
+                                #:owned-proof [owned-proof #f])
   (unless (and (hash? snapshot)
                (text? (hash-ref snapshot 'repo #f))
                (text? (hash-ref snapshot 'origin #f))
@@ -429,17 +460,30 @@
   ;; re-verified at every boundary (before-push, after-effect, and
   ;; immediately before the durable certification write).
   (define (guard! phase)
-    (capture-active-authorization! plan
-                                   wave
-                                   snapshot
-                                   attempt-id
-                                   attempt-fence
-                                   read-current
-                                   phase
-                                   active-fence
-                                   snapshot-digest))
-  (define intent
+    (define-values (fence digest)
+      (capture-active-authorization! plan
+                                     wave
+                                     snapshot
+                                     attempt-id
+                                     attempt-fence
+                                     read-current
+                                     phase
+                                     active-fence
+                                     snapshot-digest))
+    (when (and prior
+               (not (same-publication-identity? prior intent))
+               (not (repair-tail-publication? prior intent)))
+      (unless (author-publication? base plan wave prior intent)
+        (error 'delivery-publication "author publication permission changed during effect")))
+    (values fence digest))
+  (define raw-intent
     (intent-record plan wave snapshot attempt-id attempt-fence active-fence snapshot-digest evidence))
+  (define intent
+    (if owned-proof
+        (hash-set raw-intent
+                  'receipt-candidate
+                  (hash-set (hash-ref raw-intent 'receipt-candidate) 'owned-proof owned-proof))
+        raw-intent))
   (define prior (load-approved-publication base plan wave))
   (define active-intent (save-intent-for-transition! base plan wave prior intent))
   (guard! 'before-push)
@@ -518,7 +562,8 @@
                                  attempt-fence
                                  active-fence
                                  evidence
-                                 read-current)
+                                 read-current
+                                 #:owned-proof (hash-ref candidate 'owned-proof #f))
          (guard! 'before-receipt-certification)
          (certify-publication-receipt! base
                                        plan
@@ -526,7 +571,9 @@
                                        candidate
                                        #:expected-attempt-id attempt-id
                                        #:expected-fence attempt-fence
-                                       #:guard (lambda () (guard! 'receipt-certification-write))))))
+                                       #:guard (lambda ()
+                                                 (guard! 'receipt-certification-write)
+                                                 #t)))))
 
 ;; BUG-0079 REVIEW-2 item 9 (fail-closed branch protection): enumerating the
 ;; approved publication branches must never raise and never silently drop an

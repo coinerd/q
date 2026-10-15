@@ -38,7 +38,7 @@
           'failure-summary (canonical-evidence-json failed)
           'owner-job-id (hash-ref (hash-ref baseline 'job) 'id)
           'origin "posthoc-reproduction" 'relation "baseline-with-test-overlay-v1"))
-(define (validate-owned-authority root authority)
+(define (validate-owned-authority root authority #:source-repo [source-repo root])
   (unless (and (hash? authority) (equal? (hash-ref authority 'mode #f) owned-audit-mode))
     (error 'owned-audit "unknown-proof-authority"))
   (define relative (hash-ref authority 'bundle #f))
@@ -76,7 +76,7 @@
                 [registration (hash-ref authority 'evidence-registration)]
                 [probe (hash-ref registration 'probe)]
                 [probe-root (build-path bundle-root "probes" (hash-ref probe 'sha256))]
-                [loaded (validate-exported-baseline-probe! root probe-root probe context)]
+                [loaded (validate-exported-baseline-probe! source-repo probe-root probe context)]
                 [spec (call-with-input-file
                        (build-path probe-root (string-append (hash-ref (hash-ref loaded 'spec) 'sha256) ".json"))
                        read-json)])
@@ -129,9 +129,10 @@
          (error 'owned-audit "authority-red-facts-do-not-match-retained-red"))
        loaded))))
   (hasheq 'green-gates gates 'red-manifest (or red-manifest #f) 'red-facts (and (hash? red) red)))
-(define (validate-owned-audit root evidence review validation authority)
+(define (validate-owned-audit root evidence review validation authority
+                              #:source-repo [source-repo root])
   (with-handlers ([exn:fail? (lambda (e) (list (exn-message e)))])
-    (define audited (validate-owned-authority root authority))
+    (define audited (validate-owned-authority root authority #:source-repo source-repo))
     (define gates (hash-ref audited 'green-gates))
     (define red-manifest (hash-ref audited 'red-manifest))
     (define red-facts (hash-ref audited 'red-facts))
@@ -192,7 +193,11 @@
     (cond
       [red-manifest
        (unless (equal? (hash-ref validation 'red-first #f)
-                       (hasheq 'command
+                       ((lambda (facts)
+                          (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
+                              (hash-set* facts 'origin (hash-ref red-facts 'origin)
+                                         'relation (hash-ref red-facts 'relation))
+                              facts)) (hasheq 'command
                                (hash-ref red-facts 'command)
                                'failure
                                (hash-ref red-facts 'failure-summary)
@@ -203,7 +208,7 @@
                                'owner-job-id
                                (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
                                    (hash-ref (hash-ref (car (hash-ref red-manifest 'results)) 'job) 'id)
-                                   (hash-ref (hash-ref red-manifest 'job) 'id))))
+                                   (hash-ref (hash-ref red-manifest 'job) 'id)))))
          (error 'owned-audit "model-authored-or-mismatched-owned-red-facts"))]
       [else
        ;; Green capture has no meaningful-RED authority: no terminal
@@ -218,7 +223,10 @@
     '()))
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
-  (unless (= 2 (length args))
-    (error 'owned-audit "expected <authority.json> <bundle-root>"))
-  (write-json (validate-owned-authority (second args) (call-with-input-file (first args) read-json)))
+  (unless (or (= 2 (length args))
+              (and (= 4 (length args)) (equal? (third args) "--owned-source-repo")))
+    (error 'owned-audit "expected <authority.json> <bundle-root> [--owned-source-repo <repo>]"))
+  (write-json (validate-owned-authority
+               (second args) (call-with-input-file (first args) read-json)
+               #:source-repo (if (= 4 (length args)) (fourth args) (second args))))
   (newline))

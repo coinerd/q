@@ -26,7 +26,7 @@
       (dynamic-wind
        void
        (lambda ()
-         (define manifest (make-campaign-manifest 1 "w0" '() '() "constraints"))
+         (define manifest (make-campaign-manifest 1 "w0" '() '() (path->string temp)))
          (define plan (campaign-manifest-hash manifest))
          (define setup
            (run-subprocess "python3"
@@ -38,6 +38,11 @@
                            #:timeout 180))
          (check-equal? (subprocess-result-exit-code setup) 0 (subprocess-result-stderr setup))
          (define world (string->jsexpr (subprocess-result-stdout setup)))
+         (define readiness (hash-ref world 'readiness))
+         (check-not-false (member (hash-ref readiness 'code)
+                                  '("missing-meaningful-red-proof" "legacy-red-ready"
+                                                                   "registered-probe-ready"))
+                          (format "underlying fixture readiness: ~s" readiness))
          (define root (string->path (hash-ref world 'root)))
          (check-true (directory-exists? (build-path root "q")))
          (define receipt (hash-ref world 'receipt))
@@ -78,6 +83,10 @@
            (check-true (string-contains? (file->string (build-path (hash-ref world 'repo)
                                                                    "src/gsd-fixture-widget.rkt"))
                                          "#lang"))
+           (define red-sha (hash-ref (hash-ref (hash-ref authority 'red) 'reference) 'sha256))
+           (for ([path (in-directory bundle)]
+                 #:when (file-exists? path))
+             (file->bytes path))
            (hasheq 'kind
                    "request-changes"
                    'reviewer
@@ -98,16 +107,9 @@
                            'raw-output-read
                            #t
                            'binding
-                           (for/hasheq ([key '(plan-id wave
-                                                       generation
-                                                       head
-                                                       tree
-                                                       branch
-                                                       attempt-id
-                                                       attempt-fence
-                                                       content-digest
-                                                       proof-sha256)])
-                             (values key (hash-ref request key))))))
+                           (hash-ref authority 'audit-binding)
+                           'red-ack
+                           (hasheq 'proof-sha256 red-sha 'raw-output-read #t))))
          ;; Simulate publication -> checkpoint crash: do not consume this outcome.
          (define published
            (parameterize ([current-gsd-auto-review-runner runner])

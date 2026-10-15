@@ -496,7 +496,7 @@
     (check-false (parse-delivery-stop "not json at all" "implementation-review"))
     (check-false (parse-delivery-stop "{\"status\":\"reviewed\"}" "implementation-review"))
     (check-false (parse-delivery-stop "" "implementation-review")))
-  (test-case "implementation-review routes to the review action (never the not-implemented stop)"
+  (test-case "implementation-review refuses missing owned evidence before review dispatch"
     (call-with-campaign 1
                         (lambda (dir rec)
                           (define ready (done-record dir))
@@ -505,10 +505,12 @@
                           (check-eq? (delivery-effect-result-kind r) 'blocked)
                           (define reason (hash-ref (delivery-effect-result-data r) 'reason))
                           (check-false (string-contains? reason "not implemented"))
-                          ;; the stub campaign repo has no origin: the python failure
-                          ;; reason must survive the exit-2 boundary (previously
-                          ;; discarded with the empty stderr)
-                          (check-true (string-contains? reason "delivery command failed")))))
+                          ;; This stub has no authenticated GREEN. The new mandatory
+                          ;; boundary must stop before Python or a reviewer runs;
+                          ;; genuine positive dispatch is covered by the production fixture.
+                          (check-equal? reason "invalid-current-evidence")
+                          (check-equal? (hash-ref (delivery-effect-result-data r) 'context) 'null)
+                          (check-equal? (hash-ref (delivery-effect-result-data r) 'spec) 'null))))
   (test-case "W2 PR and CI stages route to their controller actions"
     (call-with-campaign 1
                         (lambda (dir rec)

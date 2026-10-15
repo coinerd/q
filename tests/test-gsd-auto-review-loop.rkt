@@ -20,6 +20,7 @@
          racket/file
          racket/format
          racket/path
+         racket/runtime-path
          racket/string
          racket/system
          json
@@ -49,11 +50,29 @@
 ;; whole-tree lint entrypoint. There is no shimmed or fictional CLI here.
 (define verify-chain
   (string-append "```sh\ncd <project-base>/q"
-                 "\nraco fmt -i tests/acceptance-check.rkt"
-                 "\nraco make tests/acceptance-check.rkt"
+                 "\nraco fmt -i src/widget.rkt"
+                 "\nraco make src/widget.rkt"
                  "\nracket scripts/run-tests.rkt tests/acceptance-check.rkt"
                  "\nracket scripts/run-tests.rkt --suite fast"
                  "\nracket scripts/lint-all.rkt\n```"))
+(define-runtime-path installed-root "..")
+(define (install-runner! repo)
+  (define seen (make-hash))
+  (define (install source)
+    (unless (hash-ref seen source #f)
+      (hash-set! seen source #t)
+      (define target
+        (build-path repo (find-relative-path (simplify-path installed-root) (simplify-path source))))
+      (make-directory* (path-only target))
+      (copy-file source target #t)
+      (for ([dependency (in-list (regexp-match* #px"\"([^\"\n]+[.]rkt)\""
+                                                (file->string source)
+                                                #:match-select cadr))])
+        (when (relative-path? dependency)
+          (define next (simplify-path (build-path (path-only source) dependency)))
+          (when (file-exists? next)
+            (install next))))))
+  (install (build-path installed-root "scripts/run-tests.rkt")))
 ;; Honest fixture gate runner for this fixture ONLY: runs the named focused
 ;; test files (or the full fixture fast suite) through the REAL `raco test`
 ;; runner, fail-fast, propagating the real exit code. NOT the repository's
@@ -120,15 +139,15 @@ LINT-EOF
 ;; Focused acceptance check for the auto-review loop fixture: reads the
 ;; acceptance file at the checkout root and fails with real rackunit output
 ;; when a required acceptance line is missing.
-(require rackunit racket/file racket/runtime-path racket/string)
-(define-runtime-path module-dir ".")
-(define acceptance-path (simplify-path (build-path module-dir 'up "acceptance")))
+;; @speed fast
+(require rackunit "../src/widget.rkt")
+(provide evidence-suite)
+(define evidence-suite
+  (test-suite "acceptance"
+    (test-case "squares input" (check-equal? (widget-score 3) 9))))
 (module+ test
-  (check-true (file-exists? acceptance-path)
-              "the committed acceptance file is missing from this checkout")
-  (define contents (file->string acceptance-path))
-  (check-true (string-contains? contents "first acceptance")
-              "the acceptance file must record the first acceptance check"))
+  (require rackunit/text-ui)
+  (exit (run-tests evidence-suite)))
 TEST-EOF
   )
 (module+ test
@@ -168,6 +187,10 @@ TEST-EOF
                        "\n")
         (build-path root ".planning/waves/W0-test.md"))
        (define rec (migrate-campaign! root))
+       ;; This fixture exercises a historical receipt/rejection continuation:
+       ;; frozen FILES predates test-author policy and cannot authorize tests.
+       ;; Fresh owned-red-v1 scheduling has its own real integration fixture.
+       (set-campaign-record-execution-policy! rec #f)
        (define plan (campaign-plan-id rec))
        (define gsd-plan (load-plan-from-index root))
        (define repo (build-path root "q"))
@@ -176,7 +199,11 @@ TEST-EOF
        (display-to-file "compiled/\n" (build-path repo ".gitignore"))
        (display-to-file "(\"lint\" \"test (0)\" \"workflows (0)\")"
                         (build-path repo "scripts/required-pr-checks.policy"))
-       (display-to-file fixture-run-tests (build-path repo "scripts/run-tests.rkt"))
+       (install-runner! repo)
+       (make-directory* (build-path repo "src"))
+       (display-to-file
+        "#lang racket/base\n(provide widget-score)\n(define (widget-score n)\n  (+ n n))\n"
+        (build-path repo "src/widget.rkt"))
        (display-to-file fixture-lint-all (build-path repo "scripts/lint-all.rkt"))
        (display-to-file fixture-acceptance-check (build-path repo "tests/acceptance-check.rkt"))
        (git-quiet! repo "init" "-q")
@@ -190,7 +217,6 @@ TEST-EOF
                                         "fmt"
                                         "-i"
                                         "tests/acceptance-check.rkt"
-                                        "scripts/run-tests.rkt"
                                         "scripts/lint-all.rkt"))])
          (unless (zero? code)
            (error 'review-fixture "raco fmt -i failed: ~a" code)))
@@ -245,6 +271,13 @@ TEST-EOF
          (define raw-output
            (file->string (build-path bundle (hash-ref (hash-ref manifest 'log) 'path))))
          (check-true (positive? (string-length raw-output)))
+         (define red-match (regexp-match #px"red-ack \\{\"proof-sha256\": \"([0-9a-f]{64})\"" prompt))
+         (unless red-match
+           (error 'review-fixture "missing linked RED identity"))
+         ;; Read the exported negative manifest and its retained raw outputs.
+         (for ([path (in-directory bundle)]
+               #:when (file-exists? path))
+           (file->bytes path))
          (jsexpr->string
           (hasheq
            'kind
@@ -265,7 +298,9 @@ TEST-EOF
                    'raw-output-read
                    #t
                    'binding
-                   binding))))
+                   binding
+                   'red-ack
+                   (hasheq 'proof-sha256 (cadr red-match) 'raw-output-read #t)))))
        (define (prompt-text request)
          (string-join (for/list ([m (in-list (model-request-messages request))])
                         (if (hash? m)
@@ -368,21 +403,31 @@ TEST-EOF
                                      "first acceptance\nsecond acceptance\n")
                                  (build-path (current-directory) "acceptance")
                                  #:exists 'truncate)
-                (git-quiet! (current-directory) "add" "acceptance")
+                (display-to-file
+                 "#lang racket/base\n(provide widget-score)\n(define (widget-score n)\n  (* n n))\n"
+                 (build-path (current-directory) "src/widget.rkt")
+                 #:exists 'truncate)
+                (git-quiet! (current-directory) "add" "acceptance" "src/widget.rkt")
                 (git-quiet! (current-directory) "commit" "-qm" "implementation")
                 (make-loop-result '() 'completed (hasheq)))))))
        (define first-result (execute (request-for rec)))
-       (check-equal? (campaign-result-status first-result) 'wave-blocked)
+       (check-equal? (campaign-result-status first-result)
+                     'wave-blocked
+                     (format "first campaign result: ~s" first-result))
        (check-equal? implementations 1)
-       (check-equal? reviews 1)
-       (check-true crashed?)
+       (check-equal? reviews 1 (format "first campaign result: ~s" first-result))
+       (check-true crashed? (format "first campaign result: ~s" first-result))
        (check-false (hash-ref (load-delivery-journal root plan 0) 'review-rejection #f))
        ;; Resume with neither a marker nor local dispatch staging. The real
        ;; fetched artifact must reenter the ordinary retry without another r0
        ;; reviewer; the second reviewer belongs ONLY to the fresh r1 attempt.
        (delete-directory/files (review-dispatch-staging-path root plan 0 0))
        (define result (execute (request-for (load-campaign-record root plan))))
-       (check-equal? (campaign-result-status result) 'wave-blocked)
+       (delete-directory/files (build-path fake-home ".q" "agent" "evidence-repairs" plan "W0.g1")
+                               #:must-exist? #f)
+       (check-equal? (campaign-result-status result)
+                     'wave-blocked
+                     (format "resumed campaign result: ~s" result))
        (check-equal? implementations 2 (campaign-result-message result))
        (check-equal? verifies 2)
        (check-equal? reviews 2)

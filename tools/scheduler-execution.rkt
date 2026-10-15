@@ -55,7 +55,7 @@
                   tool-approval-commitment-digest)
          (only-in "tool-classification.rkt" tool-name-tool-owned-approval?)
          (only-in "../runtime/approval/broker.rkt" approval-grant? call-with-approval-grant)
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload hook-block)
          (only-in "../util/cancellation.rkt" cancellation-token-cancelled?)
          (only-in "../util/capability.rkt" capability-authorized?)
          (only-in "scheduler-preflight.rkt"
@@ -204,7 +204,9 @@
     (if hook-dispatcher
         (with-handlers ([exn:fail? (lambda (e)
                                      (log-warning "tool-call-pre hook threw: ~a" (exn-message e))
-                                     #f)])
+                                     ;; A failed authorization dispatch is not
+                                     ;; equivalent to having no dispatcher.
+                                     (hook-block "tool-call-pre authorization dispatch failed"))])
           (hook-dispatcher 'tool-call-pre pre-payload))
         #f))
 

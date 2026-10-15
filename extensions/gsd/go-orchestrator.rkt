@@ -55,6 +55,13 @@
                   delivery-outcome-kind
                   delivery-outcome-message)
          "wave-runner-port.rkt"
+         (only-in "composition-root.rkt" current-gsd-verification-registry)
+         (only-in "verification-job.rkt" make-verification-registry verification-close-registry!)
+         (only-in "author-execution.rkt" run-proactive-author-phases! run-retained-author-phases!)
+         (only-in "author-checkpoint.rkt"
+                  author-repair-pending?
+                  author-repair-running?
+                  retained-author-worktree)
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
@@ -559,6 +566,11 @@
          (memq (campaign-wave-status initial-wave) '(done deferred))
          (<= fence (campaign-fence-token active)))
      (campaign-result 'wave-cancelled '() "stale campaign request ignored")]
+    [(author-repair-running? base-dir (campaign-plan-id active) wave-idx)
+     (campaign-result
+      'wave-blocked
+      '()
+      "author repair already launched; ambiguous/lost model response is not redispatched")]
     ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract wave-advance gate.
     ;; A wave may launch only when its predecessor carries a merge-SHA
     ;; binding in its evidence trio. W0 (no predecessor) is never gated.
@@ -660,7 +672,57 @@
        ;; 'timed-out (persisted as interrupted) instead of blocking forever.
        ;; v1.00.24: the deadline is MANDATORY (never #f/unbounded): absent
        ;; timeout-sec, wrap with current-gsd-wave-timeout-seconds (default 7200).
-       (define runner-port (coerce-runner runner))
+       (define author-pending? (author-repair-pending? base-dir (campaign-plan-id active) wave-idx))
+       (define owned-red?
+         (and (not author-pending?) (eq? (campaign-record-execution-policy active) 'owned-red-v1)))
+       (define owned-phases? (or author-pending? owned-red?))
+       (define source-runner-port (coerce-runner runner))
+       (define (phase-live?)
+         (define now (observe))
+         (and (current-wave-for-attempt now wave-idx fence expected-id)
+              (not (campaign-record-cancellation now))
+              (not (campaign-record-budget-pause now))))
+       (define (account-phase!)
+         (define observation (current-campaign-usage-observation))
+         (stamp-observed-usage! base-dir
+                                (campaign-plan-id active)
+                                wave-idx
+                                (and (box? observation) (unbox observation))
+                                #:strict? #t)
+         (pause-campaign-if-over-budget! base-dir (campaign-plan-id active) #:strict? #t))
+       ;; Isolate this runner's structured RED, declared RED and candidate jobs
+       ;; from unrelated ambient verification. Close admission atomically before
+       ;; cancelling, so a launch racing the timeout cannot orphan a subprocess.
+       (define phase-registry (and owned-phases? (make-verification-registry)))
+       (define (close-phase-jobs!)
+         (when phase-registry
+           (verification-close-registry! phase-registry)))
+       (define runner-port
+         (if owned-phases?
+             (make-wave-runner-port
+              (lambda (idx)
+                (dynamic-wind
+                 void
+                 (lambda ()
+                   (parameterize ([current-gsd-verification-registry phase-registry])
+                     ((if author-pending? run-retained-author-phases! run-proactive-author-phases!)
+                      base-dir
+                      (campaign-plan-id active)
+                      idx
+                      expected-id
+                      fence
+                      (lambda () ((gsd-wave-runner-port-run source-runner-port) idx))
+                      #:guard phase-live?
+                      #:after-phase account-phase!)))
+                 close-phase-jobs!))
+              #:cancel! (lambda ()
+                          (close-phase-jobs!)
+                          ((gsd-wave-runner-port-cancel! source-runner-port)))
+              #:cancel-requested?
+              (lambda ()
+                (or (not (phase-live?))
+                    ((gsd-wave-runner-port-cancel-requested? source-runner-port)))))
+             source-runner-port))
        (define effective-timeout-sec (or timeout-sec (current-gsd-wave-timeout-seconds)))
        (define run-one (lambda (idx) (run-wave-with-timeout runner-port effective-timeout-sec idx)))
        ;; v1.00.18 W5 (#9513): wrap run-one with the mutation-stall
@@ -725,7 +787,11 @@
              ;; durable pause with the named reason; the loop's pause
              ;; clause below stops dispatch.
              (pause-campaign-if-over-budget! base-dir (campaign-plan-id active))
-             (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
+             ;; Owned phases have durable launch intent. An ambiguous timeout
+             ;; is NOT permission to rerun a model or a closed job owner.
+             (if (and (not owned-phases?)
+                      (eq? (wave-execution-outcome-kind result) 'timed-out)
+                      (> retries-left 0))
                  (begin
                    (log-info "wave ~a timed out; retrying (~a retries left)"
                              wave-idx
@@ -747,7 +813,8 @@
        ;; Design record:
        ;; q/docs/reports/GSD-WORKTREE-ISOLATION-v1.00.17.md
        (define (run-isolated run-thunk)
-         (if (and (not (worktree-isolation-enabled? #:isolate? isolate?))
+         (if (and (not owned-phases?)
+                  (not (worktree-isolation-enabled? #:isolate? isolate?))
                   (not (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)))
              (run-thunk)
              (call-with-retained-wave-worktree!
@@ -756,19 +823,26 @@
                 (with-handlers
                     ([exn:fail?
                       (lambda (e)
-                        (when (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)
+                        (when (or owned-phases?
+                                  (review-retry-pending? base-dir (campaign-plan-id active) wave-idx))
                           (raise e)) ; never abandon rejected source for the shared checkout
                         (log-warning
                          "wave ~a: worktree isolation unavailable (~a); running in shared checkout"
                          wave-idx
                          (exn-message e))
                         #f)])
-                  (or (retained-review-retry-worktree base-dir active wave-idx)
-                      (make-wave-worktree! base-dir
-                                           #:campaign-id (campaign-plan-id active)
-                                           #:wave-index wave-idx
-                                           #:spare-branches
-                                           (durable-spare-branches base-dir active)))))
+                  (define acquired
+                    (or (and author-pending? (retained-author-worktree base-dir active wave-idx))
+                        (retained-review-retry-worktree base-dir active wave-idx)
+                        (make-wave-worktree! base-dir
+                                             #:campaign-id (campaign-plan-id active)
+                                             #:wave-index wave-idx
+                                             #:spare-branches
+                                             (durable-spare-branches base-dir active))))
+                  (when (and owned-phases? (not acquired))
+                    (error 'go-author-phase
+                           "owned author phases require an isolated source checkout"))
+                  acquired))
               (lambda (wt)
                 (record-attempt-artifact! base-dir (campaign-plan-id active) wave-idx expected-id wt))
               run-thunk)))
@@ -928,7 +1002,8 @@
                                                            #:refresh observe)]
                            [(failed)
                             (cond
-                              [(and (> no-change-retries-left 0)
+                              [(and (not owned-phases?)
+                                    (> no-change-retries-left 0)
                                     (no-change-rejection? verifier-message))
                                ;; #9515: exactly-once-bounded failure-context
                                ;; retry. Reset the durable status to pending
@@ -1336,6 +1411,7 @@
                                                       wave-idx
                                                       (exn-message e)))])
               (if (or (unbox keep-branch-box)
+                      (author-repair-pending? base-dir (campaign-plan-id active) wave-idx)
                       (review-retry-pending? base-dir (campaign-plan-id active) wave-idx))
                   (log-info "wave ~a: retained ~a" wave-idx (wave-worktree-path wt))
                   (cleanup-wave-worktree! wt)))))))]))

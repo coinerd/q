@@ -379,6 +379,20 @@
   (unless (and (hash? receipt) (hash-ref receipt 'owned-proof #f))
     (error 'delivery "missing-owned-proof"))
   (validate-receipt-owned-proof! receipt base plan wave)
+  ;; Readiness is an admission boundary, not merely a probe preference.
+  ;; Authenticate it before exporting anything, including legacy evidence.
+  (define readiness (evidence-readiness base plan wave))
+  (define status (hash-ref readiness 'status #f))
+  (define code (hash-ref readiness 'code #f))
+  (unless (or (and (equal? status "ready")
+                   (member code '("legacy-red-ready" "registered-probe-ready")))
+              (and (equal? status "repair-required")
+                   (member code '("missing-meaningful-red-proof" "unsupported-harness"))))
+    (error 'delivery "evidence-readiness ~a: ~a: ~a"
+           status code (hash-ref readiness 'message "inconsistent readiness")))
+  (define legacy? (and (equal? status "ready") (equal? code "legacy-red-ready")))
+  (define registered?
+    (and (equal? status "ready") (equal? code "registered-probe-ready")))
   (define ref (hash-ref receipt 'owned-proof))
   (define frozen (frozen-verify-binding base plan wave))
   (define normalized (hash-ref frozen 'normalized-command))
@@ -413,7 +427,7 @@
                                       green-head))
       pair))
   (define red-facts #f)
-  (when linked
+  (when (and legacy? linked)
     (define red-ref (first linked))
     (define red-manifest (second linked))
     (export-owned-red-proof! root red-manifest red-ref (build-path staging relative))
@@ -440,8 +454,6 @@
                   (hash-ref (hash-ref red-manifest 'binding) 'head)
                   'red-tree
                   (hash-ref (hash-ref red-manifest 'binding) 'tree))))
-  (define readiness (evidence-readiness base plan wave))
-  (define registered? (equal? (hash-ref readiness 'code #f) "registered-probe-ready"))
   (when registered?
     (define context (hash-ref readiness 'context))
     (define probe (hash-ref (hash-ref readiness 'registration) 'probe))
@@ -481,7 +493,11 @@
         (hash-set authority 'evidence-revision 0)))
   (hash-set enriched 'publication-files
             (sort (for/list ([p (in-directory (build-path staging relative))]
-                            #:when (file-exists? p))
+                            ;; This derived envelope is written by publication,
+                            ;; not an input to its own authority. Including it
+                            ;; makes repeat authentication depend on publication.
+                            #:when (and (file-exists? p)
+                                        (not (equal? p (build-path staging relative "authority.json")))))
                     (path->string (find-relative-path staging p))) string<?)))
 
 (module+ main

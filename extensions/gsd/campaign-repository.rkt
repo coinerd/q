@@ -229,7 +229,8 @@
         ;; v1.00.24 W3 (BUG-0052): immutable plan snapshot binding. These
         ;; fields must survive the first persist/reload boundary.
         (campaign-record-plan-snapshot-path rec)
-        (campaign-record-plan-snapshot-digest rec)))
+        (campaign-record-plan-snapshot-digest rec)
+        (campaign-record-execution-policy rec)))
 
 (define (manifest->datum m)
   ;; F13: plan-body-hash is persisted only when bound; legacy records keep
@@ -466,6 +467,18 @@
 
 (define (datum->record d)
   (match d
+    ;; Execution policy is record metadata, never part of canonical plan identity.
+    [(list 'campaign-record pid m waves cancellation fence prov created updated
+           build-version main-head-sha stale-override budget-pause
+           snapshot-path snapshot-digest execution-policy)
+     (unless (or (eq? execution-policy #f) (eq? execution-policy 'owned-red-v1))
+       (corrupt! "unknown execution policy ~s" execution-policy))
+     (define rec
+       (datum->record (list 'campaign-record pid m waves cancellation fence prov created updated
+                            build-version main-head-sha stale-override budget-pause
+                            snapshot-path snapshot-digest)))
+     (set-campaign-record-execution-policy! rec execution-policy)
+     rec]
     ;; v1.00.24 W3 (BUG-0052): current records carry the immutable snapshot
     ;; path+digest binding. Both fields are paired and fail closed on damage.
     [(list 'campaign-record

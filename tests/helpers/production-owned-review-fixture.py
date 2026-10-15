@@ -1,6 +1,7 @@
 """Real declared owned Verify setup for the production coordinator fixture."""
 import importlib.util
 import json
+import re
 from pathlib import Path
 import subprocess
 import shutil
@@ -17,12 +18,48 @@ f.BRANCH = f.WAVE_BRANCH = 'campaign/production-review'
 w = f.build_world(base, plan=plan, wave=wave)
 repo = w['subject']
 f.sh('git', 'checkout', '-q', '-b', f.WAVE_BRANCH, w['head'], cwd=repo)
+# Discovery authenticates the installed runner's complete dependency closure,
+# not a fixture-local CLI that merely happens to run green checks.
+installed = TESTS.parent
+seen = set()
+def install_runner(relative):
+    source = (installed / relative).resolve()
+    if source in seen:
+        return
+    seen.add(source)
+    source.relative_to(installed)
+    text = source.read_text()
+    f.write_file(repo / source.relative_to(installed), text)
+    for dependency in re.findall(r'"([^"\n]+\.rkt)"', text):
+        candidate = source.parent / dependency
+        if candidate.is_file():
+            install_runner(candidate.resolve().relative_to(installed))
+
+install_runner(Path('scripts/run-tests.rkt'))
+regression = '''#lang racket/base
+;; @speed fast
+;; @suite fixture
+(require rackunit "../src/gsd-fixture-widget.rkt")
+(provide evidence-suite)
+(define evidence-suite
+  (test-suite "widget"
+    (test-case "squares input" (check-equal? (widget-score 3) 9))
+    (test-case "squares zero" (check-equal? (widget-score 0) 0))))
+(module+ test
+  (require rackunit/text-ui)
+  (exit (run-tests evidence-suite)))
+'''
+f.write_file(repo / 'src/gsd-fixture-widget.rkt', a.WIDGET_BUGGY)
+f.sh('git', 'add', '.', cwd=repo)
+f.sh('git', 'commit', '-qm', 'fixture: baseline widget behavior', cwd=repo)
+f.sh('git', 'branch', '-f', 'main', 'HEAD', cwd=repo)
+f.sh('git', 'push', '-q', 'origin', 'main', cwd=repo)
 for rel, text in [('src/gsd-fixture-widget.rkt', a.WIDGET_FIXED),
-                  ('tests/w1-fixture.rkt', a.TEST), ('scripts/run-tests.rkt', a.RUNNER),
+                  ('tests/w1-fixture.rkt', regression),
                   ('scripts/lint-all.rkt', a.LINT), ('.gitignore', 'compiled/\n')]:
     f.write_file(repo / rel, text)
 subprocess.run(['raco', 'fmt', '-i', 'src/gsd-fixture-widget.rkt', 'tests/w1-fixture.rkt',
-                'scripts/run-tests.rkt', 'scripts/lint-all.rkt'], cwd=repo, check=True,
+                'scripts/lint-all.rkt'], cwd=repo, check=True,
                stdout=subprocess.PIPE)
 f.sh('git', 'add', '.', cwd=repo)
 f.sh('git', 'commit', '-qm', 'fixture: real acceptance gates', cwd=repo)
@@ -31,7 +68,7 @@ root = f.build_campaign(base, plan, wave,
                        heading=f'# Fixture plan\n\n## Waves\n\n- [Inbox] W{wave}: fixture → waves/W{wave}-fixture.md',
                        wave_override=(f'# W{wave}: fixture\n\nBranch: `{f.WAVE_BRANCH}`; GitHub issue '
                                       '[#9686](https://github.com/owner/repo/issues/9686), milestone #895.\n\n'
-                                      f'## Verify\n{a.CHAIN}\n'))
+                                      f'## Verify\n{a.CHAIN.replace("raco fmt -i tests/w1-fixture.rkt src/gsd-fixture-widget.rkt", "raco fmt -i src/gsd-fixture-widget.rkt").replace("raco make tests/w1-fixture.rkt", "raco make src/gsd-fixture-widget.rkt")}\n'))
 # Recreate via the real snapshot API, including UTF-8 byte counts and hashes.
 shutil.rmtree(root / '.planning/campaigns' / plan / 'plan-snapshot')
 (root / 'q').symlink_to(repo, target_is_directory=True)
@@ -48,4 +85,15 @@ prior = f.journal_fixture(plan, wave, journal['receipt']['head'], generation, br
 if 'receipt-history' in prior:
     journal['receipt-history'] = prior['receipt-history']
 path.write_text(json.dumps(journal), encoding='utf-8')
-print(json.dumps({'root': str(root), 'repo': str(repo), 'receipt': journal['receipt']}))
+# Keep the underlying readiness diagnosis visible, rather than collapsing it
+# into the coordinator's generic evidence-repair-required outcome.
+readiness_module = TESTS.parent / 'extensions/gsd/evidence-readiness.rkt'
+readiness_run = subprocess.run(
+    ['racket', '-e',
+     '(begin (require json (file ' + json.dumps(str(readiness_module)) + ')) '
+     '(write-json (evidence-readiness ' + json.dumps(str(root)) + ' '
+     + json.dumps(plan) + ' ' + str(wave) + ')))'],
+    capture_output=True, text=True, check=True, timeout=30)
+readiness = json.loads(readiness_run.stdout)
+print(json.dumps({'root': str(root), 'repo': str(repo), 'receipt': journal['receipt'],
+                  'readiness': readiness}))

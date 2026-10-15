@@ -55,6 +55,36 @@ have the initiating account's filesystem permissions. Deployment requiring
 protection against a hostile reviewer reading absolute credential paths needs
 an external restricted filesystem/process boundary.
 
+### Bounded missing-evidence recovery
+
+Before independent review, the evidence readiness boundary authenticates the
+retained green proof, frozen Verify binding, receipt identity and clean source
+checkout. Existing compatible owned RED remains usable. When meaningful RED is
+missing, static discovery may select a supported frozen RackUnit regression
+suite; unsupported or ambiguous harnesses pause with `evidence-repair-required`.
+This is not an author repair lifecycle: source/test changes require a separate
+implementation attempt and full Verify, which this slice does not automate.
+
+The controller reserves at most one operation, with two jobs and a 600-second
+probe timeout, and runs the authenticated regression against isolated baseline
+and implementation worktrees. `scripts/gsd-evidence-probe-runner.rkt` collects and
+validates the supported suite; runner coverage checks read installed owner code
+and Git bytes, rather than trusting JSON assertions. Only canonical formatting
+and context/spec digests are pure (`evidence-repair-format.rkt`); discovery,
+readiness, probe, coverage and ledger boundaries perform file/Git I/O. The
+controller delegates those effects rather than becoming a proof authority.
+
+Registration requires owner-generated authorization and revalidated context,
+retains the green proof and records a separate evidence revision. Registration
+alone does not admit review: readiness must authenticate it again. A durably
+captured result can be recovered under the same live guard; ambiguous intent or
+start records pause and are not relaunched or silently adopted. Stale identities,
+unsupported suites, invalid probe artifacts and exhausted reservation budgets
+fail closed. No approval, operator authorization, source receipt replacement or
+publication permission is created by this recovery. The production reviewer
+remains exact GLM-5.3 with the unchanged 600-second cap. Local deterministic tests
+are not live model acceptance or live GitHub delivery evidence.
+
 ### Frozen Verify execution binding
 
 The frozen document and snapshot digest remain immutable. Declared execution,

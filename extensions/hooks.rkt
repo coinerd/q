@@ -53,7 +53,7 @@
 ;; Critical hooks default to 'block on error (safety-first).
 ;; Advisory hooks default to 'pass on error (liveness-first).
 (define critical-hooks
-  '(tool-call session-before-switch session-before-fork session-before-compact input execute-command))
+  '(tool-call tool-call-pre session-before-switch session-before-fork session-before-compact input execute-command))
 
 (define (critical-hook? hook-point)
   (and (member hook-point critical-hooks) #t))
@@ -67,8 +67,8 @@
 ;; Returns a hook-result reflecting the combined outcome.
 ;; When #:ctx is provided, handlers receive (ctx payload) instead of just (payload).
 ;; Backward compat: handlers that only accept 1 arg (payload) still work.
-;; Per-hook timeout: if a handler exceeds current-hook-timeout-ms,
-;; it is skipped and a warning is logged.
+;; Per-hook timeout: critical authorization hooks block on timeout;
+;; advisory hooks pass. Failures are logged.
 (define (dispatch-hooks hook-point payload registry #:ctx [ctx #f])
   (define handlers (handlers-for-point registry hook-point))
   (let loop ([remaining handlers]

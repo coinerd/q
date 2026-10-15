@@ -283,11 +283,18 @@ def validate_trio(repo, ref, relative, base, owned_proof_authority=None):
             bundle = owned_proof_authority['bundle']
             refs = [owned_proof_authority['reference'],
                     owned_proof_authority['log-reference']]
-            if isinstance(owned_proof_authority.get('red'), dict):
+            if (isinstance(owned_proof_authority.get('red'), dict) and
+                    owned_proof_authority['red'].get('relation') != 'baseline-with-test-overlay-v1'):
                 refs += [owned_proof_authority['red']['reference'],
                          owned_proof_authority['red']['log-reference']]
-            for entry in refs:
-                materialize(repo, ref, bundle + '/' + entry['path'], root)
+            portable = [bundle + '/' + entry['path'] for entry in refs]
+            portable += owned_proof_authority.get('publication-files', [])
+            for path in dict.fromkeys(portable):
+                parsed = PurePosixPath(path)
+                require(not parsed.is_absolute() and '..' not in parsed.parts and
+                        path.startswith(bundle + '/'), 'unsafe portable proof path')
+                materialize(repo, ref, path, root)
+            _owned_publication_files(root, owned_proof_authority)
         actual = digest(repo, base, ref)
         gate = ['racket', str(HERE / 'gsd-wave-gate.rkt'), str(root / relative),
                 '--content-digest', actual, '--root', str(root), '--policy',
@@ -295,7 +302,8 @@ def validate_trio(repo, ref, relative, base, owned_proof_authority=None):
         if owned_proof_authority is not None:
             payload = root / 'owned-proof-authority.json'
             payload.write_text(json.dumps(owned_proof_authority), encoding='utf-8')
-            gate += ['--owned-proof-authority', str(payload)]
+            gate += ['--owned-proof-authority', str(payload),
+                     '--owned-source-repo', str(Path(repo).resolve())]
         command(gate, timeout=60)
         return evidence, read_datum(root / review), [relative, review, validation]
 
@@ -2295,8 +2303,15 @@ def auto_review_prepare(repo, plan, wave, stage, expected_head, expected_branch,
                                   expected_head, expected_branch)
     # Publication can precede the journal checkpoint. Recover committed,
     # receipt-bound rejection evidence BEFORE deciding whether to dispatch.
+    recovery_authority = None
+    if (not manual_compatibility and receipt.get('owned-proof') and
+            blob_or_none(repo, tip, paths['review']) is not None):
+        recovery_staging = implementation_review_staging(
+            campaign_root, plan, wave, actual_generation, staging_root)
+        recovery_staging.mkdir(parents=True, exist_ok=True)
+        recovery_authority = _owned_authority(campaign_root, plan, wave, recovery_staging)
     rejected = _recover_rejected_artifact(repo, tip, paths['review'], plan, wave,
-                                          actual_generation, receipt)
+                                          actual_generation, receipt, recovery_authority)
     if rejected is not None:
         return rejected
     # Dispatchable ONLY when the trio or its review artifact is genuinely
@@ -2390,7 +2405,12 @@ AUDIT_KEYS = ('plan-id', 'wave', 'generation', 'head', 'tree', 'branch',
 
 
 def _audit_binding(request):
-    return {key: request.get(key) for key in AUDIT_KEYS}
+    binding = {key: request.get(key) for key in AUDIT_KEYS}
+    revision = request.get('evidence-revision', 0)
+    if revision:
+        binding['evidence-revision'] = revision
+        binding['evidence-registration-sha256'] = request['evidence-registration-sha256']
+    return binding
 
 
 def _exact_audit_binding(actual, expected):
@@ -2420,6 +2440,11 @@ def _bind_owned_request(request, campaign_root, plan, wave, staging, manual=Fals
         raise _ReviewInfra('stale owned-proof receipt/generation')
     request['review-mode'] = OWNED_AUDIT_MODE
     request['proof-sha256'] = authority['reference']['sha256']
+    request['evidence-revision'] = authority.get('evidence-revision', 0)
+    if request['evidence-revision']:
+        request['evidence-registration-sha256'] = authority['evidence-registration-sha256']
+    else:
+        request.pop('evidence-registration-sha256', None)
     authority['audit-binding'] = _audit_binding(request)
     request['owned-authority'] = authority
     request['prompt'] += ('\nPinned audit binding: '
@@ -2449,9 +2474,20 @@ def _reauthenticate_owned_request(request, campaign_root, plan, wave, staging, m
             any(request.get(key) != fresh['receipt'].get(key) for key in
                 ('head', 'tree', 'branch', 'attempt-id', 'attempt-fence'))):
         raise _ReviewInfra('stale owned receipt/generation before publication')
+    if (request.get('evidence-revision', 0) != fresh.get('evidence-revision', 0) or
+            request.get('evidence-registration-sha256') !=
+            fresh.get('evidence-registration-sha256')):
+        raise _ReviewInfra('evidence registration drifted since prepare')
     fresh['audit-binding'] = _audit_binding(request)
     if fresh != request.get('owned-authority'):
-        raise _ReviewInfra('owned proof or receipt drifted since prepare')
+        changed = sorted(key for key in set(fresh) | set(request.get('owned-authority', {}))
+                         if fresh.get(key) != request.get('owned-authority', {}).get(key))
+        detail = ''
+        if 'publication-files' in changed:
+            detail = '; publication-files prepared=%s fresh=%s' % (
+                json.dumps(request['owned-authority'].get('publication-files', [])),
+                json.dumps(fresh.get('publication-files', [])))
+        raise _ReviewInfra('owned proof or receipt drifted since prepare: ' + ', '.join(changed) + detail)
     if request.get('proof-sha256') != fresh['reference']['sha256']:
         raise _ReviewInfra('owned proof SHA drifted since prepare')
     return fresh
@@ -2474,7 +2510,9 @@ def _owned_approval_gates(model_gates, authority):
                           'failure': red['failure-summary'],
                           'result': 'passed',
                           'verification-origin': 'audited-owned',
-                          'owner-job-id': red['owner-job-id']},
+                          'owner-job-id': red['owner-job-id'],
+                          **({'origin': red['origin'], 'relation': red['relation']}
+                             if red.get('relation') == 'baseline-with-test-overlay-v1' else {})},
             'focused-tests': green['focused-tests'],
             'format-compile': green['format-compile'],
             'lint': green['lint'],
@@ -2508,10 +2546,25 @@ def _owned_publication_files(staging, authority):
     bundle = authority['bundle']
     refs = [authority['reference'], authority['log-reference']]
     red = authority.get('red')
-    if isinstance(red, dict):
+    if isinstance(red, dict) and red.get('relation') != 'baseline-with-test-overlay-v1':
         refs += [red['reference'], red['log-reference']]
     files = {bundle + '/' + ref['path']: Path(staging) / bundle / ref['path']
              for ref in refs}
+    for relative in authority.get('publication-files', []):
+        path = PurePosixPath(relative)
+        require(not path.is_absolute() and '..' not in path.parts and
+                relative.startswith(bundle + '/'), 'unsafe portable proof path')
+        source = Path(staging) / path
+        require(source.is_file() and not source.is_symlink(),
+                'missing portable owned proof: ' + relative)
+        if source.suffix == '.json' and re.fullmatch('[0-9a-f]{64}', source.stem):
+            require(hashlib.sha256(source.read_bytes()).hexdigest() == source.stem,
+                    'portable proof digest mismatch: ' + relative)
+        if source.name == 'objects.bundle':
+            metadata = json.loads((source.parent / 'bundle.json').read_text())
+            require(hashlib.sha256(source.read_bytes()).hexdigest() ==
+                    metadata['git-bundle-sha256'], 'portable Git bundle digest mismatch')
+        files[relative] = source
     # The committed authority payload lets push CI (and the staged binding
     # gate) validate the audit trio with the exact trusted authority the
     # controller used: same excluded directory, same trust level as the
@@ -2621,7 +2674,8 @@ def _require_review_evidence_tail(repo, head, tip):
                 'the review ancestry contains non-evidence paths')
 
 
-def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, receipt):
+def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, receipt,
+                               authority=None):
     blob = blob_or_none(repo, tip, relative)
     if blob is None:
         return None
@@ -2654,14 +2708,24 @@ def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, rece
         ref = receipt.get('owned-proof')
         require(isinstance(ref, dict) and datum.get('owned-proof') == ref,
                 'recovered rejection has stale owned execution proof')
+        require(isinstance(authority, dict),
+                'recovered owned rejection requires fresh authenticated authority')
+        require(type(authority.get('generation')) is type(generation) and
+                authority['generation'] == generation and
+                _exact_audit_binding(authority.get('receipt'), receipt) and
+                authority.get('reference') == ref,
+                'recovered rejection has stale owned receipt/generation/proof')
         request = dict(receipt, **{'plan-id': plan, 'wave': wave, 'generation': generation,
                                   'proof-sha256': ref['sha256'], 'review-mode': OWNED_AUDIT_MODE,
                                   'content-digest': digest(repo, 'refs/remotes/origin/main', receipt['head'])})
-        owned_red = datum.get('owned-red')
-        if isinstance(owned_red, dict):
-            # The published rejection named its linked RED; recovery validates
-            # the acknowledgement against exactly that retained identity.
-            request['owned-authority'] = {'red': {'reference': {'sha256': owned_red['sha256']}}}
+        request['evidence-revision'] = authority.get('evidence-revision', 0)
+        if request['evidence-revision']:
+            request['evidence-registration-sha256'] = authority['evidence-registration-sha256']
+        request['owned-authority'] = authority
+        red = authority.get('red')
+        require(datum.get('owned-red') ==
+                (red.get('reference') if isinstance(red, dict) else None),
+                'recovered rejection has stale owned behavioral RED proof')
         require(_exact_audit_binding(datum.get('audit-binding'), _audit_binding(request)),
                 'recovered rejection has stale audit binding')
     try:
@@ -2743,7 +2807,7 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
         _verify_rejected_artifact(repo, candidate, paths['review'], expected_head,
                                   output['findings'])
         _recover_rejected_artifact(repo, candidate, paths['review'], plan, wave,
-                                   generation, receipt)
+                                   generation, receipt, authority)
         _reauthenticate_owned_request(request, campaign_root, plan, wave, staging,
                                       manual_compatibility)
         if authority is None:
@@ -2753,7 +2817,7 @@ def _finalize_implementation(repo, plan, wave, expected_head, expected_branch,
                 repo, expected_branch, tip, candidate,
                 lambda: _reauthenticate_owned_request(request, campaign_root, plan, wave, staging, False))
         return _recover_rejected_artifact(repo, tip_now, paths['review'], plan, wave,
-                                          generation, receipt)
+                                          generation, receipt, authority)
     # approved: the controller binds every digest and head; the reviewer's
     # prose never becomes authority. Only the strict gate below can produce
     # the reviewed verdict.
