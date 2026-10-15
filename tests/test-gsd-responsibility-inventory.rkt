@@ -110,10 +110,12 @@
       ;; +1 v1.00.33 recovery continuation (delivery-recovery);
       ;; +1 BUG-0079 approved-head publication (delivery-publication);
       ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
-      ;; worktree and the extension-owned runtime session adapter).
+      ;; worktree and the extension-owned runtime session adapter);
+      ;; +3 BUG-0042 extractions (owned-lane, wave-scope,
+      ;; evidence-author-journal).
       (check-equal? (length inventory)
-                    81
-                    "69 existing + seven evidence recovery + five author lifecycle modules"))
+                    84
+                    "69 existing + seven evidence recovery + five author lifecycle + three extraction modules"))
 
     (test-case "evidence recovery classification preserves I/O boundaries"
       (define formats '("evidence-repair-format.rkt"))

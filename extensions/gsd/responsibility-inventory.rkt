@@ -25,7 +25,28 @@
                '(sha256)
                '()
                '("json" "racket/list" "racket/string" "util/json/checksum"))
-   (make-entry "evidence-discovery.rkt"
+   (make-entry "owned-lane.rkt"
+               'transition-logic
+               '(parameterize)
+               '()
+               '("wave-runner-port" "campaign-state" "campaign-repository"
+                               "campaign-budgets" "delivery-receipt"
+                               "author-execution" "author-checkpoint"
+                               "composition-root" "verification-job"))
+  (make-entry "wave-scope.rkt"
+               'transition-logic
+               '()
+               '()
+               '("campaign-state" "wave-executor" "review-worktree"
+                               "author-checkpoint" "delivery-publication"
+                               "attempt-artifacts"))
+  (make-entry "evidence-author-journal.rkt"
+               'campaign-state
+               '()
+               '()
+               '("delivery-journal" "review-proof" "author-scope"
+                               "evidence-repair-format" "composition-root"))
+  (make-entry "evidence-discovery.rkt"
                'persistence
                '(git parameterize path-ops)
                '()
