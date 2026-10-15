@@ -688,25 +688,35 @@
     (define old-out (and attempt (campaign-attempt-output-tokens attempt)))
     (define old-total (and attempt (campaign-attempt-total-tokens attempt)))
     (define old-cost (and attempt (campaign-attempt-cost-usd attempt)))
-    ;; Unknown values contribute nothing, but an entirely unknown total
-    ;; remains #f rather than becoming a fabricated zero.
+    ;; Unknown values RETAIN every known contribution: an observed bill is
+    ;; real spend and must never be discarded (a lost total could admit
+    ;; spend past a ceiling). Coverage honesty lives in the durable
+    ;; 'prior-cost-unknown source and missing-attempt counts, never in a
+    ;; fabricated zero or a silently reduced total. A later known
+    ;; replacement still subtracts the retained attempt contribution, so
+    ;; nothing is double-counted.
     (define (replace old previous new)
       (define rest (- (if (number? old) old 0) (if (number? previous) previous 0)))
       (cond
         [(number? new) (+ rest new)]
-        [(positive? rest) rest]
+        [(number? old) old]
         [else #f]))
     (cond
       [(not attempt) (void)]
       [(usage-datum? usage)
        (define src (if (usage-datum-estimated? usage) 'provider-estimated 'provider))
-       (set-campaign-attempt-input-tokens! attempt
-                                           (valid-token-value (usage-datum-input-tokens usage)))
-       (set-campaign-attempt-output-tokens! attempt
-                                            (valid-token-value (usage-datum-output-tokens usage)))
-       (set-campaign-attempt-total-tokens! attempt
-                                           (valid-token-value (usage-datum-total-tokens usage)))
-       (set-campaign-attempt-cost-usd! attempt (valid-cost-value (usage-datum-cost-usd usage)))
+       (set-campaign-attempt-input-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-input-tokens usage)) old-in))
+       (set-campaign-attempt-output-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-output-tokens usage)) old-out))
+       (set-campaign-attempt-total-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-total-tokens usage)) old-total))
+       (set-campaign-attempt-cost-usd!
+        attempt
+        (or (valid-cost-value (usage-datum-cost-usd usage)) old-cost))
        (set-campaign-attempt-usage-source! attempt src)
        ;; cumulative wave totals: #f (unset) + n = n; #f (unknown) + n = #f
        (when (eq? old-source 'usage-missing)
@@ -753,10 +763,13 @@
        (set-campaign-wave-usage-output-tokens! w (replace (wave-usage-output-tokens w) old-out #f))
        (set-campaign-wave-usage-total-tokens! w (replace (wave-usage-total-tokens w) old-total #f))
        (set-campaign-wave-usage-cost-usd! w (replace (wave-usage-cost-usd w) old-cost #f))
-       (set-campaign-attempt-input-tokens! attempt #f)
-       (set-campaign-attempt-output-tokens! attempt #f)
-       (set-campaign-attempt-total-tokens! attempt #f)
-       (set-campaign-attempt-cost-usd! attempt #f)
+       ;; Retain the last-known contribution (lower bound of real spend);
+       ;; the usage-missing source and missing-attempt count carry the
+       ;; coverage honesty, not a discarded total.
+       (set-campaign-attempt-input-tokens! attempt old-in)
+       (set-campaign-attempt-output-tokens! attempt old-out)
+       (set-campaign-attempt-total-tokens! attempt old-total)
+       (set-campaign-attempt-cost-usd! attempt old-cost)
        (when (eq? (wave-usage-source w) 'none)
          (set-campaign-wave-usage-source! w 'usage-missing))]))
   (set-campaign-record-updated-at! rec (current-seconds)))

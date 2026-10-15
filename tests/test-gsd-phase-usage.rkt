@@ -65,8 +65,19 @@
                             (stamp-observed-usage! dir id 0 (cons 0 #f)))
                           (define w (car (campaign-record-waves (load-campaign-record dir id))))
                           (check-equal? (wave-usage-missing-attempts w) 1)
+                          ;; Observed tokens/cost are REAL spend: the unknown
+                          ;; restamp retains them (never a discarded total);
+                          ;; missing-attempts carries the coverage honesty.
+                          (check-equal? (wave-usage-total-tokens w) 14)
+                          (check-equal? (wave-usage-cost-usd w) 1))))
+
+(test-case "a never-informed attempt stays entirely unknown"
+  (with-durable-attempt (lambda (dir id)
+                          (stamp-observed-usage! dir id 0 (cons 0 #f))
+                          (define w (car (campaign-record-waves (load-campaign-record dir id))))
                           (check-false (wave-usage-total-tokens w))
-                          (check-false (wave-usage-cost-usd w)))))
+                          (check-false (wave-usage-cost-usd w))
+                          (check-equal? (wave-usage-missing-attempts w) 1))))
 
 (test-case "durable partial retry keeps unknown cost coverage and token known-sums"
   (with-durable-attempt (lambda (dir id)
@@ -99,6 +110,24 @@
                           (define rec (load-campaign-record dir id))
                           (check-equal? (wave-usage-cost-usd (car (campaign-record-waves rec))) 0)
                           (check-= (usage-summary-cost-usd (campaign-usage-summary rec)) 0 0))))
+
+(test-case "same-attempt unknown restamp retains its own known spend"
+  ;; Reviewer follow-up: stamp $5, then a usage report with unknown cost.
+  ;; The retained wave spend must stay $5 (the observed bill is real), and
+  ;; a later cumulative known replacement must not double-count it.
+  (with-durable-attempt
+   (lambda (dir id)
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 10 4 14 5 #f)))
+     (define w1 (car (campaign-record-waves (load-campaign-record dir id))))
+     (check-equal? (wave-usage-cost-usd w1) 5)
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 30 10 40 #f #f)))
+     (define w2 (car (campaign-record-waves (load-campaign-record dir id))))
+     (check-equal? (wave-usage-cost-usd w2) 5 "own known spend retained")
+     (check-equal? (wave-usage-total-tokens w2) 40 "known tokens replace")
+     (check-eq? (wave-usage-source w2) 'prior-cost-unknown)
+     (stamp-observed-usage! dir id 0 (cons 0 (usage-datum 30 10 40 6 #f)))
+     (define w3 (car (campaign-record-waves (load-campaign-record dir id))))
+     (check-equal? (wave-usage-cost-usd w3) 6 "cumulative replacement, not 5+6"))))
 
 (test-case "cross-attempt unknown cost never discards prior known spend"
   ;; Reviewer scenario: attempt1 costs $5; attempt2 reports unknown cost
