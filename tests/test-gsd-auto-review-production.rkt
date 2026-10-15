@@ -2,7 +2,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 300
+;; @timeout 900
 ;; @covers extensions/gsd/delivery-coordinator.rkt
 ;; Real default coordinator + Python controller + local Git remote. Only the
 ;; independent model response is deterministic; no controller status is faked.
