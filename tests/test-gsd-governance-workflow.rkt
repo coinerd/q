@@ -10,14 +10,23 @@
          racket/runtime-path
          racket/string
          (only-in "../extensions/gsd/campaign-state.rkt"
-                  migrate-campaign!
+                  [migrate-campaign! migrate-owned-campaign!]
+                  set-campaign-record-execution-policy!
                   campaign-plan-id
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-status)
          (only-in "../extensions/gsd/delivery-handoff.rkt" delivered-proof-merge-sha)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!)
          "../scripts/gsd-wave-gate.rkt"
          "../extensions/gsd/go-orchestrator.rkt")
+
+;; Governance advancement uses a legacy plain-runner, non-git fixture.
+(define (migrate-campaign! dir)
+  (define rec (migrate-owned-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
 
 (define-runtime-path ci-workflow "../.github/workflows/ci.yml")
 (define-runtime-path governance-doc "../docs/gsd-process-governance.md")

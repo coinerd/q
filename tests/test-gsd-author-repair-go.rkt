@@ -16,6 +16,10 @@
          (only-in "../extensions/gsd/go-orchestrator.rkt" run-campaign-wave)
          "../extensions/gsd/delivery-verifier.rkt"
          "../extensions/gsd/delivery-journal.rkt"
+         (only-in "../extensions/gsd/evidence-author-journal.rkt"
+                  reserve-evidence-author-repair!
+                  start-evidence-author-repair!
+                  reconcile-evidence-author-receipt!)
          "../extensions/gsd/delivery-finalize.rkt"
          (only-in "../extensions/gsd/delivery-publication.rkt" approved-publication-path)
          "../extensions/gsd/delivery-coordinator.rkt"

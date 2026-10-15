@@ -337,9 +337,11 @@
 ;; 13. FUNC-07 (#105): Parallel tool execution doesn't deadlock on hook exception
 ;; ============================================================
 
-(test-case "Parallel execution survives pre-hook exception"
+(test-case "Parallel execution BLOCKS a tool-call-pre authorization exception"
   (define reg (make-test-registry))
-  ;; Hook that throws for 'tool-call-pre, passes for everything else
+  ;; Hook that throws for 'tool-call-pre, passes for everything else.
+  ;; tool-call-pre is authorization-critical: a handler failure must
+  ;; never degrade to "no hook" (fail-open) — it blocks the call.
   (define hook
     (lambda (hook-point data)
       (cond
@@ -353,19 +355,17 @@
                     #:parallel? #t
                     #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
-  (check-equal? (length results) 1 "parallel with throwing pre-hook should return results")
-  ;; Tool should still execute (hook error is caught, treated as #f)
-  (check-false (tool-result-is-error? (car results))
-               "parallel execution should succeed despite pre-hook exception")
-  (check-equal? (result-text (car results))
-                "parallel-resilient"
-                "result content should be from tool execution"))
+  (check-equal? (length results) 1 "a blocked call still yields a result")
+  (check-true (tool-result-is-error? (car results))
+              "authorization failure must block, not execute")
+  (check-true (string-contains? (result-text (car results)) "tool-call-pre")
+              "the block names the authorization hook"))
 
 ;; ============================================================
 ;; 13a. FUNC-07 (#105): Serial mode also survives hook exception
 ;; ============================================================
 
-(test-case "Serial execution survives pre-hook exception"
+(test-case "Serial execution BLOCKS a tool-call-pre authorization exception"
   (define reg (make-test-registry))
   (define hook
     (lambda (hook-point data)
@@ -380,12 +380,26 @@
                     #:parallel? #f
                     #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
-  (check-equal? (length results) 1 "serial with throwing pre-hook should return results")
-  (check-false (tool-result-is-error? (car results))
-               "serial execution should succeed despite pre-hook exception")
-  (check-equal? (result-text (car results))
-                "serial-resilient"
-                "result content should be from tool execution"))
+  (check-equal? (length results) 1 "a blocked call still yields a result")
+  (check-true (tool-result-is-error? (car results))
+              "authorization failure must block, not execute")
+  ;; Non-authorization hooks keep the resilient contract: a tool-result
+  ;; handler exception never deadlocks or fails the batch.
+  (define hook2
+    (lambda (hook-point data)
+      (cond
+        [(eq? hook-point 'tool-result) (error 'test-hook "deliberate post-hook crash")]
+        [else data])))
+  (define sr2
+    (run-tool-batch tcs
+                    reg
+                    #:hook-dispatcher hook2
+                    #:parallel? #f
+                    #:exec-context (make-test-exec-context)))
+  (define results2 (scheduler-result-results sr2))
+  (check-equal? (length results2) 1)
+  (check-false (tool-result-is-error? (car results2))
+               "non-authorization hook failures stay resilient"))
 
 ;; ============================================================
 ;; 13b. FUNC-07 (#105): Parallel with throwing post-hook also survives

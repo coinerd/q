@@ -5,7 +5,8 @@
          racket/string
          "author-scope.rkt"
          "evidence-readiness.rkt"
-         "delivery-journal.rkt")
+         "delivery-journal.rkt"
+         (only-in "evidence-author-journal.rkt" reserve-evidence-author-repair!))
 (provide literal-author-scope?
          evidence-author-repair-preflight
          authorize-evidence-author-repair!

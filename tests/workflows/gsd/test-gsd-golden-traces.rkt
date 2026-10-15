@@ -24,7 +24,8 @@
          racket/list
          racket/match
          "../../helpers/gsd-golden-trace.rkt"
-         (only-in "../../../extensions/gsd/campaign-state.rkt" migrate-campaign! campaign-plan-id)
+         (only-in "../../../extensions/gsd/campaign-state.rkt" migrate-campaign! campaign-plan-id
+                  set-campaign-record-execution-policy!)
          (only-in "../../../extensions/gsd/campaign-repository.rkt" load-campaign-record))
 
 ;; ============================================================
@@ -293,6 +294,8 @@
                        '((/plan) (/go))
                        (lambda (dir ctx)
                          (define rec (migrate-campaign! dir))
+                         ;; Crash recovery exercises the legacy plain runner, not worktrees.
+                         (set-campaign-record-execution-policy! rec #f)
                          ;; commit + crash (as above)
                          (run-golden-request! dir rec ctx #:outcomes '(ok error))
                          (seed-golden-project! dir)

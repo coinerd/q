@@ -9,6 +9,7 @@
          "red-checkpoint.rkt"
          "delivery-receipt.rkt"
          "delivery-journal.rkt"
+         (only-in "evidence-author-journal.rkt" start-evidence-author-repair!)
          "wave-runner-port.rkt"
          (only-in "policy.rkt" current-gsd-wave-failure-context)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))

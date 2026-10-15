@@ -5,6 +5,7 @@
 (require racket/path
          racket/string
          "delivery-journal.rkt"
+         (only-in "evidence-author-journal.rkt" reconcile-evidence-author-receipt!)
          "delivery-verifier.rkt"
          "review-proof.rkt"
          "campaign-state.rkt"

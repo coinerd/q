@@ -8,12 +8,22 @@
 
 ;; tests/test-process-extension-command.rkt -- Tests for process-extension-command (N-10)
 
+;; These command fixtures exercise legacy runners, not git worktree isolation.
+(define (migrate-campaign! dir)
+  (define rec (migrate-owned-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
+
 (require rackunit
          (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery! test-delivered-reader)
          "../tui/commands.rkt"
          "../tui/state-types.rkt"
          (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
-         (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign! campaign-plan-id)
+         (only-in "../extensions/gsd/campaign-state.rkt"
+                  [migrate-campaign! migrate-owned-campaign!]
+                  set-campaign-record-execution-policy! campaign-plan-id)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!)
          (only-in "helpers/gsd-test-helpers.rkt" bind-test-wave-merge-sha!)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   make-campaign-request
