@@ -51,6 +51,7 @@
          load-approved-publication
          replay-approved-publication!
          strict-descendant?
+         delivery-git
          current-gsd-approved-head-publisher
          default-approved-head-publisher
          publish-approved-head!)
@@ -300,6 +301,10 @@
 (define (same-publication-identity? record intent)
   (same-keys? record intent exact-identity-keys))
 
+;; BUG-0085: shared git runner for checkpoint-side tree measurement; the
+;; delivery journal transition still validates the measured value.
+(define (delivery-git root . args)
+  (apply git root args))
 (define (git root . args)
   (define r
     (run-subprocess "git"

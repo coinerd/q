@@ -709,7 +709,7 @@
        (or (not (equal? (hash-ref m 'state) "completed"))
            (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))
        (or (not (equal? (hash-ref m 'state) "retained"))
-           (and (equal? (hash-ref m 'disposition #f) "no-edit")
+           (and (member (hash-ref m 'disposition #f) '("no-edit" "session-lost"))
                 (hex? (hash-ref m 'retained-tree-sha256 #f) 40)))))
 (define (author-marker-matches-journal? m j)
   (and (valid-author-marker? m (hash-ref j 'plan-id #f) (hash-ref j 'wave #f))

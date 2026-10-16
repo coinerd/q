@@ -14,6 +14,10 @@
 ;;     author examined the wave, found no defect to author against, and
 ;;     returned without edits; the prior receipt stays current and the
 ;;     loop routes to a fresh review instead of a dead end)
+;;   - abandon-evidence-author-session! (BUG-0085 session-loss terminal:
+;;     the author was durably launched but its session was reaped before
+;;     any return — orchestrator death, reaped owned jobs; with the tree
+;;     unchanged and no live session, the honest state is retained)
 ;; No rejection counter is spent, no REQUEST_CHANGES is manufactured, and
 ;; the completed marker is retained forever (one allowance per wave).
 (require racket/list
@@ -38,7 +42,8 @@
 (provide reserve-evidence-author-repair!
          start-evidence-author-repair!
          reconcile-evidence-author-receipt!
-         complete-evidence-author-no-edit!)
+         complete-evidence-author-no-edit!
+         abandon-evidence-author-session!)
 
 (define (validate-author-context! root plan wave context receipt files)
   (define manifest (load-receipt-owned-proof receipt root plan wave))
@@ -215,4 +220,35 @@
     j
     'evidence-author-repair
     (hash-set* m 'state "retained" 'disposition "no-edit" 'retained-tree-sha256 current-tree))
+   guard))
+(define (abandon-evidence-author-session! root plan wave current-tree #:guard guard)
+  ;; BUG-0085: the session-loss terminal. A "running" marker whose author
+  ;; session is provably gone (the ownership registry reaps owned jobs on
+  ;; termination, so a checkpoint observed between passes with no live
+  ;; dispatch is a lost session) and whose tree still equals the retained
+  ;; receipt's tree is an HONEST abandoned launch, not an ambiguity: the
+  ;; allowance is spent, the receipt is unchanged, and the wave routes to a
+  ;; fresh review exactly like the no-edit return. A changed tree refuses:
+  ;; the author may have landed edits, and that is a reconciliation event,
+  ;; never a silent reclaim.
+  (author-guard! guard)
+  (define j (load-delivery-journal root plan wave))
+  (define m (journal-evidence-author-repair j))
+  (unless (and (evidence-author-repair-pending? j)
+               (equal? (hash-ref m 'state) "running")
+               (hex? current-tree 40)
+               (equal? current-tree (hash-ref (hash-ref m 'old-receipt) 'tree)))
+    (error 'delivery-journal "evidence author session-loss reclaim refused"))
+  (author-save!
+   root
+   plan
+   wave
+   j
+   (hash-set
+    j
+    'evidence-author-repair
+    (hash-set* m
+               'state "retained"
+               'disposition "session-lost"
+               'retained-tree-sha256 current-tree))
    guard))

@@ -29,11 +29,14 @@
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
                   evidence-author-repair-pending?
+                  hex?
                   update-delivery-journal!) ; BUG-0084: durable review-infra retry counter
          (only-in "delivery-publication.rkt"
                   load-approved-publication
                   replay-approved-publication!
-                  strict-descendant?)
+                  strict-descendant?
+                  delivery-git)
+         (only-in "evidence-author-journal.rkt" abandon-evidence-author-session!)
          (only-in "review-proof.rkt" load-receipt-owned-proof)
          (only-in "campaign-state.rkt"
                   campaign-plan-id
@@ -373,7 +376,17 @@
                                     delivery-coordinator
                                     #:on-cancel [on-cancel (lambda (_) #f)]
                                     #:on-advance [on-advance (lambda () #f)]
-                                    #:on-blocked [on-blocked (lambda (_) #f)])
+                                    #:on-blocked [on-blocked (lambda (_) #f)]
+                                    ;; BUG-0085: liveness of the launched
+                                    ;; evidence-author session. The default is
+                                    ;; LIVE (conservative: never reclaim on a
+                                    ;; guess); the orchestrator passes the
+                                    ;; ownership-contract verdict — checkpoints
+                                    ;; run strictly between wave passes and the
+                                    ;; owned registry reaps its jobs on pass end
+                                    ;; and termination, so #f is a proven dead
+                                    ;; session, never an assumption.
+                                    #:author-session-live? [author-session-live? (lambda () #t)])
   (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
       (on-cancel message)
       (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
@@ -445,7 +458,17 @@
            (define resolved
              (cond
                [(and idx (author-repair-pending? dir plan-id idx))
-                (resolve-author-checkpoint! dir plan-id idx)]
+                ;; BUG-0085: a "running" marker with no live session and an
+                ;; unchanged tree is an honest abandoned launch; the reclaim
+                ;; IS the durable transition and the loop re-enters to route
+                ;; the wave to a fresh review. Everything else (a live
+                ;; session, a changed tree, a pending permission) keeps the
+                ;; existing resolve-or-pause behavior unchanged.
+                (or (reclaim-lost-author-session! dir
+                                                  plan-id
+                                                  idx
+                                                  #:session-live? author-session-live?)
+                    (resolve-author-checkpoint! dir plan-id idx))]
                [(and (eq? kind 'review-rejected) idx)
                 (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
                [else #f]))
@@ -469,16 +492,39 @@
                                        completed
                                        message
                                        delivery-coordinator
-                                       loop-again)
+                                       loop-again
+                                       #:author-session-live? [author-session-live? (lambda () #t)])
   (run-coordinator-checkpoint
    dir
    plan-id
    extra
    message
    delivery-coordinator
+   #:author-session-live? author-session-live?
    #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
    #:on-advance loop-again
    #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
+
+;; BUG-0085: reclaim a launched-but-lost evidence author session into the
+;; honest retained/session-lost terminal. Returns #t when the durable
+;; reclaim happened (the caller advances); #f/#f-string leaves the decision
+;; to the existing resolver. The tree is measured NOW in the marker's
+;; execution checkout; the journal transition re-validates it against the
+;; retained receipt, so a stale measurement cannot manufacture a reclaim.
+(define (reclaim-lost-author-session! dir plan-id idx #:session-live? session-live?)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define journal (load-delivery-journal dir plan-id idx))
+    (define marker (journal-evidence-author-repair journal))
+    (define tree
+      (and marker
+           (equal? (hash-ref marker 'state #f) "running")
+           (not (session-live?))
+           (let ((repo (hash-ref (hash-ref marker 'context #f) 'repo #f)))
+             (and repo (directory-exists? repo) (delivery-git repo "write-tree")))))
+    (and tree
+         (hex? tree 40)
+         (abandon-evidence-author-session! dir plan-id idx tree #:guard (lambda () #t))
+         #t)))
 
 ;; Park a verifier-approved attempt whose protected delivery is still pending
 ;; (BUG-0077). Verify approval is durable, but it is NOT delivery: the SAME
