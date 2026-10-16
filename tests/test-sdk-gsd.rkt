@@ -15,7 +15,9 @@
 ;;   - q:reset-gsd! resets all GSD state
 ;;   - Edge cases: no extension registry, no submit text, no session
 
-(require rackunit
+(require (only-in "../extensions/gsd/campaign-state.rkt"
+                  migrate-campaign! set-campaign-record-execution-policy!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!) rackunit
          racket/file
          racket/system
          "../interfaces/sdk.rkt"
@@ -169,6 +171,10 @@
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (write-index-plan! tmp '((0 "Test" "test") (1 "Test two" "test-two")))
+  ;; This SDK session fixture tests the legacy shared-checkout runner.
+  (define rec (migrate-campaign! tmp))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! tmp rec)
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result)
     (parameterize ([current-verifier-enabled #f])

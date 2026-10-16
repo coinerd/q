@@ -75,10 +75,31 @@
                      (usage-datum in out tot cost (and (hash-ref u 'estimated? #f) #t))))))))
 
 ;; Runner-lambda side: observe BEFORE outcome conversion strips metadata.
+;; #f in the box means no invocation yet; a pair with a #f datum means
+;; an invocation was missing usage. Keep that missing state until drained.
+;; Multiple phases share an attempt, so every field needs complete coverage.
 (define (record-usage-observation! wave-index run-result)
   (define b (current-campaign-usage-observation))
   (when (box? b)
-    (set-box! b (cons wave-index (loop-result->usage-datum run-result)))))
+    (define previous (unbox b))
+    (define usage (loop-result->usage-datum run-result))
+    (define (sum-field accessor)
+      (define a (accessor (cdr previous)))
+      (define z (accessor usage))
+      (and a z (+ a z)))
+    (set-box!
+     b
+     (cons
+      wave-index
+      (cond
+        [(not previous) usage]
+        [(and (equal? (car previous) wave-index) (usage-datum? (cdr previous)) (usage-datum? usage))
+         (usage-datum (sum-field usage-datum-input-tokens)
+                      (sum-field usage-datum-output-tokens)
+                      (sum-field usage-datum-total-tokens)
+                      (sum-field usage-datum-cost-usd)
+                      (or (usage-datum-estimated? (cdr previous)) (usage-datum-estimated? usage)))]
+        [else #f])))))
 
 ;; Parent side: drain + reset after an attempt (next attempt starts clean).
 (define (take-usage-observation!)
@@ -94,10 +115,14 @@
 ;; telemetry purity). Idempotent across restarts: stamping a second
 ;; observation REPLACES the attempt's numbers and re-accumulates the
 ;; wave totals from the per-attempt fields — no double counting.
-(define (stamp-observed-usage! base-dir plan-id wave-index observation)
+(define (stamp-observed-usage! base-dir plan-id wave-index observation #:strict? [strict? #f])
   (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning "campaign usage stamp failed: ~a" (exn-message e)))])
+                               (if strict?
+                                   (raise e)
+                                   (log-warning "campaign usage stamp failed: ~a" (exn-message e))))])
     (define rec (load-campaign-record base-dir plan-id))
+    (when (and strict? (not rec))
+      (error 'stamp-observed-usage! "campaign record unavailable: ~a" plan-id))
     (when rec
       (stamp-wave-usage! rec wave-index (and observation (cdr observation)))
       (persist-campaign! base-dir rec))))
@@ -116,12 +141,25 @@
 ;; message string when the campaign is now paused, #f otherwise
 ;; (within budget, ceilings unset, or the pause could not persist —
 ;; checked again at the next boundary in the latter case).
-(define (pause-campaign-if-over-budget! base-dir plan-id)
+(define (pause-campaign-if-over-budget! base-dir plan-id #:strict? [strict? #f])
   (define budget (resolve-campaign-budget base-dir))
   (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning "campaign budget check failed: ~a" (exn-message e))
-                               #f)])
+                               ;; Legacy boundaries stay best-effort (liveness over
+                               ;; telemetry). Owned phase boundaries pass #:strict? #t:
+                               ;; a load/ceiling/pause-persist failure must STOP the
+                               ;; next model dispatch rather than silently allow it —
+                               ;; a pause that cannot be durably recorded is not a
+                               ;; permission to keep spending.
+                               (if strict?
+                                   (raise e)
+                                   (begin
+                                     (log-warning "campaign budget check failed: ~a" (exn-message e))
+                                     #f)))])
     (define rec (load-campaign-record base-dir plan-id))
+    (when (and strict? (not rec))
+      (error 'pause-campaign-if-over-budget!
+             "campaign record unavailable for owned budget check: ~a"
+             plan-id))
     (cond
       [(not rec) #f]
       ;; Already paused (e.g. resumed with the ceiling untouched):

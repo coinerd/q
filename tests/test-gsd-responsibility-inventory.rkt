@@ -1,4 +1,4 @@
-#lang racket/base
+#lang racket
 ;; @covers extensions/gsd/responsibility-inventory.rkt
 
 ;; tests/test-gsd-responsibility-inventory.rkt — GSD Responsibility & Effect Inventory fitness
@@ -110,10 +110,42 @@
       ;; +1 v1.00.33 recovery continuation (delivery-recovery);
       ;; +1 BUG-0079 approved-head publication (delivery-publication);
       ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
-      ;; worktree and the extension-owned runtime session adapter).
+      ;; worktree and the extension-owned runtime session adapter);
+      ;; +3 BUG-0042 extractions (owned-lane, wave-scope,
+      ;; evidence-author-journal).
       (check-equal? (length inventory)
-                    69
-                    "GSD module count includes owned-proof retention and three pure format modules"))
+                    84
+                    "69 existing + seven evidence recovery + five author lifecycle + three extraction modules"))
+
+    (test-case "evidence recovery classification preserves I/O boundaries"
+      (define formats '("evidence-repair-format.rkt"))
+      ;; Discovery delegates source reads to runner coverage/the probe reader;
+      ;; keep direct source-marker checks separate from delegated effects.
+      (define io-owners '("evidence-probe.rkt" "evidence-readiness.rkt"
+                          "evidence-repair-ledger.rkt" "evidence-runner-coverage.rkt"
+                          "author-scope.rkt" "red-checkpoint.rkt"))
+      (define discovery (hash-ref inventory-map "evidence-discovery.rkt"))
+      (check-equal? (entry-effects discovery) '(git parameterize path-ops))
+      (for ([dep '("evidence-runner-coverage" "scripts/gsd-evidence-probe-runner")])
+        (check-not-false (member dep (entry-deps discovery))))
+      (for ([file (in-list formats)])
+        (check-equal? (entry-effects (hash-ref inventory-map file)) '(sha256)))
+      (for ([file (in-list io-owners)])
+        (check-not-false (memq 'fs-read (entry-effects (hash-ref inventory-map file))))))
+
+    (test-case "author lifecycle is not classified as pure or a facade"
+      (for ([file '("author-scope.rkt" "author-execution.rkt" "author-checkpoint.rkt"
+                    "evidence-author-repair.rkt" "red-checkpoint.rkt")])
+        (check-false (and (memq (entry-domain (hash-ref inventory-map file))
+                                '(pure-planning compatibility-facade)) #t)))
+      (for ([binding '(("evidence-author-repair.rkt" "author-scope" "delivery-journal")
+                       ("author-execution.rkt" "red-checkpoint" "delivery-journal"
+                                               "../gsd-planning/execution-policy")
+                       ("author-checkpoint.rkt" "campaign-repository" "delivery-receipt")
+                       ("red-checkpoint.rkt" "verification-job" "author-scope"))])
+        (for ([dep (in-list (cdr binding))])
+          (check-not-false
+           (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

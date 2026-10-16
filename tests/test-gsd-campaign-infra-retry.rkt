@@ -51,6 +51,7 @@
                   campaign-result-message
                   stall-hard-failure-message)
          (only-in "../extensions/gsd/campaign-state.rkt"
+                  set-campaign-record-execution-policy!
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-status
@@ -96,7 +97,11 @@
   dir)
 
 (define (load-or-migrate dir)
-  (load-or-migrate-campaign! dir))
+  (define rec (load-or-migrate-campaign! dir))
+  ;; Retry tests exercise the legacy plain runner in a non-git fixture.
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
 
 (define (cleanup-tmp dir)
   (delete-directory/files dir #:must-exist? #f))

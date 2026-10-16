@@ -6,8 +6,20 @@
          racket/file
          racket/list
          racket/path
-         "review-proof.rkt")
-(provide delivery-journal-path
+         "review-proof.rkt"
+         "author-scope.rkt"
+         "evidence-repair-format.rkt")
+(provide journal-evidence-author-repair
+         evidence-author-repair-pending?
+         save!
+         review-rejection-allowed-stages
+         journal-review-rejection
+         review-rejection-matches-receipt?
+         context-receipt?
+         literal-files?
+         text?
+         hex?
+         delivery-journal-path
          load-delivery-journal
          record-delivery-receipt!
          update-delivery-journal!
@@ -162,6 +174,9 @@
                       (equal? (hash-ref data 'wave #f) wave)
                       (member (hash-ref data 'stage #f) delivery-stages)
                       (valid-delivery-receipt? (hash-ref data 'receipt #f))
+                      (or (not (hash-has-key? data 'evidence-author-repair))
+                          (author-marker-matches-journal? (hash-ref data 'evidence-author-repair)
+                                                          data))
                       (let ([h (hash-ref data 'receipt-history #f)])
                         (or (not h) (valid-receipt-history? h)))
                       (let ([m (hash-ref data 'review-rejection #f)])
@@ -221,6 +236,7 @@
                                      wave
                                      schema-version
                                      receipt-history
+                                     evidence-author-repair
                                      review-rejection
                                      review-rejection-history
                                      review-rejection-count)))
@@ -650,6 +666,72 @@
                                   'superseded-at
                                   (current-seconds))))
      (load-delivery-journal root plan wave)]))
+
+;; Independent evidence authoring has a permanent, separate one-per-wave slot.
+(define (literal-files? fs)
+  (and (list? fs)
+       (pair? fs)
+       (= (length fs) (length (remove-duplicates fs)))
+       (andmap (lambda (f)
+                 (and (text? f)
+                      (regexp-match? #px"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$" f)
+                      (not (regexp-match? #px"(?:^|/)[.][.]?(?:/|$)" f))))
+               fs)))
+(define (context-receipt? c r plan wave generation)
+  (and (valid-evidence-context? c)
+       (valid-delivery-receipt? r)
+       (equal? (hash-ref c 'plan-id) plan)
+       (equal? (hash-ref c 'wave) wave)
+       (equal? (hash-ref c 'receipt-generation) generation)
+       (equal? (hash-ref c 'receipt-sha256) (canonical-evidence-digest r))
+       (valid-owned-proof-reference? (hash-ref r 'owned-proof #f))
+       (for/and ([k '(attempt-id attempt-fence branch origin head tree)])
+         (equal? (hash-ref c k) (hash-ref r k #f)))
+       (equal? (hash-ref c 'green-proof-sha256)
+               (hash-ref (hash-ref r 'owned-proof (hasheq)) 'sha256 #f))))
+(define (valid-author-marker? m plan wave)
+  (and (hash? m)
+       (equal? (hash-ref m 'schema-version #f) 1)
+       (member (hash-ref m 'state #f) '("pending" "running" "completed"))
+       (literal-files? (hash-ref m 'frozen-files #f))
+       (let ([c (hash-ref m 'context #f)]
+             [r (hash-ref m 'old-receipt #f)])
+         (and (valid-evidence-context? c)
+              (context-receipt? c r plan wave (hash-ref c 'receipt-generation))
+              (or (equal? (hash-ref m 'state) "pending")
+                  (and (text? (hash-ref m 'successor-attempt #f))
+                       (not (equal? (hash-ref m 'successor-attempt) (hash-ref c 'attempt-id)))
+                       (exact-nonnegative-integer? (hash-ref m 'successor-fence #f))
+                       (>= (hash-ref m 'successor-fence) (hash-ref c 'attempt-fence))))))
+       (or (not (equal? (hash-ref m 'state) "completed"))
+           (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))))
+(define (author-marker-matches-journal? m j)
+  (and (valid-author-marker? m (hash-ref j 'plan-id #f) (hash-ref j 'wave #f))
+       (let* ([history (hash-ref j 'receipt-history '())]
+              [receipts (append history (list (hash-ref j 'receipt)))]
+              [generation (hash-ref (hash-ref m 'context) 'receipt-generation)])
+         (and (< generation (length receipts))
+              (equal? (list-ref receipts generation) (hash-ref m 'old-receipt))
+              (if (equal? (hash-ref m 'state) "completed")
+                  (and (< (add1 generation) (length receipts))
+                       (let ([successor (list-ref receipts (add1 generation))])
+                         (and (equal? (hash-ref successor 'attempt-id #f)
+                                      (hash-ref m 'successor-attempt))
+                              (equal? (hash-ref successor 'attempt-fence #f)
+                                      (hash-ref m 'successor-fence))
+                              (equal? (canonical-evidence-digest successor)
+                                      (hash-ref m 'successor-receipt-sha256)))))
+                  (= generation (length history)))))))
+(define (journal-evidence-author-repair j)
+  (define m (and (hash? j) (hash-ref j 'evidence-author-repair #f)))
+  (and m (author-marker-matches-journal? m j) m))
+(define (evidence-author-repair-pending? j)
+  (define m (journal-evidence-author-repair j))
+  (and m
+       (member (hash-ref m 'state) '("pending" "running"))
+       (equal? (hash-ref m 'old-receipt) (hash-ref j 'receipt #f))
+       #t))
+
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical

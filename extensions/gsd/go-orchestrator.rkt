@@ -35,7 +35,7 @@
          "delivery-handoff.rkt"
          "delivery-receipt.rkt"
          (only-in "review-dispatch.rkt" current-gsd-auto-review-runner)
-         (only-in "review-worktree.rkt" review-retry-pending? retained-review-retry-worktree)
+         (only-in "review-worktree.rkt" review-retry-pending?)
          (only-in "delivery-publication.rkt" publish-approved-head! durable-spare-branches)
          (only-in "tracker-resume.rkt" resume-tracker-reconciliation!)
          (only-in "delivery-finalize.rkt"
@@ -55,6 +55,9 @@
                   delivery-outcome-kind
                   delivery-outcome-message)
          "wave-runner-port.rkt"
+         (only-in "author-checkpoint.rkt" author-repair-pending?)
+         (only-in "owned-lane.rkt" make-owned-runner-port owned-lane? owned-entry-block)
+         (only-in "wave-scope.rkt" call-with-wave-scope)
          (only-in "wave-docs.rkt" wave-slug plan-slug-map)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
@@ -105,8 +108,6 @@
                   wave-worktree-branch
                   wave-worktree-repo-root
                   wave-worktree-base-ref
-                  make-wave-worktree!
-                  call-with-retained-wave-worktree!
                   cleanup-wave-worktree!
                   release-wave-worktree!
                   worktree-hash8
@@ -559,6 +560,7 @@
          (memq (campaign-wave-status initial-wave) '(done deferred))
          (<= fence (campaign-fence-token active)))
      (campaign-result 'wave-cancelled '() "stale campaign request ignored")]
+    [(owned-entry-block base-dir active wave-idx) => (lambda (r) r)]
     ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract wave-advance gate.
     ;; A wave may launch only when its predecessor carries a merge-SHA
     ;; binding in its evidence trio. W0 (no predecessor) is never gated.
@@ -660,7 +662,21 @@
        ;; 'timed-out (persisted as interrupted) instead of blocking forever.
        ;; v1.00.24: the deadline is MANDATORY (never #f/unbounded): absent
        ;; timeout-sec, wrap with current-gsd-wave-timeout-seconds (default 7200).
-       (define runner-port (coerce-runner runner))
+       (define author-pending? (author-repair-pending? base-dir (campaign-plan-id active) wave-idx))
+       (define owned-phases? (owned-lane? author-pending? active))
+       (define source-runner-port (coerce-runner runner))
+       ;; Owned-lane port wiring (strict phase guards/accounting, dedicated
+       ;; registry with atomic close-before-cancel) lives in owned-lane.rkt.
+       (define runner-port
+         (if owned-phases?
+             (make-owned-runner-port base-dir
+                                     (campaign-plan-id active)
+                                     wave-idx
+                                     expected-id
+                                     fence
+                                     observe
+                                     source-runner-port)
+             source-runner-port))
        (define effective-timeout-sec (or timeout-sec (current-gsd-wave-timeout-seconds)))
        (define run-one (lambda (idx) (run-wave-with-timeout runner-port effective-timeout-sec idx)))
        ;; v1.00.18 W5 (#9513): wrap run-one with the mutation-stall
@@ -725,7 +741,11 @@
              ;; durable pause with the named reason; the loop's pause
              ;; clause below stops dispatch.
              (pause-campaign-if-over-budget! base-dir (campaign-plan-id active))
-             (if (and (eq? (wave-execution-outcome-kind result) 'timed-out) (> retries-left 0))
+             ;; Owned phases: durable launch intent — an ambiguous timeout
+             ;; never reruns a model or a closed job owner.
+             (if (and (not owned-phases?)
+                      (eq? (wave-execution-outcome-kind result) 'timed-out)
+                      (> retries-left 0))
                  (begin
                    (log-info "wave ~a timed out; retrying (~a retries left)"
                              wave-idx
@@ -746,32 +766,18 @@
        ;; (branch = delivery evidence); run-once releases it on exit.
        ;; Design record:
        ;; q/docs/reports/GSD-WORKTREE-ISOLATION-v1.00.17.md
-       (define (run-isolated run-thunk)
-         (if (and (not (worktree-isolation-enabled? #:isolate? isolate?))
-                  (not (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)))
-             (run-thunk)
-             (call-with-retained-wave-worktree!
-              wt-box
-              (lambda ()
-                (with-handlers
-                    ([exn:fail?
-                      (lambda (e)
-                        (when (review-retry-pending? base-dir (campaign-plan-id active) wave-idx)
-                          (raise e)) ; never abandon rejected source for the shared checkout
-                        (log-warning
-                         "wave ~a: worktree isolation unavailable (~a); running in shared checkout"
-                         wave-idx
-                         (exn-message e))
-                        #f)])
-                  (or (retained-review-retry-worktree base-dir active wave-idx)
-                      (make-wave-worktree! base-dir
-                                           #:campaign-id (campaign-plan-id active)
-                                           #:wave-index wave-idx
-                                           #:spare-branches
-                                           (durable-spare-branches base-dir active)))))
-              (lambda (wt)
-                (record-attempt-artifact! base-dir (campaign-plan-id active) wave-idx expected-id wt))
-              run-thunk)))
+       ;; Per-attempt scope (shared checkout vs retained worktree) lives in
+       ;; wave-scope.rkt (BUG-0042: extract instead of growing the orchestrator).
+       (define run-result
+         (call-with-wave-scope base-dir
+                               active
+                               wave-idx
+                               isolate?
+                               owned-phases?
+                               author-pending?
+                               expected-id
+                               wt-box
+                               (lambda () (run-with-timeout-retry timeout-retries))))
        ;; W7 (#9512b): the worktree outlives the run thunk — its branch
        ;; carries the delivery evidence through verification and the
        ;; completion decision. run-once* therefore receives the boxes
@@ -781,7 +787,6 @@
        ;; ordinary failed attempts use cleanup-wave-worktree!. The previous attempt released here —
        ;; before verification — which made wt always #f at the delivery
        ;; check and silently disabled branch-based verification.
-       (define run-result (run-isolated (lambda () (run-with-timeout-retry timeout-retries))))
        (define outcome (wave-execution-outcome-kind run-result))
        (define after-run (observe))
        (cond
@@ -928,7 +933,8 @@
                                                            #:refresh observe)]
                            [(failed)
                             (cond
-                              [(and (> no-change-retries-left 0)
+                              [(and (not owned-phases?)
+                                    (> no-change-retries-left 0)
                                     (no-change-rejection? verifier-message))
                                ;; #9515: exactly-once-bounded failure-context
                                ;; retry. Reset the durable status to pending
@@ -1336,6 +1342,7 @@
                                                       wave-idx
                                                       (exn-message e)))])
               (if (or (unbox keep-branch-box)
+                      (author-repair-pending? base-dir (campaign-plan-id active) wave-idx)
                       (review-retry-pending? base-dir (campaign-plan-id active) wave-idx))
                   (log-info "wave ~a: retained ~a" wave-idx (wave-worktree-path wt))
                   (cleanup-wave-worktree! wt)))))))]))

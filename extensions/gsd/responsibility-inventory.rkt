@@ -18,7 +18,159 @@
 
 (define inventory
   (list
-   ;; pure planning (8)
+   ;; Evidence recovery: only the format module is pure. The controller
+   ;; delegates durable writes and execution to the ledger/probe boundaries.
+   (make-entry "evidence-repair-format.rkt"
+               'transition-logic
+               '(sha256)
+               '()
+               '("json" "racket/list" "racket/string" "util/json/checksum"))
+   (make-entry "owned-lane.rkt"
+               'transition-logic
+               '(parameterize)
+               '()
+               '("wave-runner-port" "campaign-state" "campaign-repository"
+                               "campaign-budgets" "delivery-receipt"
+                               "author-execution" "author-checkpoint"
+                               "composition-root" "verification-job"))
+  (make-entry "wave-scope.rkt"
+               'transition-logic
+               '()
+               '()
+               '("campaign-state" "wave-executor" "review-worktree"
+                               "author-checkpoint" "delivery-publication"
+                               "attempt-artifacts"))
+  (make-entry "evidence-author-journal.rkt"
+               'campaign-state
+               '()
+               '()
+               '("delivery-journal" "review-proof" "author-scope"
+                               "evidence-repair-format" "composition-root"))
+  (make-entry "evidence-discovery.rkt"
+               'persistence
+               '(git parameterize path-ops)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "racket/system"
+                               "review-proof-format"
+                               "evidence-repair-format"
+                               "evidence-runner-coverage"
+                               "util/json/checksum"
+                               "scripts/gsd-evidence-probe-runner"))
+   (make-entry "evidence-probe.rkt"
+               'persistence
+               '(fs-read fs-write fs-rename fs-delete mkdir sha256 git parameterize path-ops)
+               '()
+               '("json" "racket/file"
+                        "racket/path"
+                        "racket/list"
+                        "racket/string"
+                        "racket/system"
+                        "racket/port"
+                        "racket/runtime-path"
+                        "evidence-repair-format"
+                        "evidence-runner-coverage"
+                        "review-proof"
+                        "verification-job"
+                        "composition-root"
+                        "util/json/checksum"))
+   (make-entry "evidence-readiness.rkt"
+               'campaign-state
+               '(fs-read git parameterize path-ops)
+               '()
+               '("json" "racket/list"
+                        "racket/path"
+                        "racket/string"
+                        "racket/system"
+                        "delivery-journal"
+                        "review-proof"
+                        "evidence-repair-format"
+                        "evidence-repair-ledger"
+                        "evidence-probe"
+                        "evidence-discovery"))
+   (make-entry "evidence-repair-ledger.rkt"
+               'persistence
+               '(fs-read mkdir path-ops)
+               '()
+               '("json" "racket/file"
+                        "racket/path"
+                        "racket/list"
+                        "review-proof"
+                        "evidence-repair-format"
+                        "evidence-probe"))
+   ;; Atomic ledger output/locking delegates fs-write/fs-rename to racket/file;
+   ;; these are invisible to the legacy marker scanner, as above.
+   (make-entry
+    "evidence-repair-controller.rkt"
+    'campaign-state
+    '()
+    '()
+    '("evidence-readiness" "evidence-repair-format" "evidence-repair-ledger" "evidence-probe"))
+   (make-entry "evidence-runner-coverage.rkt"
+               'persistence
+               '(fs-read git parameterize path-ops dynamic-require)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/promise"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "racket/system"
+                               "review-proof-format"))
+   ;; Effects below are source-marker effects, not a transitive purity claim.
+   ;; Admission reads through readiness/scope and reserves durable permission
+   ;; through delivery-journal; it neither dispatches nor fabricates rejection.
+   (make-entry "evidence-author-repair.rkt"
+               'campaign-state
+               '()
+               '()
+               '("racket/list" "racket/string" "author-scope"
+                               "evidence-readiness" "delivery-journal"))
+   ;; Authenticate literal FILES against the frozen snapshot; actual file reads.
+   (make-entry "author-scope.rkt"
+               'persistence
+               '(fs-read)
+               '()
+               '("racket/file" "racket/list" "racket/string"
+                               "plan-snapshot" "plan-types" "wave-docs"))
+   ;; Owner-controlled phase dispatch and Git commits. Snapshot/journal reads,
+   ;; durable launch intent and registered checks delegate to their owners.
+   ;; Path normalization uses path->complete-path/simplify-path, outside the
+   ;; legacy path-ops marker (string->path/path->string).
+   (make-entry "author-execution.rkt"
+               'external-ports
+               '(git parameterize)
+               '()
+               '("racket/list" "racket/path" "racket/port" "racket/string"
+                               "racket/system" "red-checkpoint" "delivery-receipt"
+                               "delivery-journal" "wave-runner-port" "policy"
+                               "../gsd-planning/execution-policy"))
+   ;; Resume policy mutates campaign state and delegates persistence to the
+   ;; repository. Retained checkout authentication delegates Git to receipts.
+   (make-entry "author-checkpoint.rkt"
+               'campaign-state
+               '(path-ops)
+               '()
+               '("racket/path" "campaign-state" "campaign-repository"
+                               "delivery-journal" "delivery-receipt" "wave-executor"))
+   ;; Durable, locked preimplementation RED and candidate assertion capture,
+   ;; never a full Verify receipt. Atomic output/locking delegates writes and
+   ;; renames to racket/file; registered child execution to verification-job.
+   (make-entry "red-checkpoint.rkt"
+               'persistence
+               '(fs-read mkdir sha256 git parameterize path-ops)
+               '()
+               '("json" "racket/file" "racket/list" "racket/path" "racket/port"
+                        "racket/runtime-path" "racket/string" "racket/system"
+                        "review-proof" "delivery-receipt" "delivery-verifier"
+                        "composition-root" "verification-job" "evidence-repair-format"
+                        "evidence-runner-coverage" "author-scope" "util/json/checksum"
+                        "scripts/gsd-evidence-probe-runner"))
+   ;; pure planning
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
    (make-entry "wave-status.rkt" 'pure-planning '() '() '())
    ;; BUG-0077: the campaign terminal result struct, extracted from

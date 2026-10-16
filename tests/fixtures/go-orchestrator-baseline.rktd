@@ -46,10 +46,18 @@
 ;; alongside the checkpoint driver; the orchestrator injects its continuation.
 ;; Automatic-review routing adds bounded call sites. 1695 -> 1691 lines,
 ;; 20 -> 19 defines, with the unchanged 1700-line ceiling.
+;; Re-recorded for autonomous evidence repair (#9831): the owned-lane
+;; runner-port construction (strict phase guards/accounting, dedicated
+;; verification registry with atomic close-before-cancel) moved OUT into
+;; extensions/gsd/owned-lane.rkt, and the per-attempt execution scope
+;; decision (shared checkout vs retained worktree) moved OUT into
+;; extensions/gsd/wave-scope.rkt; the orchestrator keeps the lane
+;; decision and thin call sites. 1698 lines / 19 defines, below the
+;; unchanged 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "Automatic independent review: coordinator-checkpoint-result extracted to delivery-finalize.rkt: 1691 lines / 19 defines; below the unchanged 1700 target")
- (line-count . 1691)
+  "Autonomous evidence repair: owned-lane.rkt + wave-scope.rkt extractions: 1698 lines / 19 defines; below the unchanged 1700 target")
+ (line-count . 1698)
  (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

@@ -25,8 +25,18 @@
 (require racket/list
          racket/string
          (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-message)
+         (only-in "author-checkpoint.rkt" resolve-author-checkpoint! author-repair-pending?)
+         (only-in "delivery-journal.rkt"
+                  journal-evidence-author-repair
+                  evidence-author-repair-pending?)
+         (only-in "delivery-publication.rkt"
+                  load-approved-publication
+                  replay-approved-publication!
+                  strict-descendant?)
+         (only-in "review-proof.rkt" load-receipt-owned-proof)
          (only-in "campaign-state.rkt"
                   campaign-plan-id
+                  campaign-fence-token
                   campaign-record-waves
                   campaign-wave-index
                   campaign-wave-current-attempt
@@ -269,6 +279,51 @@
 ;; loop ONLY when the durable delivery journal actually moved; a coordinator
 ;; that claims progress without a durable transition is a clean, resumable
 ;; block (never an infinite spin, never a false DONE).
+;; Publication-only crash recovery for a RUNNING author marker: the
+;; successor publication was already CONFIRMED (real push + readback) but
+;; the process died before receipt supersession. The confirmed record,
+;; its full owned proof and the running marker's exact successor identity
+;; authorize replaying ONLY that publication — never redispatching an
+;; author phase, reviewer, or ladder effect. Anything less (intent-only,
+;; unprovable ancestry, unauthentic proof, stale/ambiguous marker) keeps
+;; the honest pause.
+(define (author-publication-recovery dir plan wave)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define journal (load-delivery-journal dir plan wave))
+    (define marker (journal-evidence-author-repair journal))
+    (define pub (and marker (load-approved-publication dir plan wave)))
+    (define candidate (and pub (hash-ref pub 'receipt-candidate #f)))
+    (define old (and marker (hash-ref marker 'old-receipt #f)))
+    (and
+     marker
+     pub
+     candidate
+     old
+     (evidence-author-repair-pending? journal)
+     (equal? (hash-ref marker 'state #f) "running")
+     (equal? (hash-ref pub 'status #f) "confirmed")
+     (load-receipt-owned-proof candidate dir plan wave)
+     (equal? (hash-ref pub 'attempt-id #f) (hash-ref marker 'successor-attempt #f))
+     (equal? (hash-ref pub 'attempt-fence #f) (hash-ref marker 'successor-fence #f))
+     (equal? (hash-ref pub 'snapshot-digest #f)
+             (hash-ref (hash-ref marker 'context #f) 'snapshot-sha256 #f))
+     (for/and ([k '(repo origin branch)])
+       (equal? (hash-ref pub k #f) (hash-ref old k #f)))
+     (not (equal? (hash-ref pub 'head #f) (hash-ref old 'head #f)))
+     (strict-descendant? (hash-ref pub 'repo) (hash-ref old 'head) (hash-ref pub 'head))
+     (lambda ()
+       (define pub-fence (hash-ref pub 'coordinator-fence #f))
+       (replay-approved-publication! dir
+                                     plan
+                                     wave
+                                     (lambda ()
+                                       (define rec (load-campaign-record dir plan))
+                                       (and rec (equal? (campaign-fence-token rec) pub-fence) rec)))
+       (hasheq 'status
+               "recovered"
+               'message
+               "author successor publication recovered; receipt supersession replayed")))))
+
 (define (run-coordinator-checkpoint dir
                                     plan-id
                                     extra
@@ -281,10 +336,30 @@
       (on-cancel message)
       (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
              [before (and idx (delivery-journal-snapshot dir plan-id idx))]
+             [author-replay (and idx (author-repair-pending? dir plan-id idx))]
+             [author-recovery (and author-replay
+                                   (equal? (hash-ref (journal-evidence-author-repair
+                                                      (load-delivery-journal dir plan-id idx))
+                                                     'state
+                                                     #f)
+                                           "running")
+                                   (author-publication-recovery dir plan-id idx))]
              [replay (pending-review-rejection-message before)]
-             [outcome (if replay
-                          (cons 'review-rejected replay)
-                          (delivery-coordinator dir plan-id idx))]
+             [outcome
+              (cond
+                [(and author-replay (not author-recovery))
+                 (cons 'evidence-author-repair "durable author permission pending")]
+                [author-recovery
+                 ;; Publication-only crash recovery: the confirmed successor
+                 ;; publication and its owned proof replay supersession; no
+                 ;; author phase, reviewer or ladder effect is redispatched.
+                 (with-handlers ([exn:fail? (lambda (e)
+                                              (cons 'evidence-author-repair
+                                                    (format "author publication recovery refused: ~a"
+                                                            (exn-message e))))])
+                   (cons 'ok (hash-ref (author-recovery) 'message)))]
+                [replay (cons 'review-rejected replay)]
+                [else (delivery-coordinator dir plan-id idx)])]
              [after (and idx (delivery-journal-snapshot dir plan-id idx))]
              [kind (and outcome (delivery-outcome-kind outcome))]
              [decision (coordinator-checkpoint-decision
@@ -298,9 +373,12 @@
           [(advance) (on-advance)]
           [else
            (define resolved
-             (and (eq? kind 'review-rejected)
-                  idx
-                  (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome))))
+             (cond
+               [(and idx (author-repair-pending? dir plan-id idx))
+                (resolve-author-checkpoint! dir plan-id idx)]
+               [(and (eq? kind 'review-rejected) idx)
+                (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome))]
+               [else #f]))
            (if (eq? resolved #t)
                (on-advance)
                (on-blocked

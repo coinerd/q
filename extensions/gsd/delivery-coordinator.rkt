@@ -27,6 +27,8 @@
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "delivery-receipt.rkt"
+         "evidence-repair-controller.rkt"
+         "evidence-author-repair.rkt"
          (only-in "delivery-publication.rkt" replay-approved-publication! load-approved-publication)
          (only-in "delivery-journal.rkt"
                   delivery-stages
@@ -684,21 +686,42 @@
      ;; Installed production runner: prepare -> fresh independent review ->
      ;; trusted strict validation/publication. Absent ports retain manual
      ;; validation; a typed dispatch refusal never falls back to approval.
-     (or (and (review-runner-installed?)
-              (auto-review-dispatch! base-dir
-                                     plan
-                                     wave
-                                     "implementation-review"
-                                     #:generation (binding-generation base-dir plan wave)))
-         (run-controller "review"
-                         "--expected-head"
-                         (default-delivery-receipt-head base-dir plan wave)
-                         "--expected-branch"
-                         (default-delivery-receipt-branch base-dir plan wave)
-                         "--campaign-root"
-                         (path->string base-dir)
-                         "--generation"
-                         (number->string (binding-generation base-dir plan wave))))]
+     (define record (load-campaign-record base-dir plan))
+     (define fence (and record (campaign-fence-token record)))
+     (define (repair-live?)
+       (define now (load-campaign-record base-dir plan))
+       (and now
+            record
+            (equal? (campaign-fence-token now) fence)
+            (not (campaign-record-cancellation now))
+            (not (durable-blocker base-dir plan wave fence))))
+     (define repair-readiness (resume-evidence-repair! base-dir plan wave #:guard repair-live?))
+     (define readiness
+       (if (equal? (hash-ref repair-readiness 'code #f) "evidence-repair-required")
+           ;; A separate durable allowance, never evidence-only permission or
+           ;; an invented rejection. The finalizer schedules an ordinary fresh
+           ;; attempt from this receipt-pinned source, not a new checkout.
+           (authorize-evidence-author-repair! base-dir plan wave #:guard repair-live?)
+           repair-readiness))
+     (if (not (equal? (hash-ref readiness 'status #f) "ready"))
+         (delivery-effect-result
+          'blocked
+          (hash-set readiness 'reason (hash-ref readiness 'code "evidence-repair-required")))
+         (or (and (review-runner-installed?)
+                  (auto-review-dispatch! base-dir
+                                         plan
+                                         wave
+                                         "implementation-review"
+                                         #:generation (binding-generation base-dir plan wave)))
+             (run-controller "review"
+                             "--expected-head"
+                             (default-delivery-receipt-head base-dir plan wave)
+                             "--expected-branch"
+                             (default-delivery-receipt-branch base-dir plan wave)
+                             "--campaign-root"
+                             (path->string base-dir)
+                             "--generation"
+                             (number->string (binding-generation base-dir plan wave)))))]
     [("implementation-pr")
      ;; Resolve the durable branch identity first. A missing open PR is the
      ;; only blocked result that may proceed to deterministic creation; API,

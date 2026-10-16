@@ -43,6 +43,7 @@
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "plan-snapshot.rkt"
                   seed-and-bind-plan-snapshot!
+                  load-snapshot-manifest
                   normalize-wave-doc-content
                   plan-body-normalized-hash))
 
@@ -77,14 +78,14 @@
            (-> (or/c #f number?)
                (or/c #f number?)
                (or/c #f number?)
-               (or/c #f (and/c real? positive?))
+               (or/c #f (and/c real? (>=/c 0)))
                any/c
                usage-datum?)]
           [usage-datum? (-> any/c boolean?)]
           [usage-datum-input-tokens (-> usage-datum? (or/c #f number?))]
           [usage-datum-output-tokens (-> usage-datum? (or/c #f number?))]
           [usage-datum-total-tokens (-> usage-datum? (or/c #f number?))]
-          [usage-datum-cost-usd (-> usage-datum? (or/c #f (and/c real? positive?)))]
+          [usage-datum-cost-usd (-> usage-datum? (or/c #f (and/c real? (>=/c 0))))]
           [usage-datum-estimated? (-> usage-datum? any/c)]
           [usage-summary? (-> any/c boolean?)]
           [usage-summary-input-tokens (-> usage-summary? (or/c #f number?))]
@@ -189,6 +190,8 @@
           [campaign-record-provenance (-> campaign-record? (or/c #f string? symbol?))]
           [campaign-record-created-at (-> campaign-record? exact-integer?)]
           [campaign-record-updated-at (-> campaign-record? exact-integer?)]
+          [campaign-record-execution-policy (-> campaign-record? (or/c #f 'owned-red-v1))]
+          [set-campaign-record-execution-policy! (-> campaign-record? (or/c #f 'owned-red-v1) void?)]
           [campaign-record-build-version (-> campaign-record? (or/c #f string?))]
           [campaign-record-main-head-sha (-> campaign-record? (or/c #f string?))]
           [campaign-record-stale-override (-> campaign-record? any/c)]
@@ -253,14 +256,14 @@
           [campaign-attempt-input-tokens (-> campaign-attempt? (or/c #f number?))]
           [campaign-attempt-output-tokens (-> campaign-attempt? (or/c #f number?))]
           [campaign-attempt-total-tokens (-> campaign-attempt? (or/c #f number?))]
-          [campaign-attempt-cost-usd (-> campaign-attempt? (or/c #f (and/c real? positive?)))]
+          [campaign-attempt-cost-usd (-> campaign-attempt? (or/c #f (and/c real? (>=/c 0))))]
           [campaign-attempt-usage-source
            (-> campaign-attempt? (or/c #f 'provider 'provider-estimated 'usage-missing))]
           [set-campaign-attempt-input-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
           [set-campaign-attempt-output-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
           [set-campaign-attempt-total-tokens! (-> campaign-attempt? (or/c #f number?) void?)]
           [set-campaign-attempt-cost-usd!
-           (-> campaign-attempt? (or/c #f (and/c real? positive?)) void?)]
+           (-> campaign-attempt? (or/c #f (and/c real? (>=/c 0))) void?)]
           [set-campaign-attempt-usage-source!
            (-> campaign-attempt? (or/c #f 'provider 'provider-estimated 'usage-missing) void?)]
           [campaign-manifest-schema-version (-> campaign-manifest? exact-nonnegative-integer?)]
@@ -477,7 +480,9 @@
                  ;; written atomically at seed time. #f (default) = legacy record
                  ;; created before snapshot binding (absent ≠ corrupt).
                  [plan-snapshot-path #:auto]
-                 [plan-snapshot-digest #:auto])
+                 [plan-snapshot-digest #:auto]
+                 ;; Absent/manual/historical records explicitly retain legacy execution.
+                 [execution-policy #:auto])
   #:transparent
   #:mutable
   #:auto-value #f
@@ -601,6 +606,12 @@
            wave-idx))
   (for ([w waves]
         #:when (= (campaign-wave-index w) wave-idx))
+    ;; Retain unknown coverage before discarding the current attempt.
+    ;; This source symbol is durable; numeric legacy totals need no migration.
+    (when (and (not (eq? (wave-usage-source w) 'none))
+               (or (not (real? (wave-usage-cost-usd w)))
+                   (eq? (wave-usage-source w) 'prior-cost-unknown)))
+      (set-campaign-wave-usage-source! w 'prior-cost-unknown))
     (define new-count (add1 (campaign-wave-attempt-count w)))
     (set-campaign-wave-status! w 'in-progress)
     (set-campaign-wave-attempt-count! w new-count)
@@ -614,7 +625,7 @@
 
 ;; A single usage observation extracted from loop-result metadata.
 ;;   input/output/total-tokens : number or #f (#f = not reported)
-;;   cost-usd                  : positive real or #f (#f = unknown — the
+;;   cost-usd                  : nonnegative real or #f (#f = unknown — the
 ;;                               provider did not report a cost)
 ;;   estimated?                : #t when tokens were locally estimated
 (struct usage-datum (input-tokens output-tokens total-tokens cost-usd estimated?) #:transparent)
@@ -666,51 +677,79 @@
 ;;   usage = #f | 'usage-missing → the attempt is recorded usage-missing
 ;;           with NO token/cost values (honest accounting: absent ≠ zero).
 ;; The current attempt must exist (begin-attempt! ran). Mutates rec in
-;; place; the CALLER persists. Idempotence: stamping twice would double —
-;; the orchestrator stamps exactly once per attempt boundary.
+;; place; the CALLER persists. Replace the current attempt's contribution
+;; by delta, retaining totals from earlier attempts without a schema change.
 (define (stamp-wave-usage! rec wave-idx usage)
   (for ([w (campaign-record-waves rec)]
         #:when (= (campaign-wave-index w) wave-idx))
     (define attempt (campaign-wave-current-attempt w))
+    (define old-source (and attempt (campaign-attempt-usage-source attempt)))
+    (define old-in (and attempt (campaign-attempt-input-tokens attempt)))
+    (define old-out (and attempt (campaign-attempt-output-tokens attempt)))
+    (define old-total (and attempt (campaign-attempt-total-tokens attempt)))
+    (define old-cost (and attempt (campaign-attempt-cost-usd attempt)))
+    ;; Unknown values RETAIN every known contribution: an observed bill is
+    ;; real spend and must never be discarded (a lost total could admit
+    ;; spend past a ceiling). Coverage honesty lives in the durable
+    ;; 'prior-cost-unknown source and missing-attempt counts, never in a
+    ;; fabricated zero or a silently reduced total. A later known
+    ;; replacement still subtracts the retained attempt contribution, so
+    ;; nothing is double-counted.
+    (define (replace old previous new)
+      (define rest (- (if (number? old) old 0) (if (number? previous) previous 0)))
+      (cond
+        [(number? new) (+ rest new)]
+        [(number? old) old]
+        [else #f]))
     (cond
       [(not attempt) (void)]
       [(usage-datum? usage)
        (define src (if (usage-datum-estimated? usage) 'provider-estimated 'provider))
-       (set-campaign-attempt-input-tokens! attempt
-                                           (valid-token-value (usage-datum-input-tokens usage)))
-       (set-campaign-attempt-output-tokens! attempt
-                                            (valid-token-value (usage-datum-output-tokens usage)))
-       (set-campaign-attempt-total-tokens! attempt
-                                           (valid-token-value (usage-datum-total-tokens usage)))
-       (set-campaign-attempt-cost-usd! attempt (valid-cost-value (usage-datum-cost-usd usage)))
+       (set-campaign-attempt-input-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-input-tokens usage)) old-in))
+       (set-campaign-attempt-output-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-output-tokens usage)) old-out))
+       (set-campaign-attempt-total-tokens!
+        attempt
+        (or (valid-token-value (usage-datum-total-tokens usage)) old-total))
+       (set-campaign-attempt-cost-usd!
+        attempt
+        (or (valid-cost-value (usage-datum-cost-usd usage)) old-cost))
        (set-campaign-attempt-usage-source! attempt src)
        ;; cumulative wave totals: #f (unset) + n = n; #f (unknown) + n = #f
-       (define (accumulate old new)
-         (cond
-           [(not (number? old)) new]
-           [(not (number? new)) old]
-           [else (+ old new)]))
-       (define (accumulate-cost old new)
-         (cond
-           [(not (real? old)) (valid-cost-value new)]
-           [(valid-cost-value new) (+ old new)]
-           [else old]))
+       (when (eq? old-source 'usage-missing)
+         (set-campaign-wave-usage-missing-attempts! w (max 0 (sub1 (wave-usage-missing-attempts w)))))
        (set-campaign-wave-usage-input-tokens!
         w
-        (accumulate (wave-usage-input-tokens w) (valid-token-value (usage-datum-input-tokens usage))))
+        (replace (wave-usage-input-tokens w)
+                 old-in
+                 (valid-token-value (usage-datum-input-tokens usage))))
        (set-campaign-wave-usage-output-tokens!
         w
-        (accumulate (wave-usage-output-tokens w)
-                    (valid-token-value (usage-datum-output-tokens usage))))
+        (replace (wave-usage-output-tokens w)
+                 old-out
+                 (valid-token-value (usage-datum-output-tokens usage))))
        (set-campaign-wave-usage-total-tokens!
         w
-        (accumulate (wave-usage-total-tokens w) (valid-token-value (usage-datum-total-tokens usage))))
+        (replace (wave-usage-total-tokens w)
+                 old-total
+                 (valid-token-value (usage-datum-total-tokens usage))))
        (set-campaign-wave-usage-cost-usd!
         w
-        (accumulate-cost (wave-usage-cost-usd w) (valid-cost-value (usage-datum-cost-usd usage))))
+        (replace (wave-usage-cost-usd w) old-cost (valid-cost-value (usage-datum-cost-usd usage))))
+       ;; Unknown cost keeps every prior KNOWN contribution (the sum stays
+       ;; auditable) while the durable 'prior-cost-unknown source marks that
+       ;; some counted attempt had unknown cost — summaries then report
+       ;; cost #f (never a falsely complete total) and cost ceilings stay
+       ;; untrippable on unprovable spend.
+       (when (not (valid-cost-value (usage-datum-cost-usd usage)))
+         (set-campaign-wave-usage-source! w 'prior-cost-unknown))
        (set-campaign-wave-usage-source! w
                                         (let ([prior (wave-usage-source w)])
                                           (cond
+                                            [(eq? prior 'prior-cost-unknown) prior]
                                             [(or (eq? prior 'none) (not prior)) src]
                                             [(eq? prior src) src]
                                             [else 'mixed])))
@@ -718,12 +757,27 @@
       [else
        ;; usage absent → distinct usage-missing marker, never zeros
        (set-campaign-attempt-usage-source! attempt 'usage-missing)
-       (set-campaign-wave-usage-missing-attempts! w (add1 (wave-usage-missing-attempts w)))
+       (unless (eq? old-source 'usage-missing)
+         (set-campaign-wave-usage-missing-attempts! w (add1 (wave-usage-missing-attempts w))))
+       (set-campaign-wave-usage-input-tokens! w (replace (wave-usage-input-tokens w) old-in #f))
+       (set-campaign-wave-usage-output-tokens! w (replace (wave-usage-output-tokens w) old-out #f))
+       (set-campaign-wave-usage-total-tokens! w (replace (wave-usage-total-tokens w) old-total #f))
+       (set-campaign-wave-usage-cost-usd! w (replace (wave-usage-cost-usd w) old-cost #f))
+       ;; Retain the last-known contribution (lower bound of real spend);
+       ;; the usage-missing source and missing-attempt count carry the
+       ;; coverage honesty, not a discarded total.
+       (set-campaign-attempt-input-tokens! attempt old-in)
+       (set-campaign-attempt-output-tokens! attempt old-out)
+       (set-campaign-attempt-total-tokens! attempt old-total)
+       (set-campaign-attempt-cost-usd! attempt old-cost)
        (when (eq? (wave-usage-source w) 'none)
          (set-campaign-wave-usage-source! w 'usage-missing))]))
   (set-campaign-record-updated-at! rec (current-seconds)))
 
-;; Per-wave spend summary.
+;; Per-wave spend summary. Cost stays the KNOWN sum for audit, but reads
+;; as #f whenever a counted attempt had unknown cost ('prior-cost-unknown
+;; is durable across attempts): unknown coverage must never present a
+;; falsely complete total to ceilings or operators.
 (define (wave-usage-summary w)
   (define in (wave-usage-input-tokens w))
   (define out (wave-usage-output-tokens w))
@@ -731,7 +785,9 @@
   (usage-summary in
                  out
                  tot
-                 (wave-usage-cost-usd w)
+                 (if (eq? (wave-usage-source w) 'prior-cost-unknown)
+                     #f
+                     (wave-usage-cost-usd w))
                  (if (or in out tot) 1 0)
                  (wave-usage-missing-attempts w)))
 
@@ -751,18 +807,20 @@
             (+ out (or (usage-summary-output-tokens s) 0))
             (+ tot (or (usage-summary-total-tokens s) 0))
             (+ cost-known (or (usage-summary-cost-usd s) 0.0))
-            (and cost-fully-known? (real? (usage-summary-cost-usd s)))
+            (and cost-fully-known?
+                 (real? (usage-summary-cost-usd s))
+                 (zero? (usage-summary-missing-attempts s)))
             (+ with-usage (usage-summary-attempts-with-usage s))
             (+ missing (usage-summary-missing-attempts s)))))
 
 ;; Contract-facing summary: a single usage-summary struct. Cost is #f
-;; when nothing real was ever observed (absent ≠ zero); tokens are the
+;; when any wave has incomplete cost coverage (absent ≠ zero); tokens are the
 ;; known-sum (0 honestly means "no usage seen", paired with
 ;; missing-attempts).
 (define (campaign-usage-summary rec)
   (define-values (in out tot cost-known cost-fully-known? with-usage missing)
     (campaign-usage-fold rec))
-  (usage-summary in out tot (if (> cost-known 0) cost-known #f) with-usage missing))
+  (usage-summary in out tot (and cost-fully-known? cost-known) with-usage missing))
 
 ;; Operator-facing pause message: names the ceiling and how to raise it.
 (define (budget-pause-message kind ceiling observed)
@@ -1001,10 +1059,15 @@
   ;; Plan-less migration sources (legacy STATE.md-only repositories) have no
   ;; plan to snapshot: leave the binding fields #f (absent ≠ corrupt).
   (when (non-empty-string? plan-text)
+    ;; Check the manifest BEFORE seeding: an existing directory alone is not
+    ;; proof of a frozen snapshot, and old frozen content must not be upgraded.
+    (define existing-snapshot (load-snapshot-manifest base-dir (campaign-record-plan-id record)))
     (let-values ([(snap-path snap-digest)
                   (seed-and-bind-plan-snapshot! base-dir (campaign-record-plan-id record))])
       (set-campaign-record-plan-snapshot-path! record snap-path)
-      (set-campaign-record-plan-snapshot-digest! record snap-digest)))
+      (set-campaign-record-plan-snapshot-digest! record snap-digest)
+      (unless existing-snapshot
+        (set-campaign-record-execution-policy! record 'owned-red-v1))))
   record)
 
 (define (migrate-campaign! base-dir)

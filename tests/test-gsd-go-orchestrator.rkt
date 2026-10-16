@@ -42,6 +42,7 @@
                   begin-attempt!
                   select-next-actionable-wave
                   migrate-campaign!
+                  set-campaign-record-execution-policy!
                   campaign-record-build-version
                   campaign-record-main-head-sha
                   campaign-record-stale-override
@@ -134,8 +135,14 @@
      #:exists 'truncate))
   dir)
 
+;; Historical executor/status fixtures have no owned test phases. Keep their
+;; legacy policy explicit; fresh production migrations retain owned-red-v1.
 (define (load-or-migrate dir)
-  (migrate-campaign! dir))
+  (define rec (migrate-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  ;; As before, let run-campaign-wave persist this seed. Early persistence
+  ;; would make cancellation mocks mutate a stale, pre-attempt caller copy.
+  rec)
 
 (define (cleanup-tmp dir)
   (delete-directory/files dir #:must-exist? #f))

@@ -102,7 +102,7 @@
 
 ;; jobs: hash identity-key -> job-handle; lock: registry semaphore making
 ;; check+spawn+insert (start!) atomic across threads.
-(struct verification-registry (jobs lock))
+(struct verification-registry (jobs lock [closed? #:mutable]))
 
 ;; ------------------------------------------------------------ helpers
 
@@ -339,7 +339,7 @@
 ;; ------------------------------------------------------------ registry
 
 (define (make-verification-registry)
-  (verification-registry (make-hash) (make-semaphore 1)))
+  (verification-registry (make-hash) (make-semaphore 1) #f))
 
 ;; Never iterate the mutable registry hash while another thread may insert a
 ;; freshly spawned owner. Snapshot under the registry lock, then release it
@@ -350,6 +350,19 @@
 
 (define (registry-active-count reg)
   (for/sum ([h (in-list (registry-handles reg))] #:when (eq? (handle-state h) 'running)) 1))
+
+;; A dedicated owner closes admission under the SAME lock as start/spawn.
+;; A concurrent launch is either fully registered and reaped below, or refused;
+;; it cannot escape between cancellation's snapshot and worker termination.
+;; Never close a shared ambient registry to cancel an individual attempt.
+(define (verification-close-registry! reg)
+  (define handles
+    (call-with-semaphore (verification-registry-lock reg)
+                         (lambda ()
+                           (set-verification-registry-closed?! reg #t)
+                           (hash-values (verification-registry-jobs reg)))))
+  (for/list ([h (in-list handles)])
+    (verification-cancel! reg (verification-job-id (unbox (job-handle-rec-box h))))))
 
 (define job-counter 0)
 
@@ -381,6 +394,8 @@
   (call-with-semaphore
    (verification-registry-lock reg)
    (lambda ()
+     (when (verification-registry-closed? reg)
+       (error 'verification-start! "owned verification registry is closed"))
      (define existing (hash-ref (verification-registry-jobs reg) key #f))
      (cond
        ;; 1. active owner: reuse, never launch a duplicate
@@ -635,6 +650,7 @@
           [make-verification-registry (-> verification-registry?)]
           [verification-registry? (-> any/c boolean?)]
           [registry-active-count (-> verification-registry? exact-nonnegative-integer?)]
+          [verification-close-registry! (-> verification-registry? (listof verification-job?))]
           [verification-start!
            (->*
             (verification-registry? verification-identity? path-string? (listof (or/c string? path?)))

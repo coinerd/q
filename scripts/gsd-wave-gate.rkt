@@ -160,6 +160,7 @@
                                 #:actual-content-digest [actual-content-digest #f]
                                 #:receipt-head [receipt-head #f]
                                 #:owned-proof-authority [owned-proof-authority #f]
+                                #:owned-source-repo [owned-source-repo root]
                                 #:policy [policy-path
                                           (build-path root "scripts/required-pr-checks.policy")])
   (define reasons '())
@@ -339,7 +340,8 @@
                                                     validation
                                                     (or owned-proof-authority
                                                         (discover-owned-proof-authority root-path
-                                                                                        evidence))))])
+                                                                                        evidence))
+                                                    #:source-repo owned-source-repo))])
          (reject! reason)))
      (when (hash? validation)
        (for ([key (in-list validation-required-fields)])
@@ -397,6 +399,7 @@
                                      #:actual-content-digest [actual-content-digest #f]
                                      #:receipt-head [receipt-head #f]
                                      #:owned-proof-authority [owned-proof-authority #f]
+                                     #:owned-source-repo [owned-source-repo root]
                                      #:policy [policy-path
                                                (build-path root "scripts/required-pr-checks.policy")])
   (with-handlers ([exn:fail? (lambda (error)
@@ -411,6 +414,7 @@
                             #:actual-content-digest actual-content-digest
                             #:receipt-head receipt-head
                             #:owned-proof-authority owned-proof-authority
+                            #:owned-source-repo owned-source-repo
                             #:policy policy-path)))
 
 (define (print-usage)
@@ -436,6 +440,8 @@
       [(list "--policy" value rest ...) (loop rest (hash-set acc '--policy value) positional)]
       [(list "--owned-proof-authority" value rest ...)
        (loop rest (hash-set acc '--owned-proof-authority value) positional)]
+      [(list "--owned-source-repo" value rest ...)
+       (loop rest (hash-set acc '--owned-source-repo value) positional)]
       [(list "--receipt-head" value rest ...)
        (loop rest (hash-set acc '--receipt-head value) positional)]
       [(list arg rest ...)
@@ -454,6 +460,8 @@
            evidence-path
            #:root (hash-ref options '--root ".")
            #:actual-content-digest (hash-ref options '--content-digest)
+           #:owned-source-repo (hash-ref options '--owned-source-repo
+                                        (hash-ref options '--root "."))
            #:receipt-head (hash-ref options '--receipt-head #f)
            #:owned-proof-authority
            (and (hash-ref options '--owned-proof-authority #f)

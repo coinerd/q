@@ -257,6 +257,7 @@
  ;; R-18: Pure modules — must not gain I/O imports
  ;; Format: ((module-path . allowed-current-impurities) ...)
  (pure-modules (decision . ("runtime/iteration/decision.rkt" . ()))
+               (evidence-repair-format . ("extensions/gsd/evidence-repair-format.rkt" . ()))
                (event-payloads . ("util/event-payloads.rkt" . ()))
                (event-codec . ("util/event-codec.rkt" . ()))
                (prompt-preparation . ("runtime/session/session-prompt-preparation.rkt" . ()))

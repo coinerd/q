@@ -816,7 +816,11 @@
     (dynamic-wind
      void
      (lambda ()
+       ;; Legacy-lane E2E: this fixture exercises publication/certification
+       ;; ladder behavior with a plain runner; fresh owned-red-v1 scheduling
+       ;; (test-author/RED/implementation) has its own integration fixtures.
        (define rec (migrate-campaign! repo))
+       (set-campaign-record-execution-policy! rec #f)
        (define plan-id (campaign-plan-id rec))
        (define publish-effects (box '()))
        (define ladder-effects (box '()))
@@ -900,7 +904,9 @@
     (dynamic-wind
      void
      (lambda ()
+       ;; Legacy-lane E2E (same rationale as the positive case above).
        (define rec (migrate-campaign! repo))
+       (set-campaign-record-execution-policy! rec #f)
        (define plan-id (campaign-plan-id rec))
        (define publish-effects (box '()))
        (define ladder-effects (box '()))

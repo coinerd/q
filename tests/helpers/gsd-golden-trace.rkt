@@ -22,6 +22,13 @@
 ;; W2 (plan/state projection kernel), W3 (command parsing) and W4 (facade
 ;; thinning) to verify behavior preservation.
 
+;; Golden scenarios exercise legacy plain runners in non-git temporary dirs.
+(define (migrate-campaign! dir)
+  (define rec (migrate-owned-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
+
 (require racket/file
          racket/path
          racket/string
@@ -30,7 +37,8 @@
          racket/port
          "honest-delivery-fixture.rkt"
          (only-in "../../extensions/gsd/campaign-state.rkt"
-                  migrate-campaign!
+                  [migrate-campaign! migrate-owned-campaign!]
+                  set-campaign-record-execution-policy!
                   canonical-wave-status
                   campaign-plan-id
                   campaign-fence-token

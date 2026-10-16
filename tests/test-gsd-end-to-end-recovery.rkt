@@ -28,7 +28,8 @@
          racket/match
          "helpers/gsd-golden-trace.rkt"
          (only-in "../extensions/gsd/campaign-state.rkt"
-                  migrate-campaign!
+                  [migrate-campaign! migrate-fresh-campaign!]
+                  set-campaign-record-execution-policy!
                   campaign-plan-id
                   campaign-fence-token
                   campaign-record-waves
@@ -71,6 +72,15 @@
   '((0 "E2E Wave Alpha" "alpha") (1 "E2E Wave Beta" "beta")
                                  (2 "E2E Wave Gamma" "gamma")
                                  (3 "E2E Wave Delta" "delta")))
+
+;; These historical recovery fixtures exercise legacy executor transitions,
+;; not owned test phases. Persist that compatibility choice across restarts;
+;; fresh production migrations still default to owned-red-v1.
+(define (migrate-campaign! dir)
+  (define rec (migrate-fresh-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
 
 (define (make-e2e-project)
   (define dir (make-temporary-file "gsd-e2e-~a" 'directory))

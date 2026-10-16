@@ -30,6 +30,9 @@
                   parse-plan-index
                   wave-index-entry-idx
                   wave-index-entry-ref-path)
+         "../extensions/gsd/evidence-readiness.rkt"
+         "../extensions/gsd/evidence-probe.rkt"
+         "gsd-gates/owned-audit.rkt"
          "../extensions/gsd/review-proof.rkt"
          "../extensions/gsd/review-audit-format.rkt"
          (only-in "../extensions/gsd/delivery-journal.rkt"
@@ -376,6 +379,20 @@
   (unless (and (hash? receipt) (hash-ref receipt 'owned-proof #f))
     (error 'delivery "missing-owned-proof"))
   (validate-receipt-owned-proof! receipt base plan wave)
+  ;; Readiness is an admission boundary, not merely a probe preference.
+  ;; Authenticate it before exporting anything, including legacy evidence.
+  (define readiness (evidence-readiness base plan wave))
+  (define status (hash-ref readiness 'status #f))
+  (define code (hash-ref readiness 'code #f))
+  (unless (or (and (equal? status "ready")
+                   (member code '("legacy-red-ready" "registered-probe-ready")))
+              (and (equal? status "repair-required")
+                   (member code '("missing-meaningful-red-proof" "unsupported-harness"))))
+    (error 'delivery "evidence-readiness ~a: ~a: ~a"
+           status code (hash-ref readiness 'message "inconsistent readiness")))
+  (define legacy? (and (equal? status "ready") (equal? code "legacy-red-ready")))
+  (define registered?
+    (and (equal? status "ready") (equal? code "registered-probe-ready")))
   (define ref (hash-ref receipt 'owned-proof))
   (define frozen (frozen-verify-binding base plan wave))
   (define normalized (hash-ref frozen 'normalized-command))
@@ -410,7 +427,7 @@
                                       green-head))
       pair))
   (define red-facts #f)
-  (when linked
+  (when (and legacy? linked)
     (define red-ref (first linked))
     (define red-manifest (second linked))
     (export-owned-red-proof! root red-manifest red-ref (build-path staging relative))
@@ -437,7 +454,14 @@
                   (hash-ref (hash-ref red-manifest 'binding) 'head)
                   'red-tree
                   (hash-ref (hash-ref red-manifest 'binding) 'tree))))
-  (hasheq 'mode
+  (when registered?
+    (define context (hash-ref readiness 'context))
+    (define probe (hash-ref (hash-ref readiness 'registration) 'probe))
+    (define destination (build-path staging relative "probes" (hash-ref probe 'sha256)))
+    (export-baseline-probe! (hash-ref context 'repo) probe context destination)
+    (define loaded (validate-exported-baseline-probe! (hash-ref context 'repo) destination probe context))
+    (set! red-facts (baseline-probe-red-facts destination probe loaded)))
+  (define authority (hasheq 'mode
           owned-audit-mode
           'reference
           ref
@@ -459,10 +483,31 @@
           red-facts
           'green-gates
           (owned-green-gates manifest)))
+  (define enriched
+    (if registered?
+        (hash-set* authority
+                   'evidence-context (hash-ref readiness 'context)
+                   'evidence-registration (hash-ref readiness 'registration)
+                   'evidence-revision (hash-ref readiness 'evidence-revision)
+                   'evidence-registration-sha256 (hash-ref (hash-ref readiness 'registration) 'sha256))
+        (hash-set authority 'evidence-revision 0)))
+  (hash-set enriched 'publication-files
+            (sort (for/list ([p (in-directory (build-path staging relative))]
+                            ;; This derived envelope is written by publication,
+                            ;; not an input to its own authority. Including it
+                            ;; makes repeat authentication depend on publication.
+                            #:when (and (file-exists? p)
+                                        (not (equal? p (build-path staging relative "authority.json")))))
+                    (path->string (find-relative-path staging p))) string<?)))
 
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
   (case (string->symbol (vector-ref (current-command-line-arguments) 0))
+    [(readiness)
+     (unless (= 4 (length args))
+       (error 'delivery "readiness requires: <base> <plan> <wave>"))
+     (write-json (evidence-readiness (second args) (third args) (string->number (fourth args))))
+     (newline)]
     [(owned-review)
      (unless (= 5 (length args))
        (error 'delivery "owned-review requires: <base> <plan> <wave> <staging>"))

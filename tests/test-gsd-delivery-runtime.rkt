@@ -47,7 +47,11 @@
           (fprintf out "- [Inbox] W~a: Test → waves/W~a-test.md\n" i i)
           (display-to-file "# Test\n\nGoal: test\n\n## Verify\n\nraco test .\n"
                            (build-path dir ".planning/waves" (format "W~a-test.md" i))))))
-     (proc dir (migrate-campaign! dir)))
+     (define rec (migrate-campaign! dir))
+     ;; Legacy plain-runner delivery fixture, not owned-red worktree execution.
+     (set-campaign-record-execution-policy! rec #f)
+     (persist-campaign! dir rec)
+     (proc dir rec))
    (lambda () (delete-directory/files dir))))
 
 (define (delivered base plan idx)
@@ -74,6 +78,8 @@
 ;; entry test below: /go must enter final delivery, never rerun implementation).
 (define (done-record dir)
   (define rec (migrate-campaign! dir))
+  ;; Legacy delivery-only fixture uses the shared checkout.
+  (set-campaign-record-execution-policy! rec #f)
   (set-campaign-wave-status! (car (campaign-record-waves rec)) 'done)
   (set-campaign-wave-current-attempt! (car (campaign-record-waves rec))
                                       (campaign-attempt "attempt-1" 7 0))

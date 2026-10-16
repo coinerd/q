@@ -32,6 +32,7 @@
                   campaign-wave-index
                   campaign-wave-status
                   set-campaign-wave-status!
+                  set-campaign-record-execution-policy!
                   select-next-actionable-wave
                   migrate-campaign!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
@@ -75,7 +76,11 @@
   dir)
 
 (define (load-or-migrate dir)
-  (migrate-campaign! dir))
+  ;; Legacy runner/cancellation characterization: the owned lane has its
+  ;; own integration fixtures and requires an isolated git worktree.
+  (define rec (migrate-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  rec)
 
 (define (cleanup-tmp dir)
   (delete-directory/files dir #:must-exist? #f))

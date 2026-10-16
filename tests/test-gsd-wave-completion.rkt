@@ -45,7 +45,8 @@
                   wave-failure-reason
                   attempt-failure-reason
                   stamp-wave-failure!
-                  migrate-campaign!)
+                  migrate-campaign!
+                  set-campaign-record-execution-policy!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/delivery-handoff.rkt"
                   persist-delivery-handoff!
@@ -94,8 +95,13 @@
      #:exists 'truncate))
   dir)
 
+;; Historical completion fixtures predate owned test phases; explicitly use
+;; legacy policy without changing the fresh production migration default.
 (define (load-or-migrate dir)
-  (migrate-campaign! dir))
+  (define rec (migrate-campaign! dir))
+  (set-campaign-record-execution-policy! rec #f)
+  (persist-campaign! dir rec)
+  rec)
 
 (define (cleanup-tmp dir)
   (delete-directory/files dir #:must-exist? #f))

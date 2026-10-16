@@ -24,6 +24,7 @@
          owned-proof-capture-reference
          consume-owned-proof-refresh!
          validate-receipt-owned-proof!
+         load-receipt-owned-proof
          run-owned-red-verification
          load-owned-red-proof
          owned-red-failure-summary
@@ -344,33 +345,36 @@
 ;; Write boundary validator. Receipt readers can still inspect missing/legacy
 ;; proofs; newly written proof-bearing receipts must authenticate every byte.
 (define (validate-receipt-owned-proof! receipt base plan wave)
-  (define ref (hash-ref receipt 'owned-proof #f))
-  (when ref
-    (unless (proof-reference-matches-receipt? ref receipt)
-      (refuse "receipt/proof mismatch"))
-    (define frozen (frozen-verify-binding base plan wave))
-    (define b (hash-ref ref 'binding))
-    (unless (and (equal? (hash-ref b 'plan-id) plan)
-                 (equal? (hash-ref b 'wave) wave)
-                 (equal? (hash-ref b 'snapshot-sha256) (hash-ref frozen 'snapshot-sha256)))
-      (refuse "receipt/frozen binding mismatch"))
-    (define path (read-addressed (store-root plan) ref ".json"))
-    (define m (call-with-input-file path read-json))
-    (unless (valid-owned-proof-manifest? m)
-      (refuse "invalid owned manifest"))
-    (define normalized (hash-ref frozen 'normalized-command))
-    (define command
-      (expand-frozen-command normalized
-                             (hash-ref m 'execution-base)
-                             (hash-ref m 'execution-cwd)
-                             (hash-ref m 'execution-worktree)
-                             #:jobs (hash-ref m 'operational-jobs #f)))
-    (load-owned-review-proof (store-root plan)
-                             ref
-                             b
-                             #:command command
-                             #:normalized-command normalized))
+  (load-receipt-owned-proof receipt base plan wave)
   (void))
+(define (load-receipt-owned-proof receipt base plan wave)
+  (define ref (hash-ref receipt 'owned-proof #f))
+  (and ref
+       (let ()
+         (unless (proof-reference-matches-receipt? ref receipt)
+           (refuse "receipt/proof mismatch"))
+         (define frozen (frozen-verify-binding base plan wave))
+         (define b (hash-ref ref 'binding))
+         (unless (and (equal? (hash-ref b 'plan-id) plan)
+                      (equal? (hash-ref b 'wave) wave)
+                      (equal? (hash-ref b 'snapshot-sha256) (hash-ref frozen 'snapshot-sha256)))
+           (refuse "receipt/frozen binding mismatch"))
+         (define path (read-addressed (store-root plan) ref ".json"))
+         (define m (call-with-input-file path read-json))
+         (unless (valid-owned-proof-manifest? m)
+           (refuse "invalid owned manifest"))
+         (define normalized (hash-ref frozen 'normalized-command))
+         (define command
+           (expand-frozen-command normalized
+                                  (hash-ref m 'execution-base)
+                                  (hash-ref m 'execution-cwd)
+                                  (hash-ref m 'execution-worktree)
+                                  #:jobs (hash-ref m 'operational-jobs #f)))
+         (load-owned-review-proof (store-root plan)
+                                  ref
+                                  b
+                                  #:command command
+                                  #:normalized-command normalized))))
 (define (receipt-owned-proof-blocker receipt base plan wave #:command command)
   (define ref (and (hash? receipt) (hash-ref receipt 'owned-proof #f)))
   (cond

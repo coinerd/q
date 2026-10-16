@@ -5,6 +5,7 @@
 (require racket/path
          racket/string
          "delivery-journal.rkt"
+         (only-in "evidence-author-journal.rkt" reconcile-evidence-author-receipt!)
          "delivery-verifier.rkt"
          "review-proof.rkt"
          "campaign-state.rkt"
@@ -191,6 +192,19 @@
      (guard)
      (clear-remote-pending! base plan wave)
      (load-delivery-journal base plan wave)]
+    [(and old (evidence-author-repair-pending? old))
+     (guard)
+     (reconcile-evidence-author-receipt!
+      base
+      plan
+      wave
+      receipt
+      #:guard guard
+      #:head-ancestor? (lambda (old-head new-head)
+                         (repair-tail-ancestor? (hash-ref receipt 'repo #f) old-head new-head)))
+     (guard)
+     (clear-remote-pending! base plan wave)
+     (load-delivery-journal base plan wave)]
     [old (error 'delivery-receipt "publication receipt does not match durable journal identity")]
     [else
      (guard)
@@ -276,6 +290,8 @@
       ;; marker for THIS receipt, if any. It authorizes the cross-attempt
       ;; supersession below; it never weakens any same-attempt path.
       (define old-rejection (and old (hash? old-receipt) (journal-review-rejection old)))
+      (define old-author
+        (and old (evidence-author-repair-pending? old) (journal-evidence-author-repair old)))
       ;; BUG-0079 REVIEW-2 item 8: publication requires GENUINE non-empty
       ;; successful Verify evidence. A bare boolean, empty list, or blank
       ;; text approval is bool-only and can never trigger the publication
@@ -325,16 +341,20 @@
                      (delivery-verification-approved? result)
                      (genuine-delivery-evidence? (delivery-verification-evidence result))
                      (procedure? current-record))
-                (publish-approved-head
-                 base
-                 plan
-                 wave
-                 before
-                 (campaign-attempt-id attempt)
-                 (campaign-attempt-fence-token attempt)
-                 coordinator-fence
-                 (format "~a" (redact-credential-data (delivery-verification-evidence result)))
-                 current-record)]
+                (define args
+                  (list base
+                        plan
+                        wave
+                        before
+                        (campaign-attempt-id attempt)
+                        (campaign-attempt-fence-token attempt)
+                        coordinator-fence
+                        (format "~a" (redact-credential-data (delivery-verification-evidence result)))
+                        current-record))
+                (define-values (_required accepted) (procedure-keywords publish-approved-head))
+                (if (or (not accepted) (memq '#:owned-proof accepted))
+                    (keyword-apply publish-approved-head '(#:owned-proof) (list proof) args)
+                    (apply publish-approved-head args))]
                [(and (procedure? publish-approved-head) (not (delivery-verification? result)))
                 (record-remote-pending!
                  base
@@ -446,28 +466,52 @@
         [(and old
               attempt
               (hash? old-receipt)
-              old-rejection
-              (review-rejection-matches-receipt? old-rejection old-receipt)
-              (not (hash-ref old-rejection 'superseded-by-attempt #f))
+              (or (and old-rejection
+                       (review-rejection-matches-receipt? old-rejection old-receipt)
+                       (not (hash-ref old-rejection 'superseded-by-attempt #f)))
+                  (and old-author
+                       (equal? (hash-ref old-author 'state) "running")
+                       (equal? (hash-ref old-author 'successor-attempt) (campaign-attempt-id attempt))
+                       (equal? (hash-ref old-author 'successor-fence)
+                               (campaign-attempt-fence-token attempt))))
               (not (equal? (hash-ref old-receipt 'attempt-id #f) (campaign-attempt-id attempt)))
               (equal? (hash-ref old-receipt 'branch #f) (hash-ref before 'branch #f)))
          (define (live-supersession-guard-ok?)
            (and (procedure? current-record)
                 (approved? result)
                 (equal? before (snapshot cwd))
-                (review-rejection-live-authorized? (current-record)
+                (if old-author
+                    (let ([rec (current-record)])
+                      (and rec
+                           (not (campaign-record-budget-pause rec))
+                           (current-wave-for-attempt rec
+                                                     wave
+                                                     (campaign-attempt-fence-token attempt)
+                                                     (campaign-attempt-id attempt))))
+                    (review-rejection-live-authorized? (current-record)
+                                                       plan
+                                                       wave
+                                                       (campaign-attempt-id attempt)
+                                                       (campaign-attempt-fence-token attempt)))))
+         (define (supersede-rejected!)
+           (if old-author
+               (reconcile-evidence-author-receipt!
+                base
+                plan
+                wave
+                (new-receipt-for-head!)
+                #:guard live-supersession-guard-ok?
+                #:head-ancestor?
+                (lambda (old-head new-head)
+                  (default-repair-tail-ancestor? (hash-ref before 'repo #f) old-head new-head)))
+               (reconcile-review-rejected-receipt! base
                                                    plan
                                                    wave
-                                                   (campaign-attempt-id attempt)
-                                                   (campaign-attempt-fence-token attempt))))
-         (define (supersede-rejected!)
-           (reconcile-review-rejected-receipt! base
-                                               plan
-                                               wave
-                                               (new-receipt-for-head!)
-                                               #:guard live-supersession-guard-ok?)
+                                                   (new-receipt-for-head!)
+                                                   #:guard live-supersession-guard-ok?))
            (clear-remote-pending! base plan wave)
-           (log-info "review-rejected receipt superseded by attempt ~a at head ~a"
+           (log-info "~a receipt superseded by attempt ~a at head ~a"
+                     (if old-author "evidence-author" "review-rejected")
                      (campaign-attempt-id attempt)
                      (hash-ref before 'head)))
          (cond
@@ -486,7 +530,8 @@
                                 (lambda (e)
                                   (record-post-publication-pending!
                                    (format "~a; supersession refused: ~a" reason (exn-message e)))
-                                  (log-warning "review-rejected supersession refused: ~a"
+                                  (log-warning "~a supersession refused: ~a"
+                                               (if old-author "evidence-author" "review-rejected")
                                                (exn-message e)))])
                  (supersede-rejected!))]
               [published?
@@ -494,7 +539,8 @@
                 (string-append
                  reason
                  "; supersession guard refused: approval, snapshot or campaign record drifted after the publisher effect"))
-               (log-warning "review-rejected supersession withheld: guard refused")]
+               (log-warning "~a supersession withheld: guard refused"
+                            (if old-author "evidence-author" "review-rejected"))]
               [else (log-warning "delivery receipt withheld: ~a; publication refused" reason)])])]
         ;; v1.00.33 W0 (audit §20 blocker 2): a durable receipt resolves any
         ;; stale marker ONLY at the SAME head+branch (idempotent re-verify).

@@ -53,6 +53,7 @@
                   gsd-wave-files)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   migrate-campaign!
+                  set-campaign-record-execution-policy!
                   campaign-record-waves
                   campaign-plan-id
                   campaign-wave-status
@@ -379,6 +380,7 @@
             (define-values (proj repo) (make-sandbox))
             (write-plan! proj 0 "Wave Zero" "zero" '("q/ui-core/preferences.rkt"))
             (define rec (migrate-campaign! proj))
+            (set-campaign-record-execution-policy! rec #f) ; legacy delivery-lane fixture
             (define plan (plan-for '("q/ui-core/preferences.rkt")))
             ;; The verified wave branch is treated as published on origin so
             ;; the Verify receipt (branch+head provenance) can be recorded —
@@ -460,6 +462,7 @@
             (define-values (proj repo) (make-sandbox))
             (write-plan! proj 0 "Wave Zero" "zero" '("q/ui-core/preferences.rkt"))
             (define rec (migrate-campaign! proj))
+            (set-campaign-record-execution-policy! rec #f) ; legacy delivery-lane fixture
             (define plan (plan-for '("q/ui-core/preferences.rkt")))
             (define result
               (parameterize ([current-gsd-delivery-verify-command "true"])
