@@ -9,6 +9,12 @@
 ;; @boundary integration
 ;; → interrupted (no invented DONE, no outbox event), pending-tool
 ;; cancellation → interrupted (no event), and legacy symbol runner compat.
+;;
+;; v1.00.33 W1 evidence repair: the whole file is exported as ONE RackUnit
+;; evidence suite (wave-executor-isolation-evidence-suite, see the bottom of
+;; the file); the ordinary (module+ test) submodule runs exactly that suite,
+;; so both `raco test` here and a baseline-with-test-overlay probe requiring
+;; the exported suite observe the identical assertion set.
 
 (require rackunit
          (only-in "helpers/honest-delivery-fixture.rkt" finalize-awaiting!)
@@ -597,13 +603,101 @@
       ;; The gated log must not change the returned flag.
       (check-true (car (with-arming-logs (lambda () (apply-quietly! isolated-settings))))))))
 
-(define all-suites
+;; ============================================================
+;; v1.00.33 W1 evidence regression (posthoc reproduction): the canary
+;; provisioning recorded 2026-09-29 (read-only lookups against
+;; coinerd/q, later verified by running the adapter's exact GraphQL
+;; readback) must arm through the strict binding validator with every
+;; exact value retained, and a single malformed ID must disarm the
+;; WHOLE binding (never a partial arm). These pin the REAL opaque ID
+;; shapes the live adapter reads back before a board write — a
+;; validator tightening that rejects the real provisioning would
+;; silently disarm the canary while the dummy-ID fixtures above still
+;; pass. Identity mismatch itself (issue ≠ item) is the adapter's
+;; authenticated readback gate, not a settings-shape concern.
+;; ============================================================
+
+(define CANARY-PROVISIONING
+  (hash 'live
+        #t
+        'repository
+        "coinerd/q"
+        'plan-id
+        PLAN-ID-64
+        'wave
+        0
+        'issue-number
+        9766
+        'board-field
+        "Status"
+        'board-value
+        "Done"
+        'project-item-id
+        "PVTI_lAHOAJo6gM4BUXfizg9bZSw"
+        'project-id
+        "PVT_kwHOAJo6gM4BUXfi"
+        'field-id
+        "PVTSSF_lAHOAJo6gM4BUXfizhBgIbg"
+        'option-id
+        "c2657ba0"))
+
+(define (canary-settings [overrides '()])
+  (define tracker
+    (for/fold ([t CANARY-PROVISIONING]) ([kv (in-list overrides)])
+      (hash-set t (car kv) (cdr kv))))
+  (q-settings (hash) (hash) (hash 'gsd (hash 'tracker tracker))))
+
+(define canary-provisioning-suite
+  (test-suite "W1 canary provisioning regression (real authenticated IDs)"
+
+    (test-case "real provisioning arms: every exact value retained"
+      (define binding (gsd-tracker-live-binding (canary-settings)))
+      (check-true (hash? binding) "real canary provisioning must arm, not disarm")
+      (check-equal? (hash-ref binding 'repository) "coinerd/q")
+      (check-equal? (hash-ref binding 'plan-id) PLAN-ID-64)
+      (check-equal? (hash-ref binding 'wave) 0)
+      (check-equal? (hash-ref binding 'issue-number) 9766)
+      (check-equal? (hash-ref binding 'project-item-id) "PVTI_lAHOAJo6gM4BUXfizg9bZSw")
+      (check-equal? (hash-ref binding 'project-id) "PVT_kwHOAJo6gM4BUXfi")
+      (check-equal? (hash-ref binding 'field-id) "PVTSSF_lAHOAJo6gM4BUXfizhBgIbg")
+      (check-equal? (hash-ref binding 'option-id) "c2657ba0"))
+
+    (test-case "one malformed ID among the real ones disarms the whole binding"
+      (check-false
+       (gsd-tracker-live-binding
+        (canary-settings '((project-item-id . "PVTI_lAHOAJo6gM4BUXfizg9bZS w")))))
+      (check-false (gsd-tracker-live-binding (canary-settings '((field-id . "")))))
+      (check-false (gsd-tracker-live-binding (canary-settings '((project-id))))))
+
+    (test-case "arming line renders the real provisioning"
+      (define line (tracker-arming-line (canary-settings)))
+      (check-true (string-contains? line "ARMED") (format "must be ARMED: ~a" line))
+      (check-true (string-contains? line "coinerd/q")
+                  (format "must name the repository: ~a" line))
+      (check-true (string-contains? line "9766") (format "must name the issue: ~a" line))
+      (check-true (string-contains? line PLAN-ID-64)
+                  (format "must name the plan-id: ~a" line)))))
+
+;; ============================================================
+;; Exported evidence suite — the ordinary (module+ test) entry point
+;; below runs exactly this suite, and an external baseline-with-test-
+;; overlay probe requires it by name. No test runner at the top level:
+;; raco test (and the grouped/in-process lane in scripts/run-tests)
+;; require the `test` submodule, instantiating this module first, so a
+;; top-level (exit ...) would short-circuit the submodule.
+;; ============================================================
+(provide wave-executor-isolation-evidence-suite)
+
+(define wave-executor-isolation-evidence-suite
   (test-suite "wave executor isolation"
     exactly-once-suite
     timeout-suite
     pending-cancel-suite
     compat-suite
     settings-wiring-suite
-    tracker-binding-suite))
+    tracker-binding-suite
+    canary-provisioning-suite))
 
-(exit (if (zero? (run-tests all-suites)) 0 1))
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests wave-executor-isolation-evidence-suite))
