@@ -47,7 +47,7 @@
                   delivery-journal-advanced?
                   delivery-journal-snapshot
                   run-delivery-finalization
-                  coordinator-checkpoint-result
+                  wave-blocked-checkpoint-result!
                   park-approved-attempt-result!)
          (only-in "delivery-coordinator.rkt"
                   delivery-outcome
@@ -1469,24 +1469,14 @@
                                               #:reason "all waves done or deferred")
                 (campaign-result 'campaign-complete (reverse completed) message)]
                [(wave-blocked)
-                (if (procedure? delivery-coordinator)
-                    (coordinator-checkpoint-result
-                     base-dir
-                     plan-id
-                     extra
-                     completed
-                     message
-                     delivery-coordinator
-                     (lambda () (loop (load-campaign-record base-dir plan-id) completed))
-                     ;; BUG-0085: the campaign loop is single-threaded and this
-                     ;; checkpoint runs strictly BETWEEN wave passes; the owned
-                     ;; registry closes at pass end and reaps its jobs on
-                     ;; termination, so no evidence-author dispatch is live
-                     ;; here. A "running" marker seen now is a proven lost
-                     ;; session, reclaimable through the durable journal
-                     ;; transition — never an ambiguous live launch.
-                     #:author-session-live? (lambda () #f))
-                    (campaign-result 'wave-blocked (reverse completed) message))]
+                (wave-blocked-checkpoint-result!
+                 base-dir
+                 plan-id
+                 extra
+                 completed
+                 message
+                 delivery-coordinator
+                 (lambda () (loop (load-campaign-record base-dir plan-id) completed)))]
                [(finalize-wave)
                 ;; Authenticated delivered proof commits DONE (BUG-0077).
                 (run-delivery-finalization

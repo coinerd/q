@@ -91,6 +91,7 @@
          run-delivery-finalization
          run-coordinator-checkpoint
          coordinator-checkpoint-result
+         wave-blocked-checkpoint-result!
          park-approved-attempt-result!)
 
 ;; ============================================================
@@ -464,11 +465,9 @@
                 ;; the wave to a fresh review. Everything else (a live
                 ;; session, a changed tree, a pending permission) keeps the
                 ;; existing resolve-or-pause behavior unchanged.
-                (or (reclaim-lost-author-session! dir
-                                                  plan-id
-                                                  idx
-                                                  #:session-live? author-session-live?)
-                    (resolve-author-checkpoint! dir plan-id idx))]
+                (or
+                 (reclaim-lost-author-session! dir plan-id idx #:session-live? author-session-live?)
+                 (resolve-author-checkpoint! dir plan-id idx))]
                [(and (eq? kind 'review-rejected) idx)
                 (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
                [else #f]))
@@ -505,6 +504,31 @@
    #:on-advance loop-again
    #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
 
+;; Extracted from go-orchestrator (BUG-0042 module-size law): the loop's
+;; wave-blocked case. The liveness verdict encodes the ownership contract —
+;; the campaign loop is single-threaded and this checkpoint runs strictly
+;; BETWEEN wave passes; the owned registry closes at pass end and reaps its
+;; jobs on termination, so no evidence-author dispatch is live here. A
+;; "running" marker seen now is a proven lost session, reclaimable through
+;; the durable journal transition — never an ambiguous live launch.
+(define (wave-blocked-checkpoint-result! base-dir
+                                         plan-id
+                                         extra
+                                         completed
+                                         message
+                                         delivery-coordinator
+                                         loop-again)
+  (if (procedure? delivery-coordinator)
+      (coordinator-checkpoint-result base-dir
+                                     plan-id
+                                     extra
+                                     completed
+                                     message
+                                     delivery-coordinator
+                                     loop-again
+                                     #:author-session-live? (lambda () #f))
+      (campaign-result 'wave-blocked (reverse completed) message)))
+
 ;; BUG-0085: reclaim a launched-but-lost evidence author session into the
 ;; honest retained/session-lost terminal. Returns #t when the durable
 ;; reclaim happened (the caller advances); #f/#f-string leaves the decision
@@ -519,7 +543,7 @@
       (and marker
            (equal? (hash-ref marker 'state #f) "running")
            (not (session-live?))
-           (let ((repo (hash-ref (hash-ref marker 'context #f) 'repo #f)))
+           (let ([repo (hash-ref (hash-ref marker 'context #f) 'repo #f)])
              (and repo (directory-exists? repo) (delivery-git repo "write-tree")))))
     (and tree
          (hex? tree 40)

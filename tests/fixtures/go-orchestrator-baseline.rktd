@@ -54,10 +54,18 @@
 ;; extensions/gsd/wave-scope.rkt; the orchestrator keeps the lane
 ;; decision and thin call sites. 1698 lines / 19 defines, below the
 ;; unchanged 1700 target.
+;;
+;; Re-recorded for BUG-0085 (lost evidence-author session reclaim): the
+;; loop's wave-blocked case moved OUT into
+;; extensions/gsd/delivery-finalize.rkt
+;; (wave-blocked-checkpoint-result!, next to the checkpoint driver it
+;; wraps, carrying the between-passes author-liveness verdict); the
+;; orchestrator keeps the thin call site. 1698 -> 1696 lines, defines
+;; unchanged at 19, below the unchanged 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "Autonomous evidence repair: owned-lane.rkt + wave-scope.rkt extractions: 1698 lines / 19 defines; below the unchanged 1700 target")
- (line-count . 1698)
+  "BUG-0085: wave-blocked checkpoint case extracted to delivery-finalize.rkt: 1696 lines / 19 defines; below the unchanged 1700 target")
+ (line-count . 1696)
  (top-level-define-count . 19)
  (w7-target-max-lines . 1700))
