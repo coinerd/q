@@ -127,10 +127,21 @@ implementation. Fresh full Verify supersedes the old receipt, preserves receipt
 history, advances the evidence generation, and requires another fresh review.
 Rejected source is not destroyed if that retry fails.
 
-Malformed output, infrastructure failure, cancellation, stale identities,
+Malformed output, cancellation, stale identities,
 budget pause or exhausted rejection allowance stop without another rejection
 retry. Postmerge REQUEST_CHANGES currently stops explicitly with an unsupported
 artifact-repair reason; it never rewinds or reruns already merged source.
+
+A typed review-lane infrastructure failure (transport, stale session, malformed
+or verdict-less reviewer output) no longer dead-ends the wave (BUG-0084): the
+coordinator checkpoint relaunches the review from a separate durable per-round
+budget in the delivery journal (default two, parameter
+`current-gsd-review-infra-retry-limit`). Each retry is itself the durable
+journal transition, so the no-spin advance guard holds; any genuine advance
+refreshes the next round's budget; exhaustion stops blocked with the honest
+bounded reason, and blank blocked reasons are never persisted as wave failure
+reasons. Reviewer sessions pin the author-phase parameter unbound so the
+pre-tool guard can never deny the reviewer's own read/bash tools.
 
 F11 is unchanged. Merge still requires recorded operator authorization bound to
 the exact wave and implementation receipt, with operator/action/source and

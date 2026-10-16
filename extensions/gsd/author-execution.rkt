@@ -9,7 +9,9 @@
          "red-checkpoint.rkt"
          "delivery-receipt.rkt"
          "delivery-journal.rkt"
-         (only-in "evidence-author-journal.rkt" start-evidence-author-repair!)
+         (only-in "evidence-author-journal.rkt"
+                  start-evidence-author-repair!
+                  complete-evidence-author-no-edit!)
          "wave-runner-port.rkt"
          (only-in "policy.rkt" current-gsd-wave-failure-context)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))
@@ -119,6 +121,11 @@
     ;; write pauses instead of buying another model attempt or fake rejection.
     (start-evidence-author-repair! base plan wave attempt fence #:guard guard)
     (define authored
+      ;; BUG-0084: an EMPTY test-author phase is a legitimate verdict here —
+      ;; this durable permission exists precisely when the prior failure was
+      ;; lane-side (no rejection findings demand new evidence). Refusing an
+      ;; empty phase would force a manufactured edit. The final tree check
+      ;; below still distinguishes the honest no-edit terminal from real work.
       (dispatch-phase!
        repo
        files
@@ -128,11 +135,15 @@
        run
        guard
        after-phase
+       #:allow-empty? #t
        #:instructions
        (string-append
         "\nEVIDENCE AUTHOR REPAIR (separate default-one allowance, NOT REQUEST_CHANGES).\n"
-        "Retain existing implementation. Edit only frozen test FILES into a compatible exported RackUnit evidence-suite.\n"
-        "The ordinary module+ test must run that exact suite. Add a meaningful behavioral regression, not a vacuous check.\n"
+        "Retain existing implementation. If new evidence is genuinely needed, edit only frozen test FILES into a\n"
+        "compatible exported RackUnit evidence-suite.\n"
+        "If the prior failure was lane-side (review/verification infrastructure) and the retained evidence is\n"
+        "complete, return WITHOUT edits; the owner routes the wave to a fresh review.\n"
+        "When authoring, the ordinary module+ test must run that exact suite. Add a meaningful behavioral regression, not a vacuous check.\n"
         "This is POSTHOC reproduction, not historical RED-first. Tests should pass on the current candidate.\n"
         "A trusted baseline-with-test-overlay probe must later demonstrate genuine assertion failure on baseline source.\n"
         "No shell, Git, fabricated output, approval, F11 or canary authority is granted. Return after test authoring.\n")))
@@ -158,7 +169,24 @@
            "No shell or custom mutations. The owner will run full Verify, then independent evidence probing and review.\n")))
        (need (equal? pinned-tests (apply git repo (append '("ls-tree" "HEAD" "--") tests)))
              "implementation changed the frozen authored tests")
-       implemented])))
+       ;; BUG-0084: distinguish the honest no-edit terminal from real work.
+       ;; When BOTH phases returned without a single change, the retained
+       ;; implementation IS the verdict; stamp the durable "retained" marker
+       ;; so the coordinator routes this wave to a fresh review instead of
+       ;; stranding it in an unresolvable "running" checkpoint.
+       (define snapshot (committed-delivery-snapshot repo))
+       (if (and snapshot
+                (equal? (hash-ref snapshot 'tree) (hash-ref (hash-ref marker 'old-receipt) 'tree)))
+           (begin
+             (complete-evidence-author-no-edit! base
+                                                plan
+                                                wave
+                                                (hash-ref snapshot 'tree)
+                                                #:guard guard)
+             (wave-execution-outcome
+              'done
+              "Evidence author returned without edits; implementation retained; fresh review is next"))
+           implemented)])))
 (define (run-proactive-author-phases! base
                                       plan
                                       wave

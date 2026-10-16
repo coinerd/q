@@ -36,8 +36,11 @@
          "../extensions/gsd/review-session.rkt"
          "../extensions/gsd/wave-executor.rkt"
          (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-failure-context)
+         (only-in "../extensions/gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          (only-in "../extensions/gsd/wave-executor.rkt" current-gsd-worktree-isolation)
          (only-in "../extensions/gsd/review-proof.rkt" current-owned-proof-root)
+         (only-in "../extensions/gsd/delivery-finalize.rkt"
+                  current-gsd-review-infra-retry-limit)
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../util/message/message.rkt" message-content)
@@ -329,6 +332,11 @@ TEST-EOF
                                           'reason
                                           "test ends at fresh r1 review; no approval fabricated"))))
             (define (response-for request)
+              ;; BUG-0084: the reviewer thread must NEVER inherit an author
+              ;; phase binding — it would make the tool-call-pre guard deny
+              ;; the reviewer's own read/bash tools (live W1 incident).
+              (check-false (current-gsd-author-phase)
+                           "reviewer session ran inside an author phase")
               (make-model-response (list (hasheq 'type "text" 'text (response-text request)))
                                    (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7)
                                    "glm-5.3"
@@ -368,9 +376,15 @@ TEST-EOF
                                 verifying-runner
                                 #:auto-review-runner recording-runner
                                 #:delivery-coordinator crash-once-coordinator))
+       ;; BUG-0084: segment 1 pins the relaunch budget to 0 so the simulated
+       ;; checkpoint crash still lands as the historical operator-level stop;
+       ;; segment 2 runs the real default budget and pins the honest bounded
+       ;; review-lane exhaustion.
+       (define infra-limit-box (box 2))
        (define (execute request)
          (parameterize
-             ([current-gsd-worktree-isolation #t]
+             ([current-gsd-review-infra-retry-limit (unbox infra-limit-box)]
+              [current-gsd-worktree-isolation #t]
               [current-owned-proof-root (build-path fake-home ".q" "agent" "owned-review-proofs")]
               [current-environment-variables fake-env]
               [current-gsd-remote-published
@@ -410,6 +424,7 @@ TEST-EOF
                 (git-quiet! (current-directory) "add" "acceptance" "src/widget.rkt")
                 (git-quiet! (current-directory) "commit" "-qm" "implementation")
                 (make-loop-result '() 'completed (hasheq)))))))
+       (set-box! infra-limit-box 0)
        (define first-result (execute (request-for rec)))
        (check-equal? (campaign-result-status first-result)
                      'wave-blocked
@@ -422,6 +437,7 @@ TEST-EOF
        ;; fetched artifact must reenter the ordinary retry without another r0
        ;; reviewer; the second reviewer belongs ONLY to the fresh r1 attempt.
        (delete-directory/files (review-dispatch-staging-path root plan 0 0))
+       (set-box! infra-limit-box 2)
        (define result (execute (request-for (load-campaign-record root plan))))
        (delete-directory/files (build-path fake-home ".q" "agent" "evidence-repairs" plan "W0.g1")
                                #:must-exist? #f)
@@ -430,8 +446,17 @@ TEST-EOF
                      (format "resumed campaign result: ~s" result))
        (check-equal? implementations 2 (campaign-result-message result))
        (check-equal? verifies 2)
-       (check-equal? reviews 2)
-       (check-equal? (reverse generations) '(0 1))
+       ;; BUG-0084: the r1 review-failed verdict is a typed review-infra
+       ;; outcome; the loop relaunches the review lane durably from the
+       ;; round's remaining budget (one retry left after segment 1) and only
+       ;; then stops with the honest bounded reason.
+       (check-equal? reviews 3 (campaign-result-message result))
+       (check-true (string-contains? (campaign-result-message result)
+                                     "review lane failed 3 times (limit 2)")
+                   (format "bounded stop expected: ~s" (campaign-result-message result)))
+       ;; The relaunch runs a fresh reviewer in the SAME generation (the
+       ;; receipt is unchanged); only an authorized edit path bumps it.
+       (check-equal? (reverse generations) '(0 1 1))
        (check-not-equal? (caar attempts) (caadr attempts))
        (check-true (> (cdar attempts) (cdadr attempts)))
        (define journal (load-delivery-journal root plan 0))

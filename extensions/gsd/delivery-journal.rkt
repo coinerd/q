@@ -692,7 +692,10 @@
 (define (valid-author-marker? m plan wave)
   (and (hash? m)
        (equal? (hash-ref m 'schema-version #f) 1)
-       (member (hash-ref m 'state #f) '("pending" "running" "completed"))
+       ;; BUG-0084: "retained" is the honest no-edit terminal — the author
+       ;; examined the wave and returned without edits; the old receipt stays
+       ;; current and the loop routes to a fresh review.
+       (member (hash-ref m 'state #f) '("pending" "running" "completed" "retained"))
        (literal-files? (hash-ref m 'frozen-files #f))
        (let ([c (hash-ref m 'context #f)]
              [r (hash-ref m 'old-receipt #f)])
@@ -704,7 +707,10 @@
                        (exact-nonnegative-integer? (hash-ref m 'successor-fence #f))
                        (>= (hash-ref m 'successor-fence) (hash-ref c 'attempt-fence))))))
        (or (not (equal? (hash-ref m 'state) "completed"))
-           (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))))
+           (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))
+       (or (not (equal? (hash-ref m 'state) "retained"))
+           (and (equal? (hash-ref m 'disposition #f) "no-edit")
+                (hex? (hash-ref m 'retained-tree-sha256 #f) 40)))))
 (define (author-marker-matches-journal? m j)
   (and (valid-author-marker? m (hash-ref j 'plan-id #f) (hash-ref j 'wave #f))
        (let* ([history (hash-ref j 'receipt-history '())]
@@ -731,7 +737,6 @@
        (member (hash-ref m 'state) '("pending" "running"))
        (equal? (hash-ref m 'old-receipt) (hash-ref j 'receipt #f))
        #t))
-
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical

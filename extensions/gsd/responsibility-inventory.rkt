@@ -505,9 +505,11 @@
    ;; effects are delegated to the required modules (campaign-repository,
    ;; delivery-journal, wave-completion, attempt-artifacts); this module's
    ;; own source carries no marker-visible effects.
+   ;; BUG-0084: declares the current-gsd-review-infra-retry-limit parameter
+   ;; (audited in docs/architecture/parameter-inventory.rktd).
    (make-entry "delivery-finalize.rkt"
                'campaign-state
-               '()
+               '(make-param)
                '()
                '("racket/list" "racket/string"
                                "campaign-state"

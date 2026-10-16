@@ -109,6 +109,9 @@
  ;; Request-scoped fresh reviewer port, carried by production /go requests
  ;; across the TUI thread and SDK boundary; #f preserves manual fixtures.
  ("extensions/gsd/review-dispatch.rkt" (current-gsd-auto-review-runner . SERVICE_HANDLE))
+ ;; BUG-0084: bounded review-lane relaunch ceiling (default 2); consumed
+ ;; count is durable in the delivery journal, never in this param.
+ ("extensions/gsd/delivery-finalize.rkt" (current-gsd-review-infra-retry-limit . CONFIGURATION))
  ;; test seam: overrides the version-freshness probe (running version vs
  ;; checkout) so tests can simulate a stale build; never set in prod
  ("extensions/gsd/freshness.rkt" (current-gsd-freshness-check . OTHER_REVIEWED))

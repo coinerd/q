@@ -12,6 +12,8 @@
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/delivery-coordinator.rkt"
+         (only-in "../extensions/gsd/delivery-finalize.rkt"
+                  current-gsd-review-infra-retry-limit)
          "../extensions/gsd/policy.rkt")
 (define manifest (make-campaign-manifest 1 "w0" '() '() "constraints"))
 (define plan (campaign-manifest-hash manifest))
@@ -122,15 +124,23 @@
                (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count)
                              1))))
   (test-case "infrastructure failure does not consume rejection budget"
+    ;; BUG-0084: a typed review-infra outcome relaunches the review from the
+    ;; separate durable per-round budget; only exhaustion stops blocked. The
+    ;; rejection budget is never touched in either case.
     (fixture (lambda (root rec)
-               (check-equal? (run-coordinator-checkpoint root
-                                                         plan
-                                                         (car (campaign-record-waves rec))
-                                                         "pending"
-                                                         (lambda (_d _p _w)
-                                                           (delivery-outcome 'review-infra "timeout"))
-                                                         #:on-advance (lambda () 'retry)
-                                                         #:on-blocked (lambda (_) 'blocked))
-                             'blocked)
-               (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0)
+               (define (infra reason)
+                 (run-coordinator-checkpoint root
+                                             plan
+                                             (car (campaign-record-waves rec))
+                                             "pending"
+                                             (lambda (_d _p _w)
+                                               (delivery-outcome 'review-infra reason))
+                                             #:on-advance (lambda () 'retry)
+                                             #:on-blocked (lambda (_) 'blocked)))
+               (parameterize ([current-gsd-review-infra-retry-limit 1])
+                 (check-equal? (infra "timeout") 'retry)
+                 (check-equal? (infra "timeout again") 'blocked))
+               (check-equal? (hash-ref (load-delivery-journal root plan 0)
+                                       'review-rejection-count
+                                       0)
                              0)))))
