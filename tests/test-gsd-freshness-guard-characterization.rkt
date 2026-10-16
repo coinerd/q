@@ -99,8 +99,11 @@
                       ;; The positional schema carries build identity in slots
                       ;; 9-11, budget-pause in slot 12, and BUG-0052's immutable
                       ;; snapshot path+digest binding in slots 13-14.
-                      (check-true (and (list? d) (= (length d) 15))
-                                  (format "campaign datum is not the 15-element W3 form: ~s"
+                      ;; 15-element W3 form + 16th execution-policy slot
+                      ;; (autonomous evidence repair; record metadata only,
+                      ;; never part of canonical plan identity).
+                      (check-true (and (list? d) (= (length d) 16))
+                                  (format "campaign datum is not the 16-element form: ~s"
                                           (and (list? d) (length d))))
                       (check-equal? (list-ref d 9)
                                     "9.9.99-pin"
@@ -142,7 +145,7 @@
                       (define back (load-campaign-record tmp (campaign-plan-id rec)))
                       (check-true (and (campaign-record? back) #t)
                                   "legacy record without identity fields failed to load")
-                      (check-equal? (vector-length (struct->vector back)) 15)
+                      (check-equal? (vector-length (struct->vector back)) 16)
                       (check-false (campaign-record-build-version back)
                                    "legacy record must deserialize missing build-version as #f")
                       (check-false (campaign-record-main-head-sha back)
