@@ -10,6 +10,10 @@
 ;;   - start-evidence-author-repair!    (at-most-once durable launch)
 ;;   - reconcile-evidence-author-receipt! (proof-bearing supersession,
 ;;     requires strict git ancestry at this shared boundary)
+;;   - complete-evidence-author-no-edit! (honest no-edit terminal: the
+;;     author examined the wave, found no defect to author against, and
+;;     returned without edits; the prior receipt stays current and the
+;;     loop routes to a fresh review instead of a dead end)
 ;; No rejection counter is spent, no REQUEST_CHANGES is manufactured, and
 ;; the completed marker is retained forever (one allowance per wave).
 (require racket/list
@@ -33,7 +37,8 @@
          "composition-root.rkt")
 (provide reserve-evidence-author-repair!
          start-evidence-author-repair!
-         reconcile-evidence-author-receipt!)
+         reconcile-evidence-author-receipt!
+         complete-evidence-author-no-edit!)
 
 (define (validate-author-context! root plan wave context receipt files)
   (define manifest (load-receipt-owned-proof receipt root plan wave))
@@ -180,3 +185,34 @@
                #:when (hash-has-key? j k))
       (hash-set h k (hash-ref j k))))
   (author-save! root plan wave j fresh guard))
+(define (complete-evidence-author-no-edit! root plan wave current-tree #:guard guard)
+  ;; BUG-0084: the no-edit author terminal. The marker's only prior
+  ;; completions were edit-shaped (a successor receipt superseding the old
+  ;; one), so an author that legitimately returned WITHOUT edits stranded the
+  ;; wave in "running" forever: recovery demanded a publication that cannot
+  ;; exist, and the launch resolver demanded "pending". This transition is
+  ;; the honest third terminal: implementation retained, allowance spent,
+  ;; receipt unchanged — the coordinator's fresh review is the next step.
+  (author-guard! guard)
+  (define j (load-delivery-journal root plan wave))
+  (define m (journal-evidence-author-repair j))
+  (unless (and (evidence-author-repair-pending? j)
+               (equal? (hash-ref m 'state) "running")
+               ;; The claim is only recordable when it is TRUE: the current
+               ;; tree must still BE the old receipt's tree (byte-identical
+               ;; implementation). The caller measures the live checkout;
+               ;; the journal refuses to stamp a no-edit terminal over a
+               ;; tree that differs from the retained receipt.
+               (hex? current-tree 40)
+               (equal? current-tree (hash-ref (hash-ref m 'old-receipt) 'tree)))
+    (error 'delivery-journal "evidence author no-edit completion refused"))
+  (author-save!
+   root
+   plan
+   wave
+   j
+   (hash-set
+    j
+    'evidence-author-repair
+    (hash-set* m 'state "retained" 'disposition "no-edit" 'retained-tree-sha256 current-tree))
+   guard))

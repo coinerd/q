@@ -28,7 +28,8 @@
          (only-in "author-checkpoint.rkt" resolve-author-checkpoint! author-repair-pending?)
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
-                  evidence-author-repair-pending?)
+                  evidence-author-repair-pending?
+                  update-delivery-journal!) ; BUG-0084: durable review-infra retry counter
          (only-in "delivery-publication.rkt"
                   load-approved-publication
                   replay-approved-publication!
@@ -82,6 +83,8 @@
          delivery-journal-snapshot
          finalize-checkpoint-decision
          coordinator-checkpoint-decision
+         current-gsd-review-infra-retry-limit
+         journal-review-infra-count
          run-delivery-finalization
          run-coordinator-checkpoint
          coordinator-checkpoint-result
@@ -207,7 +210,46 @@
   (cond
     [cancelled 'cancelled]
     [(eq? outcome-kind 'ok) (if (delivery-journal-advanced? before after) 'advance 'blocked)]
+    ;; BUG-0084: a review-infra retry advances only through its durable
+    ;; counter bump — the same no-spin law as 'ok.
+    [(eq? outcome-kind 'review-infra-retry)
+     (if (delivery-journal-advanced? before after) 'advance 'blocked)]
     [else 'blocked]))
+
+;; BUG-0084: bounded review-lane relaunch. A typed 'review-infra outcome
+;; (reviewer transport failure, stale session, malformed output, missing
+;; verdict) used to be a terminal wave-block — a dead end whenever the ONLY
+;; missing evidence was the review itself. The relaunch budget is a SEPARATE
+;; durable counter in the delivery journal (never an author/rejection
+;; allowance); each retry IS the durable journal transition, so the existing
+;; no-spin guard (advance requires durable progress) stays intact. Any other
+;; advancing outcome resets the counter so every review ROUND gets a fresh
+;; budget. Beyond the limit the campaign stops blocked with the honest
+;; reason instead of spinning.
+(define current-gsd-review-infra-retry-limit (make-parameter 2))
+(define (journal-review-infra-count journal)
+  (or (and journal (hash-ref journal 'review-infra-count #f)) 0))
+(define (bump-review-infra-count! dir plan-id idx)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define j (load-delivery-journal dir plan-id idx))
+    (and j
+         (begin
+           (update-delivery-journal! dir
+                                     plan-id
+                                     idx
+                                     (hasheq 'review-infra-count
+                                             (add1 (journal-review-infra-count j))))
+           (add1 (journal-review-infra-count j))))))
+(define (clear-review-infra-count! dir plan-id idx)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define j (load-delivery-journal dir plan-id idx))
+    (when (and j (positive? (journal-review-infra-count j)))
+      (update-delivery-journal! dir plan-id idx (hasheq 'review-infra-count 0)))))
+(define (honest-blocked-reason reason)
+  ;; BUG-0084: a blank blocked reason is never a durable failure reason.
+  (if (and (string? reason) (positive? (string-length (string-trim reason))))
+      reason
+      "wave blocked without an actionable reason; inspect the review/validation reports"))
 
 ;; ============================================================
 ;; Coordinator progress
@@ -360,8 +402,31 @@
                    (cons 'ok (hash-ref (author-recovery) 'message)))]
                 [replay (cons 'review-rejected replay)]
                 [else (delivery-coordinator dir plan-id idx)])]
+             ;; BUG-0084: a typed review-infra outcome consumes one unit of
+             ;; the SEPARATE durable relaunch budget before the decision. The
+             ;; counter bump IS a durable journal transition, so advancing on
+             ;; it never violates the no-spin guard; past the limit the
+             ;; honest bounded reason stops the wave instead.
+             [outcome*
+              (if (and idx
+                       (delivery-outcome? outcome)
+                       (eq? (delivery-outcome-kind outcome) 'review-infra))
+                  (let ([count (bump-review-infra-count! dir plan-id idx)]
+                        [limit (current-gsd-review-infra-retry-limit)])
+                    (cond
+                      [(and count (<= count limit))
+                       (cons 'review-infra-retry (delivery-outcome-message outcome))]
+                      [count
+                       (cons 'blocked
+                             (format
+                              "review lane failed ~a times (limit ~a); operator review required: ~a"
+                              count
+                              limit
+                              (delivery-outcome-message outcome)))]
+                      [else outcome]))
+                  outcome)]
              [after (and idx (delivery-journal-snapshot dir plan-id idx))]
-             [kind (and outcome (delivery-outcome-kind outcome))]
+             [kind (and outcome* (delivery-outcome-kind outcome*))]
              [decision (coordinator-checkpoint-decision
                         kind
                         before
@@ -370,14 +435,19 @@
                              (campaign-record-cancellation (load-campaign-record dir plan-id))))])
         (case decision
           [(cancelled) (on-cancel "campaign cancellation requested")]
-          [(advance) (on-advance)]
+          [(advance)
+           ;; BUG-0084: any genuine advance ends the current review round —
+           ;; its infra budget is refreshed for the next round.
+           (unless (eq? kind 'review-infra-retry)
+             (clear-review-infra-count! dir plan-id idx))
+           (on-advance)]
           [else
            (define resolved
              (cond
                [(and idx (author-repair-pending? dir plan-id idx))
                 (resolve-author-checkpoint! dir plan-id idx)]
                [(and (eq? kind 'review-rejected) idx)
-                (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome))]
+                (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
                [else #f]))
            (if (eq? resolved #t)
                (on-advance)
@@ -385,8 +455,9 @@
                 (cond
                   [(eq? kind 'delivered)
                    "terminal stage lacks authenticated readback; no delivery proof advanced"]
-                  [resolved resolved]
-                  [(and outcome (delivery-outcome? outcome)) (delivery-outcome-message outcome)]
+                  [resolved (honest-blocked-reason resolved)]
+                  [(and outcome* (delivery-outcome? outcome*))
+                   (honest-blocked-reason (delivery-outcome-message outcome*))]
                   [(and before (not after))
                    "coordinator reported progress without a durable delivery transition"]
                   [else message])))]))))

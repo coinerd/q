@@ -30,6 +30,7 @@
          "delivery-journal.rkt"
          "review-usage.rkt"
          "review-proof.rkt"
+         (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          "review-audit-format.rkt"
          (only-in "review-worktree.rkt" resolve-review-checkout))
 (provide make-auto-review-runner
@@ -46,8 +47,7 @@
 ;; is exactly one JSON object, either bare or as the sole content of exactly
 ;; one Markdown fenced code block (optional `json` language tag). No prose,
 ;; no multiple fences, no non-json tag, no trailing content.
-(define whole-fence-pattern
-  #px"(?s:^```[ \t]*(?i:json)?[ \t]*\r?\n(.*?)\r?\n?```[ \t]*$)")
+(define whole-fence-pattern #px"(?s:^```[ \t]*(?i:json)?[ \t]*\r?\n(.*?)\r?\n?```[ \t]*$)")
 (define (normalize-final-text text)
   (when (> (string-length text) (* 1024 1024))
     (final-output-refuse "final reviewer text exceeds the 1 MiB character limit"))
@@ -65,12 +65,11 @@
 (define (parse-whole-final-json text)
   (define in (open-input-string text))
   (define value
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (define detail (exn-message e))
-                       (final-output-refuse
-                        (format "final reviewer text is not valid JSON: ~a"
-                                (substring detail 0 (min 160 (string-length detail))))))])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (define detail (exn-message e))
+                                 (final-output-refuse
+                                  (format "final reviewer text is not valid JSON: ~a"
+                                          (substring detail 0 (min 160 (string-length detail))))))])
       (read-json in)))
   (when (eof-object? value)
     (final-output-refuse "final reviewer text is empty; exactly one JSON object is required"))
@@ -302,7 +301,15 @@
                        (define provider (provider-builder cwd))
                        (parameterize ([current-directory cwd]
                                       [current-environment-variables env]
-                                      [current-execution-plane-enabled #f])
+                                      [current-execution-plane-enabled #f]
+                                      ;; BUG-0084: reviewer sessions are NEVER
+                                      ;; inside an author phase. A new thread
+                                      ;; inherits its creator's parameter
+                                      ;; bindings; a stray binding here would
+                                      ;; make the tool-call-pre guard deny the
+                                      ;; reviewer's own read/bash tools (the
+                                      ;; live W1 incident). Pin #f explicitly.
+                                      [current-gsd-author-phase #f])
                          (define tools (make-tool-registry))
                          (register-default-tools! tools #:only '("read" "bash"))
                          (set! session

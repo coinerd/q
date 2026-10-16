@@ -20,6 +20,7 @@
                   reserve-evidence-author-repair!
                   start-evidence-author-repair!
                   reconcile-evidence-author-receipt!)
+         (only-in "../extensions/gsd/campaign-result.rkt" campaign-result-status)
          "../extensions/gsd/delivery-finalize.rkt"
          (only-in "../extensions/gsd/delivery-publication.rkt" approved-publication-path)
          "../extensions/gsd/delivery-coordinator.rkt"
@@ -331,4 +332,160 @@
             (call-with-output-file journal-path
                                    (lambda (out) (write-bytes original-bytes out))
                                    #:exists 'truncate)))))
+     (lambda () (delete-directory/files root))))
+  (test-case "no-edit evidence author retains the receipt and the loop relaunches the review lane (BUG-0084)"
+    (define root (make-temporary-file "author-noedit-~a" 'directory))
+    (define repo (build-path root "q"))
+    (define (put path text)
+      (make-directory* (path-only path))
+      (display-to-file text path #:exists 'truncate))
+    (define source "#lang racket/base\n(provide answer)\n(define (answer) 1)\n")
+    (dynamic-wind
+     void
+     (lambda ()
+       (make-directory repo)
+       (git-quiet! repo "init" "-q")
+       (hermetic-identity! repo)
+       (define remote (build-path root "origin.git"))
+       (git-quiet! repo "init" "--bare" "-q" (path->string remote))
+       (git-quiet! repo "remote" "add" "origin" "https://github.com/example/q.git")
+       (git-quiet! repo
+                   "config"
+                   (string-append "url.file://" (path->string remote) ".insteadOf")
+                   "https://github.com/example/q.git")
+       (put (build-path repo ".gitignore") "compiled/\n")
+       (put (build-path repo "source.rkt") source)
+       (put
+        (build-path repo "tests/probe.rkt")
+        "#lang racket/base\n(require rackunit \"../source.rkt\")\n(module+ test (check-equal? (answer) 1))\n")
+       (git-quiet! repo "add" ".")
+       (git-quiet! repo "commit" "-qm" "delivered candidate")
+       (git-quiet! repo "push" "-q" "origin" "HEAD:refs/heads/main")
+       (git-quiet! repo "update-ref" "refs/remotes/origin/main" "HEAD")
+       (make-directory* (build-path root ".planning" "waves"))
+       (write-plan! root 0 "Checkpoint" "checkpoint")
+       (write-wave-doc! root
+                        0
+                        "checkpoint"
+                        '("q/source.rkt" "q/tests/probe.rkt")
+                        "raco test tests/probe.rkt")
+       (define record (migrate-campaign! root))
+       (set-campaign-record-execution-policy! record #f)
+       (persist-campaign! root record)
+       (define plan (campaign-plan-id record))
+       (parameterize ([current-owned-proof-root (build-path root "owned-proofs")]
+                      [current-gsd-verification-registry (make-verification-registry)])
+         (define cwd #f)
+         (define (run rec fence runner)
+           (run-campaign-wave
+            root
+            rec
+            0
+            #:fence-token fence
+            #:timeout-sec 180
+            #:timeout-retries 0
+            #:no-change-retries 0
+            #:isolate? #t
+            #:stall-soft-limit #f
+            #:stall-hard-limit #f
+            #:runner runner
+            #:verifier (lambda (_)
+                         (define check (check-verify-command root 0 #f))
+                         (delivery-verification (cadr check) (list check) "actual declared Verify"))))
+         (run record
+              1
+              (lambda (_)
+                (set! cwd (current-directory))
+                'ok)) ; candidate already committed: delivered as-is
+         (define (journal)
+           (load-delivery-journal root plan 0))
+         (define old (hash-ref (journal) 'receipt))
+         ;; Move the ladder to the author-eligible stage, then reserve the
+         ;; allowance and launch the author phases.
+         (define advanced? #f)
+         (run-coordinator-checkpoint
+          root
+          plan
+          (car (campaign-record-waves (load-campaign-record root plan)))
+          "repair"
+          (lambda (dir id wave)
+            (define result (default-delivery-controller dir id wave "implementation-review"))
+            (cons (delivery-effect-result-kind result)
+                  (format "~s" (delivery-effect-result-data result))))
+          #:on-advance (lambda () (set! advanced? #t)))
+         (check-true advanced?)
+         (define context (current-evidence-context root plan 0))
+         (define files (frozen-author-files root plan 0))
+         (reserve-evidence-author-repair! root plan 0 context files #:guard (lambda () #t))
+         ;; The live incident: the author examines the wave, finds the prior
+         ;; failure was lane-side, and legitimately returns WITHOUT edits.
+         ;; Before BUG-0084 this stranded the marker in "running" and the
+         ;; campaign dead-ended; now the retained terminal routes to review.
+         (define pending (load-campaign-record root plan))
+         (define outcome
+           (run pending
+                2
+                (lambda (_)
+                  (check-false (file-exists? (build-path (current-directory) "nope.rkt")))
+                  'ok))) ; no edits in either phase
+         ;; The no-edit author completes the SAME ladder as an edit: verify
+         ;; approves the retained implementation and the attempt parks for
+         ;; review. The durable no-edit truth is the retained marker below.
+         (check-equal? (campaign-result-status outcome) 'wave-awaiting-delivery)
+         (define marker (journal-evidence-author-repair (journal)))
+         (check-equal? (hash-ref marker 'state) "retained")
+         (check-equal? (hash-ref marker 'disposition) "no-edit")
+         (check-equal? (hash-ref marker 'retained-tree-sha256) (hash-ref old 'tree))
+         (check-equal? (hash-ref (journal) 'receipt) old "no-edit never supersedes the receipt")
+         (check-false (evidence-author-repair-pending? (journal)))
+         ;; The checkpoint must now route to the review lane, not pause.
+         (define review-calls 0)
+         (define (wave-struct)
+           (car (campaign-record-waves (load-campaign-record root plan))))
+         (define (checkpoint-with coordinator)
+           (define advanced? #f)
+           (define blocked #f)
+           (run-coordinator-checkpoint root
+                                       plan
+                                       (wave-struct)
+                                       "no-edit checkpoint"
+                                       coordinator
+                                       #:on-advance (lambda () (set! advanced? #t))
+                                       #:on-blocked (lambda (reason) (set! blocked reason)))
+           (values advanced? blocked))
+         ;; Bounded review-infra relaunch: two retries advance durably.
+         (define (infra-coordinator _dir _plan _wave)
+           (set! review-calls (add1 review-calls))
+           (cons 'review-infra (format "reviewer transport failure #~a" review-calls)))
+         (define-values (a1 b1) (checkpoint-with infra-coordinator))
+         (check-true a1)
+         (check-false b1)
+         (check-equal? (journal-review-infra-count (journal)) 1)
+         (define-values (a2 b2) (checkpoint-with infra-coordinator))
+         (check-true a2)
+         (check-false b2)
+         (check-equal? (journal-review-infra-count (journal)) 2)
+         ;; Third failure exceeds the limit: honest bounded stop.
+         (define-values (a3 b3) (checkpoint-with infra-coordinator))
+         (check-false a3)
+         (check-true (and (string? b3) (string-contains? b3 "review lane failed 3 times (limit 2)"))
+                     (format "bounded stop expected: ~s" b3))
+         ;; Any genuine advance refreshes the next round's budget.
+         (define-values (a4 b4)
+           (checkpoint-with (lambda (dir p w)
+                              (update-delivery-journal! dir p w (hasheq 'model-calls 7))
+                              (cons 'ok "genuine ladder advance"))))
+         (check-true a4)
+         (check-false b4)
+         (check-equal? (journal-review-infra-count (journal)) 0)
+         ;; A fresh round starts from a fresh budget.
+         (define-values (a5 _b5) (checkpoint-with infra-coordinator))
+         (check-true a5)
+         (check-equal? (journal-review-infra-count (journal)) 1)
+         ;; A blank blocked reason is never persisted as the wave failure.
+         (define-values (a6 b6) (checkpoint-with (lambda (_dir _plan _wave) (cons 'blocked ""))))
+         (check-false a6)
+         (check-equal?
+          b6
+          "wave blocked without an actionable reason; inspect the review/validation reports")))
      (lambda () (delete-directory/files root)))))
