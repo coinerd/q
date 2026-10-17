@@ -5,11 +5,11 @@ Every production area must have an accountable test destination.
 
 | Area | Production source | Suite | Tests | Boundary tags | Owning path |
 |---|---|---|---|---|---|
-| runtime | runtime/ | runtime | 156 | e2e, integration, unit | tests |
+| runtime | runtime/ | runtime | 157 | e2e, integration, unit | tests |
 | provider | llm/ (provider adapters) | provider | 8 | integration, unit | tests |
 | session | agent/ (agent session) | runtime | 138 | e2e, integration, unit | tests |
 | tools | tools/ + agent/roles/tool-gateway | tools | 3 | unit | tests |
-| extensions | extensions/ | extensions | 189 | e2e, integration, pure, unit | tests |
+| extensions | extensions/ | extensions | 190 | e2e, integration, pure, unit | tests |
 | tui | tui/ | tui | 89 | integration, unit | tests |
 | workflows | scripts/run-tests/workflows/ + GSD | workflows | 33 | integration, unit | tests/workflows |
 
