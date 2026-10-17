@@ -4,7 +4,9 @@
 ;; @boundary integration
 ;; @mutates repo
 ;; @isolation temp-dir
-;; @timeout 900
+;; @timeout 1800
+;; Complete owner Verify/publication cases measured 1323s on the local shared host;
+;; retain every case and allow bounded headroom rather than skipping real gates.
 ;; @covers extensions/gsd/author-session-recovery.rkt extensions/gsd/delivery-finalize.rkt extensions/gsd/go-orchestrator.rkt
 (require rackunit
          json
