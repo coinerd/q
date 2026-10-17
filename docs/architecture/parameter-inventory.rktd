@@ -40,6 +40,7 @@
  ;; here: a phase dispatch may span turns, so TURN_LOCAL would be misleading.
  ;; Its immutable tool-admission scope is neither configuration nor a service.
  ("extensions/gsd-planning/execution-policy.rkt" (current-gsd-author-phase . OTHER_REVIEWED))
+ ("extensions/gsd/author-session-recovery.rkt" (current-gsd-author-recovery-timeout-sec . CONFIGURATION))
  ("agent/blackboard.rkt" (current-blackboard . SERVICE_HANDLE))
  ("agent/iteration/main-loop.rkt" (current-iteration-fsm-state . ITERATION_LOCAL))
  ("agent/loop-fsm.rkt" (current-turn-fsm-state . TURN_LOCAL))

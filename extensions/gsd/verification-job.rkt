@@ -11,9 +11,11 @@
 ;;
 ;; Safety invariants honored here (wave W3):
 ;;   - no launch without an atomically-acquired ownership record first;
-;;   - replacement requires explicit cancel-and-reap of the prior job;
+;;   - replacement requires confirmed cleanup of the prior job; terminal
+;;     attribution alone (reaped? #f) never releases ownership;
 ;;   - campaign/wave cancellation cancels and reaps all its owned jobs;
-;;   - TERM->KILL escalation covers the full process group;
+;;   - TERM->KILL escalation runs inside the owned process group, via a
+;;     private control-pipe watcher, never an external saved-PGID signal;
 ;;   - a stale PID record cannot claim ownership without process
 ;;     identity/start-time verification (reconcile -> orphan-recovered);
 ;;   - status reads are structured records, never pgrep heuristics;
@@ -50,7 +52,6 @@
          racket/format
          racket/match
          racket/string
-         racket/system
          (only-in "../../util/json/checksum.rkt" sha256-string))
 
 ;; ------------------------------------------------------------ identity
@@ -91,13 +92,16 @@
                  err
                  drain-threads
                  timeout-ms
+                 result-path ; bounded command status, separate from the group owner's exit
+                 watcher-path ; private startup identity published before the command starts
+                 watcher-identity ; (pid . start-ticks), or #f: cleanup cannot be confirmed
                  group-leader?
                  out-box
                  err-box
                  log-out
                  log-lock ; semaphore 1: serializes stdout/stderr writes + terminal close
                  lock ; semaphore 1: serializes terminal transitions (wait/cancel/reconcile)
-                 kill-box) ; box #f | integer status: kill+reap+close already ran
+                 kill-box) ; #f | exit status (confirmed) | 'cleanup-unconfirmed
   )
 
 ;; jobs: hash identity-key -> job-handle; lock: registry semaphore making
@@ -139,6 +143,8 @@
                            (with-handlers ([exn:fail? void])
                              (flush-output (job-handle-log-out h))
                              (close-output-port (job-handle-log-out h)))))
+    (with-handlers ([exn:fail? void]) (delete-file (job-handle-result-path h)))
+    (with-handlers ([exn:fail? void]) (delete-file (job-handle-watcher-path h)))
     (set-box! (job-handle-rec-box h) (job->public-record h state exit-code reaped? out err))))
 
 ;; Bounded in-memory tail per stream (chars). The complete durable record
@@ -279,24 +285,96 @@
 ;; would hit our own group).
 (define setsid-path (find-executable-path "setsid"))
 
-(define (signal-group! pid signal)
-  (with-handlers ([exn:fail? void])
-    (system (format "/bin/bash -c 'kill -~a -- -~a 2>/dev/null || true'" signal pid))))
+;; The command is NOT the session/group owner. A tiny supervisor retains that
+;; identity until it kills its own group, including redirected background
+;; descendants, on both command completion and TERM. Signalling group 0 from
+;; INSIDE the owned group cannot target a reused PGID. Never defer successful
+;; cleanup until registry close: terminal handles can be replaced in the hash.
+;; The supervisor dies with its group, so preserve the command's real status
+;; separately (never in stdout, which is untrusted gate output).
+(define owner-script
+  (string-append "result=$1; watcher=$2; shift 2\n"
+                 "cleanup() { trap '' TERM HUP INT; kill -TERM 0; sleep 0.25; kill -KILL 0; }\n"
+                 "trap cleanup TERM HUP INT\n"
+                 ;; A second in-group owner watches a private control pipe.
+                 ;; EOF cleans even a STOP'd supervisor, without signalling a
+                 ;; saved numeric PGID from outside the group. The command
+                 ;; cannot consume or retain that pipe.
+                 "exec 3<&0\n"
+                 "( IFS= read -r ignored <&3; cleanup ) <&3 &\n"
+                 ;; Publish the actual subshell incarnation, not $$ (which is
+                 ;; the supervisor's PID in POSIX subshells). No command may
+                 ;; start before this private ownership handshake succeeds.
+                 "IFS= read -r watcher_stat < /proc/$!/stat || exit 125\n"
+                 "printf '%s\\n' \"$watcher_stat\" > \"$watcher\" || exit 125\n"
+                 "\"$@\" </dev/null 3<&- &\n"
+                 "wait $! 2>/dev/null\n"
+                 "code=$?\n"
+                 "printf '%s\\n' \"$code\" > \"$result\"\n"
+                 "kill -KILL 0\n"))
 
-;; TERM -> bounded 500ms grace -> KILL over the whole process group, then
-;; close inherited pipes so no descendant can hold them open. Returns the
-;; final exit status (integer) of the direct child.
+(define (command-exit-code h fallback)
+  (with-handlers ([exn:fail? (lambda (_) fallback)])
+    (define raw
+      (call-with-input-file (job-handle-result-path h) (lambda (in) (read-bytes 5 in))))
+    (if (and (bytes? raw) (regexp-match? #rx#"^[0-9][0-9]?[0-9]?\n$" raw))
+        (let ([code (string->number (string-trim (bytes->string/utf-8 raw)))])
+          (if (<= 0 code 255) code fallback))
+        fallback)))
+
+;; Unlike pid-alive? (a reconciliation hint), confirmation must fail CLOSED
+;; on unreadable /proc entries. Only ENOENT/ESRCH, a different incarnation,
+;; or an explicitly dead state proves that the recorded watcher is gone.
+(define (confirmed-dead? pid ticks)
+  (with-handlers ([exn:fail:filesystem:errno?
+                   (lambda (e) (and (memv (car (exn:fail:filesystem:errno-errno e)) '(2 3)) #t))]
+                  [exn:fail? (lambda (_) #f)])
+    (define raw (call-with-input-file (format "/proc/~a/stat" pid) read-line))
+    (define-values (state now-ticks) (parse-proc-stat raw))
+    (and now-ticks
+         (or (not (= ticks now-ticks)) (and (member state '("Z" "X")) #t)))))
+
+;; The watcher dies on return from its in-group KILL syscall. Also require
+;; the owned session/group to be quiescent: SIGKILL delivery to a descendant
+;; may lag the watcher's death. This is observation only, NEVER numeric PGID
+;; signalling. An unreadable snapshot refuses release rather than guessing.
+(define (group-quiescent? owner-pid)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (for/and ([entry (in-list (directory-list "/proc"))]
+              #:when (regexp-match? #rx"^[0-9]+$" (path->string entry)))
+      (with-handlers ([exn:fail:filesystem:errno?
+                       (lambda (e) (and (memv (car (exn:fail:filesystem:errno-errno e)) '(2 3)) #t))])
+        (define raw (call-with-input-file (build-path "/proc" entry "stat") read-line))
+        ;; Greedy comm matching ends at the LAST closing paren, just as in
+        ;; parse-proc-stat. Fields here are state, ppid, pgrp, session.
+        (define fields (regexp-match #rx"^[0-9]+ \\(.*\\) ([^ ]+) [^ ]+ ([0-9]+) ([0-9]+) " raw))
+        (and fields
+             (or (and (not (= owner-pid (string->number (list-ref fields 2))))
+                      (not (= owner-pid (string->number (list-ref fields 3)))))
+                 (and (member (list-ref fields 1) '("Z" "X")) #t)))))))
+
+(define (read-watcher-identity path)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define raw (file->string path))
+    (define pid-match (regexp-match #rx"^([0-9]+) " raw))
+    (define-values (_state ticks) (parse-proc-stat raw))
+    (and pid-match ticks (cons (string->number (cadr pid-match)) ticks))))
+
+(define (cleanup-confirmed? h)
+  (exact-integer? (unbox (job-handle-kill-box h))))
+
+;; Request TERM -> KILL from INSIDE the group by closing its private control
+;; pipe. No status/identity check can make an external numeric PGID signal
+;; safe: a concurrent waiter can reap the owner between check and signal.
+;; Confirm watcher death AND group quiescence before releasing ownership;
+;; reaping the supervisor alone is insufficient when it died out of band.
+;; Then close inherited pipes. Returns the direct child's final exit status
+;; only on confirmation, otherwise 'cleanup-unconfirmed at the hard bound.
 (define (do-escalated-kill! h)
   (define p (job-handle-proc h))
-  (define pid (subprocess-pid p))
   (if (job-handle-group-leader? h)
-      (begin
-        (signal-group! pid "TERM")
-        (let loop ([deadline (+ (current-inexact-milliseconds) 500)])
-          (when (and (eq? (subprocess-status p) 'running) (< (current-inexact-milliseconds) deadline))
-            (sleep 0.05)
-            (loop deadline)))
-        (signal-group! pid "KILL"))
+      (with-handlers ([exn:fail? void])
+        (close-output-port (job-handle-in h)))
       (begin
         (subprocess-kill p #f)
         (let loop ([deadline (+ (current-inexact-milliseconds) 500)])
@@ -311,11 +389,19 @@
   ;; OS reap) under a hard 2s bound. This runs while the caller holds the
   ;; job lock; an unbounded wait here would wedge every racing
   ;; waiter/canceller on that lock (observed as a gate-wide deadlock).
-  (let reap ([deadline (+ (current-inexact-milliseconds) 2000)])
-    (when (and (eq? (subprocess-status p) 'running) (< (current-inexact-milliseconds) deadline))
-      (sleep 0.01)
-      (reap deadline)))
-  (define status (subprocess-status p))
+  (define watcher (job-handle-watcher-identity h))
+  (define (finished?)
+    (and (not (eq? (subprocess-status p) 'running))
+         (or (not (job-handle-group-leader? h))
+             (and watcher
+                  (confirmed-dead? (car watcher) (cdr watcher))
+                  (group-quiescent? (subprocess-pid p))))))
+  (define confirmed?
+    (let reap ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
+      (cond [(finished?) #t]
+            [(>= (current-inexact-monotonic-milliseconds) deadline) #f]
+            [else (sleep 0.01) (reap deadline)])))
+  (define status (if confirmed? (subprocess-status p) 'cleanup-unconfirmed))
   ;; close inherited descriptors
   (with-handlers ([exn:fail? void])
     (close-input-port (job-handle-out h)))
@@ -349,7 +435,9 @@
                        (lambda () (hash-values (verification-registry-jobs reg)))))
 
 (define (registry-active-count reg)
-  (for/sum ([h (in-list (registry-handles reg))] #:when (eq? (handle-state h) 'running)) 1))
+  ;; Failed confirmation retains ownership even with a terminal attribution.
+  (for/sum ([h (in-list (registry-handles reg))]
+            #:unless (verification-job-reaped? (unbox (job-handle-rec-box h)))) 1))
 
 ;; A dedicated owner closes admission under the SAME lock as start/spawn.
 ;; A concurrent launch is either fully registered and reaped below, or refused;
@@ -394,36 +482,53 @@
   (call-with-semaphore
    (verification-registry-lock reg)
    (lambda ()
+     ;; Once spawn can create a process, defer asynchronous breaks until its
+     ;; handle is registered. In particular, the bounded watcher handshake
+     ;; sleeps below must not abandon an unregistered owner. Lock acquisition
+     ;; stays breakable; registry close can find the job when breaks resume.
+     (parameterize-break
+      #f
      (when (verification-registry-closed? reg)
        (error 'verification-start! "owned verification registry is closed"))
      (define existing (hash-ref (verification-registry-jobs reg) key #f))
      (cond
-       ;; 1. active owner: reuse, never launch a duplicate
-       [(and existing (eq? (handle-state existing) 'running))
+       ;; 1. running OR unconfirmed terminal owner: never launch a duplicate
+       [(and existing
+             (not (verification-job-reaped? (unbox (job-handle-rec-box existing)))))
         (start-result (verification-job-id (unbox (job-handle-rec-box existing))) #f #t)]
-       ;; 2. ownership slot free (no record, or terminal record): fresh launch
+       ;; 2. ownership slot free (no record, or confirmed reap): fresh launch
        [else
         (define digest (sha256-string (string-join (cons executable args) "\u0")))
         (define job-id (allocate-job-id!))
         ;; Real log backing BEFORE spawn so every byte of output — including
         ;; output produced before any status read — has a durable home.
         (define-values (eff-log-path log-out) (open-verification-log job-id log-path))
+        (define result-path (make-temporary-file "gsd-verification-status-~a"))
+        (define watcher-path (make-temporary-file "gsd-verification-watcher-~a"))
         ;; Verification runs in a new session, not merely a new process group.
         ;; A background process group in the TUI's session still owns
         ;; /dev/tty; terminal tests that call tcsetattr/stty then receive
         ;; SIGTTOU and stop the entire verification tree. Spawn without
         ;; subprocess-group-enabled so the setsid child is not already a
         ;; process-group leader; util-linux setsid can then exec directly.
-        ;; --wait preserves the command's real exit status. The resulting
-        ;; identity is PID == PGID == SID, so the existing negative-PID
-        ;; TERM/KILL escalation continues to reach all descendants.
+        ;; The resulting owner identity is PID == PGID == SID. Its command
+        ;; status is recorded separately before self-cleanup; terminal records
+        ;; still attribute the declared command, never the supervisor's KILL.
         (define-values (p out in err)
-          (if setsid-path
-              (parameterize ([subprocess-group-enabled #f])
-                (apply subprocess #f #f #f setsid-path "--wait" "--" executable args))
-              (error 'verification-start!
-                     "terminal-isolated verification requires the setsid executable")))
-        (close-output-port in) ; child never reads our stdin
+          (with-handlers ([exn? (lambda (e)
+                                  (delete-file result-path)
+                                  (delete-file watcher-path)
+                                  (close-output-port log-out)
+                                  (raise e))])
+            (if setsid-path
+                (parameterize ([subprocess-group-enabled #f])
+                  (apply subprocess #f #f #f setsid-path "--wait" "--"
+                         "/bin/sh" "-c" owner-script "gsd-verification-owner"
+                         result-path watcher-path executable args))
+                (error 'verification-start!
+                       "terminal-isolated verification requires the setsid executable"))))
+        ;; Keep stdin open as the watcher's private cancellation pipe. The
+        ;; actual command gets /dev/null, not this control descriptor.
         (define out-box (box ""))
         (define err-box (box ""))
         (define log-lock (make-semaphore 1))
@@ -431,6 +536,14 @@
           (list (drain-port! out out-box log-out log-lock)
                 (drain-port! err err-box log-out log-lock)))
         (define start-ms (current-inexact-milliseconds))
+        ;; Own the watcher's incarnation before exposing the job (including
+        ;; to simulate-lost-process!). A missing handshake cannot claim reap.
+        (define watcher-identity
+          (let ready ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
+            (or (read-watcher-identity watcher-path)
+                (and (eq? (subprocess-status p) 'running)
+                     (< (current-inexact-monotonic-milliseconds) deadline)
+                     (begin (sleep 0.005) (ready deadline))))))
         (define h
           (job-handle (box (verification-job job-id
                                              key
@@ -452,6 +565,9 @@
                       err
                       drains
                       timeout-ms
+                      result-path
+                      watcher-path
+                      watcher-identity
                       #t ; session and process-group leader created by setsid
                       out-box
                       err-box
@@ -460,7 +576,7 @@
                       (make-semaphore 1) ; serializes terminal transitions
                       (box #f))) ; kill/reap-once status cache
         (hash-set! (verification-registry-jobs reg) key h)
-        (start-result job-id #t #f)]))))
+        (start-result job-id #t #f)])))))
 
 (define (require-handle reg job-id)
   (or (for/first ([h (in-list (registry-handles reg))]
@@ -507,13 +623,19 @@
                ;; a racing waiter/cancel recorded the terminal state first
                [(not (eq? (handle-state h) 'running)) (unbox (job-handle-rec-box h))]
                [else
-                (define code (subprocess-status p))
+                (define code (command-exit-code h (subprocess-status p)))
+                ;; Drain buffered command output before cleanup closes the
+                ;; read ports. Both joins are bounded even if a lost owner's
+                ;; watcher still holds the descriptors open.
                 (for ([t (job-handle-drain-threads h)])
                   (sync/timeout 1 t))
+                ;; Even on exit, the supervisor may have been lost rather
+                ;; than having performed its normal in-group cleanup.
+                (escalated-kill! h)
                 (set-state! h
                             (if (eq? code 0) 'completed 'failed)
                             code
-                            #t
+                            (cleanup-confirmed? h)
                             (unbox (job-handle-out-box h))
                             (unbox (job-handle-err-box h)))
                 (unbox (job-handle-rec-box h))])))]
@@ -535,7 +657,7 @@
                 (set-state! h
                             'timed-out
                             124
-                            #t
+                            (cleanup-confirmed? h)
                             (unbox (job-handle-out-box h))
                             (unbox (job-handle-err-box h)))
                 (unbox (job-handle-rec-box h))])))]
@@ -568,7 +690,7 @@
                             (set-state! h
                                         'cancelled
                                         (verification-job-exit-code rec)
-                                        #t
+                                        (cleanup-confirmed? h)
                                         (unbox (job-handle-out-box h))
                                         (unbox (job-handle-err-box h)))
                             (unbox (job-handle-rec-box h))]))))
@@ -585,8 +707,9 @@
 
 ;; Reconcile a record against OS reality (resume/restart): a record whose
 ;; process is gone (or whose start identity no longer matches — or was
-;; never recordable, fail-closed) becomes orphan-recovered and releases
-;; ownership; a live, identity-matching process keeps ownership.
+;; never recordable, fail-closed) becomes orphan-recovered. Ownership is
+;; released ONLY with confirmed watcher/group cleanup (reaped? #t); a failed
+;; confirmation retains the slot, as does a live identity-matching process.
 (define (verification-reconcile! reg job-id)
   (define h (require-handle reg job-id))
   (define rec (unbox (job-handle-rec-box h)))
@@ -601,10 +724,16 @@
                               ;; a racing waiter/cancel recorded the terminal state first
                               [(not (eq? (verification-job-state cur) 'running)) cur]
                               [else
+                               ;; A lost supervisor may still have descendants.
+                               ;; Closing the control pipe lets its in-group
+                               ;; watcher clean them before ownership is released.
+                               (escalated-kill! h)
+                               (for ([t (job-handle-drain-threads h)])
+                                 (sync/timeout 1 t))
                                (set-state! h
                                            'orphan-recovered
                                            #f
-                                           #t
+                                           (cleanup-confirmed? h)
                                            (verification-job-stdout cur)
                                            (verification-job-stderr cur))
                                (unbox (job-handle-rec-box h))])))]))

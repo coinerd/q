@@ -157,6 +157,20 @@
                '()
                '("racket/path" "campaign-state" "campaign-repository"
                                "delivery-journal" "delivery-receipt" "wave-executor"))
+   ;; Lost-session completion is an owner effect, not a model phase. The
+   ;; deadline/registry and Git runner own cancellation and process cleanup;
+   ;; receipt, proof and publication persistence delegates to their owners.
+   (make-entry "author-session-recovery.rkt"
+               'campaign-state
+               '(git subprocess parameterize make-param path-ops)
+               '(current-gsd-author-recovery-timeout-sec)
+               '("racket/list" "racket/path" "racket/string"
+                 "author-scope" "campaign-state" "campaign-repository"
+                 "delivery-journal" "delivery-receipt" "delivery-verifier"
+                 "delivery-publication" "evidence-author-journal" "review-proof"
+                 "wave-runner-port" "system-adapters" "composition-root"
+                 "verification-job" "wave-executor" "attempt-artifacts"
+                 "sandbox/subprocess"))
    ;; Durable, locked preimplementation RED and candidate assertion capture,
    ;; never a full Verify receipt. Atomic output/locking delegates writes and
    ;; renames to racket/file; registered child execution to verification-job.
@@ -522,7 +536,7 @@
                                "campaign-result"
                                "reconciliation-checkpoint"
                                "tracker-production-wiring"
-                               "review-checkpoint"))
+                               "review-checkpoint" "author-checkpoint" "author-session-recovery"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -600,7 +614,7 @@
                                "projection-effects"))
    (make-entry "delivery-verifier.rkt"
                'campaign-state
-               '(git fs-read make-param path-ops parameterize)
+               '(git subprocess fs-read make-param path-ops parameterize)
                '(current-gsd-delivery-verify-command current-gsd-delivery-verify-timeout-sec
                                                      current-owned-verify-observer)
                '("racket/format" "racket/path"
@@ -613,7 +627,7 @@
                                  "plan-types"
                                  "verification-job"
                                  "wave-docs"
-                                 "plan-context-builder"))
+                                 "plan-context-builder" "sandbox/subprocess"))
    ;; BUG-0040 W6: terminal-transition notification sink adapter
    ;; (tmux/bell default + opt-in desktop-command/webhook sinks).
    (make-entry "notify.rkt"
@@ -821,7 +835,7 @@
    ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
    (make-entry "verification-job.rkt"
                'external-ports
-               '(fs-read sha256 subprocess parameterize path-ops)
+               '(fs-read fs-delete dir-list sha256 subprocess parameterize path-ops)
                '()
                '("racket/contract" "racket/file"
                                    "racket/format"
