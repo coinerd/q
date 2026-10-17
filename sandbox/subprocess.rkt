@@ -7,6 +7,7 @@
 ;; so that timeout or kill cleans up all associated resources.
 
 (require racket/contract
+         racket/file
          racket/port
          racket/string
          racket/system
@@ -111,7 +112,7 @@
 ;; the parent is still waiting for process exit.  The reader stores at most
 ;; max-bytes and drains the remainder so the child can finish; callers can ask
 ;; for the latest captured value even if timeout cleanup interrupts the thread.
-(define (start-bounded-reader p max-bytes label)
+(define (start-bounded-reader p max-bytes label [encoding 'utf-8])
   (define acc (open-output-bytes))
   (define lock (make-semaphore 1))
   (define truncated? #f)
@@ -122,7 +123,12 @@
   (define (snapshot)
     (call-with-semaphore lock
                          (lambda ()
-                           (values (bytes->string/utf-8 (get-output-bytes acc) #\uFFFD) truncated?))))
+                           ;; Authorization facts must not conflate invalid
+                           ;; pathname bytes with a literal U+FFFD pathname.
+                           ;; Display-oriented callers retain replacement mode.
+                           (values (bytes->string/utf-8 (get-output-bytes acc)
+                                                       (if (eq? encoding 'utf-8/strict) #f #\uFFFD))
+                                   truncated?))))
   (define reader
     (thread (lambda ()
               (with-handlers ([exn:fail? (lambda (e)
@@ -156,15 +162,88 @@
                          [else (void)])])))))))
   (values reader snapshot))
 
-;; W1 v0.99.77: Send a signal to a whole process group. The child must have
-;; been launched under `setsid` so its PID == its PGID (process-group
-;; leader). bash's `kill` builtin accepts `-- -PGID` (dash, `/bin/sh`, does
-;; not), so we invoke bash explicitly. This is what lets a timed-out tool
-;; call kill SIGSTOP'd grandchildren that hold inherited pipes open.
-(define (signal-process-group! pid signal)
-  (with-handlers
-      ([exn:fail? (lambda (e) (log-subprocess-warning "signal group ~a: ~a" signal (exn-message e)))])
-    (system (format "/bin/bash -c 'kill -~a -- -~a 2>/dev/null || true'" signal pid))))
+;; The command must not own the group's lifetime: it can exit on TERM while
+;; descendants ignore TERM. A supervisor retains ownership until it kills
+;; group 0 FROM INSIDE the group. No caller ever signals a saved numeric PGID
+;; (even checking subprocess-status before such a signal would race reap/reuse).
+;; Keep the real command status out of stdout/stderr, which belong to the tool.
+(define group-owner-script
+  (string-append
+   "result=$1; watcher=$2; shift 2\n"
+   "cleanup() { trap '' TERM HUP INT; kill -TERM 0; sleep 0.25; kill -KILL 0; }\n"
+   "trap cleanup TERM HUP INT\n"
+   ;; A second in-group owner watches a private control pipe. Closing it also
+   ;; cleans a STOP'd supervisor: no external -PGID fallback is needed. The
+   ;; command sees EOF on stdin and cannot consume the control pipe.
+   "exec 3<&0\n"
+   "( IFS= read -r ignored <&3; cleanup ) <&3 &\n"
+   ;; Publish the subshell's actual incarnation ($$ is the supervisor in a
+   ;; POSIX subshell). Never start the command without this handshake.
+   "IFS= read -r watcher_stat < /proc/$!/stat || exit 125\n"
+   "printf '%s\\n' \"$watcher_stat\" > \"$watcher\" || exit 125\n"
+   "\"$@\" </dev/null 3<&- &\n"
+   "wait $! 2>/dev/null\n"
+   "code=$?\n"
+   "printf '%s\\n' \"$code\" > \"$result\"\n"
+   "kill -KILL 0\n"))
+
+(define (group-command-status result-path fallback)
+  (with-handlers ([exn:fail? (lambda (_) fallback)])
+    (define raw (call-with-input-file result-path (lambda (in) (read-bytes 5 in))))
+    (if (and (bytes? raw) (regexp-match? #rx#"^[0-9][0-9]?[0-9]?\n$" raw))
+        (let ([code (string->number (string-trim (bytes->string/utf-8 raw)))])
+          (if (<= 0 code 255) code fallback))
+        fallback)))
+
+;; Linux /proc is the confirmation boundary, as in verification-job. A dead
+;; supervisor alone is NOT evidence that its control-pipe watcher has killed
+;; the group. All uses of a numeric group/session identity below are READ ONLY.
+(define (proc-stat-fields raw)
+  ;; comm can contain spaces and parentheses: resume after the LAST ") ".
+  (define match (and (string? raw) (regexp-match #rx"^[0-9]+ \\(.*\\) (.*)$" raw)))
+  (define fields (and match (string-split (cadr match))))
+  (and fields (>= (length fields) 20) fields))
+
+(define (read-watcher-identity path owner-pid)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define raw (file->string path))
+    (define pid-match (regexp-match #rx"^([0-9]+) " raw))
+    (define fields (proc-stat-fields raw))
+    (define ticks (and fields (string->number (list-ref fields 19))))
+    (and pid-match (exact-nonnegative-integer? ticks)
+         (= owner-pid (string->number (list-ref fields 2)))
+         (= owner-pid (string->number (list-ref fields 3)))
+         (cons (string->number (cadr pid-match)) ticks))))
+
+(define (proc-entry-gone? e)
+  (and (memv (car (exn:fail:filesystem:errno-errno e)) '(2 3)) #t))
+
+(define (watcher-confirmed-dead? identity)
+  ;; Permission errors, malformed data, etc. must refuse confirmation. Only
+  ;; disappearance, a new incarnation, or an explicitly dead state proves it.
+  (with-handlers ([exn:fail:filesystem:errno? proc-entry-gone?]
+                  [exn:fail? (lambda (_) #f)])
+    (define fields
+      (proc-stat-fields
+       (call-with-input-file (format "/proc/~a/stat" (car identity)) read-line)))
+    (define ticks (and fields (string->number (list-ref fields 19))))
+    (and (exact-nonnegative-integer? ticks)
+         (or (not (= ticks (cdr identity)))
+             (and (member (car fields) '("Z" "X")) #t)))))
+
+(define (group-quiescent? owner-pid)
+  ;; Watcher death can precede SIGKILL delivery to another member. Do not
+  ;; release on watcher death alone, or mistake redirected pipe EOF for death.
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (for/and ([entry (in-list (directory-list "/proc"))]
+              #:when (regexp-match? #rx"^[0-9]+$" (path->string entry)))
+      (with-handlers ([exn:fail:filesystem:errno? proc-entry-gone?])
+        (define fields
+          (proc-stat-fields (call-with-input-file (build-path "/proc" entry "stat") read-line)))
+        (and fields
+             (or (and (not (= owner-pid (string->number (list-ref fields 2))))
+                      (not (= owner-pid (string->number (list-ref fields 3)))))
+                 (and (member (car fields) '("Z" "X")) #t)))))))
 
 ;; --------------------------------------------------
 ;; Kill helper
@@ -299,13 +378,72 @@
 
   (define cust (make-custodian (current-custodian)))
   (define start-ms (current-inexact-milliseconds))
+  (define child #f)
+  (define grouped? #f)
+  (define control-out #f)
+  (define result-path #f)
+  (define watcher-path #f)
+  (define watcher-identity #f)
+  (define cleanup-attempted? #f)
+  (define cleanup-confirmed? #f)
+  (define (remove-result!)
+    (for ([path (in-list (list result-path watcher-path))] #:when path)
+      (with-handlers ([exn:fail? void]) (delete-file path))))
+  (define (request-group-cleanup!)
+    (when (and control-out (not (port-closed? control-out)))
+      (close-output-port control-out)))
+  ;; One bounded confirmation shared by completion, timeout, and cancellation.
+  ;; Disable breaks across the attempt so an escaped break cannot interrupt
+  ;; cleanup and cache a half-finished verdict. A startup break may arrive
+  ;; before the handshake is read; continue acquiring it during this bound.
+  (define (confirm-group-cleanup!)
+    (parameterize-break #f
+      (unless cleanup-attempted?
+        (set! cleanup-attempted? #t)
+        (request-group-cleanup!)
+        (set! cleanup-confirmed?
+              (let loop ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
+                (unless watcher-identity
+                  (set! watcher-identity (read-watcher-identity watcher-path (subprocess-pid child))))
+                (cond
+                  [(and (not (eq? (subprocess-status child) 'running))
+                        watcher-identity
+                        (watcher-confirmed-dead? watcher-identity)
+                        (group-quiescent? (subprocess-pid child))) #t]
+                  [(>= (current-inexact-monotonic-milliseconds) deadline) #f]
+                  [else (sleep 0.005) (loop deadline)]))))
+      cleanup-confirmed?))
+  (define (require-group-cleanup!)
+    (unless (confirm-group-cleanup!)
+      (error 'run-subprocess "group cleanup unconfirmed (watcher death/group quiescence)")))
+  ;; Decode failures can occur after reap; never signal an old numeric group
+  ;; identity. Even an escaped break is only re-raised after confirmed cleanup.
+  (define (abort-child!)
+    (define confirmed?
+      (cond
+        [(not child) #t]
+        [grouped? (confirm-group-cleanup!)]
+        [else
+         (when (eq? (subprocess-status child) 'running)
+           (with-handlers ([exn:fail? void]) (subprocess-kill child #t)))
+         (wait-subprocess-status! child 1)]))
+    (custodian-shutdown-all cust)
+    (remove-result!)
+    confirmed?)
 
-  (with-handlers ([exn:fail? (lambda (e)
-                               (custodian-shutdown-all cust)
-                               (make-error-result
-                                (format "Failed to execute: ~a" (exn-message e))
-                                (inexact->exact (round (- (current-inexact-milliseconds)
-                                                          start-ms)))))])
+  (define (handle-error e)
+    (define confirmed? (parameterize-break #f (abort-child!)))
+    (cond
+      [(and confirmed? (not (exn:fail? e))) (raise e)]
+      [(not (exn:fail? e))
+       (error 'run-subprocess "cleanup unconfirmed during cancellation: ~a" (exn-message e))]
+      [else
+       (make-error-result
+        (format "Failed to execute: ~a~a" (exn-message e)
+                (if confirmed? "" "; cleanup unconfirmed"))
+        (inexact->exact (round (- (current-inexact-milliseconds) start-ms))))]))
+
+  (with-handlers ([exn? handle-error])
 
     (define cmd-path (resolve-command command))
     (unless cmd-path
@@ -317,41 +455,56 @@
           (path->string cmd-path)
           cmd-path))
 
-    ;; W1 v0.99.77: optional setsid wrapper. When process-group? is #t and
-    ;; setsid exists (Linux), the child becomes a session/process-group leader
-    ;; (PGID == child PID) so the timeout path can signal the whole group.
-    ;; On platforms without setsid (e.g. macOS), fall back to direct launch;
-    ;; the timeout path still sends SIGTERM then SIGKILL to the direct child.
+    ;; Isolate an owner, not the command, in a new session. Without setsid
+    ;; retain the existing direct-child fallback (no group cleanup available).
     (define setsid-path (and process-group? (find-executable-path "setsid")))
+    (when setsid-path
+      (unless (directory-exists? "/proc/self")
+        (error 'run-subprocess "group cleanup confirmation requires Linux /proc"))
+      (set! result-path (make-temporary-file "q-subprocess-status-~a"))
+      (set! watcher-path (make-temporary-file "q-subprocess-watcher-~a")))
 
     (define-values (sp stdout-in stdin-out stderr-in)
-      (parameterize ([current-custodian cust]
-                     [current-directory dir]
-                     [current-environment-variables env])
-        (cond
-          [setsid-path
-           ;; Wrap with setsid: setsid execs the command without forking when
-           ;; the caller is not a process-group leader (which is the case for
-           ;; a subprocess spawned by Racket), so the PID stays the same.
-           (apply subprocess
-                  #f
-                  #f
-                  #f
-                  setsid-path
-                  (if (null? args)
-                      (list cmd-string)
-                      (cons cmd-string args)))]
-          ;; No args: run command directly
-          [(null? args) (subprocess #f #f #f cmd-path)]
-          ;; With args: pass as direct arg vector — avoids shell injection
-          ;; (previously used /bin/sh -c which was vulnerable to injection)
-          [else (apply subprocess #f #f #f cmd-path args)])))
+      ;; Do not allow cancellation between spawn and recording its handle.
+      (parameterize-break #f
+        (define-values (p out in err)
+          (parameterize ([current-custodian cust]
+                         [current-directory dir]
+                         [current-environment-variables env])
+            (cond
+              [setsid-path
+               ;; Do not pre-create a group: setsid must exec the owner rather
+               ;; than fork and leave us holding a different process's handle.
+               (parameterize ([subprocess-group-enabled #f])
+                 (apply subprocess #f #f #f setsid-path "--wait" "--"
+                        "/bin/sh" "-c" group-owner-script "q-subprocess-owner"
+                        result-path watcher-path cmd-string args))]
+              ;; No args: run command directly
+              [(null? args) (subprocess #f #f #f cmd-path)]
+              ;; With args: pass as direct arg vector — avoids shell injection
+              ;; (previously used /bin/sh -c which was vulnerable to injection)
+              [else (apply subprocess #f #f #f cmd-path args)])))
+        (set! child p)
+        (set! grouped? (and setsid-path #t))
+        (when grouped? (set! control-out in))
+        (values p out in err)))
 
-    ;; Close stdin immediately and start output drainers before waiting for the
-    ;; child.  Waiting first can deadlock when child output fills the OS pipe.
-    (close-output-port stdin-out)
-    (define-values (stdout-reader get-stdout) (start-bounded-reader stdout-in max-output "stdout"))
-    (define-values (stderr-reader get-stderr) (start-bounded-reader stderr-in max-output "stderr"))
+    ;; Grouped commands get /dev/null as stdin; keep the owner's private control
+    ;; pipe until cleanup. Direct commands retain immediate stdin EOF. Start
+    ;; drainers before waiting so a full output pipe cannot deadlock the child.
+    (unless setsid-path (close-output-port stdin-out))
+    (define-values (stdout-reader get-stdout) (start-bounded-reader stdout-in max-output "stdout" encoding))
+    (define-values (stderr-reader get-stderr) (start-bounded-reader stderr-in max-output "stderr" encoding))
+
+    (when grouped?
+      (set! watcher-identity
+            (let ready ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
+              (or (read-watcher-identity watcher-path (subprocess-pid sp))
+                  (and (eq? (subprocess-status sp) 'running)
+                       (< (current-inexact-monotonic-milliseconds) deadline)
+                       (begin (sleep 0.005) (ready deadline))))))
+      (unless watcher-identity
+        (error 'run-subprocess "group watcher identity unconfirmed")))
 
     (define (reader-results)
       (define-values (out-str out-truncated?) (get-stdout))
@@ -388,46 +541,43 @@
                             effective-timeout
                             child-pid
                             (subprocess-status sp))
-       ;; W1 v0.99.77: Phase 1 — SIGTERM.
-       ;; FIX (F-18b): previously called (subprocess-kill sp) with one argument
-       ;; (arity error, silently swallowed) so NO signal was delivered.
-       ;; Correct arity is (subprocess-kill subprocess kill?) where #f = SIGTERM
-       ;; and #t = SIGKILL. Send SIGTERM to the direct child and, when we
-       ;; launched under setsid, to the whole process group.
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (log-subprocess-warning "~a: subprocess-kill TERM: ~a"
-                                                            trace-id
-                                                            (exn-message e)))])
-         (subprocess-kill sp #f))
-       (when setsid-path
-         (signal-process-group! child-pid "TERM"))
+       ;; EOF asks the in-group watcher to TERM then KILL its own group, even
+       ;; if the supervisor is STOP'd. Direct launches retain TERM -> KILL.
+       (if setsid-path
+           (request-group-cleanup!)
+           (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "~a: subprocess-kill TERM: ~a"
+                                                              trace-id
+                                                              (exn-message e)))])
+             (subprocess-kill sp #f)))
        (log-subprocess-info "~a: after SIGTERM: pid ~a status ~s"
                             trace-id
                             child-pid
                             (subprocess-status sp))
-       ;; Grace period: allow a clean exit from SIGTERM before escalating to
-       ;; SIGKILL (which cannot be caught/ignored). Same poll-vs-event split as
-       ;; the main wait: the event never fires for setsid children.
+       ;; Grouped launches require watcher death AND group quiescence, not
+       ;; merely an exited supervisor. Direct launches retain TERM grace
+       ;; before escalating to KILL.
        (define grace-exit?
          (if setsid-path
-             (wait-subprocess-status! sp 2)
+             (begin (require-group-cleanup!) #t)
              (sync/timeout 2 sp)))
        (unless grace-exit?
          (log-subprocess-info "~a: SIGKILL after grace (pid ~a)" trace-id child-pid)
-         ;; Phase 2 — SIGKILL. SIGTERM is NOT delivered to SIGSTOP'd
-         ;; processes, but SIGKILL is; this kills stopped children and, via
-         ;; the process group, any grandchildren holding inherited pipes.
+         ;; Bounded last resort for an unresponsive direct child. Group
+         ;; cleanup belongs to the watcher, never to a saved numeric PGID.
          (with-handlers ([exn:fail? (lambda (e)
                                       (log-subprocess-warning "~a: subprocess-kill KILL: ~a"
                                                               trace-id
                                                               (exn-message e)))])
            (subprocess-kill sp #t))
-         (when setsid-path
-           (signal-process-group! child-pid "KILL"))
          (log-subprocess-info "~a: after SIGKILL: pid ~a status ~s"
                               trace-id
                               child-pid
                               (subprocess-status sp)))
+       ;; Grouped cleanup was explicitly confirmed, not inferred from reap.
+       ;; Never signal child-pid as a group here: it may already be reused.
+       (unless (wait-subprocess-status! sp 0.5)
+         (error 'run-subprocess "direct child cleanup unconfirmed"))
        ;; Give reader threads a bounded chance to observe EOF and flush their
        ;; latest snapshots.  If they do not finish, snapshot still returns the
        ;; latest captured bytes.
@@ -436,6 +586,7 @@
        (define-values (partial-out partial-err partial-truncated?) (reader-results))
        (define end-ms (current-inexact-milliseconds))
        (custodian-shutdown-all cust)
+       (remove-result!)
        (log-subprocess-info "~a: after custodian shutdown: pid ~a status ~s"
                             trace-id
                             child-pid
@@ -448,12 +599,19 @@
 
       ;; Completed
       [else
+       ;; An out-of-band supervisor death leaves the watcher and descendants
+       ;; alive. Close its control pipe and confirm cleanup BEFORE returning,
+       ;; even if the command redirected every stream and readers saw EOF.
+       (when grouped? (require-group-cleanup!))
        ;; Process exited; readers should finish after draining stdout/stderr.
        ;; Bound the join to preserve the background-child inherited-pipe fix.
        (finish-reader! stdout-reader stdout-in "stdout")
        (finish-reader! stderr-reader stderr-in "stderr")
        (define-values (out-str err-str output-truncated?) (reader-results))
-       (define exit-code (subprocess-status sp))
+       (define exit-code
+         (if setsid-path
+             (group-command-status result-path (subprocess-status sp))
+             (subprocess-status sp)))
 
        ;; W0 v0.99.77 instrumentation: log nonzero exit (signal / wait-status).
        (when (and (number? exit-code) (not (zero? exit-code)))
@@ -467,6 +625,7 @@
                                     (log-subprocess-warning "close stderr: ~a" (exn-message e)))])
          (close-input-port stderr-in))
        (custodian-shutdown-all cust)
+       (remove-result!)
 
        (define end-ms (current-inexact-milliseconds))
        (make-success-result exit-code

@@ -26,6 +26,8 @@
 (require rackunit
          racket/file
          racket/list
+         racket/port
+         racket/system
          racket/string
          ;; subprocess-group-enabled is a racket/base primitive (the spawn
          ;; parameter checked in R/WP3.4-C5); no extra require needed.
@@ -138,6 +140,193 @@
   (check-equal? (vj:verification-job-exit-code job) 124)
   (check-true (vj:verification-job-reaped? job) "timeout must reap the process group"))
 
+;; A completed owner cannot leave redirected work behind, even when its
+;; terminal handle is replaced (registry hash retains only the newest owner).
+(for ([exit-code '(0 3)])
+  (test-case (format "completed command ~a kills redirected descendants before handle replacement"
+                     exit-code)
+    (define root (make-temporary-file "vj-descendant-~a" 'directory))
+    (define reg (vj:make-verification-registry))
+    (define ident (vj:verification-identity "descendant" "W1" "fast" "/repo" "local"))
+    (define pid-file (build-path root "child.pid"))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define r
+         (parameterize ([current-directory root])
+           (vj:verification-start!
+            reg
+            ident
+            "/bin/sh"
+            (list "-c"
+                  (format "(trap '' TERM; sleep 60) >/dev/null 2>&1 & echo $! > child.pid; exit ~a"
+                          exit-code)))))
+       (define id (vj:start-result-job-id r))
+       (define done (vj:verification-wait reg id 5000))
+       (check-equal? (vj:verification-job-state done) (if (zero? exit-code) 'completed 'failed))
+       (check-equal? (vj:verification-job-exit-code done) exit-code)
+       (check-eq? (vj:verification-cancel! reg id)
+                  done
+                  "cleanup never rewrites completed attribution")
+       (check-true (file-exists? pid-file))
+       (define pid (string-trim (file->string pid-file)))
+       (define (gone?)
+         (define stat (build-path "/proc" pid "stat"))
+         (or (not (file-exists? stat)) (regexp-match? #rx"\\) [ZX] " (file->string stat))))
+       (define deadline (+ (current-inexact-milliseconds) 2000))
+       (let wait ()
+         (when (and (not (gone?)) (< (current-inexact-milliseconds) deadline))
+           (sleep 0.01)
+           (wait)))
+       (check-true (gone?) "successful leader must not strand a child")
+       (define replacement (vj:verification-start! reg ident "/bin/sh" '("-c" "sleep 30")))
+       (check-true (vj:start-result-started? replacement))
+       (check-not-equal? id (vj:start-result-job-id replacement))
+       (check-equal?
+        (vj:verification-job-state (vj:verification-status reg (vj:start-result-job-id replacement)))
+        'running)
+       (vj:verification-close-registry! reg))
+     (lambda ()
+       (vj:verification-close-registry! reg)
+       (when (file-exists? pid-file)
+         ;; Keep an intentionally failing RED probe from leaking its child.
+         (parameterize ([current-output-port (open-output-nowhere)]
+                        [current-error-port (open-output-nowhere)])
+           (system* (find-executable-path "kill") "-KILL" (string-trim (file->string pid-file)))))
+       (delete-directory/files root)))))
+
+(test-case "control-pipe watcher kills a stopped group owner and its redirected command"
+  (define root (make-temporary-file "vj-stopped-owner-~a" 'directory))
+  (define reg (vj:make-verification-registry))
+  (dynamic-wind void
+                (lambda ()
+                  (define r
+                    (parameterize ([current-directory root])
+                      (vj:verification-start!
+                       reg
+                       (vj:verification-identity "stopped-owner" "W1" "fast" "/repo" "local")
+                       "/bin/sh"
+                       '("-c" "echo $$ > child.pid; kill -STOP $PPID; trap '' TERM; sleep 60")
+                       #:timeout-ms 5000)))
+                  (define deadline (+ (current-inexact-milliseconds) 4000))
+                  (let ready ()
+                    (unless (or (file-exists? (build-path root "child.pid"))
+                                (>= (current-inexact-milliseconds) deadline))
+                      (sleep 0.01)
+                      (ready)))
+                  (check-true (file-exists? (build-path root "child.pid")))
+                  (define job (vj:verification-wait reg (vj:start-result-job-id r) 200))
+                  (check-equal? (vj:verification-job-state job) 'timed-out)
+                  (check-equal? (vj:verification-job-exit-code job) 124)
+                  (define pid (string-trim (file->string (build-path root "child.pid"))))
+                  (define stat (build-path "/proc" pid "stat"))
+                  (check-true (or (not (file-exists? stat))
+                                  (regexp-match? #rx"\\) [ZX] " (file->string stat)))))
+                (lambda ()
+                  (vj:verification-close-registry! reg)
+                  (delete-directory/files root))))
+
+;; A delayed security guard reproduced the old check -> external helper race:
+;; while cancellation held the terminal lock, a waiter could still reap the
+;; owner in its polling loop. Never actually deliver that stale group signal.
+(test-case "concurrent waiter cannot reap an owner ahead of a delayed external group signal"
+  (define root (make-temporary-file "vj-no-external-signal-~a" 'directory))
+  (define reg (vj:make-verification-registry))
+  (define (wait-until pred seconds)
+    (define deadline (+ (current-inexact-monotonic-milliseconds) (* seconds 1000)))
+    (let loop ()
+      (cond
+        [(pred) #t]
+        [(>= (current-inexact-monotonic-milliseconds) deadline) #f]
+        [else
+         (sleep 0.01)
+         (loop)])))
+  (define (dead? pid)
+    (define stat (format "/proc/~a/stat" pid))
+    (or (not (file-exists? stat)) (regexp-match? #rx"\\) [ZX] " (file->string stat))))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define r
+       (parameterize ([current-directory root])
+         (vj:verification-start!
+          reg
+          (vj:verification-identity "delayed-helper" "W1" "fast" "/repo" "local")
+          "/bin/sh"
+          (list
+           "-c"
+           (string-append
+            "trap '' TERM; echo $$ > command.pid\n"
+            "/bin/sh -c 'trap \"\" TERM; echo $$ > descendant.pid; while :; do sleep 1; done' >/dev/null 2>&1 &\n"
+            "while [ ! -s descendant.pid ]; do sleep 0.01; done\n"
+            "echo $PPID > owner.pid; kill -STOP $PPID; echo ready > ready\n"
+            ;; Only the obsolete external-helper guard releases this.
+            "while [ ! -f release ]; do sleep 0.01; done\n"
+            "kill -CONT $PPID; while :; do sleep 1; done\n")))))
+     (define id (vj:start-result-job-id r))
+     (define pid (vj:verification-job-pid (vj:verification-status reg id)))
+     (check-true (wait-until (lambda () (file-exists? (build-path root "ready"))) 4))
+     (define executions '())
+     (define reaped-during-delay? #f)
+     (define guard
+       (make-security-guard
+        (current-security-guard)
+        (lambda (_who path modes)
+          (when (memq 'execute modes)
+            (set! executions (cons path executions))
+            (call-with-output-file (build-path root "release") void #:exists 'truncate)
+            ;; The command resumes its owner; the pending TERM kills the
+            ;; group. A concurrent waiter reaps it outside the terminal lock.
+            (set! reaped-during-delay?
+                  (wait-until (lambda () (not (directory-exists? (format "/proc/~a" pid)))) 2))
+            (error 'delayed-helper "blocked stale group signal after delay")))
+        (lambda args (void))))
+     (define results (make-vector 4 #f))
+     (define errors (box '()))
+     (define waiters
+       (for/list ([i (in-range 4)])
+         (thread (lambda ()
+                   (with-handlers ([exn? (lambda (e) (set-box! errors (cons e (unbox errors))))])
+                     (vector-set! results i (vj:verification-wait reg id 10000)))))))
+     (define cancelled #f)
+     (define canceller
+       (parameterize ([current-security-guard guard])
+         (thread (lambda ()
+                   (with-handlers ([exn? (lambda (e) (set-box! errors (cons e (unbox errors))))])
+                     (set! cancelled (vj:verification-cancel! reg id)))))))
+     (for ([worker (in-list (cons canceller waiters))])
+       (check-not-false (sync/timeout 5 worker) "wait/cancel must remain bounded"))
+     (check-equal? (unbox errors) '() "no waiter/canceller errors")
+     (check-equal? executions
+                   '()
+                   (format "no external signal helper, including after concurrent reap (~a)"
+                           reaped-during-delay?))
+     (check-pred vj:verification-job? cancelled)
+     (when (vj:verification-job? cancelled)
+       (check-equal? (vj:verification-job-state cancelled) 'cancelled)
+       (check-true (vj:verification-job-reaped? cancelled))
+       (for ([result (in-vector results)])
+         (check-eq? result cancelled "one frozen terminal attribution"))
+       (check-eq? (vj:verification-cancel! reg id) cancelled "no second cleanup"))
+     (for ([name '("owner.pid" "command.pid" "descendant.pid")])
+       (define path (build-path root name))
+       (check-true (file-exists? path))
+       (when (file-exists? path)
+         (define child (string->number (string-trim (file->string path))))
+         (check-true (wait-until (lambda () (dead? child)) 2)
+                     (format "~a must not survive cleanup" name)))))
+   (lambda ()
+     (vj:verification-close-registry! reg)
+     (for ([name '("owner.pid" "command.pid" "descendant.pid")])
+       (define path (build-path root name))
+       (when (file-exists? path)
+         (define pid (string->number (string-trim (file->string path))))
+         (unless (dead? pid)
+           (parameterize ([current-output-port (open-output-nowhere)]
+                          [current-error-port (open-output-nowhere)])
+             (system* (find-executable-path "kill") "-KILL" (number->string pid))))))
+     (delete-directory/files root))))
+
 ;; ---------------------------------------------------- structured status
 
 (test-case "F/WP3.4-5: status is a structured record (id/pid/start/digest/log), no pgrep"
@@ -192,6 +381,127 @@
                             '("-c" "sleep 0.1; exit 0")))
   (check-true (vj:start-result-started? r2) "identity is free after orphan-recovery")
   (vj:verification-cancel! reg (vj:start-result-job-id r2)))
+
+;; No grace-period sleep after losing the supervisor: reconciliation itself
+;; must wait for the independent watcher, not merely reap the dead owner.
+(test-case "lost supervisor reconciliation confirms watcher cleanup before return/replacement"
+  (define root (make-temporary-file "vj-lost-watcher-~a" 'directory))
+  (define reg (vj:make-verification-registry))
+  (define ident (vj:verification-identity "lost-watcher" "W1" "fast" "/repo" "local"))
+  (define (dead? pid)
+    (define stat (format "/proc/~a/stat" pid))
+    (or (not (file-exists? stat)) (regexp-match? #rx"\\) [ZX] " (file->string stat))))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define r
+       (parameterize ([current-directory root])
+         (vj:verification-start!
+          reg
+          ident
+          "/bin/sh"
+          (list
+           "-c"
+           (string-append
+            "trap '' TERM; echo $$ > command.pid\n"
+            "/bin/sh -c 'trap \"\" TERM; echo $$ > descendant.pid; while :; do sleep 1; done' >/dev/null 2>&1 &\n"
+            "while [ ! -s descendant.pid ]; do sleep 0.01; done\n"
+            "echo ready > ready; while :; do sleep 1; done\n")))))
+     (define deadline (+ (current-inexact-monotonic-milliseconds) 4000))
+     (let ready ()
+       (unless (or (file-exists? (build-path root "ready"))
+                   (>= (current-inexact-monotonic-milliseconds) deadline))
+         (sleep 0.005)
+         (ready)))
+     (check-true (file-exists? (build-path root "ready")))
+     (define id (vj:start-result-job-id r))
+     (define owner (vj:verification-job-pid (vj:verification-status reg id)))
+     (vj:simulate-lost-process! reg id)
+     ;; Wait only for the supervisor to die, not the watcher's 250ms grace.
+     (let lost ()
+       (unless (or (dead? owner) (>= (current-inexact-monotonic-milliseconds) deadline))
+         (sleep 0.001)
+         (lost)))
+     (check-true (dead? owner))
+     (define start (current-inexact-monotonic-milliseconds))
+     (define recovered (vj:verification-reconcile! reg id))
+     (check-true (< (- (current-inexact-monotonic-milliseconds) start) 3500)
+                 "cleanup confirmation must remain bounded")
+     (check-eq? (vj:verification-job-state recovered) 'orphan-recovered)
+     (check-true (vj:verification-job-reaped? recovered))
+     (for ([name '("command.pid" "descendant.pid")])
+       (define pid (string->number (string-trim (file->string (build-path root name)))))
+       ;; Deliberately NO retry/sleep here: death is a return-time guarantee.
+       (check-true (dead? pid) (format "~a must be dead when reconcile returns" name)))
+     (define replacement (vj:verification-start! reg ident "/bin/sh" '("-c" "sleep 30")))
+     (check-true (vj:start-result-started? replacement))
+     (check-not-equal? (vj:start-result-job-id replacement) id))
+   (lambda ()
+     (vj:verification-close-registry! reg)
+     (for ([name '("command.pid" "descendant.pid")])
+       (define path (build-path root name))
+       (when (file-exists? path)
+         (define pid (string-trim (file->string path)))
+         (unless (dead? pid)
+           (parameterize ([current-output-port (open-output-nowhere)]
+                          [current-error-port (open-output-nowhere)])
+             (system* (find-executable-path "kill") "-KILL" pid)))))
+     (delete-directory/files root))))
+
+;; A failed observation is NOT evidence of successful cleanup, even if the
+;; supervisor is already dead. Every terminal path must preserve that fact.
+(for ([operation '(cancel timeout completion reconcile)])
+  (test-case (format "~a: failed cleanup confirmation retains ownership and refuses replacement"
+                     operation)
+    (define reg (vj:make-verification-registry))
+    (define ident (vj:verification-identity "unconfirmed" "W1" "fast" "/repo" "local"))
+    (define r
+      (vj:verification-start! reg
+                              ident
+                              "/bin/sh"
+                              (if (eq? operation 'completion)
+                                  '("-c" "exit 0")
+                                  '("-c" "sleep 30"))))
+    (define id (vj:start-result-job-id r))
+    (when (eq? operation 'reconcile)
+      (vj:simulate-lost-process! reg id)
+      (define deadline (+ (current-inexact-monotonic-milliseconds) 1000))
+      (let lost ()
+        (define pid (vj:verification-job-pid (vj:verification-status reg id)))
+        (define stat (format "/proc/~a/stat" pid))
+        (when (and (file-exists? stat)
+                   (not (regexp-match? #rx"\\) [ZX] " (file->string stat)))
+                   (< (current-inexact-monotonic-milliseconds) deadline))
+          (sleep 0.001)
+          (lost))))
+    (define guard
+      (make-security-guard (current-security-guard)
+                           (lambda (_who path modes)
+                             (when (and path (equal? path (string->path "/proc")) (memq 'read modes))
+                               (error 'cleanup-confirmation "cannot observe the owned group")))
+                           (lambda args (void))))
+    (define start (current-inexact-monotonic-milliseconds))
+    (define rec
+      (parameterize ([current-security-guard guard])
+        (case operation
+          [(cancel) (vj:verification-cancel! reg id)]
+          [(timeout) (vj:verification-wait reg id 0)]
+          [(completion) (vj:verification-wait reg id 5000)]
+          [(reconcile) (vj:verification-reconcile! reg id)])))
+    (check-true (< (- (current-inexact-monotonic-milliseconds) start) 4000))
+    (check-eq? (vj:verification-job-state rec)
+               (case operation
+                 [(cancel) 'cancelled]
+                 [(timeout) 'timed-out]
+                 [(completion) 'completed]
+                 [(reconcile) 'orphan-recovered]))
+    (check-false (vj:verification-job-reaped? rec) "unconfirmed is never reaped")
+    (check-equal? (vj:registry-active-count reg) 1 "ownership is retained")
+    (define retry (vj:verification-start! reg ident "/bin/sh" '("-c" "exit 0")))
+    (check-false (vj:start-result-started? retry) "must not replace an unconfirmed owner")
+    (check-equal? (vj:start-result-job-id retry) id)
+    (check-eq? (vj:verification-cancel! reg id) rec "failed confirmation stays honest")
+    (vj:verification-close-registry! reg)))
 
 (test-case "F/WP3.4-6b: reconcile of a LIVE record keeps ownership (no false orphan)"
   (define reg (vj:make-verification-registry))
@@ -349,6 +659,106 @@
   (vj:verification-cancel! reg (vj:start-result-job-id (vector-ref results 0)))
   (with-handlers ([exn:fail? void])
     (delete-file pid-log)))
+
+(test-case "break during watcher handshake preserves one registered owner for registry close"
+  (define root (make-temporary-file "vj-start-break-~a" 'directory))
+  (define reg (vj:make-verification-registry))
+  (define ident (vj:verification-identity "start-break" "W1" "fast" "/repo" "local"))
+  (define entered (make-semaphore 0))
+  (define release (make-semaphore 0))
+  (define delayed? #f)
+  (define broken? #f)
+  (define errors (box '()))
+  (define retry #f)
+  (define workers '())
+  (define (wait-until pred)
+    (define deadline (+ (current-inexact-monotonic-milliseconds) 4000))
+    (let loop ()
+      (cond
+        [(pred) #t]
+        [(>= (current-inexact-monotonic-milliseconds) deadline) #f]
+        [else
+         (sleep 0.005)
+         (loop)])))
+  (define (dead? pid)
+    (define stat (format "/proc/~a/stat" pid))
+    (or (not (file-exists? stat)) (regexp-match? #rx"\\) [ZX] " (file->string stat))))
+  (define guard
+    (make-security-guard (current-security-guard)
+                         (lambda (_who path modes)
+                           (when (and (not delayed?)
+                                      path
+                                      (memq 'read modes)
+                                      (regexp-match? #rx"gsd-verification-watcher-"
+                                                     (path->string path)))
+                             (set! delayed? #t)
+                             (semaphore-post entered)
+                             (semaphore-wait release)))
+                         (lambda args (void))))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define starter
+       (parameterize ([current-directory root]
+                      [current-security-guard guard])
+         (thread
+          (lambda ()
+            (with-handlers ([exn:break? (lambda (_) (set! broken? #t))]
+                            [exn:fail? (error-recorder! errors)])
+              (vj:verification-start!
+               reg
+               ident
+               "/bin/sh"
+               (list
+                "-c"
+                (string-append
+                 "trap '' TERM; echo $PPID > owner.pid; echo $$ > command.pid; "
+                 "(trap '' TERM; exec sleep 60) >/dev/null 2>&1 & echo $! > descendant.pid; wait"))))))))
+     (set! workers (list starter))
+     (check-not-false (sync/timeout 4 entered) "pause after spawn, before registration")
+     (check-true (wait-until (lambda () (file-exists? (build-path root "descendant.pid"))))
+                 "the unregistered owner already has a redirected descendant")
+     (define duplicate
+       (thread (lambda ()
+                 (with-handlers ([exn:fail? (error-recorder! errors)])
+                   (set! retry (vj:verification-start! reg ident "/bin/sh" '("-c" "sleep 60")))))))
+     (set! workers (cons duplicate workers))
+     (break-thread starter)
+     (semaphore-post release)
+     (for ([worker (in-list workers)])
+       (check-not-false (sync/timeout 4 worker) "startup and pending break remain bounded"))
+     (check-true broken? "the deferred break is delivered after registration")
+     (check-equal? (unbox errors) '())
+     (check-pred vj:start-result? retry)
+     (when (vj:start-result? retry)
+       (check-false (vj:start-result-started? retry) "no duplicate ownership after interrupted start")
+       (check-true (vj:start-result-existing-job? retry)))
+     (check-equal? (vj:registry-active-count reg) 1)
+     (define closed (vj:verification-close-registry! reg))
+     (check-equal? (length closed) 1 "close finds the interrupted starter's owner")
+     (for ([job (in-list closed)])
+       (check-equal? (vj:verification-job-state job) 'cancelled)
+       (check-true (vj:verification-job-reaped? job))
+       (check-equal? (vj:verification-job-pid job)
+                     (string->number (string-trim (file->string (build-path root "owner.pid"))))))
+     (for ([name '("command.pid" "descendant.pid")])
+       (define pid (string-trim (file->string (build-path root name))))
+       (check-true (dead? pid) (format "~a is dead when close returns" name)))
+     (check-equal? (vj:registry-active-count reg) 0))
+   (lambda ()
+     (semaphore-post release)
+     (for ([worker (in-list workers)])
+       (sync/timeout 4 worker))
+     (vj:verification-close-registry! reg)
+     ;; A failing regression must not leak the unregistered group either.
+     (define owner-file (build-path root "owner.pid"))
+     (when (file-exists? owner-file)
+       (define owner (string-trim (file->string owner-file)))
+       (unless (dead? owner)
+         (parameterize ([current-output-port (open-output-nowhere)]
+                        [current-error-port (open-output-nowhere)])
+           (system* (find-executable-path "kill") "-KILL" "--" (string-append "-" owner)))))
+     (delete-directory/files root))))
 
 (test-case "R/WP3.4-C2: concurrent waiters and cancellers share ONE terminal attribution"
   (define reg (vj:make-verification-registry))
