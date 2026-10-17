@@ -835,7 +835,7 @@
    ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
    (make-entry "verification-job.rkt"
                'external-ports
-               '(fs-read fs-delete sha256 subprocess parameterize path-ops)
+               '(fs-read fs-delete dir-list sha256 subprocess parameterize path-ops)
                '()
                '("racket/contract" "racket/file"
                                    "racket/format"
