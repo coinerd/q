@@ -500,9 +500,16 @@
       (set! watcher-identity
             (let ready ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
               (or (read-watcher-identity watcher-path (subprocess-pid sp))
-                  (and (eq? (subprocess-status sp) 'running)
-                       (< (current-inexact-monotonic-milliseconds) deadline)
-                       (begin (sleep 0.005) (ready deadline))))))
+                  (cond
+                    ;; Publication can follow the empty read but precede exit.
+                    ;; Exit is not proof of ownership: reread and validate the
+                    ;; private identity before rejecting the missing handshake.
+                    [(not (eq? (subprocess-status sp) 'running))
+                     (read-watcher-identity watcher-path (subprocess-pid sp))]
+                    [(< (current-inexact-monotonic-milliseconds) deadline)
+                     (sleep 0.005)
+                     (ready deadline)]
+                    [else #f]))))
       (unless watcher-identity
         (error 'run-subprocess "group watcher identity unconfirmed")))
 

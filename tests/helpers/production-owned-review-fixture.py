@@ -78,7 +78,21 @@ run = subprocess.run(['racket', str(TESTS / 'helpers/auto-review-owned-fixture.r
 if run.returncode:
     raise RuntimeError(run.stdout + run.stderr)
 path = root / '.planning/campaigns' / plan / f'coordinator-w{wave}.json'
-journal = json.loads(path.read_text())
+try:
+    journal = json.loads(path.read_text())
+    if not isinstance(journal.get('receipt'), dict):
+        raise ValueError('owned Verify returned without a receipt')
+except (OSError, ValueError) as exc:
+    # Approval alone is not receipt evidence. Fail at the producer boundary,
+    # preserving its captured output instead of a context-free FileNotFoundError
+    # (and never inventing a journal or retrying until the fixture looks green).
+    git = subprocess.run(['git', 'status', '--short', '--branch'], cwd=repo,
+                         capture_output=True, text=True, timeout=30)
+    raise RuntimeError(
+        f'owned Verify did not persist a valid receipt at {path}: {exc}\n'
+        f'producer exit={run.returncode}\nstdout:\n{run.stdout}\n'
+        f'stderr:\n{run.stderr}\ngit status:\n{git.stdout}{git.stderr}'
+    ) from exc
 # Preserve the pre-existing fixture's simulated prior-generation setup; the
 # current receipt's execution proof is genuinely produced above, never mocked.
 prior = f.journal_fixture(plan, wave, journal['receipt']['head'], generation, branch=f.WAVE_BRANCH)

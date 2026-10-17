@@ -541,9 +541,15 @@
         (define watcher-identity
           (let ready ([deadline (+ (current-inexact-monotonic-milliseconds) 2000)])
             (or (read-watcher-identity watcher-path)
-                (and (eq? (subprocess-status p) 'running)
-                     (< (current-inexact-monotonic-milliseconds) deadline)
-                     (begin (sleep 0.005) (ready deadline))))))
+                (cond
+                  ;; The owner may publish and exit after our empty read.
+                  ;; Still require a validated identity, never exit alone.
+                  [(not (eq? (subprocess-status p) 'running))
+                   (read-watcher-identity watcher-path)]
+                  [(< (current-inexact-monotonic-milliseconds) deadline)
+                   (sleep 0.005)
+                   (ready deadline)]
+                  [else #f]))))
         (define h
           (job-handle (box (verification-job job-id
                                              key
