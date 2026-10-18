@@ -37,7 +37,8 @@
   (load-delivery-journal (lost-author-root f) (lost-author-plan f) 0))
 (define-runtime-path metrics-script "../../scripts/metrics.rkt")
 (define-runtime-path metrics-helpers "../../scripts/metrics-helpers.rkt")
-(define (with-lost-author proc #:metrics? [metrics? #f] #:metrics-suffix [metrics-suffix ""])
+(define (with-lost-author proc #:metrics? [metrics? #f] #:metrics-suffix [metrics-suffix ""]
+                          #:metrics-links? [metrics-links? #f])
   (define root (make-temporary-file "lost-author-finish-~a" 'directory))
   (dynamic-wind
    void
@@ -60,6 +61,15 @@
        (unless (equal? metrics-suffix "")
          (display-to-file metrics-suffix (build-path repo "scripts/metrics.rkt") #:exists 'append))
        (copy-file metrics-helpers (build-path repo "scripts/metrics-helpers.rkt"))
+       (when metrics-links?
+         ;; Committed BEFORE the genuine baseline owned Verify, just like the
+         ;; metadata-discovery fixture in the actual pinned input tree.
+         (define dir (build-path repo "tests/metadata-discovery/fixture/tests"))
+         (put! (build-path dir "link-target.rkt")
+               "#lang racket/base\n(require rackunit)\n(module+ test (check-true #t))\n")
+         (make-file-or-directory-link "link-target.rkt" (build-path dir "symlinked-test.rkt"))
+         (put! (build-path dir "real-dir/target.txt") "committed regular target\n")
+         (make-file-or-directory-link "real-dir" (build-path dir "linked-dir")))
        (put! (build-path repo "README.md")
              (string-append "Prose stays byte-identical.\n## Test Suite\n| Source modules | 0 |\n"
                             "| Test files | 0 |\n| Source lines | 0 |\n| Test lines | 0 |\n| Test assertions | 0 |\n")))

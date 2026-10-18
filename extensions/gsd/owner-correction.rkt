@@ -94,10 +94,52 @@
     (list (list-ref m 3) (list-ref m 1) (list-ref m 2))))
 (define (entry es path) (need (assoc path es) (format "missing committed input ~a" path)))
 (define (blob cwd oid) (git cwd (list "cat-file" "blob" oid)))
+;; The pinned metrics generator opens tracked paths, so a tracked .rkt link
+;; contributes its target's lines under the LINK's name (even if counted twice).
+;; Resolve only bounded, single-hop lexical links in this immutable Git tree.
+;; In particular do not simplify away a linked/missing directory before checking
+;; it, and never consult the execution filesystem to find a target.
+(define (metrics-link-target cwd es e)
+  (define text (blob cwd (caddr e)))
+  (need (and (positive? (string-length text))
+             (<= (bytes-length (string->bytes/utf-8 text)) 4096)
+             (not (ormap (lambda (s) (string-contains? text s)) '("\\" "\r" "\n" "\u0000")))
+             (not (regexp-match? #px"^(?:/|[A-Za-z]:)" text)))
+        "unsafe committed metrics symlink target")
+  (define parts (string-split text "/" #:trim? #f))
+  (need (<= (length parts) 256) "committed metrics symlink target exceeds bound")
+  (define base (drop-right (string-split (car e) "/") 1))
+  (define resolved
+    (for/fold ([dir base]) ([part (in-list parts)] [i (in-naturals)])
+      (define last? (= i (sub1 (length parts))))
+      (cond
+        [(equal? part ".") dir]
+        [(equal? part "..")
+         (need (pair? dir) "committed metrics symlink escapes tree root")
+         (drop-right dir 1)]
+        [else
+         (need (not (equal? part "")) "empty committed metrics symlink component")
+         (define next (append dir (list part)))
+         (unless last?
+           (define path (string-join next "/"))
+           (need (and (not (assoc path es))
+                      (ormap (lambda (candidate)
+                               (string-prefix? (car candidate) (string-append path "/"))) es))
+                 "non-directory/linked/missing committed metrics symlink component"))
+         next])))
+  (define target (entry es (string-join resolved "/")))
+  (need (member (cadr target) '("100644" "100755"))
+        "committed metrics symlink target is not single-hop regular")
+  ;; A final dot/up or slash denotes a directory, never a regular blob.
+  (need (not (member (last parts) '("." ".." ""))) "nonregular committed metrics symlink target")
+  target)
 (define (inputs cwd es)
   (for/list ([e (in-list es)] #:when (string-suffix? (car e) ".rkt"))
-    (need (member (cadr e) '("100644" "100755")) "non-regular metrics input")
-    (cons (car e) (blob cwd (caddr e)))))
+    (define target
+      (cond [(member (cadr e) '("100644" "100755")) e]
+            [(equal? (cadr e) "120000") (metrics-link-target cwd es e)]
+            [else (error 'owner-correction "non-regular metrics input")]))
+    (cons (car e) (blob cwd (caddr target)))))
 (define (index-visible! cwd)
   ;; A clean porcelain status must not hide candidate bytes via index flags.
   (for ([s (in-list (string-split (git cwd '("ls-files" "-v" "-z")) "\u0000"))])
