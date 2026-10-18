@@ -3,6 +3,7 @@
 (require rackunit
          "delivery-fixtures.rkt"
          "private-fixture-templates.rkt"
+         racket/runtime-path
          "../../extensions/gsd/author-scope.rkt"
          "../../extensions/gsd/campaign-state.rkt"
          "../../extensions/gsd/campaign-repository.rkt"
@@ -34,7 +35,9 @@
   (git-quiet! repo "commit" "-qm" "owner test-author delta"))
 (define (journal f)
   (load-delivery-journal (lost-author-root f) (lost-author-plan f) 0))
-(define (with-lost-author proc)
+(define-runtime-path metrics-script "../../scripts/metrics.rkt")
+(define-runtime-path metrics-helpers "../../scripts/metrics-helpers.rkt")
+(define (with-lost-author proc #:metrics? [metrics? #f] #:metrics-suffix [metrics-suffix ""])
   (define root (make-temporary-file "lost-author-finish-~a" 'directory))
   (dynamic-wind
    void
@@ -51,6 +54,15 @@
      (put! (build-path repo ".gitignore") "compiled/\n")
      (put! (build-path repo "source.rkt")
            "#lang racket/base\n(provide answer)\n(define (answer) 0)\n")
+     (when metrics?
+       (make-directory* (build-path repo "scripts"))
+       (copy-file metrics-script (build-path repo "scripts/metrics.rkt"))
+       (unless (equal? metrics-suffix "")
+         (display-to-file metrics-suffix (build-path repo "scripts/metrics.rkt") #:exists 'append))
+       (copy-file metrics-helpers (build-path repo "scripts/metrics-helpers.rkt"))
+       (put! (build-path repo "README.md")
+             (string-append "Prose stays byte-identical.\n## Test Suite\n| Source modules | 0 |\n"
+                            "| Test files | 0 |\n| Source lines | 0 |\n| Test lines | 0 |\n| Test assertions | 0 |\n")))
      (git-quiet! repo "add" ".")
      (git-quiet! repo "commit" "-qm" "baseline")
      (git-quiet! repo "push" "-q" "origin" "HEAD:refs/heads/main")
@@ -59,7 +71,8 @@
      (write-plan! root 0 "Checkpoint" "checkpoint")
      (write-wave-doc! root 0 "checkpoint"
                       '("q/source.rkt" "q/tests/probe.rkt" "q/tests/second.rkt")
-                      "raco test tests/probe.rkt && raco test tests/second.rkt")
+                      (string-append "raco test tests/probe.rkt && raco test tests/second.rkt"
+                                     (if metrics? " && racket scripts/metrics.rkt --lint" "")))
      (define record (migrate-campaign! root))
      (set-campaign-record-execution-policy! record #f)
      (persist-campaign! root record)
@@ -68,7 +81,8 @@
      (parameterize ([current-owned-proof-root (build-path root "owned-proofs")]
                     [current-gsd-verification-registry registry])
        (define cwd #f)
-       (run-campaign-wave
+       (define initial-result
+         (run-campaign-wave
         root record 0 #:fence-token 1 #:timeout-sec 180 #:timeout-retries 0
         #:no-change-retries 0 #:isolate? #t #:stall-soft-limit #f #:stall-hard-limit #f
         #:runner
@@ -80,10 +94,20 @@
                 "#lang racket/base\n(require rackunit \"../source.rkt\")\n(module+ test (check-equal? (answer) 1))\n")
           (put! (build-path cwd "tests/second.rkt")
                 "#lang racket/base\n(require rackunit)\n(module+ test (check-true #t))\n")
+          (when metrics?
+            ;; Fixture baseline only; the correction implementation must NEVER
+            ;; execute this candidate-controlled generator to derive authority.
+            (git-quiet! cwd "add" "tests")
+            (unless (parameterize ([current-directory cwd])
+                      (system* (find-executable-path "racket") "scripts/metrics.rkt" "--sync-all"))
+              (error 'fixture "baseline metrics sync failed")))
           'ok)
         #:verifier (lambda (_)
                      (define check (check-verify-command root 0 #f))
-                     (delivery-verification (cadr check) (list check) "actual full Verify")))
+                     (delivery-verification (cadr check) (list check)
+                                            (format "actual full Verify: ~s" check)))))
+       (unless (load-delivery-journal root plan 0)
+         (error 'fixture "initial delivery failed: ~s" initial-result))
        (define old (hash-ref (load-delivery-journal root plan 0) 'receipt))
        (check-not-false (load-receipt-owned-proof old root plan 0))
        (run-coordinator-checkpoint

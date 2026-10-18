@@ -101,6 +101,10 @@
  ;; owned-proof slice: trusted host configuration locating the content-
  ;; addressed retained proof store (never a model/command-supplied path).
  ("extensions/gsd/review-proof.rkt" (current-owned-proof-root . CONFIGURATION))
+ ;; BUG-0087: trusted host configuration locating private correction authority;
+ ;; injected durable-cut fault hook never supplies approval or session state.
+ ("extensions/gsd/owner-correction.rkt" (current-owner-correction-root . CONFIGURATION)
+                                         (current-owner-correction-cut . SERVICE_HANDLE))
  ;; BUG-0079: test/embedding seam overriding the approved-head publisher
  ;; (default shells the trusted gsd-delivery.py controller through the ONE
  ;; controller-environment credential boundary); never set in prod.

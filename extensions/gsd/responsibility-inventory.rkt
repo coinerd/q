@@ -165,12 +165,24 @@
                '(git subprocess parameterize make-param path-ops)
                '(current-gsd-author-recovery-timeout-sec)
                '("racket/list" "racket/path" "racket/string"
-                 "author-scope" "campaign-state" "campaign-repository"
+                 "author-scope" "owner-correction" "campaign-state" "campaign-repository"
                  "delivery-journal" "delivery-receipt" "delivery-verifier"
                  "delivery-publication" "evidence-author-journal" "review-proof"
                  "wave-runner-port" "system-adapters" "composition-root"
                  "verification-job" "wave-executor" "attempt-artifacts"
                  "sandbox/subprocess"))
+   ;; Separate owner metadata authority. The deterministic interpreter has no
+   ;; I/O; the owner protocol owns private persistence and exact Git effects.
+   (make-entry "generated-readme.rkt" 'pure-planning '() '()
+               '("racket/list" "racket/port" "racket/string"))
+   (make-entry "owner-correction.rkt" 'persistence
+               '(fs-write fs-read fs-rename fs-delete mkdir sha256 git subprocess parameterize make-param path-ops)
+               '(current-owner-correction-root current-owner-correction-cut)
+               '("racket/file" "racket/list" "racket/path" "racket/port" "racket/string"
+                 "generated-readme" "author-scope" "campaign-state" "campaign-repository"
+                 "delivery-journal" "delivery-receipt" "evidence-author-journal" "review-proof"
+                 "../gsd-planning/execution-policy"
+                 "util/json/checksum" "sandbox/subprocess"))
    ;; Durable, locked preimplementation RED and candidate assertion capture,
    ;; never a full Verify receipt. Atomic output/locking delegates writes and
    ;; renames to racket/file; registered child execution to verification-job.
