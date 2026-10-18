@@ -27,12 +27,13 @@
 (define-runtime-path owner-module "../extensions/gsd/owner-correction.rkt")
 (define-runtime-path proof-module "../extensions/gsd/review-proof.rkt")
 (define stopped (lambda () #f))
-(define (with-fixture proc #:metrics-suffix [metrics-suffix ""])
+(define (with-fixture proc #:metrics-suffix [metrics-suffix ""] #:metrics-links? [metrics-links? #f])
   (define store (make-temporary-file "private-correction-~a" 'directory))
   (file-or-directory-permissions store #o700)
   (dynamic-wind void
     (lambda () (parameterize ([current-owner-correction-root store])
-                 (with-lost-author proc #:metrics? #t #:metrics-suffix metrics-suffix)))
+                 (with-lost-author proc #:metrics? #t #:metrics-suffix metrics-suffix
+                                   #:metrics-links? metrics-links?)))
     (lambda () (delete-directory/files store))))
 (define (propose f) (propose-owner-correction! (lost-author-root f) (lost-author-plan f) 0 #:session-live? stopped))
 (define (authorize f digest)
@@ -76,6 +77,112 @@
       (for ([worker (in-list workers)] #:unless (thread-dead? worker)) (break-thread worker))
       (for-each thread-wait workers))))
 (module+ test
+  (correction-case "committed metrics links: genuine baseline, proposal, application and full recovery"
+    (with-fixture
+     (lambda (f)
+       (define cwd (lost-author-cwd f))
+       (define j (journal f))
+       ;; Also cover bounded lexical dot/up resolution through real committed
+       ;; directories; this author change remains within the original FILES.
+       (delete-file (build-path cwd "tests/second.rkt"))
+       (make-file-or-directory-link
+        "./metadata-discovery/fixture/tests/real-dir/../link-target.rkt"
+        (build-path cwd "tests/second.rkt"))
+       (git-output cwd "add" "--" "tests/second.rkt")
+       (git-output cwd "commit" "-qm" "frozen test path uses committed lexical link")
+       (define parent (git-output cwd "rev-parse" "HEAD"))
+       (define link "tests/metadata-discovery/fixture/tests/symlinked-test.rkt")
+       (define target "tests/metadata-discovery/fixture/tests/link-target.rkt")
+       (check-not-false (load-receipt-owned-proof (lost-author-old f)
+                                                 (lost-author-root f) (lost-author-plan f) 0))
+       (define r (propose f))
+       (define d (delta r))
+       (define es (hash-ref d 'inputs))
+       (check-equal? (assoc link es)
+                     (list link "120000" "093687fa1799470fa02296ba52f0665c4c6b8ff7"))
+       (check-equal? (assoc target es)
+                     (list target "100644" (git-output cwd "rev-parse" (string-append parent ":" target))))
+       (unchanged f j parent)
+       ;; Compare against the ACTUAL pinned generator, not another interpreter.
+       (check-true (parameterize ([current-directory cwd])
+                     (system* (find-executable-path "racket") "scripts/metrics.rkt" "--sync-all")))
+       (check-equal? (file->string (build-path cwd "README.md")) (hash-ref d 'after))
+       ;; Target identity is independently rederived, not trusted from a digest.
+       (define p (hash-ref r 'proposal))
+       (define forged
+         (hash-set p 'delta
+                   (hash-set d 'inputs
+                             (map (lambda (e) (if (equal? (car e) target)
+                                                  (list target "100644" (caddr (assoc link es))) e)) es))))
+       (define fake-digest (correction-digest forged))
+       (define fake-path (build-path (current-owner-correction-root) (string-append fake-digest ".proposal")))
+       (call-with-output-file fake-path (lambda (out) (write forged out)))
+       (file-or-directory-permissions fake-path #o400)
+       (check-exn #rx"trees/blobs/commit differ" (lambda () (authorize f fake-digest)))
+       (define digest (hash-ref r 'digest))
+       (authorize f digest)
+       (check-equal? (apply! f digest) (hash-ref d 'commit))
+       (check-equal? (git-output cwd "diff" "--name-only" parent "HEAD") "README.md")
+       (check-equal? (journal f) j)
+       (check-true (recover f))
+       (define next (hash-ref (journal f) 'receipt))
+       (check-equal? (hash-ref next 'head) (hash-ref d 'commit))
+       (check-not-false (load-receipt-owned-proof next (lost-author-root f) (lost-author-plan f) 0))
+       (check-equal? (hash-ref (journal f) 'receipt-history) (list (lost-author-old f)))
+       (check-equal? (hash-ref (journal f) 'stage) "context-ready"))
+     #:metrics-links? #t))
+
+  (correction-case "committed metrics links: unsafe targets refuse before authority without filesystem fallback"
+    (with-fixture
+     (lambda (f)
+       (define cwd (lost-author-cwd f))
+       (define j (journal f))
+       (define dir "metadata-discovery/fixture/tests/")
+       ;; This real but UNCOMMITTED file must never supply a missing Git target.
+       (define untracked (build-path cwd "tests/untracked-target.txt"))
+       (put! untracked "(check-true #t)\n")
+       (for ([item (in-list
+                    (list (cons 'absolute (path->string untracked))
+                          (cons 'rootescape "../../outside.rkt")
+                          (cons 'dangling "missing.rkt")
+                          (cons 'filesystem-only "untracked-target.txt")
+                          (cons 'cycle "second.rkt")
+                          (cons 'chain (string-append dir "symlinked-test.rkt"))
+                          (cons 'directory (string-append dir "real-dir"))
+                          (cons 'linked-directory (string-append dir "linked-dir/target.txt"))
+                          ;; Must not normalize away a linked/missing component.
+                          (cons 'linked-dotdot (string-append dir "linked-dir/../link-target.rkt"))
+                          (cons 'missing-dotdot (string-append dir "absent/../link-target.rkt"))
+                          (cons 'regular-component (string-append dir "link-target.rkt/../link-target.rkt"))
+                          (cons 'trailing-slash (string-append dir "link-target.rkt/"))
+                          (cons 'windows "C:\\outside.rkt")
+                          (cons 'empty "")
+                          (cons 'newline "untracked-target.txt\n")
+                          (cons 'nul "untracked-target.txt\u0000")
+                          (cons 'oversized (make-string 4097 #\a))
+                          (cons 'too-many-components
+                                (string-append (apply string-append (make-list 256 "./")) "probe.rkt"))))])
+         (define oid
+           (parameterize ([current-input-port (open-input-string (cdr item))])
+             (git-output cwd "hash-object" "-w" "--stdin")))
+         ;; Git-only malicious trees avoid asking the OS to materialize unsafe
+         ;; links. Every author commit still changes only a frozen FILES path.
+         (git-output cwd "update-index" "--cacheinfo" "120000" oid "tests/second.rkt")
+         (git-output cwd "commit" "-qm" (format "negative committed link: ~a" (car item)))
+         (define parent (git-output cwd "rev-parse" "HEAD"))
+         (check-exn #rx"committed (metrics symlink|input)" (lambda () (propose f)) (symbol->string (car item)))
+         (unchanged f j parent)
+         (check-equal? (file->string untracked) "(check-true #t)\n"))
+       ;; Existing non-blob/ambiguous-mode guard is not weakened either.
+       (git-output cwd "update-index" "--cacheinfo" "160000"
+                   (git-output cwd "rev-parse" "HEAD") "tests/second.rkt")
+       (git-output cwd "commit" "-qm" "negative nonregular metrics entry")
+       (check-exn #rx"non-blob/submodule" (lambda () (propose f)))
+       (check-equal? (journal f) j)
+       (check-false (for/or ([p (in-directory (current-owner-correction-root))])
+                      (regexp-match? #rx"[.](proposal|authority|intent)$" (path->string p)))))
+     #:metrics-links? #t))
+
   (correction-case "BUG0087 GREEN: inspected exact digest, private authority, real full frozen owned Verify"
     (with-fixture
      (lambda (f)

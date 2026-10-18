@@ -41,7 +41,17 @@ committed Git inputs; it never loads or executes project generator code. Only
 section may change. The other three static metrics must already match. Ambiguous
 rows, noncanonical formatting, prose/marker sync, new test-file/module counts,
 unrecognized generators, mixed dirt, hidden index entries, mode changes and
-nonregular inputs refuse rather than broadening this contract. Assertions count
+unsupported nonregular inputs refuse rather than broadening this contract.
+To match the pinned generator's file reads, a tracked `.rkt` symlink may refer
+lexically to a committed regular blob in the same tree: relative, at most 4096
+UTF-8 bytes / 256 components, and single-hop only. Its target's contents count
+under the link's path, independently of the target's own entry. Absolute or
+root-escaping targets, dangling targets, cycles/chains, directory targets and
+linked/missing/non-directory traversal components refuse; no filesystem target
+or external fallback is used. The complete immutable input tree already binds
+both link and target paths/modes/blob identities, independently rederived during
+validation. README must still be regular; its no-links/mode guards are unchanged.
+Assertions count
 **lines containing `(check-`**, not occurrences. README mode and all other bytes
 are preserved. The actual frozen Verify still runs its declared metrics lint;
 the correction validator cannot substitute its own passing gate.
