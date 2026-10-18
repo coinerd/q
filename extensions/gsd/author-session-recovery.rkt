@@ -7,6 +7,7 @@
          racket/path
          racket/string
          "author-scope.rkt"
+         "owner-correction.rkt"
          "campaign-state.rkt"
          "campaign-repository.rkt"
          "delivery-journal.rkt"
@@ -148,6 +149,18 @@
                            (member (campaign-wave-delivery-head-sha w)
                                    (list "" (hash-ref old 'head) (hash-ref candidate 'head))))
                       "stale confirmed author publication")
+                ;; Owned Verify never substitutes for separate correction
+                ;; authority, including confirmed-publication crash replay.
+                (when (and (not (member "README.md" (hash-ref marker 'frozen-files)))
+                           (member "README.md"
+                                   (string-split (need (commit-paths (hash-ref (hash-ref marker 'context) 'repo)
+                                                                    (hash-ref pub 'head))
+                                                       "cannot inspect publication head") "\u0000")))
+                  (validate-owner-correction!
+                   dir plan wave
+                   (hasheq 'repo (hash-ref pub 'repo) 'origin (hash-ref pub 'origin)
+                           'branch (hash-ref pub 'branch) 'head (hash-ref pub 'head) 'tree (hash-ref candidate 'tree))
+                   journal marker #:session-live? (lambda () #f)))
                 rec)
               (current!)
               ;; Bind the genuine approved head BEFORE certification so a crash
@@ -184,7 +197,18 @@
                 "execution checkout repository/branch/origin differs from retained receipt")
           (cond
             [(equal? (hash-ref source 'tree) (hash-ref old 'tree))
-             ;; BUG-0085 unchanged-tree disposition remains truthful.
+             ;; Unchanged net bytes do not excuse a reverted forbidden
+             ;; commit. Preserve BUG-0085 only for in-scope/no-history work.
+             (define history
+               (string-split (need (delivery-git cwd "rev-list"
+                                                (string-append (hash-ref old 'head) ".." (hash-ref source 'head)))
+                                   "cannot enumerate unchanged author history") "\n"))
+             (need (<= (length history) 128) "unchanged author history exceeds bounded scan")
+             (define files (frozen-author-files root plan wave))
+             (for* ([commit (in-list history)]
+                    [path (in-list (string-split (need (commit-paths cwd commit)
+                                                      "cannot inspect unchanged author scope") "\u0000"))])
+               (need (member path files) (format "committed author path outside frozen FILES: ~s" path)))
              (abandon-evidence-author-session!
               root plan wave (hash-ref source 'tree)
               #:guard (lambda ()
@@ -208,6 +232,7 @@
   (define files (frozen-author-files root plan wave))
   (define head (hash-ref source 'head))
   (define candidate #f)
+  (define correction #f)
   (define (current!)
     (need (not (session-live?)) "author session is live; owner finish refused")
     (define rec (load-campaign-record root plan))
@@ -245,6 +270,8 @@
                    (equal? (hash-ref now 'receipt-history '())
                            (append (hash-ref j 'receipt-history '()) (list old)))))
           "author journal raced; owner finish refused")
+    (when correction
+      (validate-owner-correction! root plan wave source j m #:session-live? session-live?))
     rec)
   (current!)
   (need (strict-descendant? (hash-ref source 'repo) (hash-ref old 'head) head)
@@ -261,8 +288,15 @@
   (for ([commit (in-list history)])
     (define paths
       (need (commit-paths cwd commit) "cannot inspect committed author scope"))
-    (for ([path (in-list (string-split paths "\u0000"))])
-      (need (member path files) (format "committed author path outside frozen FILES: ~s" path))))
+    (define changed (string-split paths "\u0000"))
+    (cond
+      [(and (equal? commit head) (equal? changed '("README.md")) (not (member "README.md" files)))
+       ;; Additive owner-correction classification, never FILES expansion.
+       (set! correction
+             (validate-owner-correction! root plan wave source j m #:session-live? session-live?))]
+      [else
+       (for ([path (in-list changed)])
+         (need (member path files) (format "committed author path outside frozen FILES: ~s" path)))]))
   (current!)
   (define prior (load-approved-publication root plan wave))
   (cond

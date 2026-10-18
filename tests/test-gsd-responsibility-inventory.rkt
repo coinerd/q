@@ -114,8 +114,8 @@
       ;; +3 BUG-0042 extractions (owned-lane, wave-scope,
       ;; evidence-author-journal); +1 BUG-0086 owner session recovery.
       (check-equal? (length inventory)
-                    85
-                    "69 existing + seven evidence recovery + six author lifecycle + three extraction modules"))
+                    87
+                    "85 existing + two separately authorized correction modules"))
 
     (test-case "evidence recovery classification preserves I/O boundaries"
       (define formats '("evidence-repair-format.rkt"))
@@ -144,7 +144,9 @@
                        ("author-checkpoint.rkt" "campaign-repository" "delivery-receipt")
                        ("red-checkpoint.rkt" "verification-job" "author-scope")
                        ("author-session-recovery.rkt" "delivery-verifier" "review-proof"
-                                                      "verification-job" "system-adapters"))])
+                                                      "verification-job" "system-adapters" "owner-correction")
+                       ("owner-correction.rkt" "generated-readme" "review-proof"
+                                               "../gsd-planning/execution-policy"))])
         (for ([dep (in-list (cdr binding))])
           (check-not-false
            (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
