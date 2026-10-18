@@ -48,7 +48,10 @@
          "verify-command-format.rkt"
          "wave-docs.rkt"
          (only-in "review-proof-format.rkt" apply-verify-jobs)
-         (only-in "plan-context-builder.rkt" find-git-root-dir))
+         (only-in "plan-context-builder.rkt" find-git-root-dir)
+         (only-in "../../sandbox/subprocess.rkt"
+                  run-subprocess subprocess-result-exit-code subprocess-result-stdout
+                  subprocess-result-stderr subprocess-result-timed-out? subprocess-result-truncated?))
 
 (provide delivery-verification
          delivery-verification?
@@ -254,18 +257,18 @@
   (find-git-root-dir base-dir))
 
 (define (run-git* git-root args)
-  ;; returns (list exit-code stdout) — exit-code #f on exception
-  (define git (find-executable-path "git"))
-  (define stdout (open-output-string))
-  (define stderr (open-output-string))
-  (define exit-code
-    (with-handlers ([exn:fail? (lambda (_) #f)])
-      (parameterize ([current-output-port stdout]
-                     [current-error-port stderr])
-        (if git
-            (apply system*/exit-code git "-C" git-root args)
-            #f))))
-  (list exit-code (get-output-string stdout) (get-output-string stderr)))
+  ;; This REAL boundary also serves execution-snapshot, which deliberately
+  ;; bypasses injected Git facts for proof authenticity. Bound both paths;
+  ;; truncated or undecodable facts must never authenticate partial/aliased
+  ;; snapshots (including repository paths, branch names and changed paths).
+  (define r
+    (run-subprocess "git" #:args (append (list "-C" (if (path? git-root) (path->string git-root) git-root)) args)
+                    #:timeout 15 #:process-group? #t #:encoding 'utf-8/strict))
+  (list (and (not (subprocess-result-timed-out? r))
+             (not (subprocess-result-truncated? r))
+             (subprocess-result-exit-code r))
+        (subprocess-result-stdout r)
+        (subprocess-result-stderr r)))
 
 ;; W3 tier-ownership split: injectable Git-facts adapter. Delivery DECISION
 ;; logic (branch matching, changed-file detection, verify-gate combination)

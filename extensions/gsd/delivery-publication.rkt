@@ -310,7 +310,7 @@
     (run-subprocess "git"
                     #:args (append (list "-C" (path->string (path->complete-path root))) args)
                     #:directory root
-                    #:timeout 15))
+                    #:timeout 15 #:process-group? #t #:encoding 'utf-8/strict))
   (and (not (subprocess-result-timed-out? r))
        (not (subprocess-result-truncated? r))
        (equal? (subprocess-result-exit-code r) 0)

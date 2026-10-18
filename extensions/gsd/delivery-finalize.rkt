@@ -28,16 +28,10 @@
          (only-in "author-checkpoint.rkt" resolve-author-checkpoint! author-repair-pending?)
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
-                  evidence-author-repair-pending?
-                  hex?
                   update-delivery-journal!) ; BUG-0084: durable review-infra retry counter
-         (only-in "delivery-publication.rkt"
-                  load-approved-publication
-                  replay-approved-publication!
-                  strict-descendant?
-                  delivery-git)
-         (only-in "evidence-author-journal.rkt" abandon-evidence-author-session!)
-         (only-in "review-proof.rkt" load-receipt-owned-proof)
+         (only-in "author-session-recovery.rkt"
+                  author-publication-recovery
+                  recover-lost-author-session!)
          (only-in "campaign-state.rkt"
                   campaign-plan-id
                   campaign-fence-token
@@ -325,51 +319,6 @@
 ;; loop ONLY when the durable delivery journal actually moved; a coordinator
 ;; that claims progress without a durable transition is a clean, resumable
 ;; block (never an infinite spin, never a false DONE).
-;; Publication-only crash recovery for a RUNNING author marker: the
-;; successor publication was already CONFIRMED (real push + readback) but
-;; the process died before receipt supersession. The confirmed record,
-;; its full owned proof and the running marker's exact successor identity
-;; authorize replaying ONLY that publication — never redispatching an
-;; author phase, reviewer, or ladder effect. Anything less (intent-only,
-;; unprovable ancestry, unauthentic proof, stale/ambiguous marker) keeps
-;; the honest pause.
-(define (author-publication-recovery dir plan wave)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (define journal (load-delivery-journal dir plan wave))
-    (define marker (journal-evidence-author-repair journal))
-    (define pub (and marker (load-approved-publication dir plan wave)))
-    (define candidate (and pub (hash-ref pub 'receipt-candidate #f)))
-    (define old (and marker (hash-ref marker 'old-receipt #f)))
-    (and
-     marker
-     pub
-     candidate
-     old
-     (evidence-author-repair-pending? journal)
-     (equal? (hash-ref marker 'state #f) "running")
-     (equal? (hash-ref pub 'status #f) "confirmed")
-     (load-receipt-owned-proof candidate dir plan wave)
-     (equal? (hash-ref pub 'attempt-id #f) (hash-ref marker 'successor-attempt #f))
-     (equal? (hash-ref pub 'attempt-fence #f) (hash-ref marker 'successor-fence #f))
-     (equal? (hash-ref pub 'snapshot-digest #f)
-             (hash-ref (hash-ref marker 'context #f) 'snapshot-sha256 #f))
-     (for/and ([k '(repo origin branch)])
-       (equal? (hash-ref pub k #f) (hash-ref old k #f)))
-     (not (equal? (hash-ref pub 'head #f) (hash-ref old 'head #f)))
-     (strict-descendant? (hash-ref pub 'repo) (hash-ref old 'head) (hash-ref pub 'head))
-     (lambda ()
-       (define pub-fence (hash-ref pub 'coordinator-fence #f))
-       (replay-approved-publication! dir
-                                     plan
-                                     wave
-                                     (lambda ()
-                                       (define rec (load-campaign-record dir plan))
-                                       (and rec (equal? (campaign-fence-token rec) pub-fence) rec)))
-       (hasheq 'status
-               "recovered"
-               'message
-               "author successor publication recovered; receipt supersession replayed")))))
-
 (define (run-coordinator-checkpoint dir
                                     plan-id
                                     extra
@@ -459,14 +408,12 @@
            (define resolved
              (cond
                [(and idx (author-repair-pending? dir plan-id idx))
-                ;; BUG-0085: a "running" marker with no live session and an
-                ;; unchanged tree is an honest abandoned launch; the reclaim
-                ;; IS the durable transition and the loop re-enters to route
-                ;; the wave to a fresh review. Everything else (a live
-                ;; session, a changed tree, a pending permission) keeps the
-                ;; existing resolve-or-pause behavior unchanged.
+                ;; BUG-0086: a dead running author may retain an unchanged
+                ;; snapshot or finish its committed scoped successor through
+                ;; real owned Verify/publication. A refusal is actionable and
+                ;; must NOT be swallowed by the unlaunched-permission resolver.
                 (or
-                 (reclaim-lost-author-session! dir plan-id idx #:session-live? author-session-live?)
+                 (recover-lost-author-session! dir plan-id idx #:session-live? author-session-live?)
                  (resolve-author-checkpoint! dir plan-id idx))]
                [(and (eq? kind 'review-rejected) idx)
                 (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
@@ -528,27 +475,6 @@
                                      loop-again
                                      #:author-session-live? (lambda () #f))
       (campaign-result 'wave-blocked (reverse completed) message)))
-
-;; BUG-0085: reclaim a launched-but-lost evidence author session into the
-;; honest retained/session-lost terminal. Returns #t when the durable
-;; reclaim happened (the caller advances); #f/#f-string leaves the decision
-;; to the existing resolver. The tree is measured NOW in the marker's
-;; execution checkout; the journal transition re-validates it against the
-;; retained receipt, so a stale measurement cannot manufacture a reclaim.
-(define (reclaim-lost-author-session! dir plan-id idx #:session-live? session-live?)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (define journal (load-delivery-journal dir plan-id idx))
-    (define marker (journal-evidence-author-repair journal))
-    (define tree
-      (and marker
-           (equal? (hash-ref marker 'state #f) "running")
-           (not (session-live?))
-           (let ([repo (hash-ref (hash-ref marker 'context #f) 'repo #f)])
-             (and repo (directory-exists? repo) (delivery-git repo "write-tree")))))
-    (and tree
-         (hex? tree 40)
-         (abandon-evidence-author-session! dir plan-id idx tree #:guard (lambda () #t))
-         #t)))
 
 ;; Park a verifier-approved attempt whose protected delivery is still pending
 ;; (BUG-0077). Verify approval is durable, but it is NOT delivery: the SAME

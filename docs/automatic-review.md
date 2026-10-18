@@ -85,6 +85,51 @@ publication permission is created by this recovery. The production reviewer
 remains exact GLM-5.3 with the unchanged 600-second cap. Local deterministic tests
 are not live model acceptance or live GitHub delivery evidence.
 
+### Lost author with a committed delta (BUG-0086)
+
+At the owner-only `/go` checkpoint, the existing owned-session liveness verdict
+may prove that a durably running evidence author is gone. This does **not** prove
+which model phases ran. Neither phase is redispatched and no author allowance,
+review rejection, approval or no-edit result is invented.
+
+For a changed committed tree, recovery requires the exact existing successor
+attempt/fence, stable campaign fence and frozen declaration, strict receipt-head
+ancestry, and every intervening commit's paths within frozen literal FILES.
+The authenticated execution checkout must be clean. Its Git common-directory
+identity must match the old receipt: a receipt naming `q/` and a context naming
+its retained worktree are different locations, not different repositories.
+Clones and arbitrary path substitution do not satisfy that identity.
+
+The owner runs the **complete frozen declared Verify** on the existing successor,
+retains a genuine owned green proof, and uses the existing approved-head
+publication/readback and author receipt certification protocols. Provenance binds
+the approved successor before receipt supersession, so publication crash windows
+remain resumable. An interrupted owned publication intent reuses its exact proof;
+a repeated successful `/go` proceeds to fresh independent review, not another
+Verify or model author phase. Prior review/evidence-generation approvals do not
+survive supersession; RED reproduction/readiness and all protected gates remain
+mandatory.
+
+The entire owner recovery, including proof capture, Git snapshots, publication
+readback/guards and confirmed-publication replay, has an outer deadline: the
+configured Verify window plus one hour (five hours by default). Verify keeps its
+full four-hour default; this is not a short reviewer timeout. Recovery owns a
+dedicated verification registry, closes admission and cancels/reaps jobs before
+interrupting its worker, then shuts down its custodian. Interrupted sandbox
+processes kill/reap their groups before propagating the break. Real verifier Git
+facts (including the non-injectable proof snapshot path) have a 15-second limit
+and a 10 MiB capture cap per stream; timeout/truncation refuses the fact rather
+than approving partial evidence. Full Verify logs remain file-backed.
+
+Dirty staged, unstaged or untracked files stop recovery with an actionable
+preservation message. In particular, unrelated `README.md` metrics edits must be
+explicitly accounted for by the operator before resuming. Recovery never discards,
+commits, stashes or copies them away, and does not verify an immutable substitute
+to evade the clean-source gate. A red Verify, stale identity or publication
+failure leaves the running author and old receipt intact. This behavior is
+covered with real owned subprocesses and a local bare Git remote, not live
+campaign mutation or live reviewer acceptance.
+
 ### Frozen Verify execution binding
 
 The frozen document and snapshot digest remain immutable. Declared execution,

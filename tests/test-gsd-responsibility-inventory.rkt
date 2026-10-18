@@ -112,10 +112,10 @@
       ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
       ;; worktree and the extension-owned runtime session adapter);
       ;; +3 BUG-0042 extractions (owned-lane, wave-scope,
-      ;; evidence-author-journal).
+      ;; evidence-author-journal); +1 BUG-0086 owner session recovery.
       (check-equal? (length inventory)
-                    84
-                    "69 existing + seven evidence recovery + five author lifecycle + three extraction modules"))
+                    85
+                    "69 existing + seven evidence recovery + six author lifecycle + three extraction modules"))
 
     (test-case "evidence recovery classification preserves I/O boundaries"
       (define formats '("evidence-repair-format.rkt"))
@@ -135,14 +135,16 @@
 
     (test-case "author lifecycle is not classified as pure or a facade"
       (for ([file '("author-scope.rkt" "author-execution.rkt" "author-checkpoint.rkt"
-                    "evidence-author-repair.rkt" "red-checkpoint.rkt")])
+                    "evidence-author-repair.rkt" "red-checkpoint.rkt" "author-session-recovery.rkt")])
         (check-false (and (memq (entry-domain (hash-ref inventory-map file))
                                 '(pure-planning compatibility-facade)) #t)))
       (for ([binding '(("evidence-author-repair.rkt" "author-scope" "delivery-journal")
                        ("author-execution.rkt" "red-checkpoint" "delivery-journal"
                                                "../gsd-planning/execution-policy")
                        ("author-checkpoint.rkt" "campaign-repository" "delivery-receipt")
-                       ("red-checkpoint.rkt" "verification-job" "author-scope"))])
+                       ("red-checkpoint.rkt" "verification-job" "author-scope")
+                       ("author-session-recovery.rkt" "delivery-verifier" "review-proof"
+                                                      "verification-job" "system-adapters"))])
         (for ([dep (in-list (cdr binding))])
           (check-not-false
            (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
