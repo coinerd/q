@@ -29,26 +29,34 @@
                'transition-logic
                '(parameterize)
                '()
-               '("wave-runner-port" "campaign-state" "campaign-repository"
-                               "campaign-budgets" "delivery-receipt"
-                               "author-execution" "author-checkpoint"
-                               "composition-root" "verification-job"))
-  (make-entry "wave-scope.rkt"
+               '("wave-runner-port" "campaign-state"
+                                    "campaign-repository"
+                                    "campaign-budgets"
+                                    "delivery-receipt"
+                                    "author-execution"
+                                    "author-checkpoint"
+                                    "composition-root"
+                                    "verification-job"))
+   (make-entry "wave-scope.rkt"
                'transition-logic
                '()
                '()
-               '("campaign-state" "wave-executor" "review-worktree"
-                               "author-checkpoint" "delivery-publication"
-                               "attempt-artifacts"))
-  (make-entry "evidence-author-journal.rkt"
-               'campaign-state
-               '()
-               '()
-               '("delivery-journal" "review-proof" "author-scope"
-                               "evidence-repair-format" "composition-root"))
-  (make-entry "evidence-discovery.rkt"
+               '("campaign-state" "wave-executor"
+                                  "review-worktree"
+                                  "author-checkpoint"
+                                  "delivery-publication"
+                                  "attempt-artifacts"))
+   (make-entry
+    "evidence-author-journal.rkt"
+    'campaign-state
+    '()
+    '()
+    '("delivery-journal" "review-proof" "author-scope" "evidence-repair-format" "composition-root"))
+   ;; `dynamic-require` is a REJECTED-FORM marker in the static helper-closure
+   ;; walk, never an executed effect; the scanner reads source text.
+   (make-entry "evidence-discovery.rkt"
                'persistence
-               '(git parameterize path-ops)
+               '(git parameterize path-ops dynamic-require)
                '()
                '("racket/file" "racket/list"
                                "racket/path"
@@ -60,23 +68,24 @@
                                "evidence-runner-coverage"
                                "util/json/checksum"
                                "scripts/gsd-evidence-probe-runner"))
-   (make-entry "evidence-probe.rkt"
-               'persistence
-               '(fs-read fs-write fs-rename fs-delete mkdir sha256 git parameterize path-ops)
-               '()
-               '("json" "racket/file"
-                        "racket/path"
-                        "racket/list"
-                        "racket/string"
-                        "racket/system"
-                        "racket/port"
-                        "racket/runtime-path"
-                        "evidence-repair-format"
-                        "evidence-runner-coverage"
-                        "review-proof"
-                        "verification-job"
-                        "composition-root"
-                        "util/json/checksum"))
+   (make-entry
+    "evidence-probe.rkt"
+    'persistence
+    '(fs-read fs-write fs-rename fs-delete mkdir sha256 git parameterize path-ops dynamic-require)
+    '()
+    '("json" "racket/file"
+             "racket/path"
+             "racket/list"
+             "racket/string"
+             "racket/system"
+             "racket/port"
+             "racket/runtime-path"
+             "evidence-repair-format"
+             "evidence-runner-coverage"
+             "review-proof"
+             "verification-job"
+             "composition-root"
+             "util/json/checksum"))
    (make-entry "evidence-readiness.rkt"
                'campaign-state
                '(fs-read git parameterize path-ops)
@@ -124,19 +133,19 @@
    ;; Effects below are source-marker effects, not a transitive purity claim.
    ;; Admission reads through readiness/scope and reserves durable permission
    ;; through delivery-journal; it neither dispatches nor fabricates rejection.
-   (make-entry "evidence-author-repair.rkt"
-               'campaign-state
-               '()
-               '()
-               '("racket/list" "racket/string" "author-scope"
-                               "evidence-readiness" "delivery-journal"))
+   (make-entry
+    "evidence-author-repair.rkt"
+    'campaign-state
+    '()
+    '()
+    '("racket/list" "racket/string" "author-scope" "evidence-readiness" "delivery-journal"))
    ;; Authenticate literal FILES against the frozen snapshot; actual file reads.
-   (make-entry "author-scope.rkt"
-               'persistence
-               '(fs-read)
-               '()
-               '("racket/file" "racket/list" "racket/string"
-                               "plan-snapshot" "plan-types" "wave-docs"))
+   (make-entry
+    "author-scope.rkt"
+    'persistence
+    '(fs-read)
+    '()
+    '("racket/file" "racket/list" "racket/string" "plan-snapshot" "plan-types" "wave-docs"))
    ;; Owner-controlled phase dispatch and Git commits. Snapshot/journal reads,
    ;; durable launch intent and registered checks delegate to their owners.
    ;; Path normalization uses path->complete-path/simplify-path, outside the
@@ -145,9 +154,15 @@
                'external-ports
                '(git parameterize)
                '()
-               '("racket/list" "racket/path" "racket/port" "racket/string"
-                               "racket/system" "red-checkpoint" "delivery-receipt"
-                               "delivery-journal" "wave-runner-port" "policy"
+               '("racket/list" "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "racket/system"
+                               "red-checkpoint"
+                               "delivery-receipt"
+                               "delivery-journal"
+                               "wave-runner-port"
+                               "policy"
                                "../gsd-planning/execution-policy"))
    ;; Resume policy mutates campaign state and delegates persistence to the
    ;; repository. Retained checkout authentication delegates Git to receipts.
@@ -155,8 +170,11 @@
                'campaign-state
                '(path-ops)
                '()
-               '("racket/path" "campaign-state" "campaign-repository"
-                               "delivery-journal" "delivery-receipt" "wave-executor"))
+               '("racket/path" "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "delivery-receipt"
+                               "wave-executor"))
    ;; Lost-session completion is an owner effect, not a model phase. The
    ;; deadline/registry and Git runner own cancellation and process cleanup;
    ;; receipt, proof and publication persistence delegates to their owners.
@@ -164,25 +182,60 @@
                'campaign-state
                '(git subprocess parameterize make-param path-ops)
                '(current-gsd-author-recovery-timeout-sec)
-               '("racket/list" "racket/path" "racket/string"
-                 "author-scope" "owner-correction" "campaign-state" "campaign-repository"
-                 "delivery-journal" "delivery-receipt" "delivery-verifier"
-                 "delivery-publication" "evidence-author-journal" "review-proof"
-                 "wave-runner-port" "system-adapters" "composition-root"
-                 "verification-job" "wave-executor" "attempt-artifacts"
-                 "sandbox/subprocess"))
+               '("racket/list" "racket/path"
+                               "racket/string"
+                               "author-scope"
+                               "owner-correction"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "delivery-receipt"
+                               "delivery-verifier"
+                               "delivery-publication"
+                               "evidence-author-journal"
+                               "review-proof"
+                               "wave-runner-port"
+                               "system-adapters"
+                               "composition-root"
+                               "verification-job"
+                               "wave-executor"
+                               "attempt-artifacts"
+                               "sandbox/subprocess"))
    ;; Separate owner metadata authority. The deterministic interpreter has no
    ;; I/O; the owner protocol owns private persistence and exact Git effects.
-   (make-entry "generated-readme.rkt" 'pure-planning '() '()
+   (make-entry "generated-readme.rkt"
+               'pure-planning
+               '()
+               '()
                '("racket/list" "racket/port" "racket/string"))
-   (make-entry "owner-correction.rkt" 'persistence
-               '(fs-write fs-read fs-rename fs-delete mkdir sha256 git subprocess parameterize make-param path-ops)
+   (make-entry "owner-correction.rkt"
+               'persistence
+               '(fs-write fs-read
+                          fs-rename
+                          fs-delete
+                          mkdir
+                          sha256
+                          git
+                          subprocess
+                          parameterize
+                          make-param
+                          path-ops)
                '(current-owner-correction-root current-owner-correction-cut)
-               '("racket/file" "racket/list" "racket/path" "racket/port" "racket/string"
-                 "generated-readme" "author-scope" "campaign-state" "campaign-repository"
-                 "delivery-journal" "delivery-receipt" "evidence-author-journal" "review-proof"
-                 "../gsd-planning/execution-policy"
-                 "util/json/checksum" "sandbox/subprocess"))
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "generated-readme"
+                               "author-scope"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "delivery-receipt"
+                               "evidence-author-journal"
+                               "review-proof"
+                               "../gsd-planning/execution-policy"
+                               "util/json/checksum"
+                               "sandbox/subprocess"))
    ;; Durable, locked preimplementation RED and candidate assertion capture,
    ;; never a full Verify receipt. Atomic output/locking delegates writes and
    ;; renames to racket/file; registered child execution to verification-job.
@@ -190,11 +243,22 @@
                'persistence
                '(fs-read mkdir sha256 git parameterize path-ops)
                '()
-               '("json" "racket/file" "racket/list" "racket/path" "racket/port"
-                        "racket/runtime-path" "racket/string" "racket/system"
-                        "review-proof" "delivery-receipt" "delivery-verifier"
-                        "composition-root" "verification-job" "evidence-repair-format"
-                        "evidence-runner-coverage" "author-scope" "util/json/checksum"
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/port"
+                        "racket/runtime-path"
+                        "racket/string"
+                        "racket/system"
+                        "review-proof"
+                        "delivery-receipt"
+                        "delivery-verifier"
+                        "composition-root"
+                        "verification-job"
+                        "evidence-repair-format"
+                        "evidence-runner-coverage"
+                        "author-scope"
+                        "util/json/checksum"
                         "scripts/gsd-evidence-probe-runner"))
    ;; pure planning
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
@@ -336,11 +400,17 @@
    ;; to the legacy effect marker scanner, as with delivery-handoff above.
    ;; W3 register F5: the remote-pending marker's clear deletes the sibling
    ;; file, so fs-delete is a declared effect of this module.
+   ;; BUG-0088: guarded supplemental supersession/promotion writes (atomic
+   ;; save!, write-ahead intents, fsync) are owner-side persistence here.
    (make-entry "delivery-journal.rkt"
                'persistence
-               '(fs-read fs-delete)
+               '(fs-read fs-write fs-rename fs-delete)
                '()
-               '("json" "racket/file" "racket/list" "racket/path" "review-proof"))
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "review-proof"
+                        "supplemental-evidence-authority"))
    ;; Owned execution retention is effectful; formats stay pure.
    (make-entry
     "review-proof.rkt"
@@ -365,6 +435,12 @@
                '()
                '("racket/list" "racket/string" "util/json/checksum"))
    (make-entry "verify-command-format.rkt" 'transition-logic '() '() '("racket/list" "racket/string"))
+   ;; Public promotion audit validation delegates to pure format modules.
+   (make-entry "review-audit-promotion.rkt"
+               'transition-logic
+               '()
+               '()
+               '("supplemental-evidence-format" "evidence-repair-format"))
    (make-entry "review-audit-format.rkt"
                'transition-logic
                '()
@@ -429,8 +505,7 @@
                         "util/loop-result"
                         "util/message/message"
                         "util/content/content-parts"
-                        "tools/tool"
-                        "tools/registry-defaults"
+                        "review-tools"
                         "tools/permission-gate"
                         "sandbox/subprocess"
                         "sandbox/gateway-bridge"
@@ -441,6 +516,8 @@
                         "review-usage"
                         "review-proof"
                         "review-audit-format"
+                        "review-audit-promotion"
+                        "../gsd-planning/execution-policy"
                         "runtime/provider/model-registry"
                         "runtime/auth/auth-store"
                         "util/hash-helpers"
@@ -548,7 +625,9 @@
                                "campaign-result"
                                "reconciliation-checkpoint"
                                "tracker-production-wiring"
-                               "review-checkpoint" "author-checkpoint" "author-session-recovery"))
+                               "review-checkpoint"
+                               "author-checkpoint"
+                               "author-session-recovery"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -639,7 +718,8 @@
                                  "plan-types"
                                  "verification-job"
                                  "wave-docs"
-                                 "plan-context-builder" "sandbox/subprocess"))
+                                 "plan-context-builder"
+                                 "sandbox/subprocess"))
    ;; BUG-0040 W6: terminal-transition notification sink adapter
    ;; (tmux/bell default + opt-in desktop-command/webhook sinks).
    (make-entry "notify.rkt"
@@ -884,12 +964,180 @@
                     "effect-ports"
                     "wave-runner-port"
                     "sandbox/gateway-bridge"))
+   (make-entry "composition-root.rkt"
+               'external-ports
+               '(make-param)
+               '(current-gsd-verification-registry)
+               '("racket/contract" "effect-ports" "github-port" "system-adapters" "verification-job"))
+   ;; BUG-0088 governed supplemental evidence: pure contract lenses and the
+   ;; strict five-stage C0->C1 focus-only superset validator.
+   (make-entry "effective-verify-binding.rkt"
+               'pure-planning
+               '()
+               '()
+               '("racket/list" "racket/string" "review-proof-format"))
+   ;; Canonical sealed supplemental records. Pure digest/shape validation only.
+   (make-entry "supplemental-evidence-format.rkt"
+               'pure-planning
+               '()
+               '()
+               '("racket/list" "racket/string" "evidence-repair-format" "effective-verify-binding"))
+   ;; Private immutable proposal/approval retention. The broker grant is an
+   ;; in-process capability; retained bytes live outside the project root.
+   (make-entry "supplemental-evidence-authority.rkt"
+               'persistence
+               '(fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 make-param path-ops)
+               '(current-supplemental-authority-root)
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/port"
+                        "racket/runtime-path"
+                        "racket/string"
+                        "../../runtime/approval/broker"
+                        "../../util/json/checksum"
+                        "evidence-repair-format"
+                        "../gsd-planning/execution-policy"))
+   ;; Protected one-shot operation journal: OS-locked CAS + write-ahead intents.
+   (make-entry "supplemental-evidence-journal.rkt"
+               'persistence
+               '(fs-write fs-read fs-rename fs-delete mkdir sha256 make-param path-ops)
+               '(current-supplemental-journal-crash-cut)
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/port"
+                        "racket/runtime-path"
+                        "../../util/json/checksum"
+                        "evidence-repair-format"
+                        "supplemental-evidence-format"
+                        "supplemental-evidence-authority"
+                        "../gsd-planning/execution-policy"))
+   ;; Effective C1 owned-Verify capture and private authority reload. Git,
+   ;; verification capture and proof retention delegate to their owners.
+   (make-entry "supplemental-evidence-proof.rkt"
+               'persistence
+               '(sha256 git subprocess path-ops dynamic-require)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "review-proof-format"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-journal"
+                               "campaign-state"
+                               "campaign-repository"
+                               "evidence-repair-format"
+                               "sandbox/subprocess"
+                               "../../util/json/checksum"))
+   ;; Staged wrappers, guarded supersession publication and replay. Effect
+   ;; bodies delegate to delivery-publication/authority/journal owners.
+   (make-entry "supplemental-evidence-publication.rkt"
+               'persistence
+               '(fs-write fs-read fs-rename fs-delete sha256 dynamic-require)
+               '()
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/runtime-path"
+                        "racket/string"
+                        "../../util/json/checksum"
+                        "review-proof-format"
+                        "evidence-repair-format"
+                        "supplemental-evidence-format"
+                        "supplemental-evidence-authority"
+                        "supplemental-evidence-journal"
+                        "supplemental-evidence-proof"
+                        "delivery-journal"
+                        "delivery-publication"))
+   ;; Immutable promotion record P, protected capability minting and idempotent
+   ;; reconciliation. Provenance bytes delegate to proof/journal owners.
+   (make-entry "supplemental-evidence-promotion.rkt"
+               'persistence
+               '(sha256)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "../../util/json/checksum"
+                               "evidence-repair-format"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-journal"
+                               "supplemental-evidence-proof"
+                               "evidence-probe"
+                               "evidence-repair-ledger"
+                               "review-proof-format"))
+   ;; Owned controller: typed admission seams, allocation and advance loop.
+   ;; Model dispatch, commits and Verify delegate to the existing owned lanes.
    (make-entry
-    "composition-root.rkt"
-    'external-ports
-    '(make-param)
-    '(current-gsd-verification-registry)
-    '("racket/contract" "effect-ports" "github-port" "system-adapters" "verification-job"))))
+    "supplemental-evidence-controller.rkt"
+    'campaign-state
+    '(fs-write fs-read fs-rename fs-delete mkdir sha256 git parameterize path-ops dynamic-require)
+    '()
+    '("json" "racket/file"
+             "racket/list"
+             "racket/match"
+             "racket/path"
+             "racket/port"
+             "racket/runtime-path"
+             "racket/string"
+             "racket/system"
+             "campaign-state"
+             "campaign-result"
+             "campaign-repository"
+             "delivery-journal"
+             "delivery-receipt"
+             "delivery-verifier"
+             "delivery-publication"
+             "review-proof"
+             "review-proof-format"
+             "apply-verify-jobs"
+             "evidence-readiness"
+             "evidence-discovery"
+             "evidence-probe"
+             "evidence-repair-format"
+             "supplemental-evidence-format"
+             "supplemental-evidence-authority"
+             "supplemental-evidence-journal"
+             "supplemental-evidence-operator"
+             "supplemental-evidence-proof"
+             "supplemental-evidence-publication"
+             "author-execution"
+             "wave-executor"
+             "owned-lane"
+             "wave-scope"
+             "author-checkpoint"
+             "../gsd-planning/execution-policy"
+             "../../util/json/checksum"))
+   ;; Trusted-frontend approval requests: broker registration and owner UI
+   ;; event emission. No grant is ever created here.
+   (make-entry "supplemental-evidence-operator.rkt"
+               'ui-glue
+               '(sha256 make-param)
+               '(current-supplemental-operator-publisher)
+               '("racket/file" "racket/string"
+                               "../../util/credential-redaction"
+                               "../../util/json/checksum"
+                               "../../runtime/approval/broker"
+                               "evidence-repair-format"
+                               "supplemental-evidence-authority"))
+   ;; Hardened reviewer tool registry: bounded direct-argv read-only commands.
+   (make-entry "review-tools.rkt"
+               'external-ports
+               '(git subprocess parameterize path-ops)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/match"
+                               "racket/path"
+                               "racket/string"
+                               "../../tools/tool"
+                               "../../tools/registry-defaults"
+                               "../../sandbox/subprocess"
+                               "../../sandbox/limits"))))
 
 (provide inventory
          (struct-out entry)

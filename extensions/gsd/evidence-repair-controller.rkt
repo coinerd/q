@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Concrete owner orchestration; no caller-supplied executor or proof authority.
-(require "evidence-readiness.rkt"
+(require (only-in "delivery-journal.rkt" load-supplemental-promotion-intent)
+         "evidence-readiness.rkt"
          "evidence-repair-format.rkt"
          "evidence-repair-ledger.rkt"
          "evidence-probe.rkt")
@@ -20,6 +21,12 @@
        (define context (hash-ref readiness 'context))
        (define spec (hash-ref readiness 'spec 'null))
        (cond
+         ;; BUG-0088 (d): a durable promotion intent means the protected
+         ;; owner transition owns this generation; an ordinary repair must
+         ;; never race it, and recovery (never a relaunch) is the only path.
+         [(load-supplemental-promotion-intent base plan wave)
+          (stop "supplemental-promotion-pending"
+                "a protected supplemental promotion intent owns this generation")]
          [(not (and (valid-probe-spec? spec) (equal? context (hash-ref spec 'context))))
           (stop "evidence-repair-required"
                 (hash-ref readiness 'message "No eligible authenticated probe"))]

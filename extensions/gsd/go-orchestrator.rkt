@@ -55,10 +55,11 @@
                   delivery-outcome-kind
                   delivery-outcome-message)
          "wave-runner-port.rkt"
-         (only-in "author-checkpoint.rkt" author-repair-pending?)
+         (only-in "author-checkpoint.rkt"
+                  author-lane-pending? supplemental-done-route! supplemental-checkout-retained?)
          (only-in "owned-lane.rkt" make-owned-runner-port owned-lane? owned-entry-block)
          (only-in "wave-scope.rkt" call-with-wave-scope)
-         (only-in "wave-docs.rkt" wave-slug plan-slug-map)
+         (only-in "wave-docs.rkt" wave-slug plan-slug-map read-wave-doc)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
          "projection-effects.rkt"
          "../../util/loop-result.rkt"
@@ -459,8 +460,7 @@
 ;; missing entry means the wave has no Delivery-Contract PR proof —
 ;; exactly the v1.00.27 failure mode (W0→W6 advanced with zero merges).
 ;; Returns the sha string, or #f when the wave is not merged-proven.
-(define (wave-merge-sha base-dir plan-id wave-idx)
-  (verified-wave-merge-sha base-dir plan-id wave-idx))
+(define (wave-merge-sha base-dir plan-id wave-idx) (verified-wave-merge-sha base-dir plan-id wave-idx))
 
 (define (run-campaign-wave base-dir
                            rec
@@ -662,7 +662,7 @@
        ;; 'timed-out (persisted as interrupted) instead of blocking forever.
        ;; v1.00.24: the deadline is MANDATORY (never #f/unbounded): absent
        ;; timeout-sec, wrap with current-gsd-wave-timeout-seconds (default 7200).
-       (define author-pending? (author-repair-pending? base-dir (campaign-plan-id active) wave-idx))
+       (define author-pending? (author-lane-pending? base-dir active wave-idx))
        (define owned-phases? (owned-lane? author-pending? active))
        (define source-runner-port (coerce-runner runner))
        ;; Owned-lane port wiring (strict phase guards/accounting, dedicated
@@ -836,6 +836,7 @@
                                                  expected-id
                                                  'cancelled)
                 (campaign-result 'meta-fix (list wave-idx) "meta-fix wave reset")]
+               [(supplemental-done-route! base-dir active wave-idx expected-id fence) => values]
                [else
                 (define verifying (persist-current-status! 'verifying))
                 (if (not verifying)
@@ -1342,7 +1343,8 @@
                                                       wave-idx
                                                       (exn-message e)))])
               (if (or (unbox keep-branch-box)
-                      (author-repair-pending? base-dir (campaign-plan-id active) wave-idx)
+                      (supplemental-checkout-retained? base-dir active wave-idx)
+                      (author-lane-pending? base-dir active wave-idx)
                       (review-retry-pending? base-dir (campaign-plan-id active) wave-idx))
                   (log-info "wave ~a: retained ~a" wave-idx (wave-worktree-path wt))
                   (cleanup-wave-worktree! wt)))))))]))

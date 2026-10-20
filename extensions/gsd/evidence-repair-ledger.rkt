@@ -11,7 +11,8 @@
          reserve-evidence-repair!
          advance-evidence-repair!
          make-evidence-registrar
-         register-owned-evidence!)
+         register-owned-evidence!
+         admit-promoted-captured-evidence!)
 (define limits (hasheq 'reservations 1 'jobs 2 'timeout-sec 600))
 (define keys
   '(plan-id wave
@@ -191,6 +192,78 @@
                 (hash-set o k v)))
             (save! d (hash-set s 'operation updated))
             updated)))
+;; ============================================================
+;; BUG-0088 (d): the explicit promoted-captured ledger admission. ONLY the
+;; protected owner transition can install a captured record for a promoted
+;; supplemental operation: the opaque, single-consumption capability is
+;; verified (non-destructively) here and consumed later by the registrar's
+;; validate closure. The ordinary registrar's captured checks (exact
+;; context, probe equality, revision/chain arithmetic, one registration)
+;; are preserved unchanged; a caller-supplied captured JSON is never an
+;; admission.
+(define (admit-promoted-captured-evidence! base c probe id capability)
+  (context! c)
+  (unless (promoted-registration? capability)
+    (error 'ledger "an opaque promoted capability is required"))
+  (unless (verify-promoted-registration-capability! capability c probe id)
+    (error 'ledger "the promotion capability does not bind this context/probe/operation"))
+  (locked
+   base
+   (hash-ref c 'plan-id)
+   (hash-ref c 'wave)
+   #:generation (hash-ref c 'receipt-generation 0)
+   (lambda (d s)
+     (define old (hash-ref s 'operation))
+     (cond
+       ;; A fresh ledger carries the JSON 'null operation (truthy in
+       ;; Racket): "no operation yet" is ANY non-hash, matching the
+       ;; reserve-evidence-repair! and load-evidence-repair idiom.
+       [(not (hash? old))
+        (define op
+          (hasheq 'id
+                  "repair-1"
+                  'context
+                  c
+                  'spec
+                  (hash-ref probe 'sha256)
+                  'state
+                  "captured"
+                  'limits
+                  limits
+                  'reserved-jobs
+                  2
+                  'no-progress
+                  "promoted-supplemental-evidence"
+                  'probe
+                  probe
+                  'promoted
+                  (hasheq 'promotion
+                          (promoted-registration-promotion capability)
+                          'generation
+                          (hash-ref c 'receipt-generation))))
+        (save! d (hash-set s 'operation op))
+        op]
+       [else
+        (unless (and (equal? (hash-ref old 'id #f) "repair-1") (equal? (hash-ref old 'context #f) c))
+          (error 'ledger "a different operation owns this generation"))
+        (define state (hash-ref old 'state #f))
+        (cond
+          [(equal? state "captured")
+           ;; recovery replay: identical captured record required
+           (unless (and (equal? (hash-ref old 'probe #f) probe)
+                        (equal? (hash-ref old 'promoted #f)
+                                (hasheq 'promotion
+                                        (promoted-registration-promotion capability)
+                                        'generation
+                                        (hash-ref c 'receipt-generation))))
+             (error 'ledger "conflicting promoted captured record"))
+           old]
+          ;; crash after registration: recovery reads the identical
+          ;; existing registration instead of appending twice
+          [(equal? state "registered") old]
+          [else
+           (error 'ledger
+                  (format "ambiguous promoted operation state ~a; refusing adoption" state))])]))))
 ;; validate : opaque-token context probe-ref operation-id -> boolean
 ;; This factory is a trusted composition port, not a model-facing API.
 (define (make-evidence-registrar validate)
@@ -264,20 +337,28 @@
                                   #:context c
                                   #:probe ref
                                   #:authorization auth
-                                  #:operation-id id)
+                                  #:operation-id id
+                                  #:promoted-capability [promoted-capability #f])
   ;; Opaque capability identity uses the exact authenticated execution port,
   ;; never a path-equivalent campaign root or a prior campaign's closure.
   (define repo (hash-ref c 'repo))
   (validate-baseline-probe! repo ref c)
   (define registrar
-    (hash-ref! registrars
-               base
-               (lambda ()
-                 (make-evidence-registrar (lambda (token context probe operation)
-                                            (consume-evidence-registration-authorization!
-                                             token
-                                             (hash-ref context 'repo)
-                                             context
-                                             probe
-                                             operation))))))
+    (if promoted-capability
+        ;; The promoted capability is single-consumption and binds the exact
+        ;; context/probe/operation; it replaces ONLY the authority token
+        ;; consumption. Every ordinary registrar check stays identical.
+        (make-evidence-registrar
+         (lambda (_token context probe operation)
+           (consume-promoted-registration-capability! promoted-capability context probe operation)))
+        (hash-ref! registrars
+                   base
+                   (lambda ()
+                     (make-evidence-registrar (lambda (token context probe operation)
+                                                (consume-evidence-registration-authorization!
+                                                 token
+                                                 (hash-ref context 'repo)
+                                                 context
+                                                 probe
+                                                 operation)))))))
   (registrar base plan wave #:context c #:probe ref #:authorization auth #:operation-id id))

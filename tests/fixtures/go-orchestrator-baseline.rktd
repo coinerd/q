@@ -62,10 +62,19 @@
 ;; wraps, carrying the between-passes author-liveness verdict); the
 ;; orchestrator keeps the thin call site. 1698 -> 1696 lines, defines
 ;; unchanged at 19, below the unchanged 1700 target.
+;;
+;; Re-recorded for BUG-0088 (governed supplemental evidence replan): the
+;; wave-completion routing gained ONE disjoint supplemental-lane route
+;; (supplemental-done-route!) plus a supplemental-checkout-retained?
+;; retention check next to author-lane-pending? in the worktree cleanup;
+;; the author-checkpoint require widened to the three lane functions and
+;; the wave-merge-sha one-line wrapper was inlined. Bounded routing call
+;; sites, no new defines. 1696 -> 1698 lines, defines unchanged at 19,
+;; below the unchanged 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "BUG-0085: wave-blocked checkpoint case extracted to delivery-finalize.rkt: 1696 lines / 19 defines; below the unchanged 1700 target")
- (line-count . 1696)
+  "BUG-0088: supplemental done-route + checkout-retention call sites and widened author-lane require; wave-merge-sha wrapper inlined: 1698 lines / 19 defines; below the unchanged 1700 target")
+ (line-count . 1698)
  (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

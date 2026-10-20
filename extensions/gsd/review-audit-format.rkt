@@ -15,6 +15,18 @@
   (define legacy
     (for/hasheq ([key (in-list audit-keys)])
       (values key (hash-ref request key #f))))
+  (define authority (hash-ref request 'owned-authority (hasheq)))
+  (define reference (hash-ref authority 'reference (hasheq)))
+  (define promotion (hash-ref request 'supplemental-promotion-sha256 #f))
+  (define expected (hash-ref authority 'supplemental-promotion-sha256 #f))
+  ;; Presence of any supplemental identity activates the all-or-none pin.
+  ;; Public P is not authority: EXPECTED comes from the trusted request.
+  (when (or (hash-has-key? reference 'supplemental-contract) promotion expected)
+    (unless (and (string? promotion)
+                 (regexp-match? #px"^[0-9a-f]{64}$" promotion)
+                 (equal? promotion expected))
+      (error 'audit-binding "missing-or-mismatched-supplemental-promotion"))
+    (set! legacy (hash-set legacy 'supplemental-promotion-sha256 promotion)))
   (define revision (hash-ref request 'evidence-revision 0))
   (unless (exact-nonnegative-integer? revision)
     (error 'audit-binding "invalid-evidence-revision"))
@@ -23,8 +35,7 @@
       (let ([sha (hash-ref request 'evidence-registration-sha256 #f)])
         (unless (and (string? sha) (regexp-match? #px"^[0-9a-f]{64}$" sha))
           (error 'audit-binding "invalid-registration-digest"))
-        (hash-set (hash-set legacy 'evidence-revision revision)
-                  'evidence-registration-sha256 sha))))
+        (hash-set (hash-set legacy 'evidence-revision revision) 'evidence-registration-sha256 sha))))
 (define (valid-audit-ack? ack expected)
   (and (hash? ack)
        (equal? (hash-ref ack 'mode #f) owned-audit-mode)
@@ -49,7 +60,12 @@
 ;; per-stage coverage from logs, and no fictional command (e.g. a
 ;; nonexistent `raco fmt-strict`) is accepted as an executed gate.
 (define (owned-green-gates manifest)
-  (define normalized (hash-ref manifest 'frozen-normalized-command ""))
+  ;; The versioned manifest validator authenticates C1 against frozen C0.
+  ;; Extract the gates actually executed, never silently report C0 coverage.
+  (define normalized
+    (hash-ref manifest
+              'effective-normalized-command
+              (lambda () (hash-ref manifest 'frozen-normalized-command ""))))
   (define stages (owned-chain-stages normalized))
   (define (refuse)
     (error 'owned-audit "unsupported-owned-gate-chain"))

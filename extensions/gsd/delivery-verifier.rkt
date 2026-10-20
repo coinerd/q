@@ -46,12 +46,17 @@
          "plan-types.rkt"
          "verification-job.rkt"
          "verify-command-format.rkt"
+         "supplemental-evidence-proof.rkt"
          "wave-docs.rkt"
          (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
          (only-in "../../sandbox/subprocess.rkt"
-                  run-subprocess subprocess-result-exit-code subprocess-result-stdout
-                  subprocess-result-stderr subprocess-result-timed-out? subprocess-result-truncated?))
+                  run-subprocess
+                  subprocess-result-exit-code
+                  subprocess-result-stdout
+                  subprocess-result-stderr
+                  subprocess-result-timed-out?
+                  subprocess-result-truncated?))
 
 (provide delivery-verification
          delivery-verification?
@@ -85,6 +90,7 @@
          git-exit-ok?
          expand-project-base
          current-owned-verify-observer
+         current-owned-supplemental-verification
          owned-verify-observation?
          owned-verify-observation-job
          owned-verify-observation-command
@@ -262,8 +268,15 @@
   ;; truncated or undecodable facts must never authenticate partial/aliased
   ;; snapshots (including repository paths, branch names and changed paths).
   (define r
-    (run-subprocess "git" #:args (append (list "-C" (if (path? git-root) (path->string git-root) git-root)) args)
-                    #:timeout 15 #:process-group? #t #:encoding 'utf-8/strict))
+    (run-subprocess "git"
+                    #:args (append (list "-C"
+                                         (if (path? git-root)
+                                             (path->string git-root)
+                                             git-root))
+                                   args)
+                    #:timeout 15
+                    #:process-group? #t
+                    #:encoding 'utf-8/strict))
   (list (and (not (subprocess-result-timed-out? r))
              (not (subprocess-result-truncated? r))
              (subprocess-result-exit-code r))
@@ -716,6 +729,9 @@
 ;; registry slot can be reused, with the closed/reaped terminal record.
 (struct owned-verify-observation (job command cwd before after base wave fresh? declared? active))
 (define current-owned-verify-observer (make-parameter void))
+;; Inert request, authenticated against private authority immediately before
+;; launch. Bound only by the owned proof wrapper; never a command override.
+(define current-owned-supplemental-verification (make-parameter #f))
 (define (consume-owned-verify-observation! o)
   (and (owned-verify-observation? o)
        (eq? (unbox (owned-verify-observation-active o)) 'available)
@@ -973,6 +989,7 @@
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
   (define explicit (current-gsd-delivery-verify-command))
+  (define supplemental (current-owned-supplemental-verification))
   ;; W7 (#9512b): under an active branch context the override and the derived
   ;; fallback gate run from the wave WORKTREE (the delivered tree as
   ;; committed), not the shared checkout.
@@ -1016,6 +1033,42 @@
                                 ""))))))
   (cond
     [(not root) (cons "verify" (cons #f "no git root"))]
+    ;; Supplemental admission is never an explicit override. Reload private
+    ;; approvals/operation and check the ACTUAL declared C0 before selecting C1.
+    [supplemental
+     ;; Consume before launch, including ambiguous startup failure. A thunk
+     ;; cannot run a second full C1 chain through the same owned admission.
+     (define used (hash-ref supplemental 'admission-used))
+     (unless (and (box? used) (box-cas! used #f #t))
+       (error 'delivery-verifier "supplemental Verify admission already consumed"))
+     (when explicit
+       (error 'delivery-verifier "supplemental Verify cannot use an explicit override"))
+     (define frozen (hash-ref supplemental 'frozen))
+     (unless (equal? (normalize-declared-verify (or (declared-wave-verify base-dir wave-idx plan) ""))
+                     (hash-ref frozen 'normalized-command))
+       (error 'delivery-verifier "supplemental frozen declaration mismatch"))
+     (define resolved
+       (resolve-supplemental-verify-binding (hash-ref supplemental 'contract)
+                                            frozen
+                                            base-dir
+                                            (hash-ref supplemental 'plan)
+                                            wave-idx
+                                            (hash-ref supplemental 'before)
+                                            (hash-ref supplemental 'attempt-id)
+                                            (hash-ref supplemental 'attempt-fence)
+                                            (hash-ref supplemental 'cwd)))
+     (define task
+       (hash-ref (hash-ref (hash-ref resolved 'supplemental-contract) 'task-record) 'payload))
+     (unless (<= (current-gsd-delivery-verify-timeout-sec)
+                 (hash-ref (hash-ref (hash-ref task 'task) 'bounds) 'verify-timeout-sec))
+       (error 'delivery-verifier "Verify timeout exceeds approved task bound"))
+     (unless (equal? (current-gsd-delivery-verify-jobs) (hash-ref resolved 'operational-jobs))
+       (error 'delivery-verifier "supplemental operational jobs mismatch"))
+     (define normalized (hash-ref resolved 'effective-normalized-command))
+     (define cwd (declared-verify-cwd base-dir normalized))
+     (unless (equal? (checkout-key cwd) (hash-ref supplemental 'cwd))
+       (error 'delivery-verifier "supplemental execution cwd mismatch"))
+     (run-cmd (expand-project-base normalized base-dir) cwd " (authenticated supplemental C1)" #t)]
     ;; explicit test override wins (fail-forcing / pinning)
     [explicit (run-cmd explicit run-cwd "")]
     [else

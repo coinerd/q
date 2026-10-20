@@ -436,4 +436,8 @@
       ("scripts/run-tests/cohort-report.rkt"
        (risk
         . "Test cohort measurement report builder (census/final-cohort aggregation, per-row verdict binding); grew with the v1.00.28 measurement campaign; score ~20888")
-       (owner . "tools"))))))
+       (owner . "tools"))
+      ("info.rkt"
+       (risk
+        . "Package metadata (package definition, compile-omit-paths) — not decomposable; the score is churn-driven, not size or complexity: touched by nearly every release/version-bump commit (713) against 30 LOC; score ~21390")
+       (owner . "core"))))))

@@ -19,8 +19,7 @@
          "../../util/loop-result.rkt"
          "../../util/message/message.rkt"
          "../../util/content/content-parts.rkt"
-         "../../tools/tool.rkt"
-         "../../tools/registry-defaults.rkt"
+         "review-tools.rkt"
          "../../tools/permission-gate.rkt"
          "../../sandbox/subprocess.rkt"
          "../../sandbox/gateway-bridge.rkt"
@@ -32,6 +31,7 @@
          "review-proof.rkt"
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          "review-audit-format.rkt"
+         "review-audit-promotion.rkt"
          (only-in "review-worktree.rkt" resolve-review-checkout))
 (provide make-auto-review-runner
          resolve-review-checkout
@@ -142,7 +142,8 @@
 ;; Private test/probe interface, not part of the extension's public runner API.
 (module+ test-support
   (provide resolve-review-model
-           build-review-provider))
+           build-review-provider
+           make-review-tool-registry))
 (define (run-review-session session prompt)
   (define-values (_updated result) (run-prompt! session prompt #:max-iterations 80))
   result)
@@ -179,7 +180,24 @@
       (define audit? (equal? mode owned-audit-mode))
       (unless (or audit? (equal? mode "manual-compatibility"))
         (error 'review-session "production review requires owned-proof audit mode"))
+      (define (promotion-live?)
+        (cond
+          [(and audit?
+                (hash-has-key? (hash-ref receipt 'owned-proof (hasheq)) 'supplemental-contract))
+           (define authority (hash-ref request 'owned-authority (hasheq)))
+           (define intent (load-supplemental-promotion-intent root plan wave))
+           (and (equal? (hash-ref authority 'reference #f) (hash-ref receipt 'owned-proof))
+                (audit-promotion-sha256 authority)
+                (hash? intent)
+                (equal? (hash-ref authority 'supplemental-promotion #f)
+                        (hash-ref intent 'promotion #f))
+                (equal? (hash-ref request 'supplemental-promotion-sha256 #f)
+                        (hash-ref authority 'supplemental-promotion-sha256 #f)))]
+          [else #t]))
       (when audit?
+        (audit-binding request)
+        (unless (promotion-live?)
+          (error 'review-session "stale supplemental promotion pin"))
         (validate-receipt-owned-proof! receipt root plan wave)
         (unless (and (hash? (hash-ref receipt 'owned-proof #f))
                      (equal? (hash-ref request 'proof-sha256 #f)
@@ -196,6 +214,7 @@
              (not (campaign-record-budget-pause rec))
              (= (campaign-fence-token rec) (hash-ref receipt 'attempt-fence))
              (equal? receipt (and current (hash-ref current 'receipt #f)))
+             (promotion-live?)
              (or (not audit?)
                  (equal? (hash-ref request 'generation #f)
                          (length (hash-ref current 'receipt-history '()))))
@@ -310,8 +329,7 @@
                                       ;; reviewer's own read/bash tools (the
                                       ;; live W1 incident). Pin #f explicitly.
                                       [current-gsd-author-phase #f])
-                         (define tools (make-tool-registry))
-                         (register-default-tools! tools #:only '("read" "bash"))
+                         (define tools (make-review-tool-registry cwd))
                          (set! session
                                (make-agent-session
                                 (hasheq 'provider
