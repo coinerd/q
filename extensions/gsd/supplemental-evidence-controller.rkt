@@ -618,7 +618,12 @@
        (step! grant (reload-for-step! grant operation) "candidate-approved" (hasheq 'candidate-approval-ref cap))
        (values 'next #f))]))
 
+;; Fresh admission only. A durable verifying state spends C1 even if the
+;; process died before launch: a new registry cannot prove prior quiescence.
+;; Resume must not enter this capture path again.
 (define (verification-step! base plan wave operation grant task)
+  (unless (equal? (hash-ref operation 'state) "candidate-approved")
+    (raise-pause! "ambiguous supplemental verification admission; no C1 relaunch"))
   (define context (hash-ref task 'context))
   (define cwd (hash-ref context 'repo))
   (define c1 (hash-ref task 'effective-command))
@@ -627,9 +632,7 @@
   (define command-sha (sha256-string (string-join (list "/bin/sh" "-c" (apply-verify-jobs c1 jobs)) "\u0")))
   (define intent (hasheq 'execution-cwd cwd 'operational-jobs jobs 'command-sha256 command-sha))
   (define operation*
-    (if (equal? (hash-ref operation 'state) "candidate-approved")
-        (step! grant (reload-for-step! grant operation) "verifying" (hasheq 'verify-job intent))
-        operation))
+    (step! grant operation "verifying" (hasheq 'verify-job intent)))
   (unless (equal? (hash-ref (hash-ref operation* 'facts) 'verify-job) intent)
     (raise-pause! "recorded verification intent differs from the current admission"))
   (define allocation (allocation-of operation*))
@@ -895,7 +898,13 @@
          (if (eq? kind 'next)
              (loop (add1 steps))
              (values kind detail))]
-        [("candidate-approved" "verifying")
+        [("verifying")
+         ;; Without a sealed GREEN transition there is no authenticated
+         ;; recovery target here. The old process may have launched C1 (or
+         ;; still be running it); matching intent is not launch permission.
+         ;; Late GREEN WAL cuts retain their separate reconcile route below.
+         (raise-pause! "ambiguous supplemental verification: admission already consumed; no C1 relaunch; owner recovery required")]
+        [("candidate-approved")
          (begin
            ;; The loop call must stay OUTSIDE this handler: a pause raised by
            ;; a LATER state must not be mislabeled as a C1 verify failure.

@@ -944,8 +944,22 @@
     {
      "class": "C",
      "disposition": "retained-canary",
-     "line": 148,
+     "line": 150,
      "reason": "BUG-0088 keyboard/broker integration: after the actual approval key event, poll the durable pointer for the asynchronously consumed exact grant, at most 100 times with 0.01s waits; success requires validated task approval, not elapsed time. The frontend launches a worker and exposes no completion event to this test; logical clock advancement cannot schedule that worker.",
+     "text": "(sleep 0.01)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 200,
+     "reason": "BUG-0088 keyboard revocation denial canary: a bounded 0.05s window after the actual deny key gives the asynchronous approval worker an opportunity to act incorrectly; assertions require the target approval to remain valid and operation bytes unchanged. This is a negative observation window, not proof of worker completion; the frontend exposes no completion event and fake time cannot schedule the worker.",
+     "text": "(sleep 0.05)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 210,
+     "reason": "BUG-0088 keyboard revocation integration: after the actual approve key, poll durable approval validity at most 200 times with 0.01s waits; success requires durable revocation and subsequent admission/recovery refusal, not elapsed time. The frontend worker exposes no completion event to this test; logical clock advancement cannot schedule its durable write.",
      "text": "(sleep 0.01)"
     }
    ],
@@ -2231,8 +2245,8 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and the bounded frontend approval-worker pointer poll",
-  "total-occurrences": 245,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll)",
+  "total-occurrences": 247,
   "unit-fast-files": 3,
   "unit-fast-occurrences": 3,
   "unjustified-unit-fast-sleeps": 0
