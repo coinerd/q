@@ -148,7 +148,21 @@ this is an acceptance requirement, not a claim that all consumers are accepted.
 
 The protected journal consumes launch permission **before** the single test-author
 dispatch, using a fresh monotonic owner attempt/fence allocation. Ambiguous launch
-stays spent. Shared owner locking, revision/CAS and write-ahead intents serialize
+stays spent. At full `/go` campaign entry, an `awaiting-delivery` wave with an
+authentic, live approved-but-unlaunched T is authenticated before the ordinary
+exhausted-allowance coordinator. Under the campaign lease and authority lock,
+only that eligible wave's status returns to `pending`; the existing owned lane
+then allocates and consumes the single scoped test-author launch. This is not a
+legacy allowance reset: the historical marker, receipt/proof, frozen snapshot,
+FILES and task/approval records stay unchanged. Stale context/attempt/fence,
+revocation, expiry, cancellation, budget pause or an ambiguous reserved allocation
+fail closed. A retained supplemental pointer owns spent/revoked retries too;
+it never permits ordinary-author fallback or duplicate dispatch. Direct
+`run-campaign-wave` tests do not cover this parked full-campaign checkpoint;
+full-entry fixtures invoke `run-campaign!` without an advance override and stop
+at the next genuine approval boundary, not at live delivery acceptance.
+
+Shared owner locking, revision/CAS and write-ahead intents serialize
 admission, revocation and recovery. Revalidate exact source/clean checkout,
 ancestry, receipt/generation, approvals/revocation, deadlines, cancellation and
 fences at protected boundaries and after waits. Owned jobs must be confirmed

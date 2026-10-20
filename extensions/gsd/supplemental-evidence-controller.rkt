@@ -76,6 +76,7 @@
          build-supplemental-task-proposal!
          supplemental-active-operation
          supplemental-author-pending?
+         supplemental-approved-entry-context
          supplemental-operation-live?
          supplemental-resumable?
          supplemental-operation-summary
@@ -181,27 +182,28 @@
             (or task-approval-ref absent)))
   (define path (pointer-path base plan wave))
   (define temp (make-temporary-file ".supplemental-pointer-~a.tmp" #f dir))
-  (dynamic-wind
-   (lambda ()
-     (call-with-output-file temp (lambda (out) (display (canonical-evidence-json record) out)) #:exists 'truncate)
-     (file-or-directory-permissions temp #o600))
-   (lambda ()
-     (when (file-exists? path)
-       (define existing
-         (with-handlers ([exn:fail? (lambda (_) #f)])
-           (call-with-input-file path read-json)))
-       (unless (hash? existing)
-         (refuse "unreadable existing supplemental pointer"))
-       (unless (equal? (hash-ref existing 'task-proposal) task-proposal-ref)
-         (refuse "pointer already holds a different proposal for this campaign"))
-       (when task-approval-ref
-         (unless (or (equal? (hash-ref existing 'task-approval) absent)
-                     (equal? (hash-ref existing 'task-approval) task-approval-ref))
-           (refuse "pointer already holds a different task approval"))))
-     (rename-file-or-directory temp path #t))
-   (lambda ()
-     (when (file-exists? temp)
-       (delete-file temp))))
+  (dynamic-wind (lambda ()
+                  (call-with-output-file temp
+                                         (lambda (out) (display (canonical-evidence-json record) out))
+                                         #:exists 'truncate)
+                  (file-or-directory-permissions temp #o600))
+                (lambda ()
+                  (when (file-exists? path)
+                    (define existing
+                      (with-handlers ([exn:fail? (lambda (_) #f)])
+                        (call-with-input-file path read-json)))
+                    (unless (hash? existing)
+                      (refuse "unreadable existing supplemental pointer"))
+                    (unless (equal? (hash-ref existing 'task-proposal) task-proposal-ref)
+                      (refuse "pointer already holds a different proposal for this campaign"))
+                    (when task-approval-ref
+                      (unless (or (equal? (hash-ref existing 'task-approval) absent)
+                                  (equal? (hash-ref existing 'task-approval) task-approval-ref))
+                        (refuse "pointer already holds a different task approval"))))
+                  (rename-file-or-directory temp path #t))
+                (lambda ()
+                  (when (file-exists? temp)
+                    (delete-file temp))))
   (load-supplemental-pointer base plan wave))
 
 ;; ----------------------------------------------------------------------
@@ -231,9 +233,10 @@
   (define readiness (evidence-readiness base plan wave))
   (unless (and (equal? (hash-ref readiness 'status #f) "repair-required")
                (equal? (hash-ref readiness 'code #f) "unsupported-harness"))
-    (refuse (format "supplemental proposal requires authenticated unsupported-harness readiness, got ~a/~a"
-                    (hash-ref readiness 'status #f)
-                    (hash-ref readiness 'code #f))))
+    (refuse
+     (format "supplemental proposal requires authenticated unsupported-harness readiness, got ~a/~a"
+             (hash-ref readiness 'status #f)
+             (hash-ref readiness 'code #f))))
   (define context (current-evidence-context base plan wave))
   (define repo (hash-ref context 'repo))
   (define frozen (frozen-verify-binding base plan wave))
@@ -246,8 +249,9 @@
     (refuse "pinned baseline must be a strict ancestor of the current head"))
   (unless (equal? (git repo "rev-parse" (string-append baseline-head "^{tree}")) baseline-tree)
     (refuse "pinned baseline tree does not match the repository"))
-  (unless (for/or ([p (in-list (string-split (git repo "diff" "--name-only" baseline-head (hash-ref context 'head))
-                                             "\n"))])
+  (unless (for/or ([p (in-list (string-split
+                                (git repo "diff" "--name-only" baseline-head (hash-ref context 'head))
+                                "\n"))])
             (and (string-suffix? p ".rkt") (not (string-prefix? p "tests/"))))
     (refuse "pinned baseline has no real production difference against the current head"))
   (define bounds (fixed-bounds))
@@ -300,7 +304,8 @@
         (define context (hash-ref task 'context))
         ;; Pre-supersession admission: the context names the CURRENT receipt.
         (define (admitted-context?)
-          (and (= (hash-ref context 'receipt-generation) (length (hash-ref journal 'receipt-history '())))
+          (and (= (hash-ref context 'receipt-generation)
+                  (length (hash-ref journal 'receipt-history '())))
                (equal? (hash-ref context 'receipt-sha256) (canonical-evidence-digest receipt))))
         ;; After this task's OWN S-authorized supersession, the journal's
         ;; current receipt IS the task's product, so the pre-supersession
@@ -327,7 +332,8 @@
                       (equal? (hash-ref s 'old-receipt-sha256) (hash-ref context 'receipt-sha256))
                       (equal? (hash-ref s 'old-generation) (hash-ref context 'receipt-generation))
                       (equal? (hash-ref s 'task-approval) aref)
-                      (equal? (canonical-evidence-digest (hash-ref s 'receipt)) (canonical-evidence-digest receipt))))))
+                      (equal? (canonical-evidence-digest (hash-ref s 'receipt))
+                              (canonical-evidence-digest receipt))))))
         (unless (and receipt
                      (equal? (hash-ref context 'plan-id) plan)
                      (= (hash-ref context 'wave) wave)
@@ -344,11 +350,39 @@
   (define pointer (load-supplemental-pointer base plan wave))
   (and pointer
        (with-handlers ([exn:fail? (lambda (_) #f)])
-         (and (validate-supplemental-approval (hash-ref pointer 'task-approval) (hash-ref pointer 'task-proposal))
+         (and (validate-supplemental-approval (hash-ref pointer 'task-approval)
+                                              (hash-ref pointer 'task-proposal))
               (let ([operation (with-handlers ([exn:fail? (lambda (_) #f)])
                                  (load-supplemental-operation (hash-ref pointer 'task-approval)))])
-                (or (not operation) (member (hash-ref operation 'state) '("proposal-approved" "reserved"))))))
+                (or (not operation)
+                    (member (hash-ref operation 'state) '("proposal-approved" "reserved"))))))
        #t))
+;; Pure admission for an unallocated parked entry. Never initialize an
+;; operation here: a reserved allocation belongs to its original attempt and
+;; cannot acquire a successor through this checkpoint after a crash.
+;; The caller holds the authority lock through its campaign status commit.
+(define (supplemental-approved-entry-context base plan wave)
+  (define pointer (load-supplemental-pointer base plan wave))
+  (unless (and pointer
+               (validate-supplemental-approval (hash-ref pointer 'task-approval)
+                                               (hash-ref pointer 'task-proposal)))
+    (refuse "supplemental checkpoint requires the exact live task approval"))
+  (define operation (load-supplemental-operation (hash-ref pointer 'task-approval)))
+  (unless (or (not operation) (equal? (hash-ref operation 'state) "proposal-approved"))
+    (refuse "supplemental checkpoint cannot reallocate a reserved or spent task"))
+  (define proposal (load-supplemental-record (hash-ref pointer 'task-proposal)))
+  (define task (hash-ref (hash-ref proposal 'payload) 'task))
+  (define context (hash-ref task 'context))
+  ;; control-plane-head is sealed proposal-time provenance, not an execution
+  ;; equality pin. Separately authorized engineering may upgrade the trusted
+  ;; installed process without reapproving unchanged T. Caller-supplied code
+  ;; is not admitted here; HEAD equality would not authenticate loaded bytes
+  ;; (nor a dirty engine) within the same-uid/trusted-process boundary.
+  ;; Live source/receipt context must still match exactly.
+  (unless (equal? context (current-evidence-context base plan wave))
+    (refuse "supplemental checkpoint task context drifted"))
+  context)
+
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
 ;; exists (any operation state, terminal included): the campaign branch is
 ;; delivery/receipt evidence and must never be worktree-cleaned.
@@ -403,7 +437,11 @@
 ;; Shared journal/CAS and wave-status helpers
 ;; ----------------------------------------------------------------------
 (define (step! grant operation new-state facts)
-  (transition-supplemental-operation! grant (hash-ref operation 'revision) (hash-ref operation 'state) new-state facts))
+  (transition-supplemental-operation! grant
+                                      (hash-ref operation 'revision)
+                                      (hash-ref operation 'state)
+                                      new-state
+                                      facts))
 (define (live-grant? grant)
   (define operation
     (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -428,7 +466,9 @@
 ;; Request an operator decision; ANY channel/transport failure is an honest
 ;; typed pause, never a failure and never a synthetic approval.
 (define (request-operator-approval ref publisher what)
-  (with-handlers ([exn:fail? (lambda (e) (values #f (format "operator ~a unavailable: ~a" what (trim-message e))))])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (values #f (format "operator ~a unavailable: ~a" what (trim-message e))))])
     (values (request-supplemental-approval! ref publisher) #f)))
 
 ;; ----------------------------------------------------------------------
@@ -457,15 +497,18 @@
                (git-ok? repo "merge-base" "--is-ancestor" (hash-ref task 'baseline-head) head))
     (refuse "candidate head is not a strict descendant of the approved context/baseline"))
   (define allowed (task-expected-paths task))
-  (for ([line (in-list (string-split (git repo "log" "--format=%H" "--name-status" (string-append old-head ".." head))
-                                     "\n"))]
+  (for ([line (in-list
+               (string-split
+                (git repo "log" "--format=%H" "--name-status" (string-append old-head ".." head))
+                "\n"))]
         #:when (not (equal? line "")))
     (when (string-contains? line "\t")
       (match (string-split line "\t")
         [(list status path)
          (unless (and (member status '("A" "M")) (member path allowed))
            (refuse (format "intervening commit changed forbidden path ~s (~a)" path status)))]
-        [other (refuse (format "intervening commit recorded an unsupported change entry: ~a" other))]))))
+        [other
+         (refuse (format "intervening commit recorded an unsupported change entry: ~a" other))]))))
 (define (run-supplemental-author-phases! base
                                          plan
                                          wave
@@ -474,23 +517,26 @@
                                          run
                                          #:guard guard
                                          #:after-phase [after-phase void])
-  (with-handlers ([exn:fail? (lambda (e)
-                               ;; A launch is durable: any admission refusal while the
-                               ;; protected record is still `launched` spends the task.
-                               (define-values (op g _task _tref) (supplemental-active-operation base plan wave))
-                               (when (and op g (equal? (hash-ref op 'state) "launched"))
-                                 (with-handlers ([exn:fail? void])
-                                   (transition-supplemental-operation! g
-                                                                       (hash-ref op 'revision)
-                                                                       "launched"
-                                                                       "blocked"
-                                                                       (hasheq 'block-reason (trim-message e 200)))))
-                               (wave-execution-outcome 'failed
-                                                       (string-append "Supplemental evidence task blocked: "
-                                                                      (trim-message e))))])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; A launch is durable: any admission refusal while the
+                     ;; protected record is still `launched` spends the task.
+                     (define-values (op g _task _tref) (supplemental-active-operation base plan wave))
+                     (when (and op g (equal? (hash-ref op 'state) "launched"))
+                       (with-handlers ([exn:fail? void])
+                         (transition-supplemental-operation! g
+                                                             (hash-ref op 'revision)
+                                                             "launched"
+                                                             "blocked"
+                                                             (hasheq 'block-reason
+                                                                     (trim-message e 200)))))
+                     (wave-execution-outcome 'failed
+                                             (string-append "Supplemental evidence task blocked: "
+                                                            (trim-message e))))])
     (define repo (current-directory))
     (define pointer
-      (or (load-supplemental-pointer base plan wave) (refuse "no supplemental pointer for this campaign")))
+      (or (load-supplemental-pointer base plan wave)
+          (refuse "no supplemental pointer for this campaign")))
     (define grant (hash-ref pointer 'task-approval))
     (define tref (hash-ref pointer 'task-proposal))
     (define task (hash-ref (hash-ref (load-supplemental-record tref) 'payload) 'task))
@@ -518,28 +564,34 @@
           (step! grant
                  operation
                  "reserved"
-                 (hasheq 'allocation (hasheq 'attempt-id attempt-id 'attempt-fence fence 'coordinator-fence fence)))
+                 (hasheq
+                  'allocation
+                  (hasheq 'attempt-id attempt-id 'attempt-fence fence 'coordinator-fence fence)))
           (begin
             (unless (equal? (hash-ref (allocation-of operation) 'attempt-id #f) attempt-id)
               ;; A reserved allocation that lost its attempt (crash/restart)
               ;; can never be re-reserved: block the task durably and spend it.
               (with-handlers ([exn:fail? void])
-                (transition-supplemental-operation! grant
-                                                    (hash-ref operation 'revision)
-                                                    "reserved"
-                                                    "blocked"
-                                                    (hasheq 'block-reason
-                                                            "reserved allocation lost its attempt; task stays spent")))
+                (transition-supplemental-operation!
+                 grant
+                 (hash-ref operation 'revision)
+                 "reserved"
+                 "blocked"
+                 (hasheq 'block-reason "reserved allocation lost its attempt; task stays spent")))
               (refuse "bound allocation does not match the current attempt; the task stays spent"))
             operation)))
     ;; Durable launch intent BEFORE the one model dispatch: a crash or lost
     ;; response after this commit can never buy another dispatch.
     (unless (guard)
       (refuse "stale campaign authority before supplemental launch"))
-    (step! grant operation* "launched" (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id)))
+    (step! grant
+           operation*
+           "launched"
+           (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id)))
     (unless (guard)
       (refuse "stale campaign authority before model dispatch"))
-    (define outcome (run-supplemental-test-author! repo (task-write-paths task) attempt-id run guard after-phase))
+    (define outcome
+      (run-supplemental-test-author! repo (task-write-paths task) attempt-id run guard after-phase))
     (if (not (eq? (wave-execution-outcome-kind outcome) 'done))
         (begin
           ;; The launch was durably consumed: a phase that ends without an
@@ -547,12 +599,12 @@
           ;; spends the task. It is never silently retried and never
           ;; re-reserved; only owner governance may re-plan.
           (with-handlers ([exn:fail? void])
-            (transition-supplemental-operation! grant
-                                                (hash-ref operation* 'revision)
-                                                "launched"
-                                                "blocked"
-                                                (hasheq 'block-reason
-                                                        (trim-message (wave-execution-outcome-message outcome) 200))))
+            (transition-supplemental-operation!
+             grant
+             (hash-ref operation* 'revision)
+             "launched"
+             "blocked"
+             (hasheq 'block-reason (trim-message (wave-execution-outcome-message outcome) 200))))
           outcome)
         (let ()
           (define committed (committed-delivery-snapshot repo))
@@ -560,7 +612,8 @@
             (refuse "author phase left the retained checkout uncommitted"))
           (validate-commit-chain! repo context task)
           (for ([path (in-list (task-expected-paths task))])
-            (unless (regexp-match? #px"^100644 blob [0-9a-f]{40}\t" (git repo "ls-tree" "HEAD" "--" path))
+            (unless (regexp-match? #px"^100644 blob [0-9a-f]{40}\t"
+                                   (git repo "ls-tree" "HEAD" "--" path))
               (refuse (format "candidate path ~s is absent or not a regular committed blob" path))))
           (define manifest
             (for/list ([path (in-list (task-expected-paths task))])
@@ -587,7 +640,10 @@
                                               'manifest
                                               manifest)))
           (define kref (propose-retain! "candidate-proposal" candidate (list tref grant)))
-          (step! grant (reload-for-step! grant operation*) "candidate-sealed" (hasheq 'candidate-ref kref))
+          (step! grant
+                 (reload-for-step! grant operation*)
+                 "candidate-sealed"
+                 (hasheq 'candidate-ref kref))
           (wave-execution-outcome
            'done
            "supplemental test evidence committed and candidate sealed; operator candidate approval is next")))))
@@ -610,12 +666,17 @@
   (cond
     [(not g) (values 'paused (or err "operator candidate approval unavailable"))]
     [else
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (values 'paused (format "candidate approval refused: ~a" (trim-message e))))])
+     (with-handlers ([exn:fail?
+                      (lambda (e)
+                        (values 'paused (format "candidate approval refused: ~a" (trim-message e))))])
        (define cap (approve-supplemental-proposal! kref g))
        (unless (and (supplemental-reference? cap) (equal? (hash-ref cap 'kind) "candidate-approval"))
-         (raise-pause! "candidate approval grant could not be consumed; operator decision required again"))
-       (step! grant (reload-for-step! grant operation) "candidate-approved" (hasheq 'candidate-approval-ref cap))
+         (raise-pause!
+          "candidate approval grant could not be consumed; operator decision required again"))
+       (step! grant
+              (reload-for-step! grant operation)
+              "candidate-approved"
+              (hasheq 'candidate-approval-ref cap))
        (values 'next #f))]))
 
 ;; Fresh admission only. A durable verifying state spends C1 even if the
@@ -629,16 +690,21 @@
   (define c1 (hash-ref task 'effective-command))
   (define verify-bound (hash-ref (hash-ref task 'bounds) 'verify-timeout-sec))
   (define jobs (current-gsd-delivery-verify-jobs))
-  (define command-sha (sha256-string (string-join (list "/bin/sh" "-c" (apply-verify-jobs c1 jobs)) "\u0")))
+  (define command-sha
+    (sha256-string (string-join (list "/bin/sh" "-c" (apply-verify-jobs c1 jobs)) "\u0")))
   (define intent (hasheq 'execution-cwd cwd 'operational-jobs jobs 'command-sha256 command-sha))
-  (define operation*
-    (step! grant operation "verifying" (hasheq 'verify-job intent)))
+  (define operation* (step! grant operation "verifying" (hasheq 'verify-job intent)))
   (unless (equal? (hash-ref (hash-ref operation* 'facts) 'verify-job) intent)
     (raise-pause! "recorded verification intent differs from the current admission"))
   (define allocation (allocation-of operation*))
   (unless allocation
     (refuse "supplemental operation lost its allocation"))
-  (wave-for-attempt! base plan wave (hash-ref allocation 'attempt-id) (hash-ref allocation 'attempt-fence) 'verifying)
+  (wave-for-attempt! base
+                     plan
+                     wave
+                     (hash-ref allocation 'attempt-id)
+                     (hash-ref allocation 'attempt-fence)
+                     'verifying)
   (define kref (hash-ref (hash-ref operation* 'facts) 'candidate-ref))
   (define cap-ref (hash-ref (hash-ref operation* 'facts) 'candidate-approval-ref))
   (define contract
@@ -652,14 +718,15 @@
             cap-ref))
   (define registry (make-verification-registry))
   (define-values (result proposed _capture)
-    (parameterize
-        ([current-gsd-verification-registry registry]
-         [current-gsd-delivery-verify-jobs jobs]
-         [current-gsd-delivery-verify-timeout-sec (min (current-gsd-delivery-verify-timeout-sec) verify-bound)]
-         [current-gsd-delivery-branch-context (make-branch-delivery-context #:repo-root (string->path cwd)
-                                                                            #:branch (hash-ref context 'branch)
-                                                                            #:base-commit (hash-ref context 'head)
-                                                                            #:worktree-path (string->path cwd))])
+    (parameterize ([current-gsd-verification-registry registry]
+                   [current-gsd-delivery-verify-jobs jobs]
+                   [current-gsd-delivery-verify-timeout-sec
+                    (min (current-gsd-delivery-verify-timeout-sec) verify-bound)]
+                   [current-gsd-delivery-branch-context
+                    (make-branch-delivery-context #:repo-root (string->path cwd)
+                                                  #:branch (hash-ref context 'branch)
+                                                  #:base-commit (hash-ref context 'head)
+                                                  #:worktree-path (string->path cwd))])
       (dynamic-wind void
                     (lambda ()
                       (capture-supplemental-delivery-verification
@@ -688,7 +755,8 @@
   ;; constructed once here and never rebuilt; its digest never depends on R1.
   (define stage! (publication-api 'stage-supplemental-evidence!))
   (unless stage!
-    (raise-pause! "supplemental GREEN captured; publication/supersession wave not installed; readiness NOT claimed"))
+    (raise-pause!
+     "supplemental GREEN captured; publication/supersession wave not installed; readiness NOT claimed"))
   (stage! base
           plan
           wave
@@ -721,19 +789,25 @@
   (define probe-context (hash-ref (staged-record staged) 'context))
   (define retained-ref (hash-ref (staged-record staged) 'red-proof-ref #f))
   (define ref
-    (or
-     retained-ref
-     (begin
-       (unless (equal? (hash-ref operation 'state) "green-captured")
-         (refuse "ambiguous probe launch without retained R1; no relaunch"))
-       (consume-staged-probe-launch! base plan wave)
-       (run-staged-supplemental-probe! base plan wave repo staged "repair-1" #:guard (lambda () (live-grant? grant))))))
+    (or retained-ref
+        (begin
+          (unless (equal? (hash-ref operation 'state) "green-captured")
+            (refuse "ambiguous probe launch without retained R1; no relaunch"))
+          (consume-staged-probe-launch! base plan wave)
+          (run-staged-supplemental-probe! base
+                                          plan
+                                          wave
+                                          repo
+                                          staged
+                                          "repair-1"
+                                          #:guard (lambda () (live-grant? grant))))))
   (unless (and (hash? ref) (hash-ref ref 'sha256 #f))
     ;; Carry the probe's typed code/diagnostic: a blocked probe must be
     ;; diagnosable without touching the retained worker logs.
     (refuse (format "staged baseline overlay probe did not produce structured RED/GREEN: ~a/~a"
                     (hash-ref ref 'status "blocked")
-                    (trim-message (or (hash-ref ref 'diagnostic #f) (hash-ref ref 'code #f) "unknown") 300))))
+                    (trim-message (or (hash-ref ref 'diagnostic #f) (hash-ref ref 'code #f) "unknown")
+                                  300))))
   (define manifest (validate-baseline-probe! repo ref probe-context))
   (unless (equal? (hash-ref manifest 'relation) "baseline-with-test-overlay-v1")
     (refuse "unexpected staged probe relation"))
@@ -747,9 +821,13 @@
     (step! grant
            operation
            "probing"
-           (hasheq
-            'probe-job
-            (hasheq 'kind "staged-baseline-overlay-v1" 'repo repo 'baseline-head (hash-ref task 'baseline-head)))))
+           (hasheq 'probe-job
+                   (hasheq 'kind
+                           "staged-baseline-overlay-v1"
+                           'repo
+                           repo
+                           'baseline-head
+                           (hash-ref task 'baseline-head)))))
   (step! grant (reload-for-step! grant operation) "probe-captured" (hasheq 'probe-proof-ref ref)))
 
 (define (consume-staged-probe-launch! base plan wave)
@@ -766,9 +844,11 @@
   ;; controller never constructs its own supersession payload.
   (define seal-S! (publication-api 'seal-supplemental-supersession-proposal!))
   (unless seal-S!
-    (raise-pause! "publication/supersession wave not installed; S cannot be sealed; readiness NOT claimed"))
+    (raise-pause!
+     "publication/supersession wave not installed; S cannot be sealed; readiness NOT claimed"))
   (with-handlers ([exn:fail? (lambda (e)
-                               (raise-pause! (format "supersession proposal sealing refused: ~a" (trim-message e))))])
+                               (raise-pause! (format "supersession proposal sealing refused: ~a"
+                                                     (trim-message e))))])
     (define sref (seal-S! base plan wave))
     (define-values (g err) (request-operator-approval sref publisher "supersession authorization"))
     (cond
@@ -776,13 +856,17 @@
       [else
        (with-handlers ([exn:fail? (lambda (e)
                                     (values 'paused
-                                            (format "supersession authorization refused: ~a" (trim-message e))))])
+                                            (format "supersession authorization refused: ~a"
+                                                    (trim-message e))))])
          (define cap (approve-supplemental-proposal! sref g))
-         (unless (and (supplemental-reference? cap) (equal? (hash-ref cap 'kind) "supersession-approval"))
-           (raise-pause! "supersession grant could not be consumed; operator decision required again"))
+         (unless (and (supplemental-reference? cap)
+                      (equal? (hash-ref cap 'kind) "supersession-approval"))
+           (raise-pause!
+            "supersession grant could not be consumed; operator decision required again"))
          (define authorize! (publication-api 'stage-supplemental-supersession-authorization!))
          (unless authorize!
-           (raise-pause! "publication/supersession wave not installed; S authorization cannot be staged"))
+           (raise-pause!
+            "publication/supersession wave not installed; S authorization cannot be staged"))
          (authorize! base plan wave sref cap)
          (step! grant
                 (reload-for-step! grant operation)
@@ -808,14 +892,17 @@
     (refuse "publication requires the bound supersession authorization"))
   (define replay! (publication-api 'replay-supplemental-supersession!))
   (unless replay!
-    (raise-pause! "supersession approved; publication route not installed in this checkout; readiness NOT claimed"))
+    (raise-pause!
+     "supersession approved; publication route not installed in this checkout; readiness NOT claimed"))
   (define (read-current)
     (load-campaign-record base plan))
   (with-handlers
-      ([exn:fail? (lambda (e)
-                    (raise-pause!
-                     (format "supersession approved; protected publication did not complete (~a); readiness NOT claimed"
-                             (trim-message e))))])
+      ([exn:fail?
+        (lambda (e)
+          (raise-pause!
+           (format
+            "supersession approved; protected publication did not complete (~a); readiness NOT claimed"
+            (trim-message e))))])
     (define result (replay! base plan wave read-current sapref (lambda () (live-grant? grant))))
     ;; The publication wave owns the durable protected-operation tail
     ;; (supersession-approved -> published -> receipt-certified) as idempotent
@@ -831,7 +918,8 @@
                     operation)
                 'state))
     (unless (member state '("published" "receipt-certified" "registered" "completed"))
-      (raise-pause! (format "protected publication left the operation at ~a; readiness NOT claimed" state)))))
+      (raise-pause! (format "protected publication left the operation at ~a; readiness NOT claimed"
+                            state)))))
 ;; Certified -> registered -> completed is the protected owner promotion
 ;; transition (P/capability/registration/readiness). The controller
 ;; integrates it like the publication route: when the module is absent or
@@ -850,11 +938,13 @@
   (unless promote!
     (raise-pause!
      "evidence certified; promotion/registration route not installed in this checkout; readiness NOT claimed"))
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (raise-pause!
-                      (format "evidence certified; protected promotion did not complete (~a); readiness NOT claimed"
-                              (trim-message e))))])
+  (with-handlers
+      ([exn:fail?
+        (lambda (e)
+          (raise-pause!
+           (format
+            "evidence certified; protected promotion did not complete (~a); readiness NOT claimed"
+            (trim-message e))))])
     (define readiness (promote! base plan wave sapref (lambda () (live-grant? grant))))
     ;; The promotion transition itself admits readiness only after the
     ;; promoted registration validates against the current certified context;
@@ -867,7 +957,8 @@
 (define (advance-supplemental-evidence! base
                                         plan
                                         wave
-                                        #:publisher [publisher (current-supplemental-operator-publisher)])
+                                        #:publisher
+                                        [publisher (current-supplemental-operator-publisher)])
   (define (blocked! grant operation reason)
     (with-handlers ([exn:fail? void])
       (transition-supplemental-operation! grant
@@ -877,7 +968,8 @@
                                           (hasheq 'block-reason (trim-message reason 200)))))
   (with-handlers ([exn:supplemental-pause? (lambda (e) (values 'paused (exn-message e)))]
                   [exn:fail? (lambda (e)
-                               (define-values (operation grant task _t) (supplemental-active-operation base plan wave))
+                               (define-values (operation grant task _t)
+                                 (supplemental-active-operation base plan wave))
                                (when (and operation grant)
                                  (blocked! grant operation e))
                                (values 'failed (trim-message e)))])
@@ -889,7 +981,8 @@
         (refuse "live supplemental operation vanished during advance"))
       (case (hash-ref operation 'state)
         [("proposal-approved" "reserved")
-         (raise-pause! "supplemental task has not launched; it must run through the author lane attempt")]
+         (raise-pause!
+          "supplemental task has not launched; it must run through the author lane attempt")]
         [("launched")
          (blocked! grant operation "launch consumed without captured author output; task stays spent")
          (values 'failed "ambiguous supplemental launch: no captured author output; task spent")]
@@ -903,7 +996,8 @@
          ;; recovery target here. The old process may have launched C1 (or
          ;; still be running it); matching intent is not launch permission.
          ;; Late GREEN WAL cuts retain their separate reconcile route below.
-         (raise-pause! "ambiguous supplemental verification: admission already consumed; no C1 relaunch; owner recovery required")]
+         (raise-pause!
+          "ambiguous supplemental verification: admission already consumed; no C1 relaunch; owner recovery required")]
         [("candidate-approved")
          (begin
            ;; The loop call must stay OUTSIDE this handler: a pause raised by
@@ -911,29 +1005,34 @@
            (with-handlers ([exn:fail? (lambda (e)
                                         (blocked! grant operation e)
                                         (values 'failed
-                                                (format "supplemental C1 verify failed: ~a" (trim-message e))))])
+                                                (format "supplemental C1 verify failed: ~a"
+                                                        (trim-message e))))])
              (verification-step! base plan wave operation grant task))
            (loop (add1 steps)))]
         [("green-captured")
          (with-handlers ([exn:fail? (lambda (e)
                                       (blocked! grant operation e)
-                                      (values 'failed (format "staged probe failed: ~a" (trim-message e))))])
+                                      (values 'failed
+                                              (format "staged probe failed: ~a" (trim-message e))))])
            ;; R1 may run only after the staged wrapper (exact r*/E) exists.
            (define load-staged (publication-api 'load-supplemental-staged-evidence))
            (unless (and load-staged (load-staged base plan wave))
-             (raise-pause! "supplemental GREEN captured; staged publication wrapper absent; readiness NOT claimed"))
+             (raise-pause!
+              "supplemental GREEN captured; staged publication wrapper absent; readiness NOT claimed"))
            (probe-step! base plan wave operation grant task))
          ;; Loop OUTSIDE the probe handler (see the verify branch note).
          (loop (add1 steps))]
         [("probing")
          (begin
-           (with-handlers ([exn:fail? (lambda (e)
-                                        (blocked! grant operation e)
-                                        (values 'failed (format "staged probe failed: ~a" (trim-message e))))])
+           (with-handlers ([exn:fail?
+                            (lambda (e)
+                              (blocked! grant operation e)
+                              (values 'failed (format "staged probe failed: ~a" (trim-message e))))])
              (probe-step! base plan wave operation grant task))
            (loop (add1 steps)))]
         [("probe-captured")
-         (define-values (kind detail) (supersession-step! base plan wave operation grant task publisher))
+         (define-values (kind detail)
+           (supersession-step! base plan wave operation grant task publisher))
          (if (eq? kind 'next)
              (loop (add1 steps))
              (values kind detail))]
@@ -945,7 +1044,9 @@
                                      "recover-pending-registration")
          ;; Only the protected journal can install the exact sealed target.
          ;; It revalidates linked approvals under the shared owner lock.
-         (reconcile-supplemental-operation! grant (hash-ref operation 'revision) (hash-ref operation 'state))
+         (reconcile-supplemental-operation! grant
+                                            (hash-ref operation 'revision)
+                                            (hash-ref operation 'state))
          (loop (add1 steps))]
         [("published")
          (publication-step! base plan wave operation grant task)
@@ -954,8 +1055,10 @@
          (promotion-step! base plan wave operation grant task)
          (loop (add1 steps))]
         [("completed")
-         (values 'completed "supplemental evidence task completed; readiness owned by the registered receipt")]
-        [else (values 'paused (format "supplemental operation is ~a" (hash-ref operation 'state)))]))))
+         (values 'completed
+                 "supplemental evidence task completed; readiness owned by the registered receipt")]
+        [else
+         (values 'paused (format "supplemental operation is ~a" (hash-ref operation 'state)))]))))
 
 ;; ----------------------------------------------------------------------
 ;; Integration outcomes for the three admission seams
@@ -963,13 +1066,23 @@
 ;; owned-entry-block seam: pre-attempt resume WITHOUT re-reserving. #f means
 ;; "no supplemental business here".
 (define (supplemental-entry-outcome base plan wave)
-  (and (supplemental-resumable? base plan wave)
-       (let-values ([(kind detail) (advance-supplemental-evidence! base plan wave)])
-         (campaign-result (case kind
-                            [(failed) 'wave-failed]
-                            [else 'wave-blocked])
-                          '()
-                          detail))))
+  (cond
+    [(supplemental-resumable? base plan wave)
+     (let-values ([(kind detail) (advance-supplemental-evidence! base plan wave)])
+       (campaign-result (case kind
+                          [(failed) 'wave-failed]
+                          [else 'wave-blocked])
+                        '()
+                        detail))]
+    [(and (supplemental-pointer-retained? base plan wave)
+          (not (supplemental-author-pending? base plan wave)))
+     ;; Retention is ownership, NOT permission. Terminal, revoked, expired
+     ;; or invalid tasks cannot release this checkout to ordinary authors.
+     (campaign-result
+      'wave-blocked
+      '()
+      "retained supplemental task is not launchable; ordinary author fallback refused")]
+    [else #f]))
 ;; Orchestrator done-case seam: continues the flow after the author attempt
 ;; returns done (candidate approval, G1, R1, S, publication) and parks the
 ;; allocated attempt at every typed pause.
@@ -987,7 +1100,8 @@
 (define (supplemental-checkpoint-step! base plan wave)
   (define (snapshot)
     (with-handlers ([exn:fail? (lambda (_) #f)])
-      (load-supplemental-operation (hash-ref (load-supplemental-pointer base plan wave) 'task-approval))))
+      (load-supplemental-operation (hash-ref (load-supplemental-pointer base plan wave)
+                                             'task-approval))))
   (define before (snapshot))
   (define-values (kind detail) (advance-supplemental-evidence! base plan wave))
   (case kind
@@ -1004,8 +1118,10 @@
 (define (retained-supplemental-worktree root rec wave)
   (define plan (campaign-plan-id rec))
   (define pointer
-    (or (load-supplemental-pointer root plan wave) (refuse "supplemental retention requires the campaign pointer")))
-  (define task (hash-ref (hash-ref (load-supplemental-record (hash-ref pointer 'task-proposal)) 'payload) 'task))
+    (or (load-supplemental-pointer root plan wave)
+        (refuse "supplemental retention requires the campaign pointer")))
+  (define task
+    (hash-ref (hash-ref (load-supplemental-record (hash-ref pointer 'task-proposal)) 'payload) 'task))
   (let* ([context (hash-ref task 'context)]
          ;; The evidence context carries the exact execution checkout string
          ;; (no trailing separator); running the wave there must stringify

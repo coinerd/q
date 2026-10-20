@@ -927,6 +927,18 @@
    ],
    "suite": "fast"
   },
+  "tests/test-gsd-supplemental-campaign-entry.rkt": {
+   "occurrences": [
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 231,
+     "reason": "BUG-0088 full-campaign expiry canary: wait six seconds for the authentic broker-approved task's five-second deadline to expire, then invoke run-campaign! from awaiting-delivery and require zero dispatch and byte-identical campaign/journal records. Production approval validation reads current-seconds without an injectable clock; fake time cannot expire this real grant. This is deadline evidence, not a worker settle wait.",
+     "text": "(sleep 6)"
+    }
+   ],
+   "suite": "other"
+  },
   "tests/test-gsd-supplemental-evidence-authority.rkt": {
    "occurrences": [
     {
@@ -2246,7 +2258,7 @@
  },
  "summary": {
   "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll)",
-  "total-occurrences": 247,
+  "total-occurrences": 248,
   "unit-fast-files": 3,
   "unit-fast-occurrences": 3,
   "unjustified-unit-fast-sleeps": 0
