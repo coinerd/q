@@ -28,6 +28,7 @@
          (only-in "supplemental-evidence-controller.rkt"
                   run-supplemental-author-phases!
                   supplemental-author-pending?
+                  supplemental-pointer-retained?
                   supplemental-entry-outcome)
          (only-in "composition-root.rkt" current-gsd-verification-registry)
          (only-in "verification-job.rkt" make-verification-registry verification-close-registry!))
@@ -89,6 +90,13 @@
         (parameterize ([current-gsd-verification-registry phase-registry])
           ((cond
              [(supplemental-author-pending? base-dir plan-id idx) run-supplemental-author-phases!]
+             [(supplemental-pointer-retained? base-dir plan-id idx)
+              ;; Recheck on EVERY internal retry and at dispatch, not just
+              ;; campaign entry. Ownership never becomes ordinary permission.
+              (lambda (#:guard guard #:after-phase after-phase . args)
+                (wave-execution-outcome
+                 'failed
+                 "retained supplemental task is not launchable; ordinary author fallback refused"))]
              [(author-repair-pending? base-dir plan-id idx) run-retained-author-phases!]
              [else run-proactive-author-phases!])
            base-dir

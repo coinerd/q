@@ -25,9 +25,14 @@
 (require racket/list
          racket/string
          (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-message)
-         (only-in "author-checkpoint.rkt" resolve-author-checkpoint! author-repair-pending?)
+         (only-in "author-checkpoint.rkt"
+                  resolve-author-checkpoint!
+                  resolve-supplemental-author-checkpoint!
+                  author-repair-pending?)
          (only-in "supplemental-evidence-controller.rkt"
                   supplemental-resumable?
+                  supplemental-author-pending?
+                  supplemental-pointer-retained?
                   supplemental-checkpoint-step!)
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
@@ -356,6 +361,16 @@
                                     ;; session, never an assumption.
                                     #:author-session-live? [author-session-live? (lambda () #t)])
   (cond
+    ;; Approved/unlaunched T must reach the owned author lane BEFORE the
+    ;; ordinary coordinator can report the historical allowance exhausted.
+    ;; Retained terminal/revoked pointers remain owned, never ordinary routing.
+    [(and (campaign-wave? extra)
+          (supplemental-author-pending? dir plan-id (campaign-wave-index extra)))
+     (define resolved
+       (resolve-supplemental-author-checkpoint! dir plan-id (campaign-wave-index extra)))
+     (if (eq? resolved #t)
+         (on-advance)
+         (on-blocked resolved))]
     [(and (campaign-wave? extra) (supplemental-resumable? dir plan-id (campaign-wave-index extra)))
      (supplemental-checkpoint-visit! dir
                                      plan-id
@@ -363,6 +378,10 @@
                                      on-cancel
                                      on-advance
                                      on-blocked)]
+    [(and (campaign-wave? extra)
+          (supplemental-pointer-retained? dir plan-id (campaign-wave-index extra)))
+     (on-blocked
+      "retained supplemental task is not launchable; ordinary coordinator fallback refused")]
     [else
      (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
          (on-cancel message)

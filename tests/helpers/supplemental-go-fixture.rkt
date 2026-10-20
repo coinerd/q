@@ -7,7 +7,8 @@
 ;; interactive broker channel driven by a simulated trusted frontend. No live
 ;; campaign, no fabricated grants: approvals always pass through the real
 ;; register/decide/await broker flow and are consumed exactly once.
-(require racket/file
+(require compiler/cm
+         racket/file
          racket/path
          racket/port
          racket/runtime-path
@@ -23,6 +24,9 @@
          "../../extensions/gsd/delivery-verifier.rkt"
          "../../extensions/gsd/review-proof.rkt"
          "../../extensions/gsd/evidence-repair-format.rkt"
+         "../../extensions/gsd/evidence-readiness.rkt"
+         "../../extensions/gsd/evidence-author-journal.rkt"
+         "../../extensions/gsd/author-scope.rkt"
          "../../extensions/gsd/effective-verify-binding.rkt"
          "../../extensions/gsd/supplemental-evidence-format.rkt"
          "../../extensions/gsd/supplemental-evidence-authority.rkt"
@@ -112,7 +116,11 @@
         "(define evidence-suite (test-suite \"witness\" (test-case \"new regression\" "
         "(check-true (witness)))))\n"
         "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n")))
-(define (call-with-supplemental-fixture proc)
+(define (call-with-supplemental-fixture proc
+                                        #:completed-author? [completed-author? #f]
+                                        #:wave-index [wave 1]
+                                        #:expires-in-sec [expires-in-sec 3600]
+                                        #:proposal-control-plane-head [proposal-head #f])
   (define root (make-temporary-file "supplemental-go-~a" 'directory))
   (define repo (build-path root "q"))
   (define cwd (path->string repo))
@@ -134,6 +142,10 @@
      ;; dependency-closure authentication of the C1 probe is genuine.
      (for ([relative (installed-runner-closure)])
        (put repo relative (file->string (build-path checkout-root relative))))
+     ;; Warm only the real runner's compilation cache. Four focused/full
+     ;; subprocesses in the two authentic proof ladders otherwise compile the
+     ;; same closure repeatedly. compiled/ is ignored; source pins are unchanged.
+     (managed-compile-zo (build-path repo "scripts" "run-tests.rkt"))
      ;; Pre-fix baseline production fact, then the fix + existing witness.
      (put repo "runtime/local.rkt" "#lang racket/base\n(provide answer)\n(define answer 41)\n")
      (git-quiet! repo "add" "-A")
@@ -177,8 +189,8 @@
                          "   (error 'lint \"trailing whitespace\")))\n"))
      (git-quiet! repo "add" "-A")
      (git-quiet! repo "commit" "-qm" "lint helper")
-     (write-plan! root 1 "Supplemental" "supplemental")
-     (write-wave-doc! root 1 "supplemental" '("q/runtime/local.rkt") c0)
+     (write-plan! root wave "Supplemental" "supplemental")
+     (write-wave-doc! root wave "supplemental" '("q/runtime/local.rkt") c0)
      (define plan (campaign-manifest-hash (make-campaign-manifest 1 "fixture" '() '() "constraints")))
      (make-plan-snapshot! root plan (file->string (build-path root ".planning" "PLAN.md")))
      (parameterize ([current-supplemental-authority-root private]
@@ -191,20 +203,16 @@
                                                    #:worktree-path repo)])
        ;; Authentic old receipt from a real owned C0 execution.
        (define before (committed-delivery-snapshot repo))
-       (define check
-         (with-handlers ([exn:fail? (lambda (e)
-                                      (error 'fixture "C0 verify failed: ~a" (exn-message e)))])
-           (fixture-run-c1-verifier root 1)))
-       (unless (cadr check)
-         (error 'fixture "C0 verify did not approve"))
+       ;; The owned capture below runs and authenticates the full real C0
+       ;; ladder. Do not run a redundant uncaptured preflight ladder too.
        (define-values (_legacy old-capture)
          (call-with-owned-proof-capture root
                                         plan
-                                        1
+                                        wave
                                         before
                                         "old-attempt"
                                         7
-                                        (lambda () (fixture-run-c1-verifier root 1))
+                                        (lambda () (fixture-run-c1-verifier root wave))
                                         #:cwd repo))
        (unless old-capture
          (error 'fixture "real baseline capture failed"))
@@ -221,12 +229,12 @@
                     "actual owned C0 fixture GREEN"
                     'owned-proof
                     old-ref))
-       (record-delivery-receipt! root plan 1 old)
+       (record-delivery-receipt! root plan wave old)
        ;; Parked awaiting-delivery wave with the old attempt (the W1 shape).
        (define campaign
          (make-campaign-record plan
                                (make-campaign-manifest 1 "fixture" '() '() "constraints")
-                               (list (make-campaign-wave 1
+                               (list (make-campaign-wave wave
                                                          "Supplemental"
                                                          'awaiting-delivery
                                                          1
@@ -243,19 +251,77 @@
         campaign
         (snapshot-manifest-digest (load-snapshot-manifest root plan)))
        (persist-campaign! root campaign)
+       ;; Optional actual historical author supersession, before approving T.
+       (when completed-author?
+         (reserve-evidence-author-repair! root
+                                          plan
+                                          wave
+                                          (current-evidence-context root plan wave)
+                                          (frozen-author-files root plan wave)
+                                          #:guard (lambda () #t))
+         (start-evidence-author-repair! root plan wave "attempt-2" 7 #:guard (lambda () #t))
+         ;; Keep the already-canonical layout; the real successor Verify
+         ;; still runs fmt and authenticates the committed result below.
+         (put repo
+              "runtime/local.rkt"
+              (string-replace (file->string (build-path repo "runtime/local.rkt")) "42" "(+ 40 2)"))
+         (git-quiet! repo "add" "runtime/local.rkt")
+         (git-quiet! repo "commit" "-qm" "historical author successor")
+         (define source (committed-delivery-snapshot repo))
+         (define-values (_result capture)
+           (call-with-owned-proof-capture root
+                                          plan
+                                          wave
+                                          source
+                                          "attempt-2"
+                                          7
+                                          (lambda () (fixture-run-c1-verifier root wave))
+                                          #:cwd repo))
+         (unless capture
+           (error 'fixture "historical successor capture failed"))
+         (reconcile-evidence-author-receipt!
+          root
+          plan
+          wave
+          (hash-set* source
+                     'attempt-id
+                     "attempt-2"
+                     'attempt-fence
+                     7
+                     'verified-at
+                     (current-seconds)
+                     'evidence
+                     "actual historical author GREEN"
+                     'owned-proof
+                     (owned-proof-capture-reference capture))
+          #:guard (lambda () #t)
+          #:head-ancestor? (lambda (a b) (equal? (git-text repo "merge-base" a b) a)))
+         (set-campaign-wave-current-attempt! (car (campaign-record-waves campaign))
+                                             (campaign-attempt "attempt-2" 7 0))
+         (persist-campaign! root campaign))
        ;; Task proposal from authentic local facts + real operator approval.
        (define-values (tref task)
          (build-supplemental-task-proposal! root
                                             plan
-                                            1
+                                            wave
                                             #:test-path fixture-test-path
                                             #:harness-path fixture-harness-path
                                             #:owner-paths fixture-owner-paths
                                             #:baseline-head baseline-head
                                             #:baseline-tree baseline-tree
-                                            #:expires-in-sec 3600))
-       (define aref (fixture-approve! tref))
-       (unless (and (write-supplemental-pointer! root plan 1 tref aref))
+                                            #:expires-in-sec expires-in-sec))
+       ;; Model an already sealed proposal from a prior engineering install.
+       ;; Change provenance BEFORE broker approval, never a retained record.
+       (define approved-tref
+         (if proposal-head
+             (propose-retain! "task-proposal"
+                              (hash-set (hash-ref (load-supplemental-record tref) 'payload)
+                                        'task
+                                        (seal-supplemental-record
+                                         (hash-set task 'control-plane-head proposal-head))))
+             tref))
+       (define aref (fixture-approve! approved-tref))
+       (unless (and (write-supplemental-pointer! root plan wave approved-tref aref))
          (error 'fixture "pointer write failed"))
        (proc (supplemental-fixture root
                                    repo

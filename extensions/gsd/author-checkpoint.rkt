@@ -10,8 +10,10 @@
          "campaign-repository.rkt"
          "delivery-journal.rkt"
          "delivery-receipt.rkt"
+         (only-in "supplemental-evidence-authority.rkt" call-with-supplemental-authority-lock)
          (only-in "supplemental-evidence-controller.rkt"
                   supplemental-author-pending?
+                  supplemental-approved-entry-context
                   supplemental-operation-live?
                   supplemental-pointer-retained?
                   supplemental-verify-route!)
@@ -19,6 +21,7 @@
 (provide author-repair-pending?
          author-repair-running?
          resolve-author-checkpoint!
+         resolve-supplemental-author-checkpoint!
          retained-author-worktree
          ;; Combined-lane predicates for the orchestrator's thin call sites:
          ;; the legacy durable author permission OR an authenticated active
@@ -30,7 +33,10 @@
          supplemental-done-route!)
 (define (author-lane-pending? root rec wave-idx)
   (define plan (campaign-plan-id rec))
-  (or (author-repair-pending? root plan wave-idx) (supplemental-author-pending? root plan wave-idx)))
+  ;; A retained pointer also owns terminal/revoked retries. It selects the
+  ;; guarded lane, never permission to dispatch a spent task.
+  (or (supplemental-pointer-retained? root plan wave-idx)
+      (author-repair-pending? root plan wave-idx)))
 (define (author-live-supplemental? root rec wave-idx)
   (supplemental-operation-live? root (campaign-plan-id rec) wave-idx))
 (define (supplemental-checkout-retained? root rec wave-idx)
@@ -47,6 +53,39 @@
   (define journal (load-delivery-journal root plan wave))
   (define marker (journal-evidence-author-repair journal))
   (and marker (evidence-author-repair-pending? journal) (equal? (hash-ref marker 'state) "running")))
+;; Full campaign entry calls this BEFORE the legacy coordinator, under the
+;; campaign lease. The authority lock serializes approval revocation with the
+;; status-only commit. No marker, receipt, task, approval or allocation changes.
+(define (resolve-supplemental-author-checkpoint! root plan wave)
+  (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+    (call-with-supplemental-authority-lock
+     (lambda ()
+       (define record (load-campaign-record root plan))
+       (define w
+         (and record
+              (for/first ([w (in-list (campaign-record-waves record))]
+                          #:when (= wave (campaign-wave-index w)))
+                w)))
+       (define attempt (and w (campaign-wave-current-attempt w)))
+       (define context (supplemental-approved-entry-context root plan wave))
+       (unless (and record
+                    w
+                    attempt
+                    (not (campaign-record-cancellation record))
+                    (not (campaign-record-budget-pause record))
+                    (>= (campaign-fence-token record) (hash-ref context 'attempt-fence))
+                    (eq? (campaign-wave-status w) 'awaiting-delivery)
+                    (equal? (campaign-attempt-id attempt) (hash-ref context 'attempt-id))
+                    (equal? (campaign-attempt-fence-token attempt) (hash-ref context 'attempt-fence)))
+         (error 'author-checkpoint "stale, cancelled or paused supplemental checkpoint"))
+       ;; Re-read after proof/context validation, immediately before persisting.
+       (unless (and (equal? context (supplemental-approved-entry-context root plan wave))
+                    (equal? record (load-campaign-record root plan)))
+         (error 'author-checkpoint "supplemental checkpoint changed before record transition"))
+       (set-campaign-wave-status! w 'pending)
+       (persist-campaign! root record)
+       #t))))
+
 (define (resolve-author-checkpoint! root plan wave)
   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
     (define journal (load-delivery-journal root plan wave))

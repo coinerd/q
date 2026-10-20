@@ -165,7 +165,9 @@
                                "policy"
                                "../gsd-planning/execution-policy"))
    ;; Resume policy mutates campaign state and delegates persistence to the
-   ;; repository. Retained checkout authentication delegates Git to receipts.
+   ;; repository. Approved parked-entry admission serializes with revocation
+   ;; under the authority lock; the controller authenticates the exact context.
+   ;; Retained checkout authentication delegates Git to receipts.
    (make-entry "author-checkpoint.rkt"
                'campaign-state
                '(path-ops)
@@ -174,6 +176,8 @@
                                "campaign-repository"
                                "delivery-journal"
                                "delivery-receipt"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-controller"
                                "wave-executor"))
    ;; Lost-session completion is an owner effect, not a model phase. The
    ;; deadline/registry and Git runner own cancellation and process cleanup;
@@ -1107,6 +1111,8 @@
              "supplemental-evidence-proof"
              "supplemental-evidence-publication"
              "author-execution"
+             "composition-root"
+             "verification-job"
              "wave-executor"
              "owned-lane"
              "wave-scope"
